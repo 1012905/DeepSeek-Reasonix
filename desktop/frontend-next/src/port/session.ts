@@ -76,6 +76,8 @@ export interface HostTodo {
 // compose prefixes already stripped kernel-side.
 export interface Checkpoint {
   turn: number;
+  stamp?: string;
+  canFork?: boolean;
   prompt: string;
   // Distinct files in this checkpoint and every later checkpoint.
   files: number;

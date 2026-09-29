@@ -27,6 +27,11 @@ export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_runni
 export const savedNotApplied = (e: unknown): boolean => e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
 
 const SAID: Record<string, string> = {
+  "fork.local_only": "目前只能从本机对话创建分支",
+  "fork.busy": "请等待当前任务完成后再创建对话分支",
+  "fork.stale": "这轮对话已发生变化，请刷新后重新选择最终答复",
+  "fork.failed": "创建对话分支失败",
+  "fork.open_failed": "对话分支已保存，但无法打开新窗格，请从侧栏重新打开",
   "surface.value_invalid": "填写内容不符合字段要求，请检查后重试",
   "surface.expired": "界面已失效，请等待新的请求",
   "surface.schema_invalid": "界面描述不符合约定",

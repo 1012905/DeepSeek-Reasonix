@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { AgentPort, ContextBreakdown, McpEntry, SessionStatus } from "../port/port";
+import type { AgentPort, Checkpoint, ContextBreakdown, McpEntry, SessionStatus } from "../port/port";
 import type { HubPort, RuntimeView } from "../port/hub";
 import type { ConnectOffer } from "./ConnectNote";
 
@@ -41,6 +41,7 @@ export interface PaneProps {
   visible: boolean;
   onSessionChanged: () => void;
   onTurnDone?: (id: string) => void;
+  onFork?: (checkpoint: Checkpoint) => Promise<void>;
   // Bumped when something outside this pane changed a setting that belongs to
   // its session. /status is polled only while a turn runs, so without this the
   // pane keeps reporting the posture it had when it opened.

@@ -22,6 +22,8 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  "从此回复创建对话分支": "Fork conversation from this response",
+  "这轮对话已发生变化，请刷新后重试": "This turn has changed. Refresh and try again.",
   ...EN_SURFACES,
   "重命名聊天": "Rename chat",
   "保持简短且易于识别": "Keep it short and recognizable",
