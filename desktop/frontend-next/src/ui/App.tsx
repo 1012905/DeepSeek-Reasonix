@@ -693,7 +693,7 @@ export function App({ hub }: { hub: HubPort }) {
                   }}
                   onSettings={(section) => section ? showPrefs(section) : showPrefs()}
                   onFeedback={() => setFeedback("send")}
-                  onOpenSession={(path) => void openPane({ root: rt.root, sessionPath: path }).catch(fail)}
+                  onOpenSession={async (path) => { await openPane({ root: rt.root, sessionPath: path }).catch(fail); }}
                   theme={scheme}
                   dockW={shownDockW}
                   dockMax={dockLimit}

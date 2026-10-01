@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { AgentPort, Checkpoint } from "../port/port";
 import type { Item } from "../state/session";
 import { pairCheckpoints } from "../state/checkpoints";
-import { forkTargets } from "./forktargets";
 import { t } from "../i18n";
 import type { Quote, ReplyActions } from "./cards/SayCard";
 
@@ -17,7 +16,6 @@ interface Inputs {
   onSettings: (section?: string) => void;
   onRunDetail: () => void;
   onError: (e: unknown) => void;
-  onFork?: (checkpoint: Checkpoint) => Promise<void>;
   // The title the branch is given and what to do with the session it makes.
   branchName?: string;
   onBranched?: (path: string) => void;
@@ -41,9 +39,8 @@ function sameTurns(a: Map<string, ReplyTurn>, b: Map<string, ReplyTurn>) {
 /** What a finished reply can be acted on with, and the draft signal a quote
  *  travels to the composer on. The transcript owns neither: the pane holds the
  *  session these read from, and the composer is where a quote has to land. */
-export function useReplyActions({ port, items, checkpoints, running, model, submit, reloadSession, onSettings, onRunDetail, onError, branchName, onBranched, onFork }: Inputs) {
+export function useReplyActions({ port, items, checkpoints, running, model, submit, reloadSession, onSettings, onRunDetail, onError, branchName, onBranched }: Inputs) {
   const [quote, setQuote] = useState<Quote>({ text: "", n: 0 });
-  const forks = useMemo(() => running ? new Map<string, Checkpoint>() : forkTargets(items, checkpoints), [items, checkpoints, running]);
 
   // Re-running a turn is a conversation rewind and then the same words again:
   // the transcript goes back, the files do not, and the reply that was there
@@ -115,21 +112,17 @@ export function useReplyActions({ port, items, checkpoints, running, model, subm
         if (ask) void regenerate(ask.turn, ask.text).catch(onError);
       },
       canBranch: (id: string) => !!onBranched && replyTurns.has(id) && (!running || !!replyTurns.get(id)?.hasLaterTurns),
-      onBranch: (id: string) => {
+      onBranch: async (id: string) => {
         const ask = replyTurns.get(id);
-        if (ask && onBranched && (!running || ask.hasLaterTurns)) void port.branchAt(ask.turn, branchName ?? "").then(onBranched, onError);
+        if (ask && onBranched && (!running || ask.hasLaterTurns)) {
+          try { await onBranched(await port.branchAt(ask.turn, branchName ?? "")); } catch (e) { onError(e); }
+        }
       },
       model,
       onConfigureModel: () => onSettings("model"),
       onRunDetail,
-      forkable: new Set(forks.keys()),
-      onFork: onFork ? async (id) => {
-        const checkpoint = forks.get(id);
-        if (!checkpoint) return;
-        try { await onFork(checkpoint); } catch (e) { onError(e); }
-      } : undefined,
     }),
-    [replyTurns, running, regenerate, model, onSettings, onRunDetail, turnOf, onError, port, branchName, onBranched, forks, onFork],
+    [replyTurns, running, regenerate, model, onSettings, onRunDetail, turnOf, onError, port, branchName, onBranched],
   );
 
   // Rewriting a message is the same act with different words: the turn goes

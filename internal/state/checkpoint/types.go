@@ -112,6 +112,7 @@ type Meta struct {
 	CoverageGaps       []CoverageGap
 	ExpiredFilePayload bool
 	ActiveWriters      []ActiveWriter
+	ForkCopied         bool
 	Legacy             bool
 	DisabledReason     string
 }

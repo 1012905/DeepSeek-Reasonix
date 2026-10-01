@@ -75,9 +75,9 @@ export interface HostTodo {
 // before each turn's first write. prompt is the user's own text, with the
 // compose prefixes already stripped kernel-side.
 export interface Checkpoint {
+  // Copied conversation metadata without parent file-recovery payloads.
+  forkCopied?: boolean;
   turn: number;
-  stamp?: string;
-  canFork?: boolean;
   prompt: string;
   // Distinct files in this checkpoint and every later checkpoint.
   files: number;

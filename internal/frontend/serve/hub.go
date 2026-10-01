@@ -328,29 +328,53 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	settings, err := branchSettings(req.SessionPath)
+	if err != nil {
+		return nil, err
+	}
+	preset := ""
+	savedModel := ""
+	if settings != nil {
+		savedModel = strings.TrimSpace(settings.Model)
+		req.Model, preset = savedModel, settings.AgentPreset
+	}
 	bc := NewBroadcaster()
 	paneSink := h.decorateSink(bc)
-	built, err := boot.BuildRuntime(ctx, boot.Options{
-		ComputerDriver:  h.opts.ComputerDriver,
-		Model:           strings.TrimSpace(req.Model),
-		WorkspaceRoot:   root,
-		SessionDir:      SessionDirFor(root),
-		Sink:            paneSink,
-		NativeSurfaces:  h.opts.NativeSurfaces,
-		Stderr:          os.Stderr,
-		StatsSource:     h.surface(),
-		FeedbackSurface: feedbackSurface(h.surface()), AccountsURL: accountsBaseURL(),
-		BalanceStore: h.wallets,
-		// A pane opened without a model must open even on a stale default_model.
-		OpenOnFallbackModel: true,
-
-		ProviderResolver:         h.opts.ProviderResolver,
-		CleanupPendingReconciler: BackgroundCleanupReconciler,
-	})
+	build := func(model string, fallback bool) (*boot.BuildResult, error) {
+		return boot.BuildRuntime(ctx, boot.Options{
+			ComputerDriver:           h.opts.ComputerDriver,
+			Model:                    strings.TrimSpace(model),
+			AgentPreset:              preset,
+			WorkspaceRoot:            root,
+			SessionDir:               SessionDirFor(root),
+			Sink:                     paneSink,
+			NativeSurfaces:           h.opts.NativeSurfaces,
+			Stderr:                   os.Stderr,
+			StatsSource:              h.surface(),
+			FeedbackSurface:          feedbackSurface(h.surface()),
+			AccountsURL:              accountsBaseURL(),
+			BalanceStore:             h.wallets,
+			OpenOnFallbackModel:      fallback,
+			ProviderResolver:         h.opts.ProviderResolver,
+			CleanupPendingReconciler: BackgroundCleanupReconciler,
+		})
+	}
+	built, err := build(req.Model, settings == nil)
+	branchModelFallback := false
+	if err != nil && settings != nil && errors.Is(err, provider.ErrUnknownModel) {
+		built, err = build("", true)
+		branchModelFallback = err == nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", root, err)
 	}
+	if settings != nil {
+		built.Controller.SetPlanMode(settings.Mode == "plan")
+	}
 	srv := New(built.Controller, bc, h.opts.Serve)
+	if branchModelFallback {
+		srv.branchModelFallback = savedModel
+	}
 	srv.SetPaneSink(paneSink)
 	srv.AdoptRuntime(built)
 	srv.auth = h.auth
@@ -553,7 +577,6 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("GET /runtimes", h.listRuntimes)
 	mux.HandleFunc("POST /runtimes", h.openRuntime)
 	mux.HandleFunc("POST /runtimes/{id}/close", h.closeRuntime)
-	mux.HandleFunc("POST /runtimes/{id}/fork", h.forkRuntime)
 	h.registerTreeRoutes(mux)
 	h.registerStudioVersionRoutes(mux)
 	mux.HandleFunc("GET /device", notADevice)

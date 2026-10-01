@@ -73,12 +73,10 @@ export interface ReplyActions {
   hasLaterTurns: (id: string) => boolean;
   onRegenerate: (id: string) => void;
   canBranch: (id: string) => boolean;
-  onBranch: (id: string) => void;
+  onBranch: (id: string) => void | Promise<void>;
   model?: string;
   onConfigureModel?: () => void;
   onRunDetail?: () => void;
-  forkable?: ReadonlySet<string>;
-  onFork?: (id: string) => Promise<void>;
 }
 
 // The browser keeps selections outside the answer, including across cards.
@@ -100,7 +98,7 @@ function download(text: string) {
 }
 
 export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; settled?: boolean; reply?: ReplyActions; quiet?: boolean }) {
-  const [forking, setForking] = useState(false);
+  const [branching, setBranching] = useState(false);
   const start = useStartsOpen("thinking", !item.done && !item.text);
   const [touched, setOpen] = useState<boolean | null>(null);
   const open = touched ?? start;
@@ -187,21 +185,14 @@ export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { i
           {item.done && settled && item.text.trim() && (
             <div className="acts">
               <CopyButton text={item.text} iconOnly />
-              {reply?.onFork && reply.forkable?.has(item.id) && (
-                <button type="button" data-action="reply.fork" title={t("从此回复创建对话分支")}
-                  aria-label={t("从此回复创建对话分支")} disabled={forking}
-                  onClick={() => { setForking(true); void reply.onFork!(item.id).finally(() => setForking(false)); }}>
-                  <StudioIcon name={forking ? "clock" : "branch"} />
-                </button>
-              )}
               {reply && (
                 <button type="button" data-action="reply.quote" data-target={item.id} title={t("引用到输入框")} aria-label={t("引用到输入框")} onClick={() => reply.onQuote(selectedIn(answer.current) || item.text, item.id)}>
                   <StudioIcon name="quote" />
                 </button>
               )}
               {reply?.canBranch(item.id) && (
-                <button type="button" data-action="reply.branch" title={t("分支为新会话")} aria-label={t("分支为新会话")} onClick={() => reply.onBranch(item.id)}>
-                  <StudioIcon name="branch" />
+                <button type="button" data-action="reply.branch" title={t("创建对话分支")} aria-label={t("创建对话分支")} disabled={branching} onClick={() => { setBranching(true); void Promise.resolve(reply.onBranch(item.id)).finally(() => setBranching(false)); }}>
+                  <StudioIcon name={branching ? "clock" : "fork"} />
                 </button>
               )}
               {reply?.canRegenerate(item.id) && (

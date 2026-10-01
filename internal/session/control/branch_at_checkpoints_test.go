@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-	"time"
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/event"
@@ -18,13 +17,13 @@ import (
 	"reasonix/internal/state/sessionstore"
 )
 
-func TestForkTurnKeepsTheSourceAndCutsAfterTheReply(t *testing.T) {
+func TestBranchAtKeepsTheSourceAndCutsAfterTheReply(t *testing.T) {
 	c, _, _ := runTwoTurns(t)
 	defer c.Close()
 	parent := c.SessionPath()
 	before := c.History()
 	cp := c.Checkpoints()[0]
-	path, err := c.ForkTurn(parent, cp.Turn, cp.MsgIndex, cp.Time.Format(time.RFC3339Nano))
+	path, err := c.BranchAt(cp.Turn, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,32 +42,28 @@ func TestForkTurnKeepsTheSourceAndCutsAfterTheReply(t *testing.T) {
 	if err != nil || meta.ParentID != sessionstore.BranchID(parent) {
 		t.Fatalf("fork parent: %+v, %v", meta, err)
 	}
-	if _, err := c.ForkTurn(parent, cp.Turn, cp.MsgIndex, "stale"); !errors.Is(err, ErrForkBoundary) {
-		t.Fatalf("stale checkpoint: %v", err)
-	}
-	if _, err := c.ForkTurn(parent, cp.Turn, cp.MsgIndex+1, cp.Time.Format(time.RFC3339Nano)); !errors.Is(err, ErrForkBoundary) {
-		t.Fatalf("non-checkpoint message boundary: %v", err)
-	}
+
 }
 
-func TestForkTurnRefusesRunningConversation(t *testing.T) {
+func TestBranchAtRefusesRunningConversation(t *testing.T) {
 	c, ag, _ := runTwoTurns(t)
 	defer c.Close()
-	cp := c.Checkpoints()[0]
+	checkpoints := c.Checkpoints()
+	turn := checkpoints[len(checkpoints)-1].Turn + 1
 	release := make(chan struct{})
 	c.runner = blockingRunner{session: ag.Session(), release: release}
 	done := make(chan error, 1)
 	go func() { done <- c.RunTurn(context.Background(), "running") }()
 	waitForRunning(t, c)
-	_, err := c.ForkTurn(c.SessionPath(), cp.Turn, cp.MsgIndex, cp.Time.Format(time.RFC3339Nano))
+	_, err := c.BranchAt(turn, "")
 	close(release)
 	<-done
-	if !errors.Is(err, ErrForkBusy) {
+	if !errors.Is(err, ErrTurnRunning) {
 		t.Fatalf("fork during a running turn: %v", err)
 	}
 }
 
-func TestForkTurnKeepsToolsAndReopensConversationCheckpoints(t *testing.T) {
+func TestBranchAtKeepsToolsAndReopensConversationCheckpoints(t *testing.T) {
 	root := testenv.TempDir(t)
 	dir := filepath.Join(root, "sessions")
 	ag := agent.New(&scriptedTurns{turns: [][]provider.Chunk{textTurn("first answer"), textTurn("second answer")}}, tool.NewRegistry(), sessionstore.NewSession("sys"), agent.Options{}, event.Discard)
@@ -92,13 +87,13 @@ func TestForkTurnKeepsToolsAndReopensConversationCheckpoints(t *testing.T) {
 	ag.Session().Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "edit-1", Name: "edit_file", Arguments: `{"path":"a.txt"}`}}})
 	ag.Session().Add(provider.Message{Role: provider.RoleTool, ToolCallID: "edit-1", Name: "edit_file", Content: "changed a.txt from before to after"})
 	ag.Session().Add(provider.Message{Role: provider.RoleAssistant, Content: "file edited"})
-	parent, history, checkpoints := c.SessionPath(), c.History(), c.Checkpoints()
+	history, checkpoints := c.History(), c.Checkpoints()
 	target := checkpoints[len(checkpoints)-1]
 	if len(target.Paths) != 1 {
 		t.Fatalf("source checkpoint has no file snapshot: %+v", target)
 	}
 	for _, input := range []string{target.Prompt, "rewritten question"} {
-		path, err := c.ForkTurn(parent, target.Turn, target.MsgIndex, target.Time.Format(time.RFC3339Nano))
+		path, err := c.BranchAt(target.Turn, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,6 +109,16 @@ func TestForkTurnKeepsToolsAndReopensConversationCheckpoints(t *testing.T) {
 		copied := child.Checkpoints()
 		if len(copied) != len(checkpoints) || copied[1].Turn != target.Turn || copied[1].MsgIndex != target.MsgIndex || len(copied[1].Paths) != 0 {
 			t.Fatalf("reopened fork checkpoints: %+v", copied)
+		}
+		nested, err := child.BranchAt(target.Turn, "nested branch")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if savedMessages(t, nested) != len(history) {
+			t.Fatal("reopened branch cut at the wrong turn")
+		}
+		if len(checkpoint.New(ckptDir(nested), root).List()) != len(checkpoints) {
+			t.Fatal("nested branch lost copied checkpoints")
 		}
 		plan, err := child.PrepareRewind(target.Turn, RewindConversation)
 		if err != nil || !plan.CanConversation {
@@ -134,5 +139,29 @@ func TestForkTurnKeepsToolsAndReopensConversationCheckpoints(t *testing.T) {
 	}
 	if !reflect.DeepEqual(history, c.History()) || !reflect.DeepEqual(checkpoints, c.Checkpoints()) || string(mustReadFile(t, file)) != "after" {
 		t.Fatal("fork or conversation rewind changed the source or workspace file")
+	}
+}
+
+func TestBranchAtClosedTurnCopiesCheckpointsAndSettings(t *testing.T) {
+	c, ag, _ := runTwoTurns(t)
+	defer c.Close()
+	c.SetAgentPreset("delivery")
+	c.SetPlanMode(true)
+	turn := orderedTurns(t, c)[0]
+	startLaterTurn(t, c, ag)
+	path, err := c.BranchAt(turn, "closed turn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := checkpoint.New(ckptDir(path), c.WorkspaceRoot()).List()
+	if len(copied) != 1 || !copied[0].ForkCopied || copied[0].Turn != turn || len(copied[0].Paths) != 0 {
+		t.Fatalf("closed-turn branch lost conversation checkpoints: %+v", copied)
+	}
+	meta, _, err := sessionstore.LoadBranchMeta(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Model != c.ModelRef() || meta.AgentPreset != "delivery" || meta.Mode != "plan" {
+		t.Fatalf("closed-turn branch lost settings: %+v", meta)
 	}
 }

@@ -22,8 +22,7 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
-  "从此回复创建对话分支": "Fork conversation from this response",
-  "这轮对话已发生变化，请刷新后重试": "This turn has changed. Refresh and try again.",
+  "此检查点不包含文件快照": "This checkpoint contains no file snapshots",
   ...EN_SURFACES,
   "重命名聊天": "Rename chat",
   "保持简短且易于识别": "Keep it short and recognizable",
@@ -1173,6 +1172,7 @@ export const EN: Record<string, string> = {
   // ── 回合中的通知（notices.ts 按 code 查表，扫描器看不到）──────
   "这一轮模型没有给出回答，正在让它重说一次": "The model gave no answer this round; asking it again",
   "模型直接给了答案却没动手，正在要求它先用工具": "The model answered without acting; asking it to use its tools first",
+  "分支保存的模型已不可用，本次改用其他已配置的模型；可以在模型设置中重新选择": "The model saved for this branch is unavailable, so another configured model is in use; choose a model again in settings",
   "同一个检查连着几轮都报同样的结果，是否继续由你定":
     "The same check has reported the same thing for several rounds; whether to keep at it is yours to call",
   "另一个会话正在写这个工作区，等它写完会自动继续":
@@ -1376,7 +1376,7 @@ export const EN: Record<string, string> = {
   "复制选中内容": "Copy selected text",
   "选中内容": "Selected text",
   "重新生成": "Regenerate",
-  "分支为新会话": "Branch into a new conversation",
+  "创建对话分支": "Create a conversation branch",
   "分支": "branch",
   "从最近回复分叉": "Branch from the latest reply",
   "还没有已完成的回复可以分叉": "There is no finished reply to branch from yet",
