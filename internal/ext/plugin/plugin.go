@@ -8,6 +8,7 @@ package plugin
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -211,6 +212,10 @@ type Host struct {
 	// changing provider-visible tool prefixes (spatiotemporal composability).
 	proxies map[string]*serverProxy
 
+	// toolListChanges are the subscribers to catalog changes a connected server
+	// announces; guarded by mu like the client list it publishes from.
+	toolListChanges toolListWatchers
+
 	// Detached stats/schema-cache writers from Start; off the boot path but
 	// drained by Close so cleanup can't race a still-open cache file.
 	bgWrites sync.WaitGroup
@@ -388,7 +393,6 @@ func Start(ctx context.Context, specs []Spec, p StartPolicy) (*Host, []tool.Tool
 				ch <- result{idx: idx, spec: spec, err: fmt.Errorf("list tools from %q: %w", spec.Name, err)}
 				return
 			}
-			c.toolCount = len(ts)
 			h.announceHeld(c)
 
 			// Persist for next launch on the side: a slow cache write must not
@@ -433,6 +437,7 @@ func Start(ctx context.Context, specs []Spec, p StartPolicy) (*Host, []tool.Tool
 			}
 			continue
 		}
+		h.bindToolListChanges(r.client)
 		tools = append(tools, r.tools...)
 		// prompts/resources are filled in later by StartPhaseB.
 	}
@@ -591,7 +596,6 @@ type Client struct {
 	// initialize. Written during the handshake, before the client is published.
 	instructions string
 
-	toolCount int    // tools discovered, for /mcp status
 	transport string // declared transport type, for /mcp status ("stdio"/"http")
 
 	// Prompts and resources discovered during StartAll, stored here so the
@@ -608,7 +612,13 @@ type Client struct {
 	toolsListed  bool
 	toolAdapters []tool.Tool
 	held         []HeldTool
-	progressID   atomic.Uint64
+	// toolsFingerprint covers the published catalog, so a re-read after a
+	// list_changed notice can tell a real change from the same tools again.
+	toolsFingerprint [sha256.Size]byte
+	progressID       atomic.Uint64
+
+	// refresh is this connection's catalog freshness: see tool_list_changed.go.
+	refresh toolRefresh
 }
 
 // auxiliaryClient opens a second connection so a background listing cannot
@@ -1055,7 +1065,6 @@ func (h *Host) addConnectedWithLifecycle(lifeCtx, callCtx context.Context, s Spe
 		err = newStartupFailure("tools/list", startupStarted, c.startupStderr(), err)
 		return nil, fmt.Errorf("list tools: %w", err)
 	}
-	c.toolCount = len(ts)
 	h.announceHeld(c)
 	h.mu.Lock()
 	if h.closed {
@@ -1083,6 +1092,7 @@ func (h *Host) addConnectedWithLifecycle(lifeCtx, callCtx context.Context, s Spe
 	}
 	h.clearFailure(s.Name)
 	h.mu.Unlock()
+	h.bindToolListChanges(c)
 	// The status changed here, not when prompts finish arriving: a tools-only
 	// server has neither, so announcing from those paths leaves it showing a
 	// startup failure forever while the agent uses it perfectly well.
@@ -1199,6 +1209,7 @@ func start(lifeCtx, callCtx context.Context, s Spec) (*Client, error) {
 		tt = "stdio"
 	}
 	c := &Client{name: s.Name, spec: s, transport: tt}
+	c.setRefreshLifetime(lifeCtx)
 	c.t = newReconnectingTransport(lifeCtx, t, s.ResolvedStartupTimeout(), c.redial,
 		c.handshakeOn)
 	if err := c.connect(callCtx); err != nil {
@@ -1340,6 +1351,19 @@ func (c *Client) relistToolsLocked(ctx context.Context) ([]tool.Tool, error) {
 	})
 	held = slices.DeleteFunc(held, func(h HeldTool) bool { return !c.spec.ToolEnabled(h.RawName) })
 
+	toolInfos, sortedTools := c.buildToolCatalog(out)
+	c.tools = toolInfos
+	c.held = held
+	c.toolAdapters = append([]tool.Tool(nil), sortedTools...)
+	c.toolsFingerprint = toolCatalogFingerprint(toolInfos, sortedTools)
+	c.toolsListed = true
+	return append([]tool.Tool(nil), sortedTools...), nil
+}
+
+// buildToolCatalog turns one tools/list answer into the status rows and the
+// model-visible adapters, both name-sorted. It performs no I/O, so a caller can
+// build a candidate catalog before taking the lock that publishes it.
+func (c *Client) buildToolCatalog(out []mcpTool) ([]ToolInfo, []tool.Tool) {
 	toolInfos := make([]ToolInfo, 0, len(out))
 	tools := make([]tool.Tool, 0, len(out))
 	normalizedSchemas := make(map[string]json.RawMessage, len(out))
@@ -1389,12 +1413,7 @@ func (c *Client) relistToolsLocked(ctx context.Context) ([]tool.Tool, error) {
 		})
 	}
 	sort.SliceStable(toolInfos, func(i, j int) bool { return toolInfos[i].Name < toolInfos[j].Name })
-	sortedTools := sortToolsByName(tools)
-	c.tools = toolInfos
-	c.held = held
-	c.toolAdapters = append([]tool.Tool(nil), sortedTools...)
-	c.toolsListed = true
-	return append([]tool.Tool(nil), sortedTools...), nil
+	return toolInfos, sortToolsByName(tools)
 }
 
 func normalizeAndValidateToolSchema(raw json.RawMessage) (json.RawMessage, error) {
