@@ -93,18 +93,12 @@ export interface ModelMode {
 // kernel appear here; image routing joins once it can name its own model
 // instead of borrowing whatever the subagent runs.
 export interface RoleAssignments {
+  roles: Record<string, string>;
+  efforts: Record<string, string>;
   web_search: string;
   web_search_effective?: string;
   web_search_reason?: string;
   web_search_source?: string;
-  planner: string;
-  subagent: string;
-  guardian: string;
-  vision: string;
-  // The system_one backend. It names a model on a decision wire, so unlike the
-  // others it never falls back to the main model: a chat model cannot answer a
-  // question set, and a silent fallback would make a missing backend a wrong one.
-  decision: string;
 }
 
 // A per-profile entry that outranks a role's global model. `scope` names the

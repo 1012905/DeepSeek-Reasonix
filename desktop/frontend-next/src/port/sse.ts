@@ -199,8 +199,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.get<RoleAssignments>("/roles");
   }
 
-  setRole(role: string, ref: string) {
-    return this.post("/roles", { role, ref });
+  setRole(role: string, ref: string, effort?: string) {
+    return this.post("/roles", { role, ref, effort });
   }
 
   roleOverrides() {

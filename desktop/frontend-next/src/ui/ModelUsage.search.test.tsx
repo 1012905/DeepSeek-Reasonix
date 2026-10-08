@@ -7,7 +7,7 @@ import { ModelUsage } from "./ModelUsage";
 import type { ModelEntry, RoleAssignments } from "../port/port";
 
 afterEach(cleanup);
-const roles: RoleAssignments = { planner: "", subagent: "", guardian: "", vision: "", decision: "", web_search: "" };
+const roles: RoleAssignments = { roles: { title: "", planner: "", subagent: "", guardian: "", vision: "", decision: "" }, efforts: {}, web_search: "" };
 const models: ModelEntry[] = [
   { ref: "chat/plain", provider: "chat", model: "plain" },
   { ref: "search/native", provider: "search", model: "native", webSearch: true },

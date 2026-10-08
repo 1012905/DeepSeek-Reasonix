@@ -69,19 +69,24 @@ export class MockPort extends MockWorkspace implements AgentPort {
   // The subagent runs somewhere cheaper; everything else rides the main model.
   private assigned: RoleAssignments = {
     web_search: "",
-    planner: "",
-    subagent: "deepseek/deepseek-flash",
-    guardian: "",
-    decision: "",
-    vision: "",
+    roles: {
+      title: "", planner: "",
+      subagent: "deepseek/deepseek-flash",
+      guardian: "", decision: "", vision: "",
+    },
+    efforts: {},
   };
 
   async roles(): Promise<RoleAssignments> {
     return this.assigned;
   }
 
-  async setRole(role: string, ref: string) {
-    this.assigned = { ...this.assigned, [role]: ref };
+  async setRole(role: string, ref: string, effort?: string) {
+    if (role === "web_search") {
+      this.assigned = { ...this.assigned, web_search: ref };
+      return;
+    }
+    this.assigned = { ...this.assigned, roles: { ...this.assigned.roles, [role]: ref }, efforts: { ...this.assigned.efforts, [role]: effort ?? "auto" } };
   }
 
   overrides: Record<string, RoleOverride[]> = {};

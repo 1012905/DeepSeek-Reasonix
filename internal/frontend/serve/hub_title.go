@@ -97,7 +97,7 @@ func (h *Hub) autoNameSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	generator := h.sessionTitleGenerator(filepath.Dir(path))
-	if nilutil.IsNil(generator.titleProv) {
+	if nilutil.IsNil(generator.currentTitleProvider().prov) {
 		refuse(w, http.StatusServiceUnavailable, "session.title_unavailable", "no title model is configured", nil)
 		return
 	}
@@ -119,7 +119,7 @@ func (h *Hub) autoNameSession(w http.ResponseWriter, r *http.Request) {
 func (h *Hub) sessionTitleGenerator(dir string) *Server {
 	h.mu.RLock()
 	for _, rt := range h.runtimes {
-		if rt.Server != nil && !nilutil.IsNil(rt.Server.titleProv) && rt.Server.Controller().SessionDir() == dir {
+		if rt.Server != nil && !nilutil.IsNil(rt.Server.currentTitleProvider().prov) && rt.Server.Controller().SessionDir() == dir {
 			h.mu.RUnlock()
 			return rt.Server
 		}
@@ -131,8 +131,10 @@ func (h *Hub) sessionTitleGenerator(dir string) *Server {
 		return h.titleFallback
 	}
 	generator := &Server{}
-	generator.initTitleProvider()
-	if !nilutil.IsNil(generator.titleProv) {
+	if err := generator.initTitleProvider(); err != nil {
+		return generator
+	}
+	if !nilutil.IsNil(generator.currentTitleProvider().prov) {
 		h.titleFallback = generator
 	}
 	return generator
@@ -148,9 +150,8 @@ func (h *Hub) resumeAutomaticTitle(path string, cache *titleCache) {
 	}
 	generator := h.sessionTitleGenerator(filepath.Dir(path))
 	worker := &Server{
-		titleProv: generator.titleProv, titlePrice: generator.titlePrice,
-		titleModelRef: generator.titleModelRef, titleUsageSink: generator.titleUsageSink,
-		titles: cache, fill: newTitleFiller(),
+		titleModel: generator.currentTitleProvider(),
+		titles:     cache, fill: newTitleFiller(),
 	}
 	worker.scheduleTitle(name, source, mod)
 }

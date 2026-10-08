@@ -31,25 +31,26 @@ func titleSource(first string) string {
 // Returns empty string on any error — callers should fall back to a preview.
 func (s *Server) generateTitle(ctx context.Context, firstMsg string) string {
 	firstMsg = titleSource(firstMsg)
-	if nilutil.IsNil(s.titleProv) || firstMsg == "" {
+	model := s.currentTitleProvider()
+	if nilutil.IsNil(model.prov) || firstMsg == "" {
 		return ""
 	}
 	if r := []rune(firstMsg); len(r) > 300 {
 		firstMsg = string(r[:300]) + "..."
 	}
-	return s.requestTitle(ctx, firstMsg)
+	return s.requestTitle(ctx, firstMsg, model)
 }
 
-func (s *Server) requestTitle(ctx context.Context, firstMsg string) string {
+func (s *Server) requestTitle(ctx context.Context, firstMsg string, model titleProviderState) string {
 	ctx = provider.WithRequestAttemptCounter(ctx)
 	var usage *provider.Usage
 	defer func() {
 		usage = provider.UsageWithRequestAttemptCount(ctx, usage)
-		if usage != nil && !nilutil.IsNil(s.titleUsageSink) {
-			s.titleUsageSink.Emit(event.Event{Kind: event.Usage, ModelRef: s.titleModelRef, Usage: usage, Pricing: s.titlePrice, UsageSource: event.UsageSourceTitle})
+		if usage != nil && !nilutil.IsNil(model.sink) {
+			model.sink.Emit(event.Event{Kind: event.Usage, ModelRef: model.ref, Usage: usage, Pricing: model.price, UsageSource: event.UsageSourceTitle})
 		}
 	}()
-	ch, err := s.titleProv.Stream(ctx, provider.Request{
+	ch, err := model.prov.Stream(ctx, provider.Request{
 		Messages: []provider.Message{
 			{Role: provider.RoleSystem, Content: titlePrompt},
 			{Role: provider.RoleUser, Content: firstMsg},
