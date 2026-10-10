@@ -272,6 +272,7 @@ type NotificationsConfig struct {
 	TurnDone        bool `toml:"turn_done"`
 	ApprovalRequest bool `toml:"approval_request"`
 	AskRequest      bool `toml:"ask_request"`
+	FeedbackReply   bool `toml:"feedback_reply"`
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the
@@ -1395,6 +1396,7 @@ func Default() *Config {
 			TurnDone:        true,
 			ApprovalRequest: true,
 			AskRequest:      true,
+			FeedbackReply:   true,
 		},
 		Agent: AgentConfig{
 			SystemPrompt: DefaultSystemPrompt,
