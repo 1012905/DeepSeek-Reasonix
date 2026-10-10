@@ -60,6 +60,18 @@ describe("useFeedbackUnread polling", () => {
     expect(port.myFeedback).toHaveBeenCalledTimes(1);
   });
 
+  it("stops polling for a report nobody has touched in a month", async () => {
+    const old = new Date(Date.now() - 40 * 24 * 3_600_000).toISOString();
+    const port = portOf(async () => {
+      const m = mine(0, ["received"]);
+      (m.items[0] as unknown as { updatedAt: string }).updatedAt = old;
+      return m;
+    });
+    render(<Probe port={port} />);
+    await tick(POLL_MS * 3);
+    expect(port.myFeedback).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a reply that arrives while the app stays open, on the next poll", async () => {
     let unread = 0;
     const port = portOf(async () => mine(unread, ["received"]));

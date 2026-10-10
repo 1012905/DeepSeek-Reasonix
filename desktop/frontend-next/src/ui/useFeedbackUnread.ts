@@ -10,7 +10,13 @@ const SETTLED: readonly FeedbackStatus[] = ["fixed", "wontfix", "duplicate", "cl
 
 const latestReply = (i: FeedbackItem) => i.replies?.reduce((id, r) => (r.author === "maintainer" && r.id > id ? r.id : id), 0) ?? 0;
 
-const hasOpenItem = (m: FeedbackMine) => m.items.some((i) => !SETTLED.includes(i.status));
+export const STALE_MS = 30 * 24 * 60 * 60_000;
+
+const quiet = (i: FeedbackItem) => Date.now() - Date.parse(i.updatedAt) > STALE_MS;
+
+// A report nobody has touched for a month stops being polled for; opening the
+// app or the feedback page still reads it.
+const hasOpenItem = (m: FeedbackMine) => m.items.some((i) => !SETTLED.includes(i.status) && !quiet(i));
 
 /** Keeps the rail's unread count honest while the app stays open. Only a person
  *  with an unsettled report is ever polled, a failed background read is silent,
