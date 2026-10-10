@@ -299,6 +299,13 @@ type Extensions interface {
 	ProviderCatalog() []provider.Descriptor
 }
 
+// MCPTrust is the user's decision on MCP tool definitions a server changed. An
+// editor integration surfaces the notice but leaves the decision to a surface
+// that can show what changed.
+type MCPTrust interface {
+	AcceptMCPHeldTools(name, digest string) (int, error)
+}
+
 // Capabilities is the whole pluggable surface, for a frontend that drives all
 // of it. One that drives part of it names that part instead.
 type Capabilities interface {
@@ -306,6 +313,7 @@ type Capabilities interface {
 	Skills
 	Hooks
 	MCPControl
+	MCPTrust
 	RuntimeSettings
 	Extensions
 }
@@ -463,6 +471,7 @@ var (
 	_ Skills             = (*Controller)(nil)
 	_ Hooks              = (*Controller)(nil)
 	_ MCPControl         = (*Controller)(nil)
+	_ MCPTrust           = (*Controller)(nil)
 	_ RuntimeSettings    = (*Controller)(nil)
 	_ Extensions         = (*Controller)(nil)
 	_ Capabilities       = (*Controller)(nil)
