@@ -16,6 +16,7 @@ describe("sponsor", () => {
     expect(screen.getByText(/不是合同/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "显示收款码" }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.getByRole("button", { name: "显示收款码" }).hasAttribute("aria-controls")).toBe(false);
   });
 
   it("shows the WeChat Pay and Alipay codes on request and hides them again", async () => {
@@ -23,6 +24,7 @@ describe("sponsor", () => {
     const toggle = screen.getByRole("button", { name: "显示收款码" });
     await userEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById(toggle.getAttribute("aria-controls")!)).toBeTruthy();
     const imgs = screen.getAllByRole("img") as HTMLImageElement[];
     expect(imgs.map((i) => i.alt)).toEqual(["微信支付收款码", "支付宝收款码"]);
     for (const img of imgs) expect(img.getAttribute("src")).toBeTruthy();

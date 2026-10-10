@@ -17,7 +17,7 @@ export function Sponsor({ port }: { port: Pick<AgentPort, "openExternal"> }) {
       <p className="spon-note">{t("如果 Reasonix 帮你省了时间或 token，欢迎请杯咖啡。这是一杯咖啡，不是合同：捐助不会换来功能优先级，也不会改变问题的处理顺序。")}</p>
       <div className="spon-acts">
         <a className="spon-link" href={COMMUNITY.paypal} data-action="sponsor.paypal" onClick={(e) => { e.preventDefault(); open(COMMUNITY.paypal); }}>PayPal</a>
-        <button type="button" className="btn sm" data-action="sponsor.qr" aria-expanded={qr} aria-controls="spon-qr" onClick={() => setQr((v) => !v)}>
+        <button type="button" className="btn sm" data-action="sponsor.qr" aria-expanded={qr} aria-controls={qr ? "spon-qr" : undefined} onClick={() => setQr((v) => !v)}>
           {qr ? t("收起收款码") : t("显示收款码")}
         </button>
       </div>
