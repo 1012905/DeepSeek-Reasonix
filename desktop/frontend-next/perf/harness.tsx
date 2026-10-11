@@ -27,6 +27,7 @@ let peakInFlight = 0;
 // ?pack=sky opens on a pack with the live sky; ?pack=photo on one with a
 // picture. Both are the states where the shell goes translucent over a backdrop.
 const PACK = new URLSearchParams(location.search).get("pack");
+const GLOW = new URLSearchParams(location.search).get("glow");
 
 function benchPack(): ThemePack | null {
   const tokens = {
@@ -42,7 +43,10 @@ function benchPack(): ThemePack | null {
   if (PACK === "photo") {
     return {
       id: "bench-photo", name: "Bench photo", active: true, tokens,
-      background: { image: true, focusX: 0.5, focusY: 0.5, homeOpacity: 0.9, taskOpacity: 0.5, overlayStrength: 0.4 },
+      background: {
+        image: true, focusX: 0.5, focusY: 0.5, homeOpacity: 0.9, taskOpacity: 0.5, overlayStrength: 0.4,
+        ...(GLOW === "none" || GLOW === "default" ? { textGlow: GLOW } : {}),
+      },
     };
   }
   return null;

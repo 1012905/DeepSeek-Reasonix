@@ -82,8 +82,8 @@
   }
 
   :root[data-bg] .flow:not([data-empty]) {
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
-                 0 0 7px color-mix(in srgb, var(--page) 72%, transparent);
+    text-shadow: var(--flow-text-shadow, 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
+                 0 0 7px color-mix(in srgb, var(--page) 72%, transparent));
   }
   :root[data-bg] .compose {
     background: color-mix(in srgb, var(--raised) 80%, transparent);

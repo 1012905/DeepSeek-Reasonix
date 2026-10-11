@@ -44,7 +44,7 @@ type Pack struct {
 	Background  *Background                  `json:"background,omitempty"`
 	Sky         *Sky                         `json:"sky,omitempty"`
 	HasPreview  bool                         `json:"hasPreview,omitempty"`
-	// Warnings names the tokens that were dropped and why. The pack still
+	// Warnings names the values that were dropped and why. The pack still
 	// loads: one bad value must not cost the author every good one.
 	Warnings []string `json:"warnings,omitempty"`
 }
@@ -67,6 +67,7 @@ type Background struct {
 	HomeOpacity     float64 `json:"homeOpacity"`
 	TaskOpacity     float64 `json:"taskOpacity"`
 	OverlayStrength float64 `json:"overlayStrength"`
+	TextGlow        string  `json:"textGlow,omitempty"`
 }
 
 // Sky is a live backdrop rather than a picture: drifting cloud, a sun, and a
@@ -112,6 +113,7 @@ type manifestBackground struct {
 	HomeOpacity     *float64 `json:"homeOpacity"`
 	TaskOpacity     *float64 `json:"taskOpacity"`
 	OverlayStrength *float64 `json:"overlayStrength"`
+	TextGlow        string   `json:"textGlow"`
 }
 
 // Dir is where user-installed packs live: one directory per pack, each with a
@@ -256,6 +258,14 @@ func decodeManifest(raw []byte, dirID string) (Pack, manifest, error) {
 		}
 		tokens[scheme] = copied
 	}
+	if bg := m.Background; bg != nil {
+		switch bg.TextGlow {
+		case "", "default", "none":
+		default:
+			warnings = append(warnings, fmt.Sprintf("background: %q is not a valid textGlow value", bg.TextGlow))
+			bg.TextGlow = ""
+		}
+	}
 	// Map iteration order would otherwise make the same pack report its
 	// problems in a different order on every read.
 	slices.Sort(warnings)
@@ -305,6 +315,7 @@ func backgroundOf(m *manifestBackground, image bool) *Background {
 	if m == nil {
 		return out
 	}
+	out.TextGlow = m.TextGlow
 	if m.FocusX != nil {
 		out.FocusX = clamp01(*m.FocusX)
 	}

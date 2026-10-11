@@ -115,6 +115,33 @@ The current `background` block controls `focusX`, `focusY`, `safeArea`
 Use a low task opacity so the image does not compete with a transcript.
 Check your image licence and avoid including workspace screenshots or secrets.
 
+### Transcript text glow
+
+Set `background.textGlow` to `"none"` to disable the transcript's wallpaper
+text shadow. Omit it, or use `"default"`, to retain the two existing shadows
+(1px offset with 2px blur, plus a 7px halo). For example:
+
+```json
+"background": { "textGlow": "none", "taskOpacity": 0.2 }
+```
+
+This choice applies in both schemes whenever a backdrop is active, including
+a sky or the reader's own wallpaper. It also works without a packaged image.
+
+The composer, navigation shadows and frosted transcript backing retain their
+own treatments. Reduced effects still overrides text shadows;
+reduced motion changes animation only.
+
+Switching or clearing a pack
+removes its glow choice, so older packs retain the default.
+
+Only `"default"` and `"none"` are accepted. An unknown string is dropped with
+a theme warning. Null behaves as omitted; booleans, numbers, arrays and objects
+fail manifest decoding. CSS values are not accepted.
+
+Check ordinary and muted text over bright and dark images in
+both schemes and at phone width before sharing a pack.
+
 ## Disable and clean up
 
 ```bash

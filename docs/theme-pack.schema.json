@@ -49,6 +49,7 @@
         "homeOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
         "taskOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
         "overlayStrength": { "type": "number", "minimum": 0, "maximum": 1 },
+        "textGlow": { "type": "string", "enum": ["default", "none"], "default": "default", "description": "Studio transcript text shadow when a backdrop is active; does not change the frosted backing." },
         "paneOpacity": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },

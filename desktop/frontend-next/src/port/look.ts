@@ -13,6 +13,7 @@ export interface ThemeBackground {
   homeOpacity: number;
   taskOpacity: number;
   overlayStrength: number;
+  textGlow?: "default" | "none";
 }
 
 // A live backdrop the window draws, rather than a picture it places. Absent on
@@ -35,7 +36,7 @@ export interface ThemePack {
   background?: ThemeBackground;
   sky?: ThemeSky;
   hasPreview?: boolean;
-  // Tokens the kernel dropped and why: an unknown name, or a value that could
+  // Values the kernel dropped and why: an unknown name, or a value that could
   // not be let into a stylesheet. The pack still loads without them.
   warnings?: string[];
 }
