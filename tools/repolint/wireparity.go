@@ -126,6 +126,9 @@ var mirroredWireTypes = []wireMirror{
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
 	{"internal/frontend/serve/hub_tree.go", "treeSession", tsHubFile, "TreeSession"},
+	// The folder's true size beside the rows loaded. A window that cannot read
+	// the total labels a truncated list as the whole history.
+	{"internal/frontend/serve/hub_tree.go", "treeWorkspace", tsHubFile, "TreeWorkspace"},
 	// A session the import left in place. The reason code is what the window
 	// words the explanation from; a code it cannot read is a skipped session
 	// reported as nothing more than a count.
@@ -149,6 +152,10 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/update/hub.go", "VersionEntry", tsVersionFile, "VersionEntry"},
 	{"internal/platform/update/hub.go", "VersionHub", tsVersionFile, "VersionHub"},
 	{"internal/platform/update/notes.go", "VersionNotes", tsVersionFile, "VersionNotes"},
+	// Where the logs and crash files are. A field the page cannot read is a path
+	// it cannot show to someone asked where to look.
+	{"internal/frontend/serve/studio_logs.go", "studioLogs", tsVersionFile, "StudioLogs"},
+	{"internal/frontend/serve/studio_logs.go", "studioCrashes", tsVersionFile, "StudioCrash"},
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
 	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},

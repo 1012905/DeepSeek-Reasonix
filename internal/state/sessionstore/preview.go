@@ -32,6 +32,7 @@ var TransientUserBlockTags = []string{
 	"workspace",
 	"scheduled-run",
 	"mcp-prompt-failure",
+	"refused-calls",
 }
 
 // SupersededUserBlockTags names the transient blocks carrying standing state

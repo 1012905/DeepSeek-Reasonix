@@ -660,7 +660,7 @@ var English = Messages{
 	WriteConfigErr:            "write config:",
 	WriteEnvErr:               "write .env:",
 
-	ProviderErrBadRequest:          "Malformed request (HTTP 400): the request body was rejected. This is likely a bug — please report it if it persists.",
+	ProviderErrBadRequest:          "The model service rejected this request (HTTP 400). The reason it gave follows when it sent one. You can try a new session or another model. If it keeps happening, report it together with that reason.",
 	ProviderErrAuth:                "Authentication failed (HTTP 401): your API key is missing or unset. Add it to .env or run `reasonix setup`.",
 	ProviderErrAuthRejected:        "Authentication failed (HTTP 401): the server rejected your API key. It may be wrong or expired, or the provider hit a transient auth/quota issue — retried with backoff and still failed. Try again shortly, or check the key in .env / run `reasonix setup`.",
 	ProviderErrDNSNotFound:         "Cannot resolve the model service domain name %s: the DNS lookup found no such host, so no connection was made and nothing was retried. Check the network, DNS and proxy settings, and the provider base URL.",

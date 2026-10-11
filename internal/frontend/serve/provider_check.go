@@ -11,6 +11,7 @@ import (
 	"reasonix/internal/model/catalog"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"reasonix/internal/assembly/boot"
@@ -222,7 +223,7 @@ func (s *Server) checkProviderModel(w http.ResponseWriter, r *http.Request) {
 	if candidate.NoProxy && proxy.Mode != netclient.ModeCustom {
 		proxy = netclient.ProxySpec{Mode: netclient.ModeOff}
 	}
-	ctx, cancel := context.WithTimeout(provider.WithRetryLimit(r.Context(), 0), providerProbeTimeout)
+	ctx, cancel := context.WithTimeout(provider.WithRetryLimit(r.Context(), 0), modelCheckTimeout(candidate.BaseURL))
 	defer cancel()
 	if config.AnswersFor(candidate.Kind) == config.AnswersDecision {
 		if candidate.APIKey() == "" {
@@ -230,7 +231,7 @@ func (s *Server) checkProviderModel(w http.ResponseWriter, r *http.Request) {
 		}
 		err := probeDecision(ctx, cfg, &candidate, model)
 		status, reason, httpStatus := classifyProviderModelCheck(err)
-		writeJSON(w, providerModelCheck{Model: model, Status: status, Reason: reason, HTTPStatus: httpStatus, Detail: modelCheckDetail(err, candidate.APIKey)})
+		writeJSON(w, providerModelCheck{Model: model, Status: status, Reason: localTimeout(reason, candidate.BaseURL), HTTPStatus: httpStatus, Detail: modelCheckDetail(err, candidate.APIKey)})
 		return
 	}
 	modelProvider, err := boot.NewProviderWithProxy(&candidate, proxy)
@@ -240,7 +241,47 @@ func (s *Server) checkProviderModel(w http.ResponseWriter, r *http.Request) {
 	}
 	err = runProviderModelCheck(ctx, modelProvider)
 	status, reason, httpStatus := classifyProviderModelCheck(err)
-	writeJSON(w, providerModelCheck{Model: model, Status: status, Reason: reason, HTTPStatus: httpStatus, Detail: modelCheckDetail(err, candidate.APIKey)})
+	writeJSON(w, providerModelCheck{Model: model, Status: status, Reason: localTimeout(reason, candidate.BaseURL), HTTPStatus: httpStatus, Detail: modelCheckDetail(err, candidate.APIKey)})
+}
+
+// A local engine that has not loaded the model yet takes its first request for
+// as long as the weights take to reach memory, so a local address gets a longer
+// wait than a remote one.
+var (
+	modelCheckRemoteTimeout = providerProbeTimeout
+	modelCheckLocalTimeout  = 3 * providerProbeTimeout
+)
+
+const reasonLocalTimeout = "local_timeout"
+
+func modelCheckTimeout(baseURL string) time.Duration {
+	if loopbackEndpoint(baseURL) {
+		return modelCheckLocalTimeout
+	}
+	return modelCheckRemoteTimeout
+}
+
+// localTimeout names a timeout against the machine's own address as such: the
+// host knows where it asked, and the cause to look at there is the engine, not
+// the network.
+func localTimeout(reason, baseURL string) string {
+	if reason == "timeout" && loopbackEndpoint(baseURL) {
+		return reasonLocalTimeout
+	}
+	return reason
+}
+
+func loopbackEndpoint(baseURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // modelCheckDetail returns what the endpoint said, as one printable line. The
