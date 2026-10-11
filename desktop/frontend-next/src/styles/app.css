@@ -551,10 +551,10 @@
   [data-rail="off"] .rail, .app:not([data-side="on"]) .side { opacity: 0; transition: opacity var(--m-exit) }
 
   .gutter {
-    position: absolute; top: 0; bottom: 0; width: 11px; z-index: 5;
+    position: absolute; top: 0; bottom: 0; width: 7px; z-index: 5;
     cursor: col-resize; touch-action: none;
   }
-  .gutter-l { left: -6px; z-index: 13 }
+  .gutter-l { left: -1px; z-index: 13 }
   .gutter-r { right: -6px }
   .gutter::after {
     content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px;
@@ -571,7 +571,7 @@
   @keyframes edgebump { 0%, 100% { transform: none } 40% { transform: translateX(var(--bump, 0px)) } }
   .gutter:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; border-radius: var(--r-xs) }
 
-  .gutter[data-shut] { width: 14px }
+  .gutter[data-shut] { width: 14px; top: 50%; bottom: auto; height: 46px; margin-top: -23px }
   [data-rail="off"] .gutter-l { left: 0 }
   [data-rail="off"] .gutter-l .grip { margin-left: -6px }
   .grip {

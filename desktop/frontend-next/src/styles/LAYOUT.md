@@ -276,6 +276,14 @@ rules are written in.
   was read, stored, written inline and then overridden every time.
 - `.gutter-l` outranks the rail because the rail is `position: fixed` at 12: a
   seam painted under the panel it divides cannot be grabbed where it matters.
+- A handle never lies over the scrollbar beside it.
+  - The scrollbar is the scroller's own right 10px, so the open handle starts one
+    pixel inside the seam and takes the pixels beyond it.
+  - A shut handle is only as tall as its grip: a full-height strip at the window
+    edge sits on the transcript's scrollbar.
+  - The grip therefore starts the drag itself once the press has travelled; a
+    press that has not stays a click.
+  - `perf/gutterhit.mjs` asks the browser what a press on the thumb hits.
 - The rail's floor is 232px (`RAIL.min`); a narrower saved width is raised on
   read.
 - Under 232px the session filter row cannot hold four labels in either

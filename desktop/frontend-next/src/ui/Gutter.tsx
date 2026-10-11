@@ -63,20 +63,16 @@ interface Props {
 export function Gutter({ edge, span, width, max = span.max, label, open, onWidth, onOpen }: Props) {
   const held = useRef(0);
 
-  const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    const bar = e.currentTarget;
+  const begin = (bar: HTMLDivElement, pointerId: number, x0: number) => {
     const app = bar.closest(".app") as HTMLElement | null;
     if (!app) return;
-    e.preventDefault();
 
-    const x0 = e.clientX;
     const wasShut = !open;
     let now = open ? width : span.min;
     let shut = wasShut;
     let over = 0;
     let raf = 0;
-    bar.setPointerCapture(e.pointerId);
+    bar.setPointerCapture(pointerId);
     bar.dataset.on = "";
     app.dataset.drag = "pointer";
 
@@ -136,6 +132,36 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
     bar.addEventListener("pointerup", up);
     bar.addEventListener("pointercancel", up);
     paint();
+  };
+
+  const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    begin(e.currentTarget, e.pointerId, e.clientX);
+  };
+
+  // A shut handle is only as tall as its grip, so the grip has to start the drag
+  // too; a press that never travels stays the click it always was.
+  const pull = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    const bar = e.currentTarget.parentElement as HTMLDivElement;
+    const { pointerId, clientX: x0 } = e;
+    const grip = e.currentTarget;
+    const slack = 4;
+    const stop = () => {
+      grip.removeEventListener("pointermove", watch);
+      grip.removeEventListener("pointerup", stop);
+      grip.removeEventListener("pointercancel", stop);
+    };
+    const watch = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - x0) <= slack) return;
+      stop();
+      begin(bar, pointerId, x0);
+    };
+    grip.setPointerCapture(pointerId);
+    grip.addEventListener("pointermove", watch);
+    grip.addEventListener("pointerup", stop);
+    grip.addEventListener("pointercancel", stop);
   };
 
   const toggle = () => onOpen(!open);
@@ -204,7 +230,10 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
         tabIndex={-1}
         aria-hidden="true"
         title={open ? t("收起") : t("展开")}
-        onPointerDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          pull(e);
+        }}
         onClick={toggle}
         data-action-click={rail ? "chrome.rail" : "browser.open"}
       >
