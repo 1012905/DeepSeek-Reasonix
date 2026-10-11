@@ -27,6 +27,7 @@ const { BrowserViews } = require("./browserviews");
 const { startBrowserRelay } = require("./browserrelay");
 const { groundFor } = require("./ground");
 const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
+const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
@@ -310,28 +311,34 @@ function createWindow() {
   const mac = process.platform === "darwin";
   const windows = process.platform === "win32";
   const chrome = mac || windows;
-  return new BrowserWindow({
-    ...fitted(),
-    ...appIcon(),
-    minWidth: MIN_SIZE.width,
-    minHeight: MIN_SIZE.height,
-    // Shown once it has been measured against the screen it landed on; sizing a
-    // visible window makes the correction a flicker.
-    show: false,
-    backgroundColor: ground(),
-    frame: !windows,
-    titleBarStyle: mac ? "hiddenInset" : "default",
-    ...(mac ? { trafficLightPosition: LIGHTS } : {}),
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      // Stated rather than left to the defaults: this is the list a reviewer
-      // reads to know what the renderer may reach.
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webviewTag: false,
-      webSecurity: true,
-      additionalArguments: [`--reasonix-titlebar=${chrome ? "1" : "0"}`],
+  return openWindow({
+    BrowserWindow,
+    screen,
+    file: stateFile(app.getPath("userData")),
+    fallback: fitted(),
+    min: MIN_SIZE,
+    options: {
+      ...appIcon(),
+      minWidth: MIN_SIZE.width,
+      minHeight: MIN_SIZE.height,
+      // Shown once it has been measured against the screen it landed on; sizing a
+      // visible window makes the correction a flicker.
+      show: false,
+      backgroundColor: ground(),
+      frame: !windows,
+      titleBarStyle: mac ? "hiddenInset" : "default",
+      ...(mac ? { trafficLightPosition: LIGHTS } : {}),
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+        // Stated rather than left to the defaults: this is the list a reviewer
+        // reads to know what the renderer may reach.
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webviewTag: false,
+        webSecurity: true,
+        additionalArguments: [`--reasonix-titlebar=${chrome ? "1" : "0"}`],
+      },
     },
   });
 }
