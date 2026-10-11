@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -185,14 +186,7 @@ func validateCorpusPolicies(root string, policies []corpusPolicy) []error {
 			errs = append(errs, fmt.Errorf("corpus %q is registered but has no tasks/ directory at %s", name, p.Dir))
 		}
 		for rule := range p.Rules {
-			known := false
-			for _, r := range allRules {
-				if rule == r {
-					known = true
-					break
-				}
-			}
-			if !known {
+			if !slices.Contains(allRules, rule) {
 				errs = append(errs, fmt.Errorf("corpus %q declares an unknown rule %q", name, rule))
 			}
 		}
@@ -481,10 +475,11 @@ func TestCorpusPolicyValidationCatchesGaps(t *testing.T) {
 			if len(errs) == 0 {
 				t.Fatalf("no error reported, want one mentioning %q", c.want)
 			}
-			joined := ""
+			var jb strings.Builder
 			for _, err := range errs {
-				joined += err.Error() + "\n"
+				jb.WriteString(err.Error() + "\n")
 			}
+			joined := jb.String()
 			if !strings.Contains(joined, c.want) {
 				t.Fatalf("errors do not mention %q:\n%s", c.want, joined)
 			}
