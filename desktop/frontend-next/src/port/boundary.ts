@@ -61,6 +61,15 @@ export interface SandboxSettings {
   shadowedBy?: string;
 }
 
+// The project's primary folder and the extra folders the user granted it write
+// access to. pending counts other panes on the project that were busy and take
+// the change at their next rebuild.
+export interface WorkspaceRoots {
+  primary: string;
+  extra: string[];
+  pending?: number;
+}
+
 // What a settings surface shows in place of a save it cannot perform. The
 // kernel refuses every write while the file will not parse, so this arrives
 // before anything is tried rather than as each panel's own error.
