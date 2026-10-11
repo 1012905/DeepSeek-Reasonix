@@ -25,11 +25,17 @@ export interface ProviderEntry {
   // at all; webSearch whether it is on. They differ between an account's doors.
   canWebSearch?: boolean;
   webSearch?: boolean;
+  // False where the entry's protocol declares no model listing, so the editor
+  // offers no control to read one. Absent is a kernel that predates the field.
+  canListModels?: boolean;
   // Whether thinking/reasoning_effort may go on the wire. canSetThinking is
   // false where the protocol never carries them, so the switch appears only
   // where a relay can actually reject the request over it.
   canSetThinking?: boolean;
   sendsThinking?: boolean;
+  // Where a chosen effort level lands in this entry's request body, as a dotted
+  // path; absent when its resolved reasoning protocol reshapes the request.
+  effortField?: string;
   // How this endpoint carries context between turns, and whether its protocol
   // has the choice at all. "" is vendor detection, which is what an endpoint
   // nobody has characterised keeps doing.
@@ -87,6 +93,10 @@ export interface Protocol {
   // whether thinking/effort fields ride it at all.
   serverWebSearch: boolean;
   reasoningParams: boolean;
+  effortField?: string;
+  // The reasoning protocols under which that field holds; empty when the wire
+  // fixes it whatever protocol is chosen.
+  effortUnder?: string[];
 }
 
 // What an endpoint turned out to be. Every field is a guess the user confirms
@@ -148,6 +158,8 @@ export type ProviderModelCheckReason =
   | "rejected"
   | "network"
   | "timeout"
+  // Timed out against the machine's own address: the engine did not answer, not the network.
+  | "local_timeout"
   // The endpoint answered chat and refused a tools array. Established by
   // sending the same request again without one, not by reading the refusal.
   | "tools";
@@ -176,6 +188,8 @@ export interface ProviderModelCheckRequest {
 // Changing a source that already exists: everything else on the entry stays.
 export interface ProviderEdit {
   name: string;
+  // Omitted leaves the wire format alone.
+  kind?: string;
   baseUrl?: string;
   // Empty keeps the stored key.
   apiKey?: string;
@@ -216,6 +230,8 @@ export interface ModelLimit {
 export interface ModelEffort {
   supportedEfforts: string[];
   defaultEffort?: string;
+  // On an inherited ladder: the vendor's documented contract, not typed levels.
+  official?: boolean;
 }
 
 // What the panel sends back after the user has looked at the probe.

@@ -79,11 +79,17 @@ type providerView struct {
 	// has no format for it, so the answer differs per protocol on one account.
 	CanWebSearch bool `json:"canWebSearch"`
 	WebSearch    bool `json:"webSearch"`
+	// CanListModels is false where the protocol declares no model listing, so
+	// the editor does not offer to read one.
+	CanListModels bool `json:"canListModels"`
 	// SendsThinking is whether thinking/reasoning_effort may go on the wire.
 	// CanSetThinking is false where the protocol never carries them, so the UI
 	// offers the switch only where a gateway can actually reject the request.
 	CanSetThinking bool `json:"canSetThinking"`
 	SendsThinking  bool `json:"sendsThinking"`
+	// EffortField is where a chosen effort level lands in this wire's request
+	// body, declared by the protocol so every panel words it from one source.
+	EffortField string `json:"effortField"`
 	// Continuation is how this endpoint carries context between turns, and
 	// CanSetContinuation whether its protocol has the choice at all. Empty is
 	// vendor detection, which is what an uncharacterised endpoint must keep.
@@ -150,8 +156,10 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			VisionSettable:     nonNilStrings(settable),
 			CanWebSearch:       config.HasServerWebSearchCapability(p),
 			WebSearch:          config.EffectiveWebSearch(p),
+			CanListModels:      config.CanListModels(p),
 			CanSetThinking:     config.CanConfigureThinkingParams(p),
 			SendsThinking:      config.SendsThinkingParams(p),
+			EffortField:        config.EffortFieldForEntry(p),
 			CanSetContinuation: config.CanConfigureContinuation(p),
 			Continuation:       string(config.ContinuationOf(p)),
 			Default:            p.DefaultModel(),
@@ -186,6 +194,10 @@ type protocolView struct {
 	Discovery       string `json:"discovery"`
 	ServerWebSearch bool   `json:"serverWebSearch"`
 	ReasoningParams bool   `json:"reasoningParams"`
+	EffortField     string `json:"effortField"`
+	// EffortUnder is the reasoning protocols under which the field holds; empty
+	// when the wire fixes it.
+	EffortUnder []string `json:"effortUnder"`
 }
 
 // providerProtocols lists what a chooser may offer, so a wire added to the
@@ -200,6 +212,8 @@ func (s *Server) providerProtocols(w http.ResponseWriter, _ *http.Request) {
 			Discovery:       p.Discovery,
 			ServerWebSearch: p.ServerWebSearch,
 			ReasoningParams: p.ReasoningParams,
+			EffortField:     p.EffortField,
+			EffortUnder:     nonNilStrings(p.EffortUnder),
 		})
 	}
 	writeJSON(w, out)
@@ -419,7 +433,8 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 func removalSuccessor(cfg *config.Config) string {
 	target := cfg.DefaultModel
 	if _, found := cfg.ResolveModel(target); !found && target != "" {
-		target, _, _ = cfg.ResolveStartupChatModel()
+		start, _ := cfg.ResolveStartupChatModel()
+		target = start.Ref
 	}
 	return target
 }
@@ -511,6 +526,11 @@ const (
 	codeProbeUnreachable     = "provider.probe.unreachable"
 	codeProbeNotCompatible   = "provider.probe.not_compatible"
 	codeProbeFailed          = "provider.probe.failed"
+
+	codeProbeDecisionPathNotFound  = "provider.probe.decision_path_not_found"
+	codeProbeDecisionNotCompatible = "provider.probe.decision_not_compatible"
+	codeProbeDecisionRejected      = "provider.probe.decision_rejected"
+	codeNoModelsPicked             = "provider.no_models_picked"
 )
 
 // probeReasonRefusal is the one place a probe identity becomes a status and a dotted

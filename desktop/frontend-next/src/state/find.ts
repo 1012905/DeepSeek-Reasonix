@@ -38,6 +38,8 @@ export function saidBy(it: Item): string[] {
       return [it.c.summary ?? ""];
     case "remember":
       return [it.m.title, it.m.description, it.m.body];
+    case "worked":
+      return [];
     case "receipt":
       return [
         ...(it.r.changes ?? []).map((c) => c.path),

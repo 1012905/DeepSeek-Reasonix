@@ -78,8 +78,8 @@ func renderDesktopSection(b *strings.Builder, c *Config) {
 	}
 	renderDesktopReasoningDisplayMode(b, c)
 	fmt.Fprintf(b, "display_mode = %q   # desktop: standard|compact transcript display mode\n", c.DesktopDisplayMode())
-	if width := c.DesktopConversationWidth(); width == "full" {
-		fmt.Fprintf(b, "conversation_width = %q   # desktop: standard|full transcript width; empty = standard\n", width)
+	if width := c.DesktopConversationWidth(); width != "standard" {
+		fmt.Fprintf(b, "conversation_width = %q   # desktop: standard|full|full-all (full-all widens the composer too); empty = standard\n", width)
 	}
 	renderAppearanceSection(b, c.Desktop.Appearance)
 	b.WriteString("\n")
@@ -109,7 +109,7 @@ func renderAppearanceSection(b *strings.Builder, a AppearanceConfig) {
 		b.WriteString("\n[desktop.appearance]\n")
 	}
 	if a.Zoom != 0 {
-		fmt.Fprintf(b, "zoom = %g   # whole-interface scale, 0.8..1.6\n", a.Zoom)
+		fmt.Fprintf(b, "zoom = %g   # whole-interface scale, %g..%g\n", a.Zoom, ZoomMin, ZoomMax)
 	}
 	if a.ReadSize != 0 {
 		fmt.Fprintf(b, "read_size = %g   # transcript body size in px\n", a.ReadSize)

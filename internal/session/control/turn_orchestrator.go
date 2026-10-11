@@ -27,13 +27,16 @@ type turnOrchestrator struct {
 }
 
 type orchestratedTurn struct {
-	input            string
-	raw              string
-	imageRefs        string
-	images           *turnImages
-	display          string
-	editedOriginal   string
-	synthetic        bool
+	input          string
+	raw            string
+	imageRefs      string
+	images         *turnImages
+	display        string
+	editedOriginal string
+	synthetic      bool
+	// opensTurn marks a synthetic turn that is a whole turn of its own, such as
+	// a queued host item: nothing before it announced a start.
+	opensTurn        bool
 	goalContinuation *goalContinuationSnapshot
 }
 
@@ -334,6 +337,7 @@ func (c *Controller) announceAuthoredTurn(ctx context.Context, raw string, msgIn
 		// the way history reads it, so a reload draws the same line.
 		started.Text = sessionstore.UserMessageText(provider.Message{Role: provider.RoleUser, RawContent: raw})
 		started.Via = via
+		started.Attachments = c.StoredAttachments(started.Text)
 	}
 	c.sink.Emit(started)
 	return agent.WithHostTurnBoundary(ctx, boundary)
@@ -345,6 +349,9 @@ func (c *Controller) announceAuthoredTurn(ctx context.Context, raw string, msgIn
 func (c *Controller) openTurnBoundary(ctx context.Context, turn orchestratedTurn, msgIndex int) (context.Context, sessionstore.InFlightTurnMeta) {
 	ctx, marker := c.beginTurn(ctx, msgIndex, !turn.synthetic && !IsSyntheticUserMessage(turn.raw))
 	if turn.synthetic {
+		if turn.opensTurn {
+			c.sink.Emit(event.Event{Kind: event.TurnStarted, ModelRef: c.modelRef})
+		}
 		return c.continueAnnouncedTurn(ctx), marker
 	}
 	return c.announceAuthoredTurn(ctx, firstNonEmpty(turn.raw, turn.input), msgIndex), marker

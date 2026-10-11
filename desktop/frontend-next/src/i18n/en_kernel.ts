@@ -46,6 +46,8 @@ export const EN_KERNEL: Record<string, string> = {
     "That server would not start, and the switch could not be put back - after a restart it will hold what you just set",
   "这个服务要启动的内容在你启用后变了，请先查看命令并重新启用":
     "What this server launches changed since you enabled it; review the command and enable it again",
+  "这个服务没有被暂挡的工具定义": "This server has no held tool definitions",
+  "你看到的被挡定义已经变了，没有接受；请重新查看": "The held definitions changed since you saw them, so nothing was accepted; review them again",
   "开关未能保存：其存储文件无法读取或写入": "The switch was not stored: its file could not be read or written",
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
@@ -64,6 +66,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这台服务器未开放配置编辑": "This server does not allow editing its config",
   "该文件需手动修改：{detail}": "This file needs an edit by hand: {detail}",
   "设置已写入，但运行时未能按新设置重建：{detail}": "The settings were written, but the runtime could not be rebuilt on them: {detail}",
+  "规则 {rule} 没有对应的工具（{tool}），匹配不到任何调用，因此未保存；命令要写成 Bash(命令:*)": "Rule {rule} names no tool ({tool}), so it would match no call and was not saved. A shell command is written Bash(command:*).",
   "该权限未能保存：{detail}": "That permission was not saved: {detail}",
   "沙箱设置未能保存：{detail}": "The sandbox settings were not saved: {detail}",
   "内置浏览器设置未能保存：{detail}": "The built-in browser setting was not saved: {detail}",
@@ -117,6 +120,16 @@ export const EN_KERNEL: Record<string, string> = {
   "本机的 sandbox-exec 不可用，命令将不受限制地运行": "sandbox-exec is unusable on this machine, so commands run unconfined",
   "Windows 上尚无操作系统级沙箱，命令将不受限制地运行": "Windows has no OS-level sandbox here yet, so commands run unconfined",
   "该平台尚无可用的沙箱后端，命令将不受限制地运行": "This platform has no usable sandbox backend yet, so commands run unconfined",
+  "当前还有任务在运行，结束后才能更改工作区文件夹": "Finish the current work before changing the workspace folders.",
+  "这台服务器没有开启工作区文件夹编辑": "Workspace folder editing is not enabled on this server.",
+  "请填写文件夹路径": "A folder path is required.",
+  "没有可用的当前模型，无法应用文件夹更改": "There is no current model to apply the folder change on.",
+  "需要一个已存在的文件夹的绝对路径": "Use the absolute path of a folder that exists.",
+  "这个文件夹已经在当前工作区里": "This folder is already inside the current workspace.",
+  "这个文件夹范围太大（磁盘根目录，或包含你的主目录或 Reasonix 数据目录）": "This folder is too broad: it is a drive root or contains your home or Reasonix data folder.",
+  "这个文件夹含有或位于密钥、凭据或 Reasonix 自己的数据目录里，不能授予写入权限": "This folder holds or sits inside keys, credentials or Reasonix's own data, so it cannot be granted write access.",
+  "这个文件夹不属于当前用户，不能授予写入权限": "This folder is not owned by the current user, so it cannot be granted write access.",
+  "这个文件夹和已有的可写位置（临时目录、工具缓存或另一个额外文件夹）重叠": "This folder overlaps a location that is already writable (temp, a tool cache or another extra folder).",
   "本机没有操作系统沙箱，「关进沙箱」一档无法保存": "This machine has no OS sandbox, so the jailed mode cannot be saved",
 
   "该文件夹仍有 {n} 个打开的面板，请先关闭再移除": "This folder still has {n} open panes — close them before removing it",
@@ -146,7 +159,9 @@ export const EN_KERNEL: Record<string, string> = {
   "连接 {host} 失败：{detail}": "Could not reach {host}: {detail}",
   "{host} 不接受该凭据。请更换密钥，或在设置中填写正确的环境变量名。":
     "{host} rejected these credentials. Try another key, or name the right environment variable in settings.",
-  "任务正在运行，请先停止再切换模型": "A task is running — stop it before switching models",
+  "当前回合正在进行，请先停止或等它结束再切换模型": "A turn is in progress — stop it or wait for it to finish before switching models",
+  "回合已结束，但还有 {count} 个后台任务在运行，切换模型会终止它们。请先在「后台任务」里停止，再切换模型":
+    "The turn has finished, but {count} background job(s) are still running and switching models would end them. Stop them under Background jobs, then switch",
   "任务正在运行，请先停止再调整推理强度": "A task is running — stop it before changing the reasoning effort",
   "{provider} 没说自己有哪些推理强度档位。要有，得在它的配置块里写 reasoning_protocol 或 supported_efforts":
     "{provider} names no reasoning-effort levels. To give it some, set reasoning_protocol or supported_efforts in its config block",
@@ -162,6 +177,7 @@ export const EN_KERNEL: Record<string, string> = {
   "读不到配置文件，没法安全地选择密钥存放位置，请检查配置后重试": "The configuration could not be read, so there is no safe place to store the key; check the config and try again",
   "请填写接口地址": "Enter an endpoint address",
   "无法识别「{kind}」这种接入方式": "“{kind}” is not a protocol this knows",
+  "这个来源固定了为当前协议写的请求地址或认证方式，不能直接换协议：请先在配置文件里去掉 request_url、chat_url 和 auth_header": "This source pins a request URL or auth header written for its current protocol, so its protocol cannot be changed here: remove request_url, chat_url and auth_header from the config file first",
   "请至少选择一个模型": "Pick at least one model",
   "默认模型「{model}」不在已选择的模型中": "The default model “{model}” is not among the ones you picked",
   "显示名称最多 {max} 个字符": "A display name can be at most {max} characters",
@@ -242,6 +258,12 @@ export const EN_KERNEL: Record<string, string> = {
   "检查失败，没有具体原因": "The check failed and gave no reason",
   "无法连接该地址。请检查网络是否通畅，以及地址是否有误":
     "Cannot reach that address. Check the network, or whether the address has a typo",
+  "地址可以连通，但没有 System One 决策接口。请填写服务的基地址，不要带 /v1/systemone，Reasonix 会自己在后面追加":
+    "The address answers, but has no System One decision endpoint. Enter the service's base address without /v1/systemone — Reasonix appends it",
+  "该地址有响应，但返回的不是 System One 的决策结果。请确认这是决策协议服务的基地址":
+    "The address answers, but not with a System One decision. Check that it is the decision service's base address",
+  "服务拒绝了这次决策请求。请核对模型名与服务文档，具体原因见下方服务返回的内容":
+    "The service refused the decision request. Check the model name against its documentation; what it said is shown with this result",
   "该地址有响应，但不是 OpenAI 或 Anthropic 类接口。请确认是否误将网页地址复制过来":
     "Something answered, but not as an OpenAI- or Anthropic-compatible API. Check a web page address was not pasted in",
   "无法解析本次请求的内容，请刷新页面后重试": "That request could not be read — reload the page and try again",
@@ -272,6 +294,8 @@ export const EN_KERNEL: Record<string, string> = {
   "HTTP 上不提供 shell 命令": "Shell commands are not served over HTTP",
   "不存在「{role}」这个角色": "There is no “{role}” role",
   "没有已配置的模型匹配「{model}」": "No configured model matches “{model}”",
+  "「{model}」是决策来源，只服务 system_one 的询问，不能用作对话模型": "“{model}” is a decision source: it only answers system_one's questions and cannot be used as a conversation model",
+  "「{model}」是对话模型，不是决策来源；决策只能选择「模型服务」里添加的决策来源": "“{model}” is a conversation model, not a decision source; decisions can only use a decision source added under Model services",
   "「{key}」不在用户配置里，可能已被清除，或来自项目配置": "“{key}” is not in the user config; it may already be cleared, or come from the project config",
   "这台服务器未开放 shell 设置": "This server does not open shell settings",
   "这台服务器未开放账号登录": "This server does not open account sign-in",
@@ -334,6 +358,7 @@ export const EN_KERNEL: Record<string, string> = {
   "该问题已有其他答案": "That question already has a different answer",
   "状态图标设置未能保存：{detail}": "The status icon settings were not saved: {detail}",
   "内置浏览器的消息格式不正确，本次回传被丢弃": "The built-in browser sent malformed messages, and they were dropped",
+  "这个内核没有窗口外壳，没有可以指出的日志目录": "This kernel has no window shell, so there is no log directory to point to",
   "这个 Studio 不是安装版（从源码启动），没有可以查看或切换的版本":
     "This Studio is not an installed build (it runs from source), so it has no version to show or change",
   "版本固定未能保存：{detail}": "The version hold was not saved: {detail}",
@@ -363,7 +388,12 @@ export const EN_KERNEL: Record<string, string> = {
   "该文件不是可编辑文本或超过大小限制": "The file is not editable text or exceeds the size limit",
   "不支持这个币种，只能选自动、CNY 或 USD：{detail}": "That currency is not supported; choose Auto, CNY or USD: {detail}",
   "费用显示币种未能保存：{detail}": "The display currency was not saved: {detail}",
+  "文件改动显示设置未能保存：{detail}": "The file-changes display setting was not saved: {detail}",
   "无进展设置未能保存：{detail}": "The progress settings were not saved: {detail}",
+  "提问等待时长未能保存：{detail}": "The question wait time was not saved: {detail}",
+  "等待时长超出允许范围，未做任何修改：{detail}": "That wait time is out of range; nothing was changed: {detail}",
+  "自动归档设置未能保存：{detail}": "The auto-archive settings were not saved: {detail}",
+  "天数超出允许范围，未做任何修改：{detail}": "The number of days is out of range; nothing was changed: {detail}",
   "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹": "A home directory or drive root cannot be trusted as a whole - open a specific project folder",
   "未能记下对此文件夹的信任决定：{detail}": "The trust decision for this folder was not saved: {detail}",
   "该数值超出允许范围，未做任何修改：{detail}": "That value is out of range; nothing was changed: {detail}",
