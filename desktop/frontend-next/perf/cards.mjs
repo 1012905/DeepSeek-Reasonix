@@ -201,6 +201,21 @@ await col.setViewportSize({ width: 1440, height: 900 });
 await setMeasure("full-all");
 await col.waitForTimeout(300);
 const fullAll = await edges();
+for (const width of [1000, 720]) {
+  await col.setViewportSize({ width, height: 900 });
+  await setMeasure("full-all");
+  await col.waitForTimeout(300);
+  const n = await edges();
+  const inside = await col.evaluate(() => {
+    const b = document.querySelector(".compose").getBoundingClientRect();
+    const pane = document.querySelector(".compose").parentElement.getBoundingClientRect();
+    return { left: Math.round(b.left - pane.left), right: Math.round(pane.right - b.right), w: innerWidth };
+  });
+  check(`${width}px 连输入框一起铺满：输入框不超出所在栏`, inside.left >= 0 && inside.right >= 0, `左 ${inside.left}，右 ${inside.right}`);
+  check(`${width}px 连输入框一起铺满：输入框与转录左右对齐（容差一个槽）`, Math.abs(n.compose.l - n.flow.l) <= 40 && Math.abs(n.compose.r - n.flow.r) <= 40,
+    `转录 ${n.flow.l}–${n.flow.r}，输入框 ${n.compose.l}–${n.compose.r}`);
+}
+await col.setViewportSize({ width: 1440, height: 900 });
 await setMeasure(false);
 check("连输入框一起铺满：输入框与转录同宽", Math.abs(fullAll.compose.l - fullAll.flow.l) <= 40 && Math.abs(fullAll.compose.r - fullAll.flow.r) <= 40,
   `转录 ${fullAll.flow.l}–${fullAll.flow.r}，输入框 ${fullAll.compose.l}–${fullAll.compose.r}`);
