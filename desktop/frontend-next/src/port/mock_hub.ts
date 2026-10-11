@@ -158,6 +158,8 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
+  onTreeChanged(_listener: () => void) { return () => {}; }
+
   tree() {
     const open = new Map(this.views.filter((v) => v.sessionPath).map((v) => [v.sessionPath!, v.id]));
     return Promise.resolve(
