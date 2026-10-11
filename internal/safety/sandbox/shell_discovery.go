@@ -77,7 +77,7 @@ func (h shellHost) bashCandidates() []string {
 			out = append(out, p)
 		}
 	}
-	if p, err := h.lookPath("bash"); err == nil && !h.isWSL(p) {
+	if p, ok := h.lookShell("bash"); ok && !h.isWSL(p) {
 		add(p)
 	}
 	for _, p := range h.winBash {
