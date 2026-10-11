@@ -158,6 +158,8 @@ export type ProviderModelCheckReason =
   | "rejected"
   | "network"
   | "timeout"
+  // Timed out against the machine's own address: the engine did not answer, not the network.
+  | "local_timeout"
   // The endpoint answered chat and refused a tools array. Established by
   // sending the same request again without one, not by reading the refusal.
   | "tools";

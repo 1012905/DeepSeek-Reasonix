@@ -524,6 +524,7 @@ export const EN: Record<string, string> = {
   "遇到限流，尚未确认": "Rate limited; availability is still unknown",
   "网络异常，尚未确认": "Network error; availability is still unknown",
   "验证超时，尚未确认": "Verification timed out; availability is still unknown",
+  "本机服务没有在时限内回答，尚未确认；模型若刚启动可能还在加载，稍后再验证一次": "The local service did not answer in time, so this is unconfirmed. A model that was just started may still be loading; verify again shortly.",
   "请求被拒绝，尚未确认": "Request rejected; availability is still unknown",
   "尚未确认": "Availability is still unknown",
   "读图": "Reads images",
