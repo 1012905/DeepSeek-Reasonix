@@ -227,17 +227,21 @@ func TestLinkedStoreRootsAndDanglingLinksStayListed(t *testing.T) {
 	}
 }
 
-// A path that climbs out of the store before it is cleaned is not judged by
-// where the cleaned spelling lands.
-func TestDotDotPathIsNeverHostOwned(t *testing.T) {
+// A path that climbs before it is cleaned is not judged by where the cleaned
+// spelling lands: this one cleans into the snapshot store but was written
+// through a ".." from outside it.
+func TestDotDotPathIntoTheStoreIsNeverHostOwned(t *testing.T) {
 	f := newReceiptFixture(t)
-	f.write(t, filepath.Join(taskmonitor.StoreDir, "step-5", "snapshot.json"))
-	work := f.write(t, filepath.Join("src", "api.py"))
+	f.write(t, filepath.Join("src", "keep.py"))
 	sep := string(filepath.Separator)
-	climbing := f.root + sep + taskmonitor.StoreDir + sep + "step-5" + sep + ".." + sep + ".." + sep + ".." + sep + "src" + sep + "api.py"
+	climbing := f.root + sep + "src" + sep + ".." + sep + taskmonitor.StoreDir + sep + "step-5" + sep + "snapshot.json"
+	writeTestFile(t, filepath.Join(f.root, taskmonitor.StoreDir, "step-5", "snapshot.json"), "x\n")
 	f.record(climbing)
 	rep := f.report()
 	if rep.Mutations != 1 || len(rep.Changes) != 1 {
-		t.Fatalf("mutations = %d, changes = %q, want the write to %s counted", rep.Mutations, changedPaths(rep), work)
+		t.Fatalf("mutations = %d, changes = %q, want the write counted", rep.Mutations, changedPaths(rep))
 	}
 }
+
+// The verdict is the host's at the moment the call returned. A single bash
+// call that makes a link, writes through it and removes it again is not seen.
