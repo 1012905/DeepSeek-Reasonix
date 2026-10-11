@@ -250,14 +250,15 @@ export function App({ hub }: { hub: HubPort }) {
   }, [hub, runtimes]);
   const activePort = panePorts.get(active) ?? panePorts.values().next().value ?? null;
   const machinePort = useMemo(() => hub.machinePort(), [hub]);
-  const localRt = runtimes.find((rt) => rt.id === active && !rt.host) ?? runtimes.find((rt) => !rt.host);
+  const machineRt = runtimes.find((rt) => !rt.host);
+  const localRt = runtimes.find((rt) => rt.id === active && !rt.host) ?? machineRt;
   const localWorkspacePort = useMemo(() => hub.machinePort(localRt?.id), [hub, localRt?.id]);
 
   useLaunchHealth(activePort, setup, welcomed);
 
   // Asked on open, on focus (at most every 30 s) and every 10 min while a report
   // is unsettled, never otherwise; a failed refresh stays silent and backs off.
-  useFeedbackUnread(machinePort, "", feedbackUnread, setFeedbackUnread, feedback !== null);
+  useFeedbackUnread(machineRt ? machinePort : null, machineRt?.id ?? "", feedbackUnread, setFeedbackUnread, feedback !== null);
 
   useEffect(() => {
     if (!activePort) return;
