@@ -199,7 +199,22 @@ func (a *Agent) touchedTheWorkspace(r evidence.Receipt) bool {
 	if a.writeWorkspaceRoot == "" || len(r.Paths) == 0 {
 		return true
 	}
-	return slices.ContainsFunc(r.Paths, a.pathInWorkspace)
+	return slices.ContainsFunc(r.Paths, func(p string) bool {
+		return !slices.Contains(r.HostOwned, p) && a.pathInWorkspace(p)
+	})
+}
+
+// stampHostOwned records which of the receipt's paths are host state as the
+// filesystem stands now, while the call's own effects are what it reflects.
+func (a *Agent) stampHostOwned(rec *evidence.Receipt) {
+	if a.writeWorkspaceRoot == "" || rec == nil {
+		return
+	}
+	for _, p := range rec.Paths {
+		if hostOwnedPath(a.writeWorkspaceRoot, p) {
+			rec.HostOwned = append(rec.HostOwned, p)
+		}
+	}
 }
 
 // pathInWorkspace reports whether one path is part of the work product. A
@@ -210,10 +225,7 @@ func (a *Agent) pathInWorkspace(path string) bool {
 	if root == "" {
 		return true
 	}
-	if filepath.IsAbs(path) && !writeclaim.PathWithin(root, path) {
-		return false
-	}
-	return !hostOwnedPath(root, path)
+	return !filepath.IsAbs(path) || writeclaim.PathWithin(root, path)
 }
 
 // mutationBaseline is what the turn's remaining obligations are measured from:
