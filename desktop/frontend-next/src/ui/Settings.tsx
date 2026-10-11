@@ -544,7 +544,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 <ModelUsage models={models} roles={roles} main={status?.modelRef} busy={busy} protocol={protocol}
                   onMain={(ref) => run(ref, async () => {
                     await port.setModel(ref);
-                    await homePort.setDefaultModel(ref);
+                    await localPort.setDefaultModel(ref);
                     // The row reads the catalogue's default, so the list has to
                     // be re-read or the controlled select snaps back.
                     loadModels();

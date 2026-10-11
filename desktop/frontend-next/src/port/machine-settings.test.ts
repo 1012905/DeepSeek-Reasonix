@@ -34,10 +34,11 @@ it("pins workspace reads and mutations to the same local owner", async () => {
   await local.memoryRevisions("fact");
   await local.restoreMemory("fact", 1);
   await local.models("all");
+  await local.setDefaultModel("plugin/project/cloud/chat");
   expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
     "/host/settings/runtime/r2/memory", "/host/settings/runtime/r2/memory/forget",
     "/host/settings/runtime/r2/memory/revisions?name=fact", "/host/settings/runtime/r2/memory/restore",
-    "/host/settings/runtime/r2/models?answers=all",
+    "/host/settings/runtime/r2/models?answers=all", "/host/settings/runtime/r2/default-model",
   ]);
   fetcher.mockResolvedValueOnce(new Response("refused", { status: 500 }));
   await expect(hub.close("r2")).rejects.toThrow();
