@@ -618,10 +618,10 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 		if a.role.requireVisibleFinal || owedSynthesis || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
 			state.emptyFinalBlocks++
 			if state.emptyFinalBlocks >= maxEmptyFinalBlocks {
-				return false, fmt.Errorf("model finished without a visible final answer %d times", state.emptyFinalBlocks)
+				return false, &EmptyFinalError{Blocks: state.emptyFinalBlocks, FinishReason: finishReasonOf(usage)}
 			}
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeEmptyFinal, Text: emptyFinalNotice(), Detail: emptyFinalNoticeDetail(a.svc.prov.Name(), usage, len(reasoning))})
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage()), HostAuthored: true})
+			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage(usage)), HostAuthored: true})
 			return true, nil
 		}
 	}
