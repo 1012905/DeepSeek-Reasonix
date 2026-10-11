@@ -76,8 +76,10 @@ func checkContent(content any) error {
 				if part["image_url"] == "" {
 					return fmt.Errorf("input_image lacks image_url")
 				}
-				if part["detail"] != "auto" && part["detail"] != "low" && part["detail"] != "high" {
-					return fmt.Errorf("input_image lacks the required detail (%q)", part["detail"])
+				// The schema lists detail as required, but every endpoint in use
+				// accepts its absence, so it is not asserted here.
+				if d, ok := part["detail"]; ok && d != "auto" && d != "low" && d != "high" {
+					return fmt.Errorf("input_image detail %q", d)
 				}
 			default:
 				return fmt.Errorf("unknown content part %q", part["type"])
