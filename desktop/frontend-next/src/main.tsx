@@ -14,6 +14,7 @@ import "./styles/workfold.css";
 import "./styles/workbench-launcher.css";
 import "./styles/feedback.css";
 import "./styles/community.css";
+import "./styles/themes.css";
 import "./styles/sponsor.css";
 import "./styles/chart.css";
 import "./styles/versions.css";

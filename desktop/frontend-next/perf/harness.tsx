@@ -11,6 +11,7 @@ import "../src/styles/narrow.css";
 import "../src/styles/workfold.css";
 import "../src/styles/workbench-launcher.css";
 import "../src/styles/feedback.css";
+import "../src/styles/themes.css";
 import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";

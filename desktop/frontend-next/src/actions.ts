@@ -437,6 +437,7 @@ export const ACTIONS: UIAction[] = [
   { id: "theme.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "theme.import", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "theme.folder", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "theme.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
 
   // Usage changes what report is read, not canonical session state.
   { id: "usage.range.start", kind: "view", target: "none", proof: "interaction" },
