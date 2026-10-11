@@ -12,6 +12,7 @@ import (
 // read itself, so a device, a FIFO or a file that grows while it is read cannot
 // pass a size check made earlier. Over the cap is ErrSourceUnreadable.
 func readBounded(path string) ([]byte, error) {
+	// codeql[go/path-injection] path is a manifest inside the source the person asked to install; reading it is the feature, and the read is capped.
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
