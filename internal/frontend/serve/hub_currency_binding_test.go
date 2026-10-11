@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -147,5 +148,91 @@ func TestHubCurrencyBindingReconcilesBuiltLocalProjections(t *testing.T) {
 	case cookie := <-far.cookies:
 		t.Fatalf("local currency reached remote: %q", cookie)
 	default:
+	}
+}
+
+func TestHubCurrencyBindingPublishesWithInvalidConfig(t *testing.T) {
+	for _, transition := range []string{"adopt", "open", "open-defaults", "model", "extensions", "workspace"} {
+		t.Run(transition, func(t *testing.T) {
+			t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+			closeSharedCatalogsOnCleanup(t)
+			path := config.UserConfigPath()
+			seed := []byte("config_version = 12\n[billing]\ndisplay_currency = \"USD\"\n")
+			if err := os.WriteFile(path, seed, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if transition != "open-defaults" {
+				if err := os.MkdirAll(filepath.Dir(config.LastKnownGoodConfigPath()), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(config.LastKnownGoodConfigPath(), seed, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			resolver := homeResolver()
+			root, bc := testenv.TempDir(t), NewBroadcaster()
+			built, err := boot.BuildRuntime(t.Context(), boot.Options{WorkspaceRoot: root, SessionDir: SessionDirFor(root), Sink: bc, ProviderResolver: resolver})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(built.Controller.Close)
+			s := New(built.Controller, bc, config.ServeConfig{})
+			s.AdoptRuntime(built)
+			h := NewHub(HubOptions{ProviderResolver: resolver})
+			t.Cleanup(h.Shutdown)
+			if transition != "adopt" && transition != "open" && transition != "open-defaults" {
+				if _, err := h.Adopt(s, bc); err != nil {
+					t.Fatal(err)
+				}
+			}
+			const malformed = "garbage = = =\n"
+			if err := os.WriteFile(path, []byte(malformed), 0600); err != nil {
+				t.Fatal(err)
+			}
+			switch transition {
+			case "adopt":
+				_, err = h.Adopt(s, bc)
+			case "open", "open-defaults":
+				var rt *Runtime
+				rt, err = h.Open(t.Context(), OpenRequest{Root: testenv.TempDir(t)})
+				if err == nil {
+					s, bc = rt.Server, rt.Events
+				}
+			case "model":
+				err = s.switchModel(t.Context(), currentModelRef(s.Controller()))
+			case "extensions":
+				err = s.reloadExtensions(t.Context())
+			case "workspace":
+				s.bindMu.Lock()
+				err = s.switchWorkspaceLocked(t.Context(), testenv.TempDir(t))
+				s.bindMu.Unlock()
+			}
+			if err != nil {
+				t.Fatalf("publish with malformed config: %v", err)
+			}
+			if raw, err := os.ReadFile(path); err != nil || string(raw) != malformed {
+				t.Fatalf("malformed config changed: %q, %v", raw, err)
+			}
+			wantDisplay, wantQuote := "USD", "USD"
+			if transition == "open-defaults" {
+				wantDisplay, wantQuote = "", "CNY"
+			}
+			if got := bc.DisplayCurrency(); got != wantDisplay {
+				t.Fatalf("built broadcaster projection = %q, want %q", got, wantDisplay)
+			}
+			before := bc.Watermark()
+			s.Controller().(*control.Controller).EmitExtensionEvent(event.Event{Kind: event.Usage, ModelRef: "deepseek/deepseek-flash", Usage: &provider.Usage{PromptTokens: 1000}, Pricing: &provider.Pricing{Currency: "CNY", CacheHit: .02, Input: 1, Output: 4}})
+			frames, _ := bc.Replay(before)
+			var wire eventwire.Event
+			if len(frames) != 1 {
+				t.Fatalf("usage frames = %d, want one", len(frames))
+			}
+			if err := json.Unmarshal(frames[0], &wire); err != nil {
+				t.Fatal(err)
+			}
+			if wire.Usage == nil || wire.Usage.CostQuote == nil || wire.Usage.CostQuote.Selected == nil || wire.Usage.CostQuote.Selected.Currency != wantQuote {
+				t.Fatalf("built future quote projection = %+v, want %s", wire.Usage, wantQuote)
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package control
 
 import (
 	"errors"
+	"log/slog"
 	"sync"
 
 	"reasonix/internal/contract/config"
@@ -32,9 +33,6 @@ func (g *DisplayCurrencyGroup) Bind(previous, next *Controller, display func(str
 		return errors.New("display currency controller is unavailable")
 	}
 	cfg, err := config.LoadForEditReadOnlyStrict(config.UserConfigPath())
-	if err != nil {
-		return err
-	}
 	next.mu.Lock()
 	if next.gate.closed {
 		next.mu.Unlock()
@@ -48,6 +46,10 @@ func (g *DisplayCurrencyGroup) Bind(previous, next *Controller, display func(str
 		g.members = make(map[*Controller]struct{})
 	}
 	g.members[next] = struct{}{}
+	if err != nil {
+		slog.Warn("controller: load display currency for publication; keeping current projections", "err", err)
+		return nil
+	}
 	currency := cfg.DisplayCurrencyPref()
 	quote.SetDisplay(currency)
 	if display != nil {

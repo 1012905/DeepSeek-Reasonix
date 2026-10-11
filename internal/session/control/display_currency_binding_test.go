@@ -1,6 +1,7 @@
 package control
 
 import (
+	"errors"
 	"os"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 	"reasonix/internal/contract/event"
 )
 
-func TestDisplayCurrencyBindingIsQuietCanonicalAndFailAtomic(t *testing.T) {
+func TestDisplayCurrencyBindingIsQuietCanonicalAndToleratesReadFailure(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	write := func(body string) {
 		t.Helper()
@@ -19,7 +20,7 @@ func TestDisplayCurrencyBindingIsQuietCanonicalAndFailAtomic(t *testing.T) {
 	}
 	write("[billing]\ndisplay_currency = \"USD\"\n")
 	var group DisplayCurrencyGroup
-	oldContext, newContext := &event.QuoteContext{}, &event.QuoteContext{}
+	oldContext, newContext := &event.QuoteContext{}, &event.QuoteContext{DisplayCurrency: "CNY"}
 	notices := 0
 	sink := event.FuncSink(func(event.Event) { notices++ })
 	old := New(Options{Sink: sink, QuoteContext: oldContext})
@@ -31,15 +32,22 @@ func TestDisplayCurrencyBindingIsQuietCanonicalAndFailAtomic(t *testing.T) {
 	if err := group.Bind(nil, old, project); err != nil {
 		t.Fatal(err)
 	}
-	write("[billing]\ndisplay_currency = [")
-	if err := group.Bind(old, next, project); err == nil {
-		t.Fatal("malformed canonical configuration accepted")
+	const malformed = "[billing]\ndisplay_currency = ["
+	write(malformed)
+	if err := group.Bind(old, next, project); err != nil {
+		t.Fatal(err)
 	}
-	if len(group.members) != 1 || next.currencyGroup() != nil || display != "USD" {
-		t.Fatal("failed binding changed membership or projection")
+	if _, live := group.members[next]; !live || len(group.members) != 1 || next.currencyGroup() != &group {
+		t.Fatal("read failure prevented replacement enrollment")
+	}
+	if newContext.DisplayCurrency != "CNY" || display != "USD" || notices != 0 {
+		t.Fatal("read failure changed the built projections or emitted a notice")
+	}
+	if raw, err := os.ReadFile(config.UserConfigPath()); err != nil || string(raw) != malformed {
+		t.Fatalf("malformed config changed: %q, %v", raw, err)
 	}
 	write("[billing]\ndisplay_currency = \"CNY\"\n")
-	if err := group.Bind(old, next, project); err != nil {
+	if err := group.Bind(next, next, project); err != nil {
 		t.Fatal(err)
 	}
 	if newContext.DisplayCurrency != "CNY" || display != "CNY" || notices != 0 {
@@ -55,12 +63,13 @@ func TestDisplayCurrencyBindingIsQuietCanonicalAndFailAtomic(t *testing.T) {
 	if len(group.members) != 1 {
 		t.Fatal("old teardown removed replacement")
 	}
-	if err := group.Bind(old, next, project); err == nil {
-		t.Fatal("retired previous controller re-enrolled")
+	write(malformed)
+	if err := group.Bind(old, next, project); !errors.Is(err, ErrDisplayCurrencyRetired) {
+		t.Fatalf("retired previous bind = %v", err)
 	}
 	next.Close()
-	if err := group.Bind(nil, next, project); err == nil {
-		t.Fatal("closed controller re-enrolled")
+	if err := group.Bind(nil, next, project); !errors.Is(err, ErrDisplayCurrencyRetired) {
+		t.Fatalf("closed controller bind = %v", err)
 	}
 	if len(group.members) != 0 {
 		t.Fatal("closed member remained registered")
