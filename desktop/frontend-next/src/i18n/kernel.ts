@@ -279,6 +279,7 @@ const SAID: Record<string, string> = {
   "session.bind_failed": "接管该会话失败，请重新打开窗口",
   "session.has_open_pane": "该会话仍有打开的面板，请先关闭",
   "session.outside_workspace": "该路径不属于任何已知的工作区",
+  "settings.local_runtime_required": "请先打开一个本机会话，再读取本机设置",
   "hub.no_runtime_open": "尚未打开任何会话",
 
   // ── 远程 ─────────────────────────────────────────────────────────
@@ -351,6 +352,7 @@ const SAID: Record<string, string> = {
   "browser_tools.save_failed": "内置浏览器设置未能保存：{detail}",
   "browser_tools.no_enabled": "本次请求未说明开关状态，未做任何修改",
   "display_currency.invalid": "不支持这个币种，只能选自动、CNY 或 USD：{detail}",
+  "display_currency.runtime_changed": "运行时已更换，费用显示币种未保存，请重试",
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "changed_files.save_failed": "文件改动显示设置未能保存：{detail}",
   "ask_timeout.save_failed": "提问等待时长未能保存：{detail}",

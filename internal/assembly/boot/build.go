@@ -49,6 +49,7 @@ type builder struct {
 	roots            config.Roots
 	cfg              *config.Config
 	sink             event.Sink
+	quoteContext     *event.QuoteContext
 	proxy            netclient.ProxySpec
 	ext              *extensionStage
 	pendingMgr       *sidecar.Manager // sidecars no RuntimeSet owns yet
@@ -188,7 +189,9 @@ func (b *builder) load() error {
 	// One synchronized sink for every emitter: background jobs and sidecars
 	// emit from their own goroutines. The goal tee and the coalescer wrap it
 	// here, before the extension hub captures it, so agents emit through both.
-	b.sink = control.NewGoalUsageTee(event.Coalesce(quotedSink(cfg, opts), event.DefaultStreamDeltaWindow))
+	quoted, quoteContext := quotedSink(cfg, opts)
+	b.quoteContext = quoteContext
+	b.sink = control.NewGoalUsageTee(event.Coalesce(quoted, event.DefaultStreamDeltaWindow))
 	// Tag a shell result whose whole output is a diff, once, before the
 	// extension hub captures the sink — every emitter shares this one.
 	b.sink = event.MarkEmbeddedDiffs(b.sink, cfg.EmbeddedDiffDetectionEnabled())
@@ -513,6 +516,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		Runner:                         runner,
 		Executor:                       executor,
 		Sink:                           b.sink,
+		QuoteContext:                   b.quoteContext,
 		Policy:                         t.policy,
 		SubagentGate:                   t.gate,
 		Label:                          label,

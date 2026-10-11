@@ -22,7 +22,7 @@ afterEach(() => {
 async function open() {
   const hub = new MockHub();
   const runtimes = await hub.runtimes();
-  const port = hub.portFor(runtimes[0]);
+  const port = hub.machinePort();
   const paint = renderHook(() => usePaint(hub, runtimes, false, () => {}));
   await waitFor(() => expect(paint.result.current.look.zoomRange).toBeDefined());
   const view = () => {

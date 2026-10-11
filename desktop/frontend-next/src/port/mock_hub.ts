@@ -10,6 +10,7 @@ import { MockPort } from "./mock";
 export class MockHub implements HubPort {
   private readonly ports = new Map<string, AgentPort>();
   private readonly machine = { configured: false };
+  private readonly settings = new MockPort();
   private readonly views: RuntimeView[] = [
     { id: "r1", base: "", root: "~/projects/DeepSeek-Reasonix", name: "DeepSeek-Reasonix", sessionPath: "/sessions/mock.jsonl" },
   ];
@@ -300,6 +301,13 @@ export class MockHub implements HubPort {
       cloudDevices: this.share.cloudDevices.filter((d) => d.id !== id),
     };
     return Promise.resolve({ ...this.share });
+  }
+
+  machinePort(runtimeId?: string): AgentPort {
+    const local = this.views.find((rt) => rt.id === runtimeId && !rt.host);
+    if (local) return this.portFor(local);
+    this.settings.machine = this.machine;
+    return this.settings;
   }
 
   portFor(rt: RuntimeView): AgentPort {

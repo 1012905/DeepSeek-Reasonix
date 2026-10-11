@@ -46,25 +46,23 @@ func TestEffectBashOutputListsRunningJobsThroughRealBuild(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 	rec := &jobListProvider{}
-	provider.Register("boot-effect-joblist", func(provider.Config) (provider.Provider, error) { return rec, nil })
+	resolver := &provider.StaticResolver{
+		Descriptors: []provider.Descriptor{{Ref: "test-model/x", Model: "x", Default: true}},
+		Providers:   map[string]provider.Provider{"test-model/x": rec},
+	}
 	writeUserConfig(t, "[sandbox]\nbash = \"off\"\n")
 	writeFile(t, dir, "reasonix.toml", `
-default_model = "test-model"
-
 [agent]
 system_prompt = "BASE"
-
-[[providers]]
-name = "test-model"
-kind = "boot-effect-joblist"
-model = "x"
 `)
-	approveWorkspace(t, dir)
-	ctrl, err := Build(context.Background(), Options{Sink: event.Discard})
+	ctrl, err := Build(context.Background(), Options{Sink: event.Discard, Model: "test-model/x", ProviderResolver: resolver})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	defer ctrl.Close()
+	if got := ctrl.RuntimeSelection().ModelRef; got != "test-model/x" {
+		t.Fatalf("built model = %q, want scripted test-model/x", got)
+	}
 	ctrl.SetSessionPath(filepath.Join(dir, ".reasonix", "sessions", "joblist.jsonl"))
 	ctrl.SetBypass(true)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -77,6 +75,15 @@ model = "x"
 	defer rec.mu.Unlock()
 	if len(rec.reqs) < 3 {
 		t.Fatalf("provider saw %d rounds, want 3", len(rec.reqs))
+	}
+	var launch string
+	for _, m := range rec.reqs[1].Messages {
+		if m.Role == provider.RoleTool && m.ToolCallID == "c1" {
+			launch = m.Content
+		}
+	}
+	if !strings.HasPrefix(launch, "Started background job ") {
+		t.Fatalf("bash background launch result = %q", launch)
 	}
 	var result string
 	for _, m := range rec.reqs[2].Messages {

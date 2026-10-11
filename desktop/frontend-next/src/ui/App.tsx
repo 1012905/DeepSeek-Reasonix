@@ -266,18 +266,16 @@ export function App({ hub }: { hub: HubPort }) {
     return map;
   }, [hub, runtimes]);
   const activePort = panePorts.get(active) ?? panePorts.values().next().value ?? null;
-  // Model requests from a remote pane leave through this machine's broker, so
-  // this machine's network is the one a person configures; a remote pane is
-  // used only when no local one is open, and is named as such.
-  const localRt = runtimes.find((rt) => rt.id === active && !rt.host) ?? runtimes.find((rt) => !rt.host);
-  const networkPort = localRt ? panePorts.get(localRt.id) ?? null : activePort;
-  const networkHost = localRt ? "" : runtimes.find((rt) => rt.id === active)?.host ?? "";
+  const machinePort = useMemo(() => hub.machinePort(), [hub]);
+  const machineRt = runtimes.find((rt) => !rt.host);
+  const localRt = runtimes.find((rt) => rt.id === active && !rt.host) ?? machineRt;
+  const localWorkspacePort = useMemo(() => hub.machinePort(localRt?.id), [hub, localRt?.id]);
 
   useLaunchHealth(activePort, setup, welcomed);
 
   // Asked on open, on focus (at most every 30 s) and every 10 min while a report
   // is unsettled, never otherwise; a failed refresh stays silent and backs off.
-  useFeedbackUnread(networkPort ?? activePort, networkHost, feedbackUnread, setFeedbackUnread, feedback !== null);
+  useFeedbackUnread(machineRt ? machinePort : null, machineRt?.id ?? "", feedbackUnread, setFeedbackUnread, feedback !== null);
 
   useEffect(() => {
     if (!activePort) return;
@@ -717,8 +715,8 @@ export function App({ hub }: { hub: HubPort }) {
 
       {adder.pathOpen && <AddWorkspacePrompt busy={adder.busy} onSubmit={adder.addPath} onClose={adder.closePath} />}
 
-      {feedback && (networkPort ?? activePort) && (
-        <Feedback port={(networkPort ?? activePort)!} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />
+      {feedback && activePort && (
+        <Feedback port={machinePort} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />
       )}
 
       {settings && activePort && (
@@ -728,8 +726,9 @@ export function App({ hub }: { hub: HubPort }) {
             hub={hub}
             onError={fail}
             port={activePort}
-            networkPort={networkPort ?? activePort}
-            networkHost={networkHost}
+            networkPort={machinePort}
+            localWorkspacePort={localWorkspacePort}
+            networkHost=""
             status={report.status}
             theme={theme}
             onTheme={setTheme}
@@ -747,7 +746,7 @@ export function App({ hub }: { hub: HubPort }) {
             account={account}
             accountUnread={accountUnread}
             reloadAccount={reloadAccount}
-            workspaceRoot={activeWorkspace?.root ?? ""}
+            workspaceRoot={localRt?.root ?? ""}
           />
         </Suspense>
         </Boundary>
