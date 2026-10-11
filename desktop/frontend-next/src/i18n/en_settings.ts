@@ -946,6 +946,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "输入 token 上限": "Input token backstop",
   "与模型无关的后备：自上次有进展以来的累计输入达到上下文窗口的这个倍数时同样提示。默认 {n} 倍。": "A model-independent backstop: the same notice once the input spent since the last progress reaches this many context windows. Default {n}×.",
   "倍窗口": "× window",
+  "主题包过大，请控制在 {limit} MB 以内": "The theme pack is too large; keep it within {limit} MB.",
   "请输入 1 到 {n} 之间的整数。": "Enter a whole number from 1 to {n}.",
   "提问等待超时": "Question wait time",
   "长任务中途遇到提问时，不必一直停在那里等人。": "A long task need not stop at a question and wait for someone.",
