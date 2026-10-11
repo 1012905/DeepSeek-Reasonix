@@ -55,6 +55,7 @@ type Server struct {
 	ctrl     control.SessionAPI
 	bc       *Broadcaster
 	paneSink event.Sink // what the controller emits into; see SetPaneSink
+	currency *control.DisplayCurrencyGroup
 	// buildController builds the replacement controller during a model switch.
 	// Nil in production (switchModel falls back to boot.Build); tests inject a
 	// fake so switchModel can be exercised without real provider IO.
@@ -277,25 +278,14 @@ func (s *Server) switchModelLocked(ctx context.Context, ref string) error {
 		return fmt.Errorf("switch model: unable to secure replacement session")
 	}
 
-	// Publish the swap under a short write lock. bindMu already serializes
-	// switches — today the only writer of s.ctrl — so the identity re-check is
-	// defensive: it keeps a future controller-swapping path (or a test doing so)
-	// from being silently clobbered after the off-lock build. On a mismatch,
-	// discard the fresh controller off-lock instead of leaking it.
-	s.mu.Lock()
-	if s.ctrl != cur {
-		s.mu.Unlock()
+	if err := s.publishController(cur, newCtrl); err != nil {
 		oldCtrl, _ := cur.(*control.Controller)
 		if restoreErr := s.rebindSessionLeaseFor(cur.SessionPath(), oldCtrl); restoreErr != nil {
-			newCtrl.Close()
-			slog.Error("serve: restore outgoing session lease after aborted model switch", "err", restoreErr)
-			return fmt.Errorf("switch model: session changed during switch; unable to restore outgoing session ownership")
+			err = errors.Join(err, restoreErr)
 		}
 		newCtrl.Close()
-		return fmt.Errorf("switch model: session changed during switch")
+		return fmt.Errorf("switch model: %w", err)
 	}
-	s.ctrl = newCtrl
-	s.mu.Unlock()
 	s.nameWorkspaceHolder(newCtrl)
 	s.refreshProviderSetup(currentModelRef(newCtrl))
 
@@ -353,19 +343,13 @@ func (s *Server) reloadExtensions(ctx context.Context) error {
 		return fmt.Errorf("reload extensions: unable to secure replacement session")
 	}
 
-	s.mu.Lock()
-	if s.ctrl != curAPI {
-		s.mu.Unlock()
+	if err := s.publishController(curAPI, newCtrl); err != nil {
 		if restoreErr := s.rebindSessionLeaseFor(cur.SessionPath(), cur); restoreErr != nil {
-			newCtrl.Close()
-			slog.Error("serve: restore outgoing session lease after aborted extension reload", "err", restoreErr)
-			return fmt.Errorf("reload extensions: session changed during reload; unable to restore outgoing session ownership")
+			err = errors.Join(err, restoreErr)
 		}
 		newCtrl.Close()
-		return fmt.Errorf("reload extensions: session changed during reload")
+		return fmt.Errorf("reload extensions: %w", err)
 	}
-	s.ctrl = newCtrl
-	s.mu.Unlock()
 	s.nameWorkspaceHolder(newCtrl)
 	s.refreshProviderSetup(currentModelRef(newCtrl))
 
