@@ -148,7 +148,7 @@ func TestAnEditThatRestoresSizeAndModificationTimeIsStillSeenThroughTheChangeTim
 	d, _ := s.PutObject([]byte("payload"))
 	path, _ := s.objectPath(d)
 	info := settled(t, path)
-	if fileIdentity(info) == (fileID{}) {
+	if !fileIdentity(info).known() {
 		t.Skip("this platform exposes no file identity beyond size and time")
 	}
 	if _, err := s.Object(d); err != nil {
@@ -186,7 +186,7 @@ func TestAReplacedFileIsNotServedFromMemory(t *testing.T) {
 	if got, err := s.Object(d); err != nil || string(got) != "payload" {
 		t.Fatalf("Object = %q, %v", got, err)
 	}
-	if fileIdentity(info) != (fileID{}) && reads.Load() == before {
+	if fileIdentity(info).known() && reads.Load() == before {
 		t.Fatal("a file replaced behind the cache was answered from memory")
 	}
 }

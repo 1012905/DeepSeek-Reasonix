@@ -9,3 +9,6 @@ type fileID struct {
 	dev, ino uint64
 	ctimeNs  int64
 }
+
+// known reports whether the platform supplied any identity at all.
+func (f fileID) known() bool { return f.dev != 0 || f.ino != 0 || f.ctimeNs != 0 }
