@@ -287,6 +287,7 @@ type Messages struct {
 	McpPanelPending              string // /mcp panel row: repository server awaiting the user's approval
 	McpPanelChanged              string // /mcp panel row: what an enabled repository server launches changed
 	McpPanelLaunchFmt            string // /mcp panel: what the selected pending server would start
+	LaunchHiddenRemoved          string // leads a launch line that had invisible characters deleted
 	McpToolDestructive           string // /mcp detail: tool tag
 	McpToolReadOnly              string // /mcp detail: tool tag
 	McpPanelConfirmFmt           string // /mcp: enabling a repository-declared server; server name and launch line

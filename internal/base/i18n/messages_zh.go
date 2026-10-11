@@ -336,6 +336,7 @@ var Chinese = Messages{
 	McpPanelPending:              "待批准",
 	McpPanelChanged:              "启用后已变更",
 	McpPanelLaunchFmt:            "将启动：%s",
+	LaunchHiddenRemoved:          "[已删除隐藏字符]",
 	McpToolDestructive:           "破坏性",
 	McpToolReadOnly:              "只读",
 	McpPanelConfirmFmt:           "这会运行仓库声明的服务器 %s：%s — y/n",

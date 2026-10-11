@@ -335,6 +335,7 @@ var English = Messages{
 	McpPanelPending:              "awaiting approval",
 	McpPanelChanged:              "changed since you enabled it",
 	McpPanelLaunchFmt:            "will start: %s",
+	LaunchHiddenRemoved:          "[hidden characters removed]",
 	McpToolDestructive:           "destructive",
 	McpToolReadOnly:              "read-only",
 	McpPanelConfirmFmt:           "this runs the repository-declared server %s: %s — y/n",

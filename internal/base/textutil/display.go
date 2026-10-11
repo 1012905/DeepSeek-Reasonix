@@ -1,54 +1,78 @@
-// Display text that came from somewhere we do not control — an MCP server's
-// own description of itself, a tool's docstring — reaches a terminal and a
-// settings pane. Both need the same thing done to it first, and doing it in
-// each frontend is how the two drift.
 package textutil
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 )
 
-// SanitizeDisplay is the prose policy for one line: escape sequences and every
-// character BoundProse removes are dropped (controls, bidirectional overrides,
-// zero-width and format characters), and whitespace collapses to single spaces,
-// so one string cannot repaint a terminal, reorder a row or smuggle a line break.
-func SanitizeDisplay(s string) string {
-	rs := []rune(strings.ToValidUTF8(ansi.Strip(s), "\uFFFD"))
+type scrub struct {
+	// oneLine turns every line break and tab into a space and collapses runs.
+	oneLine bool
+	// joiners deletes zero-width joiners and every other format character,
+	// including those that emoji and some scripts need.
+	joiners bool
+	// ansi removes whole escape sequences instead of only their control bytes.
+	ansi bool
+}
+
+// run returns the scrubbed text and whether any non-whitespace character was
+// deleted; folding whitespace is not a deletion.
+func (o scrub) run(s string) (string, bool) {
+	in := strings.ToValidUTF8(s, "�")
+	if o.ansi {
+		in = ansi.Strip(in)
+	}
+	removed := in != strings.ToValidUTF8(s, "�")
+	rs := []rune(in)
 	hidden := hiddenMask(rs)
 	var b strings.Builder
-	b.Grow(len(s))
+	b.Grow(len(in))
 	for i, r := range rs {
 		switch {
-		case r == '\t' || r == '\n' || r == '\r' || r == '\u2028' || r == '\u2029' || r == '\u0085':
+		case o.oneLine && (r == '\t' || r == '\n' || r == '\r' || r == '\u2028' || r == '\u2029' || r == '\u0085'):
 			b.WriteByte(' ')
-		case hidden[i]:
+		case !o.oneLine && (r == '\t' || r == '\n'):
+			b.WriteRune(r)
+		case hidden[i], o.joiners && isFormat(r):
+			removed = true
 		default:
 			b.WriteRune(r)
 		}
 	}
-	return strings.Join(strings.Fields(b.String()), " ")
+	out := b.String()
+	if o.oneLine {
+		out = strings.Join(strings.Fields(out), " ")
+	}
+	return out, removed
 }
 
-// Obscures reports whether s holds anything the literal policy would show as
-// \u{hex}: a surface that deletes such characters says so with it.
-func Obscures(s string) bool {
-	rs := []rune(strings.ToValidUTF8(s, "\uFFFD"))
-	return slices.Contains(hiddenMask(rs), true)
+// SanitizeDisplay is the display policy: one line, with escape sequences,
+// controls, bidirectional overrides and zero-width characters deleted, so one
+// string cannot repaint a terminal, reorder a row or smuggle a line break.
+func SanitizeDisplay(s string) string {
+	out, _ := scrub{oneLine: true, ansi: true}.run(s)
+	return out
 }
 
-// SanitizeLaunch is the launch-line policy: the display policy applied before
-// a secret is matched, because a key split by a zero-width character would
-// otherwise survive redaction. It deletes, so the caller that shows the result
-// must say so when Obscures held for the input.
+// ScrubLaunch is the launch policy for a line a person approves: display, plus
+// joiners, because redaction must still match a key a zero-width character
+// split. It deletes, so the second result says whether anything was, and a
+// surface that shows the line must say so too.
+func ScrubLaunch(s string) (string, bool) {
+	return scrub{oneLine: true, joiners: true, ansi: true}.run(s)
+}
+
+// SanitizeLaunch is ScrubLaunch for a caller with no room to say what it deleted.
 func SanitizeLaunch(s string) string {
-	s = SanitizeDisplay(s)
-	return strings.Map(func(r rune) rune {
-		if isFormat(r) {
-			return -1
-		}
-		return r
-	}, s)
+	out, _ := ScrubLaunch(s)
+	return out
+}
+
+// SanitizeStored is the policy for text that is stored and shown later, with
+// its lines kept: controls (an escape's own bytes included) and every
+// invisible character are deleted.
+func SanitizeStored(s string) string {
+	out, _ := scrub{joiners: true}.run(s)
+	return out
 }
