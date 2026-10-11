@@ -1986,3 +1986,66 @@ test("kernel acts: show brings the window forward, relaunch arms the restart, qu
   for (const act of ["show", "relaunch", "quit", "unknown"]) handle(act);
   assert.deepEqual(calls, ["show", "relaunch", "quit"]);
 });
+
+test("tray: the menu is replaced only when what it says changes, so an open menu is not torn down by the poll", async () => {
+  const { installTray } = require("../src/tray.js");
+  const menus = [];
+  let tips = 0;
+  class FakeTray {
+    on() {}
+    setImage() {}
+    setToolTip() { tips++; }
+    setContextMenu(menu) { menus.push(menu); }
+    destroy() {}
+  }
+  const electron = {
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    Tray: FakeTray,
+    nativeImage: { createFromPath: () => ({ isEmpty: () => false }), createFromBuffer: () => ({ isEmpty: () => false }) },
+    screen: { getPrimaryDisplay: () => ({ scaleFactor: 1 }), on() {}, removeListener() {} },
+  };
+  let fold = { line: "1 running", labels: { open: "Open", quit: "Quit", closeToTray: "Keep running" } };
+  const host = { trayPrefs: async () => ({ closeToTray: false }), trayState: async () => fold, setTrayPrefs: async () => ({ closeToTray: true }) };
+  const tray = installTray(host, { onOpen() {}, onQuit() {} }, electron);
+  await tray.refresh();
+  await tray.refresh();
+  await tray.refresh();
+  assert.equal(menus.length, 1, "three identical reads rebuilt the menu");
+  assert.equal(tips, 1);
+  fold = { ...fold, line: "2 running" };
+  await tray.refresh();
+  assert.equal(menus.length, 2);
+  assert.equal(menus[1].template.find((item) => item.enabled === false).label, "2 running");
+  tray.close();
+});
+
+test("tray: a refused close-to-tray save redraws the checkbox, and a menu that failed to draw is tried again", async () => {
+  const { installTray } = require("../src/tray.js");
+  const menus = [];
+  let failNext = false;
+  class FakeTray {
+    on() {}
+    setImage() {}
+    setToolTip() {}
+    setContextMenu(menu) { if (failNext) { failNext = false; throw new Error("indicator busy"); } menus.push(menu); }
+    destroy() {}
+  }
+  const electron = {
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    Tray: FakeTray,
+    nativeImage: { createFromPath: () => ({ isEmpty: () => false }), createFromBuffer: () => ({ isEmpty: () => false }) },
+    screen: { getPrimaryDisplay: () => ({ scaleFactor: 1 }), on() {}, removeListener() {} },
+  };
+  const fold = { line: "idle", labels: { open: "Open", quit: "Quit", closeToTray: "Keep running" } };
+  const host = { trayPrefs: async () => ({ closeToTray: false }), trayState: async () => fold, setTrayPrefs: async () => null };
+  const tray = installTray(host, { onOpen() {}, onQuit() {} }, electron);
+  failNext = true;
+  await assert.rejects(tray.refresh());
+  await tray.refresh();
+  assert.equal(menus.length, 1, "a menu whose draw threw was never retried");
+  const toggle = menus[0].template.find((item) => item.type === "checkbox");
+  await toggle.click();
+  assert.equal(menus.length, 2, "a refused save left the flipped checkbox on screen");
+  assert.equal(menus[1].template.find((item) => item.type === "checkbox").checked, false);
+  tray.close();
+});

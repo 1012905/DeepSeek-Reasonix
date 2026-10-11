@@ -138,6 +138,14 @@ describe("rebuilding a reopened transcript", () => {
     expect(got[0].text).toBe("你好");
   });
 
+  it("strips a refused-calls block from a replayed turn", () => {
+    const got = users([
+      { role: "user", content: "<refused-calls>\nThe host refused these tool calls\n- bash {\"command\":\"git push\"} (permission.deny_rule)\n</refused-calls>\n继续" },
+    ]);
+    expect(got).toHaveLength(1);
+    expect(got[0].text).toBe("继续");
+  });
+
   it("leaves an ordinary turn as its text", () => {
     const got = users([{ role: "user", content: "第一句话" }]);
     expect(got).toHaveLength(1);
@@ -269,6 +277,23 @@ describe("a line that is still queued", () => {
     const st = run([sent, queued("row-2", "inbox-10", "followup")]);
     expect(rows(st)[0].pending).toBe(true);
     expect(rows(st)[0].queued).toBe("followup");
+  });
+
+  // The kernel holds the line for a retry and says so; the queue panel shows it
+  // as blocked. The transcript row must not keep calling itself queued.
+  it("drops the pending row of a line the kernel could not apply, and keeps the notice", () => {
+    const waiting = run([typed("row-1", "x"), queued("row-1", "inbox-9", "steer"), typed("row-2", "y"), queued("row-2", "inbox-10", "steer")]);
+    const st = reduce(waiting, { kind: "notice", code: "unapplied_steer", level: "warn", text: "not applied", itemId: "inbox-9" } as SessionEvent);
+    expect(rows(st).map((r) => r.itemId)).toEqual(["inbox-10"]);
+    expect(st.items.some((i) => i.t === "notice" && i.code === "unapplied_steer")).toBe(true);
+  });
+
+  it("leaves a delivered line alone when a notice names it", () => {
+    const waiting = run([typed("row-1", "x"), queued("row-1", "inbox-9", "steer")]);
+    const read = reduce(waiting, { kind: "steer", text: "x", itemId: "inbox-9" } as SessionEvent);
+    const st = reduce(read, { kind: "notice", code: "unapplied_steer", level: "warn", text: "late", itemId: "inbox-9" } as SessionEvent);
+    expect(rows(st)).toHaveLength(1);
+    expect(rows(st)[0]).toMatchObject({ pending: false, steer: true });
   });
 
   it("does not name a row for an entry taken back before its receipt landed", () => {

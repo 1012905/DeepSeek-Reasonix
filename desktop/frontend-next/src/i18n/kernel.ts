@@ -463,6 +463,7 @@ const SAID: Record<string, string> = {
 
   // ── 版本：这个内核背后有没有一个可更新的 Studio ─────────────────
   "studio.no_install": "这个 Studio 不是安装版（从源码启动），没有可以查看或切换的版本",
+  "studio.no_logs": "这个内核没有窗口外壳，没有可以指出的日志目录",
   "studio.pin_rejected": "版本固定未能保存：{detail}",
   "studio.notes_bad_version": "这不是一个已发布的版本号",
   "studio.notes_absent": "这个版本没有发布更新内容",

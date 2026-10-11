@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -67,6 +68,7 @@ type shellIdentity struct {
 	version string
 	exe     string
 	pid     int
+	logsDir string
 }
 
 func (s shellIdentity) stated() bool {
@@ -142,11 +144,20 @@ func main() {
 		return
 	}
 	boot.SetComputerHelper(*computerHelper)
-	shell := shellIdentity{version: *studioVersion, exe: *studioApp, pid: *studioAppPID}
+	shell := shellIdentity{version: *studioVersion, exe: *studioApp, pid: *studioAppPID, logsDir: logsDirOf(*crashDir)}
 	releaseFatalLog := crashreport.InstallFatalLog(*crashDir, defaultVersion(shell.version))
 	code := run(parentLease(os.Stdin), os.Stdout, os.Stderr, *page, shell)
 	releaseFatalLog()
 	os.Exit(code)
+}
+
+// logsDirOf is the shell's logs directory: the crash directory it passed is
+// the "crash" folder inside it.
+func logsDirOf(crashDir string) string {
+	if strings.TrimSpace(crashDir) == "" {
+		return ""
+	}
+	return filepath.Dir(crashDir)
 }
 
 func defaultVersion(stated string) string {
@@ -390,6 +401,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		Install:       studioInstall(shell),
 		Update:        studioUpdateHost(shell, owner),
 		Share:         share,
+		LogsDir:       shell.logsDir,
 	})
 	share.Attach(hub.Handler())
 	srv := serve.New(built.Controller, bc, hubCfg)
