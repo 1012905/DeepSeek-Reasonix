@@ -627,7 +627,7 @@ func TestPackagedNamesMatchTheHelper(t *testing.T) {
 	}
 	names := map[string]string{}
 	section := ""
-	for _, line := range strings.Split(string(raw), "\n") {
+	for line := range strings.SplitSeq(string(raw), "\n") {
 		if line != "" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "#") && strings.HasSuffix(strings.TrimSpace(line), ":") {
 			section = strings.TrimSuffix(strings.TrimSpace(line), ":")
 		}
