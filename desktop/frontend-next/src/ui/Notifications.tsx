@@ -40,7 +40,7 @@ export function Notifications({ port }: { port: AgentPort }) {
         <div className="lrow">
           <span className="tx">
             <span className="lb">{t("发送系统通知")}</span>
-            <span className="ds">{t("窗口在后台时由系统弹出提醒。立即生效，正在跑的会话下一次事件就按新设置来")}</span>
+            <span className="ds">{t("默认关闭。开启后，无论窗口是否在前台都会由系统弹出提醒；声音由系统决定，这里没有单独的声音设置。立即生效，正在跑的会话下一次事件就按新设置来")}</span>
           </span>
           <Switch data-action="notify.enabled" on={prefs.enabled} label={t("发送系统通知")} onClick={() => flip({ enabled: !prefs.enabled })} />
         </div>
