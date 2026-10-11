@@ -19,6 +19,7 @@ import (
 	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/safety/redirectguard"
 	"reasonix/internal/safety/typesafe"
 )
 
@@ -41,7 +42,9 @@ type providerCheck struct {
 	NoProxy   bool     `json:"noProxy,omitempty"`
 	// Code is why the check failed, as the dotted identity the add flow's
 	// refusals use. Params carry only the numbers its sentence needs.
-	Code   string         `json:"code,omitempty"`
+	Code string `json:"code,omitempty"`
+	// Target is the host a refused redirect pointed at, for the sentence.
+	Target string         `json:"target,omitempty"`
 	Params map[string]int `json:"params,omitempty"`
 	// HTTPStatus and Detail are what the endpoint answered with, for the user
 	// to read; neither is an input to Code.
@@ -128,6 +131,10 @@ func probeFinding(err error, apiKey func() string) providerCheck {
 	}
 	_, code := probeReasonRefusal(probe.Reason)
 	found := providerCheck{Code: code, HTTPStatus: probe.Status, Detail: endpointDetail(probe.Body, apiKey)}
+	var left *redirectguard.OriginLeft
+	if errors.As(err, &left) {
+		found.Detail, found.Target = "", left.To
+	}
 	for name, value := range probe.Params {
 		if n, ok := value.(int); ok {
 			if found.Params == nil {
@@ -295,7 +302,10 @@ func modelCheckDetail(err error, apiKey func() string) string {
 	var auth *provider.AuthError
 	var apiErr *provider.APIError
 	var streamErr *provider.StreamPayloadError
+	var left *redirectguard.OriginLeft
 	switch {
+	case errors.As(err, &left):
+		text = left.Error()
 	case errors.As(err, &typeSafeErr):
 		text = typeSafeErr.Body
 	case errors.As(err, &auth):
@@ -454,6 +464,9 @@ func classifyProviderModelCheck(err error) (status, reason string, httpStatus in
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return "unknown", "timeout", 0
+	}
+	if errors.Is(err, redirectguard.ErrRefused) {
+		return "unknown", "redirect_refused", 0
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) || provider.IsStreamInterrupted(err) {
