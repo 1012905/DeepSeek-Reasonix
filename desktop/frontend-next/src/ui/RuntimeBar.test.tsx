@@ -148,4 +148,16 @@ describe("notices whose sentence has placeholders", () => {
     expect(said()).toContain("Background job ended");
     expect(said()).not.toMatch(/\{\w+\}/);
   });
+
+  it("keeps a failed job's error text as the diagnostic", () => {
+    render(<RuntimeBar notices={[notice({ code: "job_failed", detail: JSON.stringify({ id: "j1", label: "build", error: "exit 2" }) })]} onSeen={() => {}} />);
+    expect(said()).toBe("后台任务 build 失败，需要处理");
+    expect(document.querySelector(".rtbar .why")?.textContent).toBe("exit 2");
+  });
+
+  it("keeps an unrecognised compaction reason code as the diagnostic", () => {
+    render(<RuntimeBar notices={[notice({ code: "compact_failed", text: "Compaction failed", detail: "future_reason" })]} onSeen={() => {}} />);
+    expect(said()).toContain("Compaction failed");
+    expect(document.querySelector(".rtbar .why")?.textContent).toBe("future_reason");
+  });
 });

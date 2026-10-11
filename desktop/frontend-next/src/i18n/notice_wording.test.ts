@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NOTICE_TEXT } from "./notices";
-import { NOTICE_VAR_CODES, hasTypedDetail, noticeWording } from "./notice_wording";
+import { NOTICE_VAR_CODES, leftoverDetail, noticeWording } from "./notice_wording";
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
 
@@ -35,11 +35,33 @@ describe("notice wording", () => {
 
   it("words a placeholder-free code without variables", () => {
     expect(noticeWording("verification_stalled", "anything")?.vars).toBeUndefined();
-    expect(hasTypedDetail("verification_stalled")).toBe(false);
   });
 
   it("has no wording for an unknown code", () => {
     expect(noticeWording("some_future_code", "x")).toBeUndefined();
     expect(noticeWording(undefined, "x")).toBeUndefined();
+  });
+
+  it.each([
+    ["extension_skipped", '{"extension":"","point":"p"}'],
+    ["extension_skipped", '{"extension":3,"point":"p"}'],
+    ["inbox_recovered", '{"count":"2"}'],
+    ["inbox_recovered", '{"count":0}'],
+    ["inbox_recovered", '{"count":1.5}'],
+    ["permission_rules_dormant", '{"rules":[]}'],
+    ["permission_rules_dormant", '{"rules":[{"list":"ask"}]}'],
+    ["permission_rules_dormant", '{"rules":[{"list":1,"rule":"x"}]}'],
+    ["job_finished", '{"label":"build"}'],
+    ["job_killed", '{"id":""}'],
+    ["job_failed", '{"id":5}'],
+    ["compact_failed", "no_such_reason"],
+  ])("%s reads valid JSON of the wrong shape (%s) as no payload", (code, detail) => {
+    expect(noticeWording(code, detail)).toBeUndefined();
+  });
+
+  it("keeps the diagnostic only where the detail was not read as a payload", () => {
+    expect(leftoverDetail("job_failed", '{"id":"j","error":"exit 2"}', { name: "j" })).toBe("exit 2");
+    expect(leftoverDetail("job_finished", '{"id":"j"}', { name: "j" })).toBeUndefined();
+    expect(leftoverDetail("compact_failed", "future_code", undefined)).toBe("future_code");
   });
 });

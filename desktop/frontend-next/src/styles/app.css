@@ -1660,7 +1660,7 @@
     margin: 0 auto 18px;
     width: calc(100% - var(--srail-w) * 2 - var(--flow-pad) * 2);
 
-    --aux-budget: min(calc(34vh / var(--zoom, 1)), 320px);
+    --aux-budget: min(calc(34vh / var(--zoom, 1)), 320px); --notes-floor: 9.5rem;
     max-width: calc(var(--doc) - var(--flow-pad) * 2);
 
     --pad-x: 15px; --pad-b: 11px;
@@ -1673,12 +1673,12 @@
 
   .composeaux {
     display: flex; flex-direction: column; min-height: 0; overflow: hidden;
-    max-height: calc(var(--aux-budget) * .72);
+    max-height: max(calc(var(--aux-budget) - max(calc(var(--aux-budget) * .28), var(--notes-floor))), 3.5rem);
   }
   .composeaux > * { min-height: 0 }
 
   .composenotes {
-    max-height: calc(var(--aux-budget) * .28);
+    max-height: max(calc(var(--aux-budget) * .28), var(--notes-floor));
     overflow-y: auto; overscroll-behavior: contain;
   }
 
@@ -2323,7 +2323,7 @@
     display: block; position: fixed; inset: 0; z-index: 11; padding: 0; border: 0;
     background: color-mix(in srgb, #000 34%, transparent); cursor: default;
   }
-  [data-fold~="short"] .compose { --aux-budget: min(calc(24vh / var(--zoom, 1)), 176px) }
+  [data-fold~="short"] .compose { --aux-budget: min(calc(24vh / var(--zoom, 1)), 176px); --notes-floor: 0px }
   [data-fold~="short"] .compose textarea { max-height: min(calc(var(--read, 15px) * 9.6), calc(24vh / var(--zoom, 1))) }
   [data-fold~="short"] .slashmenu { max-height: min(calc(38vh / var(--zoom, 1)), 220px) }
   [data-fold~="short"][data-fold~="side"] .side { max-height: calc(26vh / var(--zoom, 1)) }
@@ -3825,8 +3825,8 @@
     background: color-mix(in srgb, var(--warn) 8%, transparent);
     color: var(--warn-ink);
   }
-  .rtbar .t { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: var(--w-med) }
-  .rtbar .why { flex: 1; min-width: 0; color: var(--ghost); word-break: break-word }
+  .rtbar .t { flex: 1 1 0; min-width: 12rem; overflow-wrap: anywhere; font-weight: var(--w-med) }
+  .rtbar .why { order: 1; flex: 1 0 100%; min-width: 0; color: var(--ghost); word-break: break-word }
   .rtbar button {
     flex: none; border: 0; background: transparent; cursor: pointer; color: inherit;
     font: var(--w-med) var(--fs-meta) var(--ui); text-decoration: underline; text-underline-offset: 3px;

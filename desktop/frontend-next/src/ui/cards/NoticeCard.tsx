@@ -1,7 +1,6 @@
 import type { Item } from "../../state/session";
 import { t } from "../../i18n";
-import { noticeWording } from "../../i18n/notice_wording";
-import { JOB_FAILED, jobErrorText } from "../../i18n/job_notice";
+import { leftoverDetail, noticeWording } from "../../i18n/notice_wording";
 import { workspaceLeaseDetail } from "../../i18n/workspace_lease";
 import { Sym } from "../Sym";
 import { LazyMarkdown } from "../LazyMarkdown";
@@ -16,21 +15,16 @@ const PERMISSION = new Set(["permission_saved", "permission_covered"]);
 // These carry what the model wrote as their detail, so it reads the way the
 // model's own replies do.
 const AUTHORED = new Set(["await_user"]);
-// The detail is a compaction code; the sentence names its reason, so a code this
-// build cannot word leaves the kernel's own text standing.
-const REASONED = new Set(["compact_declined", "compact_failed", "compact_held"]);
-
 export function NoticeCard({ item }: { item: Extract<Item, { t: "notice" }> }) {
   const lvl = item.level === "error" ? "err" : item.level === "warn" ? "warn" : undefined;
   // The kernel writes in English for its own logs. Where this build has the
   // same notice in the reader's language, that is the one to show.
-  const reasoned = item.code !== undefined && REASONED.has(item.code);
   const wording = noticeWording(item.code, item.detail);
   const vars = wording?.vars;
   const claim = item.workspaceLease;
   const detail = claim
     ? workspaceLeaseDetail(claim, item.code !== "workspace_lease_resumed") || item.detail
-    : vars && item.code === JOB_FAILED ? jobErrorText(item.detail) : item.detail;
+    : leftoverDetail(item.code, item.detail, vars);
   return (
     <div className="call" data-k="host" data-lvl={lvl}>
       <div className="g">
@@ -51,7 +45,7 @@ export function NoticeCard({ item }: { item: Extract<Item, { t: "notice" }> }) {
                   before them. */}
               {item.count && item.count > 1 ? <b className="ntimes">×{item.count}</b> : null}
             </span>
-            {detail && (!vars || item.code === JOB_FAILED) && !reasoned && (PERMISSION.has(item.code ?? "")
+            {detail && (PERMISSION.has(item.code ?? "")
               ? <code className="nrule" title={item.text}>{item.detail}</code>
               : AUTHORED.has(item.code ?? "")
                 ? <div className="nmd"><LazyMarkdown text={detail} /></div>

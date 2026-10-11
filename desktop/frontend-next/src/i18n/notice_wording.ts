@@ -2,7 +2,7 @@ import { t } from "./index";
 import { FOLD_WHY, NO_CODE_WHY } from "./compaction_why";
 import { EXTENSION_SKIPPED, extensionSkippedVars } from "./extension_skipped";
 import { INBOX_RECOVERED, inboxRecoveredVars } from "./inbox_recovered";
-import { JOB_FAILED, JOB_FINISHED, JOB_KILLED, jobNoticeVars } from "./job_notice";
+import { JOB_FAILED, JOB_FINISHED, JOB_KILLED, jobErrorText, jobNoticeVars } from "./job_notice";
 import { NOTICE_TEXT } from "./notices";
 import { PERMISSION_RULES_DORMANT, permissionRulesDormantVars } from "./permission_rules_dormant";
 
@@ -28,8 +28,6 @@ const VARS: Record<string, (detail: string | undefined) => NoticeVars | undefine
   compact_held: compactReason("compact_held"),
 };
 
-export const hasTypedDetail = (code: string | undefined): boolean => code !== undefined && code in VARS;
-
 export const NOTICE_VAR_CODES: readonly string[] = Object.keys(VARS);
 
 // The sentence for a kernel code in this window's language, with the values its
@@ -42,4 +40,11 @@ export function noticeWording(code: string | undefined, detail: string | undefin
   if (!read) return /\{\w+\}/.test(text) ? undefined : { text };
   const vars = read(detail);
   return vars ? { text, vars } : undefined;
+}
+
+// What of the detail is still worth drawing under the sentence: all of it when
+// nothing was read from it, only the job's error text when it was a payload.
+export function leftoverDetail(code: string | undefined, detail: string | undefined, vars: NoticeVars | undefined): string | undefined {
+  if (!vars) return detail;
+  return code === JOB_FAILED ? jobErrorText(detail) : undefined;
 }

@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 import { EXTENSION_SKIPPED } from "../i18n/extension_skipped";
-import { hasTypedDetail, noticeWording } from "../i18n/notice_wording";
+import { leftoverDetail, noticeWording } from "../i18n/notice_wording";
 import type { RuntimeNotice } from "../state/session";
 import type { SessionState } from "../state/session_types";
 import { stallShown } from "../state/stall";
@@ -24,10 +24,11 @@ export function RuntimeBar({ notices, onSeen, watch, onStall, onSettings }: {
       {stall && onStall && <StallBar stall={stall} onAct={onStall} />}
       {notices.map((n) => {
         const wording = noticeWording(n.code, n.detail);
+        const why = leftoverDetail(n.code, n.detail, wording?.vars);
         return (
           <div key={n.id} className="rtbar" data-lvl={n.level} role="status">
             <span className="t">{wording ? t(wording.text, wording.vars) : n.text}</span>
-            {n.detail && !hasTypedDetail(n.code) && <span className="why">{n.detail}</span>}
+            {why && <span className="why">{why}</span>}
             {n.code === EXTENSION_SKIPPED && wording?.vars && onSettings && (
               <button data-action="settings.section" data-value="ext" onClick={() => onSettings("ext")}>{t("打开「工具与集成」")}</button>
             )}
