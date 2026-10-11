@@ -175,6 +175,12 @@ func New(chain map[extension.InterceptorPoint][]extension.Contribution, replacem
 	}
 }
 
+// Options returns the reporting this dispatcher was built with, so a successor
+// built after a rebuild reports through the same channels.
+func (d *Dispatcher) Options() Options {
+	return Options{Warn: d.warn, SidecarDown: d.sidecarDown}
+}
+
 // Intercept walks the chain for point in frozen order, calling each
 // plugin-backed interceptor with the current (possibly already replaced)
 // payload. payloadPtr must be a pointer to the point's registered DTO; on
