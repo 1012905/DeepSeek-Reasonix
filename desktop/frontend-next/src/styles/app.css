@@ -757,7 +757,8 @@
     position: relative; inset: auto; grid-area: side; justify-self: start; align-self: stretch;
     width: 11px; margin-left: -6px; z-index: 6;
   }
-  .app[data-browser="off"] .pane > .gutter-r { margin-left: -14px }
+  .pane:has(> .pbody[data-dock]) > .pbody { padding-right: 6px }
+  .pane:has(> .pbody[data-dock]) > .gutter-r[data-shut] { width: 14px; margin: 0 0 0 -30px; align-self: center }
   .app[data-browser="off"] .pane:has(> .pbody[data-dock]) > .scroll[data-pane="browser"] { visibility: hidden; transition-property: visibility; transition-duration: 0s; transition-delay: var(--t-panel) }
   .pane:has(> .pbody[data-dock]) .workbench-body:not([data-files]) { grid-template-columns: minmax(0, 1fr) }
   .pane:has(> .pbody[data-dock]) .workbench-body:not([data-files]) .workbench-explorer { display: none }

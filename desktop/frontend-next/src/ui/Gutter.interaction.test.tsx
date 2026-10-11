@@ -47,7 +47,8 @@ describe("a column's drag handle", () => {
     expect(app.dataset.drag).toBeUndefined();
     send(grip, "pointermove", 380);
     expect(app.dataset.drag).toBe("pointer");
-    send(bar, "pointerup", 380);
+    send(bar, "pointermove", 370);
+    send(bar, "pointerup", 370);
     expect(app.dataset.drag).toBeUndefined();
     expect(onOpen).toHaveBeenCalledWith(true);
   });

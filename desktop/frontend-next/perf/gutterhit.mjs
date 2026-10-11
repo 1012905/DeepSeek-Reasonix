@@ -19,6 +19,26 @@ const hit = (page, x, y) =>
     return { gutter: g ? g.className : null, tag: el ? el.className || el.tagName : null };
   }, [x, y]);
 
+// Every row of the scroller's right edge, not one sample: a handle that only covers the top or the middle is still a
+// handle on the thumb whenever the thumb is there.
+const sweep = (page, right, top, height) =>
+  page.evaluate(([right, top, height, inset]) => {
+    const hits = [];
+    for (let y = top + 2; y < top + height - 2; y += 12) {
+      for (const dx of inset) {
+        const g = document.elementFromPoint(right - dx, y)?.closest(".gutter");
+        if (g) hits.push(`${g.className.split(" ").at(-1)}@${Math.round(y)}`);
+      }
+    }
+    return hits;
+  }, [right, top, height, [4, 5, 6]]);
+
+const flowBox = (page) =>
+  page.evaluate(() => {
+    const r = document.querySelector('[data-pane="flow"]').getBoundingClientRect();
+    return { right: r.right, top: r.top, height: r.height };
+  });
+
 const browser = await chromium.launch();
 for (const scheme of ["light", "dark"]) {
   for (const width of [1280, 1440]) {
@@ -35,11 +55,22 @@ for (const scheme of ["light", "dark"]) {
     });
     const dockShut = await page.evaluate(() => document.querySelector(".gutter-r")?.hasAttribute("data-shut"));
     check(`${tag}: the workbench starts shut`, dockShut === true);
-    const y = flow.top + flow.height * 0.25;
-    const thumb = await hit(page, flow.right - THUMB, y);
-    check(`${tag}: the transcript's scrollbar is not under the workbench handle`, thumb.gutter === null, String(thumb.gutter));
+    const covered = await sweep(page, flow.right, flow.top, flow.height);
+    check(`${tag}: no row of the transcript's scrollbar is under the workbench handle`, covered.length === 0, covered.slice(0, 4).join(" "));
+    await page.mouse.move(flow.right - 5, flow.top + 8);
+    await page.mouse.down();
+    await page.mouse.move(flow.right - 5, flow.top + 160, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    check(`${tag}: pressing the scrollbar's top and dragging does not open the workbench`, (await page.evaluate(() => document.querySelector(".gutter-r")?.hasAttribute("data-shut"))) === true);
 
     const grip = await page.locator(".gutter-r .grip").boundingBox();
+    const pane = await page.evaluate(() => {
+      const r = document.querySelector(".pane").getBoundingClientRect();
+      return { top: r.top, height: r.height };
+    });
+    const mid = pane.top + pane.height / 2;
+    check(`${tag}: the shut handle sits mid-height`, Math.abs(grip.y + grip.height / 2 - mid) <= pane.height * 0.05, `${Math.round(grip.y + grip.height / 2)} against ${Math.round(mid)}`);
     const onGrip = await hit(page, grip.x + grip.width / 2, grip.y + grip.height / 2);
     check(`${tag}: the shut workbench still has a handle to press`, onGrip.gutter?.includes("gutter-r") === true, String(onGrip.gutter));
 
@@ -63,6 +94,19 @@ for (const scheme of ["light", "dark"]) {
     await page.waitForTimeout(300);
     const shut = await page.evaluate(() => document.querySelector(".gutter-r")?.hasAttribute("data-shut"));
     check(`${tag}: dragging the handle opens the workbench`, shut === false);
+    const now = await flowBox(page);
+    const openCovered = await sweep(page, now.right, now.top, now.height);
+    check(`${tag}: nor is it once the workbench is open`, openCovered.length === 0, openCovered.slice(0, 4).join(" "));
+    const seamHit = await hit(page, now.right + 2, now.top + now.height * 0.5);
+    check(`${tag}: the open seam still resizes`, seamHit.gutter?.includes("gutter-r") === true, String(seamHit.gutter));
+    const wide = () => page.evaluate(() => document.querySelector('.scroll[data-pane="browser"]').getBoundingClientRect().width);
+    const before = await wide();
+    await page.mouse.move(now.right - 5, now.top + 8);
+    await page.mouse.down();
+    await page.mouse.move(now.right - 5, now.top + 160, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    check(`${tag}: pressing the scrollbar and dragging leaves the open workbench's width alone`, Math.abs((await wide()) - before) < 1);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/${process.env.GUTTER_TAG ?? "shot"}-${scheme}-${width}.png` });
     await page.close();
   }

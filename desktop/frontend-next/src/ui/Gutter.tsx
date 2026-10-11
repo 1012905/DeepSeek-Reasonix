@@ -63,6 +63,8 @@ interface Props {
 export function Gutter({ edge, span, width, max = span.max, label, open, onWidth, onOpen }: Props) {
   const held = useRef(0);
 
+  const rail = edge === "l";
+
   const begin = (bar: HTMLDivElement, pointerId: number, x0: number) => {
     const app = bar.closest(".app") as HTMLElement | null;
     if (!app) return;
@@ -142,30 +144,24 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
 
   // A shut handle is only as tall as its grip, so the grip has to start the drag
   // too; a press that never travels stays the click it always was.
-  const pull = (e: ReactPointerEvent<HTMLButtonElement>) => {
+  const press = useRef<{ id: number; x0: number } | null>(null);
+  const grab = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
     if (e.button !== 0) return;
-    const bar = e.currentTarget.parentElement as HTMLDivElement;
-    const { pointerId, clientX: x0 } = e;
-    const grip = e.currentTarget;
-    const slack = 4;
-    const stop = () => {
-      grip.removeEventListener("pointermove", watch);
-      grip.removeEventListener("pointerup", stop);
-      grip.removeEventListener("pointercancel", stop);
-    };
-    const watch = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientX - x0) <= slack) return;
-      stop();
-      begin(bar, pointerId, x0);
-    };
-    grip.setPointerCapture(pointerId);
-    grip.addEventListener("pointermove", watch);
-    grip.addEventListener("pointerup", stop);
-    grip.addEventListener("pointercancel", stop);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    press.current = { id: e.pointerId, x0: e.clientX };
+  };
+  const travel = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const p = press.current;
+    if (!p || Math.abs(e.clientX - p.x0) <= 4) return;
+    press.current = null;
+    begin(e.currentTarget.parentElement as HTMLDivElement, p.id, p.x0);
+  };
+  const release = () => {
+    press.current = null;
   };
 
   const toggle = () => onOpen(!open);
-  const rail = edge === "l";
 
   const key = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     // The pointer commits by pushing through; the keyboard says it outright.
@@ -230,12 +226,16 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
         tabIndex={-1}
         aria-hidden="true"
         title={open ? t("收起") : t("展开")}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          pull(e);
-        }}
+        onPointerDown={grab}
+        onPointerMove={travel}
+        onPointerUp={release}
+        onPointerCancel={release}
         onClick={toggle}
         data-action-click={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointerdown={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointermove={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointerup={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointercancel={rail ? "chrome.rail" : "browser.open"}
       >
         <i className="knurl" aria-hidden="true" />
         <span className="dir" aria-hidden="true">{(edge === "l") === open ? "‹" : "›"}</span>
