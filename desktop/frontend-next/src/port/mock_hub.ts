@@ -1,5 +1,5 @@
 import type { AgentPort } from "./port";
-import type { HubPort, RuntimeView, TreeWorkspace } from "./hub";
+import type { HubPort, RuntimeView, TreeWindow, TreeWorkspace } from "./hub";
 import type { RemoteHost, RemoteListing, RemoteProbe } from "./remote";
 import type { ShareStatus } from "./share";
 import { MockPort } from "./mock";
@@ -160,7 +160,7 @@ export class MockHub implements HubPort {
 
   onTreeChanged(_listener: () => void) { return () => {}; }
 
-  tree() {
+  tree(_window?: TreeWindow) {
     const open = new Map(this.views.filter((v) => v.sessionPath).map((v) => [v.sessionPath!, v.id]));
     return Promise.resolve(
       this.roots.map<TreeWorkspace>((root, i) => ({
