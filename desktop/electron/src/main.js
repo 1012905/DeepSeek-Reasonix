@@ -31,6 +31,7 @@ const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
+const { actHandler } = require("./acts");
 const { crashDir, recordHostExit, pendingHostExit, clearHostExit, hostExitNotice } = require("./hostexit");
 
 // A page in a minimized or fully covered window counts as hidden, and a hidden
@@ -65,6 +66,7 @@ const hostBinary = layout.hostBinary(where);
 const computerHelper = layout.computerHelper(where);
 const pageDir = layout.pageDir(where);
 
+const acts = actHandler({ app, showWindow: () => showWindow() });
 let kernel = null;
 let win = null;
 let origin = "";
@@ -128,7 +130,7 @@ async function launchKernel(args) {
           app.quit();
         }
       },
-      onAct: handOver,
+      onAct: (act) => acts(act),
     });
     const current = kernel;
     current.child.on("error", (err) => logs.shell.line(`host: spawn failed: ${err.message}`));
@@ -522,21 +524,6 @@ async function hostLastWords() {
     });
   }
   return logs.host.tail();
-}
-
-// The acts a handover asks of the application. The kernel decides when: it has
-// downloaded and staged a replacement, and what is left is the part only this
-// process can do. They arrive in this order, so arming the restart before
-// ending is the sequence rather than a coincidence.
-//
-// Nothing is answered. Both are performed by ending, so an acknowledgement
-// would have to come from a process on its way out.
-function handOver(act) {
-  if (act === "relaunch") {
-    app.relaunch();
-    return;
-  }
-  if (act === "quit") app.quit();
 }
 
 // Before the handshake the only window is the starting one, and the launch
