@@ -159,9 +159,8 @@ export interface HubPort extends SharePort {
   // host-only action.
   hostCapabilities(): Promise<HostCapabilities>;
   pickFolder(): Promise<string | null>;
-  // Absolute paths of every file dropped anywhere on the window. It belongs
-  // here rather than on a pane because the window has one of it: the shell
-  // registers its drop listener once and ignores a second call, so a per-pane
+  // Machine-scoped settings resolve their local owner independently of panes.
+  machinePort(): AgentPort;
   portFor(rt: RuntimeView): AgentPort;
 }
 
@@ -176,6 +175,7 @@ export class SseHub implements HubPort {
   // Bindings the shell exposes are pane-independent; this reaches them without
   // pretending to belong to a runtime.
   private readonly shell = new SsePort();
+  private readonly settings = new SsePort("/host/settings");
   // Questions seen this session, kept so an answer can carry the identities the
   // kernel will check it against.
   private readonly asked = new Map<string, RemoteAsk>();
@@ -493,6 +493,10 @@ export class SseHub implements HubPort {
 
   async leaveDevice() {
     await this.post<void>("/device/leave", {});
+  }
+
+  machinePort(): AgentPort {
+    return this.settings;
   }
 
   portFor(rt: RuntimeView): AgentPort {
