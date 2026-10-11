@@ -315,6 +315,27 @@ jobs:
           test -n "$dir"
           node desktop/electron/packaging/pe.js "$dir" "${{ matrix.arch }}"
 
+      # An update starts the installer with --updated, and that is what keeps the
+      # shortcuts (and the taskbar pin hanging off them) from being deleted and
+      # recreated. Installed twice over itself the way an update does it, the
+      # desktop shortcut has to still be the same file, pointing at a path with
+      # no version in it, or every update costs the user their pin.
+      - name: An update keeps the shortcuts and they name no version
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem dist -Filter 'ReasonixStudio-windows-*-installer.exe' | Select-Object -First 1).FullName
+          $dir = Join-Path $env:RUNNER_TEMP 'rx-update-guard'
+          Start-Process $installer -ArgumentList '/S', "/D=$dir" -Wait
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Reasonix Studio.lnk'
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+          if ($target -ne (Join-Path $dir 'Reasonix Studio.exe')) { throw "the desktop shortcut targets $target, not the stable executable" }
+          $mark = [datetime]'2020-01-01'
+          (Get-Item $lnk).LastWriteTime = $mark
+          Start-Process $installer -ArgumentList '/S', '--updated', "/D=$dir" -Wait
+          if ((Get-Item $lnk).LastWriteTime -ne $mark) { throw 'an update rewrote the desktop shortcut' }
+          Start-Process (Join-Path $dir 'Uninstall Reasonix Studio.exe') -ArgumentList '/S', '/currentuser' -Wait
+
       # The release packages a signed copy of the bundle and then reads both
       # packages back against it. The same recipe on an unsigned copy, so the
       # packaging contract (the installer's one application archive, the pinned

@@ -42,8 +42,14 @@ func (l Line) RunInstaller(path string) error {
 	if err != nil {
 		return fmt.Errorf("update: start installer: %w", err)
 	}
+	var params *uint16
+	if l.Windows.InstallerArgs != "" {
+		if params, err = syscall.UTF16PtrFromString(l.Windows.InstallerArgs); err != nil {
+			return fmt.Errorf("update: start installer: %w", err)
+		}
+	}
 	// ShellExecute detaches on its own, so what it starts outlives this process.
-	if err := windows.ShellExecute(0, verbPtr, target, nil, nil, windows.SW_SHOWNORMAL); err != nil {
+	if err := windows.ShellExecute(0, verbPtr, target, params, nil, windows.SW_SHOWNORMAL); err != nil {
 		return runInstallerStartError(err)
 	}
 	return nil
