@@ -9,6 +9,7 @@ import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import { Chrome } from "./Chrome";
 import { useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
+import { useTreeWindow, type TreePaging } from "./treewindow";
 import { useNavRail } from "./navrail";
 import { feedbackEntryTab } from "./feedbackentry";
 import { useLinkRouting } from "./links";
@@ -155,14 +156,22 @@ export function App({ hub }: { hub: HubPort }) {
     setReport(reportsRef.current[active] ?? NO_REPORT);
   }, [active]);
 
-  const reloadTree = useMemo(
+  const treeWindow = useTreeWindow();
+  const readTree = useMemo(
     () => singleFlight(() =>
       hub
-        .tree()
+        .tree(treeWindow.current())
         .then(setTree)
-        .catch(() => {})
         .finally(() => setTreeRead(true))),
-    [hub],
+    [hub, treeWindow],
+  );
+  const reloadTree = useCallback(() => readTree().catch(() => {}), [readTree]);
+  const paging = useMemo<TreePaging>(
+    () => ({
+      more: (root) => treeWindow.grow(root, readTree),
+      view: (v) => { if (treeWindow.view(v)) void reloadTree(); },
+    }),
+    [treeWindow, readTree, reloadTree],
   );
 
   // Held beside this machine's tree, and re-read on the same beat: see
@@ -591,6 +600,7 @@ export function App({ hub }: { hub: HubPort }) {
           reloadRemoteTrees={reloadRemoteTrees}
           readRemoteTree={readRemoteTree}
           reloadTree={reloadTree}
+          paging={paging}
           adder={adder}
           opening={sw.path}
           onOpen={openPane}

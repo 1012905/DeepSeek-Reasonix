@@ -126,6 +126,9 @@ var mirroredWireTypes = []wireMirror{
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
 	{"internal/frontend/serve/hub_tree.go", "treeSession", tsHubFile, "TreeSession"},
+	// The folder's true size beside the rows loaded. A window that cannot read
+	// the total labels a truncated list as the whole history.
+	{"internal/frontend/serve/hub_tree.go", "treeWorkspace", tsHubFile, "TreeWorkspace"},
 	// A session the import left in place. The reason code is what the window
 	// words the explanation from; a code it cannot read is a skipped session
 	// reported as nothing more than a count.
