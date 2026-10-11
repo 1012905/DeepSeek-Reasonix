@@ -111,7 +111,7 @@ func (h shellHost) powerShell(order []string) (Shell, bool) {
 				return Shell{Kind: ShellPowerShell, Path: p}, true
 			}
 		}
-		if p, err := h.lookPath(name); err == nil && h.launches(p) {
+		if p, ok := h.lookShell(name); ok && h.launches(p) {
 			return Shell{Kind: ShellPowerShell, Path: p}, true
 		}
 	}
@@ -142,7 +142,7 @@ func (h shellHost) auto(warn io.Writer) Shell {
 // ones that exist did not run a command (and whether that was a timeout).
 func (h shellHost) bashFallback() FallbackReason {
 	var tried []string
-	if p, err := h.lookPath("bash"); err == nil && !h.isWSL(p) {
+	if p, ok := h.lookShell("bash"); ok && !h.isWSL(p) {
 		tried = append(tried, p)
 	}
 	for _, p := range h.winBash {
@@ -234,7 +234,7 @@ func verifyShell(prefer, path string, exists, probe, launches func(string) bool)
 	if path == "" {
 		return nil
 	}
-	if !shellLaunchPlace(path) {
+	if !shellLaunchPlace(windowsPaths, path) {
 		return fmt.Errorf("%s: not an absolute path on a local volume", path)
 	}
 	if !exists(path) {
@@ -264,7 +264,7 @@ func resolveOn(h shellHost, prefer, path string, warn io.Writer) Shell {
 	case "", "auto":
 		return h.auto(warn)
 	case "bash":
-		if path != "" && shellLaunchPlace(path) && exists(path) && probe(path) {
+		if path != "" && shellLaunchPlace(h.goos == "windows", path) && exists(path) && probe(path) {
 			return Shell{Kind: ShellBash, Path: path}
 		}
 		if path != "" {
@@ -279,7 +279,7 @@ func resolveOn(h shellHost, prefer, path string, warn io.Writer) Shell {
 		// A pinned path is proven the same way the bash arm proves its own. A Store
 		// alias that will not start is exactly the failure this resolver keeps out
 		// of a session, so existence alone must not win.
-		if path != "" && shellLaunchPlace(path) && exists(path) && launches(path) {
+		if path != "" && shellLaunchPlace(h.goos == "windows", path) && exists(path) && launches(path) {
 			return Shell{Kind: ShellPowerShell, Path: path}
 		}
 		if path != "" {
@@ -446,7 +446,7 @@ func appendGitInstallRoots(existing, roots []string) []string {
 // registry records a drive path, so a relative or drive-relative value is not an
 // install root. Callers trim first, so the string checked is the string used.
 func gitInstallRootOK(p string) bool {
-	return driveAbsolute(p) && shellLaunchPlace(p)
+	return driveAbsolute(p) && shellLaunchPlace(true, p)
 }
 
 func driveAbsolute(p string) bool {
@@ -457,12 +457,27 @@ func driveAbsolute(p string) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// shellLaunchPlace is the one answer to where a shell may be started from: an
-// absolute path on a local volume. A network share or device namespace is read
-// from the spelling alone, so every source of candidates and every pinned path
-// is held to the same rule before anything is looked up there.
-func shellLaunchPlace(p string) bool {
+// windowsPaths is the host's path rule for the candidate lists; tests replace it.
+var windowsPaths = runtime.GOOS == "windows"
+
+// shellLaunchPlace is the one answer to where a shell may be started from. Under
+// Windows rules it is an absolute path on a local volume: a network share or
+// device namespace is read from the spelling alone, so every source of
+// candidates, every PATH lookup and every pinned path is held to the same rule
+// before anything is launched there. Elsewhere `//x` is an ordinary local path
+// and only an empty path is refused.
+func shellLaunchPlace(windows bool, p string) bool {
+	if !windows {
+		return p != ""
+	}
 	return (filepath.IsAbs(p) || driveAbsolute(p)) && !fileutil.IsNetworkPath(p)
+}
+
+// lookShell is exec.LookPath held to shellLaunchPlace: a PATH entry on a share
+// is not a place a shell is found.
+func (h shellHost) lookShell(name string) (string, bool) {
+	p, err := h.lookPath(name)
+	return p, err == nil && shellLaunchPlace(h.goos == "windows", p)
 }
 
 // bashCandidates adds to the standard roots every absolute PATH directory and the
@@ -472,14 +487,14 @@ func shellLaunchPlace(p string) bool {
 func bashCandidates(getenv func(string) string, lookPath func(string) (string, error)) []string {
 	var roots []string
 	for _, env := range []string{"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"} {
-		if v := getenv(env); shellLaunchPlace(v) {
+		if v := getenv(env); shellLaunchPlace(windowsPaths, v) {
 			roots = append(roots, filepath.Join(v, "Git"))
 		}
 	}
-	if v := getenv("LOCALAPPDATA"); shellLaunchPlace(v) {
+	if v := getenv("LOCALAPPDATA"); shellLaunchPlace(windowsPaths, v) {
 		roots = append(roots, filepath.Join(v, "Programs", "Git"))
 	}
-	if g, err := lookPath("git"); err == nil && shellLaunchPlace(g) {
+	if g, err := lookPath("git"); err == nil && shellLaunchPlace(windowsPaths, g) {
 		// git.exe is in <root>\cmd or <root>\bin, or one level deeper in
 		// <root>\mingw64\bin.
 		dir := filepath.Dir(g)
@@ -499,7 +514,7 @@ func bashCandidates(getenv func(string) string, lookPath func(string) (string, e
 		add(filepath.Join(r, "usr", "bin", "bash.exe"))
 	}
 	for _, d := range filepath.SplitList(getenv("PATH")) {
-		if shellLaunchPlace(d) {
+		if shellLaunchPlace(windowsPaths, d) {
 			add(filepath.Join(d, "bash.exe"))
 		}
 	}
@@ -511,7 +526,7 @@ func bashCandidates(getenv func(string) string, lookPath func(string) (string, e
 func windowsPowerShellCandidates() []string {
 	var roots []string
 	for _, env := range []string{"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"} {
-		if v := os.Getenv(env); shellLaunchPlace(v) {
+		if v := os.Getenv(env); shellLaunchPlace(windowsPaths, v) {
 			roots = append(roots, v)
 		}
 	}
@@ -519,12 +534,12 @@ func windowsPowerShellCandidates() []string {
 	for _, r := range roots {
 		out = append(out, filepath.Join(r, "PowerShell", "7", "pwsh.exe"))
 	}
-	if v := os.Getenv("LOCALAPPDATA"); shellLaunchPlace(v) {
+	if v := os.Getenv("LOCALAPPDATA"); shellLaunchPlace(windowsPaths, v) {
 		out = append(out, filepath.Join(v, "Microsoft", "WindowsApps", "pwsh.exe"))
 	}
-	if v := os.Getenv("SystemRoot"); shellLaunchPlace(v) {
+	if v := os.Getenv("SystemRoot"); shellLaunchPlace(windowsPaths, v) {
 		out = append(out, filepath.Join(v, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
-	} else if v := os.Getenv("windir"); shellLaunchPlace(v) {
+	} else if v := os.Getenv("windir"); shellLaunchPlace(windowsPaths, v) {
 		out = append(out, filepath.Join(v, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
 	}
 	return out

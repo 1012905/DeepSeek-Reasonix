@@ -19,7 +19,7 @@ func TestShellLaunchPlace(t *testing.T) {
 		`C:Git`:           false,
 		``:                false,
 	} {
-		if got := shellLaunchPlace(p); got != want {
+		if got := shellLaunchPlace(true, p); got != want {
 			t.Errorf("shellLaunchPlace(%q) = %v, want %v", p, got, want)
 		}
 	}
@@ -28,6 +28,9 @@ func TestShellLaunchPlace(t *testing.T) {
 // One hostile root, fed to every source of bash candidates and to the pinned
 // path, never reaches a candidate list or a launch.
 func TestEverySourceRefusesANetworkShareRoot(t *testing.T) {
+	old := windowsPaths
+	windowsPaths = true
+	t.Cleanup(func() { windowsPaths = old })
 	const share = `\\srv\share`
 	env := map[string]string{"ProgramFiles": share, "ProgramW6432": share, "LOCALAPPDATA": share, "PATH": share}
 	look := func(string) (string, error) { return share + `\Git\cmd\git.exe`, nil }
@@ -48,5 +51,39 @@ func TestEverySourceRefusesANetworkShareRoot(t *testing.T) {
 		func(string) bool { return true }, nil, nil, func(string) bool { launched = true; return true }, func(string) bool { return false }, nil)
 	if launched || got.Path == pinned {
 		t.Errorf("a pinned network path was launched or chosen: %+v", got)
+	}
+}
+
+// PATH lookups for bash and PowerShell are the highest-priority sources; a
+// share on PATH is held to the same rule as every other.
+func TestHostLookupsRefuseAShareOnPath(t *testing.T) {
+	const share = `\\srv\share\bash.exe`
+	launched := false
+	h := shellHost{
+		goos:     "windows",
+		lookPath: func(string) (string, error) { return share, nil },
+		exists:   func(string) bool { return true },
+		probe:    func(string) bool { launched = true; return true },
+		isWSL:    func(string) bool { return false },
+		launches: func(string) bool { launched = true; return true },
+	}
+	if got := h.bashCandidates(); len(got) != 0 {
+		t.Errorf("bashCandidates took a PATH share: %q", got)
+	}
+	if _, ok := h.powerShell([]string{"pwsh"}); ok {
+		t.Error("powerShell took a PATH share")
+	}
+	if got := h.bashFallback(); got != FallbackNotFound {
+		t.Errorf("bashFallback = %q, want not_found", got)
+	}
+	if launched {
+		t.Error("a PATH share was launched")
+	}
+}
+
+// Off Windows `//x` is an ordinary path.
+func TestShellLaunchPlaceLeavesPosixPathsAlone(t *testing.T) {
+	if !shellLaunchPlace(false, "//usr/bin/bash") || shellLaunchPlace(false, "") {
+		t.Fatal("POSIX rules: //x is local, empty is not a place")
 	}
 }
