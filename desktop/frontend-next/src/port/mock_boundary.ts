@@ -114,7 +114,12 @@ export class MockBoundary extends MockShell {
     if (dir === this.roots.primary || dir.startsWith(this.roots.primary + "/")) this.refuseRoot("workspace_roots.covered_by_primary");
     if (dir === "/" || dir === "/Users/you") this.refuseRoot("workspace_roots.too_broad");
     if (dir.includes(".ssh")) this.refuseRoot("workspace_roots.protected");
-    if (!this.roots.extra.includes(dir)) this.roots = { ...this.roots, extra: [...this.roots.extra, dir] };
+    if (dir.startsWith("/var/root")) this.refuseRoot("workspace_roots.not_owned");
+    if (dir === "/tmp" || this.roots.extra.some((p) => dir.startsWith(p + "/"))) this.refuseRoot("workspace_roots.overlaps_write_root");
+    // The kernel records the resolved path, not the spelling: a trailing slash
+    // goes and a symlink is followed.
+    const resolved = (dir.length > 1 ? dir.replace(/[\\/]+$/, "") : dir).replace("/Users/you/link", "/Users/you/real");
+    if (!this.roots.extra.includes(resolved)) this.roots = { ...this.roots, extra: [...this.roots.extra, resolved] };
     return this.workspaceRoots();
   }
 

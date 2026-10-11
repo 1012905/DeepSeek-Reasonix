@@ -251,6 +251,9 @@ export const EN_SETTINGS: Record<string, string> = {
   "「完全放行」只决定是否询问，不会扩大可写范围；要让 agent 修改另一个文件夹，请在这里添加。":
     "\"Allow everything\" only decides whether to ask; it does not widen where writes can land. To let the agent change another folder, add it here.",
   "项目文件夹": "Project folders",
+  "添加后，agent 将能修改并删除该文件夹里的任何文件。": "Once added, the agent can change and delete any file in that folder.",
+  "无法读取这个项目的额外文件夹": "Could not read this project's extra folders.",
+  "移除后，已经打开的窗格要等重建后才会收窄可写范围。": "After a removal, panes that are already open narrow their writable area only when they are rebuilt.",
   "当前项目": "This project",
   "移除文件夹 {path}": "Remove folder {path}",
   "要添加的文件夹路径": "Folder path to add",

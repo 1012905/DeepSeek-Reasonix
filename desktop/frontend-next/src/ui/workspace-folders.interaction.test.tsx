@@ -47,6 +47,8 @@ it.each([
   ["/Users/you/code/site/sub", "这个文件夹已经在当前工作区里"],
   ["/Users/you", "这个文件夹范围太大"],
   ["/Users/you/.ssh/keys", "这个文件夹含有或位于密钥"],
+  ["/var/root/stuff", "这个文件夹不属于当前用户"],
+  ["/tmp", "和已有的可写位置"],
 ])("explains a refused folder %s in words and keeps what was typed", async (path, words) => {
   const { onChanged } = draw();
   const input = await screen.findByLabelText(t("要添加的文件夹路径"));
@@ -71,10 +73,45 @@ it("says so when the kernel is busy, and when other panes will take the change l
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-it("adds the folder chosen in the system picker", async () => {
+// Granting write access is the Add button's decision, not the dialog's.
+it("puts the folder chosen in the system picker in the field and grants nothing until Add", async () => {
   const port = new MockPort() as unknown as AgentPort;
   vi.spyOn(port, "pickFolder").mockResolvedValue("/Users/you/code/picked");
+  const added = vi.spyOn(port, "addWorkspaceRoot");
   draw(port);
   await userEvent.click(await screen.findByRole("button", { name: t("选文件夹") }));
+  expect((screen.getByLabelText(t("要添加的文件夹路径")) as HTMLInputElement).value).toBe("/Users/you/code/picked");
+  expect(added).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: t("添加") }));
   expect(await screen.findByText("/Users/you/code/picked")).toBeTruthy();
+});
+
+it("lists the path the kernel recorded, not the spelling that was typed", async () => {
+  draw();
+  const input = await screen.findByLabelText(t("要添加的文件夹路径"));
+  await userEvent.type(input, "/Users/you/code/shared-lib/");
+  await userEvent.click(screen.getByRole("button", { name: t("添加") }));
+  expect(await screen.findByText("/Users/you/code/shared-lib")).toBeTruthy();
+  await userEvent.type(input, "/Users/you/link");
+  await userEvent.click(screen.getByRole("button", { name: t("添加") }));
+  expect(await screen.findByText("/Users/you/real")).toBeTruthy();
+  expect(screen.queryByText("/Users/you/link")).toBeNull();
+});
+
+it("states the consequence of adding and of removing", async () => {
+  draw();
+  expect(await screen.findByText("添加后，agent 将能修改并删除该文件夹里的任何文件。")).toBeTruthy();
+  const input = await screen.findByLabelText(t("要添加的文件夹路径"));
+  await userEvent.type(input, "/Users/you/code/x");
+  await userEvent.click(screen.getByRole("button", { name: t("添加") }));
+  expect(await screen.findByText(/移除后，已经打开的窗格/)).toBeTruthy();
+});
+
+it("shows a retry instead of vanishing when the folders cannot be read", async () => {
+  const port = new MockPort() as unknown as AgentPort;
+  vi.spyOn(port, "workspaceRoots").mockRejectedValueOnce(new Error("down")).mockResolvedValue({ primary: "/Users/you/code/site", extra: [] });
+  draw(port);
+  expect(await screen.findByText(t("无法读取这个项目的额外文件夹"))).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: t("重试") }));
+  expect(await screen.findByText(t("项目文件夹"))).toBeTruthy();
 });
