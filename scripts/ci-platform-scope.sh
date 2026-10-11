@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Reads changed file names (one per line) on stdin and prints "true" when a
+# Reads changed file names (NUL-separated, as `git diff -z --name-only --no-renames`
+# prints them) on stdin and prints "true" when a
 # macOS/Windows test leg is worth running for them, "false" otherwise.
 # Run from the repository root. Unknown paths count as platform-relevant: the
 # set below names what is provably platform-neutral, never the reverse.
@@ -12,7 +13,7 @@ platform_dir='^(internal/(safety|platform|base|state|ext|tools|session|assembly)
 platform_file='(^|/)(go\.(mod|sum)|Makefile)$|\.(nsh|nsi|ps1|sh|bat|cmd)$|_(windows|darwin|linux|unix|bsd)(_test)?\.go$'
 
 seen=0
-while IFS= read -r f || [ -n "$f" ]; do
+while IFS= read -r -d '' f; do
   [ -n "$f" ] || continue
   seen=1
   case "$f" in
@@ -21,10 +22,10 @@ while IFS= read -r f || [ -n "$f" ]; do
   if [[ "$f" =~ $neutral_dir ]]; then continue; fi
   if [[ "$f" =~ $platform_dir || "$f" =~ $platform_file ]]; then echo true; exit 0; fi
   if [[ "$f" == *.go ]]; then
-    d=$(dirname "$f")
+    d=$(dirname -- "$f")
     # A package that carries any OS-constrained file can break on the OS it
     # does not build for, whichever file the change touched.
-    if [ -d "$d" ] && grep -lE '^//go:build .*\b(windows|darwin|linux|unix|freebsd|openbsd|netbsd|ios|android|cgo)\b' "$d"/*.go >/dev/null 2>&1; then echo true; exit 0; fi
+    if [ -d "$d" ] && grep -lE '^//go:build .*\b(windows|darwin|linux|unix|freebsd|openbsd|netbsd|ios|android|cgo)\b' -- "$d"/*.go >/dev/null 2>&1; then echo true; exit 0; fi
     continue
   fi
   echo true; exit 0

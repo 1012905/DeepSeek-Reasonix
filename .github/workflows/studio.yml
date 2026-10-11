@@ -149,7 +149,7 @@ jobs:
     name: desktop (${{ matrix.os }})
     needs: scope
     if: always()
-    runs-on: ${{ github.event_name == 'pull_request' && needs.scope.outputs.platform == 'false' && 'ubuntu-latest' || matrix.os }}
+    runs-on: ${{ github.event_name == 'pull_request' && needs.scope.outputs.platform == 'false' && matrix.os != 'ubuntu-22.04' && 'ubuntu-latest' || matrix.os }}
     env:
       RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.scope.outputs.platform != 'false' || matrix.os == 'ubuntu-22.04' }}
     strategy:
@@ -217,8 +217,8 @@ jobs:
           platform=true
           if [ "$EVENT" = pull_request ]; then
             arm64=false
-            platform=$(git diff --name-only "$BASE_SHA" HEAD | bash scripts/ci-platform-scope.sh)
-            if git diff --name-only "$BASE_SHA" HEAD |
+            platform=$(git diff -z --name-only --no-renames "$BASE_SHA" HEAD | bash scripts/ci-platform-scope.sh)
+            if git diff --name-only --no-renames "$BASE_SHA" HEAD |
               grep -qE '^(desktop/electron/|desktop/cmd/studio-manifest/|desktop/go\.(mod|sum)$|cmd/reasonix-studio-host/|internal/platform/(update|appupdate)/|go\.(mod|sum)$|scripts/(windows-signing-lib|verify-windows-package|verify-windows-authenticode|install-smoke)\.ps1$|\.github/workflows/(studio|release-studio)\.yml$)'; then
               arm64=true
             fi
@@ -235,9 +235,11 @@ jobs:
           else
             legs="$(jq -c . <<<"$legs")"
           fi
-          echo "arm64=$arm64" >> "$GITHUB_OUTPUT"
-          echo "platform=$platform" >> "$GITHUB_OUTPUT"
-          echo "matrix={\"include\":$legs}" >> "$GITHUB_OUTPUT"
+          {
+            echo "arm64=$arm64"
+            echo "platform=$platform"
+            echo "matrix={\"include\":$legs}"
+          } >> "$GITHUB_OUTPUT"
 
   # The packaging contract, on real artifacts rather than on the config that
   # describes them. Unsigned on purpose: signing and notarization are a

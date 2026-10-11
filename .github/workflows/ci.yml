@@ -51,7 +51,7 @@ jobs:
             base="${{ github.event.before }}"
           fi
           if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
-            files=$(git diff --name-only "$base" HEAD)
+            files=$(git diff --name-only --no-renames "$base" HEAD)
             if [ -n "$files" ]; then
               code=false; desktop=false; sdk=false; scripts=false
               # Root-module CI: desktop/ is a separate module, so only the
@@ -66,7 +66,7 @@ jobs:
               if echo "$files" | grep -qE '^(sdk/|internal/ext/extension/)'; then sdk=true; fi
               # The release-note tests render every committed Studio note; npm/ holds the publish tests.
               if echo "$files" | grep -qE '^(scripts/|npm/|release-notes/studio/|\.github/workflows/release-studio\.yml$)'; then scripts=true; fi
-              platform=$(echo "$files" | bash scripts/ci-platform-scope.sh)
+              platform=$(git diff -z --name-only --no-renames "$base" HEAD | bash scripts/ci-platform-scope.sh)
             fi
           fi
           { echo "code=$code"; echo "desktop=$desktop"; echo "sdk=$sdk"; echo "scripts=$scripts"; echo "platform=$platform"; } >> "$GITHUB_OUTPUT"
