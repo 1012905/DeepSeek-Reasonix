@@ -146,6 +146,16 @@ describe("a coded notice with a payload", () => {
   });
 });
 
+describe("a refused-input notice", () => {
+  it("says the message is queued rather than asking to resend it", () => {
+    const box = draw({ level: "warn", code: "input_refused", detail: undefined, text: "input was not accepted: the session is being switched — please resend" });
+    const said = box.querySelector(".find .t")?.textContent ?? "";
+    expect(said).toBe(t("会话、工作区或运行时正在切换，这条消息没能立刻发出；它已排入队列，切换结束后会自动发送，不需要重发"));
+    expect(said).not.toContain("resend");
+    expect(box.querySelector(".find .why")).toBeNull();
+  });
+});
+
 describe("a /compact notice", () => {
   it("words a failure from its code in the reader's language and keeps the kernel English out", () => {
     const box = draw({

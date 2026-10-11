@@ -57,6 +57,9 @@ const (
 	NoticeCodeApprovalModeUnrecognized = "approval_mode_unrecognized"
 	// Saved permission rules name no tool, so they match nothing; Detail is a PermissionRulesDormant.
 	NoticeCodePermissionRulesDormant = "permission_rules_dormant"
+	// A submission was refused while the session, workspace or runtime was changing.
+	// Its text says to resend, which is right for a frontend that keeps no queue; one that queues on the typed refusal says so itself.
+	NoticeCodeInputRefused = "input_refused"
 	// A turn handed its open list back to the user; Detail is the model's `need`, as it wrote it.
 	NoticeCodeAwaitUser = "await_user"
 	// A slash command nothing resolves, refused rather than sent as prose.
