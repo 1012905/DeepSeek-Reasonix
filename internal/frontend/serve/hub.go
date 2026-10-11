@@ -119,7 +119,10 @@ type Runtime struct {
 
 // HubOptions carries what the embedding host decides for every runtime.
 type HubOptions struct {
-	Serve config.ServeConfig
+	// LogsDir is where the shell keeps its logs, when there is a shell. Empty
+	// means this kernel has no such place to report.
+	LogsDir string
+	Serve   config.ServeConfig
 	// Grant applies the host's capabilities (folder picking, provider edits) to
 	// each runtime, so a pane opened later can do what the first one could.
 	Grant func(*Server)
@@ -550,6 +553,7 @@ func (h *Hub) Handler() http.Handler {
 	h.registerUpdateRoutes(hostMux)
 	h.registerAskRoutes(hostMux)
 	h.registerShareRoutes(hostMux)
+	hostMux.HandleFunc("GET /studio/logs", h.readStudioLogs)
 	return logMiddleware(h.auth.middleware(h.auth.hostGuard(withPage(csrfGuard(h.auth.mutationGate(h.watchTreeWrites(hostOnly(hostMux, mux)))), h.opts.Page))))
 }
 
