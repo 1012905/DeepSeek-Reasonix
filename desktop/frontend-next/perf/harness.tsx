@@ -8,6 +8,7 @@ import "../src/styles/studio.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/narrow.css";
+import "../src/styles/workfold.css";
 import "../src/styles/feedback.css";
 import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
@@ -80,6 +81,10 @@ class BenchPort extends MockPort {
 
   async providerSetup() {
     return ONBOARDING ? { required: true, provider: "", model: "" } : null;
+  }
+
+  async foldWorkSettings() {
+    return { ...(await super.foldWorkSettings()), fold: query.has("fold") };
   }
 
   async workspaceGit() {

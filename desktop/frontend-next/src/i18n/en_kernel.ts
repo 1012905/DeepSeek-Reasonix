@@ -391,6 +391,7 @@ export const EN_KERNEL: Record<string, string> = {
   "运行时已更换，费用显示币种未保存，请重试": "The runtime changed; the display currency was not saved. Try again.",
   "费用显示币种未能保存：{detail}": "The display currency was not saved: {detail}",
   "文件改动显示设置未能保存：{detail}": "The file-changes display setting was not saved: {detail}",
+  "折叠中间过程的设置未能保存：{detail}": "The fold-the-work setting was not saved: {detail}",
   "无进展设置未能保存：{detail}": "The progress settings were not saved: {detail}",
   "提问等待时长未能保存：{detail}": "The question wait time was not saved: {detail}",
   "等待时长超出允许范围，未做任何修改：{detail}": "That wait time is out of range; nothing was changed: {detail}",

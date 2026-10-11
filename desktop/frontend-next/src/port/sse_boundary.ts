@@ -1,6 +1,6 @@
 import { SseShell } from "./sse_shell";
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
@@ -52,6 +52,12 @@ export class SseBoundary extends SseShell {
   }
   saveChangedFilesSettings(show: boolean) {
     return this.post0<ChangedFilesSettings>("/changed-files-settings", { show });
+  }
+  foldWorkSettings() {
+    return this.get<FoldWorkSettings>("/fold-work-settings");
+  }
+  saveFoldWorkSettings(fold: boolean) {
+    return this.post0<FoldWorkSettings>("/fold-work-settings", { fold });
   }
   progressWatch() {
     return this.get<ProgressWatchSettings>("/progress-watch");

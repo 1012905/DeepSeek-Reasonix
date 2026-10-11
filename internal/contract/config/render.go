@@ -474,6 +474,9 @@ func RenderTOMLProjectDelta(c *Config) string {
 		if c.UI.ShowChangedFiles != d.UI.ShowChangedFiles {
 			fmt.Fprintf(&b, "show_changed_files = %v\n", c.UI.ShowChangedFiles)
 		}
+		if c.UI.FoldTurnWork != d.UI.FoldTurnWork {
+			fmt.Fprintf(&b, "fold_turn_work = %v\n", c.UI.FoldTurnWork)
+		}
 		b.WriteString("\n")
 	}
 

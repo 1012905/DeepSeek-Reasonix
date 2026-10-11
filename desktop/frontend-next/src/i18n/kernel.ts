@@ -355,6 +355,7 @@ const SAID: Record<string, string> = {
   "display_currency.runtime_changed": "运行时已更换，费用显示币种未保存，请重试",
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "changed_files.save_failed": "文件改动显示设置未能保存：{detail}",
+  "fold_work.save_failed": "折叠中间过程的设置未能保存：{detail}",
   "ask_timeout.save_failed": "提问等待时长未能保存：{detail}",
   "ask_timeout.out_of_range": "等待时长超出允许范围，未做任何修改：{detail}",
   "progress_watch.save_failed": "无进展设置未能保存：{detail}",
