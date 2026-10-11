@@ -21,13 +21,21 @@ func (s *Server) registerMachineSettingsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /default-model", s.setDefaultModel)
 }
 
+func (h *Hub) localWorkspaceSettings(w http.ResponseWriter, r *http.Request) {
+	http.StripPrefix("/host/settings/runtime/"+r.PathValue("runtime"), http.HandlerFunc(h.machineSettings)).ServeHTTP(w, r)
+}
+
 // A machine request resolves a live local owner each time; runtime IDs are
 // process-local and a remote pane never owns this machine's settings.
 func (h *Hub) machineSettings(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	var local *Server
-	for _, id := range h.order {
-		if rt := h.runtimes[id]; rt != nil && rt.remote == nil {
+	ids := h.order
+	if id := r.PathValue("runtime"); id != "" {
+		ids = []string{id}
+	}
+	for _, id := range ids {
+		if rt := h.runtimes[id]; rt != nil && rt.remote == nil && rt.Server != nil {
 			local = rt.Server
 			break
 		}
