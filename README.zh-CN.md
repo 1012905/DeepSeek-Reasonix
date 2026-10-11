@@ -57,7 +57,7 @@
 
 ## ❤️赞助商
 
-<table><tr><td width="180"><a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="./.github/sponsor/packycode-dark.svg"><img src="./.github/sponsor/packycode-light.svg" alt="PackyCode" width="150"></picture></a></td><td>感谢 PackyCode 赞助了本项目！PackyCode 是一家稳定、高效的 API 中转服务商，统一域名、统一密钥、智能容灾切换。</td></tr></table>
+<table><tr><td width="180"><a href="https://www.rightapi.ai/register?aff=e083bf73" target="_blank" rel="sponsored noopener noreferrer"><img src="./.github/sponsor/rightcode.png" alt="Right Code" width="64"></a></td><td>感谢 Right Code 赞助了本项目！Right Code 是企业级 AI Agent 分发平台，统一接入 Claude Code、Codex、Gemini CLI 等主流 AI 编程工具，按量计费、多渠道稳定可靠，开箱即用。</td></tr><tr><td width="180"><a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="./.github/sponsor/packycode-dark.svg"><img src="./.github/sponsor/packycode-light.svg" alt="PackyCode" width="150"></picture></a></td><td>感谢 PackyCode 赞助了本项目！PackyCode 是一家稳定、高效的 API 中转服务商，统一域名、统一密钥、智能容灾切换。</td></tr></table>
 
 ## 它是什么
 
