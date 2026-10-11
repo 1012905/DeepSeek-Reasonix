@@ -47,6 +47,8 @@ import { PostureNote } from "./PostureNote";
 import { useStatusPoll } from "./useStatusPoll";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
 import { LiveWork, useLiveWork } from "../state/foldpref";
+import { loadChangedFilesPref, useShowsChangedFiles } from "../state/changedfiles";
+import { ChangedFilesPill } from "./ChangedFilesPill";
 
 export type { PaneReport };
 
@@ -277,6 +279,15 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   }, [ready, reloadMcp, status?.sessionPath, running]);
   useCheckpointRefresh(port, status?.sessionPath, running, setCheckpoints);
   // A call that may write can have moved the tree before the turn ends.
+  const pillOn = useShowsChangedFiles(port);
+  const changeCount = tree?.repo ? tree.changes.length : 0;
+  const pill = pillOn && !!tree?.repo;
+  const [revealChanges, setRevealChanges] = useState(0);
+  const openChanges = useCallback(() => {
+    setRevealChanges((n) => n + 1);
+    showView("browser");
+  }, [showView]);
+  useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   const refreshTree = useCallback(() => { void port.changes().then(setTree).catch(() => setTree(null)); void port.workspaceGit().then(setGit).catch(() => setGit(null)); }, [port]);
   useEffect(() => { if (ready || counts.wrote) refreshTree(); }, [ready, refreshTree, status?.sessionPath, running, counts.wrote]);
 
@@ -456,7 +467,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             shown={visible && workbench}
             onSurfaces={setSurfaces}
             scheme={theme === "light" ? "light" : "dark"}
-            changes={tree?.changes ?? []} onTreeChanged={refreshTree}
+            changes={tree?.changes ?? []} onTreeChanged={refreshTree} revealChanges={revealChanges}
             running={running}
             wrote={counts.wrote}
             remote={!!rt.host}
@@ -511,7 +522,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           )}
         </div>
         {alert && <div className="cmpalert">{alert}</div>}
-        <Composer port={port} status={status} running={running} quote={quote} restore={restored} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={fail} onSettings={onSettings} changeCount={tree?.repo ? tree.changes.length : 0} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
+        {pill && <ChangedFilesPill changes={tree?.changes ?? []} onOpen={openChanges} />}
+        <Composer port={port} status={status} running={running} quote={quote} restore={restored} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={fail} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
         <MeterRail
           tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}

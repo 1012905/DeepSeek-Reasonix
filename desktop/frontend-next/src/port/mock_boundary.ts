@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AutoArchiveSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
+import type { AutoArchiveSettings, ChangedFilesSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
 import { MockShell } from "./mock_shell";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
@@ -125,6 +125,17 @@ export class MockBoundary extends MockShell {
   async saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings> {
     this.currency = { ...this.currency, mode };
     return { ...this.currency };
+  }
+
+  private changedFiles: ChangedFilesSettings = { show: true, path: "/Users/you/.reasonix/config.toml" };
+
+  async changedFilesSettings(): Promise<ChangedFilesSettings> {
+    return { ...this.changedFiles };
+  }
+
+  async saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings> {
+    this.changedFiles = { ...this.changedFiles, show };
+    return { ...this.changedFiles };
   }
 
   private watch: ProgressWatchSettings = {

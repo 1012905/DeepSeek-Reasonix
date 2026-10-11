@@ -12,6 +12,7 @@ import type {
 import { openPage, pageForEmptyColumn } from "./browser_open";
 import { AgentBrowserPanel, ManualBrowserPanel, UNREAD_TABS } from "./BrowserPanel";
 import { DiffView } from "./cards/DiffView";
+import { useOnBump } from "./useOnBump";
 import { StudioIcon } from "./StudioIcon";
 import { LazyMarkdown } from "./LazyMarkdown";
 import type { LocalRefs } from "./Markdown";
@@ -117,6 +118,7 @@ export function WorkbenchPanel({
   running = false,
   wrote = 0,
   remote = false,
+  revealChanges = 0,
   onCloseManual,
   onSurfaces,
   onExternal,
@@ -136,6 +138,7 @@ export function WorkbenchPanel({
   wrote?: number;
   /** The workspace is on another machine, so its paths mean nothing here. */
   remote?: boolean;
+  revealChanges?: number;
   onCloseManual: () => void;
   // How many surfaces the strip holds, for the pane's own tab to count.
   onSurfaces: (n: number) => void;
@@ -151,6 +154,7 @@ export function WorkbenchPanel({
   // in at all. The toggle is that way in, at any width.
   const [showFiles, setShowFiles] = useState(false);
   const commit = useCommitCard(port, () => onTreeChanged?.());
+  useOnBump(revealChanges, () => setShowFiles(true));
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
   // Docked, the file list hides the canvas a page is drawn in, so choosing any
