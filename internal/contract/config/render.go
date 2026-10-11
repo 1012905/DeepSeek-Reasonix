@@ -89,6 +89,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		fmt.Fprintf(&b, "approval_request = %v   # notify when a tool approval is waiting\n", c.Notifications.ApprovalRequest)
 		fmt.Fprintf(&b, "ask_request = %v   # notify when a question is waiting\n", c.Notifications.AskRequest)
 		fmt.Fprintf(&b, "feedback_reply = %v   # notify when a feedback report gets a reply\n", c.Notifications.FeedbackReply)
+		fmt.Fprintf(&b, "sound = %v   # play a short chime for the events above, with or without system notifications; default off\n", c.Notifications.Sound)
 		b.WriteString("\n")
 	}
 
@@ -472,6 +473,12 @@ func RenderTOMLProjectDelta(c *Config) string {
 		}
 		if c.UI.ShowChangedFiles != d.UI.ShowChangedFiles {
 			fmt.Fprintf(&b, "show_changed_files = %v\n", c.UI.ShowChangedFiles)
+		}
+		if c.UI.FoldTurnWork != d.UI.FoldTurnWork {
+			fmt.Fprintf(&b, "fold_turn_work = %v\n", c.UI.FoldTurnWork)
+		}
+		if c.UI.ShowReceipt != d.UI.ShowReceipt {
+			fmt.Fprintf(&b, "show_receipt = %v\n", c.UI.ShowReceipt)
 		}
 		b.WriteString("\n")
 	}

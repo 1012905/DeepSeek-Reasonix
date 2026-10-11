@@ -47,6 +47,7 @@ const runtimePrefix = "/rt/"
 // published under /rt/{id}/; the hub owns only what they share — the auth gate,
 // the workspace tree, and the rule that one session file gets one runtime.
 type Hub struct {
+	currency control.DisplayCurrencyGroup
 	mu       sync.RWMutex
 	runtimes map[string]*Runtime
 	order    []string
@@ -119,7 +120,10 @@ type Runtime struct {
 
 // HubOptions carries what the embedding host decides for every runtime.
 type HubOptions struct {
-	Serve config.ServeConfig
+	// LogsDir is where the shell keeps its logs, when there is a shell. Empty
+	// means this kernel has no such place to report.
+	LogsDir string
+	Serve   config.ServeConfig
 	// Grant applies the host's capabilities (folder picking, provider edits) to
 	// each runtime, so a pane opened later can do what the first one could.
 	Grant func(*Server)
@@ -257,7 +261,13 @@ func (h *Hub) Adopt(srv *Server, bc *Broadcaster) (*Runtime, error) {
 		return nil, err
 	}
 	rt := &Runtime{ID: h.nextID(), Root: srv.Controller().WorkspaceRoot(), Server: srv, Events: bc, leases: leases}
-	h.publish(rt)
+	if err := h.publish(rt); err != nil {
+		if leases != nil {
+			_ = srv.SetSessionLeases(nil)
+			leases.Release()
+		}
+		return nil, err
+	}
 	return rt, nil
 }
 
@@ -372,7 +382,14 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	// Before publishing: Close reads rt.stop, and a pane must not be reachable
 	// before the fields its teardown depends on are set.
 	h.adoptHostDecisions(rt)
-	h.publish(rt)
+	if err := h.publish(rt); err != nil {
+		if rt.stop != nil {
+			rt.stop()
+		}
+		built.Controller.Close()
+		leases.Release()
+		return nil, err
+	}
 	return rt, nil
 }
 
@@ -390,6 +407,10 @@ func (h *Hub) Close(id string) error {
 	h.mu.Unlock()
 	defer h.treeChanged()
 
+	if rt.Local() {
+		rt.Server.bindMu.Lock()
+		defer rt.Server.bindMu.Unlock()
+	}
 	if h.opts.OnClose != nil {
 		h.opts.OnClose(rt)
 	}
@@ -526,6 +547,8 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("GET /device", notADevice)
 	mux.HandleFunc("POST /device/leave", notADevice)
 	mux.HandleFunc(runtimePrefix+"{id}/", h.routeRuntime)
+	mux.HandleFunc("/host/settings/runtime/{runtime}/", h.localWorkspaceSettings)
+	mux.Handle("/host/settings/", http.StripPrefix("/host/settings", http.HandlerFunc(h.machineSettings)))
 	mux.HandleFunc("/", h.routeDefault)
 	// What acts on the machine behind the window, or dials onward from it,
 	// stays the window's: a paired device reaches the rest.
@@ -550,6 +573,7 @@ func (h *Hub) Handler() http.Handler {
 	h.registerUpdateRoutes(hostMux)
 	h.registerAskRoutes(hostMux)
 	h.registerShareRoutes(hostMux)
+	hostMux.HandleFunc("GET /studio/logs", h.readStudioLogs)
 	return logMiddleware(h.auth.middleware(h.auth.hostGuard(withPage(csrfGuard(h.auth.mutationGate(h.watchTreeWrites(hostOnly(hostMux, mux)))), h.opts.Page))))
 }
 
@@ -615,10 +639,27 @@ func (h *Hub) routeDefault(w http.ResponseWriter, r *http.Request) {
 
 // publish registers a runtime and freezes the handler that serves it. The
 // prefix is stripped here so the runtime's own routes stay unprefixed.
-func (h *Hub) publish(rt *Runtime) {
+func (h *Hub) publish(rt *Runtime) error {
 	if rt.remote != nil {
 		rt.handler = http.StripPrefix(runtimePrefix+rt.ID, refuseLocalOnly(remoteProxy(rt.remote.ep)))
 	} else {
+		rt.Server.bindMu.Lock()
+		rt.Server.mu.Lock()
+		ctrl, concrete := rt.Server.ctrl.(*control.Controller)
+		if concrete {
+			rt.Server.currency = &h.currency
+		}
+		rt.Server.mu.Unlock()
+		if concrete {
+			if err := h.currency.Bind(nil, ctrl, rt.Events.SetDisplayCurrency); err != nil {
+				rt.Server.mu.Lock()
+				rt.Server.currency = nil
+				rt.Server.mu.Unlock()
+				rt.Server.bindMu.Unlock()
+				return err
+			}
+		}
+		rt.Server.bindMu.Unlock()
 		rt.Server.bc.observeTree(h.treeChanged)
 		// A local runtime a Hub publishes is driven by an interactive frontend,
 		// so that binding is completed here, not at whichever entry point made
@@ -634,6 +675,7 @@ func (h *Hub) publish(rt *Runtime) {
 	if h.opts.OnOpen != nil {
 		h.opts.OnOpen(rt)
 	}
+	return nil
 }
 
 // findSession returns the runtime already driving path. Session paths reach us

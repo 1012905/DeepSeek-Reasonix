@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -146,6 +147,13 @@ func decorateObservedPaths(rec *evidence.Receipt, plan *toolCallPlan) {
 			}
 		}
 	}
+	if rec.Write {
+		for _, target := range linkedWriteTargets(plan.pathsBefore.root, rec.Paths) {
+			if !holdsPath(rec.Paths, target) {
+				rec.Paths = append(rec.Paths, target)
+			}
+		}
+	}
 	if plan.pathsBefore.empty() || !rec.Success {
 		return
 	}
@@ -160,6 +168,42 @@ func decorateObservedPaths(rec *evidence.Receipt, plan *toolCallPlan) {
 			rec.Paths = append(rec.Paths, path)
 		}
 	}
+}
+
+// linkedWriteTargets names the files a named write changed through a link.
+// fileutil.AtomicOverwriteFile writes where a path resolves, and the link that
+// led there can be gone or replaced by the time anything reads the receipt.
+func linkedWriteTargets(root string, paths []string) []string {
+	if root == "" {
+		return nil
+	}
+	root = filepath.Clean(root)
+	var out []string
+	for _, path := range paths {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(root, path)
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || !throughLink(root, filepath.Clean(path)) {
+			continue
+		}
+		if target, err := filepath.EvalSymlinks(path); err == nil {
+			out = append(out, target)
+		}
+	}
+	return out
+}
+
+// throughLink reports whether path, or a directory between it and root, is a
+// symbolic link. path must lie under root.
+func throughLink(root, path string) bool {
+	for path != root && path != filepath.Dir(path) {
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return true
+		}
+		path = filepath.Dir(path)
+	}
+	return false
 }
 
 // holdsPath asks whether the receipt already names this file, by the ledger's
@@ -237,14 +281,20 @@ func (a *Agent) pathInWorkspace(path string) bool {
 // and build artifacts it cleaned up has no baseline, and owes no verification
 // of changes it kept none of.
 func (a *Agent) mutationBaseline(delivery bool) (int, bool) {
-	ledger := a.task.ledger
-	survives := func(r evidence.Receipt) bool {
-		return a.touchedTheWorkspace(r) && leftSomethingBehind(ledger, r, a.writeWorkspaceRoot)
-	}
 	if delivery {
-		return ledger.LatestProvenMutationIndexFunc(survives)
+		return a.task.ledger.LatestProvenMutationIndexFunc(a.survives)
 	}
-	return ledger.LatestSuccessfulWriterIndexFunc(survives)
+	return a.task.ledger.LatestSuccessfulWriterIndexFunc(a.survives)
+}
+
+// writerBaselineThrough is the non-delivery baseline as it stood at receipt
+// through.
+func (a *Agent) writerBaselineThrough(through int) (int, bool) {
+	return a.task.ledger.LatestSuccessfulWriterIndexThrough(through, a.survives)
+}
+
+func (a *Agent) survives(r evidence.Receipt) bool {
+	return a.touchedTheWorkspace(r) && leftSomethingBehind(a.task.ledger, r, a.writeWorkspaceRoot)
 }
 
 // observeBeforeMutation captures preimages for Previewable writers and records
@@ -507,4 +557,83 @@ func scopedGrant(ctx context.Context) *writeclaim.WriteGrant {
 		return nil
 	}
 	return g
+}
+
+// recordLinkTargets names the file a named-path write really landed on when its
+// path goes through a symlink. The link can be removed before the turn ends, so
+// the target has to be written down while the link still resolves. A path the
+// host cannot resolve leaves the write's extent unestablished.
+func (a *Agent) recordLinkTargets(rec *evidence.Receipt) {
+	if !rec.Write || a.observeRoot == "" {
+		return
+	}
+	root, err := filepath.EvalSymlinks(a.observeRoot)
+	if err != nil {
+		rec.MutationEvidence = evidence.MutationUnknown
+		return
+	}
+	for _, path := range rec.Paths {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(a.observeRoot, path)
+		}
+		resolved, err := resolveThroughExisting(path)
+		if err != nil {
+			rec.MutationEvidence = evidence.MutationUnknown
+			continue
+		}
+		rel, err := filepath.Rel(a.observeRoot, path)
+		if err == nil && !strings.HasPrefix(rel, "..") && evidence.NormalizePath(filepath.Join(root, rel)) == evidence.NormalizePath(resolved) {
+			continue
+		}
+		rec.MutationPaths = append(rec.MutationPaths, resolved)
+	}
+}
+
+// maxLinkHops bounds how many dangling links one write path may chain through.
+const maxLinkHops = 40
+
+var errLinkChain = errors.New("symlink chain too long")
+
+// resolveThroughExisting resolves symlinks in the longest existing prefix of
+// path, so a write that never created its target still reports where it would
+// have landed. A dangling link is followed by hand: the write creates its
+// target, and an unfollowed link would name itself as the destination.
+func resolveThroughExisting(path string) (string, error) {
+	return resolveHops(path, 0)
+}
+
+func resolveHops(path string, hops int) (string, error) {
+	if hops > maxLinkHops {
+		return "", errLinkChain
+	}
+	rest := ""
+	for {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err == nil {
+			return filepath.Join(resolved, rest), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
+			target, rerr := os.Readlink(path)
+			if rerr != nil {
+				return "", rerr
+			}
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(path), target)
+			}
+			landed, derr := resolveHops(target, hops+1)
+			if derr != nil {
+				return "", derr
+			}
+			return filepath.Join(landed, rest), nil
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return "", err
+		}
+		rest = filepath.Join(filepath.Base(path), rest)
+		path = parent
+	}
 }

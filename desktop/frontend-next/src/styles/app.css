@@ -153,7 +153,7 @@
     --chrome-h: 51px; --lights-w: 96px; --lights-h: var(--chrome-h);
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="off"] .chrome {
-    padding-left: calc(var(--lights-w) - var(--nav-w));
+    padding-left: calc(var(--lights-w) + 50px - var(--nav-w));
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="on"] .studio-rail-head {
     padding-top: var(--lights-h); -webkit-app-region: drag;
@@ -907,11 +907,6 @@
   }
 
   .chunk { display: flow-root }
-
-  .chunk > .enterbox > .call {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 216px;
-  }
 
   .flow-end { height: 1px; margin-top: -1px }
 
@@ -3840,9 +3835,9 @@
   .rc { margin: 4px 0 2px }
   .rc-ok {
     display: flex; flex-direction: row; align-items: baseline; gap: 8px;
-    font: var(--w-reg) var(--fs-ui)/1.6 var(--ui); color: var(--ghost);
+    font: var(--w-reg) var(--fs-ui)/1.6 var(--ui); color: var(--ghost); background: none; border: 0; padding: 0; text-align: start; cursor: pointer;
   }
-  .rc-ok .rc-tick { flex: none; color: var(--ok) }
+  .rc-ok .rc-tick { flex: none; color: var(--rc-c, var(--ok)) }
   .rc-ok .rc-t { flex: none }
   .rc-ok .rc-src { min-width: 0; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .rc-hd { padding: 8px 0 2px; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--ghost) }

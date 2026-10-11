@@ -84,6 +84,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/boundary.go", "PermissionLists", tsBoundaryFile, "PermissionLists"},
 	{"internal/session/control/boundary.go", "PermissionRules", tsBoundaryFile, "PermissionRules"},
 	{"internal/session/control/boundary.go", "SandboxSettings", tsBoundaryFile, "SandboxSettings"},
+	{"internal/frontend/serve/workspace_roots.go", "workspaceRootsView", tsBoundaryFile, "WorkspaceRoots"},
 	{"internal/session/control/browser_settings.go", "BrowserToolsSettings", tsBoundaryFile, "BrowserToolsSettings"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
@@ -115,8 +116,10 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/display_currency.go", "DisplayCurrencySettings", tsBoundaryFile, "DisplayCurrencySettings"},
 	{"internal/session/control/progress_watch_settings.go", "ProgressWatchSettings", tsBoundaryFile, "ProgressWatchSettings"},
 	{"internal/session/control/changed_files_settings.go", "ChangedFilesSettings", tsBoundaryFile, "ChangedFilesSettings"},
+	{"internal/session/control/fold_work_settings.go", "FoldWorkSettings", tsBoundaryFile, "FoldWorkSettings"},
 	{"internal/session/control/ask_timeout.go", "AskTimeoutSettings", tsBoundaryFile, "AskTimeoutSettings"},
 	{"internal/session/control/auto_archive.go", "AutoArchiveSettings", tsBoundaryFile, "AutoArchiveSettings"},
+	{"internal/session/control/receipt_settings.go", "ReceiptSettings", tsBoundaryFile, "ReceiptSettings"},
 	// RemoteHostEdit is left out on purpose: the kernel still takes the single
 	// `workspace` an old row was saved with, which the page deliberately does
 	// not send. An under-filled request is not a picture that cannot be read.
@@ -126,6 +129,9 @@ var mirroredWireTypes = []wireMirror{
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
 	{"internal/frontend/serve/hub_tree.go", "treeSession", tsHubFile, "TreeSession"},
+	// The folder's true size beside the rows loaded. A window that cannot read
+	// the total labels a truncated list as the whole history.
+	{"internal/frontend/serve/hub_tree.go", "treeWorkspace", tsHubFile, "TreeWorkspace"},
 	// A session the import left in place. The reason code is what the window
 	// words the explanation from; a code it cannot read is a skipped session
 	// reported as nothing more than a count.
@@ -149,6 +155,10 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/update/hub.go", "VersionEntry", tsVersionFile, "VersionEntry"},
 	{"internal/platform/update/hub.go", "VersionHub", tsVersionFile, "VersionHub"},
 	{"internal/platform/update/notes.go", "VersionNotes", tsVersionFile, "VersionNotes"},
+	// Where the logs and crash files are. A field the page cannot read is a path
+	// it cannot show to someone asked where to look.
+	{"internal/frontend/serve/studio_logs.go", "studioLogs", tsVersionFile, "StudioLogs"},
+	{"internal/frontend/serve/studio_logs.go", "studioCrashes", tsVersionFile, "StudioCrash"},
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
 	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},
@@ -156,7 +166,9 @@ var mirroredWireTypes = []wireMirror{
 	// read puts the config name back on screen after the user renamed it.
 	{"internal/frontend/serve/providers.go", "providerView", tsProviderFile, "ProviderEntry"},
 	{"internal/frontend/serve/providers.go", "protocolView", tsProviderFile, "Protocol"},
+	{"internal/frontend/serve/provider_presets.go", "providerPresetView", tsProviderFile, "ProviderPreset"},
 	{"internal/frontend/serve/provider_check.go", "providerCheck", tsProviderFile, "ProviderCheck"},
+	{"internal/frontend/serve/providers.go", "providerRemovalView", tsProviderFile, "ProviderRemoval"},
 	{"internal/frontend/serve/provider_check.go", "providerModelCheck", tsProviderFile, "ProviderModelCheck"},
 	{"internal/frontend/serve/settings.go", "modelEntry", tsModelFile, "ModelEntry"},
 	// A per-profile entry that outranks a role's global model. A scope the page

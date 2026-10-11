@@ -3,6 +3,8 @@
 package notify
 
 import (
+	"syscall"
+
 	"git.sr.ht/~jackmordaunt/go-toast/v2"
 
 	"reasonix/internal/platform/appidentity"
@@ -25,4 +27,16 @@ func (PlatformSender) Send(m Message) error {
 		Body:  m.Body,
 	}
 	return notification.Push()
+}
+
+var messageBeep = syscall.NewLazyDLL("user32.dll").NewProc("MessageBeep")
+
+// Chime plays the system's asterisk sound, which is the one the person already
+// hears for a finished task elsewhere; it does not depend on toast settings.
+func (PlatformSender) Chime() error {
+	const iconAsterisk = 0x40
+	if r, _, err := messageBeep.Call(iconAsterisk); r == 0 {
+		return err
+	}
+	return nil
 }

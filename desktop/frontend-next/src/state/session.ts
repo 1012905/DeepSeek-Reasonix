@@ -6,7 +6,6 @@ import { plural, t } from "../i18n";
 import { currentStep, stepDone, stepLabel } from "./session_types";
 import type { Item, Metrics, PlanStep, RememberedFact, RuntimeNotice, SessionState, TodoStatus, TurnTerminal, Waiting } from "./session_types";
 import { foldUsage, quoteAmount } from "./usage";
-import { setShowsReceipt, showsReceipt } from "./prefs";
 
 // The types live next door; this stays their way in, so no reader of a
 // session has to know they were split off.
@@ -25,7 +24,6 @@ import { nameQueued, withoutPendingRow } from "./queued";
 import { dropTool, foldLastRead, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
 export { chipLabel };
 export { quoteAmount };
-export { setShowsReceipt, showsReceipt };
 
 // doing is what the status chip prints. These two values are also read back by
 // the reducer, so they get a name: a comparison against a sentence is one copy
@@ -631,15 +629,10 @@ function turnTerminal(ev: WireEvent): TurnTerminal {
 }
 
 // withReceipt appends the turn's completion record when the kernel says it has
-// something to say — and when this reader wants to read it. Whether a receipt
-// has content is the kernel's answer and is not restated here; whether it is
-// wanted on this screen is the reader's, and belongs where the panel widths
-// already live rather than in a config the whole install shares.
-//
-// The check itself is untouched either way: it still runs, still decides
-// readiness, and still reaches the trajectory. Only the card is withheld.
+// something to say. Whether the card is drawn is the reader's choice, made at
+// render time, so the record stays in the transcript either way.
 function withReceipt(items: Item[], r?: Receipt): Item[] {
-  if (!r?.saysSomething || !showsReceipt()) return items;
+  if (!r?.saysSomething) return items;
   return [...items, { t: "receipt", id: nextId(), r }];
 }
 
@@ -651,7 +644,7 @@ function withReceipt(items: Item[], r?: Receipt): Item[] {
 // eleven. The server strips these before /history now — this is what covers
 // sessions already on disk.
 const CONTROL =
-  /<(reasoning-language|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|project-instructions|capability-route|interrupted-turn-recovery|workspace|scheduled-run|mcp-prompt-failure|refused-calls)[\s\S]*?<\/\1>\s*/g;
+  /<(reasoning-language|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|current-date|project-instructions|capability-route|interrupted-turn-recovery|workspace|scheduled-run|mcp-prompt-failure|refused-calls)[\s\S]*?<\/\1>\s*/g;
 const stripControl = (s: string) => s.replace(CONTROL, "").trim();
 
 // A plan that ran to the end is spent: struck through in the rail it reads as

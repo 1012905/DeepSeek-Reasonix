@@ -222,6 +222,7 @@ const SAID: Record<string, string> = {
   "provider.probe.upstream_error": "服务商返回错误（HTTP {status}），与填写内容无关，请稍后重试",
   "provider.probe.timeout": "该地址在限定时间内没有响应。请检查网络或代理，或稍后重试",
   "provider.probe.unreachable": "无法连接该地址。请检查网络是否通畅，以及地址是否有误",
+  "provider.probe.redirect_refused": "该地址跳转到了 {target}，已拒绝，以免 key 被发到别处。如果信任 {target}，请把服务地址改成 {target}",
   "provider.probe.failed": "检查失败，没有具体原因",
   "provider.probe.decision_path_not_found": "地址可以连通，但没有 System One 决策接口。请填写服务的基地址，不要带 /v1/systemone，Reasonix 会自己在后面追加",
   "provider.probe.decision_not_compatible": "该地址有响应，但返回的不是 System One 的决策结果。请确认这是决策协议服务的基地址",
@@ -279,6 +280,7 @@ const SAID: Record<string, string> = {
   "session.bind_failed": "接管该会话失败，请重新打开窗口",
   "session.has_open_pane": "该会话仍有打开的面板，请先关闭",
   "session.outside_workspace": "该路径不属于任何已知的工作区",
+  "settings.local_runtime_required": "请先打开一个本机会话，再读取本机设置",
   "hub.no_runtime_open": "尚未打开任何会话",
 
   // ── 远程 ─────────────────────────────────────────────────────────
@@ -351,10 +353,13 @@ const SAID: Record<string, string> = {
   "browser_tools.save_failed": "内置浏览器设置未能保存：{detail}",
   "browser_tools.no_enabled": "本次请求未说明开关状态，未做任何修改",
   "display_currency.invalid": "不支持这个币种，只能选自动、CNY 或 USD：{detail}",
+  "display_currency.runtime_changed": "运行时已更换，费用显示币种未保存，请重试",
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "changed_files.save_failed": "文件改动显示设置未能保存：{detail}",
+  "fold_work.save_failed": "折叠中间过程的设置未能保存：{detail}",
   "ask_timeout.save_failed": "提问等待时长未能保存：{detail}",
   "ask_timeout.out_of_range": "等待时长超出允许范围，未做任何修改：{detail}",
+  "receipt.save_failed": "交付验收卡片的设置未能保存：{detail}",
   "progress_watch.save_failed": "无进展设置未能保存：{detail}",
   "auto_archive.save_failed": "自动归档设置未能保存：{detail}",
   "auto_archive.out_of_range": "天数超出允许范围，未做任何修改：{detail}",
@@ -420,6 +425,8 @@ const SAID: Record<string, string> = {
   "workspace_roots.protected": "这个文件夹含有或位于密钥、凭据或 Reasonix 自己的数据目录里，不能授予写入权限",
   "workspace_roots.not_owned": "这个文件夹不属于当前用户，不能授予写入权限",
   "workspace_roots.overlaps_write_root": "这个文件夹和已有的可写位置（临时目录、工具缓存或另一个额外文件夹）重叠",
+  "provider.preset_unknown": "没有这个预设",
+  "provider.preset_named_entries": "这个预设会创建多个来源，名称由预设决定",
   "sandbox.unavailable": "本机没有操作系统沙箱，「关进沙箱」一档无法保存",
   "remote.install_disabled": "{host} 上没有 reasonix，且本机已设置为不自动安装。请将安装方式改回「自动」，或自行在该机器上安装",
   "remote.npm_unavailable": "{host} 上无法运行 npm —— 通常是该机器未安装 Node.js。请安装 Node.js，或将安装方式改为「上传」",
@@ -461,6 +468,7 @@ const SAID: Record<string, string> = {
 
   // ── 版本：这个内核背后有没有一个可更新的 Studio ─────────────────
   "studio.no_install": "这个 Studio 不是安装版（从源码启动），没有可以查看或切换的版本",
+  "studio.no_logs": "这个内核没有窗口外壳，没有可以指出的日志目录",
   "studio.pin_rejected": "版本固定未能保存：{detail}",
   "studio.notes_bad_version": "这不是一个已发布的版本号",
   "studio.notes_absent": "这个版本没有发布更新内容",

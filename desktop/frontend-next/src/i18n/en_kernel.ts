@@ -3,6 +3,7 @@
 // code adds one here. i18n.test.ts is what stops one from being forgotten.
 
 export const EN_KERNEL: Record<string, string> = {
+  "请先打开一个本机会话，再读取本机设置": "Open a local session to read this machine’s settings",
   "该路径指向网络上的另一台机器，不在当前工作区内。文件工具只按路径写法拒绝它，不会去访问；工作区本身在网络共享上时，其下的路径可用": "That path names another machine on the network and is outside this workspace. File tools refuse it by its spelling and never look it up; paths below a workspace that is itself on a network share are allowed",
   "内置浏览器不会打开指向网络上另一台机器的路径，只按路径写法拒绝，不会去访问": "The built-in browser does not open a path that names another machine on the network; it is refused by its spelling and never looked up",
   "内核繁忙，这次操作可能没有被收到，重试前请先确认": "The kernel is busy; the action may not have been received - check before retrying",
@@ -130,6 +131,8 @@ export const EN_KERNEL: Record<string, string> = {
   "这个文件夹含有或位于密钥、凭据或 Reasonix 自己的数据目录里，不能授予写入权限": "This folder holds or sits inside keys, credentials or Reasonix's own data, so it cannot be granted write access.",
   "这个文件夹不属于当前用户，不能授予写入权限": "This folder is not owned by the current user, so it cannot be granted write access.",
   "这个文件夹和已有的可写位置（临时目录、工具缓存或另一个额外文件夹）重叠": "This folder overlaps a location that is already writable (temp, a tool cache or another extra folder).",
+  "没有这个预设": "No curated preset has this id.",
+  "这个预设会创建多个来源，名称由预设决定": "This preset creates several sources and keeps its own names.",
   "本机没有操作系统沙箱，「关进沙箱」一档无法保存": "This machine has no OS sandbox, so the jailed mode cannot be saved",
 
   "该文件夹仍有 {n} 个打开的面板，请先关闭再移除": "This folder still has {n} open panes — close them before removing it",
@@ -255,6 +258,8 @@ export const EN_KERNEL: Record<string, string> = {
     "The provider errored (HTTP {status}) — nothing you typed is wrong; try again shortly",
   "该地址在限定时间内没有响应。请检查网络或代理，或稍后重试":
     "That address did not answer in time. Check the network or proxy, or try again shortly",
+  "该地址跳转到了 {target}，已拒绝，以免 key 被发到别处。如果信任 {target}，请把服务地址改成 {target}":
+    "That address redirected to {target} and was refused so the key is not sent elsewhere. If you trust {target}, change the address to {target}",
   "检查失败，没有具体原因": "The check failed and gave no reason",
   "无法连接该地址。请检查网络是否通畅，以及地址是否有误":
     "Cannot reach that address. Check the network, or whether the address has a typo",
@@ -358,6 +363,7 @@ export const EN_KERNEL: Record<string, string> = {
   "该问题已有其他答案": "That question already has a different answer",
   "状态图标设置未能保存：{detail}": "The status icon settings were not saved: {detail}",
   "内置浏览器的消息格式不正确，本次回传被丢弃": "The built-in browser sent malformed messages, and they were dropped",
+  "这个内核没有窗口外壳，没有可以指出的日志目录": "This kernel has no window shell, so there is no log directory to point to",
   "这个 Studio 不是安装版（从源码启动），没有可以查看或切换的版本":
     "This Studio is not an installed build (it runs from source), so it has no version to show or change",
   "版本固定未能保存：{detail}": "The version hold was not saved: {detail}",
@@ -386,13 +392,16 @@ export const EN_KERNEL: Record<string, string> = {
   "无法读取工作区文件列表": "The workspace file list could not be read",
   "该文件不是可编辑文本或超过大小限制": "The file is not editable text or exceeds the size limit",
   "不支持这个币种，只能选自动、CNY 或 USD：{detail}": "That currency is not supported; choose Auto, CNY or USD: {detail}",
+  "运行时已更换，费用显示币种未保存，请重试": "The runtime changed; the display currency was not saved. Try again.",
   "费用显示币种未能保存：{detail}": "The display currency was not saved: {detail}",
   "文件改动显示设置未能保存：{detail}": "The file-changes display setting was not saved: {detail}",
+  "折叠中间过程的设置未能保存：{detail}": "The fold-the-work setting was not saved: {detail}",
   "无进展设置未能保存：{detail}": "The progress settings were not saved: {detail}",
   "提问等待时长未能保存：{detail}": "The question wait time was not saved: {detail}",
   "等待时长超出允许范围，未做任何修改：{detail}": "That wait time is out of range; nothing was changed: {detail}",
   "自动归档设置未能保存：{detail}": "The auto-archive settings were not saved: {detail}",
   "天数超出允许范围，未做任何修改：{detail}": "The number of days is out of range; nothing was changed: {detail}",
+  "交付验收卡片的设置未能保存：{detail}": "The receipt card setting was not saved: {detail}",
   "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹": "A home directory or drive root cannot be trusted as a whole - open a specific project folder",
   "未能记下对此文件夹的信任决定：{detail}": "The trust decision for this folder was not saved: {detail}",
   "该数值超出允许范围，未做任何修改：{detail}": "That value is out of range; nothing was changed: {detail}",
