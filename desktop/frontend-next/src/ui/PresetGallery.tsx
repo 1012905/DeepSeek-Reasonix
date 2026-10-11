@@ -35,7 +35,7 @@ export function PresetGallery({ load, onPick, disabled }: {
     return (
       <p className="addp-presets-note" role="alert">
         {t("常用服务列表没能读到：{detail}", { detail: failed })}
-        <button type="button" className="act" onClick={read}>{t("重试")}</button>
+        <button type="button" className="act" data-action="provider.preset-retry" onClick={read}>{t("重试")}</button>
       </p>
     );
   }
@@ -43,7 +43,7 @@ export function PresetGallery({ load, onPick, disabled }: {
   if (presets.length === 0) return <p className="addp-presets-note">{t("内核没有提供常用服务预设，可以在下面手动填写。")}</p>;
   return (
     <div className="addp-presets">
-      <button type="button" className="addp-presets-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="addp-presets-toggle" data-action="provider.preset-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <strong>{t("从常用服务开始")}</strong>
         <span>{presets.length}</span>
       </button>
@@ -51,7 +51,7 @@ export function PresetGallery({ load, onPick, disabled }: {
         <>
           <div className="fields">
             <label className="grow full">
-              <input type="search" aria-label={t("搜索常用服务")} placeholder={t("搜索常用服务")} value={query} onChange={(e) => setQuery(e.target.value)} spellCheck={false} />
+              <input type="search" data-action="provider.draft" data-value="preset-query" aria-label={t("搜索常用服务")} placeholder={t("搜索常用服务")} value={query} onChange={(e) => setQuery(e.target.value)} spellCheck={false} />
             </label>
           </div>
           {groups.length === 0 && <p className="addp-presets-note">{t("没有匹配的服务")}</p>}
