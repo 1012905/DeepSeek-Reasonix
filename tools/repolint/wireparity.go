@@ -84,6 +84,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/boundary.go", "PermissionLists", tsBoundaryFile, "PermissionLists"},
 	{"internal/session/control/boundary.go", "PermissionRules", tsBoundaryFile, "PermissionRules"},
 	{"internal/session/control/boundary.go", "SandboxSettings", tsBoundaryFile, "SandboxSettings"},
+	{"internal/frontend/serve/workspace_roots.go", "workspaceRootsView", tsBoundaryFile, "WorkspaceRoots"},
 	{"internal/session/control/browser_settings.go", "BrowserToolsSettings", tsBoundaryFile, "BrowserToolsSettings"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
