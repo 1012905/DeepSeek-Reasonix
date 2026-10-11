@@ -328,6 +328,7 @@ var ChineseTraditional = Messages{
 	McpPanelPending:              "待核准",
 	McpPanelChanged:              "啟用後已變更",
 	McpPanelLaunchFmt:            "將啟動：%s",
+	LaunchHiddenRemoved:          "[已刪除隱藏字元]",
 	McpToolDestructive:           "破壞性",
 	McpToolReadOnly:              "唯讀",
 	McpPanelConfirmFmt:           "這會執行倉庫宣告的伺服器 %s：%s — y/n",
