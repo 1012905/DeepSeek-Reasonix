@@ -195,6 +195,9 @@ var English = Messages{
 	RecoveryTaskGrantChoices:        "1. Continue once\n2. Continue and allow similar actions in this task\n3. Try another approach",
 	SandboxEscapeApprovalChoices:    "1. Allow once\n2. Use real environment for this session\n3. Deny\nChoose [1/2/3] (y/a/n also work)",
 	NotifyMessages: NotifyMessages{
+		AskTimeoutMessages: AskTimeoutMessages{
+			CmdAskTimeout: "skip a question nobody answers after a wait", AskTimeoutFmt: "ask timeout: %s — set it with /ask-timeout <seconds|off>", AskTimeoutOff: "off", AskTimeoutBadFmt: "ask-timeout: %q is neither a number of seconds nor off",
+		},
 		NotifyTitle:         "Reasonix",
 		NotifyTurnDone:      "The turn finished",
 		NotifyTurnFailed:    "The turn failed",
