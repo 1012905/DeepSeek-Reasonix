@@ -67,7 +67,8 @@ type Hub struct {
 	// and a per-runtime cache would be cold on exactly the read a switch waits on.
 	wallets *billing.Store
 	// stance is the Ask/Auto/YOLO posture every pane this hub opens starts in.
-	stance *approvalStance
+	stance  *approvalStance
+	changes *Broadcaster
 }
 
 // approvalStance is the Ask/Auto/YOLO posture the frontend is in, held by the
@@ -219,6 +220,7 @@ func NewHub(opts HubOptions) *Hub {
 		auth:     newAuthGate(opts.Serve),
 		wallets:  &billing.Store{},
 		stance:   &approvalStance{},
+		changes:  NewBroadcaster(),
 	}
 }
 
@@ -373,6 +375,7 @@ func (h *Hub) Close(id string) error {
 	delete(h.runtimes, id)
 	h.order = removeString(h.order, id)
 	h.mu.Unlock()
+	defer h.treeChanged()
 
 	if h.opts.OnClose != nil {
 		h.opts.OnClose(rt)
@@ -534,7 +537,7 @@ func (h *Hub) Handler() http.Handler {
 	h.registerUpdateRoutes(hostMux)
 	h.registerAskRoutes(hostMux)
 	h.registerShareRoutes(hostMux)
-	return logMiddleware(h.auth.middleware(h.auth.hostGuard(withPage(csrfGuard(h.auth.mutationGate(hostOnly(hostMux, mux))), h.opts.Page))))
+	return logMiddleware(h.auth.middleware(h.auth.hostGuard(withPage(csrfGuard(h.auth.mutationGate(h.watchTreeWrites(hostOnly(hostMux, mux)))), h.opts.Page))))
 }
 
 func (h *Hub) listRuntimes(w http.ResponseWriter, _ *http.Request) {
@@ -603,6 +606,7 @@ func (h *Hub) publish(rt *Runtime) {
 	if rt.remote != nil {
 		rt.handler = http.StripPrefix(runtimePrefix+rt.ID, refuseLocalOnly(remoteProxy(rt.remote.ep)))
 	} else {
+		rt.Server.bc.observeTree(h.treeChanged)
 		// A local runtime a Hub publishes is driven by an interactive frontend,
 		// so that binding is completed here, not at whichever entry point made
 		// it — Adopt takes what the host built, and this is the half it cannot.
@@ -613,6 +617,7 @@ func (h *Hub) publish(rt *Runtime) {
 	h.runtimes[rt.ID] = rt
 	h.order = append(h.order, rt.ID)
 	h.mu.Unlock()
+	h.treeChanged()
 	if h.opts.OnOpen != nil {
 		h.opts.OnOpen(rt)
 	}

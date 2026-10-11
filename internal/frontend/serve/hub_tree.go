@@ -73,6 +73,8 @@ type treeSession struct {
 
 func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /tree", h.tree)
+	mux.HandleFunc("GET /tree/events", h.treeEvents)
+	mux.HandleFunc("GET /tree/events/replay", h.treeEventsReplay)
 	mux.HandleFunc("POST /tree/workspaces", h.addWorkspace)
 	mux.HandleFunc("POST /tree/workspaces/remove", h.removeWorkspace)
 	mux.HandleFunc("POST /tree/workspaces/move", h.moveWorkspace)

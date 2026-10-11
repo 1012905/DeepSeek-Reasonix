@@ -7,6 +7,7 @@ package event
 // wording edits in Go no longer silently break localization. Values are
 // wire-stable: never rename or reuse one once shipped.
 const (
+	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"

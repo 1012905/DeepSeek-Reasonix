@@ -264,8 +264,8 @@ func (w *wireScan) findings(root string) []Finding {
 		}
 		bodies[m.tsFile] = string(raw)
 	}
-	return append(wireParityFindings(mirroredWireTypes, w.fields, bodies),
-		readParityFindings(readMirrors, w.fields)...)
+	out := append(wireParityFindings(mirroredWireTypes, w.fields, bodies), readParityFindings(readMirrors, w.fields)...)
+	return append(out, wireConstantFindings(root, mirroredWireConstants)...)
 }
 
 // readParityFindings checks the one direction a hand-written reader owes: every
