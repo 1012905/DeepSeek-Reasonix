@@ -22,7 +22,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/klauspost/compress v1.20.1
-	github.com/mattn/go-runewidth v0.0.30
+	github.com/mattn/go-runewidth v0.0.31
 	github.com/pkg/sftp v1.13.11
 	github.com/rivo/uniseg v0.4.7
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
@@ -41,7 +41,7 @@ require (
 	golang.org/x/image v0.46.0
 	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.60.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
