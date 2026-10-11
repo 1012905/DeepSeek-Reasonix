@@ -21,7 +21,7 @@ import { nextId } from "./ids";
 import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
-import { nameQueued } from "./queued";
+import { nameQueued, withoutPendingRow } from "./queued";
 import { dropTool, foldLastRead, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
 export { chipLabel };
 export { quoteAmount };
@@ -214,6 +214,8 @@ export type SessionEvent =
   | { kind: "__entered"; ids: string[] };
 
 function apply(s: SessionState, ev: SessionEvent): SessionState {
+  // A line the kernel holds for a retry waits in the queue panel, not here.
+  if (ev.kind === "notice" && ev.code === "unapplied_steer" && ev.itemId) s = withoutPendingRow(s, ev.itemId);
   if (ev.kind === "__error") return { ...s, error: ev.text };
   if (ev.kind === "__entered") {
     const spent = new Set(ev.ids);
