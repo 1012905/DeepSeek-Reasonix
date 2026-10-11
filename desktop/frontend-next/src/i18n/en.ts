@@ -1395,6 +1395,8 @@ export const EN: Record<string, string> = {
   "后台任务已结束：{name}": "Background job finished: {name}",
   "后台任务已终止：{name}": "Background job killed: {name}",
   "后台任务 {name} 失败，需要处理": "Background job {name} failed: needs attention",
+  "被信号 {signal} 终止": "Ended by signal {signal}",
+  "退出码 {code}": "Exit code {code}",
   "已恢复 {n} 条未完成的指令。待发送已暂停，请先在输入框上方的队列里查看，再点“继续派发”": "Recovered {n} unfinished instruction(s). Sending is paused: review them in the queue above the input box, then press Release",
   "待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送": "Sending is paused. This message is queued and goes out once you press Release",
   "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：": "Guidance was not applied because the turn ended before it could be processed. Send it again if it is still needed:",

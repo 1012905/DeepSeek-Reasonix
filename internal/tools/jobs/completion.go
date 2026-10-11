@@ -147,7 +147,11 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label, resultRef str
 	case Failed:
 		ne.Level, ne.Code = event.LevelWarn, event.NoticeCodeJobFailed
 		ne.Text = fmt.Sprintf("background %s failed: %s — %v", kind, id, err)
-		ne.Detail = event.JobNotice{Kind: kind, ID: id, Label: label, Error: fmt.Sprint(err)}.Encode()
+		failed := event.JobNotice{Kind: kind, ID: id, Label: label, Error: fmt.Sprint(err)}
+		if ex, ok := exitOf(err); ok {
+			failed.ExitCode, failed.Signal = &ex.Code, ex.Signal
+		}
+		ne.Detail = failed.Encode()
 	case Killed:
 		ne.Code = event.NoticeCodeJobKilled
 		ne.Text = fmt.Sprintf("background %s killed: %s", kind, id)
