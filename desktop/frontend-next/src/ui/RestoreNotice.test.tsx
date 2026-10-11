@@ -33,12 +33,13 @@ const style = (selector: string) => {
   return rule!.style;
 };
 
-it("resets native button paint and supplies themed focus and disabled states", () => {
+it("resets native paint with a resting click cue, themed focus and disabled states", () => {
   const button = style(".restore-notice button");
   expect(button.getPropertyValue("border")).toBe("0px");
   expect(button.getPropertyValue("background")).toBe("transparent");
   expect(button.getPropertyValue("font")).toBe("inherit");
-  expect(button.getPropertyValue("text-decoration")).toBe("none");
+  expect(button.getPropertyValue("text-decoration")).toBe("underline");
+  expect(button.getPropertyValue("text-underline-offset")).toBe("2px");
   expect(style(".restore-notice button:focus-visible").getPropertyValue("outline")).toBe("2px solid var(--focus)");
   expect(style(".restore-notice button:disabled").getPropertyValue("opacity")).toBe("0.5");
   expect(style(".restore-notice button:disabled").getPropertyValue("cursor")).toBe("default");
