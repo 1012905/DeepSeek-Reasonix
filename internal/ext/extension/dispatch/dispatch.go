@@ -403,11 +403,15 @@ func (d *Dispatcher) failure(pluginID string, point extension.InterceptorPoint, 
 	if d.isRequired(pluginID) {
 		return &FailureError{Plugin: pluginID, Point: point, Err: err}
 	}
-	if errors.Is(err, ErrNoLiveSidecar) && d.sidecarDown != nil {
-		d.once("error|"+pluginID, func() { d.sidecarDown(pluginID, point) })
-		return nil
+	key := "error|" + pluginID
+	if errors.Is(err, ErrNoLiveSidecar) {
+		key = "sidecar|" + pluginID
+		if d.sidecarDown != nil {
+			d.once(key, func() { d.sidecarDown(pluginID, point) })
+			return nil
+		}
 	}
-	d.warnOnce("error|"+pluginID, fmt.Sprintf(
+	d.warnOnce(key, fmt.Sprintf(
 		"extension %s failed at %s; skipping this optional extension: %s",
 		pluginID, point, secrets.RedactCredentials(err.Error())))
 	return nil
