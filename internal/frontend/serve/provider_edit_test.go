@@ -51,6 +51,12 @@ func newRichProviderServer(t *testing.T) *httptest.Server {
 // the tests that need it to answer differently about what it is doing.
 func newRichProviderServerAs(t *testing.T, wrap func(control.SessionAPI) control.SessionAPI) *httptest.Server {
 	t.Helper()
+	return newRichProviderServerWith(t, wrap, nil)
+}
+
+// newRichProviderServerWith also lets the test shape the controller it starts on.
+func newRichProviderServerWith(t *testing.T, wrap func(control.SessionAPI) control.SessionAPI, shape func(*control.Options)) *httptest.Server {
+	t.Helper()
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
 	if _, err := config.SetCredential("RICH_API_KEY", "sk-rich"); err != nil {
@@ -64,10 +70,14 @@ func newRichProviderServerAs(t *testing.T, wrap func(control.SessionAPI) control
 		t.Fatal(err)
 	}
 	bc := NewBroadcaster()
-	ctrl := control.New(control.Options{
+	opts := control.Options{
 		Sink: bc, Label: "alpha", ModelRef: "rich/alpha", SessionDir: testenv.TempDir(t),
 		ModelEntry: richModelEntry(t),
-	})
+	}
+	if shape != nil {
+		shape(&opts)
+	}
+	ctrl := control.New(opts)
 	s := New(wrap(ctrl), bc, config.ServeConfig{})
 	s.AllowProviderEdit()
 	srv := httptest.NewServer(operatorHandler(s))

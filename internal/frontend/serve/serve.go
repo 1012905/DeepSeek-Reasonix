@@ -237,12 +237,21 @@ func (s *Server) switchModelLocked(ctx context.Context, ref string) error {
 	// Run/RunGraceful only wire the initial controller. Every replacement must
 	// receive the same frontend hooks or the ask tool falls back to headless mode.
 	newCtrl.EnableInteractiveApproval()
+	prevCtrl, _ := cur.(*control.Controller)
+	// A replacement that adopted the job manager must not close it on any exit.
+	discard := func() {
+		if newCtrl.SharesJobsWith(prevCtrl) {
+			newCtrl.CloseSharingJobs()
+			return
+		}
+		newCtrl.Close()
+	}
 	// One definition of what survives a rebuild, shared with boot.Rebuild: the
 	// conversation on its existing file (#2807), the fresh system contract
 	// spliced over the carried one, session authorizations, and the axes a
 	// switch must not silently reset — approval mode, plan mode, a running goal.
-	prevCtrl, _ := cur.(*control.Controller)
 	if err := boot.ApplyRuntimeMigration(newCtrl, prevCtrl, migration); err != nil {
+		discard()
 		return fmt.Errorf("switch model: %w", err)
 	}
 	newPath := newCtrl.SessionPath()
@@ -252,7 +261,7 @@ func (s *Server) switchModelLocked(ctx context.Context, ref string) error {
 	// would report a successful switch whose refreshed system contract disappears
 	// on restart. AdoptHistory retained the loaded CAS baseline for this rewrite.
 	if err := s.rebindSessionLeaseFor(newPath, newCtrl); err != nil {
-		newCtrl.Close()
+		discard()
 		if errors.Is(err, sessionstore.ErrSessionLeaseHeld) {
 			return fmt.Errorf("switch model: %s", sessionInUseError(err))
 		}
@@ -263,13 +272,13 @@ func (s *Server) switchModelLocked(ctx context.Context, ref string) error {
 			if oldCtrl, ok := cur.(*control.Controller); ok {
 				_ = s.rebindSessionLeaseFor(prevPath, oldCtrl)
 			}
-			newCtrl.Close()
+			discard()
 			return fmt.Errorf("switch model: snapshot adopted history: %w", err)
 		}
 	}
 	activePath := newCtrl.SessionPath()
 	if err := s.rebindSessionLeaseFor(activePath, newCtrl); err != nil {
-		newCtrl.Close()
+		discard()
 		if errors.Is(err, sessionstore.ErrSessionLeaseHeld) {
 			return fmt.Errorf("switch model: %s", sessionInUseError(err))
 		}
@@ -287,11 +296,11 @@ func (s *Server) switchModelLocked(ctx context.Context, ref string) error {
 		s.mu.Unlock()
 		oldCtrl, _ := cur.(*control.Controller)
 		if restoreErr := s.rebindSessionLeaseFor(cur.SessionPath(), oldCtrl); restoreErr != nil {
-			newCtrl.Close()
+			discard()
 			slog.Error("serve: restore outgoing session lease after aborted model switch", "err", restoreErr)
 			return fmt.Errorf("switch model: session changed during switch; unable to restore outgoing session ownership")
 		}
-		newCtrl.Close()
+		discard()
 		return fmt.Errorf("switch model: session changed during switch")
 	}
 	s.ctrl = newCtrl
@@ -300,6 +309,11 @@ func (s *Server) switchModelLocked(ctx context.Context, ref string) error {
 	s.refreshProviderSetup(currentModelRef(newCtrl))
 
 	// Off-lock: tear down the old controller. Close can block up to 15s.
+	if newCtrl.SharesJobsWith(prevCtrl) {
+		newCtrl.TakeOverJobs()
+		prevCtrl.CloseHandingOffJobs()
+		return nil
+	}
 	cur.Close()
 	return nil
 }
@@ -1023,25 +1037,24 @@ func removeSessionFiles(absDir, abs string) error {
 }
 
 // modelSwitchRefusal says why a rebuild must wait. A turn in flight is waited
-// out or stopped; jobs left after the turn ended die with the controller being
-// replaced, so they are named separately with how many.
+// out or stopped; jobs left after it ended move to the replacement.
 func modelSwitchRefusal(ctrl control.SessionAPI) error {
 	if ctrl == nil {
 		return nil
 	}
 	status := ctrl.RuntimeStatus()
-	switch {
-	case status.Running || status.PendingPrompt:
+	if status.Running || status.PendingPrompt {
 		return busyErr(codeSwitchModel, "cannot switch model while a turn is running")
-	case status.BackgroundJobs > 0:
-		return refusal(http.StatusConflict, codeSwitchModelJobs,
-			errors.New("cannot switch model while background jobs are running"),
-			map[string]any{"count": status.BackgroundJobs})
+	}
+	// Only a *control.Controller can hand its jobs to a replacement; any other
+	// implementation would cancel them when it is closed.
+	if _, ok := ctrl.(*control.Controller); !ok && status.BackgroundJobs > 0 {
+		return busyErr(codeSwitchModel, "cannot switch model while background jobs are running")
 	}
 	return nil
 }
 
 func isSwitchBusy(err error) bool {
 	code := codedRefusal(err)
-	return code == codeSwitchModel || code == codeSwitchModelJobs
+	return code == codeSwitchModel
 }
