@@ -806,6 +806,7 @@ func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, read
 // in hours or tokens rather than a round count, and every such budget ships off.
 // Turn policy lives in beginRunTurn / runToolLoop / handleFinalResponse.
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
+	ctx, report := takeRunTimeSink(ctx)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey
 	runLimitHostOwned := false
@@ -863,7 +864,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	state.runMaxStepsKey = runMaxStepsKey
 	state.runLimitHostOwned = runLimitHostOwned
 	state.workDurationMs = workDurationMs
-	return a.runToolLoop(ctx, state)
+	err := a.runToolLoop(ctx, state)
+	report(state.answeredMs, err)
+	return err
 }
 
 func boolInt(v bool) int {

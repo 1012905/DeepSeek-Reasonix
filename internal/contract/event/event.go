@@ -573,6 +573,10 @@ type Event struct {
 	Readiness      *FinalReadiness          // TurnDone: structured final-readiness recovery state
 	Receipt        *CompletionReceipt       // TurnDone: what the host verified, and what it could not
 	CheckpointTurn *int                     // TurnDone: authoritative checkpoint for this turn's visible user message
+	// TurnDone: wall-clock ms the turn's runs took up to their final answers,
+	// approval and tool waits included, summed over goal continuations; 0 when the
+	// turn failed, was cancelled, or gave no final answer.
+	WorkDurationMs int64
 	// TurnStarted: which message this turn is about — the conversation's own
 	// turn number, and the session index that message takes. Both nil when the
 	// turn opened no authored message.

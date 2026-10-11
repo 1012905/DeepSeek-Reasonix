@@ -94,6 +94,7 @@ export const EN: Record<string, string> = {
   "复制这段代码": "Copy this code",
   "复制路径": "Copy path",
   "思考 {chars}": "Thought · {chars}",
+  "耗时 {t}": "Worked for {t}",
   "思考 {secs} 秒 · {chars}": "Thought for {secs}s · {chars}",
   "{n} 字": "{n} chars",
   "{n} 张图片": "{n} images",

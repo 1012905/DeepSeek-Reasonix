@@ -50,10 +50,12 @@ type historyMessage struct {
 	// Which model wrote this assistant turn. A reopened transcript has no
 	// turn_started to read it off, and the composer's current setting is a
 	// different fact that has usually moved on.
-	ModelRef   string            `json:"modelRef,omitempty"`
-	ThoughtMs  int64             `json:"thoughtMs,omitempty"` // host-measured, so a reopened turn keeps it
-	ToolCalls  []historyToolCall `json:"toolCalls,omitempty"`
-	ToolCallID string            `json:"toolCallId,omitempty"`
+	ModelRef  string `json:"modelRef,omitempty"`
+	ThoughtMs int64  `json:"thoughtMs,omitempty"` // host-measured, so a reopened turn keeps it
+	// WorkDurationMs is the turn's run time, set only on the message that closed it.
+	WorkDurationMs int64             `json:"workDurationMs,omitempty"`
+	ToolCalls      []historyToolCall `json:"toolCalls,omitempty"`
+	ToolCallID     string            `json:"toolCallId,omitempty"`
 	// The host's own account of a result that did not succeed. Without it a
 	// rebuilt card has only the words, which a tool's own output can imitate.
 	ToolFailed      bool   `json:"toolFailed,omitempty"`
@@ -79,6 +81,7 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 		return eventwire.ToWireAttachments(attachments(text))
 	}
 	out := make([]historyMessage, 0, len(msgs))
+	worked := sessionstore.TurnWorkMs(msgs)
 	for i, m := range msgs {
 		// A steer is the person speaking into a running turn, so it stays a
 		// user message and carries what it was. The host's own mid-turn notice
@@ -110,6 +113,7 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 			hm.ModelRef = m.ModelRef
 			hm.Reasoning = m.ReasoningContent
 			hm.ThoughtMs = m.ThoughtMs
+			hm.WorkDurationMs = worked[i]
 			if len(m.ToolCalls) > 0 {
 				hm.ToolCalls = make([]historyToolCall, len(m.ToolCalls))
 				for i, tc := range m.ToolCalls {
