@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"reasonix/internal/runtime/writeclaim"
@@ -225,7 +226,10 @@ func (a *Agent) pathInWorkspace(path string) bool {
 	if root == "" {
 		return true
 	}
-	return !filepath.IsAbs(path) || writeclaim.PathWithin(root, path)
+	if !filepath.IsAbs(path) {
+		return true
+	}
+	return writeclaim.PathWithin(root, path) || slices.ContainsFunc(a.extraRoots, func(extra string) bool { return writeclaim.PathWithin(extra, path) })
 }
 
 // mutationBaseline is what the turn's remaining obligations are measured from:
@@ -341,6 +345,23 @@ func scanWorkspace(ctx context.Context, root string) workspaceScan {
 	return scanWorkspaceTo(ctx, root, workspaceScanLimit)
 }
 
+// scanObserved walks the observed workspace and every granted extra root, so
+// a change in any of them is seen. One incomplete walk makes the whole scan
+// incomplete: nothing is concluded from a part.
+func (a *Agent) scanObserved(ctx context.Context) workspaceScan {
+	scan := scanWorkspaceTo(ctx, a.observeRoot, a.scanLimit())
+	if len(a.extraRoots) == 0 || !scan.complete {
+		return scan
+	}
+	for _, extra := range a.extraRoots {
+		more := scanWorkspaceTo(ctx, extra, max(0, a.scanLimit()-len(scan.state)))
+		maps.Copy(scan.state, more.state)
+		scan.complete = scan.complete && more.complete
+		scan.overLimit = scan.overLimit || more.overLimit
+	}
+	return scan
+}
+
 // scanLimit is the walk bound this agent runs under: its configured limit,
 // never above workspaceScanLimit, which is also the default.
 func (a *Agent) scanLimit() int {
@@ -405,7 +426,7 @@ func (a *Agent) settleUnchangedWorkspace(ctx context.Context, rec *evidence.Rece
 	if !plan.scanBefore.complete || !a.mayAttributeObserved(ctx) {
 		return
 	}
-	after := scanWorkspaceTo(ctx, a.observeRoot, a.scanLimit())
+	after := a.scanObserved(ctx)
 	changed, ok := plan.scanBefore.changed(after)
 	if !ok {
 		return
@@ -464,7 +485,7 @@ func (a *Agent) scanBeforeUnprovenCall(ctx context.Context, plan *toolCallPlan) 
 	if !a.mayAttributeObserved(ctx) {
 		return workspaceScan{}
 	}
-	scan := scanWorkspaceTo(ctx, a.observeRoot, a.scanLimit())
+	scan := a.scanObserved(ctx)
 	if scan.overLimit {
 		a.task.noteWorkspaceOverScanLimit()
 	}

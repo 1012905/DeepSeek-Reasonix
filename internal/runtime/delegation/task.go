@@ -82,8 +82,8 @@ type TaskTool struct {
 	resolveProvider               func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error)
 	transcripts                   *SubagentStore
 	workspaceRoot                 string
-	baseModel                     string
-	baseEffort                    string
+	extraRoots                    []string
+	baseModel, baseEffort         string
 	identityProfile               func(modelRef, effort string) (string, string)
 	maxSubagentDepth              int
 	deliveryProfile               bool
@@ -927,7 +927,7 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 	if t.hooksForRole != nil {
 		opts.Hooks = t.hooksForRole(recoveryTaskID)
 	}
-	return opts
+	return t.withExtraRoots(opts)
 }
 
 func subagentRecoveryTaskID(ctx context.Context, ref string) string {
