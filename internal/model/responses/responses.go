@@ -304,7 +304,12 @@ func (c *client) send(ctx context.Context, body map[string]any) (*http.Response,
 		provider.ApplyClientIdentity(req)
 		return req, nil
 	}
-	return provider.SendWithRetry(ctx, c.http, c.sendOpts(), newRequest)
+	resp, err := provider.SendWithRetry(ctx, c.http, c.sendOpts(), newRequest)
+	var apiErr *provider.APIError
+	if errors.As(err, &apiErr) && (apiErr.Status == http.StatusBadRequest || apiErr.Status == http.StatusUnprocessableEntity) {
+		err = provider.AnnotateRequestShape(err, requestShape(body, len(payload)))
+	}
+	return resp, err
 }
 
 // isStalePreviousResponseError reads the error object, not its prose: the
