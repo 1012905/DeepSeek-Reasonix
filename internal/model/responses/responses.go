@@ -141,6 +141,7 @@ type sessionHeaders struct {
 func New(cfg Config) provider.Provider {
 	vendor := DetectVendor(cfg.BaseURL)
 	cap := capabilitiesFor(vendor)
+	cap.imageDetail = provider.IsOpenAIEndpoint(cfg.BaseURL)
 	maxOutputTokens := cfg.MaxOutputTokens
 	// max_output_tokens=0 is automatic. Known vendors use the 16K/32K/64K ladder;
 	// thinking-disabled DeepSeek still gets the ordinary 16K auto budget.
@@ -437,7 +438,7 @@ func messagesToInput(messages []provider.Message, vision, replayWebSearchItems b
 		parts := make([]map[string]string, 0, len(toolImages)+1)
 		parts = append(parts, map[string]string{"type": "input_text", "text": "Images returned by the preceding tool call(s):"})
 		for _, url := range toolImages {
-			parts = append(parts, map[string]string{"type": "input_image", "image_url": url})
+			parts = append(parts, inputImage(url, caps))
 		}
 		input = append(input, map[string]any{"role": "user", "content": parts})
 		toolImages = nil
@@ -460,7 +461,7 @@ func messagesToInput(messages []provider.Message, vision, replayWebSearchItems b
 					parts = append(parts, map[string]string{"type": "input_text", "text": message.Content})
 				}
 				for _, url := range message.Images {
-					parts = append(parts, map[string]string{"type": "input_image", "image_url": url})
+					parts = append(parts, inputImage(url, caps))
 				}
 				input = append(input, map[string]any{"role": "user", "content": parts})
 			} else {
@@ -519,6 +520,17 @@ func messagesToInput(messages []provider.Message, vision, replayWebSearchItems b
 	}
 	flushToolImages()
 	return input
+}
+
+// inputImage is an input_image part. detail is the published schema's required
+// field, sent only where the endpoint is known to take it; elsewhere the part is
+// what every other endpoint in use already accepts.
+func inputImage(url string, caps vendorCapabilities) map[string]string {
+	part := map[string]string{"type": "input_image", "image_url": url}
+	if caps.imageDetail {
+		part["detail"] = "auto"
+	}
+	return part
 }
 
 func decodeReplayableWebSearchItem(raw json.RawMessage) (map[string]any, bool) {
