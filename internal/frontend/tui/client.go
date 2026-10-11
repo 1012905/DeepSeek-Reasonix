@@ -290,11 +290,21 @@ type Completion struct {
 }
 
 type CompletionItem struct {
-	Label   string `json:"label"`
-	Insert  string `json:"insert"`
-	Hint    string `json:"hint,omitempty"`
-	Descend bool   `json:"descend,omitempty"`
-	Kind    string `json:"kind,omitempty"`
+	Label   string          `json:"label"`
+	Insert  string          `json:"insert"`
+	Hint    string          `json:"hint,omitempty"`
+	Descend bool            `json:"descend,omitempty"`
+	Kind    string          `json:"kind,omitempty"`
+	Args    []CompletionArg `json:"args,omitempty"`
+	// MoreArgs counts declarations the kernel left out of Args.
+	MoreArgs int `json:"moreArgs,omitempty"`
+}
+
+// CompletionArg is one argument a prompt declares.
+type CompletionArg struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
 }
 
 // Complete asks for completions at cursor, a UTF-16 offset into line.

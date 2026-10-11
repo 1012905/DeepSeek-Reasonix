@@ -727,6 +727,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "高级连接选项": "Advanced connection options",
   "思考控制、代理与中转站自定义参数": "Thinking controls, proxy and gateway parameters",
   "可选": "Optional",
+  "必填": "Required",
+  "还有 {n} 项": "{n} more",
   "发送思考控制": "Send thinking controls",
   "允许当前协议发送思考控制字段；模型是否真的思考仍由模型决定。": "Allow this protocol to send its thinking-control fields. The model still decides whether it actually reasons.",
   "当前协议没有思考控制字段，切换模型时仍可在推理强度菜单查看支持情况。": "This protocol has no thinking-control field. Model support is still shown in the reasoning-effort menu.",
