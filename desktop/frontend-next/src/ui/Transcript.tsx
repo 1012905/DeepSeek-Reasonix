@@ -23,7 +23,7 @@ import { NoticeCard } from "./cards/NoticeCard";
 import { RememberCard } from "./cards/RememberCard";
 import { ExtensionCard } from "./cards/ExtensionCard";
 import { toolChangedFile, toolFailed } from "./cards/outcome";
-import { drawn, foldStats, transcriptRows, type Shown } from "./turnrows";
+import { drawn, foldStats, repeatedSpeakers, sameMembers, transcriptRows, type Shown } from "./turnrows";
 import { WorkFold } from "./WorkFold";
 import { opensTurn, useBlocks } from "./blocks";
 import { Rail, type RailMark } from "./Rail";
@@ -438,8 +438,14 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
     if (entering.length > 0) onEntered(entering);
   }, [entering, onEntered]);
   const owed = useMemo(() => new Set(entering), [entering]);
+  const kept = useRef<Set<string>>(new Set());
+  const echoes = useMemo(() => {
+    const next = repeatedSpeakers(items);
+    if (!sameMembers(kept.current, next)) kept.current = next;
+    return kept.current;
+  }, [items]);
 
-  const rowProps = { owed, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
+  const rowProps = { owed, echoes, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
 
   // What you said, and where it sits. Derived from the same blocks the
   // transcript renders, so a mark always knows which block holds it — that is
@@ -583,6 +589,7 @@ const Block = memo(function Block({
 
 interface RowHandlers {
   owed: Set<string>;
+  echoes: Set<string>;
   port: Props["port"];
   onApprove: Props["onApprove"];
   onFullAccess: Props["onFullAccess"];
@@ -659,6 +666,7 @@ const Row = memo(function Row({
   it,
   port,
   owed,
+  echoes,
   onApprove,
   onFullAccess,
   onPlan,
@@ -706,7 +714,7 @@ const Row = memo(function Row({
       // model. Gating the card on text meant all of it stayed invisible and
       // then landed at once. An empty card is still not a message, so a turn
       // that produced neither draws nothing.
-      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} reply={reply} /> : null;
+      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} reply={reply} quiet={echoes.has(it.id)} /> : null;
     case "tool":
       // The ask tool also raises ask_request, which carries the id /answer
       // needs. Drawing the tool call too put two copies of the same question on
