@@ -27,6 +27,8 @@ func (s *inboxEventSink) Emit(e event.Event) {
 		return
 	}
 	switch e.Kind {
+	case event.ToolResult:
+		s.c.noteRefusedCall(e.Tool)
 	case event.Steer:
 		if e.ItemID != "" {
 			s.c.onInboxSteerConsumed(e.ItemID)

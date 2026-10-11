@@ -127,6 +127,8 @@ type controllerDeps struct {
 	// workspaceRepo is workspaceRoot's git identity, resolved before any turn ran.
 	workspaceRepo gitcmd.Repo
 	posture       PostureEvidence
+	// refused owes the model the calls the host refused, once.
+	refused promptFailureDebt
 
 	// approval owns prompt bookkeeping and the runtime posture (ask/auto/yolo,
 	// session grants, the just-approved-plan window) behind its own locks, off
