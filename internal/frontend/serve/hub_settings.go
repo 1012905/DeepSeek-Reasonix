@@ -9,6 +9,7 @@ func (s *Server) registerMachineSettingsRoutes(mux *http.ServeMux) {
 	s.registerStorageRoutes(mux)
 	s.registerFeedbackRoutes(mux)
 	s.registerDisplayCurrencyRoutes(mux)
+	s.registerFoldWorkRoutes(mux)
 	mux.HandleFunc("GET /models", s.models)
 	mux.HandleFunc("GET /memory", s.memories)
 	mux.HandleFunc("POST /memory/forget", s.forgetMemory)

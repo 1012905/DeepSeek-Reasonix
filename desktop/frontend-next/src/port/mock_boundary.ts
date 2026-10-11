@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 
@@ -169,6 +169,17 @@ export class MockBoundary extends MockShell {
   async saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings> {
     this.changedFiles = { ...this.changedFiles, show };
     return { ...this.changedFiles };
+  }
+
+  private foldWork: FoldWorkSettings = { fold: false, path: "/Users/you/.reasonix/config.toml" };
+
+  async foldWorkSettings(): Promise<FoldWorkSettings> {
+    return { ...this.foldWork };
+  }
+
+  async saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings> {
+    this.foldWork = { ...this.foldWork, fold };
+    return { ...this.foldWork };
   }
 
   private watch: ProgressWatchSettings = {

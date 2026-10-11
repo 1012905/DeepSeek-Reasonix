@@ -23,7 +23,8 @@ import { NoticeCard } from "./cards/NoticeCard";
 import { RememberCard } from "./cards/RememberCard";
 import { ExtensionCard } from "./cards/ExtensionCard";
 import { toolChangedFile, toolFailed } from "./cards/outcome";
-import { drawn, transcriptRows } from "./turnrows";
+import { drawn, foldStats, transcriptRows, type Shown } from "./turnrows";
+import { WorkFold } from "./WorkFold";
 import { opensTurn, useBlocks } from "./blocks";
 import { Rail, type RailMark } from "./Rail";
 import { StudioIcon } from "./StudioIcon";
@@ -70,6 +71,8 @@ interface Props {
   needsProject: boolean;
   onOpenProject: () => void;
   onKeepHere: () => void;
+  foldWork?: boolean;
+  turnRunning?: boolean;
   checkpoints: Map<string, Checkpoint>;
   onPrepareRewind: (turn: number, scope: RewindScope) => Promise<RewindPlan>;
   onPrepareFileRevert: (path: string) => Promise<RewindPlan>;
@@ -83,7 +86,7 @@ interface Props {
   onEntered: (ids: string[]) => void;
 }
 
-export function Transcript({ items, port, entering, onEntered, revision, waiting, scroll, hidden, onPinned, jump, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere }: Props) {
+export function Transcript({ items, port, entering, onEntered, revision, waiting, scroll, hidden, onPinned, jump, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
   // A block the selection touches must not leave the DOM. Unmounting the node a
   // selection is anchored to makes the browser remap that selection onto
   // whatever is still mounted — which reads as "I selected up there and the
@@ -485,6 +488,8 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
             // mounts without waiting for the observer's first callback.
             eager={i === blocks.length - 1}
             keep={held.has(i)}
+            foldWork={foldWork}
+            tail={turnRunning && i === blocks.length - 1}
             {...rowProps}
           />
         ))}
@@ -506,6 +511,8 @@ const Block = memo(function Block({
   watch,
   eager,
   keep,
+  foldWork,
+  tail,
   ...rowProps
 }: {
   items: Item[];
@@ -515,6 +522,10 @@ const Block = memo(function Block({
   // The selection reaches into this block, so it stays mounted however far
   // off-screen it scrolls.
   keep: boolean;
+  // Whether a settled turn's work is folded under one line (the kernel's [ui] fold_turn_work).
+  foldWork: boolean;
+  // This block holds the end of a turn that is still being worked on, which stays open.
+  tail: boolean;
 } & RowHandlers) {
   const box = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(eager);
@@ -530,10 +541,34 @@ const Block = memo(function Block({
 
   // Tool traffic is evidence for the answer, not a stack of equally important
   // messages; transcriptRows folds it and keeps each sentence above its own.
-  const rows = transcriptRows(items);
+  const rows = transcriptRows(items, foldWork ? { running: tail } : undefined);
   // Which runs of work are open, held here so re-hosting one under its sentence
   // does not close it.
   const [opened, setOpened] = useState<Record<string, boolean>>({});
+  const drawRows = (list: Shown[]): ReactNode[] => list.map((row) => {
+    if ("fold" in row) {
+      const key = `fold:${row.id}`;
+      const stats = foldStats(row.fold, (item) => (item.t === "tool" ? Number(toolFailed(item.tool)) : item.t === "reads" ? item.tools.filter(toolFailed).length : 0));
+      return (
+        <WorkFold key={key} open={opened[key] ?? false} onOpen={(next) => setOpened((all) => (all[key] === next ? all : { ...all, [key]: next }))} {...stats}>
+          {drawRows(row.fold)}
+        </WorkFold>
+      );
+    }
+    return "item" in row ? (
+      <Fragment key={row.item.id}>
+        {opensTurn(row.item) && <hr className="turn-rule" />}
+        <Row
+          it={row.item}
+          {...rowProps}
+          cp={checkpoints.get(row.item.id)}
+          afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
+        />
+      </Fragment>
+    ) : (
+      <ActivityGroup key={`activity:${row.activity[0].id}`} items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} />
+    );
+  });
 
   return (
     <div
@@ -541,19 +576,7 @@ const Block = memo(function Block({
       ref={box}
       style={near || keep ? undefined : { height: `${tall.current || items.length * 96}px` }}
     >
-      {(near || keep) && rows.map((row) => "item" in row ? (
-        <Fragment key={row.item.id}>
-          {opensTurn(row.item) && <hr className="turn-rule" />}
-          <Row
-            it={row.item}
-            {...rowProps}
-            cp={checkpoints.get(row.item.id)}
-            afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
-          />
-        </Fragment>
-      ) : (
-        <ActivityGroup key={`activity:${row.activity[0].id}`} items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} />
-      ))}
+      {(near || keep) && drawRows(rows)}
     </div>
   );
 });

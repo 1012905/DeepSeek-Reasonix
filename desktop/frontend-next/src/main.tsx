@@ -10,6 +10,7 @@ import "./styles/studio.css";
 import "./styles/tips.css";
 import "./styles/waitnote.css";
 import "./styles/narrow.css";
+import "./styles/workfold.css";
 import "./styles/feedback.css";
 import "./styles/community.css";
 import "./styles/sponsor.css";

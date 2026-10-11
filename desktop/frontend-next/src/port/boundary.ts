@@ -116,6 +116,13 @@ export interface DisplayCurrencySettings {
 
 // Whether the changed-files pill is drawn above the composer; the user file
 // holds it.
+// Whether Studio folds a turn's intermediate work under one line; the user file
+// holds it.
+export interface FoldWorkSettings {
+  fold: boolean;
+  path: string;
+}
+
 export interface ChangedFilesSettings {
   show: boolean;
   path: string;

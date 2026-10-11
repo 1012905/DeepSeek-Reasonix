@@ -48,6 +48,7 @@ import { useStatusPoll } from "./useStatusPoll";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
 import { LiveWork, useLiveWork } from "../state/foldpref";
 import { loadChangedFilesPref, useShowsChangedFiles } from "../state/changedfiles";
+import { loadFoldWorkPref, useFoldsTurnWork } from "../state/foldwork";
 import { ChangedFilesPill } from "./ChangedFilesPill";
 
 export type { PaneReport };
@@ -288,6 +289,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     showView("browser");
   }, [showView]);
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
+  useEffect(() => { void loadFoldWorkPref(port); }, [port]);
+  const foldWork = useFoldsTurnWork(port);
   const refreshTree = useCallback(() => { void port.changes().then(setTree).catch(() => setTree(null)); void port.workspaceGit().then(setGit).catch(() => setGit(null)); }, [port]);
   useEffect(() => { if (ready || counts.wrote) refreshTree(); }, [ready, refreshTree, status?.sessionPath, running, counts.wrote]);
 
@@ -403,6 +406,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       <PaneShown.Provider value={shown}>
       <LiveWork.Provider value={live}>
       <Transcript port={port}
+        foldWork={foldWork}
+        turnRunning={running}
         reply={reply}
         onResend={onResend}
         items={s.items}
