@@ -8,6 +8,7 @@ import "./styles/app.css";
 import "./styles/dock.css";
 import "./styles/studio.css";
 import "./styles/tips.css";
+import "./styles/waitnote.css";
 import "./styles/feedback.css";
 import "./styles/community.css";
 import "./styles/sponsor.css";
