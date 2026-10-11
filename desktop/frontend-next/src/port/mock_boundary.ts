@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 
@@ -197,6 +197,16 @@ export class MockBoundary extends MockShell {
     if (seconds !== 0 && (seconds < this.ask.minSeconds || seconds > this.ask.maxSeconds)) throw new Error("ask timeout out of range");
     this.ask = { ...this.ask, seconds };
     return { ...this.ask };
+  }
+  private receipt: ReceiptSettings = { show: false, path: "/Users/you/.reasonix/config.toml" };
+
+  async receiptSettings(): Promise<ReceiptSettings> {
+    return { ...this.receipt };
+  }
+
+  async saveReceiptSettings(show: boolean): Promise<ReceiptSettings> {
+    this.receipt = { ...this.receipt, show };
+    return { ...this.receipt };
   }
 
   async progressWatch(): Promise<ProgressWatchSettings> {

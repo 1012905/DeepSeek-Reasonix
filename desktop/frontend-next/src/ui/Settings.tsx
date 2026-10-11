@@ -32,7 +32,7 @@ import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
 import { ProgressWatch } from "./ProgressWatch";
-import { TranscriptSettings } from "./TranscriptSettings";
+import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
@@ -498,7 +498,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   />
                 </div>
               </Group>
-              <TranscriptSettings port={port} />
+              <DisplaySettings port={port} />
               <AskTimeout port={port} />
               <ProgressWatch port={port} />
               <AutoArchive port={port} />

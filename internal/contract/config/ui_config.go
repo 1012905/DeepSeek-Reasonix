@@ -11,6 +11,7 @@ type UIConfig struct {
 	ShowTurnUsage    bool   `toml:"show_turn_usage"`    // show per-request token/cost receipts in the CLI/TUI transcript
 	ShowChangedFiles bool   `toml:"show_changed_files"` // Studio: the "N files changed" pill above the composer; false = the branch chip's small count
 	FoldTurnWork     bool   `toml:"fold_turn_work"`     // Studio: fold a turn's intermediate work (tool calls, thinking, middle sentences) under one line and keep the last sentence out; false = every step stays drawn
+	ShowReceipt      bool   `toml:"show_receipt"`       // draw the end-of-turn delivery receipt card; false = one line when something is unproven
 	CursorShape      string `toml:"cursor_shape"`       // block|underline|bar; empty defaults to bar
 	CommandMode      string `toml:"commandmode"`        // ""|vi; vi gives the composer a vi command mode (empty = insert-always)
 }

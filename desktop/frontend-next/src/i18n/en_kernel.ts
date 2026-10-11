@@ -397,6 +397,7 @@ export const EN_KERNEL: Record<string, string> = {
   "等待时长超出允许范围，未做任何修改：{detail}": "That wait time is out of range; nothing was changed: {detail}",
   "自动归档设置未能保存：{detail}": "The auto-archive settings were not saved: {detail}",
   "天数超出允许范围，未做任何修改：{detail}": "The number of days is out of range; nothing was changed: {detail}",
+  "交付验收卡片的设置未能保存：{detail}": "The receipt card setting was not saved: {detail}",
   "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹": "A home directory or drive root cannot be trusted as a whole - open a specific project folder",
   "未能记下对此文件夹的信任决定：{detail}": "The trust decision for this folder was not saved: {detail}",
   "该数值超出允许范围，未做任何修改：{detail}": "That value is out of range; nothing was changed: {detail}",

@@ -358,6 +358,7 @@ const SAID: Record<string, string> = {
   "fold_work.save_failed": "折叠中间过程的设置未能保存：{detail}",
   "ask_timeout.save_failed": "提问等待时长未能保存：{detail}",
   "ask_timeout.out_of_range": "等待时长超出允许范围，未做任何修改：{detail}",
+  "receipt.save_failed": "交付验收卡片的设置未能保存：{detail}",
   "progress_watch.save_failed": "无进展设置未能保存：{detail}",
   "auto_archive.save_failed": "自动归档设置未能保存：{detail}",
   "auto_archive.out_of_range": "天数超出允许范围，未做任何修改：{detail}",
