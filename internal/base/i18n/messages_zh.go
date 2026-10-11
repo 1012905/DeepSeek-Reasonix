@@ -196,6 +196,9 @@ var Chinese = Messages{
 	RecoveryTaskGrantChoices:        "1. 继续一次\n2. 继续，并在本任务内允许同类操作\n3. 换个方案",
 	SandboxEscapeApprovalChoices:    "1. 允许一次\n2. 本会话使用真实环境\n3. 拒绝\n选择 [1/2/3]（兼容 y/a/n）",
 	NotifyMessages: NotifyMessages{
+		AskTimeoutMessages: AskTimeoutMessages{
+			CmdAskTimeout: "设置提问无人回答多久后自动跳过", AskTimeoutFmt: "提问等待超时：%s — 用 /ask-timeout <秒数|off> 修改", AskTimeoutOff: "关闭", AskTimeoutBadFmt: "ask-timeout：%q 既不是秒数也不是 off",
+		},
 		NotifyTitle:         "Reasonix",
 		NotifyTurnDone:      "这一轮结束了",
 		NotifyTurnFailed:    "这一轮失败了",

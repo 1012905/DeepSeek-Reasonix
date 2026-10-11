@@ -538,6 +538,7 @@ export const EN: Record<string, string> = {
   "记的是 {had}，但它答的是 {got}。": "Recorded as {had}, but it answers as {got}.",
   // 收工回执
   "没有未经验证的部分": "nothing left unverified",
+  "等待超时，这个问题已被跳过": "Nobody answered in time; this question was skipped",
   "未验证": "not verified",
   "交付验收": "delivery receipt",
   "留空时按这个顺序尝试：先 ssh-agent 持有的密钥，再 ~/.ssh 下的默认密钥；只有填了下面的环境变量或该机器要求交互时，才会走密码。": "Left blank, it tries in this order: keys held by ssh-agent, then the default keys under ~/.ssh. A password is only used when one of the variables below is set, or the machine asks interactively.",
@@ -1411,6 +1412,7 @@ export const EN: Record<string, string> = {
   "待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送": "Sending is paused. This message is queued and goes out once you press Release",
   "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：": "Guidance was not applied because the turn ended before it could be processed. Send it again if it is still needed:",
   "费用显示币种已设为 {mode}": "Cost display currency set to {mode}",
+  "配置文件里的提问等待时长无效（须为 0 或 10 到 86400 之间的整数），提问现在会一直等你回答；到设置里重新设一个": "The question wait time in the config file is not valid (it must be a whole number, 0 or 10 to 86400), so questions wait for you as long as it takes; set it again in Settings.",
   "模型卡在重复输出同一段文字，这一轮已停止；可以重试、补充引导，或换一个供应商/模型": "The model is stuck repeating the same text; this turn was stopped. Try again, add guidance, or switch provider/model.",
   "扩展 {ext} 的配套后台程序没有运行，该扩展本次（在 {point}）已被跳过；到「工具与集成」里查看并启动它，或停用该扩展": "The companion background program of extension {ext} is not running, so the extension was skipped this time (at {point}). Open Tools and integrations to check and start it, or disable the extension.",
   "有 {n} 条权限规则没有对应的工具，匹配不到任何调用，因此起不到限制作用（如「{list}」里的 {rule}）；到「设置 → 权限」里删除或改写，命令要写成 Bash(命令:*)": "{n} permission rule(s) name no tool, so they match no call and restrict nothing (for example {rule} in {list}). Delete or rewrite them under Settings > Permissions; a shell command is written Bash(command:*).",
