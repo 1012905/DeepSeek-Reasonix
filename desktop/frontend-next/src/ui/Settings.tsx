@@ -775,7 +775,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
           )}
 
           {at === "appearance" && (
-            <Appearance port={port} theme={theme} onTheme={onTheme} contrast={contrast} onContrast={onContrast} weight={weight} onWeight={onWeight} reloadThemes={reloadThemes} look={look} onLook={onLook} />
+            <Appearance port={homePort} theme={theme} onTheme={onTheme} contrast={contrast} onContrast={onContrast} weight={weight} onWeight={onWeight} reloadThemes={reloadThemes} look={look} onLook={onLook} />
           )}
 
           {at === "advanced" && (
