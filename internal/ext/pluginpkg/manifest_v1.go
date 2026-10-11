@@ -97,10 +97,20 @@ func strictDecode(data []byte, v any, path string) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("%s: %s", path, textutil.ShownLocator(err.Error()))
+		return &decodeError{path: path, err: err}
 	}
 	return nil
 }
+
+// decodeError keeps the decoder's error in the chain for errors.Is/As and
+// shows its text as a literal, since the text can echo the manifest.
+type decodeError struct {
+	path string
+	err  error
+}
+
+func (e *decodeError) Error() string { return e.path + ": " + textutil.ShownLocator(e.err.Error()) }
+func (e *decodeError) Unwrap() error { return e.err }
 
 // v1Contributes is the shared strict-decoded contributes object used by the v2
 // parser. Agents, prompts, and themes exist ONLY here — the legacy top level

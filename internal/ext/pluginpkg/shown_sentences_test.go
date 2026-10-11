@@ -1,6 +1,7 @@
 package pluginpkg
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -51,5 +52,24 @@ func TestInstalledNameAndDecodeErrorsAreShownAsLiterals(t *testing.T) {
 	}
 	if strings.ContainsRune(err.Error(), 0x1b) {
 		t.Fatalf("a raw escape reached the decode error: %q", err.Error())
+	}
+	var syn *json.SyntaxError
+	var ute *json.UnmarshalTypeError
+	if errors.As(err, &syn) || errors.As(err, &ute) {
+		return
+	}
+	if errors.Unwrap(err) == nil {
+		t.Fatal("the decoder's error is not in the chain")
+	}
+}
+
+func TestStrictDecodeErrorsStayInTheChain(t *testing.T) {
+	var v struct {
+		N int `json:"n"`
+	}
+	err := strictDecode([]byte(`{"n":"x"}`), &v, "plugin.json")
+	var typed *json.UnmarshalTypeError
+	if !errors.As(err, &typed) {
+		t.Fatalf("errors.As cannot reach the decoder's error through %v", err)
 	}
 }
