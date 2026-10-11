@@ -1240,6 +1240,8 @@ export const EN: Record<string, string> = {
   "正文行宽": "Body line width",
   "适宜阅读": "Reading",
   "铺满窗口": "Full width",
+  "连输入框一起铺满": "Full width, composer too",
+  "正文和输入框都跟随窗口宽度；输入框很宽时一行不易回到行首": "Prose and the composer both follow the window; a very wide composer makes a line harder to find the start of",
   "每行长度控制在一眼能回到行首的范围": "Keeps a line short enough that your eye finds the next one",
   "正文跟随窗口宽度，宽屏上不留两侧空白": "Prose follows the window, with nothing left empty at the sides",
   "行宽只管正文：代码、命令与工具输出始终占满可用宽度。": "Line width applies to prose only — code, commands and tool output always use the width available.",

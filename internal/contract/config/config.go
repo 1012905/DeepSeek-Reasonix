@@ -434,8 +434,11 @@ func (c *Config) DesktopDisplayMode() string {
 // DesktopConversationWidth returns the normalized desktop conversation width.
 // Unknown and missing values fall back to standard for backward compatibility.
 func (c *Config) DesktopConversationWidth() string {
-	if c != nil && strings.EqualFold(strings.TrimSpace(c.Desktop.ConversationWidth), "full") {
-		return "full"
+	if c != nil {
+		switch w := strings.ToLower(strings.TrimSpace(c.Desktop.ConversationWidth)); w {
+		case "full", "full-all":
+			return w
+		}
 	}
 	return "standard"
 }

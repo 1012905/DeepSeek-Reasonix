@@ -367,7 +367,9 @@ rules are written in.
 - Rows inside the flow carry no ceiling of their own. A narrower cap on replies
   or user turns puts the steps card and the bubble short of the composer's edge.
 - The full measure moves `--doc` alone: the transcript widens and the composer
-  keeps the reading width, where the line being typed stays one glance.
+  keeps the reading width, where the line being typed stays one glance. The
+  full-all measure is the opt-in that moves `--column` with it, for a reader who
+  wants the composer on the same edges as the transcript.
 - Below 680px both columns take the phone rule instead (see *Phones*).
 - Docking the agent's browser puts the pane on a grid, and the browser's column
   spans the body's row and the composer's. Inside the conversation column `100%`
