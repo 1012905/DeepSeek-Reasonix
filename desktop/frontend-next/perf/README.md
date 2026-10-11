@@ -72,6 +72,7 @@ node perf/runningtool.mjs # 还没输出的运行中调用：行能展开、写�
 node perf/gutterhit.mjs # 分栏拖拽手柄不压在相邻滚动条上：滚动条拇指处按下命中的不是手柄，握把仍可拖开收起的栏
 node perf/dock.mjs      # 停靠的浏览器列从 pane 顶部起、与导航行并排，取消停靠后行归还（浅/深 × 宽/窄 × 首开/重载）
 node perf/signals.mjs   # 运行分析的信号轨说明：它是什么、为什么标记不能拖（浅/深 × 宽/手机）
+node perf/narrow.mjs    # 窄窗口 + 1.8 倍缩放：标题栏与输入区的行互不重叠、不越出窗口（浅/深 × 390/320 × 1.8/1.3，另加宽窗口对照）
 ```
 
 `lang.mjs` 从仓库外跑时用 `PERF_SRC` 指向 `src/`（它要读固件源码来决定
