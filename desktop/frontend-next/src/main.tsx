@@ -19,6 +19,7 @@ import "./styles/chart.css";
 import "./styles/versions.css";
 import "./styles/changedpill.css";
 import "./styles/sessionnotes.css";
+import "./styles/providerpresets.css";
 import { App } from "./ui/App";
 import { SseHub } from "./port/hub";
 import { HttpError } from "./port/http_error";
