@@ -1100,10 +1100,6 @@ func reasoningOnlyFinishHonoured(p provider.Provider, u *provider.Usage, reasoni
 	return strings.TrimSpace(reasoning) != ""
 }
 
-func emptyFinalRetryMessage() string {
-	return "The previous assistant response finished without any visible answer text. Continue the same task now and provide a concise visible answer to the user. Do not send reasoning only."
-}
-
 func emptyFinalNotice() string {
 	return "No visible answer was produced; asking the assistant to respond again."
 }
