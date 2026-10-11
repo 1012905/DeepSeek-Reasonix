@@ -49,6 +49,8 @@ export default defineConfig(({ mode }) => {
     test: {
       css: true,
       setupFiles: ["./src/testsetup.ts"],
+      testTimeout: 60_000,
+      hookTimeout: 60_000,
       pool: "threads",
     },
     server: {

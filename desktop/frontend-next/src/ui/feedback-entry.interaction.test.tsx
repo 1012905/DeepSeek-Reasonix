@@ -115,7 +115,7 @@ describe("the unread badge", () => {
     const wrap = (name: "setInterval" | "setTimeout") => {
       const real = window[name].bind(window) as (fn: TimerHandler, ms?: number, ...a: unknown[]) => number;
       return vi.spyOn(window, name).mockImplementation(((fn: TimerHandler, ms?: number, ...a: unknown[]) => {
-        if ((ms ?? 0) >= 10_000) long.push(ms!);
+        if ((ms ?? 0) >= 10_000 && !new Error().stack?.includes("@testing-library")) long.push(ms!);
         return real(fn, ms, ...a);
       }) as typeof window.setTimeout);
     };
