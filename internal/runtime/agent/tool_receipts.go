@@ -34,6 +34,11 @@ func (a *Agent) recordToolReceipts(ctx context.Context, plan *toolCallPlan, resu
 		a.task.ledger.Record(rec)
 	default:
 		rec := evidence.ReceiptFromToolCall(call.Name, args, err == nil, plan.facts())
+		// A named-path write that reached the disk stays a write when tool.after
+		// reports it failed: the extension rules on content, not on what landed.
+		if rec.Write && plan.ranClean {
+			rec.Success = true
+		}
 		decorateExecutionReceipt(&rec, result, execution)
 		decorateObservedPaths(&rec, plan)
 		a.settleUnchangedWorkspace(ctx, &rec, plan)
