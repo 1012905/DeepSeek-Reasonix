@@ -135,6 +135,21 @@ func (t *reconnectingTransport) current() (transport, error) {
 // found the same dead connection share one dial; a caller whose context ends
 // while waiting leaves without disturbing it.
 func (t *reconnectingTransport) renew(ctx context.Context, stale transport) (transport, error) {
+	return t.replace(ctx, stale, true)
+}
+
+// restart swaps in a fresh child that has not been handshaken, for a caller
+// that opens the session itself.
+func (t *reconnectingTransport) restart(ctx context.Context) error {
+	active, err := t.current()
+	if err != nil {
+		return err
+	}
+	_, err = t.replace(ctx, active, false)
+	return err
+}
+
+func (t *reconnectingTransport) replace(ctx context.Context, stale transport, handshake bool) (transport, error) {
 	for {
 		t.mu.Lock()
 		if t.closed {
@@ -159,7 +174,7 @@ func (t *reconnectingTransport) renew(ctx context.Context, stale transport) (tra
 		t.dialing = done
 		t.mu.Unlock()
 
-		next, err := t.dialOne()
+		next, err := t.dialOne(handshake)
 
 		t.mu.Lock()
 		t.dialing = nil
@@ -188,7 +203,7 @@ func (t *reconnectingTransport) renew(ctx context.Context, stale transport) (tra
 // dialOne opens and hands over one replacement. It runs on the caller's
 // goroutine under the dialing token, so no spawn outlives the session, and the
 // startup budget bounds how long that caller waits.
-func (t *reconnectingTransport) dialOne() (transport, error) {
+func (t *reconnectingTransport) dialOne(handshake bool) (transport, error) {
 	budget := t.budget
 	if budget <= 0 {
 		budget = defaultStartTimeout
@@ -198,6 +213,9 @@ func (t *reconnectingTransport) dialOne() (transport, error) {
 	next, err := t.dial(t.lifeCtx, callCtx)
 	if err != nil {
 		return nil, err
+	}
+	if !handshake {
+		return next, nil
 	}
 	if err := t.handshake(callCtx, next); err != nil {
 		next.close()
