@@ -908,11 +908,6 @@
 
   .chunk { display: flow-root }
 
-  .chunk > .enterbox > .call {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 216px;
-  }
-
   .flow-end { height: 1px; margin-top: -1px }
 
   .traj { width: 100%; border-collapse: collapse; font: var(--w-reg) var(--fs-ui)/1.55 var(--mono) }

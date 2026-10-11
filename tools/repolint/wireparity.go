@@ -149,6 +149,10 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/update/hub.go", "VersionEntry", tsVersionFile, "VersionEntry"},
 	{"internal/platform/update/hub.go", "VersionHub", tsVersionFile, "VersionHub"},
 	{"internal/platform/update/notes.go", "VersionNotes", tsVersionFile, "VersionNotes"},
+	// Where the logs and crash files are. A field the page cannot read is a path
+	// it cannot show to someone asked where to look.
+	{"internal/frontend/serve/studio_logs.go", "studioLogs", tsVersionFile, "StudioLogs"},
+	{"internal/frontend/serve/studio_logs.go", "studioCrashes", tsVersionFile, "StudioCrash"},
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
 	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},

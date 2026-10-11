@@ -42,6 +42,7 @@ func (a *Agent) recordToolReceipts(ctx context.Context, plan *toolCallPlan, resu
 		}
 		decorateExecutionReceipt(&rec, result, execution)
 		decorateObservedPaths(&rec, plan)
+		a.recordLinkTargets(&rec)
 		a.stampHostOwned(&rec)
 		a.settleUnchangedWorkspace(ctx, &rec, plan)
 		a.reviewCoverageOf(&rec, plan, result)
