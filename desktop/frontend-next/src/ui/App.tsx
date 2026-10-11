@@ -108,6 +108,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [feedback, setFeedback] = useState<FeedbackTab | null>(null);
   const [feedbackUnread, setFeedbackUnread] = useState(0);
   const [browser, setBrowser] = useState(false);
+  const [browserAsk, setBrowserAsk] = useState(0);
   const [setup, setSetup] = useState<ProviderSetup | null | undefined>(undefined);
   // undefined until asked; false means the opening sequence is still owed.
   const [welcomed, setWelcomed] = useState<boolean | undefined>(undefined);
@@ -555,7 +556,10 @@ export function App({ hub }: { hub: HubPort }) {
         title={tabs.find((tab) => tab.rt.id === active)?.title ?? report.title}
         steer={report.steer}
         onSettings={showPrefs}
-        onBrowser={() => setBrowser((value) => !value)}
+        onBrowser={() => {
+          if (!browser) setBrowserAsk((n) => n + 1);
+          setBrowser((value) => !value);
+        }}
         browser={browser}
         account={account}
         rail={rail}
@@ -683,6 +687,7 @@ export function App({ hub }: { hub: HubPort }) {
                   dockMax={dockLimit}
                   onDockW={onDockW}
                   manualBrowser={rt.id === active && browser}
+                  browserAsk={browserAsk}
                   onManualBrowser={setBrowser}
                 />
               ) : null;

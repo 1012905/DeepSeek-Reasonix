@@ -9,6 +9,7 @@ import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/narrow.css";
 import "../src/styles/workfold.css";
+import "../src/styles/workbench-launcher.css";
 import "../src/styles/feedback.css";
 import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
