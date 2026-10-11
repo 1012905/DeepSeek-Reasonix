@@ -22,7 +22,6 @@ type Messages struct {
 	// welcome / status screen
 	WelcomeTitleFmt string // first-run box title — %s = product name (styled)
 	NoConfigYet     string // first-run cue under the welcome box
-
 	// `reasonix init` — points to the in-session /init skill + setup
 	InitHint string
 
@@ -450,6 +449,7 @@ type Messages struct {
 	GoalEmpty                    string
 	GoalCurrentFmt               string
 	GoalSetFmt                   string
+	GoalResumedFmt               string // %s = goal
 	GoalCleared                  string
 	GoalNotRunning               string
 	GoalNotPaused                string

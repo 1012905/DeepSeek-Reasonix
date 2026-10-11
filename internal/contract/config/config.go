@@ -260,6 +260,9 @@ type NotificationsConfig struct {
 	ApprovalRequest bool `toml:"approval_request"`
 	AskRequest      bool `toml:"ask_request"`
 	FeedbackReply   bool `toml:"feedback_reply"`
+	// Sound plays a short system chime for the events switched on above, whether
+	// or not system notifications are; off unless asked for.
+	Sound bool `toml:"sound"`
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the

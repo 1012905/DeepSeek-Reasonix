@@ -41,7 +41,7 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -147,6 +147,7 @@ export interface NotifyPrefs {
   approval: boolean;
   ask: boolean;
   feedbackReply: boolean;
+  sound: boolean;
 }
 
 export interface TrayPrefs {
@@ -259,6 +260,12 @@ export interface AgentPort {
   revokeRememberedProjectRule(rule: string): Promise<PermissionRules>;
   sandbox(): Promise<SandboxSettings>;
   saveSandbox(s: SandboxSettings): Promise<SandboxSettings>;
+  // Per-project grants kept in the user's home, never in the checkout. Adding
+  // or removing one rebuilds the runtime, so both are refused with
+  // workspace_roots.busy while work is running.
+  workspaceRoots(): Promise<WorkspaceRoots>;
+  addWorkspaceRoot(path: string): Promise<WorkspaceRoots>;
+  removeWorkspaceRoot(path: string): Promise<WorkspaceRoots>;
   browserTools(): Promise<BrowserToolsSettings>;
   // Writes the user file, then rebuilds: the tools are bound while assembling.
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
@@ -267,6 +274,8 @@ export interface AgentPort {
   saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
   changedFilesSettings(): Promise<ChangedFilesSettings>;
   saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings>;
+  foldWorkSettings(): Promise<FoldWorkSettings>;
+  saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
@@ -275,6 +284,8 @@ export interface AgentPort {
   autoArchive(): Promise<AutoArchiveSettings>;
   // Read by the kernel's background sweep on each pass; no rebuild.
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
+  receiptSettings(): Promise<ReceiptSettings>;
+  saveReceiptSettings(show: boolean): Promise<ReceiptSettings>;
   // null in a browser tab: there is no window to keep running.
   trayPrefs(): Promise<TrayPrefs | null>;
   setTrayPrefs(icon: boolean, closeToTray: boolean): Promise<TrayPrefs | null>;

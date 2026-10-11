@@ -485,7 +485,7 @@ func (a *Agent) appendUnseenRenderGap(out *finalReadinessCheck, missing []string
 // ran, it declines to judge rather than guessing.
 func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string, writer int, blockedWithCheck, verified bool) []string {
 	if a.deliveryProfile || !a.turn.policySet || a.turn.policy.Verification < taskpolicy.VerifyTargeted ||
-		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.checkEstablished(writer, verified) ||
+		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.task.ledger.HandedBackAfter(writer) || a.checkEstablished(writer, verified) ||
 		a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) {
 		return missing
 	}

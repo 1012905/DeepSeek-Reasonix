@@ -8,6 +8,8 @@ import type { HistoryMessage, RewindResult } from "../port/port";
 import type { WireEvent } from "../port/wire";
 import type { RuntimeView } from "../port/hub";
 
+Element.prototype.getAnimations ??= () => [];
+
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 const original: HistoryMessage[] = [
   { role: "user", content: "Restore this turn", msgIndex: 0, attachments: [{ path: ".reasonix/attachments/restore-picture.png" }] },
@@ -20,9 +22,11 @@ const props = {
   onSettings() {}, needsProject: false, onOpenProject() {}, onKeepHere() {},
   theme: "dark", dockW: 560, dockMax: 880, onDockW() {},
 };
-async function open(conversation = true, holdInitialStatus = false, runtimePath: string | undefined = "session-a", mutation?: Partial<RewindResult>) {
+async function open(conversation = true, holdInitialStatus = false, runtimePath: string | undefined = "session-a", mutation?: Partial<RewindResult>, display?: { messages: HistoryMessage[]; foldWork: boolean }) {
   const port = new MockPort();
-  let history = original;
+  const messages = display?.messages ?? original;
+  let history = messages;
+  if (display) await port.saveFoldWorkSettings(display.foldWork);
   let session = "session-a";
   let running = false;
   let emit: (event: WireEvent) => void = () => {};
@@ -39,7 +43,7 @@ async function open(conversation = true, holdInitialStatus = false, runtimePath:
     if (conversation) history = [];
     return { ok: true, conversationOk: conversation, transactionId: "tx-1", undoAvailable: true, deleted: ["file.txt"], ...mutation };
   });
-  const undo = vi.spyOn(port, "undoRewind").mockImplementation(async () => { history = original; });
+  const undo = vi.spyOn(port, "undoRewind").mockImplementation(async () => { history = messages; });
   const view = render(<Pane {...props} rt={{ ...props.rt, sessionPath: runtimePath }} port={port} />);
   await screen.findByRole("button", { name: "回到这里" });
   return { port, reads, undo, view, resolveStatus, start: () => { running = true; emit({ kind: "turn_started" } as WireEvent); }, setSession: (next: string) => { session = next; } };
@@ -62,6 +66,35 @@ it("preserves canonical attachments through conversation restore and undo", asyn
   await waitFor(() => expect(undo).toHaveBeenCalledExactlyOnceWith("tx-1"));
   await screen.findByRole("button", { name: "回到这里" });
   expect(image().getAttribute("src")).toBe(src);
+});
+
+it.each([false, true])("preserves speaker grouping and work folding through restore and undo with folding %j", async (foldWork) => {
+  const messages: HistoryMessage[] = [
+    original[0],
+    { role: "assistant", content: "Inspecting file.txt", msgIndex: 1, toolCalls: [{ id: "t1", name: "bash", arguments: "{}" }] },
+    { role: "tool", content: "ok", toolCallId: "t1", msgIndex: 2 },
+    { role: "assistant", content: "Updated file.txt", msgIndex: 3 },
+  ];
+  const { undo } = await open(true, false, "session-a", undefined, { messages, foldWork });
+  const assertTranscript = () => {
+    expect(document.querySelectorAll("details.work-fold")).toHaveLength(foldWork ? 1 : 0);
+    const replies = document.querySelectorAll('[data-k="say"]');
+    expect(replies).toHaveLength(2);
+    expect(replies[0].hasAttribute("data-quiet")).toBe(false);
+    expect(replies[1].hasAttribute("data-quiet")).toBe(true);
+    expect(screen.getByRole("img", { name: "restore-picture.png" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "回到这里" }).closest("details.work-fold")).toBeNull();
+    expect(screen.getByText("Updated file.txt").closest("details.work-fold")).toBeNull();
+  };
+  await waitFor(assertTranscript);
+  await restore();
+  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "撤销这次还原" });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  expect(document.querySelectorAll('[data-k="say"]')).toHaveLength(0);
+  fireEvent.click(button);
+  await waitFor(() => expect(undo).toHaveBeenCalledExactlyOnceWith("tx-1"));
+  await waitFor(assertTranscript);
+  expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull();
 });
 
 it.each([true, false])("keeps undo through the real Pane reload with conversation removal %j", async (conversation) => {

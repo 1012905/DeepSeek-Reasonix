@@ -39,6 +39,12 @@ func TestChangedFilesSettingRefusesABodyWithoutTheChoice(t *testing.T) {
 	s := newProviderEditServer(t)
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
+	if got := readJSON[control.ChangedFilesSettings](t, srv.URL, "/changed-files-settings"); !got.Show {
+		t.Fatalf("unset choice reads %+v, want the pill shown", got)
+	}
+	if got := readJSON[control.DisplayCurrencySettings](t, srv.URL, "/display-currency"); got.Mode != "auto" {
+		t.Fatalf("currency reads %q, want auto", got.Mode)
+	}
 	resp := postProvider(t, srv.URL, "/changed-files-settings", `{}`)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {

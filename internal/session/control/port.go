@@ -279,6 +279,8 @@ type RuntimeSettings interface {
 	SaveDisplayCurrency(mode string) error
 	ChangedFilesSettings() ChangedFilesSettings
 	SaveChangedFilesSettings(show bool) error
+	FoldWorkSettings() FoldWorkSettings
+	SaveFoldWorkSettings(fold bool) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
@@ -286,6 +288,8 @@ type RuntimeSettings interface {
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int
+	ReceiptSettings() ReceiptSettings
+	SaveReceiptSettings(show bool) error
 	ConfigProblem() *ConfigProblem
 	RepairConfigFile() (string, error)
 }

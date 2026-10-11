@@ -106,13 +106,13 @@ func keyWithin(path, dir string) bool {
 	if rel, err := filepath.Rel(dir, path); err == nil && (rel == "." || filepath.IsLocal(rel)) {
 		return true
 	}
-	// codeql[go/path-injection] Both paths are the folder being vetted; they are only stat-ed for identity, never read or written.
+	// codeql[go/path-injection] dir is a protected directory the host chose; it is only stat-ed for file identity.
 	target, err := os.Stat(dir)
 	if err != nil {
 		return false
 	}
 	for p := path; ; p = filepath.Dir(p) {
-		// codeql[go/path-injection] Same vetted folder, ancestors of it, stat-ed for identity only.
+		// codeql[go/path-injection] p is the candidate path or one of its ancestors, stat-ed for identity only, never read or written.
 		if info, err := os.Stat(p); err == nil && os.SameFile(info, target) {
 			return true
 		}
@@ -122,11 +122,15 @@ func keyWithin(path, dir string) bool {
 	}
 }
 
-// ordinaryPath refuses what is not an ordinary path on this host: on Windows a
-// UNC share or a device-namespace path (\\?\, \\.\), which name a directory
-// the drive-letter checks cannot see.
+// ordinaryPath admits only what a drive letter or a Unix root names. On Windows
+// the volume must be a letter and a colon: UNC shares, \\?\ and \\.\ and the
+// NT \??\ prefix all name a directory the drive-letter checks cannot see.
 func ordinaryPath(dir string) bool {
-	return runtime.GOOS != "windows" || !strings.HasPrefix(dir, `\\`)
+	if runtime.GOOS != "windows" {
+		return true
+	}
+	vol := filepath.VolumeName(dir)
+	return len(vol) == 2 && vol[1] == ':' && (vol[0]|0x20 >= 'a' && vol[0]|0x20 <= 'z')
 }
 
 // FolderGrantRefusal judges a folder nobody should grant wholesale: a drive
