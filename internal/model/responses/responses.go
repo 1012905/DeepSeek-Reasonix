@@ -304,7 +304,11 @@ func (c *client) send(ctx context.Context, body map[string]any) (*http.Response,
 		provider.ApplyClientIdentity(req)
 		return req, nil
 	}
-	return provider.SendWithRetry(ctx, c.http, c.sendOpts(), newRequest)
+	resp, err := provider.SendWithRetry(ctx, c.http, c.sendOpts(), newRequest)
+	if err != nil {
+		err = provider.AnnotateRequestShape(err, requestShape(body, len(payload)))
+	}
+	return resp, err
 }
 
 // isStalePreviousResponseError reads the error object, not its prose: the
@@ -437,7 +441,7 @@ func messagesToInput(messages []provider.Message, vision, replayWebSearchItems b
 		parts := make([]map[string]string, 0, len(toolImages)+1)
 		parts = append(parts, map[string]string{"type": "input_text", "text": "Images returned by the preceding tool call(s):"})
 		for _, url := range toolImages {
-			parts = append(parts, map[string]string{"type": "input_image", "image_url": url})
+			parts = append(parts, inputImage(url))
 		}
 		input = append(input, map[string]any{"role": "user", "content": parts})
 		toolImages = nil
@@ -460,7 +464,7 @@ func messagesToInput(messages []provider.Message, vision, replayWebSearchItems b
 					parts = append(parts, map[string]string{"type": "input_text", "text": message.Content})
 				}
 				for _, url := range message.Images {
-					parts = append(parts, map[string]string{"type": "input_image", "image_url": url})
+					parts = append(parts, inputImage(url))
 				}
 				input = append(input, map[string]any{"role": "user", "content": parts})
 			} else {
@@ -519,6 +523,12 @@ func messagesToInput(messages []provider.Message, vision, replayWebSearchItems b
 	}
 	flushToolImages()
 	return input
+}
+
+// inputImage is an input_image part with every field the published schema
+// requires; detail has no per-image meaning here, so it is the schema's auto.
+func inputImage(url string) map[string]string {
+	return map[string]string{"type": "input_image", "image_url": url, "detail": "auto"}
 }
 
 func decodeReplayableWebSearchItem(raw json.RawMessage) (map[string]any, bool) {
