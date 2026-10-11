@@ -150,19 +150,14 @@ func (s *Server) switchWorkspaceLocked(ctx context.Context, dir string) error {
 	newCtrl.EnableInteractiveApproval()
 	newCtrl.SetOnSessionRecovered(sessionLeaseRecoveryHandler(s.leases))
 
-	s.mu.Lock()
-	if s.ctrl != cur {
-		s.mu.Unlock()
-		newCtrl.Close()
-		return fmt.Errorf("session changed during the workspace switch")
-	}
 	if err := addRememberedWorkspace(ctx, dir); err != nil {
-		s.mu.Unlock()
 		newCtrl.Close()
 		return err
 	}
-	s.ctrl = newCtrl
-	s.mu.Unlock()
+	if err := s.publishController(cur, newCtrl); err != nil {
+		newCtrl.Close()
+		return err
+	}
 	s.nameWorkspaceHolder(newCtrl)
 
 	// Session file names are timestamps, unique per project but not across
@@ -259,7 +254,11 @@ func (s *Server) build(ctx context.Context, ref string) (*control.Controller, er
 	if s.buildController != nil {
 		return s.buildController(ctx, ref)
 	}
-	res, err := boot.BuildRuntime(ctx, s.rebuildOptions(s.ctl(), ref))
+	opts := s.rebuildOptions(s.ctl(), ref)
+	if cur, ok := s.ctl().(*control.Controller); ok && cur != nil {
+		opts.Jobs, opts.WorkspaceLease = cur.JobManager(), cur.WorkspaceLeaseOwner()
+	}
+	res, err := boot.BuildRuntime(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
