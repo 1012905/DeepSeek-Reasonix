@@ -400,6 +400,8 @@ const SAID: Record<string, string> = {
   "theme.unreadable": "无法读取该主题：{detail}",
   "theme.not_a_pack": "这不是可安装的主题：{detail}",
   "theme.install_failed": "主题未能写入磁盘：{detail}",
+  "theme.bad_id": "这不是有效的主题 id",
+  "theme.remove_failed": "主题未能删除：{detail}",
   "theme.folder_failed": "无法打开主题目录：{detail}",
   "surface.too_many_slots": "记录的面板位置已达上限（最多 {limit} 个），请先清除一个",
   "sandbox.no_bubblewrap": "本机未安装 bubblewrap（bwrap），命令将不受限制地运行",

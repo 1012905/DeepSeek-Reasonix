@@ -11,6 +11,9 @@ export class SseTheme extends SseNetwork {
   activateTheme(id: string) {
     return this.post("/themes", { id });
   }
+  removeTheme(id: string) {
+    return this.del(`/themes/${encodeURIComponent(id)}`);
+  }
   // JSON, not multipart: csrfGuard admits nothing else.
   async importTheme(files: File[]) {
     const zip = files.find((f) => f.name.toLowerCase().endsWith(".zip"));

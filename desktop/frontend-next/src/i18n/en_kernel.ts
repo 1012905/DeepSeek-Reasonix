@@ -113,6 +113,8 @@ export const EN_KERNEL: Record<string, string> = {
   "无法解析安装器的响应：{detail}": "The installer's own answer could not be read: {detail}",
   "无法读取该主题：{detail}": "That theme could not be read: {detail}",
   "这不是可安装的主题：{detail}": "That is not an installable theme: {detail}",
+  "这不是有效的主题 id": "That is not a valid theme id",
+  "主题未能删除：{detail}": "The theme could not be removed: {detail}",
   "主题未能写入磁盘：{detail}": "The theme could not be written to disk: {detail}",
   "无法打开主题目录：{detail}": "The themes folder could not be opened: {detail}",
   "记录的面板位置已达上限（最多 {limit} 个），请先清除一个": "Too many panel placements are recorded (at most {limit}); clear one first",

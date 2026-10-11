@@ -574,6 +574,8 @@ export interface AgentPort {
   surfaceSlots(): Promise<Record<string, string>>;
   assignSurface(surface: string, slot: string): Promise<void>;
   activateTheme(id: string): Promise<void>;
+  // Only a pack in the user's own library; the kernel refuses any other.
+  removeTheme(id: string): Promise<void>;
   // A zip, or a pack's loose files; the kernel keeps what a pack can hold.
   importTheme(files: File[]): Promise<ThemeImport>;
   // Shows where installed packs live and answers that directory.

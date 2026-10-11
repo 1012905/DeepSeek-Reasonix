@@ -310,6 +310,7 @@ export const EN: Record<string, string> = {
   "移除": "Remove",
   "删除": "Delete",
   "删除该会话": "Delete this session",
+  "删除主题「{name}」": "Delete theme \"{name}\"",
   "删除这份恢复副本？": "Delete this recovery copy?",
   "连同其记录一并删除": "Deletes it together with its record",
   "恢复副本": "Recovery",
