@@ -29,6 +29,7 @@ function held() {
   port.providerSetup = async () => null;
   port.welcomeSeen = async () => true;
   hub.portFor = () => port;
+  hub.machinePort = () => port;
   return { hub, port };
 }
 

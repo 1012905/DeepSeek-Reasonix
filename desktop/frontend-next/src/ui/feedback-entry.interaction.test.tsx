@@ -54,20 +54,13 @@ describe("reaching feedback", () => {
 
 function quiet(unread: (m: FeedbackMine) => FeedbackMine = (m) => m) {
   const h = hub();
-  const build = h.portFor.bind(h);
+  const port = h.machinePort();
   const asked = vi.fn();
-  const wrapped = new WeakSet<object>();
-  h.portFor = (rt) => {
-    const port = build(rt);
-    if (wrapped.has(port)) return port;
-    wrapped.add(port);
-    const mine = port.myFeedback.bind(port);
-    port.myFeedback = vi.fn(async () => {
-      asked();
-      return unread(await mine());
-    });
-    return port;
-  };
+  const mine = port.myFeedback.bind(port);
+  port.myFeedback = vi.fn(async () => {
+    asked();
+    return unread(await mine());
+  });
   return { hub: h, asked };
 }
 
