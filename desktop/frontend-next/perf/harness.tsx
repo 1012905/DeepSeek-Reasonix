@@ -209,6 +209,11 @@ const NO_PANES = PANES === 0;
 
 class BenchHub extends MockHub {
   readonly feeds = new Map<string, BenchPort>();
+  private readonly settingsPort = new BenchPort();
+
+  machinePort(): AgentPort {
+    return this.settingsPort;
+  }
 
   portFor(rt: RuntimeView): AgentPort {
     let port = this.feeds.get(rt.id);
