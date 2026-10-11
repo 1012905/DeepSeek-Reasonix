@@ -76,6 +76,7 @@ interface Props {
   // Machine-scoped pages use the window owner; session and project controls
   // continue to use the active pane.
   networkPort?: AgentPort;
+  localWorkspacePort?: AgentPort;
   networkHost?: string;
   status: SessionStatus | null;
   theme: string;
@@ -96,8 +97,9 @@ interface Props {
   reloadAccount: () => void;
   workspaceRoot?: string;
 }
-export function Settings({ hub, onError, port, networkPort, networkHost, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, onSessionsRecovered, reloadThemes, at: opened, account: acct, accountUnread, reloadAccount, workspaceRoot }: Props) {
+export function Settings({ hub, onError, port, networkPort, localWorkspacePort, networkHost, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, onSessionsRecovered, reloadThemes, at: opened, account: acct, accountUnread, reloadAccount, workspaceRoot }: Props) {
   const homePort = networkPort ?? port;
+  const localPort = localWorkspacePort ?? homePort;
   const [openedSection, openedAnchor = ""] = (opened ?? "").split(":", 2);
   const [at, setAt] = useState<Section>((openedSection as Section) || "session");
   // 搜索的语料是这张表，不是屏幕上的 DOM：分区是按需挂载的，读 DOM 就只搜得到
@@ -158,7 +160,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
     const packageRead = port.plugins().then((c) => { if (current()) setPackages(c); }).catch((e) => { if (current()) { setPackages([]); setExtErrors((errors) => ({ ...errors, packages: reason(e) })); } });
     port.hooks().then((c) => { if (current()) setHookCount(c.hooks.length); }).catch(() => { if (current()) setHookCount(0); });
     homePort.network().then((n) => { if (current()) setNetMode(t(NET_MODE[n.mode] ?? n.mode)); }).catch(() => { if (current()) setNetMode(""); });
-    homePort.memories().then((c) => { if (current()) setMemCount(c.memories.length); }).catch(() => { if (current()) setMemCount(0); });
+    localPort.memories().then((c) => { if (current()) setMemCount(c.memories.length); }).catch(() => { if (current()) setMemCount(0); });
     port.permissions().then((p) => { if (current()) setRuleCount(p.deny.length + p.ask.length + p.allow.length); }).catch(() => { if (current()) setRuleCount(0); });
     const skillRead = port.skills(where).then((c) => {
       if (!current()) return;
@@ -167,10 +169,10 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
     })
       .catch((e) => { if (current()) { setSkills([]); setExtErrors((errors) => ({ ...errors, skills: reason(e) })); } });
     void Promise.allSettled([mcpRead, packageRead, skillRead]).then(() => { if (current()) setExtRefreshing(false); });
-  }, [port, homePort, scopeAt]);
+  }, [port, homePort, localPort, scopeAt]);
   // Adding or removing a source changes what the picker above can offer, so
   // the list is reloadable rather than read once at mount.
-  const loadModels = useModelCatalog(port, homePort, setModels);
+  const loadModels = useModelCatalog(port, localPort, setModels);
 
   const currentExt = useRef({ port, reloadExt, loadModels, onChanged });
   currentExt.current = { port, reloadExt, loadModels, onChanged };
@@ -764,7 +766,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
               title={t("记忆")}
               hint={t("agent 自动记录的内容：未经配置，但会据此执行。此处按触发时机分组，并标出上一轮实际使用的条目。")}
             >
-              <Memory port={homePort} />
+              <Memory port={localPort} />
             </Group>
           )}
 

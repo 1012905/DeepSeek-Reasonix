@@ -301,7 +301,9 @@ export class MockHub implements HubPort {
     return Promise.resolve({ ...this.share });
   }
 
-  machinePort(): AgentPort {
+  machinePort(runtimeId?: string): AgentPort {
+    const local = this.views.find((rt) => rt.id === runtimeId && !rt.host);
+    if (local) return this.portFor(local);
     this.settings.machine = this.machine;
     return this.settings;
   }

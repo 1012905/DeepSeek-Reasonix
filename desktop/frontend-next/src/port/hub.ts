@@ -159,8 +159,11 @@ export interface HubPort extends SharePort {
   // host-only action.
   hostCapabilities(): Promise<HostCapabilities>;
   pickFolder(): Promise<string | null>;
-  // Machine-scoped settings resolve their local owner independently of panes.
-  machinePort(): AgentPort;
+  // Machine settings resolve a local owner; workspace reads can pin a runtime.
+  machinePort(runtimeId?: string): AgentPort;
+  // Absolute paths of every file dropped anywhere on the window. It belongs
+  // here rather than on a pane because the window has one of it: the shell
+  // registers its drop listener once and ignores a second call, so a per-pane
   portFor(rt: RuntimeView): AgentPort;
 }
 
@@ -175,7 +178,7 @@ export class SseHub implements HubPort {
   // Bindings the shell exposes are pane-independent; this reaches them without
   // pretending to belong to a runtime.
   private readonly shell = new SsePort();
-  private readonly settings = new SsePort("/host/settings");
+  private readonly settings = new Map<string, AgentPort>();
   // Questions seen this session, kept so an answer can carry the identities the
   // kernel will check it against.
   private readonly asked = new Map<string, RemoteAsk>();
@@ -237,6 +240,7 @@ export class SseHub implements HubPort {
   async close(id: string) {
     await this.post<void>(`/runtimes/${encodeURIComponent(id)}/close`);
     this.ports.delete(id);
+    this.settings.delete(id);
   }
 
   tree() {
@@ -495,8 +499,13 @@ export class SseHub implements HubPort {
     await this.post<void>("/device/leave", {});
   }
 
-  machinePort(): AgentPort {
-    return this.settings;
+  machinePort(runtimeId = ""): AgentPort {
+    const held = this.settings.get(runtimeId);
+    if (held) return held;
+    const base = runtimeId ? `/host/settings/runtime/${encodeURIComponent(runtimeId)}` : "/host/settings";
+    const port = new SsePort(base);
+    this.settings.set(runtimeId, port);
+    return port;
   }
 
   portFor(rt: RuntimeView): AgentPort {

@@ -250,6 +250,8 @@ export function App({ hub }: { hub: HubPort }) {
   }, [hub, runtimes]);
   const activePort = panePorts.get(active) ?? panePorts.values().next().value ?? null;
   const machinePort = useMemo(() => hub.machinePort(), [hub]);
+  const localRt = runtimes.find((rt) => rt.id === active && !rt.host) ?? runtimes.find((rt) => !rt.host);
+  const localWorkspacePort = useMemo(() => hub.machinePort(localRt?.id), [hub, localRt?.id]);
 
   useLaunchHealth(activePort, setup, welcomed);
 
@@ -706,6 +708,7 @@ export function App({ hub }: { hub: HubPort }) {
             onError={fail}
             port={activePort}
             networkPort={machinePort}
+            localWorkspacePort={localWorkspacePort}
             networkHost=""
             status={report.status}
             theme={theme}
@@ -724,7 +727,7 @@ export function App({ hub }: { hub: HubPort }) {
             account={account}
             accountUnread={accountUnread}
             reloadAccount={reloadAccount}
-            workspaceRoot={runtimes.find((rt) => !rt.host)?.root ?? ""}
+            workspaceRoot={localRt?.root ?? ""}
           />
         </Suspense>
         </Boundary>
