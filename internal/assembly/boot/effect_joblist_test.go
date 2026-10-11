@@ -47,6 +47,7 @@ func TestEffectBashOutputListsRunningJobsThroughRealBuild(t *testing.T) {
 	t.Chdir(dir)
 	rec := &jobListProvider{}
 	provider.Register("boot-effect-joblist", func(provider.Config) (provider.Provider, error) { return rec, nil })
+	writeUserConfig(t, "[sandbox]\nbash = \"off\"\n")
 	writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
 
