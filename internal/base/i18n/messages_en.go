@@ -97,6 +97,8 @@ var English = Messages{
 	NoticeJobFinishedFmt:    "Background job finished: %s",
 	NoticeJobKilledFmt:      "Background job killed: %s",
 	NoticeJobFailedFmt:      "Background job %s failed: needs attention",
+	NoticeJobExitFmt:        "exit code %d",
+	NoticeJobSignalFmt:      "ended by signal %d",
 	NoticeInboxRecoveredFmt: "Recovered %d unfinished instruction(s). The inbox is paused: review them with /queue, then resume.",
 	TUIQuestion:             "question",
 	TUISubagentCallsFmt:     "%d sub-agent call(s)",

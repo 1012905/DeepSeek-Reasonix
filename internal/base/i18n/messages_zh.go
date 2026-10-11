@@ -98,6 +98,8 @@ var Chinese = Messages{
 	NoticeJobFinishedFmt:    "后台任务已结束：%s",
 	NoticeJobKilledFmt:      "后台任务已终止：%s",
 	NoticeJobFailedFmt:      "后台任务 %s 失败，需要处理",
+	NoticeJobExitFmt:        "退出码 %d",
+	NoticeJobSignalFmt:      "被信号 %d 终止",
 	NoticeInboxRecoveredFmt: "已恢复 %d 条未完成的指令。待发送已暂停，请先用 /queue 查看，再继续派发。",
 	TUIQuestion:             "提问",
 	TUISubagentCallsFmt:     "%d 次子代理调用",

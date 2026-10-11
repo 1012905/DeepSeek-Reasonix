@@ -94,6 +94,8 @@ var ChineseTraditional = Messages{
 	NoticeJobFinishedFmt:          "背景任務已結束：%s",
 	NoticeJobKilledFmt:            "背景任務已終止：%s",
 	NoticeJobFailedFmt:            "背景任務 %s 失敗，需要處理",
+	NoticeJobExitFmt:              "結束碼 %d",
+	NoticeJobSignalFmt:            "被訊號 %d 終止",
 	NoticeInboxRecoveredFmt:       "已恢復 %d 條未完成的指令。待發送已暫停，請先用 /queue 查看，再繼續派發。",
 	TUIQuestion:                   "提問",
 	TUISubagentCallsFmt:           "%d 次子代理呼叫",
