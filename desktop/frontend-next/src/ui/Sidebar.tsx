@@ -13,6 +13,7 @@ import { useHiddenHosts } from "../state/remotehide";
 import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
 import { Workspaces } from "./Workspaces";
+import type { TreePaging } from "./treewindow";
 import { MASK, useHidesAmounts } from "./wallet";
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
   // Collapsed, the column keeps its scroll position and its folds; inert is the
   // other half of that — a column nobody can see must not be reachable by Tab.
   collapsed: boolean;
+  navShown: boolean;
   tree: TreeWorkspace[];
   treeRead: boolean;
   runtimes: RuntimeView[];
@@ -39,6 +41,7 @@ interface Props {
   reloadRemoteTrees: () => Promise<void>;
   readRemoteTree: (host: string) => Promise<void>;
   reloadTree: () => Promise<void>;
+  paging: TreePaging;
   adder: Adder;
   opening?: string;
   onOpen: (req: { root?: string; sessionPath?: string }) => Promise<void>;
@@ -67,6 +70,7 @@ interface Props {
 export function Sidebar({
   hub,
   collapsed,
+  navShown,
   tree,
   treeRead,
   runtimes,
@@ -82,6 +86,7 @@ export function Sidebar({
   reloadRemoteTrees,
   readRemoteTree,
   reloadTree,
+  paging,
   adder,
   opening,
   onOpen,
@@ -155,8 +160,11 @@ export function Sidebar({
     ],
     [newSessionRoot, onOpen, onSettings, onFeedback, feedbackUnread, onFind, onError],
   );
-  const sessionCount = tree.reduce((n, ws) => n + ws.sessions.filter((session) => !session.archived).length, 0);
-  const archivedCount = tree.reduce((n, ws) => n + ws.sessions.filter((session) => session.archived).length, 0);
+  const sessionCount = tree.reduce(
+    (n, ws) => n + (ws.total === undefined ? ws.sessions.filter((session) => !session.archived).length : ws.total - (ws.archived ?? 0)),
+    0,
+  );
+  const archivedCount = tree.reduce((n, ws) => n + (ws.archived ?? ws.sessions.filter((session) => session.archived).length), 0);
   const liveCount = liveIds(runtimes.map((rt) => rt.id)).length;
 
   const onFold = (root: string, shut: boolean) =>
@@ -237,6 +245,7 @@ export function Sidebar({
         folded={folded}
         onFold={onFold}
         reload={reloadTree}
+        paging={paging}
         opening={opening}
         onOpen={onOpen}
         onFocus={onFocusPane}
@@ -272,7 +281,7 @@ export function Sidebar({
       </Workspaces>
       </RailSearch>
       </div>
-      <div className="railfoot">
+      {!navShown && <div className="railfoot">
         <button className="studio-wallet" data-action="settings.section" data-value="usage" onClick={() => onSettings("usage")}><span aria-hidden="true"><StudioIcon name="wallet" /></span><b>{t("钱包与用量")}</b>{wallet && <small>{hideAmounts ? MASK : wallet}</small>}</button>
         <button className="studio-wallet studio-feedback" data-action="feedback.open" onClick={() => onFeedback(feedbackEntryTab(feedbackUnread))}>
           <span aria-hidden="true"><StudioIcon name="feedback" /></span>
@@ -284,7 +293,7 @@ export function Sidebar({
           <span className="studio-workspace-kind">{t(account?.signedIn ? "个人工作空间" : "本地工作空间")}</span>
           <button className="studio-settings" data-action="chrome.settings" onClick={() => onSettings()} aria-label={t("设置")}><StudioIcon name="settings" /></button>
         </div>
-      </div>
+      </div>}
     </div>
     </>
   );

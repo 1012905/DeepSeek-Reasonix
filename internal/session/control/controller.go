@@ -1150,9 +1150,12 @@ func (c *Controller) ModelRef() string { return c.modelRef }
 // Empty means no scoping is in effect.
 func (c *Controller) WorkspaceRoot() string { return c.workspaceRoot }
 
+// loadConfigForRoot is the turn-time config read; tests count it.
+var loadConfigForRoot = config.LoadForRoot
+
 func (c *Controller) imageInputEnabled() bool {
 	ref := c.modelRef
-	cfg, err := config.LoadForRoot(c.workspaceRoot)
+	cfg, err := loadConfigForRoot(c.workspaceRoot)
 	if err == nil && ref == "" {
 		ref = cfg.DefaultModel
 	}
@@ -1207,6 +1210,12 @@ type closeJobsMode int
 const (
 	closeJobsWithGrace closeJobsMode = iota
 	closeJobsAsync
+	// closeJobsHandedOff leaves the manager to a replacement controller, so
+	// the jobs run on; cleanup waits for those jobs, which still use what it
+	// would release.
+	closeJobsHandedOff
+	// closeJobsShared closes a controller that only borrowed the manager.
+	closeJobsShared
 )
 
 // SetBypass is the legacy name for SetAutoApproveTools. Keep it for existing

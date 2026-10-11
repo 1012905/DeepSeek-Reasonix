@@ -904,7 +904,7 @@ Chat and transcript shortcuts:
 
 | Key or command | What it does | Notes |
 | --- | --- | --- |
-| `Enter` | Sends the current message | While a turn is running, non-empty input is durably queued as a follow-up before the composer clears. |
+| `Enter` | Sends the current message | While a turn is running, non-empty input is durably queued as a follow-up before the composer clears. On an empty composer it jumps back to the newest output and keeps following it. |
 | `Ctrl+Enter` or `/steer <text>` | Adds guidance to the active turn | The guidance is persisted first; if the turn cannot accept it, it remains a normal follow-up. |
 | `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` | Inserts a newline | Plain `Enter` is reserved for send/confirm. |
 | Plain `Up` / `Down` while idle | Recalls older or newer submitted prompts | In a running turn, the same keys navigate queued follow-up feedback. |
@@ -919,6 +919,7 @@ Chat and transcript shortcuts:
 | `/mouse` | Toggles in-app mouse capture | Off hands the mouse back to your terminal, restoring its native click-drag selection and right-click context menu, at the cost of in-app drag-select, the transcript scrollbar, and wheel-scroll. Set `REASONIX_DISABLE_MOUSE=1` to start every session with it off. Remote (SSH) sessions start with capture off so native selection works out of the box; `REASONIX_DISABLE_MOUSE=0` forces capture on everywhere. |
 | `Ctrl+C` | Copies, cancels, clears, or quits | Copies an active transcript or composer selection first. Otherwise it cancels a running turn, clears non-empty input, or quits on a second empty-composer press. A second press while a cancelled turn is still stopping quits too. |
 | `Ctrl+D` | Quits the TUI | Immediate quit on an empty idle composer. |
+| `Ctrl+Z` | Suspends the TUI to the shell | macOS and Linux; resume it with `fg`. Windows has no job control, so the key does nothing there. |
 | `/quit` or `/exit` | Quits the TUI | Runs at once, also while a turn is running. Typing a bare `exit`, `quit` or `:q` sends it to the model as a normal message. |
 | Your terminal's text-paste shortcut | Pastes text | Text stays on the terminal's bracketed-paste path (`Cmd+V` on macOS, commonly `Ctrl+Shift+V` on Linux, and the terminal's configured shortcut elsewhere). Reasonix consumes the resulting paste event and never probes for an image first. |
 | `Ctrl+V` on macOS/Linux; `Alt+V` on Windows | Pastes a clipboard image | Image paste is a separate application action. The footer shows `Pasting image…` while the clipboard is read, then inserts an editable `[image #N]` token at the cursor. |
@@ -1197,9 +1198,9 @@ headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 ```
 
 For a remote HTTP server without a static `Authorization` header, an
-authentication challenge is shown as **Sign in**. Run
-`reasonix mcp auth <name>` in the CLI, or click **Sign in** for that server in
-the Desktop MCP panel. Reasonix performs OAuth metadata discovery, dynamic
+authentication challenge (HTTP 401 with a `Bearer` challenge) is reported as
+needing sign-in. Run `reasonix mcp auth <name>` in the CLI; Studio has no
+sign-in control yet. Reasonix performs OAuth metadata discovery, dynamic
 client registration, PKCE S256 authorization, and refresh-token
 rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.

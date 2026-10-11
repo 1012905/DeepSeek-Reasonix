@@ -286,6 +286,7 @@ func TestDesktopConversationWidthNormalizes(t *testing.T) {
 		{"", "standard", false},
 		{"standard", "standard", false},
 		{" FULL ", "full", false},
+		{"full-all", "full-all", false},
 		{"wide", "standard", true},
 	} {
 		c := Default()

@@ -117,7 +117,8 @@ func TestResolveNewSessionChatModelSkipsNonChatProviders(t *testing.T) {
 		},
 	}
 
-	got, fallback, ok := c.ResolveNewSessionChatModel()
+	start, ok := c.ResolveNewSessionChatModel()
+	got, fallback := start.Ref, start.Fallback
 	if !ok || !fallback || got != "visible/chat-model" {
 		t.Fatalf("ResolveNewSessionChatModel() = (%q, %v, %v), want (visible/chat-model, true, true)", got, fallback, ok)
 	}
@@ -132,7 +133,8 @@ func TestResolveNewSessionChatModelIgnoresDesktopProviderAccess(t *testing.T) {
 		},
 	}
 
-	got, fallback, ok := c.ResolveNewSessionChatModel()
+	start, ok := c.ResolveNewSessionChatModel()
+	got, fallback := start.Ref, start.Fallback
 	if !ok || fallback || got != "visible/chat" {
 		t.Fatalf("ResolveNewSessionChatModel() = (%q, %v, %v), want (visible/chat, false, true)", got, fallback, ok)
 	}
@@ -319,5 +321,30 @@ func TestRemoveProviderClearsOptionalRefsWithoutFallback(t *testing.T) {
 	}
 	if _, ok := c.Agent.SubagentModels["review"]; ok {
 		t.Fatal("subagent_models.review should be removed")
+	}
+}
+
+func TestRemoveProviderClearsRolesThatCannotMove(t *testing.T) {
+	c := testModelFallbackConfig(t)
+	c.DefaultModel = "prov-b"
+	a := c.Agent
+	a.VisionModel, a.GuardianModel, a.RecoveryModel = "prov-a/model-a1", "prov-a", "model-a2"
+	a.TriageModel, a.DecisionModel, a.AdvisorModel = "prov-a/model-a1", "prov-a", "prov-a/model-a2"
+	a.SubagentModel = "prov-b/model-b1"
+	c.Agent = a
+
+	if err := c.RemoveProvider("prov-a"); err != nil {
+		t.Fatalf("RemoveProvider: %v", err)
+	}
+	for name, ref := range map[string]string{
+		"vision": c.Agent.VisionModel, "guardian": c.Agent.GuardianModel, "recovery": c.Agent.RecoveryModel,
+		"triage": c.Agent.TriageModel, "decision": c.Agent.DecisionModel, "advisor": c.Agent.AdvisorModel,
+	} {
+		if ref != "" {
+			t.Errorf("%s_model = %q, want cleared", name, ref)
+		}
+	}
+	if c.Agent.SubagentModel != "prov-b/model-b1" {
+		t.Fatalf("an unrelated role changed to %q", c.Agent.SubagentModel)
 	}
 }

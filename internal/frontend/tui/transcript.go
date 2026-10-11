@@ -19,6 +19,8 @@ const (
 	ItemNotice
 	ItemCompaction
 	ItemReceipt
+	// ItemWorked is how long the turn ran, kept after the answer it closed.
+	ItemWorked
 	// ItemUsage is what one model request cost.
 	ItemUsage
 )
@@ -69,6 +71,7 @@ type Item struct {
 	Compaction *eventwire.Compaction
 	Receipt    *eventwire.CompletionReceipt
 	Usage      *eventwire.Usage
+	WorkedMs   int64 // ItemWorked
 }
 
 // outputFold is how much of a finished shell call's output, or of an answer's
@@ -261,9 +264,18 @@ func (t *Transcript) Apply(ev eventwire.Event) {
 		t.sealSays()
 		t.sealTools(ev.Err != "")
 		t.sealPrompts()
+		t.addWorked(ev.WorkDurationMs)
 		if ev.Receipt != nil && ev.Receipt.SaysSomething {
 			t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemReceipt, Receipt: ev.Receipt})
 		}
+	}
+}
+
+// addWorked keeps a turn's run time under its answer. A run shorter than the
+// second it would be rounded to says nothing worth a line.
+func (t *Transcript) addWorked(ms int64) {
+	if ms >= 500 {
+		t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemWorked, WorkedMs: ms})
 	}
 }
 
@@ -560,6 +572,9 @@ func (t *Transcript) sealByReceipt(r *eventwire.DecisionReceipt) {
 		}
 		if (it.Kind == ItemApproval && it.Approval.ID == r.ID) || (it.Kind == ItemAsk && it.Ask.ID == r.ID) {
 			it.Verdict = "elsewhere"
+			if it.Kind == ItemAsk && r.Outcome == "timed_out" {
+				it.Verdict = "timed out"
+			}
 		}
 	}
 }
