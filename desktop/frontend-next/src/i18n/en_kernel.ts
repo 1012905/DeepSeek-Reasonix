@@ -131,6 +131,8 @@ export const EN_KERNEL: Record<string, string> = {
   "这个文件夹含有或位于密钥、凭据或 Reasonix 自己的数据目录里，不能授予写入权限": "This folder holds or sits inside keys, credentials or Reasonix's own data, so it cannot be granted write access.",
   "这个文件夹不属于当前用户，不能授予写入权限": "This folder is not owned by the current user, so it cannot be granted write access.",
   "这个文件夹和已有的可写位置（临时目录、工具缓存或另一个额外文件夹）重叠": "This folder overlaps a location that is already writable (temp, a tool cache or another extra folder).",
+  "没有这个预设": "No curated preset has this id.",
+  "这个预设会创建多个来源，名称由预设决定": "This preset creates several sources and keeps its own names.",
   "本机没有操作系统沙箱，「关进沙箱」一档无法保存": "This machine has no OS sandbox, so the jailed mode cannot be saved",
 
   "该文件夹仍有 {n} 个打开的面板，请先关闭再移除": "This folder still has {n} open panes — close them before removing it",
