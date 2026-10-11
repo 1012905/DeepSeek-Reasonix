@@ -5,24 +5,26 @@
 package textutil
 
 import (
+	"slices"
 	"strings"
-	"unicode"
 
 	"github.com/charmbracelet/x/ansi"
 )
 
-// SanitizeDisplay strips escape sequences and control characters from external
-// text and collapses the remaining whitespace to single spaces, so one string
-// cannot repaint a terminal or smuggle line breaks into a one-line row.
+// SanitizeDisplay is the prose policy for one line: escape sequences and every
+// character BoundProse removes are dropped (controls, bidirectional overrides,
+// zero-width and format characters), and whitespace collapses to single spaces,
+// so one string cannot repaint a terminal, reorder a row or smuggle a line break.
 func SanitizeDisplay(s string) string {
-	s = ansi.Strip(s)
+	rs := []rune(strings.ToValidUTF8(ansi.Strip(s), "\uFFFD"))
+	hidden := hiddenMask(rs)
 	var b strings.Builder
 	b.Grow(len(s))
-	for _, r := range s {
+	for i, r := range rs {
 		switch {
-		case r == '\t' || r == '\n' || r == '\r':
+		case r == '\t' || r == '\n' || r == '\r' || r == '\u2028' || r == '\u2029' || r == '\u0085':
 			b.WriteByte(' ')
-		case isControl(r), unicode.Is(unicode.Cc, r):
+		case hidden[i]:
 		default:
 			b.WriteRune(r)
 		}
@@ -30,9 +32,17 @@ func SanitizeDisplay(s string) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
-// SanitizeLaunch is SanitizeDisplay for a line the user is asked to approve:
-// it also drops format characters (bidi overrides, zero-width), which would
-// let the text on screen read differently from what is run.
+// Obscures reports whether s holds anything the literal policy would show as
+// \u{hex}: a surface that deletes such characters says so with it.
+func Obscures(s string) bool {
+	rs := []rune(strings.ToValidUTF8(s, "\uFFFD"))
+	return slices.Contains(hiddenMask(rs), true)
+}
+
+// SanitizeLaunch is the launch-line policy: the display policy applied before
+// a secret is matched, because a key split by a zero-width character would
+// otherwise survive redaction. It deletes, so the caller that shows the result
+// must say so when Obscures held for the input.
 func SanitizeLaunch(s string) string {
 	s = SanitizeDisplay(s)
 	return strings.Map(func(r rune) rune {
