@@ -446,6 +446,7 @@ type Messages struct {
 	GoalEmpty                    string
 	GoalCurrentFmt               string
 	GoalSetFmt                   string
+	GoalResumedFmt               string // %s = goal
 	GoalCleared                  string
 	GoalNotRunning               string
 	GoalNotPaused                string

@@ -472,9 +472,9 @@ func (o *turnOrchestrator) runTurnLoop(ctx context.Context, turn orchestratedTur
 // FSM. Without an active goal advanceGoalAfterTurn returns immediately and this
 // is one turn; with one it is the loop that keeps pursuing it.
 func (o *turnOrchestrator) runTurnLoopWithPreparedTurn(ctx context.Context, turn orchestratedTurn) error {
+	o.c.liftUserGatedGoal(turn.synthetic)
 	expectedContinuationEpoch := o.c.goals.continuationToken()
 	ctx = o.c.withVisionRouting(agent.WithSubagentImageCandidates(ctx, turn.images.candidates))
-	o.c.liftUserGatedGoal(turn.synthetic)
 	err := o.runOrchestratedTurn(ctx, turn)
 	o.c.noticeUserGate()
 	if err != nil {
