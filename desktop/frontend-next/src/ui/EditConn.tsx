@@ -323,7 +323,7 @@ export function EditConn({
         {kinds.length > 1 && (
           <label className="grow full">
             <span>{t("接口协议")}</span>
-            <select aria-label={t("接口协议")} value={kind} onChange={(e) => {
+            <select aria-label={t("接口协议")} data-action="provider.draft" data-value="protocol" value={kind} onChange={(e) => {
               setKind(e.target.value);
               setFacts(clearModelCheckFacts);
             }} disabled={busy !== "" || checkingModel !== ""}>
