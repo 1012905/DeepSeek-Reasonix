@@ -20,15 +20,14 @@ function installTray(host, { onOpen, onQuit }, electron = require("electron")) {
   // the desktop's indicator over D-Bus, and replacing it every poll closes one
   // the person has open or leaves the icon without one.
   let painted = "";
-  const paint = () => {
+  const paint = (force = false) => {
     // The sentence and the menu words come from the kernel with the numbers:
     // the language is the desktop's setting, and one surface should not need a
     // second catalogue to say what the first already said.
     const line = state.fold?.line ?? "";
     const words = state.fold?.labels ?? {};
     const shown = JSON.stringify([line, words, !!state.prefs?.closeToTray]);
-    if (shown === painted) return;
-    painted = shown;
+    if (!force && shown === painted) return;
     icon.setToolTip(line ? `Reasonix Studio — ${line}` : "Reasonix Studio");
     icon.setContextMenu(
       Menu.buildFromTemplate([
@@ -44,13 +43,16 @@ function installTray(host, { onOpen, onQuit }, electron = require("electron")) {
             // switch has one implementation whichever control asked.
             const next = await host.setTrayPrefs(true, !state.prefs?.closeToTray);
             if (next) state.prefs = next;
-            paint();
+            // The native checkbox has already flipped itself; redraw from state
+            // even when nothing changed, so a refused save puts it back.
+            paint(true);
           },
         },
         { type: "separator" },
         { label: words.quit ?? "Quit", click: onQuit },
       ]),
     );
+    painted = shown;
   };
 
   const refit = () => icon.setImage(trayImage(nativeImage, screen.getPrimaryDisplay().scaleFactor));

@@ -2018,3 +2018,34 @@ test("tray: the menu is replaced only when what it says changes, so an open menu
   assert.equal(menus[1].template.find((item) => item.enabled === false).label, "2 running");
   tray.close();
 });
+
+test("tray: a refused close-to-tray save redraws the checkbox, and a menu that failed to draw is tried again", async () => {
+  const { installTray } = require("../src/tray.js");
+  const menus = [];
+  let failNext = false;
+  class FakeTray {
+    on() {}
+    setImage() {}
+    setToolTip() {}
+    setContextMenu(menu) { if (failNext) { failNext = false; throw new Error("indicator busy"); } menus.push(menu); }
+    destroy() {}
+  }
+  const electron = {
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    Tray: FakeTray,
+    nativeImage: { createFromPath: () => ({ isEmpty: () => false }), createFromBuffer: () => ({ isEmpty: () => false }) },
+    screen: { getPrimaryDisplay: () => ({ scaleFactor: 1 }), on() {}, removeListener() {} },
+  };
+  const fold = { line: "idle", labels: { open: "Open", quit: "Quit", closeToTray: "Keep running" } };
+  const host = { trayPrefs: async () => ({ closeToTray: false }), trayState: async () => fold, setTrayPrefs: async () => null };
+  const tray = installTray(host, { onOpen() {}, onQuit() {} }, electron);
+  failNext = true;
+  await assert.rejects(tray.refresh());
+  await tray.refresh();
+  assert.equal(menus.length, 1, "a menu whose draw threw was never retried");
+  const toggle = menus[0].template.find((item) => item.type === "checkbox");
+  await toggle.click();
+  assert.equal(menus.length, 2, "a refused save left the flipped checkbox on screen");
+  assert.equal(menus[1].template.find((item) => item.type === "checkbox").checked, false);
+  tray.close();
+});
