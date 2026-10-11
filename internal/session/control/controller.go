@@ -294,7 +294,9 @@ type Options struct {
 	PromptRefiner   *promptrefine.Refiner // rewrites a draft before it is sent; nil refuses the ask
 	CommitMessenger CommitDrafter         // drafts commit messages; nil refuses the ask
 	Sink            event.Sink
-	Policy          permission.Policy
+	// QuoteContext is the same live pricing projection used by the assembled sink.
+	QuoteContext *event.QuoteContext
+	Policy       permission.Policy
 	// SubagentGate is the shared gate every headless-only sub-agent surface
 	// reads; nil disables gating there. The approval-mode setters Update it so
 	// a runtime switch reaches sub-agents, not only the executor's own gate.

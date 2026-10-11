@@ -555,6 +555,7 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 			c.gate.canceling = true
 		}
 		c.mu.Unlock()
+		c.leaveCurrencyGroup()
 		if cancel != nil {
 			// clearAll deliberately does not signal waiters. Pair it with the
 			// foreground cancellation so approval/ask waits always unblock.
