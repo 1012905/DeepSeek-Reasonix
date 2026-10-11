@@ -13,10 +13,7 @@ import (
 )
 
 // UpdateApplyFailure records that an update installer failed after the desktop
-// handed off and exited. The Windows update helper cannot roll back itself —
-// it runs from the cache directory, outside the validated Guard installation —
-// so it records this marker and relaunches Guard, which performs the rollback
-// from inside the install directory on its next start.
+// handed off and exited.
 type UpdateApplyFailure struct {
 	SchemaVersion       int    `json:"schemaVersion"`
 	ToVersion           string `json:"toVersion,omitempty"`
