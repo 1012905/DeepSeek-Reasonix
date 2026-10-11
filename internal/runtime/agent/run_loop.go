@@ -322,6 +322,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// archive. Most OpenAI-compatible backends do not replay it; providers
 		// with an explicit round-trip contract retain the raw provider text.
 		calls = a.withPreviewFileDiffs(ctx, calls)
+		workMs, committed := state.workDurationMs(), a.callsToCommit(streamed, calls)
 		a.sess.conversation.Add(provider.Message{
 			Role:               provider.RoleAssistant,
 			Content:            text,
@@ -329,12 +330,15 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			ReasoningSignature: signature,
 			ReasoningID:        streamed.reasoningID,
 			ReasoningStatus:    streamed.reasoningStatus,
-			ToolCalls:          a.callsToCommit(streamed, calls),
+			ToolCalls:          committed,
 			ResponsesItems:     responsesItems,
-			WorkDurationMs:     state.workDurationMs(),
+			WorkDurationMs:     workMs,
 			ThoughtMs:          streamed.thoughtMs,
 			ModelRef:           a.modelRef,
 		})
+		if len(committed) == 0 {
+			state.answeredMs = workMs
+		}
 		if cont, perr := a.settlePerseveration(state, streamed); !cont {
 			return perr
 		} else if streamed.perseverationAborted {

@@ -23,6 +23,7 @@ export interface HistoryMessage {
   modelRef?: string;
   reasoning?: string;
   thoughtMs?: number; // kernel-measured; absent on turns recorded before it was
+  workDurationMs?: number; // only on the answer that closed a turn
   images?: number; // attachments on a user turn; an image-only one has no text
   toolCalls?: HistoryToolCall[];
   toolCallId?: string;

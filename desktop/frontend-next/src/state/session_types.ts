@@ -43,6 +43,7 @@ export type Item =
   | { t: "compaction"; id: string; c: Compaction; done: boolean }
   | { t: "remember"; id: string; m: RememberedFact; forgotten?: boolean }
   | { t: "receipt"; id: string; r: Receipt }
+  | { t: "worked"; id: string; ms: number }
   | { t: "extension"; id: string; ext: ExtensionSurface }
   // code identifies what the kernel is reporting. text is its own English,
   // kept as the fallback for a code this build has no wording for.

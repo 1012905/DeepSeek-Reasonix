@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"reasonix/internal/base/i18n"
 	"reasonix/internal/base/textutil"
@@ -72,6 +73,8 @@ func renderItem(it *Item, width, shown int, hideRail bool) string {
 		return renderReceipt(it.Receipt, width)
 	case ItemUsage:
 		return renderUsage(it.Usage, width)
+	case ItemWorked:
+		return termrender.Dim("  " + fmt.Sprintf(i18n.M.ChatWorkedForFmt, i18n.Elapsed(time.Duration(it.WorkedMs)*time.Millisecond)))
 	}
 	return ""
 }

@@ -43,6 +43,7 @@ type Event struct {
 	Readiness       *FinalReadiness     `json:"readiness,omitempty"`
 	Receipt         *CompletionReceipt  `json:"receipt,omitempty"`
 	CheckpointTurn  *int                `json:"checkpointTurn,omitempty"`
+	WorkDurationMs  int64               `json:"workDurationMs,omitempty"` // TurnDone: run time up to the final answer
 	// Which producer wrote this frame: the executor, the planner, a sub-agent.
 	// A turn can carry two models, and the alternative is reading it off the
 	// last phase marker — an adjacency a replay cannot even see.
@@ -192,9 +193,8 @@ func ToWire(e event.Event) Event {
 		w.Via = ToWireVia(e.Via)
 		w.HostAuthored = e.HostAuthored
 	case event.TurnDone:
-		w.Cancelled = e.Cancelled
-		w.Outcome = e.Outcome
-		w.CheckpointTurn = e.CheckpointTurn
+		w.Cancelled, w.Outcome = e.Cancelled, e.Outcome
+		w.CheckpointTurn, w.WorkDurationMs = e.CheckpointTurn, e.WorkDurationMs
 		w.Receipt = completionReceiptWire(e.Receipt)
 		if e.Readiness != nil {
 			w.Readiness = &FinalReadiness{Attempts: e.Readiness.Attempts, Missing: append([]string(nil), e.Readiness.Missing...)}

@@ -18,6 +18,7 @@ import { askFromCall, promptOpen, prompted, sealByReceipt } from "./prompts";
 import { nameTurnStart, othersSteer } from "./turn_start";
 import { appendText, foldMessage, sealSay } from "./say";
 import { nextId } from "./ids";
+import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
 import { nameQueued } from "./queued";
@@ -606,7 +607,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         doing: ev.outcome === "no_progress" ? "已暂停" : ev.cancelled ? "已取消" : ev.err ? "已中断" : "已完成",
         waiting: {},
         plan: livePlan(s.plan),
-        items: withReceipt(sealTurn(sealSay(s.items, true), ev.outcome === "no_progress" || ev.cancelled ? undefined : ev.err), ev.receipt),
+        items: withReceipt([...sealTurn(sealSay(s.items, true), ev.outcome === "no_progress" || ev.cancelled ? undefined : ev.err), ...worked(ev.workDurationMs)], ev.receipt),
       };
 
     default:
@@ -737,6 +738,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
           out.push({ t: "say", id: nextId(), text: part.text, reasoning, done: true, model: m.modelRef, thoughtMs: reasoning ? m.thoughtMs : undefined });
           reasoning = undefined;
         }
+        out.push(...worked(m.workDurationMs));
       }
       for (const c of m.toolCalls ?? []) {
         if (c.id) {

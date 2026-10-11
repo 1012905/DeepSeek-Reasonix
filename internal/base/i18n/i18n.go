@@ -104,7 +104,8 @@ type Messages struct {
 	// chat TUI status line / approval banner.
 	ChatThinking                    string // live reasoning marker label, e.g. "thinking…"
 	ChatThoughtForFmt               string // collapsed reasoning summary, "%d" = elapsed s
-	ChatStatusThinkingFmt           string // "%s thinking… (%ds · %s cancels)" — %s = spinner, %d = elapsed s, %s = interrupt key
+	ChatWorkedForFmt                string // end-of-turn line, "%s" = the turn's run time
+	ChatStatusThinkingFmt           string // "%s thinking… (%s · %s cancels)" — %s = spinner, %s = elapsed, %s = interrupt key
 	TurnPhaseWorking                string // host turn_phase label: working
 	TurnPhaseChecking               string // host turn_phase label: checking
 	TurnPhaseVerifying              string // host turn_phase label: verifying
@@ -125,8 +126,8 @@ type Messages struct {
 	ChatSubagentProgressDoneFmt     string // terminal summary — %s = phase label, %d = duration s ("%s · %ds")
 	ChatSubagentPreviewLabel        string // verbose preview marker ("▎")
 	ChatStatusRetryingFmt           string // "%s retrying (%d/%d)…" — %s = spinner, %d/%d = attempt/max
-	ChatStatusCancellingFmt         string // "%s stopping… (%ds · Ctrl+C exits)" — %s = spinner, %d = elapsed s
-	ChatStatusCancellingViFmt       string // "%s stopping… (%ds)" — vi mode: Ctrl+C re-cancels instead of exiting, so the hint drops the exit key
+	ChatStatusCancellingFmt         string // "%s stopping… (%s · Ctrl+C exits)" — %s = spinner, %s = elapsed
+	ChatStatusCancellingViFmt       string // "%s stopping… (%s)" — vi mode: Ctrl+C re-cancels instead of exiting, so the hint drops the exit key
 	ChatStatusIdle                  string // shortcuts hint when idle
 	ChatStatusYoloIdle              string // shortcuts hint when idle in YOLO/bypass mode
 	ChatStatusCycleHint             string // plan-toggle shortcut hint shown when no modal prompt owns the status row
