@@ -73,3 +73,37 @@ func TestToolAfterRewriteCannotHideWrittenCodeFromProseWaiver(t *testing.T) {
 		})
 	}
 }
+
+func TestToolAfterRewriteCannotHideTheOnlyWrittenCode(t *testing.T) {
+	for _, mode := range []string{"block", "sidecar error"} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			client := &fakeDispatchClient{interceptFn: func(ev protocol.InterceptEvent, _ json.RawMessage) (protocol.InterceptResult, error) {
+				if ev != protocol.EventToolAfter {
+					return protocol.InterceptResult{Decision: protocol.DecisionContinue}, nil
+				}
+				if mode == "block" {
+					return blockWith("lint rejected the write"), nil
+				}
+				return protocol.InterceptResult{}, errors.New("sidecar timeout")
+			}}
+			d := newExtDispatcher(client, true, nil, extension.PointToolAfter)
+			reg := tool.NewRegistry()
+			reg.Add(namedFileWriter{root: root})
+			reg.Add(fakeTool{name: "bash"})
+			a := New(nil, reg, sessionstore.NewSession(""), Options{Extensions: d}, event.Discard)
+			a.observeRoot = root
+			a.writeWorkspaceRoot = root
+			a.executeOne(context.Background(), &a.turn, provider.ToolCall{ID: "1", Name: "write_file", Arguments: `{"path":"Program.cs","content":"class Q {}\n"}`})
+			a.turn.policySet = true
+			a.turn.policy = taskpolicy.TaskPolicy{Verification: taskpolicy.VerifyTargeted}
+			if _, err := os.Stat(filepath.Join(root, "Program.cs")); err != nil {
+				t.Fatalf("the write did not land: %v", err)
+			}
+			check := a.finalReadinessCheckFor()
+			if check.missingVerification != 1 {
+				t.Errorf("missing verification = %d, reason %q; want the only written code to keep the check owed", check.missingVerification, check.reason)
+			}
+		})
+	}
+}
