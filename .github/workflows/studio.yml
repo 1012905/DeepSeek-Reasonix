@@ -141,9 +141,17 @@ jobs:
           node perf/branch-tooltip.mjs
           node perf/selfcheck.mjs branch-tooltip
 
+  # A pull request with no platform-relevant change (scripts/ci-platform-scope.sh)
+  # moves the Windows and macOS legs onto an ubuntu runner with every step
+  # skipped, so the check names still report without a scarce runner. A push to
+  # studio, or a failed `scope`, runs all three.
   desktop:
     name: desktop (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    needs: scope
+    if: always()
+    runs-on: ${{ github.event_name == 'pull_request' && needs.scope.outputs.platform == 'false' && 'ubuntu-latest' || matrix.os }}
+    env:
+      RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.scope.outputs.platform != 'false' || matrix.os == 'ubuntu-22.04' }}
     strategy:
       fail-fast: false
       matrix:
@@ -152,9 +160,11 @@ jobs:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - if: env.RUN_STEPS == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - if: env.RUN_STEPS == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: desktop/go.mod
           cache: true
@@ -167,6 +177,7 @@ jobs:
       # carries build dependencies of its own.
       # Same command as `make studio-test`; this job is already in desktop/.
       - name: go test
+        if: env.RUN_STEPS == 'true'
         run: go test ./...
 
       # The host sits in the main module and nothing else builds it, so its
@@ -174,7 +185,7 @@ jobs:
       # platform-neutral or the Electron bundle cannot ship it. Cross-compiling
       # is host-independent, so once is enough.
       - name: host stays pure Go and platform-neutral
-        if: runner.os == 'Linux'
+        if: env.RUN_STEPS == 'true' && runner.os == 'Linux'
         working-directory: .
         run: |
           for os in windows linux darwin; do
@@ -183,12 +194,15 @@ jobs:
 
   # The ARM64 leg queues on a scarcer runner pool, so a pull request runs it
   # only when it touches what the leg verifies; a push to studio always does.
+  # The macOS and Windows package legs follow `platform`, the same rule as the
+  # desktop matrix above.
   scope:
     name: package matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
       arm64: ${{ steps.pick.outputs.arm64 }}
+      platform: ${{ steps.pick.outputs.platform }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -200,8 +214,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           arm64=true
+          platform=true
           if [ "$EVENT" = pull_request ]; then
             arm64=false
+            platform=$(git diff --name-only "$BASE_SHA" HEAD | bash scripts/ci-platform-scope.sh)
             if git diff --name-only "$BASE_SHA" HEAD |
               grep -qE '^(desktop/electron/|desktop/cmd/studio-manifest/|desktop/go\.(mod|sum)$|cmd/reasonix-studio-host/|internal/platform/(update|appupdate)/|go\.(mod|sum)$|scripts/(windows-signing-lib|verify-windows-package|verify-windows-authenticode|install-smoke)\.ps1$|\.github/workflows/(studio|release-studio)\.yml$)'; then
               arm64=true
@@ -212,12 +228,15 @@ jobs:
             {"os":"ubuntu-22.04","arch":"amd64","platform":"linux"},
             {"os":"windows-latest","arch":"amd64","platform":"windows","ebarch":"x64"}
           ]'
-          if [ "$arm64" = true ]; then
+          if [ "$platform" = false ]; then
+            legs="$(jq -c 'map(select(.platform == "linux"))' <<<"$legs")"
+          elif [ "$arm64" = true ]; then
             legs="$(jq -c '. + [{"os":"windows-11-arm","arch":"arm64","platform":"windows","ebarch":"arm64"}]' <<<"$legs")"
           else
             legs="$(jq -c . <<<"$legs")"
           fi
           echo "arm64=$arm64" >> "$GITHUB_OUTPUT"
+          echo "platform=$platform" >> "$GITHUB_OUTPUT"
           echo "matrix={\"include\":$legs}" >> "$GITHUB_OUTPUT"
 
   # The packaging contract, on real artifacts rather than on the config that
