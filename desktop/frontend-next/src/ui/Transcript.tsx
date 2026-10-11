@@ -16,7 +16,6 @@ import { ElicitCard } from "./cards/ElicitCard";
 import { SayCard, type ReplyActions } from "./cards/SayCard";
 import { CompactionCard } from "./cards/CompactionCard";
 import { WorkedLine } from "./cards/WorkedLine";
-import { ReceiptCard } from "./cards/ReceiptCard";
 import { ReadsCard } from "./cards/ReadsCard";
 import { UserCard } from "./cards/UserCard";
 import { NoticeCard } from "./cards/NoticeCard";
@@ -24,6 +23,7 @@ import { RememberCard } from "./cards/RememberCard";
 import { ExtensionCard } from "./cards/ExtensionCard";
 import { toolChangedFile, toolFailed } from "./cards/outcome";
 import { drawn, foldStats, repeatedSpeakers, sameMembers, transcriptRows, type Shown } from "./turnrows";
+import { ReceiptSlot } from "./ReceiptSlot";
 import { WorkFold } from "./WorkFold";
 import { opensTurn, useBlocks } from "./blocks";
 import { Rail, type RailMark } from "./Rail";
@@ -754,7 +754,7 @@ const Row = memo(function Row({
     case "remember":
       return <RememberCard m={it.m} forgotten={it.forgotten} onForget={(name) => onForget(it.id, name)} />;
     case "receipt":
-      return <ReceiptCard r={it.r} />;
+      return <ReceiptSlot r={it.r} />;
     case "worked":
       return <WorkedLine ms={it.ms} />;
     case "extension":
@@ -796,3 +796,4 @@ function Hero({ needsProject, onOpen, onKeep }: HeroProps) {
     </div>
   );
 }
+

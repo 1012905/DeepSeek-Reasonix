@@ -22,7 +22,7 @@ const ROUTES = [
   "/changes", "/commit", "/attachments", "/drop", "/checkpoints", "/branches", "/compact", "/compaction", "/rewind",
   "/extensions", "/themes", "/plugins", "/market", "/surfaces", "/feedback",
   "/fork", "/summarize", "/forget", "/bypass", "/auto-approve-tools",
-  "/permissions", "/sandbox", "/progress-watch", "/ask-timeout", "/changed-files-settings", "/fold-work-settings", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update",
+  "/permissions", "/sandbox", "/progress-watch", "/ask-timeout", "/changed-files-settings", "/fold-work-settings", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings",
   "/host", "/notifications", "/share", "/pair", "/device",
   "/slash", "/workspaces", "/welcome", "/usage", "/config", "/studio",
 ];

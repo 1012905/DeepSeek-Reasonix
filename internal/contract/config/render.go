@@ -477,6 +477,9 @@ func RenderTOMLProjectDelta(c *Config) string {
 		if c.UI.FoldTurnWork != d.UI.FoldTurnWork {
 			fmt.Fprintf(&b, "fold_turn_work = %v\n", c.UI.FoldTurnWork)
 		}
+		if c.UI.ShowReceipt != d.UI.ShowReceipt {
+			fmt.Fprintf(&b, "show_receipt = %v\n", c.UI.ShowReceipt)
+		}
 		b.WriteString("\n")
 	}
 
