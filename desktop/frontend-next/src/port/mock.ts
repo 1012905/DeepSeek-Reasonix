@@ -275,6 +275,8 @@ export class MockPort extends MockWorkspace implements AgentPort {
     { label: "/review", insert: "/review ", hint: "复核这一轮改动，给出严重度分级", kind: "subagent" },
     { label: "/init", insert: "/init ", hint: "为这个仓库生成一份项目说明", kind: "skill" },
     { label: "/security-review", insert: "/security-review ", hint: "只读地过一遍安全面", kind: "subagent" },
+    { label: "/mcp__docs__summarize", insert: "/mcp__docs__summarize ", hint: "总结一份文档", kind: "prompt",
+      args: [{ name: "topic", description: "要总结的主题", required: true }, { name: "length", description: "篇幅，如 short 或 long" }] },
   ];
 
   async refinePrompt(draft: string): Promise<string> {
