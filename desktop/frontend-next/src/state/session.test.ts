@@ -271,6 +271,23 @@ describe("a line that is still queued", () => {
     expect(rows(st)[0].queued).toBe("followup");
   });
 
+  // The kernel holds the line for a retry and says so; the queue panel shows it
+  // as blocked. The transcript row must not keep calling itself queued.
+  it("drops the pending row of a line the kernel could not apply, and keeps the notice", () => {
+    const waiting = run([typed("row-1", "x"), queued("row-1", "inbox-9", "steer"), typed("row-2", "y"), queued("row-2", "inbox-10", "steer")]);
+    const st = reduce(waiting, { kind: "notice", code: "unapplied_steer", level: "warn", text: "not applied", itemId: "inbox-9" } as SessionEvent);
+    expect(rows(st).map((r) => r.itemId)).toEqual(["inbox-10"]);
+    expect(st.items.some((i) => i.t === "notice" && i.code === "unapplied_steer")).toBe(true);
+  });
+
+  it("leaves a delivered line alone when a notice names it", () => {
+    const waiting = run([typed("row-1", "x"), queued("row-1", "inbox-9", "steer")]);
+    const read = reduce(waiting, { kind: "steer", text: "x", itemId: "inbox-9" } as SessionEvent);
+    const st = reduce(read, { kind: "notice", code: "unapplied_steer", level: "warn", text: "late", itemId: "inbox-9" } as SessionEvent);
+    expect(rows(st)).toHaveLength(1);
+    expect(rows(st)[0]).toMatchObject({ pending: false, steer: true });
+  });
+
   it("does not name a row for an entry taken back before its receipt landed", () => {
     const st = run([typed("row-1", "x"), { kind: "__unsent", id: "inbox-9" } as SessionEvent, queued("row-1", "inbox-9", "steer")]);
     expect(rows(st)).toEqual([]);
