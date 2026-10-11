@@ -8,7 +8,8 @@ import (
 	"reasonix/internal/contract/event"
 )
 
-var errDisplayCurrencyRetired = errors.New("display currency controller is retired")
+// ErrDisplayCurrencyRetired refuses a save from a replaced or closed controller.
+var ErrDisplayCurrencyRetired = errors.New("display currency controller is retired")
 
 // DisplayCurrencyGroup binds the local controllers that share one persisted
 // preference. Its zero value is ready to use; remote controllers never join it.
@@ -24,7 +25,7 @@ func (g *DisplayCurrencyGroup) Bind(previous, next *Controller, display func(str
 	defer g.mu.Unlock()
 	if previous != nil {
 		if _, live := g.members[previous]; !live {
-			return errDisplayCurrencyRetired
+			return ErrDisplayCurrencyRetired
 		}
 	}
 	if next == nil {
@@ -37,7 +38,7 @@ func (g *DisplayCurrencyGroup) Bind(previous, next *Controller, display func(str
 	next.mu.Lock()
 	if next.gate.closed {
 		next.mu.Unlock()
-		return errDisplayCurrencyRetired
+		return ErrDisplayCurrencyRetired
 	}
 	next.display.currencyGroup = g
 	quote := next.display.quoteContext

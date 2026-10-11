@@ -37,14 +37,14 @@ func (c *Controller) SaveDisplayCurrency(mode string) error {
 		group.mu.Lock()
 		defer group.mu.Unlock()
 		if _, live := group.members[c]; !live {
-			return errDisplayCurrencyRetired
+			return ErrDisplayCurrencyRetired
 		}
 	}
 	c.mu.Lock()
 	closed := c.gate.closed
 	c.mu.Unlock()
 	if closed {
-		return errDisplayCurrencyRetired
+		return ErrDisplayCurrencyRetired
 	}
 	path := config.UserConfigPath()
 	if path == "" {

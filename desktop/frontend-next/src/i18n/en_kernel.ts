@@ -376,6 +376,7 @@ export const EN_KERNEL: Record<string, string> = {
   "无法读取工作区文件列表": "The workspace file list could not be read",
   "该文件不是可编辑文本或超过大小限制": "The file is not editable text or exceeds the size limit",
   "不支持这个币种，只能选自动、CNY 或 USD：{detail}": "That currency is not supported; choose Auto, CNY or USD: {detail}",
+  "运行时已更换，费用显示币种未保存，请重试": "The runtime changed; the display currency was not saved. Try again.",
   "费用显示币种未能保存：{detail}": "The display currency was not saved: {detail}",
   "无进展设置未能保存：{detail}": "The progress settings were not saved: {detail}",
   "自动归档设置未能保存：{detail}": "The auto-archive settings were not saved: {detail}",

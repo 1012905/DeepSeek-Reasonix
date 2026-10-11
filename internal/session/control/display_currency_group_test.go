@@ -88,12 +88,12 @@ func TestDisplayCurrencyGroupRebindsFullSinksAndReplacement(t *testing.T) {
 		t.Fatal("replacement repeated a visible notice")
 	}
 	check(replacement, "USD")
-	if err := previous.controller.SaveDisplayCurrency("CNY"); !errors.Is(err, errDisplayCurrencyRetired) {
+	if err := previous.controller.SaveDisplayCurrency("CNY"); !errors.Is(err, ErrDisplayCurrencyRetired) {
 		t.Fatalf("retired save = %v", err)
 	}
 	previousCount := len(previous.events)
 	locals[2].controller.Close()
-	if err := locals[2].controller.SaveDisplayCurrency("CNY"); !errors.Is(err, errDisplayCurrencyRetired) {
+	if err := locals[2].controller.SaveDisplayCurrency("CNY"); !errors.Is(err, ErrDisplayCurrencyRetired) {
 		t.Fatalf("closed save = %v", err)
 	}
 	closedCount := len(locals[2].events)

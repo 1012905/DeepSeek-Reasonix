@@ -351,6 +351,7 @@ const SAID: Record<string, string> = {
   "browser_tools.save_failed": "内置浏览器设置未能保存：{detail}",
   "browser_tools.no_enabled": "本次请求未说明开关状态，未做任何修改",
   "display_currency.invalid": "不支持这个币种，只能选自动、CNY 或 USD：{detail}",
+  "display_currency.runtime_changed": "运行时已更换，费用显示币种未保存，请重试",
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "progress_watch.save_failed": "无进展设置未能保存：{detail}",
   "auto_archive.save_failed": "自动归档设置未能保存：{detail}",
