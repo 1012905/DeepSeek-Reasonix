@@ -1975,3 +1975,14 @@ test("window state: a saved size is cut to the display it opens on and the windo
   const cut = open(small, [{ x: 0, y: 0, width: 1366, height: 728 }]);
   assert.deepEqual(cut, { x: 0, y: 0, width: 1366, height: 728, maximized: false });
 });
+
+test("kernel acts: show brings the window forward, relaunch arms the restart, quit ends, anything else is ignored", () => {
+  const { actHandler } = require("../src/acts.js");
+  const calls = [];
+  const handle = actHandler({
+    app: { relaunch: () => calls.push("relaunch"), quit: () => calls.push("quit") },
+    showWindow: () => calls.push("show"),
+  });
+  for (const act of ["show", "relaunch", "quit", "unknown"]) handle(act);
+  assert.deepEqual(calls, ["show", "relaunch", "quit"]);
+});
