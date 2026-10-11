@@ -859,6 +859,7 @@ body { background: var(--page) !important; }
 .flow .call[data-k="me"]:hover { background: transparent; border-color: transparent; }
 .flow .call[data-k="me"]::before { display: none; }
 .flow .call[data-k="me"] > .c { width: auto; max-width: 70%; padding: 0; }
+.flow .call[data-k="me"] > .c:has(.reask) { width: 100%; max-width: 100%; }
 .flow .call[data-k="me"] .user-hl { min-height: 0; margin: 0 3px 4px; justify-content: flex-end; flex-wrap: nowrap; contain: inline-size; }
 .flow .user-acts { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 4px; min-height: 26px; contain: inline-size; opacity: 0; transition: opacity var(--m-line); }
 .flow .call > .c:hover .user-acts,
