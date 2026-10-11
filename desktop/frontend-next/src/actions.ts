@@ -58,6 +58,7 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.rail", kind: "view", target: "none", proof: "browser" },
   { id: "appearance.theme", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.nav-rail", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.search", kind: "view", target: "none", proof: "interaction" },
   { id: "session.filter", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.settings", kind: "navigation", target: "none", proof: "interaction" },
@@ -69,6 +70,8 @@ export const ACTIONS: UIAction[] = [
   { id: "tool.copy-output", kind: "shell-native", target: "none", proof: "interaction" },
   // The way out of a window whose assets an update replaced underneath it.
   { id: "chrome.reload", kind: "navigation", target: "none", proof: "interaction" },
+  { id: "chrome.changed-files", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "changes.open", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.receipt", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.keep-awake", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold", kind: "view", target: "none", proof: "interaction" },
@@ -182,6 +185,8 @@ export const ACTIONS: UIAction[] = [
   { id: "community.douyin-qr", kind: "view", target: "none", proof: "interaction" },
   { id: "community.author", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "community.more", kind: "view", target: "none", proof: "interaction" },
+  { id: "sponsor.paypal", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "sponsor.qr", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.open", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.tab", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.category", kind: "view", target: "none", proof: "interaction" },
@@ -412,6 +417,7 @@ export const ACTIONS: UIAction[] = [
   { id: "notify.turn-done", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.approval", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.ask", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "notify.feedback-reply", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.editor", kind: "repeatable", target: "none", proof: "authority-effect" },
   { id: "wallpaper.remove", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "wallpaper.change", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
@@ -503,9 +509,14 @@ export const ACTIONS: UIAction[] = [
   { id: "browser-tools.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
+  { id: "auto-archive.notice-dismiss", kind: "view", target: "none", proof: "interaction" },
+  { id: "auto-archive.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "auto-archive.days", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // The kernel announces the change on the stream, so no rebuild stands between
   // the click and the canonical change.
   { id: "currency.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "ask-timeout.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "ask-timeout.seconds", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.pause", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.rounds", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.token-multiple", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

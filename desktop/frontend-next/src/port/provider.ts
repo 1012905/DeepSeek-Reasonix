@@ -25,6 +25,9 @@ export interface ProviderEntry {
   // at all; webSearch whether it is on. They differ between an account's doors.
   canWebSearch?: boolean;
   webSearch?: boolean;
+  // False where the entry's protocol declares no model listing, so the editor
+  // offers no control to read one. Absent is a kernel that predates the field.
+  canListModels?: boolean;
   // Whether thinking/reasoning_effort may go on the wire. canSetThinking is
   // false where the protocol never carries them, so the switch appears only
   // where a relay can actually reject the request over it.
@@ -183,6 +186,8 @@ export interface ProviderModelCheckRequest {
 // Changing a source that already exists: everything else on the entry stays.
 export interface ProviderEdit {
   name: string;
+  // Omitted leaves the wire format alone.
+  kind?: string;
   baseUrl?: string;
   // Empty keeps the stored key.
   apiKey?: string;
@@ -223,6 +228,8 @@ export interface ModelLimit {
 export interface ModelEffort {
   supportedEfforts: string[];
   defaultEffort?: string;
+  // On an inherited ladder: the vendor's documented contract, not typed levels.
+  official?: boolean;
 }
 
 // What the panel sends back after the user has looked at the probe.

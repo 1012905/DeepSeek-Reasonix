@@ -276,6 +276,15 @@ rules are written in.
   was read, stored, written inline and then overridden every time.
 - `.gutter-l` outranks the rail because the rail is `position: fixed` at 12: a
   seam painted under the panel it divides cannot be grabbed where it matters.
+- A handle never lies over the scrollbar beside it.
+  - The scrollbar is the scroller's own right 10px. The workspace seam's handle starts one pixel inside it; the workbench
+    seam keeps its straddle and the transcript steps 6px in from it while docked (`.pbody` padding), so the handle's
+    inner half is empty ground.
+  - A shut workbench handle is only as tall as its grip, centred on the pane and set left of the scrollbar and the
+    transcript ticks. A full-height strip at the window edge sits on the transcript's scrollbar.
+  - The grip starts the drag itself once the press has travelled; a press that has not stays a click. The cost: a shut
+    column opens by dragging its grip, not any point on the edge.
+  - `perf/gutterhit.mjs` sweeps every row of the scrollbar and drags from it with the real mouse.
 - The rail's floor is 232px (`RAIL.min`); a narrower saved width is raised on
   read.
 - Under 232px the session filter row cannot hold four labels in either
@@ -358,7 +367,9 @@ rules are written in.
 - Rows inside the flow carry no ceiling of their own. A narrower cap on replies
   or user turns puts the steps card and the bubble short of the composer's edge.
 - The full measure moves `--doc` alone: the transcript widens and the composer
-  keeps the reading width, where the line being typed stays one glance.
+  keeps the reading width, where the line being typed stays one glance. The
+  full-all measure is the opt-in that moves `--column` with it, for a reader who
+  wants the composer on the same edges as the transcript.
 - Below 680px both columns take the phone rule instead (see *Phones*).
 - Docking the agent's browser puts the pane on a grid, and the browser's column
   spans the body's row and the composer's. Inside the conversation column `100%`

@@ -14,6 +14,7 @@ type PlatformSender struct{}
 // NewPlatformSender returns the best-effort sender for the current platform.
 func NewPlatformSender() PlatformSender {
 	_ = toast.SetAppData(toast.AppData{AppID: appidentity.AppUserModelID})
+	toast.SetActivationCallback(func(string, []toast.UserData) { activated() })
 	return PlatformSender{}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -177,5 +178,18 @@ func TestAttachmentStillStoresAPlainFile(t *testing.T) {
 	status, _ := postAttachment(t, attachmentServer(t, testenv.TempDir(t)), map[string]string{"mime": "text/plain", "name": "notes.txt", "data": b64([]byte("hello"))})
 	if status != http.StatusOK {
 		t.Fatalf("a text file = %d, want 200", status)
+	}
+}
+
+// The desktop refuses an oversize file before reading it, with its own copy of
+// the cap; the two numbers are one rule.
+func TestDesktopAttachmentCapMatchesTheKernels(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "desktop", "frontend-next", "src", "port", "sse_intake.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("MAX_ATTACHMENT_BYTES = %d * 1024 * 1024", maxAttachmentUpload>>20)
+	if !strings.Contains(string(src), want) {
+		t.Fatalf("sse_intake.ts does not declare %q, the kernel's attachment cap", want)
 	}
 }

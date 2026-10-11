@@ -15,6 +15,7 @@ import { AskCard } from "./cards/AskCard";
 import { ElicitCard } from "./cards/ElicitCard";
 import { SayCard, type ReplyActions } from "./cards/SayCard";
 import { CompactionCard } from "./cards/CompactionCard";
+import { WorkedLine } from "./cards/WorkedLine";
 import { ReceiptCard } from "./cards/ReceiptCard";
 import { ReadsCard } from "./cards/ReadsCard";
 import { UserCard } from "./cards/UserCard";
@@ -719,6 +720,8 @@ const Row = memo(function Row({
       return <RememberCard m={it.m} forgotten={it.forgotten} onForget={(name) => onForget(it.id, name)} />;
     case "receipt":
       return <ReceiptCard r={it.r} />;
+    case "worked":
+      return <WorkedLine ms={it.ms} />;
     case "extension":
       return <ExtensionCard ext={it.ext} onInvoke={onExtInvoke} onSubmit={onExtSubmit} />;
     case "notice":

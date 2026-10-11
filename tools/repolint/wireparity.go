@@ -36,6 +36,7 @@ const (
 // wrong. Declared and not inferred, for the reason the sensitive paths are: no
 // spelling tells a mirrored contract from a struct with json tags.
 var mirroredWireTypes = []wireMirror{
+	{"internal/contract/event/notice_payload.go", "DormantPermissionRule", tsBoundaryFile, "DormantPermissionRule"},
 	{"internal/frontend/serve/branch.go", "workspaceBranchesView", tsWorkspaceFile, "WorkspaceBranches"},
 	{"internal/platform/gitstatus/branches.go", "Branch", tsWorkspaceFile, "WorkspaceBranch"},
 	{"internal/frontend/serve/changes.go", "workspaceGitView", tsWorkspaceFile, "WorkspaceGit"},
@@ -58,6 +59,9 @@ var mirroredWireTypes = []wireMirror{
 	// model's work from the host's own bookkeeping, and a page that cannot read
 	// it folds them together.
 	{"internal/contract/eventwire/wire.go", "Tool", tsWireFile, "Tool"},
+	// The stored files a message references. The host resolved them; a page
+	// that cannot read one has to guess a preview from the reference's spelling.
+	{"internal/contract/eventwire/attachment.go", "Attachment", tsWireFile, "StoredAttachment"},
 	// The canonical task list, which the panel reads rather than derives. A
 	// status the page cannot read is a signed-off step drawn as the current one.
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
@@ -68,6 +72,7 @@ var mirroredWireTypes = []wireMirror{
 	// the kernel side and not on this one, so a reopened session drew
 	// use_capability where the live one drew what it reached.
 	{"internal/frontend/serve/history.go", "historyToolCall", tsSessionFile, "HistoryToolCall"},
+	{"internal/frontend/serve/history.go", "historyMessage", tsSessionFile, "HistoryMessage"},
 	// Who can reach this window from another device. A device the page cannot
 	// list is one the person at the window cannot see to disconnect.
 	{"internal/frontend/serve/device_share.go", "ShareStatus", tsShareFile, "ShareStatus"},
@@ -76,6 +81,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/device_share.go", "ShareOffer", tsShareFile, "ShareOffer"},
 	{"internal/frontend/serve/device_registry.go", "DeviceView", tsShareFile, "PairedDevice"},
 	{"internal/frontend/serve/device_gate.go", "DeviceSelf", tsShareFile, "DeviceSelf"},
+	{"internal/session/control/boundary.go", "PermissionLists", tsBoundaryFile, "PermissionLists"},
+	{"internal/session/control/boundary.go", "PermissionRules", tsBoundaryFile, "PermissionRules"},
 	{"internal/session/control/boundary.go", "SandboxSettings", tsBoundaryFile, "SandboxSettings"},
 	{"internal/session/control/browser_settings.go", "BrowserToolsSettings", tsBoundaryFile, "BrowserToolsSettings"},
 	// The MCP row: a status the host answered with and the page cannot read is a
@@ -107,6 +114,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/contract/eventwire/progress_watch.go", "ProgressWatch", tsWireFile, "ProgressWatch"},
 	{"internal/session/control/display_currency.go", "DisplayCurrencySettings", tsBoundaryFile, "DisplayCurrencySettings"},
 	{"internal/session/control/progress_watch_settings.go", "ProgressWatchSettings", tsBoundaryFile, "ProgressWatchSettings"},
+	{"internal/session/control/changed_files_settings.go", "ChangedFilesSettings", tsBoundaryFile, "ChangedFilesSettings"},
+	{"internal/session/control/ask_timeout.go", "AskTimeoutSettings", tsBoundaryFile, "AskTimeoutSettings"},
+	{"internal/session/control/auto_archive.go", "AutoArchiveSettings", tsBoundaryFile, "AutoArchiveSettings"},
 	// RemoteHostEdit is left out on purpose: the kernel still takes the single
 	// `workspace` an old row was saved with, which the page deliberately does
 	// not send. An under-filled request is not a picture that cannot be read.
@@ -256,8 +266,8 @@ func (w *wireScan) findings(root string) []Finding {
 		}
 		bodies[m.tsFile] = string(raw)
 	}
-	return append(wireParityFindings(mirroredWireTypes, w.fields, bodies),
-		readParityFindings(readMirrors, w.fields)...)
+	out := append(wireParityFindings(mirroredWireTypes, w.fields, bodies), readParityFindings(readMirrors, w.fields)...)
+	return append(out, wireConstantFindings(root, mirroredWireConstants)...)
 }
 
 // readParityFindings checks the one direction a hand-written reader owes: every
@@ -326,14 +336,30 @@ func missingFrom(want, have []string) []string {
 }
 
 // wireFieldNames lists what this struct serialises as. A field the encoder skips
-// is not part of the contract and is not reported.
+// is not part of the contract and is not reported. An embedded struct without a
+// json name contributes its own fields, as encoding/json flattens it. One
+// declared in another file or package is not read here: declare it as a pair of
+// its own, as the intersection types in the desktop's wire.ts do.
 func wireFieldNames(file *ast.File, typeName string) ([]string, bool) {
+	return flattenedWireNames(file, typeName, map[string]bool{})
+}
+
+func flattenedWireNames(file *ast.File, typeName string, seen map[string]bool) ([]string, bool) {
 	st, ok := structNamed(file, typeName)
-	if !ok {
+	if !ok || seen[typeName] {
 		return nil, false
 	}
+	seen[typeName] = true
 	var out []string
 	for _, field := range st.Fields.List {
+		if len(field.Names) == 0 {
+			embedded, ok := embeddedWireNames(file, field, seen)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, embedded...)
+			continue
+		}
 		for _, name := range field.Names {
 			if !name.IsExported() {
 				continue
@@ -344,6 +370,45 @@ func wireFieldNames(file *ast.File, typeName string) ([]string, bool) {
 		}
 	}
 	return out, true
+}
+
+func embeddedWireNames(file *ast.File, field *ast.Field, seen map[string]bool) ([]string, bool) {
+	typ := field.Type
+	if star, ok := typ.(*ast.StarExpr); ok {
+		typ = star.X
+	}
+	var name string
+	switch t := typ.(type) {
+	case *ast.Ident:
+		name = t.Name
+	case *ast.SelectorExpr:
+		name = t.Sel.Name
+	default:
+		return nil, true
+	}
+	wire, keep := wireName(field, name)
+	if !keep {
+		return nil, true
+	}
+	if jsonTagName(field) != "" {
+		return []string{wire}, true
+	}
+	if _, foreign := typ.(*ast.SelectorExpr); foreign {
+		return nil, true
+	}
+	if _, here := structNamed(file, name); !here {
+		return nil, true
+	}
+	return flattenedWireNames(file, name, seen)
+}
+
+func jsonTagName(field *ast.Field) string {
+	if field.Tag == nil {
+		return ""
+	}
+	tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Get("json")
+	name, _, _ := strings.Cut(tag, ",")
+	return name
 }
 
 func structNamed(file *ast.File, typeName string) (*ast.StructType, bool) {
@@ -380,14 +445,24 @@ func wireName(field *ast.Field, goName string) (string, bool) {
 }
 
 var (
-	tsInterfaceRe = regexp.MustCompile(`(?m)^export interface (\w+) \{`)
+	tsInterfaceRe = regexp.MustCompile(`(?m)^export interface (\w+)(?: extends ([\w, ]+))? \{`)
 	tsPropertyRe  = regexp.MustCompile(`^\s*(\w+)\??:`)
 )
 
 // tsInterfaceFields reads one interface's property names and the line it opens
 // on. It reads the declaration's shape, never its wording, which is all a
-// contract is.
+// contract is. An interface it extends contributes its properties, as the
+// compiler's own view of the type does; one declared elsewhere cannot be read
+// and fails the lookup.
 func tsInterfaceFields(body, typeName string) ([]string, int, bool) {
+	return flattenedTSFields(body, typeName, map[string]bool{})
+}
+
+func flattenedTSFields(body, typeName string, seen map[string]bool) ([]string, int, bool) {
+	if seen[typeName] {
+		return nil, 0, false
+	}
+	seen[typeName] = true
 	for _, m := range tsInterfaceRe.FindAllStringSubmatchIndex(body, -1) {
 		if body[m[2]:m[3]] != typeName {
 			continue
@@ -397,6 +472,15 @@ func tsInterfaceFields(body, typeName string) ([]string, int, bool) {
 			return nil, 0, false
 		}
 		var out []string
+		if m[4] >= 0 {
+			for parent := range strings.SplitSeq(body[m[4]:m[5]], ",") {
+				inherited, _, found := flattenedTSFields(body, strings.TrimSpace(parent), seen)
+				if !found {
+					return nil, 0, false
+				}
+				out = append(out, inherited...)
+			}
+		}
 		for line := range strings.SplitSeq(fields, "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "//") {
 				continue

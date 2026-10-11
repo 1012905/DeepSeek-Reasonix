@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
 import { MockShell } from "./mock_shell";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
@@ -104,6 +104,18 @@ export class MockBoundary extends MockShell {
     return { ...this.browser };
   }
 
+  private archive: AutoArchiveSettings = { enabled: false, days: 30, defaultDays: 30, path: "/Users/you/.reasonix/config.toml" };
+
+  async autoArchive(): Promise<AutoArchiveSettings> {
+    return { ...this.archive };
+  }
+
+  async saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings> {
+    if (s.days < 1 || s.days > 3650) throw new Error("auto archive setting out of range");
+    this.archive = { ...this.archive, ...s };
+    return { ...this.archive };
+  }
+
   private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml" };
 
   async displayCurrency(): Promise<DisplayCurrencySettings> {
@@ -115,10 +127,33 @@ export class MockBoundary extends MockShell {
     return { ...this.currency };
   }
 
+  private changedFiles: ChangedFilesSettings = { show: true, path: "/Users/you/.reasonix/config.toml" };
+
+  async changedFilesSettings(): Promise<ChangedFilesSettings> {
+    return { ...this.changedFiles };
+  }
+
+  async saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings> {
+    this.changedFiles = { ...this.changedFiles, show };
+    return { ...this.changedFiles };
+  }
+
   private watch: ProgressWatchSettings = {
     pause: false, rounds: 20, tokenMultiple: 8, defaultRounds: 20, defaultTokenMultiple: 8,
     path: "/Users/you/.reasonix/config.toml",
   };
+
+  private ask: AskTimeoutSettings = { seconds: 0, defaultSeconds: 300, minSeconds: 10, maxSeconds: 86400, path: "/Users/you/.reasonix/config.toml" };
+
+  async askTimeout(): Promise<AskTimeoutSettings> {
+    return { ...this.ask };
+  }
+
+  async saveAskTimeout(seconds: number): Promise<AskTimeoutSettings> {
+    if (seconds !== 0 && (seconds < this.ask.minSeconds || seconds > this.ask.maxSeconds)) throw new Error("ask timeout out of range");
+    this.ask = { ...this.ask, seconds };
+    return { ...this.ask };
+  }
 
   async progressWatch(): Promise<ProgressWatchSettings> {
     return { ...this.watch };

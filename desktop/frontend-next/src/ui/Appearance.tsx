@@ -13,6 +13,7 @@ import { Notifications } from "./Notifications";
 import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
 import { NavRailSection } from "./NavRailSection";
+import { GraphicsSection } from "./GraphicsSection";
 import { ThemeImport } from "./ThemeImport";
 import { useThemeInventory } from "./useThemeInventory";
 
@@ -62,6 +63,7 @@ const WEIGHTS: [string, string, string][] = [
 const MEASURES: [string, string, string][] = [
   ["standard", "适宜阅读", "每行长度控制在一眼能回到行首的范围"],
   ["full", "铺满窗口", "正文跟随窗口宽度，宽屏上不留两侧空白"],
+  ["full-all", "连输入框一起铺满", "正文和输入框都跟随窗口宽度；输入框很宽时一行不易回到行首"],
 ];
 
 const EFFECTS: [EffectsMode, string, string][] = [
@@ -525,6 +527,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <WindowSection port={port} />
       <NavRailSection />
+      <GraphicsSection />
       <Folding />
       <Notifications port={port} />
 

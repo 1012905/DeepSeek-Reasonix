@@ -1,3 +1,4 @@
+import { watchTree } from "./tree_events";
 import { HttpError, type AgentPort } from "./port";
 import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe } from "./remote";
 import type { CloudShareOffer, DeviceSelf, ShareOffer, SharePort, ShareStatus } from "./share";
@@ -41,6 +42,10 @@ export interface TreeSession {
   // pane rather than opening a second writer for one file.
   runtimeId?: string;
   archived?: boolean;
+  // The kernel is the authority for pins.
+  pinned?: boolean;
+  // Unix ms of an automatic archive, absent for a manual one.
+  autoArchivedAt?: number;
   // A turn finished since the person last looked. Absent means seen.
   unread?: boolean;
   // Conflict-recovery copies of this same conversation. A save that keeps
@@ -100,6 +105,7 @@ export interface HubPort extends SharePort {
   open(req: { root?: string; sessionPath?: string }): Promise<RuntimeView>;
   close(id: string): Promise<void>;
   tree(): Promise<TreeWorkspace[]>;
+  onTreeChanged(listener: () => void): () => void;
   addWorkspace(path: string): Promise<TreeWorkspace>;
   removeWorkspace(path: string): Promise<void>;
   /** Show a listed project's folder in the system file manager. */
@@ -107,6 +113,11 @@ export interface HubPort extends SharePort {
   moveWorkspace(path: string, direction: -1 | 1): Promise<void>;
   removeSession(path: string): Promise<void>;
   archiveSession(path: string, archived: boolean): Promise<void>;
+  // Tells the kernel which conversations automatic archiving must leave alone.
+  pinSession(path: string, pinned: boolean): Promise<void>;
+  // Adds pins made before the kernel kept them. The first call also opens the
+  // gate: until then the kernel archives nothing on its own.
+  syncPins(paths: string[]): Promise<void>;
   renameSession(path: string, title: string): Promise<void>;
   exportSession(path: string): Promise<{ name: string; content: string }>;
   importLegacySessions(path: string, workspace: string): Promise<LegacyImport>;
@@ -230,6 +241,10 @@ export class SseHub implements HubPort {
     this.ports.delete(id);
   }
 
+  onTreeChanged(listener: () => void) {
+    return watchTree(listener);
+  }
+
   tree() {
     return this.get<TreeWorkspace[]>("/tree");
   }
@@ -257,6 +272,14 @@ export class SseHub implements HubPort {
 
   async archiveSession(path: string, archived: boolean) {
     await this.post<void>("/tree/sessions/archive", { path, archived });
+  }
+
+  async pinSession(path: string, pinned: boolean) {
+    await this.post<void>("/tree/sessions/pin", { path, pinned });
+  }
+
+  async syncPins(paths: string[]) {
+    await this.post<void>("/tree/sessions/pins", { paths });
   }
 
   async renameSession(path: string, title: string) {

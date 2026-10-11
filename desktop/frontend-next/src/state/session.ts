@@ -18,6 +18,7 @@ import { askFromCall, promptOpen, prompted, sealByReceipt } from "./prompts";
 import { nameTurnStart, othersSteer } from "./turn_start";
 import { appendText, foldMessage, sealSay } from "./say";
 import { nextId } from "./ids";
+import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
 import { nameQueued } from "./queued";
@@ -518,7 +519,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         (i) => i.t === "user" && i.pending && (ev.itemId ? i.itemId === ev.itemId : i.text === ev.text),
       );
       if (at < 0) return { ...s, steerQueue: q, items: othersSteer(s.items, ev) };
-      const row = { ...(s.items[at] as Extract<Item, { t: "user" }>), pending: false, steer: true, via: ev.via };
+      const row = { ...(s.items[at] as Extract<Item, { t: "user" }>), pending: false, steer: true, via: ev.via, attachments: ev.attachments };
       return { ...s, steerQueue: q, items: [...s.items.slice(0, at), ...s.items.slice(at + 1), row] };
     }
 
@@ -606,7 +607,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         doing: ev.outcome === "no_progress" ? "已暂停" : ev.cancelled ? "已取消" : ev.err ? "已中断" : "已完成",
         waiting: {},
         plan: livePlan(s.plan),
-        items: withReceipt(sealTurn(sealSay(s.items, true), ev.outcome === "no_progress" || ev.cancelled ? undefined : ev.err), ev.receipt),
+        items: withReceipt([...sealTurn(sealSay(s.items, true), ev.outcome === "no_progress" || ev.cancelled ? undefined : ev.err), ...worked(ev.workDurationMs)], ev.receipt),
       };
 
     default:
@@ -705,7 +706,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
       // after an upgrade as well as for newly written history.
       const legacyHostRepair = m.content.startsWith("The following tools are unavailable in the current workflow phase:");
       const text = m.hostAuthored || legacyHostRepair ? "" : stripControl(m.content);
-      if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex, steer: m.steer, via: m.via });
+      if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex, steer: m.steer, via: m.via, attachments: m.attachments });
       continue;
     }
     if (m.role === "assistant") {
@@ -737,6 +738,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
           out.push({ t: "say", id: nextId(), text: part.text, reasoning, done: true, model: m.modelRef, thoughtMs: reasoning ? m.thoughtMs : undefined });
           reasoning = undefined;
         }
+        out.push(...worked(m.workDurationMs));
       }
       for (const c of m.toolCalls ?? []) {
         if (c.id) {

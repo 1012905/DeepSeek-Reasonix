@@ -7,6 +7,7 @@ package event
 // wording edits in Go no longer silently break localization. Values are
 // wire-stable: never rename or reuse one once shipped.
 const (
+	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
@@ -32,6 +33,7 @@ const (
 	NoticeCodeSessionRecoveryDepthCap                           = "session_recovery_depth_cap"
 	NoticeCodeSessionShutdownRecoveryForked                     = "session_shutdown_recovery_forked"
 	NoticeCodeVerificationStalled                               = "verification_stalled"
+	NoticeCodeAskTimeoutInvalid                                 = "ask_timeout_invalid"
 	NoticeCodeDecisionReceipt, NoticeCodeContextEditingFallback = "decision_receipt", "context_editing_fallback"
 	// A reported lease wait always arrives as a pair: one of the two below
 	// closes the one above, so no surface is left holding an open wait.
@@ -49,6 +51,8 @@ const (
 	// A project-declared MCP server held off until the user approves what it runs:
 	// never approved, or changed since it was. Detail is the launch line.
 	NoticeCodeProjectMCPAwaitingApproval, NoticeCodeProjectMCPChanged = "project_mcp_awaiting_approval", "project_mcp_changed"
+	// MCP tools whose definitions are new or changed since approval, withheld from the model; Detail lists them.
+	NoticeCodeMCPToolsHeld = "mcp_tools_held"
 	// A conversation opened from a 1.x log went on in a new session of its own.
 	NoticeCodeSessionContinuedFrom1x = "session_continued_from_1x"
 	// The user config names a default approval mode this build does not know; it loads as ask.

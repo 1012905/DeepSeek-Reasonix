@@ -79,6 +79,9 @@ type providerView struct {
 	// has no format for it, so the answer differs per protocol on one account.
 	CanWebSearch bool `json:"canWebSearch"`
 	WebSearch    bool `json:"webSearch"`
+	// CanListModels is false where the protocol declares no model listing, so
+	// the editor does not offer to read one.
+	CanListModels bool `json:"canListModels"`
 	// SendsThinking is whether thinking/reasoning_effort may go on the wire.
 	// CanSetThinking is false where the protocol never carries them, so the UI
 	// offers the switch only where a gateway can actually reject the request.
@@ -153,6 +156,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			VisionSettable:     nonNilStrings(settable),
 			CanWebSearch:       config.HasServerWebSearchCapability(p),
 			WebSearch:          config.EffectiveWebSearch(p),
+			CanListModels:      config.CanListModels(p),
 			CanSetThinking:     config.CanConfigureThinkingParams(p),
 			SendsThinking:      config.SendsThinkingParams(p),
 			EffortField:        config.EffortFieldForEntry(p),
@@ -429,7 +433,8 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 func removalSuccessor(cfg *config.Config) string {
 	target := cfg.DefaultModel
 	if _, found := cfg.ResolveModel(target); !found && target != "" {
-		target, _, _ = cfg.ResolveStartupChatModel()
+		start, _ := cfg.ResolveStartupChatModel()
+		target = start.Ref
 	}
 	return target
 }

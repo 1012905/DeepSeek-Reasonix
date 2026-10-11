@@ -158,6 +158,8 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
+  onTreeChanged(_listener: () => void) { return () => {}; }
+
   tree() {
     const open = new Map(this.views.filter((v) => v.sessionPath).map((v) => [v.sessionPath!, v.id]));
     return Promise.resolve(
@@ -208,6 +210,14 @@ export class MockHub implements HubPort {
   }
 
   archiveSession(_path: string, _archived: boolean) {
+    return Promise.resolve();
+  }
+
+  pinSession(_path: string, _pinned: boolean) {
+    return Promise.resolve();
+  }
+
+  syncPins(_paths: string[]) {
     return Promise.resolve();
   }
 

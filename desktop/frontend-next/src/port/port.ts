@@ -41,7 +41,7 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -146,6 +146,7 @@ export interface NotifyPrefs {
   turnDone: boolean;
   approval: boolean;
   ask: boolean;
+  feedbackReply: boolean;
 }
 
 export interface TrayPrefs {
@@ -264,9 +265,16 @@ export interface AgentPort {
   displayCurrency(): Promise<DisplayCurrencySettings>;
   // Applies live: the kernel announces it and every ledger rebinds; no rebuild.
   saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
+  changedFilesSettings(): Promise<ChangedFilesSettings>;
+  saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
+  askTimeout(): Promise<AskTimeoutSettings>;
+  saveAskTimeout(seconds: number): Promise<AskTimeoutSettings>;
+  autoArchive(): Promise<AutoArchiveSettings>;
+  // Read by the kernel's background sweep on each pass; no rebuild.
+  saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
   // null in a browser tab: there is no window to keep running.
   trayPrefs(): Promise<TrayPrefs | null>;
   setTrayPrefs(icon: boolean, closeToTray: boolean): Promise<TrayPrefs | null>;
@@ -381,6 +389,9 @@ export interface AgentPort {
   replyFeedback(receipt: string, body: string): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
+  // Asks the window to raise the neutral "new reply" notification; the kernel
+  // answers for the switches. Rejects where there is no window to raise it.
+  announceFeedbackReply(): Promise<void>;
   workspaces(): Promise<WorkspaceInfo>;
   // Rebuilds the whole runtime against another folder. The conversation does
   // not come along, so the caller has to reload the transcript afterwards.

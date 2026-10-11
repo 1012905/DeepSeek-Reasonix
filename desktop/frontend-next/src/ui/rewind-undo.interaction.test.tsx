@@ -10,7 +10,7 @@ import type { RuntimeView } from "../port/hub";
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 const original: HistoryMessage[] = [
-  { role: "user", content: "Restore this turn", msgIndex: 0 },
+  { role: "user", content: "Restore this turn", msgIndex: 0, attachments: [{ path: ".reasonix/attachments/restore-picture.png" }] },
   { role: "assistant", content: "Updated file.txt", msgIndex: 1 },
 ];
 const props = {
@@ -48,6 +48,21 @@ async function restore(scope = "代码和对话") {
   fireEvent.click(screen.getByRole("button", { name: "回到这里" }));
   fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(scope) }));
 }
+
+it("preserves canonical attachments through conversation restore and undo", async () => {
+  const { port, undo } = await open();
+  const image = () => screen.getByRole("img", { name: "restore-picture.png" });
+  const src = port.workspaceImageURL(".reasonix/attachments/restore-picture.png");
+  expect(image().getAttribute("src")).toBe(src);
+  await restore();
+  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "撤销这次还原" });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  expect(screen.queryByRole("img", { name: "restore-picture.png" })).toBeNull();
+  fireEvent.click(button);
+  await waitFor(() => expect(undo).toHaveBeenCalledExactlyOnceWith("tx-1"));
+  await screen.findByRole("button", { name: "回到这里" });
+  expect(image().getAttribute("src")).toBe(src);
+});
 
 it.each([true, false])("keeps undo through the real Pane reload with conversation removal %j", async (conversation) => {
   const { reads, undo } = await open(conversation);
