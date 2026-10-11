@@ -5,6 +5,7 @@ import (
 	"reasonix/internal/state/sessionstore"
 
 	"reasonix/internal/base/diff"
+	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/eventwire"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
@@ -29,6 +30,9 @@ type historyMessage struct {
 	// themselves: a turn that was only an image has no text to rebuild from,
 	// and a reader that sees zero of both drops it as host chrome.
 	Images int `json:"images,omitempty"`
+	// Attachments are the stored files the message references, resolved by the
+	// host so a reopened transcript previews what the live one did.
+	Attachments []eventwire.Attachment `json:"attachments,omitempty"`
 	// The session index this message occupies, which is what a checkpoint's
 	// boundary names. A reader rebuilding a transcript joins on it rather than
 	// on where a row happened to land after host chrome was dropped.
@@ -62,6 +66,18 @@ type historyMessage struct {
 }
 
 func historyMessages(msgs []provider.Message) []historyMessage {
+	return historyMessagesWith(msgs, nil)
+}
+
+// historyMessagesWith also names the stored attachments each user message
+// references, through the host's resolver.
+func historyMessagesWith(msgs []provider.Message, attachments func(string) []event.Attachment) []historyMessage {
+	attached := func(text string) []eventwire.Attachment {
+		if attachments == nil {
+			return nil
+		}
+		return eventwire.ToWireAttachments(attachments(text))
+	}
 	out := make([]historyMessage, 0, len(msgs))
 	for i, m := range msgs {
 		// A steer is the person speaking into a running turn, so it stays a
@@ -73,6 +89,9 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 					Role: string(provider.RoleUser), Content: steerText, Steer: true,
 					HostAuthored: host || m.HostAuthored, MsgIndex: i, Via: eventwire.ToWireVia(m.Via),
 				})
+				if !host && !m.HostAuthored {
+					out[len(out)-1].Attachments = attached(steerText)
+				}
 				continue
 			}
 		}
@@ -83,6 +102,9 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 			hm.Content = sessionstore.UserMessageText(m)
 			hm.Images = len(m.Images)
 			hm.Via = eventwire.ToWireVia(m.Via)
+			if !m.HostAuthored {
+				hm.Attachments = attached(hm.Content)
+			}
 		}
 		if m.Role == provider.RoleAssistant {
 			hm.ModelRef = m.ModelRef
@@ -116,7 +138,7 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 // if the client sends If-None-Match with the current ETag, the server returns
 // 304 Not Modified with no body, saving bandwidth on reconnects.
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
-	msgs := historyMessages(s.ctl().History())
+	msgs := historyMessagesWith(s.ctl().History(), s.ctl().StoredAttachments)
 	markHistoryDiffs(msgs, s.ctl().EmbeddedDiffDetectionEnabled())
 	writeJSONCached(w, r, msgs)
 }

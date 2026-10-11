@@ -1,6 +1,6 @@
 // What a session is made of, apart from the reducer that maintains it: the
 // rows the transcript draws and the state one turn hands the next.
-import type { Ask, Approval, Compaction, CostCoverage, ExtensionSurface, Guardian, Receipt, Tool, Via, WorkspaceLease } from "../port/wire";
+import type { Ask, Approval, Compaction, CostCoverage, ExtensionSurface, Guardian, Receipt, StoredAttachment, Tool, Via, WorkspaceLease } from "../port/wire";
 import type { Sample } from "../port/tokens";
 import type { Executions } from "./executions";
 
@@ -25,6 +25,7 @@ export type Item =
       msgIndex?: number;
       // The paired device it was sent from; absent is the window.
       via?: Via;
+      attachments?: StoredAttachment[];
     }
   // source names which model wrote it — a turn can carry two, and the card is
   // where the answer has to survive.
