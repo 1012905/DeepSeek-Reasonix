@@ -582,6 +582,9 @@ type Event struct {
 	// the window. Text carries the message itself, which a client that did not
 	// send it has no other way to draw.
 	Via *provider.Via
+	// TurnStarted / Steer: the stored attachments the message references, as
+	// the host resolved them.
+	Attachments []Attachment
 	// Steer: the host wrote this guidance, so no client draws it as the user's.
 	HostAuthored     bool
 	Compaction       Compaction          // Compaction

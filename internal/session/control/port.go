@@ -370,6 +370,10 @@ type Input interface {
 	ComposeSynthetic(text string) string
 	ResolveRefs(ctx context.Context, line string) (block string, errs []string)
 	HasRefs(line string) bool
+	// StoredAttachments is the attachments a message references that the host
+	// stored, so a transcript draws them from a field instead of reading the
+	// text for a spelling.
+	StoredAttachments(text string) []event.Attachment
 	CompletionData(lang string) CompletionData
 	ImageInputEnabled() bool
 	DroppedRef(path string) (token, displayPath string, err error)

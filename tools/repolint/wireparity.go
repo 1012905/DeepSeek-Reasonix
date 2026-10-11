@@ -59,6 +59,9 @@ var mirroredWireTypes = []wireMirror{
 	// model's work from the host's own bookkeeping, and a page that cannot read
 	// it folds them together.
 	{"internal/contract/eventwire/wire.go", "Tool", tsWireFile, "Tool"},
+	// The stored files a message references. The host resolved them; a page
+	// that cannot read one has to guess a preview from the reference's spelling.
+	{"internal/contract/eventwire/attachment.go", "Attachment", tsWireFile, "StoredAttachment"},
 	// The canonical task list, which the panel reads rather than derives. A
 	// status the page cannot read is a signed-off step drawn as the current one.
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
@@ -69,6 +72,7 @@ var mirroredWireTypes = []wireMirror{
 	// the kernel side and not on this one, so a reopened session drew
 	// use_capability where the live one drew what it reached.
 	{"internal/frontend/serve/history.go", "historyToolCall", tsSessionFile, "HistoryToolCall"},
+	{"internal/frontend/serve/history.go", "historyMessage", tsSessionFile, "HistoryMessage"},
 	// Who can reach this window from another device. A device the page cannot
 	// list is one the person at the window cannot see to disconnect.
 	{"internal/frontend/serve/device_share.go", "ShareStatus", tsShareFile, "ShareStatus"},

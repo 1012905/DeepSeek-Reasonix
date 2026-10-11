@@ -334,6 +334,7 @@ func (c *Controller) announceAuthoredTurn(ctx context.Context, raw string, msgIn
 		// the way history reads it, so a reload draws the same line.
 		started.Text = sessionstore.UserMessageText(provider.Message{Role: provider.RoleUser, RawContent: raw})
 		started.Via = via
+		started.Attachments = c.StoredAttachments(started.Text)
 	}
 	c.sink.Emit(started)
 	return agent.WithHostTurnBoundary(ctx, boundary)
