@@ -29,6 +29,7 @@ func (a *Agent) recordToolReceipts(ctx context.Context, plan *toolCallPlan, resu
 		rec := evidence.ReceiptFromToolCall(plan.evidenceName, plan.evidenceArgs, err == nil, plan.facts())
 		decorateExecutionReceipt(&rec, result, execution)
 		decorateObservedPaths(&rec, plan)
+		a.stampHostOwned(&rec)
 		a.settleUnchangedWorkspace(ctx, &rec, plan)
 		a.reviewCoverageOf(&rec, plan, result)
 		a.task.ledger.Record(rec)
@@ -41,6 +42,7 @@ func (a *Agent) recordToolReceipts(ctx context.Context, plan *toolCallPlan, resu
 		}
 		decorateExecutionReceipt(&rec, result, execution)
 		decorateObservedPaths(&rec, plan)
+		a.stampHostOwned(&rec)
 		a.settleUnchangedWorkspace(ctx, &rec, plan)
 		a.reviewCoverageOf(&rec, plan, result)
 		stampReviewGrant(&rec, plan)

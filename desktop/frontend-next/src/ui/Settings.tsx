@@ -30,7 +30,9 @@ import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
+import { AskTimeout } from "./AskTimeout";
 import { ProgressWatch } from "./ProgressWatch";
+import { ChangedFilesSetting } from "./ChangedFilesSetting";
 import { AutoArchive } from "./AutoArchive";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
@@ -54,13 +56,8 @@ import { SAVED_NOT_APPLIED, reason } from "../i18n/kernel";
 import { SettingsHeading } from "./SettingsHeading";
 import { APPROVALS, approvalName, approvalNote } from "./approvals";
 
-// What still lives in the old desktop app. Bots are not on the roadmap, so
-// they are not a promise to keep here either. Signing in and reading
-// versions landed here; downloading and applying an update did not, and naming
-// only that half keeps this list a fact rather than a promise.
-// Everything that used to live here has a home now, so the 「高级」 tab filters
-// itself out below. Keep the list rather than the tab: the next thing that is
-// real but not built yet belongs in one line here, not in a half-made panel.
+// An empty list hides Advanced. Only features available in the legacy app
+// without a settings page here belong in this list.
 const ELSEWHERE: string[] = [];
 
 // The user's question is "is it there and does it work", so the state is the
@@ -501,6 +498,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   />
                 </div>
               </Group>
+              <ChangedFilesSetting port={port} />
+              <AskTimeout port={port} />
               <ProgressWatch port={port} />
               <AutoArchive port={port} />
               <Group id="session-dir" title={t("会话写入位置")}>

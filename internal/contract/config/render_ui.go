@@ -33,5 +33,6 @@ func renderUISection(b *strings.Builder, c *Config, scope RenderScope) {
 		b.WriteString("# show_reasoning = true   # CLI: show thinking text by default; false = collapsed (toggle with Ctrl+O)\n")
 	}
 	fmt.Fprintf(b, "show_turn_usage = %v   # CLI/TUI: show per-request token and cost receipts in the transcript\n", c.UI.ShowTurnUsage)
+	fmt.Fprintf(b, "show_changed_files = %v   # Studio: show the changed-files pill above the composer; false = the count stays in the branch chip\n", c.UI.ShowChangedFiles)
 	b.WriteString("\n")
 }

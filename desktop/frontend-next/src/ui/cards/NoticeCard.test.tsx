@@ -230,4 +230,17 @@ describe("a background job notice", () => {
     expect(text({ code: undefined, text: "background bash finished: bash-126", detail: undefined })).toBe("background bash finished: bash-126");
     expect(text({ code: "job_finished", text: "background bash finished: bash-1", detail: "not json" })).toBe("background bash finished: bash-1");
   });
+
+  it("words a failed job from its typed exit, not from the raw error text", () => {
+    const detail = (extra: object) => JSON.stringify({ kind: "bash", id: "bash-9", label: "make", error: "exit status 2", ...extra });
+    const exit = draw({ code: "job_failed", text: "english", detail: detail({ exitCode: 2 }) });
+    expect(exit.querySelector(".nwhy")?.textContent).toBe(t("退出码 {code}", { code: 2 }));
+    expect(exit.textContent).not.toContain("exit status");
+    cleanup();
+    const signaled = draw({ code: "job_failed", text: "english", detail: detail({ exitCode: -1, signal: 9 }) });
+    expect(signaled.querySelector(".nwhy")?.textContent).toBe(t("被信号 {signal} 终止", { signal: 9 }));
+    cleanup();
+    const untyped = draw({ code: "job_failed", text: "english", detail: detail({}) });
+    expect(untyped.querySelector(".nwhy")?.textContent).toBe("exit status 2");
+  });
 });

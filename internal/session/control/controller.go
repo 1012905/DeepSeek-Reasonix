@@ -1212,6 +1212,12 @@ type closeJobsMode int
 const (
 	closeJobsWithGrace closeJobsMode = iota
 	closeJobsAsync
+	// closeJobsHandedOff leaves the manager to a replacement controller, so
+	// the jobs run on; cleanup waits for those jobs, which still use what it
+	// would release.
+	closeJobsHandedOff
+	// closeJobsShared closes a controller that only borrowed the manager.
+	closeJobsShared
 )
 
 // SetBypass is the legacy name for SetAutoApproveTools. Keep it for existing

@@ -1,3 +1,4 @@
+import { watchTree } from "./tree_events";
 import { HttpError, type AgentPort } from "./port";
 import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe } from "./remote";
 import type { CloudShareOffer, DeviceSelf, ShareOffer, SharePort, ShareStatus } from "./share";
@@ -104,6 +105,7 @@ export interface HubPort extends SharePort {
   open(req: { root?: string; sessionPath?: string }): Promise<RuntimeView>;
   close(id: string): Promise<void>;
   tree(): Promise<TreeWorkspace[]>;
+  onTreeChanged(listener: () => void): () => void;
   addWorkspace(path: string): Promise<TreeWorkspace>;
   removeWorkspace(path: string): Promise<void>;
   /** Show a listed project's folder in the system file manager. */
@@ -241,6 +243,10 @@ export class SseHub implements HubPort {
     await this.post<void>(`/runtimes/${encodeURIComponent(id)}/close`);
     this.ports.delete(id);
     this.settings.delete(id);
+  }
+
+  onTreeChanged(listener: () => void) {
+    return watchTree(listener);
   }
 
   tree() {

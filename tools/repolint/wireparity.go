@@ -59,6 +59,9 @@ var mirroredWireTypes = []wireMirror{
 	// model's work from the host's own bookkeeping, and a page that cannot read
 	// it folds them together.
 	{"internal/contract/eventwire/wire.go", "Tool", tsWireFile, "Tool"},
+	// The stored files a message references. The host resolved them; a page
+	// that cannot read one has to guess a preview from the reference's spelling.
+	{"internal/contract/eventwire/attachment.go", "Attachment", tsWireFile, "StoredAttachment"},
 	// The canonical task list, which the panel reads rather than derives. A
 	// status the page cannot read is a signed-off step drawn as the current one.
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
@@ -69,6 +72,7 @@ var mirroredWireTypes = []wireMirror{
 	// the kernel side and not on this one, so a reopened session drew
 	// use_capability where the live one drew what it reached.
 	{"internal/frontend/serve/history.go", "historyToolCall", tsSessionFile, "HistoryToolCall"},
+	{"internal/frontend/serve/history.go", "historyMessage", tsSessionFile, "HistoryMessage"},
 	// Who can reach this window from another device. A device the page cannot
 	// list is one the person at the window cannot see to disconnect.
 	{"internal/frontend/serve/device_share.go", "ShareStatus", tsShareFile, "ShareStatus"},
@@ -110,6 +114,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/contract/eventwire/progress_watch.go", "ProgressWatch", tsWireFile, "ProgressWatch"},
 	{"internal/session/control/display_currency.go", "DisplayCurrencySettings", tsBoundaryFile, "DisplayCurrencySettings"},
 	{"internal/session/control/progress_watch_settings.go", "ProgressWatchSettings", tsBoundaryFile, "ProgressWatchSettings"},
+	{"internal/session/control/changed_files_settings.go", "ChangedFilesSettings", tsBoundaryFile, "ChangedFilesSettings"},
+	{"internal/session/control/ask_timeout.go", "AskTimeoutSettings", tsBoundaryFile, "AskTimeoutSettings"},
 	{"internal/session/control/auto_archive.go", "AutoArchiveSettings", tsBoundaryFile, "AutoArchiveSettings"},
 	// RemoteHostEdit is left out on purpose: the kernel still takes the single
 	// `workspace` an old row was saved with, which the page deliberately does
@@ -260,8 +266,8 @@ func (w *wireScan) findings(root string) []Finding {
 		}
 		bodies[m.tsFile] = string(raw)
 	}
-	return append(wireParityFindings(mirroredWireTypes, w.fields, bodies),
-		readParityFindings(readMirrors, w.fields)...)
+	out := append(wireParityFindings(mirroredWireTypes, w.fields, bodies), readParityFindings(readMirrors, w.fields)...)
+	return append(out, wireConstantFindings(root, mirroredWireConstants)...)
 }
 
 // readParityFindings checks the one direction a hand-written reader owes: every

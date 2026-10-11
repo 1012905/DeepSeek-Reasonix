@@ -27,6 +27,8 @@ type turnRuntime struct {
 	executorHandoff bool
 	input           string
 	workDurationMs  func() int64
+	// answeredMs is the run time at the last answer that asked for no tool.
+	answeredMs int64
 
 	// budget is the turn's spend axis: tokens, money, wall clock.
 	budget runBudget

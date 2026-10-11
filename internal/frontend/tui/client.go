@@ -156,17 +156,18 @@ func (c *Client) SetApprovalMode(ctx context.Context, mode string) error {
 
 // HistoryMessage is one record of the session as /history returns it.
 type HistoryMessage struct {
-	Role         string            `json:"role"`
-	Content      string            `json:"content"`
-	Reasoning    string            `json:"reasoning,omitempty"`
-	MsgIndex     int               `json:"msgIndex"`
-	HostAuthored bool              `json:"hostAuthored,omitempty"`
-	Steer        bool              `json:"steer,omitempty"`
-	ThoughtMs    int64             `json:"thoughtMs,omitempty"`
-	ToolCalls    []HistoryToolCall `json:"toolCalls,omitempty"`
-	ToolCallID   string            `json:"toolCallId,omitempty"`
-	ToolFailed   bool              `json:"toolFailed,omitempty"`
-	ToolName     string            `json:"toolName,omitempty"`
+	Role           string            `json:"role"`
+	Content        string            `json:"content"`
+	Reasoning      string            `json:"reasoning,omitempty"`
+	MsgIndex       int               `json:"msgIndex"`
+	HostAuthored   bool              `json:"hostAuthored,omitempty"`
+	Steer          bool              `json:"steer,omitempty"`
+	ThoughtMs      int64             `json:"thoughtMs,omitempty"`
+	WorkDurationMs int64             `json:"workDurationMs,omitempty"`
+	ToolCalls      []HistoryToolCall `json:"toolCalls,omitempty"`
+	ToolCallID     string            `json:"toolCallId,omitempty"`
+	ToolFailed     bool              `json:"toolFailed,omitempty"`
+	ToolName       string            `json:"toolName,omitempty"`
 	// OutputDiff marks a rebuilt shell result whose whole output is a unified
 	// diff, re-derived by the server so a reopened session renders it as one.
 	OutputDiff bool `json:"outputDiff,omitempty"`

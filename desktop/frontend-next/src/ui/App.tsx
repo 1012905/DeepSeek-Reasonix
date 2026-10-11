@@ -1,3 +1,4 @@
+import { watchTreeWake } from "./treewake";
 import { usePinnedSessions } from "./usePinnedSessions";
 import { AutoArchiveNotice } from "./AutoArchiveNotice";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -154,13 +155,13 @@ export function App({ hub }: { hub: HubPort }) {
     setReport(reportsRef.current[active] ?? NO_REPORT);
   }, [active]);
 
-  const reloadTree = useCallback(
-    () =>
+  const reloadTree = useMemo(
+    () => singleFlight(() =>
       hub
         .tree()
         .then(setTree)
         .catch(() => {})
-        .finally(() => setTreeRead(true)),
+        .finally(() => setTreeRead(true))),
     [hub],
   );
 
@@ -188,8 +189,15 @@ export function App({ hub }: { hub: HubPort }) {
   const refreshPanes = useMemo(() => singleFlight(reloadPanes), [reloadPanes]);
 
   useEffect(() => {
-    void reloadPanes();
-  }, [reloadPanes]);
+    void refreshPanes();
+  }, [refreshPanes]);
+
+  useEffect(() => {
+    const refresh = () => { void refreshPanes(); };
+    const stop = hub.onTreeChanged?.(refresh);
+    const stopWake = watchTreeWake(refresh);
+    return () => { stop?.(); stopWake(); };
+  }, [hub, refreshPanes]);
 
   const reloadRemotes = useCallback(
     () =>

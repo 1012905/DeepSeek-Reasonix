@@ -19,6 +19,7 @@ import (
 	"reasonix/internal/runtime/guardian"
 	"reasonix/internal/runtime/promptrefine"
 	"reasonix/internal/runtime/recovery"
+	"reasonix/internal/runtime/taskmonitor"
 	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/safety/permission"
 	"reasonix/internal/safety/sandbox"
@@ -99,7 +100,8 @@ type controllerDeps struct {
 	// jobs is the session-scoped background-job manager. The agent's background
 	// tools spawn into it; Compose drains its completion notes into the next turn;
 	// Close cancels its still-running jobs.
-	jobs *jobs.Manager
+	jobs      *jobs.Manager
+	taskStore taskmonitor.WriteStore
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
 	workspaceLease *workspacelease.Owner
@@ -171,6 +173,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		balance:                opts.Balance,
 		feedback:               opts.Feedback,
 		jobs:                   opts.Jobs,
+		taskStore:              opts.TaskStore,
 		workspaceLease:         opts.WorkspaceLease,
 		mcp:                    newMcpManager(opts.Host, opts.Registry, pluginCtx, opts.MCPDefaultCallTimeout),
 		mcpConfigureSpec:       opts.MCPConfigureSpec,
