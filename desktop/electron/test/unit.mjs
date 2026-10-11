@@ -1986,3 +1986,35 @@ test("kernel acts: show brings the window forward, relaunch arms the restart, qu
   for (const act of ["show", "relaunch", "quit", "unknown"]) handle(act);
   assert.deepEqual(calls, ["show", "relaunch", "quit"]);
 });
+
+test("tray: the menu is replaced only when what it says changes, so an open menu is not torn down by the poll", async () => {
+  const { installTray } = require("../src/tray.js");
+  const menus = [];
+  let tips = 0;
+  class FakeTray {
+    on() {}
+    setImage() {}
+    setToolTip() { tips++; }
+    setContextMenu(menu) { menus.push(menu); }
+    destroy() {}
+  }
+  const electron = {
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    Tray: FakeTray,
+    nativeImage: { createFromPath: () => ({ isEmpty: () => false }), createFromBuffer: () => ({ isEmpty: () => false }) },
+    screen: { getPrimaryDisplay: () => ({ scaleFactor: 1 }), on() {}, removeListener() {} },
+  };
+  let fold = { line: "1 running", labels: { open: "Open", quit: "Quit", closeToTray: "Keep running" } };
+  const host = { trayPrefs: async () => ({ closeToTray: false }), trayState: async () => fold, setTrayPrefs: async () => ({ closeToTray: true }) };
+  const tray = installTray(host, { onOpen() {}, onQuit() {} }, electron);
+  await tray.refresh();
+  await tray.refresh();
+  await tray.refresh();
+  assert.equal(menus.length, 1, "three identical reads rebuilt the menu");
+  assert.equal(tips, 1);
+  fold = { ...fold, line: "2 running" };
+  await tray.refresh();
+  assert.equal(menus.length, 2);
+  assert.equal(menus[1].template.find((item) => item.enabled === false).label, "2 running");
+  tray.close();
+});
