@@ -406,16 +406,15 @@ func (c *Config) SetCLITelemetryMode(mode string) error {
 }
 
 // SetDesktopConversationWidth sets the max transcript width preference.
-// standard = 960px fixed; full = 90% of the parent, with a 960px floor.
-// An empty value resets to standard.
+// standard reads; full widens the transcript; full-all the composer too.
 func (c *Config) SetDesktopConversationWidth(width string) error {
 	switch strings.ToLower(strings.TrimSpace(width)) {
 	case "", "standard":
 		c.Desktop.ConversationWidth = "standard"
-	case "full":
-		c.Desktop.ConversationWidth = "full"
+	case "full", "full-all":
+		c.Desktop.ConversationWidth = strings.ToLower(strings.TrimSpace(width))
 	default:
-		return fmt.Errorf("conversation width %q: must be standard|full", width)
+		return fmt.Errorf("conversation width %q: must be standard|full|full-all", width)
 	}
 	return nil
 }

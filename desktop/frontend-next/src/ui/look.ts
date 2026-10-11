@@ -74,7 +74,7 @@ export function apply(look: Appearance | null, busy = false) {
   // only one with two honest answers: a line short enough to read without
   // losing your place, or a window used to the edge. Cards, commands and
   // output answer to neither — they always have the width.
-  if (look?.width === "full") root.dataset.measure = "full";
+  if (look?.width === "full" || look?.width === "full-all") root.dataset.measure = look.width;
   else delete root.dataset.measure;
 
   if (look?.fontUi) style.setProperty("--ui", `${look.fontUi}, ${FALLBACK_UI}`);
