@@ -278,6 +278,7 @@ const SAID: Record<string, string> = {
   "session.bind_failed": "接管该会话失败，请重新打开窗口",
   "session.has_open_pane": "该会话仍有打开的面板，请先关闭",
   "session.outside_workspace": "该路径不属于任何已知的工作区",
+  "settings.local_runtime_required": "请先打开一个本机会话，再读取本机设置",
   "hub.no_runtime_open": "尚未打开任何会话",
 
   // ── 远程 ─────────────────────────────────────────────────────────

@@ -510,6 +510,7 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("GET /device", notADevice)
 	mux.HandleFunc("POST /device/leave", notADevice)
 	mux.HandleFunc(runtimePrefix+"{id}/", h.routeRuntime)
+	mux.Handle("/host/settings/", http.StripPrefix("/host/settings", http.HandlerFunc(h.machineSettings)))
 	mux.HandleFunc("/", h.routeDefault)
 	// What acts on the machine behind the window, or dials onward from it,
 	// stays the window's: a paired device reaches the rest.
