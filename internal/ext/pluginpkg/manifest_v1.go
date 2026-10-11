@@ -1,6 +1,7 @@
 package pluginpkg
 
 import (
+	"reasonix/internal/base/textutil"
 	"reasonix/internal/ext/extensioncontract"
 	"regexp"
 
@@ -96,7 +97,7 @@ func strictDecode(data []byte, v any, path string) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		return fmt.Errorf("%s: %s", path, textutil.ShownLocator(err.Error()))
 	}
 	return nil
 }
@@ -493,20 +494,20 @@ func validateV1Paths(root string, m *Manifest) ([]string, error) {
 			if errors.Is(err, os.ErrNotExist) {
 				warnings = append(warnings, fmt.Sprintf("%s path %q does not exist", kind, rel))
 			} else {
-				warnings = append(warnings, fmt.Sprintf("%s path %q is not readable: %v", kind, rel, err))
+				warnings = append(warnings, fmt.Sprintf("%s path %q is not readable: %s", kind, rel, textutil.ShownLocator(err.Error())))
 			}
 			return nil
 		}
 		resolved, err := filepath.EvalSymlinks(abs)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s path %q cannot be resolved: %v", kind, rel, err))
+			warnings = append(warnings, fmt.Sprintf("%s path %q cannot be resolved: %s", kind, rel, textutil.ShownLocator(err.Error())))
 			return nil
 		}
 		if !pathWithinRoot(resolvedRoot, resolved) {
 			return fmt.Errorf("%s path %q escapes the plugin root through a symlink", kind, rel)
 		}
 		if info, err := os.Stat(abs); err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s path %q is not readable: %v", kind, rel, err))
+			warnings = append(warnings, fmt.Sprintf("%s path %q is not readable: %s", kind, rel, textutil.ShownLocator(err.Error())))
 		} else if !info.IsDir() {
 			warnings = append(warnings, fmt.Sprintf("%s path %q is not a directory; declare the containing directory instead", kind, rel))
 		}
@@ -539,7 +540,7 @@ func validateV1Paths(root string, m *Manifest) ([]string, error) {
 				if errors.Is(err, os.ErrNotExist) {
 					warnings = append(warnings, fmt.Sprintf("themes path %q does not exist", pattern))
 				} else {
-					warnings = append(warnings, fmt.Sprintf("themes path %q is not readable: %v", pattern, err))
+					warnings = append(warnings, fmt.Sprintf("themes path %q is not readable: %s", pattern, textutil.ShownLocator(err.Error())))
 				}
 				continue
 			}

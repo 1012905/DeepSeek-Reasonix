@@ -40,3 +40,16 @@ func TestIncompatibleWarningShowsTheErrorAsALiteralAndKeepsItsRemediation(t *tes
 		t.Fatalf("the sentence lost its tail: %q", got)
 	}
 }
+
+func TestInstalledNameAndDecodeErrorsAreShownAsLiterals(t *testing.T) {
+	requireShown(t, migratedWarning("demo"+unterminated))
+	requireShown(t, migrateRemediation("demo"+unterminated))
+	var v struct{}
+	err := strictDecode([]byte(`{"bad`+unterminated+`": 1}`), &v, "plugin.json")
+	if err == nil {
+		t.Fatal("an unknown field must fail")
+	}
+	if strings.ContainsRune(err.Error(), 0x1b) {
+		t.Fatalf("a raw escape reached the decode error: %q", err.Error())
+	}
+}
