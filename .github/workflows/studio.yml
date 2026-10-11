@@ -438,6 +438,16 @@ jobs:
             echo "::error::the package is $name; dpkg holds that beside the installed reasonix-studio instead of upgrading it, and update.StudioLine asks for it by name"
             exit 1
           fi
+          # The helper in the package accepts one package name, compiled in. It has
+          # to be the one the package carries, or every in-app update is refused
+          # as a different package after the download and signature succeed.
+          dpkg-deb --fsys-tarfile "$deb" | tar -xO ./usr/lib/reasonix-studio/reasonix-studio-update-helper > "$RUNNER_TEMP/update-helper"
+          chmod +x "$RUNNER_TEMP/update-helper"
+          accepts=$("$RUNNER_TEMP/update-helper" package)
+          if [ "$accepts" != "$name" ]; then
+            echo "::error::the update helper in the package accepts $accepts but the package is $name"
+            exit 1
+          fi
           dpkg-deb -c "$deb" > contents.txt
           # The path is the polkit action's exec.path annotation, so it is the
           # only one authorization is granted for; root because polkit will not
