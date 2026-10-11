@@ -82,6 +82,7 @@
     --t-line: .14s; --t-card: .22s; --t-panel: .34s;
 
     --t-live: .6s;
+    --tip-delay: .3s;
 
     --m-line: var(--t-line) var(--ease-out);
     --m-card: var(--t-card) var(--ease-out);
