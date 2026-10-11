@@ -244,19 +244,6 @@ type SecretsConfig struct {
 	ProtectCredentialFiles bool `toml:"protect_credential_files"`
 }
 
-// UIConfig controls CLI presentation-only settings. Desktop appearance is kept in
-// DesktopConfig so desktop preferences cannot alter terminal output or prompts.
-type UIConfig struct {
-	Theme          string `toml:"theme"`           // auto|dark|light; empty resolves to auto
-	ThemeStyle     string `toml:"theme_style"`     // graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
-	ShortcutLayout string `toml:"shortcut_layout"` // classic|desktop; accepted for compatibility
-	CloseBehavior  string `toml:"close_behavior"`  // legacy desktop close behavior; prefer desktop.close_behavior
-	ShowReasoning  bool   `toml:"show_reasoning"`  // Ctrl+O / /verbose: show thinking text in CLI; false = collapsed
-	ShowTurnUsage  bool   `toml:"show_turn_usage"` // show per-request token/cost receipts in the CLI/TUI transcript
-	CursorShape    string `toml:"cursor_shape"`    // block|underline|bar; empty defaults to bar
-	CommandMode    string `toml:"commandmode"`     // ""|vi; vi gives the composer a vi command mode (empty = insert-always)
-}
-
 // DesktopExternalOpener returns the selected opener id; unavailable ids fall
 // back to the platform file manager in the desktop shell.
 func (c *Config) DesktopExternalOpener() string {
@@ -1386,7 +1373,7 @@ func Default() *Config {
 		ConfigVersion:    freshConfigVersion,
 		DefaultModel:     "deepseek-flash",
 		CredentialsStore: CredentialsStoreAuto,
-		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true},
+		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
 		Desktop:          DesktopConfig{ConversationWidth: "standard"},
 		Billing:          BillingConfig{},
 		// Set here, not left to the zero value: an absent [secrets] still protects.

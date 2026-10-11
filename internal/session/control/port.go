@@ -274,6 +274,8 @@ type RuntimeSettings interface {
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
 	SaveDisplayCurrency(mode string) error
+	ChangedFilesSettings() ChangedFilesSettings
+	SaveChangedFilesSettings(show bool) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AutoArchiveSettings() AutoArchiveSettings

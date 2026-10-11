@@ -31,6 +31,7 @@ import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { ProgressWatch } from "./ProgressWatch";
+import { ChangedFilesSetting } from "./ChangedFilesSetting";
 import { AutoArchive } from "./AutoArchive";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
@@ -496,6 +497,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                   />
                 </div>
               </Group>
+              <ChangedFilesSetting port={port} />
               <ProgressWatch port={port} />
               <AutoArchive port={port} />
               <Group id="session-dir" title={t("会话写入位置")}>
