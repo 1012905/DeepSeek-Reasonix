@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
-	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 )
@@ -177,10 +175,7 @@ func (t *Tool) packageMCPAction(req request) action {
 // convenience wrapper used by planLocal; the parser itself is exported as
 // parseMCPJSON for tests.
 func readMCPJSON(path string) ([]config.PluginEntry, []string, error) {
-	if fi, err := os.Stat(path); err == nil && fi.Mode().IsRegular() && fi.Size() > defaultFetchLimit {
-		return nil, nil, newErr(ErrSourceUnreadable, ".mcp.json is %d bytes; limit is %d", fi.Size(), int64(defaultFetchLimit))
-	}
-	b, err := fileencoding.ReadFileUTF8(path)
+	b, err := readBoundedUTF8(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil, newErr(ErrManifestMissing, "no .mcp.json at %s", path)
 	}
