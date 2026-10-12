@@ -7,8 +7,8 @@ import { t } from "../i18n";
 export type Section = "session" | "model" | "providers" | "tools" | "hooks" | "ext" | "network" | "remote" | "memory" | "usage" | "storage" | "account" | "versions" | "appearance" | "advanced";
 
 // Drawn on the same 16-unit grid at 1.45 stroke as the rest of this screen's
-// marks. The rail in Nav.tsx keeps its own set on purpose: those name panes to
-// open, these name sections of one page, and the two lists barely overlap.
+// marks. The rail in Nav.tsx draws a section's entry from this table, so one
+// destination carries one mark wherever it is shown.
 export const ICON: Record<Section, ReactNode> = {
   session: <path d="M2.6 8h10.8M8 2.6v10.8" />,
   model: (
