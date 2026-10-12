@@ -540,12 +540,12 @@ func (a *Agent) verificationGap(writer int) (string, bool) {
 			"or, if it cannot pass as specified, call conclude_blocked with the evidence for why", named), true
 	}
 	// Commands ran and the table read none as a check. The host cannot tell a
-	// runner from a deploy, so it owes nothing and says nothing: it has no
-	// honest sentence, and failing on the guess is the gate over-reaching.
-	if len(a.projectChecks) == 0 {
-		if _, ok := a.task.ledger.LatestUnrecognizedCommandAfter(writer); ok {
-			return "", false
-		}
+	// runner from a deploy, so it owes nothing and says nothing — but only while
+	// it can say they all left the tree as they found it.
+	if len(a.projectChecks) == 0 &&
+		a.task.ledger.HasUnrecognizedCommandAfter(writer) &&
+		!a.task.ledger.HasUnrecognizedMutationAfter(writer) {
+		return "", false
 	}
 	return ask, true
 }

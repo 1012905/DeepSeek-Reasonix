@@ -1417,10 +1417,14 @@ the host proves from its own receipts that the command ran after the write and
 passed. The agent decides only which of the commands it ran was the check;
 whether it ran, exited zero, and did so after the write are never its to claim.
 
-When a command ran that the host could not read as a check, it says so as a
-warning and lets the turn end: the miss is its own blind spot, not evidence the
-work went unverified. A turn that changed files and ran nothing at all is a
-different case and still fails.
+When a command ran that the host could not read as a check, and the host saw it
+leave the tree as it found it, the turn ends with a warning: the miss is its own
+blind spot, not evidence the work went unverified.
+
+Two cases still fail. A turn that changed files and ran nothing at all, and one
+whose unreadable command changed something — watched or merely unestablished.
+The way out of the second is the citation above, a check the host recognises, or
+`conclude_blocked`.
 
 Declaring checks is the stronger, optional form. Name them in any
 standing-instruction file, under exactly this heading:
