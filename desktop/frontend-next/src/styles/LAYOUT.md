@@ -1,5 +1,11 @@
 # Layout law
 
+## Native conversation surfaces
+
+Native model forms use Mantine's styled Card, choice cards, inputs, buttons and feedback with the official card patterns. SurfaceKit follows desktop appearance and bridges Studio font and ink tokens. Library defaults own control styling; its layered stylesheet loads on demand.
+
+SimpleGrid and Paper provide choice layouts and literal previews. Drafts and diffs preserve whitespace without file operations or gutters. SurfaceCard.css only carries container compatibility and textarea resizing. Ordinary asks and approvals retain their existing presentation.
+
 `app.css` carries no commentary. The decisions behind its rules live here, in
 the order the stylesheet makes them. Each entry states what holds now; where a
 gate or a component enforces it, that is named.

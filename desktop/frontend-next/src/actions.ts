@@ -233,6 +233,7 @@ export const ACTIONS: UIAction[] = [
   { id: "backup.apply", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "backup.install-plugin", kind: "view", target: "entity", proof: "interaction" },
   { id: "backup.done", kind: "view", target: "none", proof: "interaction" },
+  { id: "surface.edit", kind: "view", target: "entity", proof: "interaction" },
   { id: "ask.answer", kind: "interaction", target: "none", proof: "authority-effect" },
   { id: "ask.step", kind: "view", target: "none", proof: "interaction" },
   { id: "code.download", kind: "interaction", target: "none", proof: "interaction" },
