@@ -77,11 +77,14 @@ type CapabilityVersion struct {
 
 // MemoryRecall mirrors event.MemoryRecallAudit with stable snake_case keys.
 type MemoryRecall struct {
-	Hits       []MemoryRecallHit `json:"hits,omitempty"`
-	UsedChars  int               `json:"used_chars,omitempty"`
-	Omitted    int               `json:"omitted,omitempty"`
-	Suppressed string            `json:"suppressed,omitempty"`
-	ShadowHits []MemoryRecallHit `json:"shadow_hits,omitempty"`
+	Hits            []MemoryRecallHit `json:"hits,omitempty"`
+	CharBudget      int               `json:"char_budget"`
+	UsedChars       int               `json:"used_chars,omitempty"`
+	Omitted         int               `json:"omitted,omitempty"`
+	OmittedByLimit  int               `json:"omitted_by_limit"`
+	OmittedByBudget int               `json:"omitted_by_budget"`
+	Suppressed      string            `json:"suppressed,omitempty"`
+	ShadowHits      []MemoryRecallHit `json:"shadow_hits,omitempty"`
 }
 
 // MemoryRecallHit is one recalled fact's content-free fingerprint.
@@ -507,7 +510,11 @@ func (r *Recorder) RecordOutcomeProgress(sample hostaudit.OutcomeSample) {
 }
 
 func (r *Recorder) RecordMemoryRecall(a event.MemoryRecallAudit) {
-	rec := &MemoryRecall{UsedChars: a.UsedChars, Omitted: a.Omitted, Suppressed: a.Suppressed}
+	rec := &MemoryRecall{
+		CharBudget: a.CharBudget, UsedChars: a.UsedChars, Omitted: a.Omitted,
+		OmittedByLimit: a.OmittedByLimit, OmittedByBudget: a.OmittedByBudget,
+		Suppressed: a.Suppressed,
+	}
 	for _, hit := range a.Hits {
 		rec.Hits = append(rec.Hits, MemoryRecallHit{
 			ID: hit.ID, Revision: hit.Revision, Scope: hit.Scope,

@@ -176,10 +176,13 @@ func RecordEvidenceBundle(s Sink, a EvidenceBundleAudit) {
 // MemoryRecallAudit summarizes one automatic-recall decision: identifiers,
 // scores, and budget numbers only — never the query or fact text.
 type MemoryRecallAudit struct {
-	Hits       []MemoryRecallHit
-	UsedChars  int
-	Omitted    int
-	Suppressed string // reason recall stayed silent; "" when hits were injected
+	Hits            []MemoryRecallHit
+	CharBudget      int
+	UsedChars       int
+	Omitted         int
+	OmittedByLimit  int
+	OmittedByBudget int
+	Suppressed      string // reason recall stayed silent; "" when hits were injected
 	// Shadow is the Retrieval V2 ranking (telemetry only, never served).
 	Shadow []MemoryRecallHit
 }
