@@ -14,6 +14,7 @@ import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
+import { SendShortcut } from "./SendShortcut";
 import { ThemeImport } from "./ThemeImport";
 import { ThemeRemove } from "./ThemeRemove";
 import { useThemeInventory } from "./useThemeInventory";
@@ -545,6 +546,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <WindowSection port={port} />
       <NavRailSection />
       <GraphicsSection />
+      <SendShortcut />
       <Folding />
       <Notifications port={port} />
 
