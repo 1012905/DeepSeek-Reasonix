@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "./testkit";
 import type { TrajRow } from "../state/trajectory";
 import { RunAnalysis } from "./RunAnalysis";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const rows: TrajRow[] = [
   { seq: 1, at: 0, dur: 4, kind: "model_round", payload: [{ t: "model_round" }], subs: [] },
@@ -84,4 +84,85 @@ describe("RunAnalysis", () => {
     fireEvent.click(container.querySelector<HTMLButtonElement>("[data-action='analysis.signal'][data-target='9']")!);
     expect(container.querySelector(".run-signals .run-inspect")).not.toBeNull();
   });
+
+  it("zooms one shared timeline, preserves selection and resets the scroll position", () => {
+    const { container } = render(<RunAnalysis rows={rows} onSave={onSave} />);
+    const slider = screen.getByRole("slider", { name: "时间轴缩放" });
+    const scroller = screen.getByRole("region", { name: "时间轴" });
+    const canvas = container.querySelector<HTMLElement>(".run-timeline-canvas")!;
+    const signal = container.querySelector<HTMLButtonElement>("[data-action='analysis.signal']")!;
+    fireEvent.click(signal);
+    fireEvent.change(slider, { target: { value: "8" } });
+    expect(canvas.style.width).toBe("800%");
+    expect(canvas.contains(container.querySelector(".run-round-track"))).toBe(true);
+    expect(canvas.contains(signal)).toBe(true);
+    expect(signal.getAttribute("aria-expanded")).toBe("true");
+    scroller.scrollLeft = 300;
+    fireEvent.click(screen.getByRole("button", { name: "重置缩放" }));
+    expect(canvas.style.width).toBe("100%");
+    expect(scroller.scrollLeft).toBe(0);
+    expect(signal.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("keeps every signal inspectable, including simultaneous and late records", () => {
+    const moments: TrajRow[] = Array.from({ length: 12 }, (_, seq) => ({
+      seq, at: 0, kind: "checkpoint", payload: [{ t: `signal ${seq}` }], subs: [],
+    }));
+    const { container } = render(<RunAnalysis rows={moments} onSave={onSave} />);
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>("[data-action='analysis.signal']")];
+    expect(buttons).toHaveLength(12);
+    expect(new Set(buttons.map((b) => b.style.top)).size).toBe(12);
+    for (const [index, button] of buttons.entries()) {
+      expect(button.getAttribute("aria-label")).toContain(`signal ${index}`);
+      fireEvent.click(button);
+      expect(container.querySelector(".run-inspect p")?.textContent).toBe(`signal ${index}`);
+    }
+    fireEvent.click(buttons[11]);
+    expect(container.querySelector(".run-inspect")).toBeNull();
+  });
+
+  it("handles a single zero-time signal and newly arriving records without resetting zoom", () => {
+    const moment: TrajRow = { seq: 1, at: 0, kind: "note", payload: [{ t: "start" }], subs: [] };
+    const { container, rerender } = render(<RunAnalysis rows={[moment]} onSave={onSave} />);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "16" } });
+    rerender(<RunAnalysis rows={[moment, { ...moment, seq: 2, at: 1 }]} onSave={onSave} />);
+    expect((screen.getByRole("slider") as HTMLInputElement).value).toBe("16");
+    expect(container.querySelector("[data-target='1']")?.getAttribute("style")).not.toMatch(/NaN|Infinity/);
+    expect(container.querySelectorAll("[data-action='analysis.signal']")).toHaveLength(2);
+  });
+
+
+  it("reflows crowded lanes as the measured timeline widens without changing timestamps", () => {
+    let measure = () => {};
+    let width = 100;
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(fn: () => void) { measure = fn; }
+      observe() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
+    const moments: TrajRow[] = [1, 1.1, 10].map((at, seq) => ({
+      seq, at, kind: "checkpoint", payload: [{ t: `signal ${seq}` }], subs: [],
+    }));
+    const { container } = render(<RunAnalysis rows={moments} onSave={onSave} />);
+    const signals = [...container.querySelectorAll<HTMLButtonElement>("[data-action='analysis.signal']")];
+    expect(signals[0].style.top).not.toBe(signals[1].style.top);
+    const positions = signals.map((signal) => signal.style.left);
+    act(() => { width = 3000; measure(); });
+    expect(signals[0].style.top).toBe(signals[1].style.top);
+    expect(signals.map((signal) => signal.style.left)).toEqual(positions);
+  });
+
+
+  it("keeps hit targets apart when interface zoom scales the rail's visual width", () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 180 } as DOMRect);
+    const moments: TrajRow[] = [0, 13, 100].map((at, seq) => ({
+      seq, at, kind: "checkpoint", payload: [{ t: `signal ${seq}` }], subs: [],
+    }));
+    const { container } = render(<RunAnalysis rows={moments} onSave={onSave} />);
+    const signals = [...container.querySelectorAll<HTMLButtonElement>("[data-action='analysis.signal']")];
+    expect(signals[0].style.top).not.toBe(signals[1].style.top);
+  });
+
 });
