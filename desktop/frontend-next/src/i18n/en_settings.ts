@@ -1030,6 +1030,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "天": "days",
   "无法读取自动归档设置。": "Could not read the auto-archive settings.",
   "已归档": "Archived",
+  "已置顶": "Pinned",
   "已自动归档 {n} 个会话，可在“已归档”中恢复。": "{n} conversations were archived automatically. You can restore them from Archived.",
   "图标栏": "Icon rail",
   "会话侧栏左边的一列图标，直达会话、用量、文件、工具、扩展、记忆、远程、反馈、账号和设置。窗口窄到手机宽度时不显示。": "A column of icons left of the session sidebar that opens conversation, usage, files, tools, extensions, memory, remote, feedback, account and settings. It is not drawn when the window is as narrow as a phone.",
