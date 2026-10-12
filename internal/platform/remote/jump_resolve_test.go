@@ -1,7 +1,9 @@
 package remote
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -9,12 +11,9 @@ import (
 	"reasonix/internal/contract/config"
 )
 
-// This binds two things: that ResolveJumpHosts reads configured aliases and
-// ssh_config, and that this machine's real ssh runs. The second failed once on
-// Windows CI at 15.50s — the product's own subprocess timeout, so ssh was
-// starved, not refused; isolated on that same runner it answers in 43ms. If it
-// recurs, split the two rather than shorten a timeout CI only made look tight.
-func TestResolveJumpHostsUsesConfiguredAliasesAndSSHConfig(t *testing.T) {
+// jumpSSHConfig writes one bastion alias into a fresh home's ~/.ssh/config.
+func jumpSSHConfig(t *testing.T) (string, *SSHConfigSource) {
+	t.Helper()
 	home := testenv.TempDir(t)
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -30,6 +29,27 @@ func TestResolveJumpHostsUsesConfiguredAliasesAndSSHConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return home, sshCfg
+}
+
+func assertBastionHop(t *testing.T, home string, got ResolvedHost) {
+	t.Helper()
+	if got.HostName != "10.0.0.8" || got.User != "jump-user" || got.Port != 2202 || got.IdentityFile != filepath.Join(home, ".ssh", "jump_key") {
+		t.Fatalf("ssh_config jump was not fully resolved: %+v", got)
+	}
+}
+
+// ssh -G's answer is supplied here, so this binds what ResolveJumpHosts does
+// with an ssh_config alias and a configured host whether or not this machine's
+// ssh gets scheduled in time.
+func TestResolveJumpHostsUsesConfiguredAliasesAndSSHConfig(t *testing.T) {
+	home, sshCfg := jumpSSHConfig(t)
+	sshCfg.resolveOpenSSH = func(_ context.Context, path, alias string) ([]byte, error) {
+		if path != sshCfg.Path() || alias != "bastion" {
+			t.Fatalf("ssh -G request = path %q alias %q", path, alias)
+		}
+		return []byte("hostname 10.0.0.8\nuser jump-user\nport 2202\nidentityfile ~/.ssh/jump_key\n"), nil
+	}
 	cfg := config.Default()
 	cfg.Remote.Hosts = []config.RemoteHostEntry{{
 		Name: "second", Host: "10.0.0.9", User: "ops",
@@ -39,10 +59,23 @@ func TestResolveJumpHostsUsesConfiguredAliasesAndSSHConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := hops[0]; got.HostName != "10.0.0.8" || got.User != "jump-user" || got.Port != 2202 || got.IdentityFile != filepath.Join(home, ".ssh", "jump_key") {
-		t.Fatalf("ssh_config jump was not fully resolved: %+v", got)
-	}
+	assertBastionHop(t, home, hops[0])
 	if got := hops[1]; got.PasswordEnv != "SECOND_PASSWORD" || len(got.ProxyJump) != 0 {
 		t.Fatalf("Reasonix jump credentials/nested-chain handling wrong: %+v", got)
 	}
+}
+
+// The same alias through this machine's installed ssh. A failure at the
+// product's 15 s subprocess timeout is ssh not being scheduled, not a wrong
+// resolution: do not shorten that timeout to make this pass.
+func TestResolveJumpHostsThroughTheInstalledOpenSSH(t *testing.T) {
+	if _, err := exec.LookPath("ssh"); err != nil {
+		t.Skip("OpenSSH client is not installed")
+	}
+	home, sshCfg := jumpSSHConfig(t)
+	hops, err := ResolveJumpHosts(config.Default(), []string{"bastion"}, sshCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBastionHop(t, home, hops[0])
 }
