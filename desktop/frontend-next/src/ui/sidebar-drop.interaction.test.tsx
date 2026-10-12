@@ -10,6 +10,7 @@ import { host } from "../port/host";
 import { useAddWorkspace } from "./addws";
 import { install as installDrops } from "./filedrop";
 import { Sidebar } from "./Sidebar";
+import { NO_PAGING } from "./treewindow";
 
 let clock = Date.now();
 beforeEach(() => {
@@ -33,7 +34,7 @@ function draw(collapsed = false) {
     return <>
       {error && <div role="alert">{error}</div>}
       <Sidebar
-        hub={hub} collapsed={collapsed} tree={[]} treeRead runtimes={[]} runs={{}} active="remote-pane"
+        hub={hub} collapsed={collapsed} navShown={false} paging={NO_PAGING} tree={[]} treeRead runtimes={[]} runs={{}} active="remote-pane"
         activeWorkspace={undefined} liveIds={() => []} pinned={new Set()} onPin={() => {}}
         remotes={null} remoteTrees={{}} reloadRemotes={async () => {}} reloadRemoteTrees={async () => {}}
         readRemoteTree={async () => {}} reloadTree={reload} adder={adder} onOpen={open} onOpenRemote={remote}
