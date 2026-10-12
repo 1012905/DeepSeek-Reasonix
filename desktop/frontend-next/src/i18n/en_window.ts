@@ -25,6 +25,7 @@ export const EN_WINDOW: Record<string, string> = {
   "计划已生成，如何执行由你决定。": "The plan is written. What happens next is your call.",
   "开始执行": "Start execution",
   "修改计划": "Revise the plan",
+  "目标": "Goal",
   "暂不执行": "Not now",
   "「修改计划」将保持在计划模式中，请在下方说明需要修改之处。": "“Revise the plan” stays in plan mode — say what to change below and the planner rewrites it.",
   "已开始执行。": "Executing.",
