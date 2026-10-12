@@ -125,10 +125,11 @@ type action struct {
 	// Runtime carries a plugin package's declared runtime process so
 	// frontends can render the full-trust implications before approval.
 	// Purely additive: older consumers ignore it.
-	Runtime  *RuntimePlanInfo `json:"runtime,omitempty"`
-	Warnings []string         `json:"warnings,omitempty"`
-	Error    string           `json:"error,omitempty"`
-	Next     string           `json:"next,omitempty"`
+	Runtime   *RuntimePlanInfo `json:"runtime,omitempty"`
+	Warnings  []string         `json:"warnings,omitempty"`
+	Error     string           `json:"error,omitempty"`
+	ErrorCode string           `json:"errorCode,omitempty"`
+	Next      string           `json:"next,omitempty"`
 	// PreviewTruncated is set when the projection cut any field or list above.
 	PreviewTruncated bool `json:"previewTruncated,omitempty"`
 
@@ -145,6 +146,7 @@ type action struct {
 	// actions finish.
 	preparedRoot string
 	cleanup      func()
+	treeDigest   string
 	failure      error
 }
 
