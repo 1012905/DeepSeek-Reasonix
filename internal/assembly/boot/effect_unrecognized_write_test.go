@@ -62,7 +62,10 @@ func TestEffectAnUnrecognizedWriteStillOwesTheCheck(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Chdir(dir)
-			writeUserConfig(t, userModel+"\n[codegraph]\nenabled = false\n")
+			// The turn's commands have to reach a shell for the waiver to be
+			// about what they changed; a runner without bwrap refuses to run
+			// them at all, and the turn would owe the check for another reason.
+			writeUserConfig(t, userModel+"\n[sandbox]\nbash = \"off\"\n\n[codegraph]\nenabled = false\n")
 			registerBootTokenProfileTestProvider()
 			writeFile(t, dir, "go.mod", "module demo\n\ngo 1.26\n")
 			writeFile(t, dir, "main.go", "package main\n")
