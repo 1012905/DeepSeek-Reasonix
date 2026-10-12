@@ -260,6 +260,8 @@ type mcpEntry struct {
 	InSchema   bool `json:"inSchema,omitempty"`
 	// Launch is what starting the server runs or contacts, redacted for display.
 	Launch string `json:"launch,omitempty"`
+	// PendingReason says why a pending server waits for the user, as a code.
+	PendingReason string `json:"pendingReason,omitempty"`
 }
 
 // mcpTool is one tool as the server describes it, plus the two hints that
@@ -339,6 +341,7 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 			LocalOverride: st.LocalOverride, Transport: st.Entry.Type,
 			Source: string(st.Entry.Source), Error: health.Error, HTTPStatus: health.HTTPStatus,
 			Tools: health.Tools, AlwaysLoad: st.AlwaysLoad, InSchema: st.InSchema,
+			PendingReason: string(health.Reason),
 		}
 		if srv, ok := live[health.Name]; ok && health.Status == control.MCPHealthReady {
 			row.Transport, row.Source = srv.Transport, srv.ConfigSource
@@ -377,6 +380,17 @@ func remembered(st control.MCPServerState, e mcpEntry) mcpEntry {
 	return e
 }
 
+func (s *Server) mcpRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /mcp", s.mcp)
+	mux.HandleFunc("POST /mcp/reconnect", s.mcpReconnect)
+	mux.HandleFunc("POST /mcp/trust", s.mcpTrust)
+	mux.HandleFunc("POST /mcp/enabled", s.mcpEnabled)
+	mux.HandleFunc("POST /mcp/load", s.mcpLoad)
+	mux.HandleFunc("POST /mcp/parse", s.mcpParse)
+	mux.HandleFunc("POST /mcp/install", s.mcpInstall)
+	mux.HandleFunc("POST /mcp/remove", s.mcpRemove)
+}
+
 // mcpReconnect retries one server. It answers with the refreshed row rather than
 // a bare 204: the outcome the user is waiting for is the new state, and a
 // follow-up GET would race the connect that just finished.
@@ -386,11 +400,49 @@ func (s *Server) mcpReconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tools, err := s.ctl().ReconnectMCPServer(name)
+	if errors.Is(err, control.ErrMCPApprovalOwed) {
+		refuse(w, http.StatusConflict, "mcp.approval_owed", err.Error(), nil)
+		return
+	}
 	if err != nil {
 		writeJSONStatus(w, http.StatusBadGateway, map[string]any{"name": name, "state": control.MCPHealthFailed, "error": err.Error()})
 		return
 	}
 	writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "tools": tools})
+}
+
+// mcpTrust approves the definitions a server's connection withheld and
+// reconnects it, answering like mcpReconnect with the refreshed row.
+func (s *Server) mcpTrust(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name   string `json:"name"`
+		Digest string `json:"digest"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	name, digest := strings.TrimSpace(body.Name), strings.TrimSpace(body.Digest)
+	if name == "" {
+		missingField(w, "name")
+		return
+	}
+	if digest == "" {
+		missingField(w, "digest")
+		return
+	}
+	tools, err := s.ctl().AcceptMCPHeldTools(name, digest)
+	switch {
+	case errors.Is(err, control.ErrMCPDigestMismatch):
+		refuse(w, http.StatusConflict, "mcp.digest_mismatch", err.Error(), nil)
+	case errors.Is(err, control.ErrMCPNothingHeld):
+		refuse(w, http.StatusConflict, "mcp.nothing_held", err.Error(), nil)
+	case errors.Is(err, control.ErrMCPApprovalOwed):
+		refuse(w, http.StatusConflict, "mcp.approval_owed", err.Error(), nil)
+	case err != nil:
+		writeJSONStatus(w, http.StatusBadGateway, map[string]any{"name": name, "state": control.MCPHealthFailed, "error": err.Error()})
+	default:
+		writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "tools": tools})
+	}
 }
 
 // mcpLoad sets whether a server's tools load into the provider schema. An
@@ -620,15 +672,5 @@ func decodeMCPName(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func launchText(e config.PluginEntry) string {
-	clean := textutil.SanitizeLaunch
-	line := mcpsetup.RedactURL(clean(e.URL))
-	if strings.TrimSpace(e.Command) != "" {
-		args := make([]string, len(e.Args))
-		for i, a := range e.Args {
-			args[i] = clean(a)
-		}
-		parts := append([]string{secrets.RedactConfigValue("", clean(e.Command))}, secrets.RedactArgs(args)...)
-		line = strings.Join(parts, " ")
-	}
-	return textutil.TruncateGraphemes(clean(line), mcpLaunchTextLimit, "…")
+	return textutil.TruncateGraphemes(mcpsetup.LaunchLine(e), mcpLaunchTextLimit, "…")
 }

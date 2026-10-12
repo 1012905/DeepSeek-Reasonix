@@ -274,7 +274,8 @@ Studio and 1.x signing jobs and smoke tests share the concurrency group `certum-
 
 | R2 path | Owner | Content |
 | --- | --- | --- |
-| `studio/versions.json` | this workflow | Studio catalog, newest first |
+| `studio/versions.json` | this workflow | Studio catalog, newest first; an entry names its notes object in an optional `notes` field |
+| `studio/notes/X.Y.Z.md` | this workflow | the rendered version notes, immutable; uploaded before the catalog entry that names it |
 | `studio-vX.Y.Z/` | this workflow | artifacts, signatures, `latest.json` |
 | `cli/stable/latest.json`, `cli/preview/latest.json` | `cli-pointer` | what `reasonix upgrade` reads through `crash.reasonix.io/v1/cli/releases/<channel>/latest.json`; only ever moves to a newer version |
 | `cli/releases/vX.Y.Z/latest.json` | `cli-pointer` | immutable record of one CLI release; a rerun with different content fails |
@@ -285,4 +286,29 @@ Studio and 1.x signing jobs and smoke tests share the concurrency group `certum-
 `latest.json` keys `platforms` (and `deltas`) as `<GOOS>-<GOARCH>`, derived from the artifact name by `studio-manifest` and asked for by the running kernel through `runtime.GOOS` and `runtime.GOARCH`.
 
 - The key is the binary's own architecture, not the machine's. An x64 build running under ARM64 emulation asks for `windows-amd64` and keeps updating to the amd64 installer; it is not moved to a native build.
+- Linux ships a `.deb` and an `.rpm`, both named `ReasonixStudio-linux-<arch>.<ext>`.
+- `native_packages["linux-<arch>"]` is the `.deb` and has to stay that: every installed client hands it to dpkg.
+- The `.rpm` is `native_packages["linux-<arch>-rpm"]`. No shipped client reads it yet, so an `.rpm` install is updated by downloading the new package.
+- The `.rpm` carries no rpm GPG signature, and `dnf install` of a local file does not check one by default.
+- Its integrity rests on HTTPS and the minisign signature beside it. Verify with `minisign -Vm ReasonixStudio-linux-amd64.rpm -P RWSw66n0RsoSr6Zhh6qt5YO95YkpCayTOCMFVDNUQSjJYwxoYngNVBSq`, the key compiled into `internal/platform/update/verify.go`.
+- fpm spells the architecture in an `.rpm` name its own way (`x86_64`, `aarch64`); `desktop/electron/packaging/canonical-artifact-names.js` renames it to the release architecture and fails the build on any spelling left over.
 - When a client tries to install a release whose manifest lacks its key (and, on Linux, a matching `native_packages` key), staging fails with `update.no_package` naming the release page; no other architecture's package is substituted. A missing `deltas` entry means the full package is downloaded.
+
+A notes upload that fails does not fail `publish`: the step warns, `::warning::release notes for vX.Y.Z were not uploaded`, and the catalog entry is written without a `notes` field. Run the backfill (section 9) afterwards to attach them.
+
+## 9. Backfilling notes
+
+Releases from the one that introduced `studio/notes/` publish their notes with the catalog entry. Older catalog entries get theirs once, by hand:
+
+```bash
+R2_ACCOUNT_ID=... R2_BUCKET=... bash scripts/backfill-studio-notes.sh          # dry run
+R2_ACCOUNT_ID=... R2_BUCKET=... bash scripts/backfill-studio-notes.sh --apply
+```
+
+Run it from a clone with the `studio-v*` tags, with the mirror's AWS credentials and `GH_TOKEN` in the environment.
+
+- It acts only on catalog entries without a `notes` field.
+- An object already in the bucket is kept.
+- A tag without a notes file leaves its entry bare.
+- The catalog is read again and written last.
+- `--apply` refuses while any `release-studio.yml` run is queued or in progress, because that run's catalog write would race this one.

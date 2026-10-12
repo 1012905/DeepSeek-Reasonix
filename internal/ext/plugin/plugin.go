@@ -119,6 +119,10 @@ type Spec struct {
 	// servers set it only after an exact launch grant is resolved.
 	Authorized            bool
 	RequireLaunchApproval bool
+	// LaunchCheck, when set, runs before every process start or connection and
+	// refuses one whose project declaration no longer reads as it did when the
+	// spec was built; a lazy start can come long after the decision was read.
+	LaunchCheck func() error
 	// LaunchArgs and launcher metadata are host-local immutable resolutions for
 	// mutable package launchers. LauncherIdentityArgs is the same exact package
 	// resolution without an automatically injected offline/no-install flag: that
@@ -385,6 +389,7 @@ func Start(ctx context.Context, specs []Spec, p StartPolicy) (*Host, []tool.Tool
 				return
 			}
 			c.toolCount = len(ts)
+			h.announceHeld(c)
 
 			// Persist for next launch on the side: a slow cache write must not
 			// delay tools coming online, and a failed one only costs a handshake.
@@ -602,6 +607,7 @@ type Client struct {
 	// MCP servers just to rebuild identical schemas.
 	toolsListed  bool
 	toolAdapters []tool.Tool
+	held         []HeldTool
 	progressID   atomic.Uint64
 }
 
@@ -1050,6 +1056,7 @@ func (h *Host) addConnectedWithLifecycle(lifeCtx, callCtx context.Context, s Spe
 		return nil, fmt.Errorf("list tools: %w", err)
 	}
 	c.toolCount = len(ts)
+	h.announceHeld(c)
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
@@ -1169,6 +1176,9 @@ func start(lifeCtx, callCtx context.Context, s Spec) (*Client, error) {
 		return nil, newStartupFailure("launch", started, 0, err)
 	}
 	s, err = resolveProjectLaunchAuthorization(callCtx, s)
+	if err == nil {
+		err = checkDeclaredLaunch(s)
+	}
 	if err != nil {
 		return nil, newStartupFailure("authorization", started, 0, err)
 	}
@@ -1280,16 +1290,25 @@ func newTransport(ctx context.Context, s Spec) (transport, error) {
 
 type mcpTool struct {
 	Name         string          `json:"name"`
+	Title        string          `json:"title,omitempty"`
 	Description  string          `json:"description"`
 	InputSchema  json.RawMessage `json:"inputSchema"`
 	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
 	// Annotations carries MCP's optional tool hints. readOnlyHint controls reader
 	// classification; destructiveHint remains destructive even when another hint
 	// claims the tool is read-only. Approval policy is applied separately.
-	Annotations *struct {
+	Annotations json.RawMessage `json:"annotations,omitempty"`
+}
+
+// hints reads the two annotations that drive safety classification; a missing
+// or malformed object declares neither.
+func (t mcpTool) hints() (readOnly, destructive bool) {
+	var a struct {
 		ReadOnlyHint    bool `json:"readOnlyHint"`
 		DestructiveHint bool `json:"destructiveHint"`
-	} `json:"annotations"`
+	}
+	_ = json.Unmarshal(t.Annotations, &a)
+	return a.ReadOnlyHint, a.DestructiveHint
 }
 
 func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
@@ -1298,15 +1317,28 @@ func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
 	if c.toolsListed {
 		return append([]tool.Tool(nil), c.toolAdapters...), nil
 	}
+	return c.relistToolsLocked(ctx)
+}
 
+// relistToolsLocked is the one path from a tools/list response to registrable
+// tools: list, judge against the approved definitions, build. Anything that
+// refreshes a catalog must come through it, or it skips the judgement. The
+// caller holds toolsMu.
+func (c *Client) relistToolsLocked(ctx context.Context) ([]tool.Tool, error) {
 	out, err := c.listToolsRawSettled(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out = slices.DeleteFunc(out, func(t mcpTool) bool { return !c.spec.ToolEnabled(t.Name) })
+	listed := out
+	out = slices.DeleteFunc(slices.Clone(listed), func(t mcpTool) bool { return !c.spec.ToolEnabled(t.Name) })
 	if err := validateMCPToolNames(out); err != nil {
 		return nil, fmt.Errorf("plugin %q: %w", c.name, err)
 	}
+	held := judgeToolPins(c.spec, listed)
+	out = slices.DeleteFunc(out, func(t mcpTool) bool {
+		return slices.ContainsFunc(held, func(h HeldTool) bool { return h.RawName == t.Name })
+	})
+	held = slices.DeleteFunc(held, func(h HeldTool) bool { return !c.spec.ToolEnabled(h.RawName) })
 
 	toolInfos := make([]ToolInfo, 0, len(out))
 	tools := make([]tool.Tool, 0, len(out))
@@ -1319,8 +1351,7 @@ func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
 		normalizedSchemas[t.Name] = schema
 	}
 	for _, t := range out {
-		readOnlyHint := t.Annotations != nil && t.Annotations.ReadOnlyHint
-		destructiveHint := t.Annotations != nil && t.Annotations.DestructiveHint
+		readOnlyHint, destructiveHint := t.hints()
 		info := ToolInfo{Name: t.Name, Description: t.Description, ReadOnlyHint: readOnlyHint, DestructiveHint: destructiveHint}
 		schema, ok := normalizedSchemas[t.Name]
 		if !ok {
@@ -1360,6 +1391,7 @@ func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
 	sort.SliceStable(toolInfos, func(i, j int) bool { return toolInfos[i].Name < toolInfos[j].Name })
 	sortedTools := sortToolsByName(tools)
 	c.tools = toolInfos
+	c.held = held
 	c.toolAdapters = append([]tool.Tool(nil), sortedTools...)
 	c.toolsListed = true
 	return append([]tool.Tool(nil), sortedTools...), nil

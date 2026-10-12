@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { t } from "../i18n";
-import type { Protocol, ProviderEntry, ProviderProbe } from "../port/port";
+import type { Protocol, ProviderEntry, ProviderPreset, ProviderProbe } from "../port/port";
+import { PresetGallery } from "./PresetGallery";
+import { PresetInstall } from "./PresetInstall";
 import { checkedFact, clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
 import { KIND_LABEL, hostOf, nameFrom, sourceNameUsable, vendorLabel } from "./vendors";
 import type { Port } from "./Providers";
 import { reason } from "../i18n/kernel";
 import { HttpError } from "../port/http_error";
+import { EffortShape } from "./EffortShape";
 import { THINKING, parseExtraBody, parseHeaders } from "./provider_compat";
 
 // Detection is assistance, not authority. Compatible relays often expose one
@@ -22,6 +25,7 @@ export function AddProvider({
   const [completed, setCompleted] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [probe, setProbe] = useState<ProviderProbe | null>(null);
+  const [preset, setPreset] = useState<ProviderPreset | null>(null);
   const [catalog, setCatalog] = useState<Protocol[]>([]);
   const [err, setErr] = useState("");
   const [errOnSave, setErrOnSave] = useState(false);
@@ -37,6 +41,7 @@ export function AddProvider({
       setKind((current) => current || (items.some((p) => p.kind === "openai") ? "openai" : items[0]?.kind ?? ""));
     }).catch(() => setCatalog([]));
   }, [port]);
+  const loadPresets = useCallback(() => port.providerPresets(), [port]);
   const choices = catalog.map((p) => p.kind);
   const detectedChoices = probe ? (probe.kinds?.length ? probe.kinds : [probe.kind]) : [];
   const searchOn = detectedChoices.filter((k) => catalog.find((p) => p.kind === k)?.serverWebSearch);
@@ -62,6 +67,8 @@ export function AddProvider({
   const nameBad = !composing && name.trim() !== "" && !sourceNameUsable(name);
   const extraBad = extra.trim() !== "" && parseExtraBody(extra) === null;
   const protocolCanThink = catalog.find((p) => p.kind === kind)?.reasoningParams ?? false;
+  const wire = catalog.find((p) => p.kind === kind);
+  const effortField = wire?.effortUnder?.length && !wire.effortUnder.includes(thinkingProtocol) ? undefined : wire?.effortField;
   // A wire with no listing shape has nothing to read: the model id is declared
   // rather than discovered, and offering a probe that must fail reads as a
   // broken endpoint instead of a protocol that never had one.
@@ -172,6 +179,8 @@ export function AddProvider({
     }
   };
 
+  if (preset) return <PresetInstall port={port} preset={preset} onDone={onDone} onCancel={onCancel} onBack={() => setPreset(null)} />;
+
   return (
     <fieldset className="addp" disabled={busy && errOnSave}>
       <div className="addp-head">
@@ -182,6 +191,7 @@ export function AddProvider({
         </div>
         <button className="addp-close" onClick={onCancel} disabled={busy || checkingModel !== ""} aria-label={t("取消")}>×</button>
       </div>
+      {baseUrl.trim() === "" && <PresetGallery load={loadPresets} onPick={setPreset} disabled={busy || checkingModel !== ""} />}
       <div className="fields">
         <div className="grow name-cell">
         <label>
@@ -232,6 +242,7 @@ export function AddProvider({
             disabled={busy || checkingModel !== ""}
             spellCheck={false}
           />
+          {wire?.answers === "decision" && <i className="tip">{t("填写服务的基地址，不要带 /v1/systemone；Reasonix 会自己在后面追加。本地的 Ollama 之类地址不适用这个协议。")}</i>}
         </label>
         <label className="grow full">
           <span>API Key{t(sibling ? "（留空就用现有那个来源的 key）" : "")}</span>
@@ -280,7 +291,7 @@ export function AddProvider({
           <div className="setting-line">
             <span className="setting-copy">
               <strong>{t("发送思考控制")}</strong>
-              <small>{t(protocolCanThink ? "允许当前协议发送 thinking 或 reasoning_effort；模型是否真的思考仍由模型决定。" : "当前协议没有思考控制字段，切换模型时仍可在推理强度菜单查看支持情况。")}</small>
+              <small>{t(protocolCanThink ? "允许当前协议发送思考控制字段；模型是否真的思考仍由模型决定。" : "当前协议没有思考控制字段，切换模型时仍可在推理强度菜单查看支持情况。")}</small>
             </span>
             <button
               type="button"
@@ -302,6 +313,7 @@ export function AddProvider({
                 ))}
               </select>
               <i>{t("使用「自动」时由模型和接口协议决定；只有中转站文档明确要求时才手动指定。")}</i>
+              <EffortShape field={effortField} />
             </label>
           )}
           <div className="setting-line">

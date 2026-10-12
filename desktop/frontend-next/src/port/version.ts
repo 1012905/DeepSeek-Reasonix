@@ -3,8 +3,16 @@ export interface VersionEntry {
   version: string;
   tag: string;
   publishedAt: string;
+  hasNotes: boolean;
   current: boolean;
   older: boolean;
+}
+
+// One release's notes. cached says only where they came from.
+export interface VersionNotes {
+  version: string;
+  markdown: string;
+  cached: boolean;
 }
 
 // err rides alongside the data: an unreachable catalog must not hide which
@@ -34,4 +42,20 @@ export interface UpdateProgress {
   err?: string;
   code?: string;
   delta_skipped?: string;
+}
+
+// Where this install keeps its logs, and the crash files the kernel left there.
+// at is when the file was last written, as an RFC 3339 instant.
+export interface StudioLogs {
+  dir: string;
+  crashDir: string;
+  crashes: StudioCrash[];
+  // More crash files exist than are listed.
+  truncated: boolean;
+}
+
+export interface StudioCrash {
+  name: string;
+  at: string;
+  bytes: number;
 }

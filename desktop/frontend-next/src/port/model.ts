@@ -14,6 +14,16 @@ export interface CompletionItem {
   // builtin | command | skill | subagent | prompt | file | dir | resource.
   // Empty on argument values, which are not things.
   kind?: string;
+  // The arguments an MCP prompt declares, in order.
+  args?: CompletionArg[];
+  // Declarations the kernel left out of args to keep the row short.
+  moreArgs?: number;
+}
+
+export interface CompletionArg {
+  name: string;
+  description?: string;
+  required?: boolean;
 }
 
 export interface Completion {
@@ -89,6 +99,14 @@ export interface RoleAssignments {
   // others it never falls back to the main model: a chat model cannot answer a
   // question set, and a silent fallback would make a missing backend a wrong one.
   decision: string;
+}
+
+// A per-profile entry that outranks a role's global model. `scope` names the
+// file holding it: only a "user" entry can be cleared from the settings page.
+export interface RoleOverride {
+  key: string;
+  model: string;
+  scope: "user" | "project";
 }
 
 // The two fold bounds and which of them is in force. They are configured

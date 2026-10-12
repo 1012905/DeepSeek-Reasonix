@@ -13,6 +13,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"reasonix/internal/base/nilutil"
 )
@@ -134,6 +135,7 @@ type UnavailableImage struct {
 // structural facts; raw partial reasoning remains on the LocalOnly Message for
 // display and is never copied into the recovery prompt.
 type InterruptedTurnRecovery struct {
+	StreamFailure           StreamFailureCause       `json:"stream_failure,omitempty"`
 	Pending                 bool                     `json:"pending,omitempty"`
 	CompletedTools          []InterruptedToolSummary `json:"completed_tools,omitempty"`
 	InterruptedTools        []string                 `json:"interrupted_tools,omitempty"`
@@ -188,29 +190,6 @@ type ToolSchema struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters"`
-}
-
-// Request is a single completion request.
-type Request struct {
-	Messages    []Message
-	Tools       []ToolSchema
-	Temperature *float64 // nil = omit; non-nil = send the value, including 0
-	MaxTokens   int
-	// ResponseFormat, when non-nil, asks the endpoint for structured JSON
-	// output (Responses: text.format.type=json_object). Nil omits the field
-	// entirely — the common path must stay byte-stable for prompt caching.
-	ResponseFormat *ResponseFormat `json:"ResponseFormat,omitempty"`
-	EffortOverride string          `json:"EffortOverride,omitempty"` // per-call reasoning-depth override; adapters apply it only when the endpoint's effort vocabulary accepts it
-	// Mode is the session's model mode id. An adapter sends only a mode its
-	// config declared for this endpoint, so an unknown one reaches no wire.
-	Mode string `json:"Mode,omitempty"`
-}
-
-// ResponseFormat asks a provider to constrain its output shape.
-type ResponseFormat struct {
-	// Type is the structured format: "json_object" is the only shape the
-	// Responses endpoints currently define (MiMo/DashScope/OpenAI).
-	Type string `json:"type"`
 }
 
 // Auto ladder for max_output_tokens=0. Bounds completion only; never compact_ratio.
@@ -774,20 +753,29 @@ func (e *AuthError) Error() string {
 // Factory builds a Provider from a resolved Config.
 type Factory func(cfg Config) (Provider, error)
 
-var registry = map[string]Factory{}
+// registry is read by every Build and written by init and by tests that run in
+// parallel, so every access holds mu.
+var registry = struct {
+	mu        sync.RWMutex
+	factories map[string]Factory
+}{factories: map[string]Factory{}}
 
 // Register adds a factory under a kind (e.g. "openai"). Intended for init().
 // It panics on a duplicate kind, since that is a compile-time wiring mistake.
 func Register(kind string, f Factory) {
-	if _, dup := registry[kind]; dup {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	if _, dup := registry.factories[kind]; dup {
 		panic("provider: duplicate kind " + kind)
 	}
-	registry[kind] = f
+	registry.factories[kind] = f
 }
 
 // New instantiates the provider of the given kind.
 func New(kind string, cfg Config) (Provider, error) {
-	f, ok := registry[kind]
+	registry.mu.RLock()
+	f, ok := registry.factories[kind]
+	registry.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("provider: unknown kind %q (registered: %v)", kind, Kinds())
 	}
@@ -803,6 +791,7 @@ func New(kind string, cfg Config) (Provider, error) {
 
 // Kinds returns the registered kinds, sorted.
 func Kinds() []string {
-	out := slices.Sorted(maps.Keys(registry))
-	return out
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	return slices.Sorted(maps.Keys(registry.factories))
 }
