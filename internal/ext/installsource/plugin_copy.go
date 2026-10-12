@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 
 	"reasonix/internal/ext/pluginpkg"
 )
@@ -92,8 +93,8 @@ func syncPluginCopy(root string) error {
 	}
 	// Directory fsync is unsupported on Windows; the registry remains the sole
 	// restart authority even when directory-entry durability is unavailable.
-	for i := len(dirs) - 1; i >= 0; i-- {
-		if f, err := os.Open(dirs[i]); err == nil {
+	for _, dir := range slices.Backward(dirs) {
+		if f, err := os.Open(dir); err == nil {
 			_ = f.Sync()
 			_ = f.Close()
 		}
