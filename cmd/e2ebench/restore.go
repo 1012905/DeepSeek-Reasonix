@@ -8,13 +8,15 @@ import (
 	"strings"
 )
 
-// Restoring the source is I/O like any other step, but a failure used to read as
-// success: the analysis went on to report a verdict about a tree that was still
-// mutated. These helpers make it loud, and are variables so tests can inject one.
+// Restoring the source is I/O like any other step, and an analysis must not
+// report a verdict about a tree it failed to restore. These helpers make that
+// failure loud, and are variables so a test can inject one.
 
 var (
 	writeFile = os.WriteFile
 	readFile  = os.ReadFile
+	// treeMatches is a variable so a test can inject the mismatch a restore guards.
+	treeMatches = treeMatchesTree
 )
 
 // restoreSource writes the original bytes back and proves they are back.
@@ -34,7 +36,7 @@ func restoreSource(abs string, src []byte) error {
 
 // treeMatches checks files against a revision. A checkout that exited zero is
 // not evidence the tree moved; the tree is.
-func treeMatches(repo, rev string, files []string) error {
+func treeMatchesTree(repo, rev string, files []string) error {
 	args := append([]string{"-C", repo, "diff", "--exit-code", rev, "--"}, files...)
 	out, err := exec.Command("git", args...).CombinedOutput()
 	if err != nil {
