@@ -102,6 +102,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [dockLimit, setDockLimit] = useState(() => dockMax(document.body.clientWidth));
   const [report, setReport] = useState<PaneReport>(NO_REPORT);
   const [findPulse, setFindPulse] = useState(0);
+  const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
   // false = closed, true = open at its last section, a string = open there.
   const [settings, setSettings] = useState<string | boolean>(false);
@@ -342,6 +343,16 @@ export function App({ hub }: { hub: HubPort }) {
     void reloadRemotes();
   }, [reloadRemotes]);
 
+  const openFiles = useCallback(() => {
+    if (!panePorts.has(active)) {
+      setError(t("请先打开一个会话，再查看它的文件。"));
+      return;
+    }
+    hidePrefs();
+    if (roomGaveUp("scene")) setRail(false);
+    setFilesRequests((requests) => ({ ...requests, [active]: (requests[active] ?? 0) + 1 }));
+  }, [active, panePorts, hidePrefs]);
+
   const openPane = useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes: refreshPanes, sw });
 
   // Awaitable because deleting a conversation has to close its pane first and
@@ -577,6 +588,7 @@ export function App({ hub }: { hub: HubPort }) {
           <Nav
             at={settings === false ? null : settings === true ? "" : settings}
             onGo={showPrefs}
+            onFiles={openFiles}
             onHome={hidePrefs}
             onRail={() => setRail((v) => !v)}
             onFeedback={() => setFeedback(feedbackEntryTab(feedbackUnread))}
@@ -618,6 +630,7 @@ export function App({ hub }: { hub: HubPort }) {
           accountUnread={accountUnread}
           wallet={report.wallet}
           onSettings={showPrefs}
+          onFiles={openFiles}
           onFeedback={(tab) => setFeedback(tab ?? "send")}
           feedbackUnread={feedbackUnread}
           onFind={openFind}
@@ -670,6 +683,7 @@ export function App({ hub }: { hub: HubPort }) {
                   onSessionChanged={refreshPanes}
                   pulse={settingsPulse}
                   findPulse={findPulse}
+                  filesPulse={filesRequests[rt.id] ?? 0}
                   alert={rt.id === active ? bar : undefined}
                   needsProject={needsProject}
                   onOpenProject={() => {

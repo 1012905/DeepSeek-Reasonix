@@ -3,18 +3,16 @@ import { FeedbackBadge } from "./feedbackentry";
 import { ICON, type Section } from "./prefsnav";
 import { StudioIcon } from "./StudioIcon";
 
-// An entry that opens a settings section draws that section's mark from prefsnav,
-// so the rail and the page it opens never show two icons for one destination. Only
-// the conversation item, which opens no section, keeps a mark of its own.
+// Settings entries share their destination's mark with prefsnav.
 const CHAT = "M3.2 4.4a1.2 1.2 0 0 1 1.2-1.2h7.2a1.2 1.2 0 0 1 1.2 1.2v5a1.2 1.2 0 0 1-1.2 1.2H7.2L4.4 13v-2.4a1.2 1.2 0 0 1-1.2-1.2Z";
-type Mark = "chat" | Section;
+type Mark = "chat" | "files" | Section;
 
 // Every entry goes somewhere that exists. A rail of icons that open nothing is
 // the cheapest thing to draw and the most expensive thing to keep.
-const TO: [Mark, string, string | null][] = [
+const TO: [Mark, string, string | null, string?][] = [
   ["chat", "会话", null],
   ["usage", "用量", "usage"],
-  ["storage", "文件", "storage"],
+  ["files", "文件", "files", "files.open"],
   ["tools", "工具与权限", "tools"],
   ["ext", "扩展", "ext"],
   ["memory", "记忆", "memory"],
@@ -29,6 +27,7 @@ const FOOT: [Mark, string, string, string][] = [
 interface Props {
   at: string | null;
   onGo: (sec?: string) => void;
+  onFiles: () => void;
   onHome: () => void;
   /** The conversation item already shows the conversation, so pressing it again
    *  does what the rail beside it can: open or close the workspace column. */
@@ -39,7 +38,7 @@ interface Props {
   shown: boolean;
 }
 
-export function Nav({ at, onGo, onHome, onRail, onFeedback, feedbackUnread, shown }: Props) {
+export function Nav({ at, onGo, onFiles, onHome, onRail, onFeedback, feedbackUnread, shown }: Props) {
   const btn = ([key, label, sec, action]: [Mark, string, string | null, string?]) => (
     <button
       key={key}
@@ -47,11 +46,11 @@ export function Nav({ at, onGo, onHome, onRail, onFeedback, feedbackUnread, show
       data-action={action}
       aria-label={t(label)}
       aria-current={(sec ?? null) === at ? "page" : undefined}
-      onClick={() => (sec === null ? (at === null ? onRail() : onHome()) : onGo(sec || undefined))}
+      onClick={() => (key === "files" ? onFiles() : sec === null ? (at === null ? onRail() : onHome()) : onGo(sec || undefined))}
     >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
+      {key === "files" ? <StudioIcon name="file" aria-hidden="true" /> : <svg viewBox="0 0 16 16" aria-hidden="true">
         {key === "chat" ? <path d={CHAT} /> : ICON[key]}
-      </svg>
+      </svg>}
       <span className="navhint" role="tooltip">{t(label)}</span>
     </button>
   );

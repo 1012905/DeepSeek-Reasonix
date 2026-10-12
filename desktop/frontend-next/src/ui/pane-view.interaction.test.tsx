@@ -142,4 +142,20 @@ describe("a pane's view", () => {
     probe.unmount();
     expect(all.rt.id).toBe("p1");
   });
+
+  it("leaves analysis for an external files request and does not replay it after a takeover", async () => {
+    const onManualBrowser = vi.fn();
+    const { send, view, all } = mount("p1", { onManualBrowser });
+    send({ kind: "turn_started" });
+    fireEvent.click(await screen.findByRole("tab", { name: /运行分析/ }));
+    view.rerender(<Pane {...all} filesPulse={1} />);
+    expect(selected()).toBe("flow");
+    expect(onManualBrowser).toHaveBeenLastCalledWith(true);
+    expect(document.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+    onManualBrowser.mockClear();
+    view.rerender(<Pane key="p1:1" {...all} filesPulse={1} />);
+    expect(onManualBrowser).not.toHaveBeenCalled();
+    expect(document.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
+  });
+
 });

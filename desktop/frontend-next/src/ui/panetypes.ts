@@ -42,6 +42,7 @@ export interface PaneProps {
   // pane keeps reporting the posture it had when it opened.
   pulse: number;
   findPulse: number;
+  filesPulse?: number;
   onSettings: (section?: string) => void;
   // Open a session this pane made, beside it: a branch is its own conversation.
   onOpenSession?: (path: string) => void;
