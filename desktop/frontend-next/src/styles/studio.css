@@ -3454,6 +3454,7 @@ body { font-size: 14px; line-height: 1.75; }
    events and the execution graph stay in Runtime details; this surface answers
    the common question first: where did the turn spend its time? */
 .run-analysis {
+  --ra-columns: 34px minmax(180px, 1fr) 180px 116px;
   --ra-model: color-mix(in srgb, var(--accent) 82%, var(--text));
   --ra-tool: color-mix(in srgb, var(--net) 78%, var(--text));
   --ra-recovery: color-mix(in srgb, var(--err) 76%, var(--text));
@@ -3536,7 +3537,14 @@ body { font-size: 14px; line-height: 1.75; }
 .run-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 7px; }
 .run-legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font: var(--w-reg) 10.5px var(--ui); }
 .run-legend i { width: 8px; height: 8px; border-radius: 2px; background: var(--ra-color); }
-.run-signal-line { position: relative; height: 34px; border-block: 1px dashed var(--border); background: color-mix(in srgb, var(--surface) 56%, transparent); }
+.run-timeline-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; font: var(--w-reg) 11px var(--ui); }
+.run-timeline-controls label { display: flex; align-items: center; gap: 10px; }
+.run-timeline-controls input { width: 130px; accent-color: var(--accent); }
+.run-timeline-scroll { overflow-x: auto; container-type: inline-size; }
+.run-timeline-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.run-timeline-canvas .run-inspect { position: sticky; left: 16px; max-width: calc(100cqw - 76px); }
+.run-signal-track { display: grid; grid-template-columns: var(--ra-columns); gap: 12px; padding: 5px 10px; }
+.run-signal-line { grid-column: 2; position: relative; height: 34px; border-block: 1px dashed var(--border); background: color-mix(in srgb, var(--surface) 56%, transparent); }
 .run-signal-line button { position: absolute; top: 50%; width: 20px; height: 30px; translate: -50% -50%; border: 0; background: transparent; cursor: pointer; }
 .run-signal-line button::after { content: ""; position: absolute; left: 50%; top: 3px; bottom: 3px; width: 1px; background: var(--border); }
 .run-signal-line button i { position: absolute; z-index: 1; left: 50%; top: 50%; width: 9px; height: 9px; translate: -50% -50%; rotate: 45deg; border: 2px solid var(--raised); background: var(--ra-color); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ra-color) 62%, var(--border)); }
@@ -3553,11 +3561,11 @@ body { font-size: 14px; line-height: 1.75; }
 .run-rounds li[data-on] .run-round-id,
 .run-rounds li[data-on] .run-round-copy b { color: var(--text); }
 .run-rounds button {
-  width: 100%; min-height: 38px; display: grid; grid-template-columns: 34px minmax(180px, 1fr) minmax(150px, .72fr) 116px;
+  width: 100%; min-height: 38px; display: grid; grid-template-columns: var(--ra-columns);
   align-items: center; gap: 12px; padding: 5px 10px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer;
 }
 .run-round-id { color: var(--muted); font: var(--w-reg) 10.5px var(--mono); }
-.run-round-track { position: relative; height: 14px; overflow: hidden; border-radius: 3px; border-left: 1px solid var(--border); background-color: var(--surface); background-image: linear-gradient(90deg, var(--hair) 1px, transparent 1px); background-size: 25% 100%; }
+.run-round-track { position: relative; height: 14px; overflow: hidden; border-radius: 3px; background-color: var(--surface); background-image: linear-gradient(90deg, var(--hair) 1px, transparent 1px); background-size: 25% 100%; }
 .run-round-track > i { position: absolute; top: 3px; height: 8px; min-width: 3px; border-radius: 2px; background: var(--ra-color, var(--ra-tool)); }
 .run-round-track > i[data-c="round"] { --ra-color: var(--ra-model); }
 .run-round-track > i[data-c="read"] { --ra-color: var(--ghost); }
@@ -3582,7 +3590,7 @@ body { font-size: 14px; line-height: 1.75; }
   .run-kpis { grid-template-columns: repeat(3, 1fr); }
   .run-kpis > div:nth-child(3) { border-right: 0; }
   .run-kpis > div:nth-child(-n+3) { border-bottom: 1px solid var(--hair); }
-  .run-rounds button { grid-template-columns: 30px minmax(120px, 1fr) minmax(120px, .8fr); }
+  .run-analysis { --ra-columns: 30px minmax(120px, 1fr) 140px; }
   .run-round-kind { display: none; }
 }
 @media (max-width: 580px) {
@@ -3591,7 +3599,7 @@ body { font-size: 14px; line-height: 1.75; }
   .run-kpis > div:nth-child(2n) { border-right: 0; }
   .run-kpis > div:nth-child(3) { border-right: 1px solid var(--hair); }
   .run-kpis > div:nth-child(-n+4) { border-bottom: 1px solid var(--hair); }
-  .run-rounds button { grid-template-columns: 26px minmax(100px, 1fr); }
+  .run-analysis { --ra-columns: 26px minmax(100px, 1fr); }
   .run-round-copy { display: none; }
 }
 :root[data-theme="light"] .grp,
