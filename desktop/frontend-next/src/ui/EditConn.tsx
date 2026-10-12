@@ -244,7 +244,7 @@ export function EditConn({
   const { batch, testAll } = useModelBatch({
     port, picked, draftKey, setFacts, origin: "configured",
     blocked: checkingModel !== "" || busy !== "",
-    request: { name: entry.name, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), kind: entry.kind },
+    request: { name: entry.name, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), kind },
   });
   const testing = checkingModel !== "" || batch === "running";
   const [edited, setEdited] = useState(false);
