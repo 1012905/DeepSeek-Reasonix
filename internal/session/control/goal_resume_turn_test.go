@@ -21,6 +21,9 @@ func TestGoalResumeCommandContinuesTheGoalAndSaysSo(t *testing.T) {
 	for len(events) > 0 {
 		<-events
 	}
+	// Completing the goal clears its text, which can happen before the notice
+	// is read here, so the expected line is fixed while the goal is still set.
+	want := fmt.Sprintf(i18n.M.GoalResumedFmt, ShortGoalForNotice(c.Goal()))
 
 	c.Submit("/goal resume")
 
@@ -29,7 +32,7 @@ func TestGoalResumeCommandContinuesTheGoalAndSaysSo(t *testing.T) {
 	for done := false; !done; {
 		select {
 		case e := <-events:
-			sawNotice = sawNotice || (e.Kind == event.Notice && e.Text == fmt.Sprintf(i18n.M.GoalResumedFmt, ShortGoalForNotice(c.Goal())))
+			sawNotice = sawNotice || (e.Kind == event.Notice && e.Text == want)
 			done = e.Kind == event.TurnDone
 		case <-deadline:
 			t.Fatal("no turn ran after /goal resume")
