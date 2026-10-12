@@ -191,7 +191,7 @@ func TestWindowsPluginWatchedUpdateRollbackAtPublication(t *testing.T) {
 			t.Fatalf("update did not reach publication fault: %v", err)
 		}
 	}()
-	if caught != marker {
+	if caughtErr, ok := caught.(error); !ok || !errors.Is(caughtErr, marker) {
 		t.Fatalf("publication fault = %v", caught)
 	}
 	after, err := os.ReadFile(pluginpkg.StatePath(tool.reasonixHome))
