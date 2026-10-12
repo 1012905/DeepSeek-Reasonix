@@ -192,3 +192,70 @@ func TestDifferentialPerTestFailsWhenRestoreFails(t *testing.T) {
 		t.Fatal("a failed restore still produced pin results")
 	}
 }
+
+// The base side is checked before any pin runs, and that check can fail too: the
+// tree must not be left on base just because the failure happened early. The
+// defer that restores is registered before the check for exactly this path.
+func TestDifferentialPerTestRestoresWhenTheBaseCheckFails(t *testing.T) {
+	repo := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	run("init", "-q")
+	if err := os.WriteFile(filepath.Join(repo, "f.go"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "f.go")
+	run("commit", "-qm", "base")
+	base := strings.TrimSpace(gitOut(repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "f.go"), []byte("head\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("commit", "-aqm", "head")
+
+	orig := treeMatches
+	treeMatches = func(r, rev string, files []string) error {
+		if rev == base {
+			return errors.New("injected: base side does not match")
+		}
+		return treeMatchesTree(r, rev, files)
+	}
+	t.Cleanup(func() { treeMatches = orig })
+
+	out, err := differentialPerTest(repo, base, []string{"f.go"}, nil)
+	if err == nil {
+		t.Fatalf("a failed base check reported success with %d pins", len(out))
+	}
+	got, rerr := os.ReadFile(filepath.Join(repo, "f.go"))
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	if strings.TrimSpace(string(got)) != "head" {
+		t.Fatalf("the tree was left on base: f.go = %q, want the PR's content", strings.TrimSpace(string(got)))
+	}
+}
+
+// A pin table that was already produced still stands, so the failure line must
+// not claim both figures are missing when only the mutation sweep failed.
+func TestAnalysisFailureLineNamesWhatIsMissing(t *testing.T) {
+	only := analysisFailureLine(diffReport{analysisErr: errors.New("boom"), pins: []pinResult{{}}})
+	if !strings.Contains(only, "mutation figures are absent") || !strings.Contains(only, "pin table above still stands") {
+		t.Fatalf("with pins present the line reads %q", only)
+	}
+	if strings.Contains(only, "Pin and mutation figures are absent") {
+		t.Fatalf("with pins present the line still claims both are absent: %q", only)
+	}
+	both := analysisFailureLine(diffReport{analysisErr: errors.New("boom")})
+	if !strings.Contains(both, "Pin and mutation figures are absent") {
+		t.Fatalf("with no pins the line reads %q", both)
+	}
+	if analysisFailureLine(diffReport{}) != "" {
+		t.Fatal("a finished analysis produced a failure line")
+	}
+}

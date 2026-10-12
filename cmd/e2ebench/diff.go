@@ -290,8 +290,8 @@ func renderDiff(r diffReport) string {
 	if r.runErr != nil {
 		fmt.Fprintf(&b, "\n<sub>agent run note: %v</sub>\n", r.runErr)
 	}
-	if r.analysisErr != nil {
-		fmt.Fprintf(&b, "\n**Analysis did not finish: %v.** Pin and mutation figures are absent, not zero.\n", r.analysisErr)
+	if line := analysisFailureLine(r); line != "" {
+		b.WriteString(line)
 	}
 	fmt.Fprintf(&b, "\n<sub>Pass = the agent added ≥1 test, the affected packages are green, AND ≥1 new test fails when the PR's source is reverted. \"By assertion\" pins are strong (they check changed behavior); \"by compile only\" pins just need a PR-added symbol — and since Go compiles per package, one compile-coupled test marks every test in its package that way. Mutation is the behavioral signal for additive PRs: each changed function's return is replaced with zero values and the new tests are re-run; \"caught\" means a test asserts that output, \"survived\" means it doesn't. Read the generated tests above to judge the rest.</sub>\n")
 	return b.String()
@@ -342,9 +342,6 @@ func differentialPerTest(repo, base string, srcFiles []string, refs []testRef) (
 			_ = os.Remove(filepath.Join(repo, filepath.FromSlash(f)))
 		}
 	}
-	if err := treeMatches(repo, base, srcFiles); err != nil {
-		return nil, err
-	}
 	// Restore source on the way out; a tree left on `base` would mask the PR for
 	// later steps, so a failed restore is this analysis failing, not a note.
 	restored := false
@@ -359,6 +356,9 @@ func differentialPerTest(repo, base string, srcFiles []string, refs []testRef) (
 			err = terr
 		}
 	}()
+	if err := treeMatches(repo, base, srcFiles); err != nil {
+		return nil, err
+	}
 
 	out = make([]pinResult, 0, len(refs))
 	for _, r := range refs {
@@ -680,4 +680,17 @@ func passFail(ok bool) string {
 		return "pass"
 	}
 	return "fail"
+}
+
+// analysisFailureLine says which figures a failed analysis leaves absent. A pin
+// table that was already produced still stands, so claiming both are missing
+// would be wrong whenever only the mutation sweep failed.
+func analysisFailureLine(r diffReport) string {
+	if r.analysisErr == nil {
+		return ""
+	}
+	if len(r.pins) > 0 {
+		return fmt.Sprintf("\n**Analysis did not finish: %v.** The mutation figures are absent, not zero; the pin table above still stands.\n", r.analysisErr)
+	}
+	return fmt.Sprintf("\n**Analysis did not finish: %v.** Pin and mutation figures are absent, not zero.\n", r.analysisErr)
 }
