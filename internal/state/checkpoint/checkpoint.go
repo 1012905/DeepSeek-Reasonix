@@ -140,6 +140,7 @@ type Store struct {
 	activeWriters []ActiveWriter
 	plans         map[string]preparedPlan
 	lastUndo      *TransactionManifest
+	undoChanged   func()
 	sessionID     string
 	mutationSeq   int64
 	retainN       int
@@ -224,27 +225,14 @@ func (s *Store) activeWriterConflicts() []RewindConflict {
 	return conflicts
 }
 
-// LastUndoTransactionID returns the committed transaction id available for undo.
-func (s *Store) LastUndoTransactionID() string {
-	if s == nil {
-		return ""
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.lastUndo == nil || s.lastUndo.State != TxCommitted {
-		return ""
-	}
-	return s.lastUndo.ID
-}
-
 // InvalidateUndo clears the last undo slot (new turn / new mutation / new rewind).
 func (s *Store) InvalidateUndo() {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
+	defer s.unlockUndoChange(s.lastUndo)
 	s.lastUndo = nil
-	s.mu.Unlock()
 }
 
 func (s *Store) load() {
@@ -309,7 +297,7 @@ func (s *Store) load() {
 // prompt labels it in the picker; msgIndex is the conversation-rewind boundary.
 func (s *Store) Begin(turn int, prompt string, msgIndex int) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlockUndoChange(s.lastUndo)
 	if s.cur != nil {
 		s.recomputeCoverageLocked(s.cur)
 		s.done = append(s.done, s.cur)
@@ -501,7 +489,7 @@ func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) {
 	_ = err
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlockUndoChange(s.lastUndo)
 	s.mutationSeq = opts.Seq
 	if s.cur != nil {
 		s.cur.LastMutationSeq = opts.Seq

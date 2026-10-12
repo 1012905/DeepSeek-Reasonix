@@ -14,7 +14,8 @@ import { useReplyActions } from "./reply";
 import { useGateActions } from "./gates";
 import { useQueueActions } from "./queueactions";
 import { useRewindActions } from "./rewind";
-import { ReloadNotice, RestoreNotice } from "./RestoreNotice";
+import { ReloadNotice } from "./RestoreNotice";
+import { RewindNotice } from "./RewindNotice";
 import { initialTraj, reduceTraj } from "../state/trajectory";
 import { Transcript } from "./Transcript";
 import { useBackgroundDeltas } from "./deltas";
@@ -342,7 +343,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     sessionState: sessionRead.kind,
     sessionPath: status?.sessionPath,
   });
-  const { reloadFailure, onReloadSession, restoreNotice, dismissRestore, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert } = useRewindActions(port, reloadSession, onRestoreText, JSON.stringify([rt.id, rt.root, status?.sessionPath ?? rt.sessionPath]), running);
+  const { reloadFailure, onReloadSession, restoreNotice, onUndoAvailable, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert } = useRewindActions(port, reloadSession, onRestoreText, JSON.stringify([rt.id, rt.root, status?.sessionPath ?? rt.sessionPath]), running);
+  const onReadUndo = useCallback(() => port.availableUndo(), [port]);
 
   const { onApprove, onFullAccess, onPlan, onForget, onExtInvoke, onExtSubmit, onAnswer } = useGateActions({
     port,
@@ -409,7 +411,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
       <Find find={find} />
 
-      <div className="pbody" data-dock={tab === "flow" ? "" : undefined} data-full={tab === "browser" ? "" : undefined}>
+      <div className="pbody rewind-notice-host" data-dock={tab === "flow" ? "" : undefined} data-full={tab === "browser" ? "" : undefined}>
+      <RewindNotice key={JSON.stringify([rt.id, rt.root, status?.sessionPath ?? rt.sessionPath])} readUndo={onReadUndo} onUndo={onUndoAvailable} busy={!!restoreNotice?.working || !!reloadFailure?.working} refreshKey={checkpoints} moved={s.rewindMoved} running={running} shown={visible && tab === "flow" && !rt.readOnly} />
       <div className="pviews">
 
       <ReceiptPrefContext.Provider value={receiptPref}>
@@ -546,7 +549,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           onCancelJob={(id) => port.cancelJob(id).then(refreshStatus, fail)}
         />
         {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}
-        {restoreNotice && <RestoreNotice receipt={restoreNotice} refreshing={reloadFailure?.working} onUndo={onUndoRewind} onDismiss={dismissRestore} />}
         {/* Below the box, under a ceiling of their own. Both arrive unbidden and
             both are dismissed one at a time, so nothing else bounds how many can
             be on screen at once. */}
