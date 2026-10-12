@@ -59,7 +59,7 @@ func TestWebSearchModelSurvivesProviderRemovalAsUnavailable(t *testing.T) {
 	on := true
 	c := &Config{Providers: []ProviderEntry{{Name: "selected", Kind: "anthropic", Model: "search", WebSearch: &on}, {Name: "other", Kind: "responses", Model: "fallback", WebSearch: &on}}}
 	c.Agent.WebSearchModel = "selected/search"
-	if err := c.RemoveProvider("selected"); err != nil {
+	if _, err := c.RemoveProvider("selected"); err != nil {
 		t.Fatal(err)
 	}
 	if c.Agent.WebSearchModel != "selected/search" || !errors.Is(c.ResolveWebSearch().Err, ErrWebSearchModelUnavailable) {
