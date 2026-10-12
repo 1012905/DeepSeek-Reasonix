@@ -404,6 +404,10 @@ export class MockPort extends MockWorkspace implements AgentPort {
     return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: this.prompts.length > 1 ? 3 : 0, msgIndex: mockMsgIndex(i + 1) }));
   }
 
+  async branchAt(turn: number): Promise<string> {
+    return `/mock/branch-${turn}.jsonl`;
+  }
+
   // The second prompt onwards is scripted to have run bash, so mock mode can
   // show the consent stage the real kernel demands on partial coverage.
   async prepareRewind(turn: number, scope: RewindScope): Promise<RewindPlan> {

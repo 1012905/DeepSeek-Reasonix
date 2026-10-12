@@ -43,6 +43,8 @@ export interface PaneProps {
   pulse: number;
   findPulse: number;
   onSettings: (section?: string) => void;
+  // Open a session this pane made, beside it: a branch is its own conversation.
+  onOpenSession?: (path: string) => void;
   // 这个窗口还没有人选过的项目文件夹。空转录是唯一说得出这句话的地方 —— 那里
   // 本来就在替一段还没开始的对话说明它该怎么开始。
   needsProject: boolean;

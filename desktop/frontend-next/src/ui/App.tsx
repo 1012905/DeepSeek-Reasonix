@@ -682,6 +682,7 @@ export function App({ hub }: { hub: HubPort }) {
                     setClaimed(true);
                   }}
                   onSettings={(section) => section ? showPrefs(section) : showPrefs()}
+                  onOpenSession={(path) => void openPane({ root: rt.root, sessionPath: path }).catch(fail)}
                   theme={scheme}
                   dockW={shownDockW}
                   dockMax={dockLimit}

@@ -1291,6 +1291,8 @@ export const EN: Record<string, string> = {
   "任务清单": "Task list",
   "引用到输入框": "Quote into the composer",
   "重新生成": "Regenerate",
+  "分支为新会话": "Branch into a new conversation",
+  "分支": "branch",
   "当前回复会留在运行历史里": "The current reply stays in the run history",
   "按当前配置重试": "Retry as configured",
   "先调整模型与强度": "Adjust the model and effort first",
@@ -1368,6 +1370,9 @@ export const EN: Record<string, string> = {
     "The staged diff is long; the draft reads only its first part",
   "这个工作区不是 git 仓库，无法提交":
     "This workspace is not a git repository, so there is nothing to commit",
+  "回合运行中，等它结束后再分支": "A turn is running; branch after it ends",
+  "这个位置无法分支（重启后恢复的会话，或已被压缩的历史）": "This point cannot be branched (a session restored after a restart, or history that was compacted)",
+  "分支失败，请重试": "Branching failed; try again",
   "暂存区是空的，先用 git add 暂存要提交的文件":
     "Nothing is staged; stage the files to commit with git add first",
   "暂存区在你确认之后又变了，请重新起草":

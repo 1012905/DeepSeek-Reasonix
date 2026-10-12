@@ -74,7 +74,7 @@ describe("the reply menus", () => {
   });
 
   const card = (onRegenerate = () => {}) =>
-    render(<SayCard item={item} reply={{ onQuote: () => {}, canRegenerate: () => true, hasLaterTurns: () => false, onRegenerate, onConfigureModel: () => {}, onRunDetail: () => {} }} />);
+    render(<SayCard item={item} reply={{ onQuote: () => {}, canRegenerate: () => true, hasLaterTurns: () => false, onRegenerate, canBranch: () => false, onBranch: () => {}, onConfigureModel: () => {}, onRunDetail: () => {} }} />);
   const list = () => document.querySelector<HTMLElement>(".acts-pop");
 
   for (const action of ["reply.retry", "reply.more"]) {

@@ -244,6 +244,10 @@ const SAID: Record<string, string> = {
   "prompt_refine.failed": "优化失败，请重试",
   "prompt_refine.bad_request": "优化请求格式不正确",
 
+  "conversation_branch.turn_running": "回合运行中，等它结束后再分支",
+  "conversation_branch.unavailable": "这个位置无法分支（重启后恢复的会话，或已被压缩的历史）",
+  "conversation_branch.failed": "分支失败，请重试",
+
   "commit.no_repository": "这个工作区不是 git 仓库，无法提交",
   "commit.nothing_staged": "暂存区是空的，先用 git add 暂存要提交的文件",
   "commit.staged_changed": "暂存区在你确认之后又变了，请重新起草",

@@ -62,6 +62,8 @@ export interface ReplyActions {
   canRegenerate: (id: string) => boolean;
   hasLaterTurns: (id: string) => boolean;
   onRegenerate: (id: string) => void;
+  canBranch: (id: string) => boolean;
+  onBranch: (id: string) => void;
   model?: string;
   onConfigureModel?: () => void;
   onRunDetail?: () => void;
@@ -141,6 +143,11 @@ export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Ite
               {reply && (
                 <button type="button" data-action="reply.quote" title={t("引用到输入框")} aria-label={t("引用到输入框")} onClick={(e) => reply.onQuote(selectedIn(e.currentTarget.closest(".call")) || item.text, item.id)}>
                   <StudioIcon name="quote" />
+                </button>
+              )}
+              {reply?.canBranch(item.id) && (
+                <button type="button" data-action="reply.branch" title={t("分支为新会话")} aria-label={t("分支为新会话")} onClick={() => reply.onBranch(item.id)}>
+                  <StudioIcon name="branch" />
                 </button>
               )}
               {reply?.canRegenerate(item.id) && (
