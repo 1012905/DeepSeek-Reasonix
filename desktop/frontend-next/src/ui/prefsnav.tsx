@@ -201,7 +201,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
-  { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "system one", "typesafe", "laya"] },
+  { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "网页搜索", "web search", "system one", "typesafe", "laya"] },
   // Written onto the provider entry, not the model row: SetProviderEffort keys
   // by provider name, so every model reached through that source shares it.
   { section: "model", anchor: "effort", title: "推理强度", scope: "model", apply: "runtime-rebuild", keywords: ["思考", "reasoning", "档位"] },
