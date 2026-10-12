@@ -131,6 +131,16 @@ func (b *MutationBarrier) ExitExclusive() {
 	b.cond.Broadcast()
 }
 
+// HasWriters reads writer activity without taking exclusive mutation access.
+func (b *MutationBarrier) HasWriters() bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.writers > 0
+}
+
 // Busy reports whether exclusive is held or writers are active.
 func (b *MutationBarrier) Busy() bool {
 	if b == nil {

@@ -296,6 +296,9 @@ func ckptDir(sessionPath string) string {
 func (c *Controller) rebindCheckpoints(sessionPath string) {
 	c.goals.setStatePath(goalStatePath(sessionPath))
 	c.checkpoints.rebind(ckptDir(sessionPath), c.workspaceRoot)
+	c.checkpoints.storeRef().OnUndoChange(func() {
+		c.sink.Emit(event.Event{Kind: event.RewindChanged})
+	})
 	if c.executor != nil {
 		c.wireMutationObserver()
 	}
