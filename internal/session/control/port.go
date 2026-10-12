@@ -266,6 +266,9 @@ type RuntimeSettings interface {
 	SavePermissionRules(in PermissionLists) error
 	RevokeSessionGrant(rule string) int
 	RevokeRememberedProjectRule(rule string) error
+	WorkspaceRoots() (WorkspaceRoots, error)
+	AddWorkspaceRoot(dir string) (string, error)
+	RemoveWorkspaceRoot(dir string) error
 	SandboxSettings() SandboxSettings
 	SaveSandboxSettings(in SandboxSettings) error
 	BrowserToolsSettings() BrowserToolsSettings
@@ -274,11 +277,19 @@ type RuntimeSettings interface {
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
 	SaveDisplayCurrency(mode string) error
+	ChangedFilesSettings() ChangedFilesSettings
+	SaveChangedFilesSettings(show bool) error
+	FoldWorkSettings() FoldWorkSettings
+	SaveFoldWorkSettings(fold bool) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
+	AskTimeoutSettings() AskTimeoutSettings
+	SaveAskTimeoutSettings(seconds int) error
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int
+	ReceiptSettings() ReceiptSettings
+	SaveReceiptSettings(show bool) error
 	ConfigProblem() *ConfigProblem
 	RepairConfigFile() (string, error)
 }

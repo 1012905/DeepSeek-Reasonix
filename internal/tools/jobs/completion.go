@@ -61,6 +61,24 @@ func (m *Manager) SetCompletionObserver(o CompletionObserver) {
 	m.mu.Unlock()
 }
 
+// Recorder is the installed task recorder, nil when none.
+func (m *Manager) Recorder() TaskRecorder { return m.taskRecorder }
+
+// ObservedBy reports whether o is the installed completion observer, and
+// Observed whether any is. A controller that adopts this manager uses them to
+// tell a manager it owns from one it only borrows until its switch is decided.
+func (m *Manager) ObservedBy(o CompletionObserver) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.completionObserver == o
+}
+
+func (m *Manager) Observed() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.completionObserver != nil
+}
+
 // publishCompletion hands the event to the observer and, when it reports the
 // event durable, drops the manager's own copy so the completion is not folded
 // into the next user turn as well.

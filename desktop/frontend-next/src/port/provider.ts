@@ -99,6 +99,23 @@ export interface Protocol {
   effortUnder?: string[];
 }
 
+// A curated starting point the kernel offers. Choosing one creates the whole
+// declared entry — catalog, window, vision models, thinking shape — in the
+// kernel; the person supplies only a name and a key.
+export interface ProviderPreset {
+  id: string;
+  label: string;
+  kind: string;
+  baseUrl: string;
+}
+
+export interface ProviderPresetInstall {
+  presetId: string;
+  // Empty takes the preset's own name, made unique by the kernel.
+  name?: string;
+  apiKey: string;
+}
+
 // What an endpoint turned out to be. Every field is a guess the user confirms
 // before anything is written — a model list cannot prove which protocol a
 // gateway speaks, only which ones it answers.
@@ -128,6 +145,12 @@ export interface ProviderProbe {
 // What re-probing a saved provider found. A failure carries `code`, the dotted
 // identity the add flow's refusals use, because "401" and "no chat models" send
 // the user to different fixes; the endpoint's own words ride along as `detail`.
+export interface ProviderRemoval {
+  movedTo: string;
+  moved: string[];
+  cleared: string[];
+}
+
 export interface ProviderCheck {
   ok: boolean;
   kind?: string;
@@ -143,6 +166,8 @@ export interface ProviderCheck {
   ambiguous?: boolean;
   noProxy?: boolean;
   code?: string;
+  // The host a refused redirect pointed at.
+  target?: string;
   // Only the numbers the code's sentence needs: `status`, `count`.
   params?: Record<string, number>;
   httpStatus?: number;
@@ -158,6 +183,10 @@ export type ProviderModelCheckReason =
   | "rejected"
   | "network"
   | "timeout"
+  // Timed out against the machine's own address: the engine did not answer, not the network.
+  | "local_timeout"
+  // The address redirected to another host; the detail names it.
+  | "redirect_refused"
   // The endpoint answered chat and refused a tools array. Established by
   // sending the same request again without one, not by reading the refusal.
   | "tools";

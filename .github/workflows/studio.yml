@@ -33,7 +33,7 @@ jobs:
           version: 10
           run_install: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
           cache: pnpm
@@ -114,7 +114,7 @@ jobs:
           run_install: false
 
       - if: steps.spa.outputs.run == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
           cache: pnpm
@@ -271,7 +271,7 @@ jobs:
           version: 10
           run_install: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
           cache: pnpm
@@ -336,6 +336,27 @@ jobs:
           test -n "$dir"
           node desktop/electron/packaging/pe.js "$dir" "${{ matrix.arch }}"
 
+      # An update starts the installer with --updated, and that is what keeps the
+      # shortcuts (and the taskbar pin hanging off them) from being deleted and
+      # recreated. Installed twice over itself the way an update does it, the
+      # desktop shortcut has to still be the same file, pointing at a path with
+      # no version in it, or every update costs the user their pin.
+      - name: An update keeps the shortcuts and they name no version
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem dist -Filter 'ReasonixStudio-windows-*-installer.exe' | Select-Object -First 1).FullName
+          $dir = Join-Path $env:RUNNER_TEMP 'rx-update-guard'
+          Start-Process $installer -ArgumentList '/S', "/D=$dir" -Wait
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Reasonix Studio.lnk'
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+          if ($target -ne (Join-Path $dir 'Reasonix Studio.exe')) { throw "the desktop shortcut targets $target, not the stable executable" }
+          $mark = [datetime]'2020-01-01'
+          (Get-Item $lnk).LastWriteTime = $mark
+          Start-Process $installer -ArgumentList '/S', '--updated', "/D=$dir" -Wait
+          if ((Get-Item $lnk).LastWriteTime -ne $mark) { throw 'an update rewrote the desktop shortcut' }
+          Start-Process (Join-Path $dir 'Uninstall Reasonix Studio.exe') -ArgumentList '/S', '/currentuser' -Wait
+
       # The release packages a signed copy of the bundle and then reads both
       # packages back against it. The same recipe on an unsigned copy, so the
       # packaging contract (the installer's one application archive, the pinned
@@ -391,7 +412,7 @@ jobs:
 
       - name: Keep the arm64 installer for the x64 refusal check
         if: matrix.platform == 'windows' && matrix.arch == 'arm64'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: studio-arm64-installer-ci
           path: dist/ReasonixStudio-windows-arm64-installer.exe
@@ -436,6 +457,16 @@ jobs:
           name=$(dpkg-deb -f "$deb" Package)
           if [ "$name" != "reasonix-studio" ]; then
             echo "::error::the package is $name; dpkg holds that beside the installed reasonix-studio instead of upgrading it, and update.StudioLine asks for it by name"
+            exit 1
+          fi
+          # The helper in the package accepts one package name, compiled in. It has
+          # to be the one the package carries, or every in-app update is refused
+          # as a different package after the download and signature succeed.
+          dpkg-deb --fsys-tarfile "$deb" | tar -xO ./usr/lib/reasonix-studio/reasonix-studio-update-helper > "$RUNNER_TEMP/update-helper"
+          chmod +x "$RUNNER_TEMP/update-helper"
+          accepts=$("$RUNNER_TEMP/update-helper" package)
+          if [ "$accepts" != "$name" ]; then
+            echo "::error::the update helper in the package accepts $accepts but the package is $name"
             exit 1
           fi
           dpkg-deb -c "$deb" > contents.txt
@@ -527,7 +558,7 @@ jobs:
     if: needs.scope.outputs.arm64 == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: studio-arm64-installer-ci
           path: installer

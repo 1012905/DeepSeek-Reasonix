@@ -22,6 +22,7 @@ import (
 // The caller must already have claimed admission (running=true) under c.mu.
 func (c *Controller) spawnGuardedTurn(ctx context.Context, cancel context.CancelFunc, body func(ctx context.Context) error) {
 	ctx, completion := withGuardedTurnCompletion(ctx)
+	ctx = agent.WithRunTimeSink(ctx, func(ms int64) { completion.workMs.Add(ms) })
 	c.autosaveWG.Go(func() {
 		c.autosaveWhileRunning(ctx)
 	})
@@ -98,6 +99,7 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 		Cancelled:      cancelRequested && (err == nil || errors.Is(err, context.Canceled)),
 		Outcome:        turnOutcome(err),
 		CheckpointTurn: c.validatedCheckpointTurn(completion),
+		WorkDurationMs: turnWorkMs(err, cancelRequested, completion),
 		Receipt:        c.executor.CompletionReceipt(),
 		ItemID:         activeInboxID,
 	}
@@ -647,4 +649,13 @@ func interruptedToolSummary(call provider.ToolCall) provider.InterruptedToolSumm
 		}
 	}
 	return summary
+}
+
+// turnWorkMs is the run time the turn reports: none when it failed or was
+// stopped, because a figure for work the person cut short says nothing.
+func turnWorkMs(err error, cancelled bool, completion *guardedTurnCompletion) int64 {
+	if err != nil || cancelled || completion == nil {
+		return 0
+	}
+	return completion.workMs.Load()
 }

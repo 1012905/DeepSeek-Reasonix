@@ -546,6 +546,8 @@ export interface Receipt {
   // The kernel's own answer to "is this worth showing at all", carried rather
   // than recomputed here so the windows and the terminal never drift apart.
   saysSomething?: boolean;
+  // The kernel's grading of what was left unproven; absent when nothing was.
+  severity?: "notice" | "warn";
 }
 
 export interface ReceiptChange {
@@ -669,6 +671,8 @@ export interface WireEvent {
   reasoning?: string;
   // message: how long the kernel measured this reply thinking, in ms.
   thoughtMs?: number;
+  // turn_done: ms the run took up to its final answer; absent when it gave none.
+  workDurationMs?: number;
   level?: string;
   // "operator" means the notice is about the machine running this conversation,
   // not about the conversation. Only the latter belongs in a transcript.

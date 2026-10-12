@@ -61,6 +61,15 @@ export interface SandboxSettings {
   shadowedBy?: string;
 }
 
+// The project's primary folder and the extra folders the user granted it write
+// access to. pending counts other panes on the project that were busy and take
+// the change at their next rebuild.
+export interface WorkspaceRoots {
+  primary: string;
+  extra: string[];
+  pending?: number;
+}
+
 // What a settings surface shows in place of a save it cannot perform. The
 // kernel refuses every write while the file will not parse, so this arrives
 // before anything is tried rather than as each panel's own error.
@@ -105,8 +114,41 @@ export interface DisplayCurrencySettings {
   path: string;
 }
 
+// Whether the changed-files pill is drawn above the composer; the user file
+// holds it.
+// Whether Studio folds a turn's intermediate work under one line; the user file
+// holds it.
+export interface FoldWorkSettings {
+  fold: boolean;
+  path: string;
+}
+
+export interface ChangedFilesSettings {
+  show: boolean;
+  path: string;
+}
+
 // When a run reads as no longer moving. Only the user file holds it: a
 // project file cannot pause the user's runs.
+// How long an ask question waits before the host skips it; 0 waits. The user
+// file holds it, so the terminal reads the same answer.
+export interface AskTimeoutSettings {
+  seconds: number;
+  // The kernel's code for a value the file holds that cannot be applied.
+  invalid?: string;
+  defaultSeconds: number;
+  minSeconds: number;
+  maxSeconds: number;
+  path: string;
+}
+
+// Whether the end-of-turn delivery receipt is drawn as a card; the user file
+// holds it, so the terminal reads the same answer.
+export interface ReceiptSettings {
+  show: boolean;
+  path: string;
+}
+
 export interface ProgressWatchSettings {
   pause: boolean;
   rounds: number;
