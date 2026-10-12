@@ -38,6 +38,9 @@ var sessionCarryOver = map[string]bool{
 	// The surface a later request estimates against. Carried for the same
 	// reason as the shape above: the next request rebinds it before reading.
 	"lastProviderSchemas": true,
+	// A withdrawn slot outlives the conversation that saw it, so the queued
+	// fact is still true and still undelivered; the next round drains it.
+	"hostNotices": true,
 }
 
 // windowReset and windowCarryOver are the same two lists for windowState.

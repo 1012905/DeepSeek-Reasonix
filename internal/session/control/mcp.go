@@ -59,7 +59,12 @@ func watchToolListChanges(host *plugin.Host, reg *tool.Registry, pluginCtx conte
 		return
 	}
 	host.SubscribeToolListChanges(pluginCtx, func(spec plugin.Spec, tools []tool.Tool) {
-		withdrawn := registerRefreshedMCPTools(reg, spec, tools)
+		// What the refresh withheld is part of what it decided: the registry's
+		// held set is replaced from the same judgement, as at every other
+		// registration site, or this session keeps policing the old one.
+		held, _ := host.HeldTools(spec.Name)
+		withdrawn := registerRefreshedMCPTools(reg, spec, tools, held)
+		plugin.ApplyHeldMCPPolicy(reg, host, spec)
 		if len(withdrawn) > 0 && notice != nil {
 			notice(withdrawnMCPToolsNotice(spec.Name, withdrawn))
 		}
@@ -71,10 +76,10 @@ func watchToolListChanges(host *plugin.Host, reg *tool.Registry, pluginCtx conte
 // backs — those stay as withdrawn slots (see withdrawnProviderTools). The
 // prefix is not resumed: a session that suspended this server turned it off,
 // and a server announcing new tools is not the user asking for it back.
-func registerRefreshedMCPTools(reg *tool.Registry, spec plugin.Spec, tools []tool.Tool) []string {
+func registerRefreshedMCPTools(reg *tool.Registry, spec plugin.Spec, tools []tool.Tool, held []plugin.HeldTool) []string {
 	prefix := plugin.ToolPrefix(spec.Name)
-	held, withdrawn := withdrawnProviderTools(reg, spec.Name, prefix, tools)
-	reg.ReplacePrefix(prefix, append(slices.Clone(tools), held...))
+	slots, withdrawn := withdrawnProviderTools(reg, spec.Name, prefix, tools, held)
+	reg.ReplacePrefix(prefix, append(slices.Clone(tools), slots...))
 	return withdrawn
 }
 
@@ -83,7 +88,7 @@ func registerRefreshedMCPTools(reg *tool.Registry, spec plugin.Spec, tools []too
 // longer offers. Vacating one rewrites the cache-stable prefix, so the entry
 // stays and its call fails with the live catalog's not-found. A slot an earlier
 // refresh withdrew is kept but not announced twice.
-func withdrawnProviderTools(reg *tool.Registry, server, prefix string, offered []tool.Tool) ([]tool.Tool, []string) {
+func withdrawnProviderTools(reg *tool.Registry, server, prefix string, offered []tool.Tool, heldNow []plugin.HeldTool) ([]tool.Tool, []string) {
 	live := make(map[string]bool, len(offered))
 	for _, t := range offered {
 		if t != nil {
@@ -112,17 +117,28 @@ func withdrawnProviderTools(reg *tool.Registry, server, prefix string, offered [
 		if rawName == "" {
 			rawName = strings.TrimPrefix(name, prefix)
 		}
-		held = append(held, tool.Withdraw(current, fmt.Sprintf("MCP tool %q not found on server %q", rawName, server)))
+		held = append(held, tool.Withdraw(current, withdrawnReason(server, rawName, heldNow)))
 		withdrawn = append(withdrawn, name)
 	}
 	return held, withdrawn
+}
+
+// withdrawnReason says why the slot no longer answers. A tool the server stopped
+// offering and one the host is holding back both fail the call, but only the
+// first is missing: telling the user "not found" about a tool the server still
+// offers sends them looking for the wrong thing.
+func withdrawnReason(server, rawName string, heldNow []plugin.HeldTool) string {
+	if slices.ContainsFunc(heldNow, func(h plugin.HeldTool) bool { return h.RawName == rawName }) {
+		return fmt.Sprintf("MCP tool %q on server %q is held: its definition is not the one approved for this server", rawName, server)
+	}
+	return fmt.Sprintf("MCP tool %q not found on server %q", rawName, server)
 }
 
 // withdrawnMCPToolsNotice is what the model is told on the turn tail: the tools
 // array still shows these calls and will until the session ends, so a model
 // reading the array and nothing else would keep spending turns on them.
 func withdrawnMCPToolsNotice(server string, names []string) string {
-	return fmt.Sprintf("MCP server %q withdrew %s during this session. The definition stays in your tool list so the cached prefix does not move, but calling it now fails with a not-found; use what the server offers instead (use_capability inspect mcp-server:%s lists it).",
+	return fmt.Sprintf("MCP server %q withdrew %s during this session. The definition stays in your tool list so the cached prefix does not move, but calling it now fails with the reason the host recorded; use what the server offers instead (use_capability inspect mcp-server:%s lists it).",
 		server, strings.Join(names, ", "), server)
 }
 

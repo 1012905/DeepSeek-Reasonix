@@ -27,6 +27,10 @@ type sessionRuntime struct {
 	cacheHit  atomic.Int64
 	cacheMiss atomic.Int64
 
+	// hostNotices is host-authored fact queued for the next round's turn tail;
+	// it outlives any one turn, so it is the session's. See host_notice.go.
+	hostNotices hostNoticeQueue
+
 	missingReasoning missingReasoningWatch
 	// mode is the model mode the conversation asked for; a new one starts off.
 	mode requestModeState

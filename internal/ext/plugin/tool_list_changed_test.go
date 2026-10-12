@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -550,5 +551,42 @@ func TestToolListChangedCannotSelfAuthorize(t *testing.T) {
 		if tool.IsMCPServerAuthorized(tl) {
 			t.Fatalf("%s reported an authorization the user never gave", tl.Name())
 		}
+	}
+}
+
+// A refresh is a listing like any other, so it is judged like one. A server
+// that waits until the session is running and then announces a tool the user
+// never approved would otherwise reach the model through the refresh, which is
+// the one listing path that used to build its catalog on its own.
+func TestToolListChangedJudgesWhatTheRefreshBrings(t *testing.T) {
+	server, srv := newListChangedServer(t, true, "alpha")
+	h, published := connectListChanged(t, srv,
+		Spec{Authorized: true, StateDir: filepath.Join(t.TempDir(), "ws", "live")})
+
+	// Startup recorded alpha as the approved definition; gamma arrives after.
+	server.announce(1, "alpha", "gamma")
+	if _, err := h.ToolsFor(t.Context(), "live"); err != nil {
+		t.Fatalf("ToolsFor: %v", err)
+	}
+	if _, err := h.lookupClient("live").call(t.Context(), "tools/call",
+		map[string]any{"name": "alpha", "arguments": map[string]any{}}); err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+
+	got := waitForCatalog(t, published)
+	want := []string{"mcp__live__alpha"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("published catalog = %v, want %v: an unapproved tool reached the model", got, want)
+	}
+	held, ok := h.HeldTools("live")
+	if !ok || heldNames(held) != "gamma:added" {
+		t.Fatalf("held = %q, want %q", heldNames(held), "gamma:added")
+	}
+	cached, err := h.ToolsFor(t.Context(), "live")
+	if err != nil {
+		t.Fatalf("ToolsFor after refresh: %v", err)
+	}
+	if !slices.Equal(names(cached), want) {
+		t.Fatalf("host catalog = %v, want %v", names(cached), want)
 	}
 }

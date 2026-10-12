@@ -26,7 +26,7 @@ func TestRefreshedMCPToolsReplaceTheServerPrefix(t *testing.T) {
 	registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, []tool.Tool{
 		refreshedTool("mcp__atlas__kept", "kept"),
 		refreshedTool("mcp__atlas__added", "added"),
-	})
+	}, nil)
 
 	for name, want := range map[string]bool{
 		"mcp__atlas__gone": false, "mcp__atlas__kept": true,
@@ -48,7 +48,7 @@ func TestRefreshedMCPToolsLeaveASuspendedServerOff(t *testing.T) {
 
 	registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, []tool.Tool{
 		refreshedTool("mcp__atlas__added", "added"),
-	})
+	}, nil)
 
 	if _, ok := reg.Get("mcp__atlas__added"); ok {
 		t.Fatal("a refresh brought back a server this session had turned off")
@@ -68,7 +68,7 @@ func TestRefreshedMCPToolsKeepAPinnedSchemaSlot(t *testing.T) {
 	withdrawn := registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, []tool.Tool{
 		refreshedTool("mcp__atlas__kept", "kept"),
 		refreshedTool("mcp__atlas__added", "added"),
-	})
+	}, nil)
 
 	if diff := schemaNames(reg.Schemas()); !slices.Equal(diff, schemaNames(before)) {
 		t.Fatalf("the provider-visible tools array moved with the catalog: %v, want %v", diff, schemaNames(before))
@@ -100,7 +100,7 @@ func TestRefreshedMCPToolsDropAnUnpinnedTool(t *testing.T) {
 	reg.Add(refreshedTool("mcp__atlas__gone", "gone"))
 	reg.SetProviderVisibleTools([]string{"use_capability"})
 
-	if withdrawn := registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil); len(withdrawn) != 0 {
+	if withdrawn := registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil, nil); len(withdrawn) != 0 {
 		t.Fatalf("withdrawn = %v, want nothing announced for a tool the model never saw", withdrawn)
 	}
 	if _, ok := reg.Get("mcp__atlas__gone"); ok {
@@ -115,8 +115,8 @@ func TestRefreshedMCPToolsAnnounceAWithdrawalOnce(t *testing.T) {
 	reg.Add(refreshedTool("mcp__atlas__gone", "gone"))
 	reg.SetProviderVisibleTools([]string{"mcp__atlas__gone"})
 
-	first := registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil)
-	second := registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil)
+	first := registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil, nil)
+	second := registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil, nil)
 	if len(first) != 1 || len(second) != 0 {
 		t.Fatalf("announced %v then %v, want the withdrawal stated once", first, second)
 	}
@@ -132,8 +132,8 @@ func TestRefreshedMCPToolsRestoreAToolThatReturns(t *testing.T) {
 	reg.Add(refreshedTool("mcp__atlas__gone", "gone"))
 	reg.SetProviderVisibleTools([]string{"mcp__atlas__gone"})
 
-	registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil)
-	registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, []tool.Tool{refreshedTool("mcp__atlas__gone", "gone")})
+	registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, nil, nil)
+	registerRefreshedMCPTools(reg, plugin.Spec{Name: "atlas"}, []tool.Tool{refreshedTool("mcp__atlas__gone", "gone")}, nil)
 
 	back, ok := reg.Get("mcp__atlas__gone")
 	if !ok || tool.IsWithdrawn(back) {

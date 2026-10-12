@@ -4430,10 +4430,11 @@ func TestHelperProcess(t *testing.T) {
 	defer os.Exit(0)
 
 	// GO_WANT_HELPER_LIST_CHANGED serves a server that declares tools.listChanged
-	// and rewrites its catalog after the first tools/call, announcing it the way
-	// the spec says: one notification, no params.
+	// and rewrites its catalog after the first tools/call. It announces on the
+	// first two, so a test can take a listing after approving what one held.
 	listChanged := os.Getenv("GO_WANT_HELPER_LIST_CHANGED") == "1"
 	mutated := false
+	announced := 0
 
 	in := bufio.NewReader(os.Stdin)
 	for {
@@ -4462,8 +4463,9 @@ func TestHelperProcess(t *testing.T) {
 			resp := map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": helperListChangedResult(req.Method, mutated)}
 			b, _ := json.Marshal(resp)
 			os.Stdout.Write(append(b, '\n'))
-			if req.Method == "tools/call" && !mutated {
+			if req.Method == "tools/call" && announced < 2 {
 				mutated = true
+				announced++
 				os.Stdout.WriteString(`{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}` + "\n")
 			}
 			continue

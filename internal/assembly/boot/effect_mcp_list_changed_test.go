@@ -22,6 +22,7 @@ import (
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/ext/plugin"
 	"reasonix/internal/session/control"
 )
 
@@ -79,6 +80,7 @@ GO_WANT_HELPER_LIST_CHANGED = "1"
 `, os.Args[0])
 	}
 	var mutated atomic.Bool
+	var announces atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			ID     *int   `json:"id"`
@@ -90,11 +92,12 @@ GO_WANT_HELPER_LIST_CHANGED = "1"
 		}
 		result := helperListChangedResult(req.Method, mutated.Load())
 		body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": result})
-		if req.Method != "tools/call" || !mutated.CompareAndSwap(false, true) {
+		if req.Method != "tools/call" || announces.Add(1) > 2 {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(body)
 			return
 		}
+		mutated.Store(true)
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "event: message\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/tools/list_changed\"}\n\n")
 		fmt.Fprintf(w, "event: message\ndata: %s\n\n", body)
@@ -188,9 +191,10 @@ func TestEffectMCPListChangedReachesTheNextRequest(t *testing.T) {
 			kind := "boot-mcp-list-changed-" + transport
 			rec := &listChangedProvider{calls: map[int]string{
 				0: capabilityCall("mcp-tool:live/alpha"),
-				2: `{"action":"inspect","capability_id":"mcp-server:live"}`,
-				3: capabilityCall("mcp-tool:live/gamma"),
-				4: capabilityCall("mcp-tool:live/beta"),
+				2: capabilityCall("mcp-tool:live/alpha"),
+				4: `{"action":"inspect","capability_id":"mcp-server:live"}`,
+				5: capabilityCall("mcp-tool:live/gamma"),
+				6: capabilityCall("mcp-tool:live/beta"),
 			}}
 			provider.Register(kind, func(provider.Config) (provider.Provider, error) { return rec, nil })
 			writeFile(t, workspace, "reasonix.toml", listChangedConfig(kind, listChangedServerBlock(t, transport)))
@@ -211,15 +215,25 @@ func TestEffectMCPListChangedReachesTheNextRequest(t *testing.T) {
 			if got := toolResults(rec.requests())["probe-0"]; !strings.Contains(got, "ok") {
 				t.Fatalf("the first call returned %q, want the server's result", got)
 			}
+			// The refresh went through the judgement, so what the server added
+			// is held until the user approves it rather than offered on the
+			// server's word.
+			acceptHeldTools(t, ctrl, "live", "delta", "gamma")
+
+			// The approval reaches the model on the next listing, which the
+			// next call's notice brings.
+			if err := ctrl.Run(t.Context(), "call the live tool again"); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
 			waitForRegisteredTool(t, ctrl, "mcp__live__gamma")
 
-			// The second turn reads the catalog, calls what arrived, then what left.
+			// The third turn reads the catalog, calls what arrived, then what left.
 			if err := ctrl.Run(t.Context(), "read the catalog and call both tools"); err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 			requests := rec.requests()
 			results := toolResults(requests)
-			catalog := results["probe-2"]
+			catalog := results["probe-4"]
 			for _, want := range []string{"gamma", "delta"} {
 				if !strings.Contains(catalog, want) {
 					t.Fatalf("catalog after the notice = %q, missing %q", catalog, want)
@@ -228,10 +242,10 @@ func TestEffectMCPListChangedReachesTheNextRequest(t *testing.T) {
 			if strings.Contains(catalog, "beta") {
 				t.Fatalf("catalog after the notice still offers the dropped tool: %q", catalog)
 			}
-			if got := results["probe-3"]; !strings.Contains(got, "ok") {
+			if got := results["probe-5"]; !strings.Contains(got, "ok") {
 				t.Fatalf("call to the tool the server added returned %q, want its result", got)
 			}
-			if got := results["probe-4"]; !strings.Contains(got, `not found on server "live"`) {
+			if got := results["probe-6"]; !strings.Contains(got, `not found on server "live"`) {
 				t.Fatalf("call to the dropped tool returned %q, want the typed not-found failure", got)
 			}
 
@@ -256,6 +270,34 @@ func mcpToolNames(req provider.Request) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// acceptHeldTools approves what the refresh withheld, as the trust command
+// does. A definition the server adds mid-session is not one the user approved,
+// so the judgement holds it out of the model; the approval reaches the model on
+// the listing after it. Holding is what proves the refresh was judged at all.
+func acceptHeldTools(t *testing.T, ctrl *control.Controller, server string, want ...string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		held, ok := ctrl.Host().HeldTools(server)
+		if ok && len(held) == len(want) {
+			names := make([]string, 0, len(held))
+			for _, h := range held {
+				names = append(names, h.RawName)
+			}
+			slices.Sort(names)
+			if !slices.Equal(names, want) {
+				t.Fatalf("the refresh held %v, want %v", names, want)
+			}
+			if _, err := ctrl.Host().AcceptHeldTools(server, plugin.HeldDigest(held)); err != nil {
+				t.Fatalf("AcceptHeldTools: %v", err)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("the refresh never held %v for approval: an unapproved definition reached the model", want)
 }
 
 // waitForRegisteredTool waits for the refresh the server announced to reach
@@ -307,7 +349,7 @@ func TestEffectMCPListChangedKeepsAPinnedToolSurface(t *testing.T) {
 
 	// Session two is pinned: the server's tools are in the provider schema from
 	// its first request, and it drops one mid-session.
-	live := &listChangedProvider{direct: map[int]string{0: "mcp__live__alpha", 2: "mcp__live__beta"}}
+	live := &listChangedProvider{direct: map[int]string{0: "mcp__live__alpha", 2: "mcp__live__alpha", 4: "mcp__live__beta"}}
 	rec.Store(live)
 	ctrl, err := Build(t.Context(), Options{Sink: event.Discard, Home: reasonixHome, WorkspaceRoot: workspace})
 	if err != nil {
@@ -322,6 +364,10 @@ func TestEffectMCPListChangedKeepsAPinnedToolSurface(t *testing.T) {
 	if !slices.Equal(pinned, []string{"mcp__live__alpha", "mcp__live__beta"}) {
 		t.Fatalf("the first request carried %v, want the cached catalog pinned into the schema", pinned)
 	}
+	acceptHeldTools(t, ctrl, "live", "delta", "gamma")
+	if err := ctrl.Run(t.Context(), "call the pinned tool again"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
 	waitForRegisteredTool(t, ctrl, "mcp__live__gamma")
 
 	if err := ctrl.Run(t.Context(), "call the tool the server dropped"); err != nil {
@@ -332,7 +378,7 @@ func TestEffectMCPListChangedKeepsAPinnedToolSurface(t *testing.T) {
 	if moved := toolSurfaceDrift(requests[0], last); len(moved) != 0 {
 		t.Fatalf("the provider-visible tools array moved with the catalog: %v", moved)
 	}
-	if got := toolResults(requests)["probe-2"]; !strings.Contains(got, `not found on server "live"`) {
+	if got := toolResults(requests)["probe-4"]; !strings.Contains(got, `not found on server "live"`) {
 		t.Fatalf("call to the withdrawn tool returned %q, want the typed not-found", got)
 	}
 	if !containsMessage(last, "withdrew mcp__live__beta") {

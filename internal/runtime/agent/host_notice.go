@@ -33,15 +33,15 @@ func (a *Agent) NoteHostFact(text string) {
 	if a == nil || text == "" {
 		return
 	}
-	a.hostNotices.mu.Lock()
-	defer a.hostNotices.mu.Unlock()
-	if slices.Contains(a.hostNotices.pending, text) {
+	a.sess.hostNotices.mu.Lock()
+	defer a.sess.hostNotices.mu.Unlock()
+	if slices.Contains(a.sess.hostNotices.pending, text) {
 		return
 	}
-	if len(a.hostNotices.pending) >= maxPendingHostNotices {
+	if len(a.sess.hostNotices.pending) >= maxPendingHostNotices {
 		return
 	}
-	a.hostNotices.pending = append(a.hostNotices.pending, text)
+	a.sess.hostNotices.pending = append(a.sess.hostNotices.pending, text)
 }
 
 // takeHostFacts hands over everything queued, leaving the queue empty.
@@ -49,10 +49,10 @@ func (a *Agent) takeHostFacts() []string {
 	if a == nil {
 		return nil
 	}
-	a.hostNotices.mu.Lock()
-	defer a.hostNotices.mu.Unlock()
-	pending := a.hostNotices.pending
-	a.hostNotices.pending = nil
+	a.sess.hostNotices.mu.Lock()
+	defer a.sess.hostNotices.mu.Unlock()
+	pending := a.sess.hostNotices.pending
+	a.sess.hostNotices.pending = nil
 	return pending
 }
 

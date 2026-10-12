@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 	"time"
 
@@ -206,28 +205,20 @@ func (c *Client) toolListRefreshTimeout() time.Duration {
 	return call
 }
 
-// refreshToolCatalog re-reads the catalog and makes it current. The list is
-// built before the swap, so a reader sees either the whole old catalog or the
+// refreshToolCatalog re-reads the catalog and makes it current, through the
+// same list-judge-build path a first listing takes: a refresh that skipped the
+// judgement would hand the model definitions the user never approved. The read
+// happens off the lock, so a reader sees either the whole old catalog or the
 // whole new one, and a failed read leaves the old one in place.
 func (c *Client) refreshToolCatalog(ctx context.Context) ([]tool.Tool, bool, error) {
-	out, err := c.listToolsRaw(ctx)
+	cat, err := c.readToolCatalog(ctx, false)
 	if err != nil {
 		return nil, false, err
 	}
-	out = slices.DeleteFunc(out, func(t mcpTool) bool { return !c.spec.ToolEnabled(t.Name) })
-	if err := validateMCPToolNames(out); err != nil {
-		return nil, false, fmt.Errorf("plugin %q: %w", c.name, err)
-	}
-	infos, tools := c.buildToolCatalog(out)
-	fingerprint := toolCatalogFingerprint(infos, tools)
-
 	c.toolsMu.Lock()
-	changed := !c.toolsListed || fingerprint != c.toolsFingerprint
+	changed := !c.toolsListed || cat.fingerprint != c.toolsFingerprint
 	if changed {
-		c.tools = infos
-		c.toolAdapters = append([]tool.Tool(nil), tools...)
-		c.toolsFingerprint = fingerprint
-		c.toolsListed = true
+		c.publishToolCatalogLocked(cat)
 	}
 	current := append([]tool.Tool(nil), c.toolAdapters...)
 	c.toolsMu.Unlock()
@@ -235,12 +226,15 @@ func (c *Client) refreshToolCatalog(ctx context.Context) ([]tool.Tool, bool, err
 }
 
 // toolCatalogFingerprint covers everything a catalog publishes: the schemas the
-// model is sent and the facts a status surface shows.
-func toolCatalogFingerprint(infos []ToolInfo, tools []tool.Tool) [sha256.Size]byte {
+// model is sent, the facts a status surface shows, and what was withheld — a
+// tool whose definition moved far enough to be held changed this catalog even
+// when what the model sees is identical.
+func toolCatalogFingerprint(infos []ToolInfo, tools []tool.Tool, held []HeldTool) [sha256.Size]byte {
 	entries := struct {
 		Infos   []ToolInfo        `json:"infos"`
 		Schemas map[string]string `json:"schemas"`
-	}{Infos: infos, Schemas: make(map[string]string, len(tools))}
+		Held    string            `json:"held"`
+	}{Infos: infos, Schemas: make(map[string]string, len(tools)), Held: HeldDigest(held)}
 	for _, t := range tools {
 		entries.Schemas[t.Name()] = string(t.Schema())
 	}
@@ -322,6 +316,9 @@ func (h *Host) publishToolListChange(c *Client, tools []tool.Tool) {
 		callbacks = append(callbacks, callback)
 	}
 	h.mu.RUnlock()
+	// A refresh can withhold a tool the server changed under the session; the
+	// operator hears it here for the same reason they hear it at startup.
+	h.announceHeld(c)
 	for _, callback := range callbacks {
 		callback(spec, append([]tool.Tool(nil), tools...))
 	}

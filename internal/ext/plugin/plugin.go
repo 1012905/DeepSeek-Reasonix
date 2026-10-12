@@ -17,8 +17,6 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
-	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1331,89 +1329,15 @@ func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
 	return c.relistToolsLocked(ctx)
 }
 
-// relistToolsLocked is the one path from a tools/list response to registrable
-// tools: list, judge against the approved definitions, build. Anything that
-// refreshes a catalog must come through it, or it skips the judgement. The
-// caller holds toolsMu.
+// relistToolsLocked answers a first listing: read one catalog and publish it.
+// The caller holds toolsMu.
 func (c *Client) relistToolsLocked(ctx context.Context) ([]tool.Tool, error) {
-	out, err := c.listToolsRawSettled(ctx)
+	cat, err := c.readToolCatalog(ctx, true)
 	if err != nil {
 		return nil, err
 	}
-	listed := out
-	out = slices.DeleteFunc(slices.Clone(listed), func(t mcpTool) bool { return !c.spec.ToolEnabled(t.Name) })
-	if err := validateMCPToolNames(out); err != nil {
-		return nil, fmt.Errorf("plugin %q: %w", c.name, err)
-	}
-	held := judgeToolPins(c.spec, listed)
-	out = slices.DeleteFunc(out, func(t mcpTool) bool {
-		return slices.ContainsFunc(held, func(h HeldTool) bool { return h.RawName == t.Name })
-	})
-	held = slices.DeleteFunc(held, func(h HeldTool) bool { return !c.spec.ToolEnabled(h.RawName) })
-
-	toolInfos, sortedTools := c.buildToolCatalog(out)
-	c.tools = toolInfos
-	c.held = held
-	c.toolAdapters = append([]tool.Tool(nil), sortedTools...)
-	c.toolsFingerprint = toolCatalogFingerprint(toolInfos, sortedTools)
-	c.toolsListed = true
-	return append([]tool.Tool(nil), sortedTools...), nil
-}
-
-// buildToolCatalog turns one tools/list answer into the status rows and the
-// model-visible adapters, both name-sorted. It performs no I/O, so a caller can
-// build a candidate catalog before taking the lock that publishes it.
-func (c *Client) buildToolCatalog(out []mcpTool) ([]ToolInfo, []tool.Tool) {
-	toolInfos := make([]ToolInfo, 0, len(out))
-	tools := make([]tool.Tool, 0, len(out))
-	normalizedSchemas := make(map[string]json.RawMessage, len(out))
-	for _, t := range out {
-		schema, err := normalizeAndValidateToolSchema(t.InputSchema)
-		if err != nil {
-			continue
-		}
-		normalizedSchemas[t.Name] = schema
-	}
-	for _, t := range out {
-		readOnlyHint, destructiveHint := t.hints()
-		info := ToolInfo{Name: t.Name, Description: t.Description, ReadOnlyHint: readOnlyHint, DestructiveHint: destructiveHint}
-		schema, ok := normalizedSchemas[t.Name]
-		if !ok {
-			if _, err := normalizeAndValidateToolSchema(t.InputSchema); err != nil {
-				info.SchemaError = schemaValidationError(err)
-			}
-			toolInfos = append(toolInfos, info)
-			continue
-		}
-		headers, err := c.toolParamHeaders(t.InputSchema)
-		if err != nil {
-			slog.Warn("plugin: tool left out for its header annotations", "server", c.name, "tool", t.Name, "err", secrets.DiagnosticError(err))
-			info.SchemaError = err.Error()
-			toolInfos = append(toolInfos, info)
-			continue
-		}
-		visibleName := t.Name
-		if c.spec.StripRawPrefix != "" {
-			visibleName = strings.TrimPrefix(visibleName, c.spec.StripRawPrefix)
-		}
-		readOnly := readOnlyHint
-		toolInfos = append(toolInfos, info)
-		tools = append(tools, &remoteTool{
-			client:           c,
-			name:             toolName(c.name, visibleName),
-			rawName:          t.Name,
-			visibleName:      visibleName,
-			desc:             t.Description,
-			schema:           schema,
-			outputSchema:     t.OutputSchema,
-			declaredReadOnly: readOnlyHint,
-			readOnly:         readOnly,
-			destructive:      destructiveHint,
-			paramHeaders:     headers,
-		})
-	}
-	sort.SliceStable(toolInfos, func(i, j int) bool { return toolInfos[i].Name < toolInfos[j].Name })
-	return toolInfos, sortToolsByName(tools)
+	c.publishToolCatalogLocked(cat)
+	return append([]tool.Tool(nil), cat.tools...), nil
 }
 
 func normalizeAndValidateToolSchema(raw json.RawMessage) (json.RawMessage, error) {
