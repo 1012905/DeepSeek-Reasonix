@@ -549,6 +549,13 @@ export const EN: Record<string, string> = {
   "忘记": "Forget",
   "重连": "Reconnect",
   "立即连接": "Connect now",
+  "定义有改动": "Definition changed",
+  "无法核对": "Cannot be checked",
+  "等待你批准的工具": "Tools waiting for your approval",
+  "这个服务有 {n} 个工具的定义与你批准过的不一致，已暂时不交给模型：": "{n} of this service's tools differ from what you approved and are withheld from the model for now:",
+  "还有 {n} 个没有列出，批准时会一并生效。": "{n} more are not listed; approving covers them too.",
+  "批准并重新连接": "Approve and reconnect",
+  "批准中…": "Approving…",
   "记的是 {had}，但它答的是 {got}。": "Recorded as {had}, but it answers as {got}.",
   // 收工回执
   "没有未经验证的部分": "nothing left unverified",

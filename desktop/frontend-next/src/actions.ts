@@ -166,6 +166,7 @@ export const ACTIONS: UIAction[] = [
   { id: "skill.enabled", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "mcp.enabled", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.retry", kind: "repeatable", target: "entity", proof: "interaction" },
+  { id: "mcp.trust", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.remove", kind: "destructive", target: "entity", proof: "interaction" },
   { id: "mcp.load", kind: "kernel-mutation", target: "entity", proof: "interaction" },
 

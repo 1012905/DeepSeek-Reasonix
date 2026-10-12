@@ -89,6 +89,7 @@ var mirroredWireTypes = []wireMirror{
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},
+	{"internal/frontend/serve/catalog.go", "mcpHeld", tsMcpFile, "McpHeld"},
 	// The fold bounds and the one in force: a field the panel cannot read is a
 	// threshold a user sets and never sees applied.
 	{"internal/session/control/compaction_settings.go", "CompactionSettings", tsModelFile, "CompactionSettings"},
