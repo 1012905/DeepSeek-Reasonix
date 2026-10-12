@@ -20,7 +20,6 @@ import type { LocalRefs } from "./Markdown";
 import { docRef } from "./docrefs";
 import { useGlance } from "./glance";
 import { useMarkdownPoll } from "./useMarkdownPoll";
-import { pinToViewport } from "./place";
 import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
