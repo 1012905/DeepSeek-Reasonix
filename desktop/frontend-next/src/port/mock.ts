@@ -1,6 +1,6 @@
 import type { PlanAction } from "./session";
 import { HttpError } from "./port";
-import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
+import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import { MockWorkspace } from "./mock_workspace";
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
@@ -92,9 +92,11 @@ export class MockPort extends MockWorkspace implements AgentPort {
     this.overrides = { ...this.overrides, [role]: (this.overrides[role] ?? []).filter((o) => o.key !== key) };
   }
 
-  async models(): Promise<ModelEntry[]> {
+  async models(answers: "chat" | "decision" | "all" = "chat"): Promise<ModelEntry[]> {
     const efforts = ["auto", "low", "high", "max"];
-    return mockModels(efforts).map((m) => ({ ...m, default: m.ref === this.defaultRef }));
+    return mockModels(efforts)
+      .filter((m) => answers === "all" || (m.answers ?? "chat") === answers)
+      .map((m) => ({ ...m, default: m.ref === this.defaultRef }));
   }
 
   // The one model the catalogue marks as default, so a pick in the settings row
@@ -183,6 +185,14 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async pinVersion(): Promise<void> {}
   async versionNotes(version: string): Promise<VersionNotes> {
     return { version, markdown: "", cached: false };
+  }
+  async studioLogs(): Promise<StudioLogs> {
+    return {
+      dir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs",
+      crashDir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs\\crash",
+      crashes: [{ name: "host-20261010T230806Z-2.31.0-4412.log", at: "2026-10-10T23:08:06Z", bytes: 8421 }],
+      truncated: false,
+    };
   }
   async acknowledgeLaunchHealth(): Promise<void> {} // booted from no update
   async goToVersion(): Promise<void> {
@@ -273,6 +283,8 @@ export class MockPort extends MockWorkspace implements AgentPort {
     { label: "/review", insert: "/review ", hint: "复核这一轮改动，给出严重度分级", kind: "subagent" },
     { label: "/init", insert: "/init ", hint: "为这个仓库生成一份项目说明", kind: "skill" },
     { label: "/security-review", insert: "/security-review ", hint: "只读地过一遍安全面", kind: "subagent" },
+    { label: "/mcp__docs__summarize", insert: "/mcp__docs__summarize ", hint: "总结一份文档", kind: "prompt",
+      args: [{ name: "topic", description: "要总结的主题", required: true }, { name: "length", description: "篇幅，如 short 或 long" }] },
   ];
 
   async refinePrompt(draft: string): Promise<string> {
@@ -389,7 +401,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   // Mock mode has to be able to show the rewind entry, so every prompt it has
   // seen becomes a checkpoint the way the kernel opens one per user turn.
   async checkpoints(): Promise<Checkpoint[]> {
-    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: i === 0 ? 0 : 3, msgIndex: mockMsgIndex(i + 1) }));
+    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: this.prompts.length > 1 ? 3 : 0, msgIndex: mockMsgIndex(i + 1) }));
   }
 
   // The second prompt onwards is scripted to have run bash, so mock mode can
@@ -405,17 +417,17 @@ export class MockPort extends MockWorkspace implements AgentPort {
         : undefined,
       canFiles: true,
       canConversation: true,
-      files: ["note.txt"],
-      fileCount: turn > 0 ? 3 : 0,
+      files: this.prompts.length > 1 ? ["note.txt", "main.ts", "style.css"] : [],
+      fileCount: this.prompts.length > 1 ? 3 : 0,
       requiresConfirmation: partial,
     };
   }
 
   async commitRewind(planId: string): Promise<RewindResult> {
-    const turn = Number(planId.split("-")[2] ?? 0);
+    const turn = Number(planId.split("-")[2] ?? 0), files = !planId.endsWith("conversation") && this.prompts.length > 1;
     this.undone = this.prompts.slice();
     this.prompts = this.prompts.slice(0, turn);
-    return { ok: true, transactionId: `mock-tx-${turn}`, undoAvailable: true, deleted: ["note.txt"] };
+    return { ok: true, transactionId: `mock-tx-${turn}`, undoAvailable: true, written: files ? ["main.ts", "style.css"] : [], deleted: files ? ["note.txt"] : [] };
   }
 
   async undoRewind(_transactionId: string): Promise<void> {
@@ -533,7 +545,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   // The fixture has a window with an icon, because the state worth designing
   // is the one where both switches mean something.
-  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true };
+  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, sound: false };
 
   async notifyPrefs(): Promise<NotifyPrefs | null> {
     return { ...this.notifications };
