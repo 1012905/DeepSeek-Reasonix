@@ -348,3 +348,34 @@ function subscribeSendShortcut(fn: () => void): () => void {
 export function useSendShortcut(): SendShortcut {
   return useSyncExternalStore(subscribeSendShortcut, sendShortcut, sendShortcut);
 }
+
+// The sidebar remains the default session switcher. Tabs are a local display
+// choice and do not change which sessions stay open in the kernel.
+const SESSION_TABS_KEY = "rx-show-session-tabs";
+let sessionTabsVisible = false;
+const sessionTabListeners = new Set<() => void>();
+
+export function showsSessionTabs(): boolean {
+  try {
+    return localStorage.getItem(SESSION_TABS_KEY) === "on";
+  } catch {
+    return sessionTabsVisible;
+  }
+}
+
+export function setShowsSessionTabs(on: boolean): void {
+  sessionTabsVisible = on;
+  try {
+    localStorage.setItem(SESSION_TABS_KEY, on ? "on" : "off");
+  } catch {
+    /* the choice holds for this window and is forgotten on the next */
+  }
+  sessionTabListeners.forEach((fn) => fn());
+}
+
+export function onShowsSessionTabsChange(fn: () => void): () => void {
+  sessionTabListeners.add(fn);
+  return () => {
+    sessionTabListeners.delete(fn);
+  };
+}

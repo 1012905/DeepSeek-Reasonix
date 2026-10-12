@@ -45,6 +45,7 @@ it("keeps machine reads separate from active-pane account operations", async () 
 
 
 it.each(["second", "remote"])("uses the active local workspace, or first local for %s", async (active) => {
+  localStorage.setItem("rx-show-session-tabs", "on");
   const hub = new MockHub();
   const views = [
     { id: "first", base: "/rt/first", root: "/first", name: "First" },

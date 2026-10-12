@@ -98,6 +98,7 @@ it("does not open an arbitrary project when no session is open", async () => {
 });
 
 it("does not replay a Files request into a newly focused session", async () => {
+  localStorage.setItem("rx-show-session-tabs", "on");
   await mount();
   await palette("文件");
   await userEvent.click(within(focused()).getByRole("button", { name: "README.md" }));

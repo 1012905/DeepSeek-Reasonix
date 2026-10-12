@@ -1,7 +1,7 @@
 import { watchTreeWake } from "./treewake";
 import { usePinnedSessions } from "./usePinnedSessions";
 import { AutoArchiveNotice } from "./AutoArchiveNotice";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
@@ -36,6 +36,7 @@ import { Sidebar } from "./Sidebar";
 import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
+import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
 import { isUnread, useViewed } from "./unread";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
@@ -75,6 +76,7 @@ const NO_REPORT: PaneReport = {
 // conversation — its transcript, metrics and event stream — lives in the Pane
 // that owns it. That split is what lets two sessions run side by side.
 export function App({ hub }: { hub: HubPort }) {
+  const sessionTabs = useSyncExternalStore(onShowsSessionTabsChange, showsSessionTabs, showsSessionTabs);
   const [runtimes, setRuntimes] = useState<RuntimeView[]>([]);
   const [panesRead, setPanesRead] = useState(false);
   const [active, setActive] = useState(savedActivePane);
@@ -650,7 +652,7 @@ export function App({ hub }: { hub: HubPort }) {
           {/* One conversation on screen at a time. Side by side, two panes
               squeezed each other and a glance could not tell which composer
               belonged to which run; the ones behind keep streaming either way. */}
-          {tabs.length > 1 && (
+          {sessionTabs && tabs.length > 1 && (
             <PaneTabs
               tabs={tabs}
               active={active}

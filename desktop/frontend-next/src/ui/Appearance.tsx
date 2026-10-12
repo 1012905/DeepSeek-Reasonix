@@ -15,6 +15,7 @@ import { WindowSection } from "./WindowSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { SendShortcut } from "./SendShortcut";
+import { SessionTabsSetting } from "./SessionTabsSetting";
 import { ThemeImport } from "./ThemeImport";
 import { ThemeRemove } from "./ThemeRemove";
 import { useThemeInventory } from "./useThemeInventory";
@@ -547,6 +548,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <NavRailSection />
       <GraphicsSection />
       <SendShortcut />
+      <SessionTabsSetting />
       <Folding />
       <Notifications port={port} />
 
