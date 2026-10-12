@@ -300,6 +300,9 @@ export interface AgentPort {
   // Retries a failed or disconnected server and answers with its new state, so
   // the caller never has to race a follow-up GET against the connect.
   reconnectMcp(name: string): Promise<{ state: string; tools?: number; error?: string }>;
+  // Approves the withheld definitions the digest names, then reconnects. The
+  // kernel refuses a digest that no longer matches what it withholds.
+  trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;
   setMcpLoad(name: string, load: McpLoad): Promise<void>;
