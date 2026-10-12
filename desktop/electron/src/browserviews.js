@@ -152,6 +152,10 @@ class BrowserViews {
       if (id !== targetId) this.putAway(other.view, other);
     }
     this.shown = targetId;
+    // A page that was parked comes back as a view that is attached but whose
+    // widget never repaints until the window's geometry changes; attaching it
+    // again is what wakes it, the same as after a minimize.
+    if (!entry.at) this.win.contentView.removeChildView(entry.view);
     this.win.contentView.addChildView(entry.view);
     entry.view.setBounds(at);
     entry.at = at;
