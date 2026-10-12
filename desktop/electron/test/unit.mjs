@@ -2059,3 +2059,43 @@ test("revealLogs opens only the folder the shell itself names, and reports why i
   assert.deepEqual(await revealLogs(refusing, "/user/logs"), { error: "no application is associated with this folder" });
   assert.deepEqual(await revealLogs(shell, ""), { error: "the logs folder is unknown" });
 });
+
+// The built-in browser drew a white page after switching away from a tab and
+// back until the window was resized: a parked view moved onscreen with
+// setBounds alone does not repaint. Bringing it back attaches it again.
+test("a parked page is attached again when it is shown, and a page already on screen is left alone", () => {
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: class {}, session: { fromPartition: () => ({}) } };
+    return load.call(this, request, ...rest);
+  };
+  let BrowserViews;
+  try {
+    ({ BrowserViews } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const calls = [];
+  const win = {
+    on() {},
+    isDestroyed: () => false,
+    getContentBounds: () => ({ width: 1200, height: 800 }),
+    contentView: { addChildView: () => calls.push("add"), removeChildView: () => calls.push("remove") },
+  };
+  const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1" });
+  const view = { setBounds: (b) => calls.push("bounds " + b.x), webContents: { isDestroyed: () => false } };
+  views.entries.set("t1", { view, at: null });
+  const rect = { x: 10, y: 20, width: 600, height: 400 };
+
+  views.show("t1", rect);
+  assert.deepEqual(calls, ["remove", "add", "bounds 10"]);
+  calls.length = 0;
+  views.show("t1", rect);
+  assert.deepEqual(calls, [], "the same rectangle on a page already shown does no work");
+  views.hide();
+  calls.length = 0;
+  views.show("t1", rect);
+  assert.deepEqual(calls, ["remove", "add", "bounds 10"], "a page put away and shown again is attached again");
+});
+
