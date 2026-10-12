@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { host } from "../port/host";
 import type { AgentPort, BrowserTab } from "../port/port";
-import { openPage } from "./browser_open";
+import { preparePage } from "./browser_open";
 import { UNREAD_TABS } from "./BrowserPanel";
 
 const HTML = /\.html?$/i;
@@ -31,6 +31,8 @@ function same(a: string, b: string): boolean {
 }
 
 export interface HtmlPreview {
+  /** A tab claim still hides pages until their preview ownership is known. */
+  pending: boolean;
   /** The agent's pages without the ones that exist to preview a file. */
   tabs: BrowserTab[];
   /** Whether this window can draw the file as a page. */
@@ -77,21 +79,20 @@ export function useHtmlPreview(port: AgentPort, all: BrowserTab[], remote: boole
     (path: string, revision: string | undefined) => {
       const running = inflight.current.get(path);
       if (running) return running;
-      const run = (async () => {
-        // A list not read yet cannot say whether the page is already there.
-        if (latest.current === UNREAD_TABS) return;
+      // A list not read yet cannot say whether the page is already there.
+      if (latest.current === UNREAD_TABS) return Promise.resolve();
+      const run = preparePage(port, async () => {
         const root = (await port.workspaces()).current;
         if (!root) throw new Error("this session has no workspace");
         const where = diskPath(root, path);
         const there = latest.current.find((tab) => !tab.active && same(addressPath(tab.url), where));
-        let page = there;
-        if (!page) {
-          setClaim(new Set(latest.current.map((tab) => tab.target)));
-          page = await openPage(port, where);
-        }
+        if (there) return there;
+        setClaim(new Set(latest.current.map((tab) => tab.target)));
+        return where;
+      }).then((page) => {
         loaded.current.set(path, revision);
         setOwned((v) => ({ ...v, [path]: page }));
-      })().finally(() => {
+      }).finally(() => {
         inflight.current.delete(path);
         if (!inflight.current.size) setClaim(null);
       });
@@ -111,5 +112,5 @@ export function useHtmlPreview(port: AgentPort, all: BrowserTab[], remote: boole
     [owned],
   );
 
-  return { tabs, can, tabFor, open, sync };
+  return { tabs, pending: claim !== null, can, tabFor, open, sync };
 }
