@@ -172,7 +172,7 @@ it("selects only displayed rows and clears the selection when the query changes"
   const many = Array.from({ length: 35 }, (_, i) => ({ path: `/sessions/${i}.jsonl`, name: `${i}`, title: `Task ${i}` }));
   const pane = draw(many);
   await selectAll();
-  expect(screen.getByText("已选 30 个会话")).toBeTruthy();
+  expect(screen.getByText("已选 35 个会话")).toBeTruthy();
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索会话 / 项目" }), "Task 34");
   expect(screen.getByText("已选 0 个会话")).toBeTruthy();
   expect(pane.onArchive).not.toHaveBeenCalled();
@@ -213,10 +213,10 @@ it("removes hidden selections when a project or the local machine is folded", as
   expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: /这台机器/ }));
 });
 
-it("limits a search matching the project name to the rows actually rendered", async () => {
+it("selects every loaded row of a search matching the project name, and only those", async () => {
   draw(Array.from({ length: 35 }, (_, i) => ({ path: `/sessions/${i}.jsonl`, name: `${i}`, title: `Task ${i}` })));
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索会话 / 项目" }), "Project");
   await selectAll();
-  expect(screen.getByText("已选 30 个会话")).toBeTruthy();
-  expect(screen.queryByRole("treeitem", { name: /Task 34/ })).toBeNull();
+  expect(screen.getByText("已选 35 个会话")).toBeTruthy();
+  expect(screen.getByRole("treeitem", { name: /Task 34/ })).toBeTruthy();
 });

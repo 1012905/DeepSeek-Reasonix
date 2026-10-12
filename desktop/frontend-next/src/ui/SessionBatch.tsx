@@ -1,8 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { current, t } from "../i18n";
 import type { HubPort, TreeSession } from "../port/hub";
 import { clearDraftForSession } from "./drafts";
 import "../styles/session-batch.css";
+
+/** The selected rows that are still on screen; a row that leaves the displayed set leaves the selection. */
+export function useSelectedRows(displayed: TreeSession[], selection: Set<string> | null, setSelection: Dispatch<SetStateAction<Set<string> | null>>): TreeSession[] {
+  const key = displayed.map((row) => row.path).join("\n");
+  useEffect(() => {
+    const paths = new Set(key ? key.split("\n") : []);
+    setSelection((current) => {
+      if (!current) return current;
+      const next = new Set([...current].filter((path) => paths.has(path)));
+      return next.size === current.size ? current : next;
+    });
+  }, [key, setSelection]);
+  return [...new Map(displayed.filter((row) => selection?.has(row.path)).map((row) => [row.path, row])).values()];
+}
 
 export function SessionBatch({ hub, selection, selected, displayed, onSelect, onExit, onBusy, onClose, onArchive, liveIds, reload, onError }: {
   hub: HubPort;

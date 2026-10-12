@@ -23,7 +23,7 @@ import { SessionMenu } from "./SessionMenu";
 import { Confirm, removeHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
-import { SessionBatch } from "./SessionBatch";
+import { SessionBatch, useSelectedRows } from "./SessionBatch";
 
 const parentOf = (root: string) => root.replace(/[/\\]+$/, "").split(/[/\\]/).slice(-2, -1)[0] ?? "";
 
@@ -328,15 +328,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
   const pagedScope = scope === "all" || scope === "archived";
   const displayed = shutHere ? [] : shownTree.filter((ws) => needle || !folded.has(ws.root))
     .flatMap((ws) => ws.sessions);
-  const selected = [...new Map(displayed.filter((row) => selection?.has(row.path)).map((row) => [row.path, row])).values()];
-  useEffect(() => {
-    const paths = new Set(displayed.map((row) => row.path));
-    setSelection((current) => {
-      if (!current) return current;
-      const next = new Set([...current].filter((path) => paths.has(path)));
-      return next.size === current.size ? current : next;
-    });
-  }, [tree, folded, hereShut, needle, scope, pinned, runs]);
+  const selected = useSelectedRows(displayed, selection, setSelection);
 
   return (
     <>
