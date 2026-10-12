@@ -5,6 +5,7 @@ import "../src/styles/tokens.css";
 import "../src/styles/app.css";
 import "../src/styles/dock.css";
 import "../src/styles/studio.css";
+import "../src/styles/phonecomposer.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/narrow.css";

@@ -160,6 +160,8 @@ const phone = () => page.evaluate(() => {
   return { height: box.getBoundingClientRect().height, line: parseFloat(getComputedStyle(box).lineHeight),
     refine: shown(".studio-refine"), branch: shown(".studio-branch-pop"), rows: rows.size };
 });
+await page.fill(BOX, "");
+await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
 await page.setViewportSize({ width: 390, height: 760 });
 await page.goto(PAGE, { waitUntil: "networkidle" });
 await page.waitForSelector(BOX);
