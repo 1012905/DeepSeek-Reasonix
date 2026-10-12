@@ -492,6 +492,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             running={running}
             wrote={counts.wrote}
             remote={!!rt.host}
+            workspaceRoot={status?.workspaceRoot}
             onCloseManual={() => onManualBrowser?.(false)}
             onExternal={(url) => void port.openExternal(url).catch(fail)}
           />
