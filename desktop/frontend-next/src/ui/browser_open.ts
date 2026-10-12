@@ -1,10 +1,55 @@
 import { HttpError, type AgentPort, type BrowserTab } from "../port/port";
 
-interface Opening { page: Promise<BrowserTab>; pending: boolean; started: boolean; order: number; tabId?: string; seen: Set<string> }
+interface Opening { page: Promise<BrowserTab>; pending: boolean; started: boolean; order: number; result?: { id: string; url?: string }; seen: Map<string, Set<string>> }
 const opening = new WeakMap<AgentPort, Opening>();
 const sequence = new WeakMap<AgentPort, number>();
 const unseen = new WeakMap<AgentPort, Set<Opening>>();
-const observed = new WeakMap<AgentPort, { ids: Set<string>; reconciled: boolean }>();
+interface Observation { locations: Map<string, string>; reconciled: boolean }
+const observed = new WeakMap<AgentPort, Observation>();
+const reads = new WeakMap<BrowserTab[], { port: AgentPort; settled: Set<Promise<BrowserTab>> }>();
+const rechecks = new WeakMap<AgentPort, { pages: Set<Promise<BrowserTab>>; read: Promise<BrowserTab[]> }>();
+
+/** Arrival order cannot date a tab snapshot: an older read may finish after
+ *  navigation. Keep the response boundary from when its read began. */
+export async function readPageTabs(port: AgentPort): Promise<BrowserTab[]> {
+  const settled = new Set([...(unseen.get(port) ?? [])].filter((request) => !request.pending).map((request) => request.page));
+  const tabs = [...await port.browserTabs()];
+  reads.set(tabs, { port, settled });
+  return tabs;
+}
+
+export function pageReadAfterSettlement(port: AgentPort, tabs: BrowserTab[], page: Promise<BrowserTab>): boolean {
+  const read = reads.get(tabs);
+  return read?.port === port && read.settled.has(page);
+}
+
+export function recheckPageTabs(port: AgentPort, pages: Promise<BrowserTab>[]): Promise<BrowserTab[]> {
+  const current = rechecks.get(port);
+  if (current && pages.every((page) => current.pages.has(page))) return current.read;
+  const next = { pages: new Set(pages), read: Promise.allSettled(pages).then(async () => {
+    const tabs = await readPageTabs(port);
+    // A matching URL may retire ownership before a pending follower verifies
+    // activation. These completed responses still establish read freshness.
+    for (const page of pages) reads.get(tabs)!.settled.add(page);
+    return tabs;
+  }) };
+  rechecks.set(port, next);
+  const clear = () => { if (rechecks.get(port) === next) rechecks.delete(port); };
+  void next.read.then(clear, clear);
+  return next.read;
+}
+
+/** Confirm just this follower's operation; other tabs still need their own
+ *  visible reconciliation before their ownership can be retired. */
+export function reconcilePageFollow(port: AgentPort, page: Promise<BrowserTab>, tabs: BrowserTab[], shown: BrowserTab, result: BrowserTab): boolean {
+  const requests = unseen.get(port);
+  const request = [...(requests ?? [])].find((request) => request.page === page);
+  if (result.id !== shown.id || !pageReadAfterSettlement(port, tabs, page)) return false;
+  const current = tabs.find((tab) => tab.id === shown.id);
+  const confirmed = current?.url === shown.url && (current.url !== result.url || (result.active === false && current.active && shown.active));
+  if (request && (!current || confirmed)) requests?.delete(request);
+  return confirmed;
+}
 
 export function unseenPageOpenings(port: AgentPort, { startedOnly = false } = {}): Promise<BrowserTab>[] {
   return [...(unseen.get(port) ?? [])].filter((request) => !startedOnly || request.started).map((request) => request.page);
@@ -20,13 +65,32 @@ export function failedPageID(error: unknown): string | undefined {
     && typeof id === "string" && id.trim() ? id : undefined;
 }
 
+export function observedPageURLs(port: AgentPort, page: Promise<BrowserTab>, tabID: string): ReadonlySet<string> {
+  const request = [...(unseen.get(port) ?? [])].find((opening) => opening.page === page);
+  return new Set(request?.seen.get(tabID));
+}
+
+function reconciledOpening(request: Opening, observation?: Observation): boolean {
+  const result = request.result;
+  if (!observation?.reconciled || !result || !request.seen.has(result.id)) return false;
+  // An early blank tab is not the completed navigation. A tab already closed
+  // needs no future location event, even if its final URL was never observed.
+  return result.url === undefined || request.seen.get(result.id)!.has(result.url) || !observation.locations.has(result.id);
+}
+
 export function observePageTabs(port: AgentPort, tabs: BrowserTab[], reconciled = true): void {
-  const ids = new Set(tabs.map((tab) => tab.id));
-  observed.set(port, { ids, reconciled });
+  const observation = { locations: new Map(tabs.map((tab) => [tab.id, tab.url])), reconciled };
+  observed.set(port, observation);
   for (const request of unseen.get(port) ?? []) {
-    // A tab closing before the response cannot erase its earlier observation.
-    for (const id of ids) request.seen.add(id);
-    if (reconciled && request.tabId && request.seen.has(request.tabId)) unseen.get(port)?.delete(request);
+    for (const [id, url] of observation.locations) {
+      const urls = request.seen.get(id) ?? new Set<string>();
+      urls.add(url);
+      request.seen.set(id, urls);
+    }
+    // A fresh read can pass the returned URL when another navigation replaced
+    // its canceled list read. Only success supplies that completion boundary.
+    const fresh = request.result?.url !== undefined && pageReadAfterSettlement(port, tabs, request.page);
+    if ((reconciled && fresh) || reconciledOpening(request, observation)) unseen.get(port)?.delete(request);
   }
 }
 
@@ -52,17 +116,20 @@ export function preparePage(port: AgentPort, prepare: () => Promise<string | Bro
 function trackPage(port: AgentPort, page: Promise<BrowserTab>, started: boolean): Opening {
   const order = (sequence.get(port) ?? 0) + 1;
   sequence.set(port, order);
-  const state: Opening = { page, pending: true, started, order, seen: new Set(observed.get(port)?.ids) };
+  const state: Opening = { page, pending: true, started, order, seen: new Map([...(observed.get(port)?.locations ?? [])].map(([id, url]) => [id, new Set([url])])) };
   if (started) markStarted(port, state);
   const requests = unseen.get(port) ?? new Set<Opening>();
   unseen.set(port, requests);
   requests.add(state);
-  const settled = (tabId?: string) => {
+  const settled = (result?: Opening["result"]) => {
     state.pending = false;
-    state.tabId = tabId;
-    if (!tabId || (observed.get(port)?.reconciled && state.seen.has(tabId))) requests.delete(state);
+    state.result = result;
+    if (!result || reconciledOpening(state, observed.get(port))) requests.delete(state);
   };
-  page.then((tab) => settled(tab.id), (error) => settled(failedPageID(error)));
+  page.then((tab) => settled({ id: tab.id, url: tab.url }), (error) => {
+    const id = failedPageID(error);
+    settled(id ? { id } : undefined);
+  });
   return state;
 }
 
