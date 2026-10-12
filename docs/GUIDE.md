@@ -1605,6 +1605,17 @@ so ordinary `@mentions` stay literal. Typing `/` or `@` opens an autocomplete
 menu — slash commands, or hierarchical file navigation (one directory level at a
 time, descend into folders) plus MCP resources.
 
+In Studio's file panel, right-click one file or folder:
+
+- **Copy path** copies its absolute workspace path, including remote roots.
+  It is available once the workspace reports an absolute root.
+- **Copy reference** copies an `@` token to paste into the composer. Spaces and
+  tabs are escaped; folder references end in `/`. Names the reference grammar
+  cannot represent, or whose final whitespace the composer would trim, disable
+  this action.
+
+Copying does not open the entry or send a message.
+
 ## Two-model collaboration
 
 `reasonix setup` manages providers, model lists, credentials, connection tests,

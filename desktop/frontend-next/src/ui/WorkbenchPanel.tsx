@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import { host } from "../port/host";
@@ -25,6 +24,7 @@ import { pinToViewport } from "./place";
 import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
+import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { useHtmlPreview } from "./useHtmlPreview";
@@ -109,6 +109,7 @@ export function WorkbenchPanel({
   running = false,
   wrote = 0,
   remote = false,
+  workspaceRoot = "",
   revealChanges = 0,
   onCloseManual,
   onSurfaces,
@@ -131,6 +132,7 @@ export function WorkbenchPanel({
   wrote?: number;
   /** The workspace is on another machine, so its paths mean nothing here. */
   remote?: boolean;
+  workspaceRoot?: string;
   revealChanges?: number;
   onCloseManual: () => void;
   // How many surfaces the strip holds, for the pane's own tab to count.
@@ -178,35 +180,27 @@ export function WorkbenchPanel({
   const revealable = !remote && port.revealsFiles();
   const [platform, setPlatform] = useState("");
   useEffect(() => void host().describe().then((h) => setPlatform(h.platform)), []);
-  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
-  useEffect(() => {
-    if (!menu) return;
-    // Enter and Space are the focused item being chosen, not the menu dismissed.
-    const shut = (e: Event) => {
-      if (e instanceof KeyboardEvent && (e.key === "Enter" || e.key === " ")) return;
-      setMenu(null);
-    };
-    addEventListener("click", shut);
-    addEventListener("keydown", shut);
-    addEventListener("blur", shut);
-    return () => {
-      removeEventListener("click", shut);
-      removeEventListener("keydown", shut);
-      removeEventListener("blur", shut);
-    };
-  }, [menu]);
+  const scope = useMemo(() => ({ port, workspaceRoot }), [port, workspaceRoot]);
+  const listedScope = useRef(scope);
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const folderRequests = useMemo(() => new Map<string, symbol>(), [scope]);
+  const menuId = useRef(0);
+  const [menu, setMenu] = useState<(FileMenu & { scope: typeof scope; id: number }) | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  useEffect(closeMenu, [closeMenu, scope, shown]);
   const reveal = (path: string) => {
     setMenu(null);
     port.revealInFileManager(path).then(() => setListFailed(""), (e) => setListFailed(reason(e)));
   };
   // The system menu stays wherever there is text to copy: this one is a shortcut.
-  const offerReveal = (e: MouseEvent<HTMLElement>, path: string) => {
-    if (!revealable || document.getSelection()?.isCollapsed === false) return;
+  const offerMenu = (e: MouseEvent<HTMLElement>, path: string, folder: boolean) => {
+    if (listedScope.current !== scope || document.getSelection()?.isCollapsed === false) return;
     e.preventDefault();
     // The context-menu key reports no pointer, so the row itself is the anchor.
     const row = e.currentTarget.getBoundingClientRect();
     const keyed = e.clientX === 0 && e.clientY === 0;
-    setMenu({ path, x: keyed ? row.left + 24 : e.clientX, y: keyed ? row.bottom : e.clientY });
+    setMenu({ path, folder, scope, id: ++menuId.current, anchor: e.currentTarget, x: keyed ? row.left + 24 : e.clientX, y: keyed ? row.bottom : e.clientY });
   };
   const changeKey = changes
     .map((change) => `${change.status}:${change.path}`)
@@ -217,6 +211,7 @@ export function WorkbenchPanel({
   const glance = useGlance();
   useEffect(() => {
     if (!shown) return;
+    folderRequests.clear();
     let live = true;
     void (async () => {
       try {
@@ -242,6 +237,7 @@ export function WorkbenchPanel({
           }
         }
         if (!live) return;
+        listedScope.current = scope;
         setFiles([...new Set(files)]);
         setDirectories([...new Set(dirs)]);
         setCollapsed(query ? new Set() : new Set(dirs.filter((path) => !open.has(path))));
@@ -253,7 +249,7 @@ export function WorkbenchPanel({
     return () => {
       live = false;
     };
-  }, [port, shown, changeKey, query, hidden, glance, running, wrote]);
+  }, [port, scope, folderRequests, shown, changeKey, query, hidden, glance, running, wrote]);
   // The button in the chrome says "show me the browser", not "show me this one
   // browser". When the agent has a page, that page is the browser; the start
   // page is only for an empty column, and steps aside unused once the agent
@@ -424,12 +420,17 @@ export function WorkbenchPanel({
     [filePath, port],
   );
   const toggleFolder = async (path: string) => {
+    if (listedScope.current !== scope) return;
+    const ticket = Symbol();
+    folderRequests.set(path, ticket);
+    const current = () => currentScope.current === scope && folderRequests.get(path) === ticket;
     if (!collapsed.has(path)) {
       setCollapsed((v) => new Set(v).add(path));
       return;
     }
     try {
       const result = await port.workspaceFiles(path, "", hidden);
+      if (!current()) return;
       setFiles((v) => [...new Set([...v, ...result.files])]);
       setDirectories((v) => [...new Set([...v, ...result.directories])]);
       setCollapsed((v) => {
@@ -440,7 +441,7 @@ export function WorkbenchPanel({
       });
       setListFailed("");
     } catch (e) {
-      setListFailed(reason(e));
+      if (current()) setListFailed(reason(e));
     }
   };
   // One browser: a tab opened here is a tab the agent can read and drive, and
@@ -713,7 +714,7 @@ export function WorkbenchPanel({
                   aria-expanded={!collapsed.has(row.path)}
                   onClick={() => void toggleFolder(row.path)}
                   data-action-contextmenu="workbench.menu"
-                  onContextMenu={(e) => offerReveal(e, row.path)}
+                  onContextMenu={(e) => offerMenu(e, row.path, true)}
                 >
                   <StudioIcon
                     name={collapsed.has(row.path) ? "chevron" : "down"}
@@ -736,7 +737,7 @@ export function WorkbenchPanel({
                   }
                   onClick={() => openFile(row.path)}
                   data-action-contextmenu="workbench.menu"
-                  onContextMenu={(e) => offerReveal(e, row.path)}
+                  onContextMenu={(e) => offerMenu(e, row.path, false)}
                 >
                   <span />
                   <StudioIcon name="file" />
@@ -754,20 +755,9 @@ export function WorkbenchPanel({
               <p className="workbench-no-files">{t("没有匹配的文件")}</p>
             )}
           </div>
-          {menu && createPortal(
-            <div
-              className="tabmenu"
-              role="menu"
-              ref={(el) => {
-                if (el) pinToViewport(el, menu.x, menu.y);
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button role="menuitem" autoFocus data-action="workbench.reveal" data-target={menu.path} onClick={() => reveal(menu.path)}>
-                {platform === "darwin" ? t("在访达中显示") : platform === "windows" ? t("在文件资源管理器中显示") : t("在系统文件管理器中显示")}
-              </button>
-            </div>,
-            document.body,
+          {menu?.scope === scope && shown && (
+            <WorkbenchFileMenu key={menu.id} menu={menu} root={workspaceRoot}
+              revealable={revealable} platform={platform} onReveal={reveal} onClose={closeMenu} />
           )}
         </aside>
       </div>

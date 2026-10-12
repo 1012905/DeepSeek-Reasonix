@@ -378,9 +378,9 @@ describe("WorkbenchPanel", () => {
     const row = await screen.findByRole("button", { name: "README.md" });
 
     expect(screen.queryByRole("button", { name: "在系统文件管理器中显示工作区" })).toBeNull();
-    // Not prevented: the system menu is left to the shell.
-    expect(fireEvent.contextMenu(row)).toBe(true);
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(fireEvent.contextMenu(row)).toBe(false);
+    expect(screen.queryByRole("menuitem", { name: /文件管理器/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "复制引用" })).toBeTruthy();
     expect(reveal).not.toHaveBeenCalled();
   });
 
