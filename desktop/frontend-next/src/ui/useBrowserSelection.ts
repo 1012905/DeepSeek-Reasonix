@@ -41,17 +41,18 @@ export function useBrowserSelection(port: AgentPort, select: (key: string) => vo
     const fresh = pending.map((page) => pageReadAfterSettlement(port, latestTabs.current, page));
     void Promise.allSettled(pending).then(async (results) => {
       if (!valid()) return;
+      const changed = (opened: BrowserTab) => opened.url !== tab?.url || (opened.active === false && tab?.active === true);
       const owns = (result: PromiseSettledResult<BrowserTab>, index: number, confirmed = false) => result.status === "fulfilled"
-        ? `browser:${result.value.target}` === key && (result.value.url === tab?.url || (!confirmed && !fresh[index] && !prior[index].has(result.value.url)))
+        ? `browser:${result.value.target}` === key && (!changed(result.value) || (!confirmed && !fresh[index] && (result.value.url === tab?.url || !prior[index].has(result.value.url))))
         : !!tab && failedPageID(result.reason) === tab.id;
       if (!results.some((result, index) => owns(result, index))) { apply(); return; }
-      const ambiguous = results.some((result, index) => owns(result, index) && result.status === "fulfilled" && result.value.url !== tab?.url);
+      const ambiguous = results.some((result, index) => owns(result, index) && result.status === "fulfilled" && changed(result.value));
       if (!tab || !ambiguous) return;
       // A final-URL read can be canceled before the response arrives. Verify
       // this candidate afresh instead of guessing which navigation it was.
       const next = await recheckPageTabs(port, pending).catch(() => null);
       if (!next) return;
-      const confirmed = pending.map((page) => reconcilePageFollow(port, page, next, tab));
+      const confirmed = results.map((result, index) => result.status === "fulfilled" && reconcilePageFollow(port, pending[index], next, tab, result.value));
       if (!valid() || latestTabs.current.find((item) => item.target === tab.target)?.url !== tab.url) return;
       if (next.some((item) => item.target === tab.target && item.url === tab.url) && !results.some((result, index) => owns(result, index, confirmed[index]))) apply();
     });

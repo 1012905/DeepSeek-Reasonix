@@ -26,7 +26,13 @@ export function pageReadAfterSettlement(port: AgentPort, tabs: BrowserTab[], pag
 export function recheckPageTabs(port: AgentPort, pages: Promise<BrowserTab>[]): Promise<BrowserTab[]> {
   const current = rechecks.get(port);
   if (current && pages.every((page) => current.pages.has(page))) return current.read;
-  const next = { pages: new Set(pages), read: readPageTabs(port) };
+  const next = { pages: new Set(pages), read: Promise.allSettled(pages).then(async () => {
+    const tabs = await readPageTabs(port);
+    // A matching URL may retire ownership before a pending follower verifies
+    // activation. These completed responses still establish read freshness.
+    for (const page of pages) reads.get(tabs)!.settled.add(page);
+    return tabs;
+  }) };
   rechecks.set(port, next);
   const clear = () => { if (rechecks.get(port) === next) rechecks.delete(port); };
   void next.read.then(clear, clear);
@@ -35,13 +41,13 @@ export function recheckPageTabs(port: AgentPort, pages: Promise<BrowserTab>[]): 
 
 /** Confirm just this follower's operation; other tabs still need their own
  *  visible reconciliation before their ownership can be retired. */
-export function reconcilePageFollow(port: AgentPort, page: Promise<BrowserTab>, tabs: BrowserTab[], shown: BrowserTab): boolean {
+export function reconcilePageFollow(port: AgentPort, page: Promise<BrowserTab>, tabs: BrowserTab[], shown: BrowserTab, result: BrowserTab): boolean {
   const requests = unseen.get(port);
   const request = [...(requests ?? [])].find((request) => request.page === page);
-  if (request?.result?.url === undefined || request.result.id !== shown.id || !pageReadAfterSettlement(port, tabs, page)) return false;
+  if (result.id !== shown.id || !pageReadAfterSettlement(port, tabs, page)) return false;
   const current = tabs.find((tab) => tab.id === shown.id);
-  const confirmed = current?.url === shown.url && current.url !== request.result.url;
-  if (!current || confirmed) requests?.delete(request);
+  const confirmed = current?.url === shown.url && (current.url !== result.url || (result.active === false && current.active && shown.active));
+  if (request && (!current || confirmed)) requests?.delete(request);
   return confirmed;
 }
 

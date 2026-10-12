@@ -110,9 +110,10 @@ it("shares concurrent verification reads only across operations already settled 
   replies[0](tab); await first;
   const early = recheckPageTabs(port, [first]);
   expect(recheckPageTabs(port, [first])).toBe(early);
+  await vi.waitFor(() => expect(port.browserTabs).toHaveBeenCalledOnce());
   replies[1]({...tab,id:"other"}); await second;
   const later = recheckPageTabs(port, [first, second]);
-  expect(port.browserTabs).toHaveBeenCalledTimes(2);
+  await vi.waitFor(() => expect(port.browserTabs).toHaveBeenCalledTimes(2));
   reads[0]([tab]); reads[1]([tab]);
   expect(pageReadAfterSettlement(port, await early, second)).toBe(false);
   expect(pageReadAfterSettlement(port, await later, second)).toBe(true);
