@@ -319,21 +319,7 @@ func RuntimeForbidReadRoots(cfg *config.Config, root string) []string {
 		return nil
 	}
 	secrets.RegisterCredentialEnvKeys(cfg.CredentialEnvNames())
-	base := cfg.ForbidReadRootsForRoot(root)
-	base = appendUniquePaths(base, secrets.ForbiddenReadPaths(cfg.Secrets.ProtectSensitiveFiles)...)
-	base = appendUniquePaths(base, append(secrets.HostSecretPaths(), cfg.Roots().RemoteStateDir(), cfg.Roots().ScheduleDir())...)
-	credentialPath := strings.TrimSpace(cfg.Roots().UserCredentialsPath())
-	if credentialPath == "" {
-		return append([]string(nil), base...)
-	}
-	info, err := os.Stat(credentialPath)
-	if err != nil || info.IsDir() {
-		return append([]string(nil), base...)
-	}
-	if real, err := filepath.EvalSymlinks(credentialPath); err == nil {
-		credentialPath = real
-	}
-	return appendUniquePaths(base, credentialPath)
+	return cfg.ForbiddenRootsForRoot(root)
 }
 
 func pathComparisonKey(path string) string {
@@ -488,14 +474,6 @@ func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sand
 			reg.Add(t)
 		}
 	}
-}
-
-// autoShellPrefer reports whether [tools.shell] left the interpreter to
-// auto-detection, so the "fell back to PowerShell" hint is suppressed once the
-// user has explicitly chosen a shell.
-func autoShellPrefer(prefer string) bool {
-	p := strings.ToLower(strings.TrimSpace(prefer))
-	return p == "" || p == "auto"
 }
 
 // LSPSpecs returns the language → server map: the built-in defaults overlaid with

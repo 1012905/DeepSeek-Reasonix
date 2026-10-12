@@ -1,4 +1,6 @@
 import { t } from "../i18n";
+import { FeedbackBadge } from "./feedbackentry";
+import { StudioIcon } from "./StudioIcon";
 
 // Drawn on the same 16-unit grid at the same 1.5 stroke as Sym's marks, and for
 // the same reason: an icon set pulled in from outside reads as a different hand
@@ -11,6 +13,7 @@ const ICON: Record<string, string> = {
   memory: "M4.6 3h6.8v10L8 10.5 4.6 13Z",
   remote: "M2.9 4.3a1.2 1.2 0 0 1 1.2-1.2h7.8a1.2 1.2 0 0 1 1.2 1.2v5.1a1.2 1.2 0 0 1-1.2 1.2H4.1a1.2 1.2 0 0 1-1.2-1.2ZM6.4 13h3.2M8 10.6V13",
   account: "M8 3.2a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6M3.9 13v-.9A2.9 2.9 0 0 1 6.8 9.2h2.4a2.9 2.9 0 0 1 2.9 2.9v.9",
+  files: "M4.5 2.8h4.8L12 5.5v7.7H4.5ZM9.3 2.8v2.7H12",
   settings: "M3 5h5.2M11.2 5H13M3 11h2.2M8.2 11H13M9.4 3.4v3.2M6.4 9.4v3.2",
 };
 
@@ -19,31 +22,40 @@ const ICON: Record<string, string> = {
 const TO: [keyof typeof ICON, string, string | null][] = [
   ["chat", "会话", null],
   ["usage", "用量", "usage"],
+  ["files", "文件", "storage"],
   ["tools", "工具与权限", "tools"],
   ["ext", "扩展", "ext"],
   ["memory", "记忆", "memory"],
   ["remote", "远程", "remote"],
 ];
 
-const FOOT: [keyof typeof ICON, string, string][] = [
-  ["account", "账号", "account"],
-  ["settings", "设置", ""],
+const FOOT: [keyof typeof ICON, string, string, string][] = [
+  ["account", "账号", "account", "chrome.account"],
+  ["settings", "设置", "", "chrome.settings"],
 ];
 
 interface Props {
   at: string | null;
   onGo: (sec?: string) => void;
   onHome: () => void;
+  /** The conversation item already shows the conversation, so pressing it again
+   *  does what the rail beside it can: open or close the workspace column. */
+  onRail: () => void;
+  onFeedback: () => void;
+  feedbackUnread: number;
+  /** False keeps the column mounted but out of the way and out of reach. */
+  shown: boolean;
 }
 
-export function Nav({ at, onGo, onHome }: Props) {
-  const btn = ([key, label, sec]: [keyof typeof ICON, string, string | null]) => (
+export function Nav({ at, onGo, onHome, onRail, onFeedback, feedbackUnread, shown }: Props) {
+  const btn = ([key, label, sec, action]: [keyof typeof ICON, string, string | null, string?]) => (
     <button
       key={key}
       className="navbtn"
+      data-action={action}
       aria-label={t(label)}
       aria-current={(sec ?? null) === at ? "page" : undefined}
-      onClick={() => (sec === null ? onHome() : onGo(sec || undefined))}
+      onClick={() => (sec === null ? (at === null ? onRail() : onHome()) : onGo(sec || undefined))}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <path d={ICON[key]} />
@@ -52,9 +64,16 @@ export function Nav({ at, onGo, onHome }: Props) {
     </button>
   );
   return (
-    <nav className="nav" aria-label={t("主导航")}>
+    <nav className="nav" aria-label={t("主导航")} aria-hidden={shown ? undefined : true} inert={!shown}>
       <div className="navgrp">{TO.map(btn)}</div>
-      <div className="navgrp foot">{FOOT.map(btn)}</div>
+      <div className="navgrp foot">
+        <button className="navbtn" data-action="feedback.open" onClick={onFeedback}>
+          <StudioIcon name="feedback" aria-hidden="true" />
+          <span className="navhint" role="tooltip">{t("发送反馈")}</span>
+          <FeedbackBadge unread={feedbackUnread} />
+        </button>
+        {FOOT.map(btn)}
+      </div>
     </nav>
   );
 }

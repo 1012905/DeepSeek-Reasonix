@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"reasonix/internal/safety/permission"
 	"reasonix/internal/session/control"
 )
 
@@ -17,6 +18,9 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /permissions/revoke", s.revokeSessionGrant)
 	mux.HandleFunc("POST /permissions/remembered/revoke", s.revokeRememberedProjectRule)
 	mux.HandleFunc("GET /sandbox", s.sandboxSettings)
+	mux.HandleFunc("GET /workspace/roots", s.workspaceRoots)
+	mux.HandleFunc("POST /workspace/roots", s.addWorkspaceRoot)
+	mux.HandleFunc("POST /workspace/roots/remove", s.removeWorkspaceRoot)
 	mux.HandleFunc("POST /sandbox", s.saveSandboxSettings)
 	mux.HandleFunc("GET /browser-tools", s.browserToolsSettings)
 	mux.HandleFunc("POST /browser-tools", s.saveBrowserToolsSettings)
@@ -45,6 +49,12 @@ func (s *Server) savePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.ctl().SavePermissionRules(body); err != nil {
+		var unknown *permission.UnknownToolError
+		if errors.As(err, &unknown) {
+			refuse(w, http.StatusBadRequest, "permissions.rule_unknown_tool", err.Error(),
+				map[string]any{"list": unknown.List, "rule": unknown.Rule, "tool": unknown.Tool})
+			return
+		}
 		saveFailed(w, http.StatusBadRequest, "permissions.rejected", err)
 		return
 	}
@@ -127,6 +137,11 @@ func (s *Server) saveSandboxSettings(w http.ResponseWriter, r *http.Request) {
 		// so this only has to carry that the write did not happen.
 		if errors.Is(err, control.ErrSandboxUnavailable) {
 			refuse(w, http.StatusConflict, "sandbox.unavailable", err.Error(), nil)
+			return
+		}
+		var refusal *control.WorkspaceRootError
+		if errors.As(err, &refusal) {
+			refuse(w, http.StatusBadRequest, string(refusal.Code), "this folder cannot be granted write access", nil)
 			return
 		}
 		saveFailed(w, http.StatusBadRequest, "sandbox.rejected", err)

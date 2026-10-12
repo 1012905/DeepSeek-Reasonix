@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/session/control"
@@ -37,16 +38,19 @@ func (p *failedJobProvider) Stream(_ context.Context, req provider.Request) (<-c
 		raw, _ := json.Marshal(args)
 		ch <- provider.Chunk{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: id, Name: name, Arguments: string(raw)}}
 	}
-	lastUser := ""
+	task, answered := "", map[string]bool{}
 	for _, m := range req.Messages {
-		if m.Role == provider.RoleUser {
-			lastUser = m.Content
+		switch {
+		case m.Role == provider.RoleTool:
+			answered[m.ToolCallID] = true
+		case m.Role == provider.RoleUser && strings.Contains(m.Content, "CHECK"):
+			task = "CHECK"
+		case m.Role == provider.RoleUser && strings.Contains(m.Content, "START"):
+			task = "START"
 		}
 	}
 	switch {
-	case toolResultAfterLastUser(req):
-		ch <- provider.Chunk{Type: provider.ChunkText, Text: "noted"}
-	case strings.Contains(lastUser, "CHECK"):
+	case task == "CHECK" && !answered["w1"]:
 		id := ""
 		for _, m := range req.Messages {
 			if found := jobIDPattern.FindString(m.Content); found != "" {
@@ -55,7 +59,7 @@ func (p *failedJobProvider) Stream(_ context.Context, req provider.Request) (<-c
 		}
 		call("w1", "wait", map[string]any{"job_ids": []string{id}})
 		call("r1", "read_file", map[string]string{"path": "note.txt"})
-	case strings.Contains(lastUser, "START"):
+	case task == "START" && !answered["b1"]:
 		call("b1", "bash", map[string]any{"command": "echo boom-output; exit 3", "run_in_background": true})
 	default:
 		ch <- provider.Chunk{Type: provider.ChunkText, Text: "noted"}
@@ -70,13 +74,13 @@ func (p *failedJobProvider) Stream(_ context.Context, req provider.Request) (<-c
 // model still reads the job's output under the error line, and the call
 // batched beside it still runs.
 func TestEffectReadingAFailedBackgroundJobIsAFailedCall(t *testing.T) {
-	isolateConfigHome(t)
-	dir := robustTempDir(t)
-	t.Chdir(dir)
+	t.Parallel()
+	home := statedBootHome(t)
+	dir := testenv.TempDir(t)
 	kind := uniqueKind("boot-failed-job")
 	rec := &failedJobProvider{answers: map[string]string{}}
 	provider.Register(kind, func(provider.Config) (provider.Provider, error) { return rec, nil })
-	writeUserConfig(t, "[sandbox]\nbash = \"off\"\n")
+	writeUserConfigAt(t, home, "[sandbox]\nbash = \"off\"\n")
 	writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
 
@@ -92,18 +96,24 @@ kind = "`+kind+`"
 model = "x"
 `)
 	writeFile(t, dir, "note.txt", "note-body")
-	approveWorkspace(t, dir)
+	approveWorkspaceAt(t, home, dir)
 
 	var mu sync.Mutex
 	liveErr := map[string]string{}
+	var failedNotice string
 	sink := event.FuncSink(func(e event.Event) {
+		if e.Kind == event.Notice && e.Code == event.NoticeCodeJobFailed {
+			mu.Lock()
+			failedNotice = e.Detail
+			mu.Unlock()
+		}
 		if e.Kind == event.ToolResult {
 			mu.Lock()
 			liveErr[e.Tool.ID] = e.Tool.Err
 			mu.Unlock()
 		}
 	})
-	ctrl, err := Build(context.Background(), Options{Sink: sink})
+	ctrl, err := Build(context.Background(), Options{Home: home, WorkspaceRoot: dir, Sink: sink})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -131,6 +141,13 @@ model = "x"
 	mu.Unlock()
 	if !strings.Contains(waitErr, "background job failed") || readErr != "" {
 		t.Fatalf("live Err: wait %q, read %q; want only the wait failed", waitErr, readErr)
+	}
+
+	mu.Lock()
+	notice, ok := event.DecodeJobNotice(failedNotice)
+	mu.Unlock()
+	if !ok || notice.ExitCode == nil || *notice.ExitCode != 3 || notice.Signal != 0 {
+		t.Fatalf("failed-job notice payload = %+v (ok=%v), want the typed exit code 3", notice, ok)
 	}
 
 	loaded, err := sessionstore.LoadSession(ctrl.SessionPath())

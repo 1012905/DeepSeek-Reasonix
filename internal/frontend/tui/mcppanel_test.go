@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"reasonix/internal/base/i18n"
 	"strings"
 	"testing"
 
@@ -109,5 +110,54 @@ func TestMCPConfirmLineStripsEscapesFromTheLaunchText(t *testing.T) {
 	v := m.View().Content
 	if strings.Contains(v, "\x1b[2J") || strings.Contains(v, "\x07") || strings.Contains(v, "\u202e") || !strings.Contains(v, "node a b") {
 		t.Fatalf("confirm line:\n%q", v)
+	}
+}
+
+// 1.x's MCP manager went into a server with l / Right, back out with h / Left,
+// and closed from anywhere with q; docs/GUIDE.md still lists those keys.
+func TestMCPPanelTakesTheOneXKeys(t *testing.T) {
+	m, k := testModel(t)
+	enterMCPLine(m, "/mcp")
+	steps := []struct {
+		name         string
+		key          tea.KeyPressMsg
+		open, detail bool
+	}{
+		{"l", tea.KeyPressMsg{Code: 'l', Text: "l"}, true, true},
+		{"h", tea.KeyPressMsg{Code: 'h', Text: "h"}, true, false},
+		{"right", tea.KeyPressMsg{Code: tea.KeyRight}, true, true},
+		{"left", tea.KeyPressMsg{Code: tea.KeyLeft}, true, false},
+		{"h on the list", tea.KeyPressMsg{Code: 'h', Text: "h"}, false, false},
+	}
+	for _, s := range steps {
+		m.Update(s.key)
+		if (m.mcp != nil) != s.open || (m.mcp != nil && m.mcp.detail != s.detail) {
+			t.Fatalf("after %s: panel %+v, want open=%v detail=%v", s.name, m.mcp, s.open, s.detail)
+		}
+	}
+	for _, path := range [][]tea.KeyPressMsg{nil, {{Code: tea.KeyEnter}}} {
+		enterMCPLine(m, "/mcp")
+		for _, key := range path {
+			m.Update(key)
+		}
+		run(m, keyRune(m, 'q'))
+		if m.mcp != nil {
+			t.Fatalf("q left the panel open (detail=%v)", m.mcp.detail)
+		}
+	}
+	if calls := strings.Join(k.seen(), "\n"); strings.Contains(calls, "POST /mcp") {
+		t.Fatalf("moving through the panel changed a server:\n%s", calls)
+	}
+}
+
+func TestMCPPanelKeepsTheHiddenCharactersMarkerWhenTheLaunchIsClipped(t *testing.T) {
+	m, _ := testModel(t)
+	enterMCPLine(m, "/mcp")
+	run(m, press(m, "down"))
+	m.mcp.servers[1].Launch = i18n.M.LaunchHiddenRemoved + " node " + strings.Repeat("x", 400)
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
+	run(m, cmd)
+	if v := m.View().Content; !strings.Contains(v, i18n.M.LaunchHiddenRemoved) {
+		t.Fatalf("the clipped launch line lost its marker:\n%q", v)
 	}
 }

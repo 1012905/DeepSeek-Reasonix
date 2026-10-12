@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"reasonix/internal/base/i18n"
 	"reasonix/internal/base/textutil"
@@ -69,9 +70,11 @@ func renderItem(it *Item, width, shown int, hideRail bool) string {
 	case ItemCompaction:
 		return renderCompaction(it, width)
 	case ItemReceipt:
-		return renderReceipt(it.Receipt, width)
+		return renderReceipt(it.Receipt, width, it.ReceiptLine)
 	case ItemUsage:
 		return renderUsage(it.Usage, width)
+	case ItemWorked:
+		return termrender.Dim("  " + fmt.Sprintf(i18n.M.ChatWorkedForFmt, i18n.Elapsed(time.Duration(it.WorkedMs)*time.Millisecond)))
 	}
 	return ""
 }
@@ -315,17 +318,63 @@ func codedNoticeText(it *Item) string {
 		if why, ok := i18n.M.CompactionWhy[it.Detail]; ok {
 			return fmt.Sprintf(i18n.M.NoticeCompactFailedFmt, why)
 		}
+	case event.NoticeCodeCompactHeld:
+		if why, ok := i18n.M.CompactionWhy[it.Detail]; ok {
+			return fmt.Sprintf(i18n.M.NoticeCompactHeldFmt, why)
+		}
 	case event.NoticeCodeUnappliedSteer:
 		if it.Detail != "" {
 			return fmt.Sprintf(i18n.M.NoticeUnappliedSteerFmt, textutil.TruncateGraphemes(textutil.SanitizeDisplay(it.Detail), unappliedSteerCap, "…"))
 		}
 		return textutil.TruncateGraphemes(textutil.SanitizeDisplay(it.Text), unappliedSteerCap, "…")
+	case event.NoticeCodeInboxRecovered:
+		if p, ok := event.DecodeInboxRecovered(it.Detail); ok {
+			return fmt.Sprintf(i18n.M.NoticeInboxRecoveredFmt, p.Count)
+		}
+	case event.NoticeCodeJobFinished, event.NoticeCodeJobKilled:
+		if p, ok := event.DecodeJobNotice(it.Detail); ok {
+			name := p.Label
+			if name == "" {
+				name = p.ID
+			}
+			if it.Code == event.NoticeCodeJobKilled {
+				return fmt.Sprintf(i18n.M.NoticeJobKilledFmt, name)
+			}
+			return fmt.Sprintf(i18n.M.NoticeJobFinishedFmt, name)
+		}
+	case event.NoticeCodeJobFailed:
+		if p, ok := event.DecodeJobNotice(it.Detail); ok {
+			name := p.Label
+			if name == "" {
+				name = p.ID
+			}
+			return fmt.Sprintf(i18n.M.NoticeJobFailedFmt, name) + jobFailure(p)
+		}
 	case event.NoticeCodeExtensionSkipped:
 		if p, ok := event.DecodeExtensionSkipped(it.Detail); ok && p.Reason == event.ExtensionSkipReasonNoLiveSidecar {
 			return fmt.Sprintf(i18n.M.NoticeExtSkippedFmt, p.Extension, p.Point)
 		}
 	}
 	return it.Text
+}
+
+// jobFailure words how a failed job's process ended from the typed fields,
+// falling back to the job function's own error text when none were written.
+func jobFailure(p event.JobNotice) string {
+	switch {
+	case p.Signal > 0:
+		return ": " + fmt.Sprintf(i18n.M.NoticeJobSignalFmt, p.Signal)
+	case p.ExitCode != nil:
+		return ": " + fmt.Sprintf(i18n.M.NoticeJobExitFmt, *p.ExitCode)
+	}
+	return jobError(p.Error)
+}
+
+func jobError(msg string) string {
+	if msg == "" {
+		return ""
+	}
+	return ": " + textutil.TruncateGraphemes(textutil.SanitizeDisplay(msg), unappliedSteerCap, "…")
 }
 
 func renderNotice(it *Item) string {
