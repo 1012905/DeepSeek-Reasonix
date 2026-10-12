@@ -67,4 +67,13 @@ async function revealWorkspace(client, shell, root, platform = process.platform)
   return null;
 }
 
-module.exports = { reveal, revealWorkspace };
+// The shell's own logs folder. The shell names it, never the page, and it is
+// opened rather than selected: it is a directory this app created. null means
+// it was shown.
+async function revealLogs(shell, dir) {
+  if (!dir) return { error: "the logs folder is unknown" };
+  const failed = await shell.openPath(String(dir));
+  return failed ? { error: failed } : null;
+}
+
+module.exports = { reveal, revealWorkspace, revealLogs };

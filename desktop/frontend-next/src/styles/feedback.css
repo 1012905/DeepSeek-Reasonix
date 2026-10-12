@@ -107,6 +107,7 @@
 .fbk-env dt { color: var(--muted); font-size: var(--fs-meta); }
 .fbk-env dd { margin: 0; overflow-wrap: anywhere; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--text); }
 .fbk-env .fbk-hint { margin: 0; }
+.fbk-logs { display: grid; justify-items: start; gap: 6px; margin-top: 10px; }
 
 .fbk-note {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; border: 1px solid var(--border);
