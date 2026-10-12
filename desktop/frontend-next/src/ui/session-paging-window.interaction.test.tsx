@@ -62,7 +62,7 @@ function pagedHub() {
   return { hub, asked, change: () => change() };
 }
 
-const filter = (name: RegExp) => screen.getByRole("button", { name });
+const filter = (name: RegExp) => screen.getAllByRole("button", { name }).find((b) => b.closest(".studio-session-segments"))!;
 
 it("keeps the pages the reader opened across a tree refresh", async () => {
   const { hub, asked, change } = pagedHub();
