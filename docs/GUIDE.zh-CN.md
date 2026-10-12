@@ -1065,6 +1065,8 @@ RPC 调用。两者都可按服务器覆盖。
 `review.md` 即 `/review`，子目录构成命名空间（`git/commit.md` → `/git:commit`）。文件正文
 是 prompt 模板，调用即作为一轮对话发出。
 
+在 Studio 里，每条已完成的回复下有「分支为新会话」按钮：把对话复制到这条回复为止，生成标题为「原标题 · 分支」的新会话，原会话保持不变。它依赖运行中产生的回合边界，所以重启后恢复的会话不提供。
+
 ### 子智能体 Profile
 
 子智能体 profile 是带有 `runAs: subagent` 和 `invocation: manual` 的手动 Skill。

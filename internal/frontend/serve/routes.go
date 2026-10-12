@@ -55,6 +55,7 @@ func (s *Server) routes() http.Handler {
 	s.registerChangedFilesRoutes(mux)
 	mux.HandleFunc("POST /new", s.newSession)
 	mux.HandleFunc("POST /rewind", s.rewind)
+	mux.HandleFunc("POST /branch/at", s.branchAt)
 	mux.HandleFunc("POST /rewind/prepare", s.rewindPrepare)
 	mux.HandleFunc("POST /rewind/commit", s.rewindCommit)
 	mux.HandleFunc("POST /rewind/undo", s.rewindUndo)

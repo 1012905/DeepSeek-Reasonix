@@ -1357,6 +1357,8 @@ Markdown files under `.reasonix/commands/` (project) or `~/.reasonix/commands/`
 (`git/commit.md` → `/git:commit`). The body is a prompt template; invoking the
 command sends it as a turn.
 
+In Studio, a finished reply has a "Branch into a new conversation" button. It copies the conversation up to that reply into a new session titled "<title> · branch" and leaves the original as it was. It needs a live turn boundary, so a session restored after a restart does not offer it.
+
 ### Subagent profiles
 
 Subagent profiles are manual Skills with `runAs: subagent` and

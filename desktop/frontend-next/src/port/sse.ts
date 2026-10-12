@@ -497,6 +497,10 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.post0<RewindResult>("/rewind/commit", { planId });
   }
 
+  async branchAt(turn: number, name: string) {
+    return (await this.post0<{ path: string }>("/branch/at", { turn, name })).path;
+  }
+
   undoRewind(transactionId: string) {
     return this.post("/rewind/undo", { transactionId });
   }

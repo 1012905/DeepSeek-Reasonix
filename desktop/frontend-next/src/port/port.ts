@@ -456,6 +456,9 @@ export interface AgentPort {
   // the user agreed to.
   prepareRewind(turn: number, scope: RewindScope): Promise<RewindPlan>;
   commitRewind(planId: string): Promise<RewindResult>;
+  // Copies the conversation up to the end of a turn into a new session and
+  // answers with its path; this session stays where it is.
+  branchAt(turn: number, name: string): Promise<string>;
   // Reverses a committed rewind. Only reachable while the caller still holds the
   // transaction id the commit returned.
   undoRewind(transactionId: string): Promise<void>;

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/event"
-	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/extension"
 	"reasonix/internal/ext/extension/dispatch"
 	"reasonix/internal/platform/browser"
@@ -254,25 +253,8 @@ func (c *Controller) Branch(name string) (string, error) {
 	if err := c.Snapshot(); err != nil {
 		return "", c.rewindFail(err)
 	}
-	parentPath := c.SessionPath()
-	parentID := sessionstore.BranchID(parentPath)
-	src := c.executor.Session().Snapshot()
-	branched := append([]provider.Message(nil), src...)
-	sess := sessionstore.NewSession("")
-	sess.Messages = branched
-
-	newPath := sessionstore.NewSessionPath(c.sessionDir, c.label)
-	if err := sess.SaveIfAbsent(newPath); err != nil {
-		return "", c.rewindFail(err)
-	}
-	branchPreview, branchTurns := sessionstore.SessionPreviewFromMessages(branched)
-	if err := sessionstore.SaveBranchMeta(newPath, sessionstore.BranchMeta{
-		Name:          strings.TrimSpace(name),
-		ParentID:      parentID,
-		Preview:       branchPreview,
-		Turns:         branchTurns,
-		SchemaVersion: sessionstore.BranchMetaCountsVersion,
-	}); err != nil {
+	sess, newPath, err := c.seedBranch(c.executor.Session().Snapshot(), name)
+	if err != nil {
 		return "", c.rewindFail(err)
 	}
 	// See snapshotMu: the swap must not interleave with an in-flight save.
