@@ -169,7 +169,7 @@ await page.click('[role="tab"][aria-selected="true"]');
 await frame();
 const quiet = await phone();
 check("手机：空置输入只占一行", quiet.height <= quiet.line + 1);
-check("手机：空置时收起优化与分支提示", !quiet.refine && !quiet.branch);
+check("手机：空置时收起优化提示，分支提示仍在", !quiet.refine && quiet.branch);
 check("手机：空置工具栏只占一行", quiet.rows === 1);
 await page.click(BOX);
 await frame();
