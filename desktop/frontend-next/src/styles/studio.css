@@ -2321,7 +2321,7 @@ body { font-size: 14px; line-height: 1.75; }
   min-width: 29px !important;
   height: 29px !important;
   padding: 0 !important;
-  display: grid !important;
+  display: grid;
   place-items: center;
   border: 1px solid transparent !important;
   border-radius: 999px !important;
