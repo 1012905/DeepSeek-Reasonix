@@ -202,7 +202,7 @@ export function RunAnalysis({ rows, availability, onSave }: {
         <ol>
           {activities.map((row, index) => {
             const start = (row.at / Math.max(span, 1)) * 100;
-            const width = Math.max(1.2, ((row.dur ?? 0) / Math.max(span, 1)) * 100);
+            const width = ((row.dur ?? 0) / Math.max(span, 1)) * 100;
             const bucket = bucketOf(row);
             const cat = row.tool ? categoryOf(row.tool) : bucket;
             return (

@@ -165,4 +165,36 @@ describe("RunAnalysis", () => {
     expect(signals[0].style.top).not.toBe(signals[1].style.top);
   });
 
+  it.each([1, 16])("keeps activity duration percentages exact at %s× zoom and after reset", (zoom) => {
+    const timed: TrajRow[] = [
+      { seq: 1, at: 10, dur: .1, kind: "tool", tool: "bash", payload: [{ t: "short" }], subs: [] },
+      { seq: 2, at: 20, dur: 0, kind: "protocol_recovery", payload: [{ t: "retry zero" }], subs: [] },
+      { seq: 3, at: 30, kind: "protocol_recovery", payload: [{ t: "retry unknown" }], subs: [] },
+      { seq: 4, at: 40, dur: 10, kind: "model_round", payload: [{ t: "long" }], subs: [] },
+      { seq: 5, at: 100, kind: "event", payload: [], subs: [] },
+    ];
+    const { container } = render(<RunAnalysis rows={timed} onSave={onSave} />);
+    const bars = [...container.querySelectorAll<HTMLElement>(".run-round-track > i")];
+    fireEvent.click(container.querySelector("[data-action='analysis.row'][data-target='1']")!);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: String(zoom) } });
+    expect(bars.map((bar) => bar.style.left)).toEqual(["10%", "20%", "30%", "40%"]);
+    expect(bars.map((bar) => bar.style.width)).toEqual(["0.1%", "0%", "0%", "10%"]);
+    expect(container.querySelector<HTMLElement>(".run-timeline-canvas")?.style.width).toBe(`${zoom * 100}%`);
+    expect(container.querySelector(".run-inspect p")?.textContent).toBe("short");
+    fireEvent.click(screen.getByRole("button", { name: "重置缩放" }));
+    expect(bars.map((bar) => bar.style.width)).toEqual(["0.1%", "0%", "0%", "10%"]);
+    expect(container.querySelector(".run-inspect p")?.textContent).toBe("short");
+  });
+
+  it("keeps zero-span recovery markers finite and duration-free at maximum zoom", () => {
+    const recovery: TrajRow = { seq: 1, at: 0, dur: 0, kind: "protocol_recovery", payload: [{ t: "retry" }], subs: [] };
+    const { container } = render(<RunAnalysis rows={[recovery]} onSave={onSave} />);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "16" } });
+    const bar = container.querySelector<HTMLElement>(".run-round-track > i")!;
+    expect(bar.style.left).toBe("0%");
+    expect(bar.style.width).toBe("0%");
+    fireEvent.click(container.querySelector("[data-action='analysis.row']")!);
+    expect(container.querySelector(".run-inspect p")?.textContent).toBe("retry");
+  });
+
 });
