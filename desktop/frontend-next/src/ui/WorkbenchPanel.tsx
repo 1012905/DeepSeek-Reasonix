@@ -9,7 +9,8 @@ import type {
   WorkspaceChange,
   WorkspaceFile,
 } from "../port/port";
-import { openPage } from "./browser_open";
+import { useBrowserSelection } from "./useBrowserSelection";
+import { openPage, observePageTabs } from "./browser_open";
 import { useColumnOpening } from "./useColumnOpening";
 import { WorkbenchLauncher } from "./WorkbenchLauncher";
 import { AgentBrowserPanel, ManualBrowserPanel, UNREAD_TABS } from "./BrowserPanel";
@@ -147,16 +148,17 @@ export function WorkbenchPanel({
   // in at all. The toggle is that way in, at any width.
   const [showFiles, setShowFiles] = useState(false);
   const commit = useCommitCard(port, () => onTreeChanged?.());
-  useOnBump(revealChanges, () => setShowFiles(true));
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
   // Docked, the file list hides the canvas a page is drawn in, so choosing any
   // surface steps the list aside.
-  const pick = useCallback((key: string) => {
+  const select = useCallback((key: string) => {
     setShowFiles(false);
     setFailed("");
     setSelected(key);
   }, []);
+  const { pick, follow, supersede, current } = useBrowserSelection(port, select, allTabs);
+  useOnBump(revealChanges, () => { supersede(); setShowFiles(true); });
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set()),
     [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   // The explorer's own failure, drawn in the explorer: the file view's error
@@ -267,7 +269,7 @@ export function WorkbenchPanel({
   const dropBlankStart = useCallback(() => setBrowsers((open) => open.filter((id) => !!visited.current[id])), []);
   const agentNow = useRef(agentTarget);
   agentNow.current = agentTarget;
-  useColumnOpening({ manual, browserAsk, port, agentNow, dropBlankStart, pick, setFailed, setBrowsers, setSelected });
+  useColumnOpening({ manual, browserAsk, filesAsk: revealChanges, port, agentNow, dropBlankStart, pick, follow, current, manualSelection: selected.startsWith("manual:") ? selected : `manual:${browsers[0] ?? "b0"}`, setFailed, setBrowsers });
   // A page that has just appeared is the one somebody wants to see, whoever
   // opened it: the agent's popup, or a link the person followed, which opens
   // beside the agent's tab without becoming the one it acts on.
@@ -283,9 +285,9 @@ export function WorkbenchPanel({
     for (const id of ids) known.current.add(id);
     if (fresh.length) {
       dropBlankStart();
-      pick(`browser:${fresh[fresh.length - 1]}`);
+      for (const target of fresh) follow(`browser:${target}`);
     }
-  }, [tabs, dropBlankStart, pick]);
+  }, [tabs, dropBlankStart, follow, port]);
   // Where the agent is looking, followed as it moves: a new page, or the same
   // tab sent somewhere else.
   const lastAgent = useRef<string | null>(null);
@@ -294,8 +296,13 @@ export function WorkbenchPanel({
     lastAgent.current = agentAt;
     if (!before || !agentAt || before === agentAt) return;
     dropBlankStart();
-    pick(`browser:${agentTarget}`);
-  }, [agentAt, agentTarget, dropBlankStart, pick]);
+    follow(`browser:${agentTarget}`);
+  }, [agentAt, agentTarget, dropBlankStart, follow]);
+  // Retire only after both followers captured this batch, including previews
+  // filtered from the visible browser tabs.
+  useEffect(() => {
+    if (allTabs !== UNREAD_TABS) observePageTabs(port, allTabs, !preview.pending);
+  }, [allTabs, port, preview.pending]);
   const noteHost = useCallback(
     (id: string, host: string) =>
       setHosts((v) => (v[id] === host ? v : { ...v, [id]: host })),
@@ -329,12 +336,12 @@ export function WorkbenchPanel({
   const { open: openPreview, sync: syncPreview } = preview;
   const revision = file?.path === filePath ? file.revision : undefined;
   useEffect(() => {
-    if (mode !== "preview" || !previewable || !shown || previewTab || (!revision && !failed)) return;
+    if (mode !== "preview" || !previewable || !shown || showFiles || previewTab || (!revision && !failed)) return;
     openPreview(filePath, revision).catch((e) => {
       setFailed(reason(e));
       setMode("file");
     });
-  }, [mode, previewable, shown, previewTab, revision, failed, filePath, openPreview, tabs]);
+  }, [mode, previewable, shown, showFiles, previewTab, revision, failed, filePath, openPreview, tabs]);
   useEffect(() => {
     if (mode === "preview" && revision) syncPreview(filePath, revision);
   }, [mode, filePath, revision, syncPreview]);
@@ -448,6 +455,8 @@ export function WorkbenchPanel({
   // that refuses to be framed opens at all. A shell with no views has no such
   // page to give, so there the iframe surface is still what there is.
   const addBrowser = async () => {
+    supersede();
+    const valid = current();
     if (!host().drawsBrowserViews()) {
       const id = `b${(minted.current += 1)}`;
       setBrowsers((v) => [...v, id]);
@@ -456,9 +465,9 @@ export function WorkbenchPanel({
     }
     try {
       const tab = await openPage(port, "about:blank");
-      pick(`browser:${tab.target}`);
+      if (valid()) pick(`browser:${tab.target}`);
     } catch (e) {
-      setFailed(reason(e));
+      if (valid()) setFailed(reason(e));
     }
   };
   const { close, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
@@ -539,7 +548,7 @@ export function WorkbenchPanel({
           aria-pressed={showFiles}
           aria-label={t("文件")}
           title={t("文件")}
-          onClick={() => setShowFiles((on) => !on)}
+          onClick={() => { supersede(); setShowFiles((on) => !on); }}
         >
           <StudioIcon name="folder" />
         </button>
@@ -564,7 +573,7 @@ export function WorkbenchPanel({
           {!active && (
             <WorkbenchLauncher
               changes={changes.length}
-              onFiles={() => setShowFiles(true)}
+              onFiles={() => { supersede(); setShowFiles(true); }}
               onChanges={() => changes[0] && openFile(changes[0].path)}
               onBrowser={() => void addBrowser()}
             />
