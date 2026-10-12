@@ -278,9 +278,9 @@ A small list of folks whose work has shaped Reasonix the most — the current to
 | --- | --- | --- | --- |
 | [**SivanCola**](https://github.com/SivanCola) | [**KHG420**](https://github.com/KHG420) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
 | [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**Harbor404**](https://github.com/Harbor404) | [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) |
-| [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) | [**eghrhegpe**](https://github.com/eghrhegpe) | [**Bernardxu123**](https://github.com/Bernardxu123) |
-| [**HaoyueQin**](https://github.com/HaoyueQin) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**BuGlessRB**](https://github.com/BuGlessRB) | [**CVEngineer66**](https://github.com/CVEngineer66) |
-| [**JesonChou**](https://github.com/JesonChou) | [**lanshi17**](https://github.com/lanshi17) | [**par73e**](https://github.com/par73e) | [**SuMuxi66**](https://github.com/SuMuxi66) |
+| [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) | [**XTLine**](https://github.com/XTLine) | [**eghrhegpe**](https://github.com/eghrhegpe) |
+| [**noreply**](https://github.com/noreply) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**xxoingr**](https://github.com/xxoingr) | [**Bernardxu123**](https://github.com/Bernardxu123) |
+| [**HaoyueQin**](https://github.com/HaoyueQin) | [**BuGlessRB**](https://github.com/BuGlessRB) | [**CVEngineer66**](https://github.com/CVEngineer66) | [**JesonChou**](https://github.com/JesonChou) |
 <!-- reasonix-top-contributors:end -->
 
 Special thanks to [**Bernardxu123**](https://github.com/Bernardxu123) for designing the project logo and intro video.
