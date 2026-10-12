@@ -367,6 +367,7 @@ export const ACTIONS: UIAction[] = [
   { id: "rewind.commit", kind: "destructive", target: "entity", proof: "authority-effect" },
   { id: "session.reload", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "rewind.undo", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "rewind.notice-dismiss", kind: "view", target: "entity", proof: "interaction" },
   { id: "extensions.submit", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "provider.probe", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "provider.draft", kind: "interaction", target: "none", proof: "interaction" },
