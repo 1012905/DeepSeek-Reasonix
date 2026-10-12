@@ -182,7 +182,7 @@ func TestEffectSupportingWritesWithoutChecksMayFinish(t *testing.T) {
 			}
 			audits := sink.audits()
 			if len(audits) == 0 || !audits[len(audits)-1].Sealed {
-				t.Fatal("missing sealed evidence")
+				t.Fatalf("missing sealed evidence: %+v", audits)
 			}
 			store := trustedstate.Open(filepath.Join(config.MemoryUserDir(), builtin.TrustedStateDir), nil)
 			stream := workspaceid.PathFingerprint(dir)
