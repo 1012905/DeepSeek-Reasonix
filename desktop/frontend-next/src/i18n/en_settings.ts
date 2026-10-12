@@ -2,6 +2,9 @@
 // alone — one catalogue is still the model, and this file is read as its
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
+  "{name} 的显示别名": "Display alias for {name}",
+  "显示别名（留空使用模型 ID）": "Display alias (empty uses model ID)",
+  "仅用于显示，不改变请求中的模型 ID": "Display only; the model ID sent in requests is unchanged",
   "步骤 1 · 连接服务": "Step 1 · Connect service",
   "先连接服务，再选择这个来源要启用的模型。": "Connect the service, then choose which models to enable from it.",
   "来源名称": "Source name",
