@@ -191,7 +191,7 @@ func changesOf(ledger *evidence.Ledger, receipts []evidence.Receipt, inWorkspace
 			authored[p] = true
 		}
 		for _, p := range r.Paths {
-			if p == "" || (inWorkspace != nil && !inWorkspace(p)) {
+			if p == "" || slices.Contains(r.HostOwned, p) || (inWorkspace != nil && !inWorkspace(p)) {
 				continue
 			}
 			if _, seen := at[p]; !seen {
@@ -223,7 +223,7 @@ func changesOf(ledger *evidence.Ledger, receipts []evidence.Receipt, inWorkspace
 func mutationsOf(receipts []evidence.Receipt, inWorkspace func(string) bool) int {
 	count := 0
 	for _, r := range receipts {
-		if r.Success && (r.Mutation || r.Write) && keptAnyPath(r.Paths, inWorkspace) {
+		if r.Success && (r.Mutation || r.Write) && keptAnyPath(r, inWorkspace) {
 			count++
 		}
 	}
@@ -233,11 +233,13 @@ func mutationsOf(receipts []evidence.Receipt, inWorkspace func(string) bool) int
 // keptAnyPath reports whether a receipt touched the work product. A receipt
 // that named no path counts either way: `sed -i` and `rm` name nothing and
 // must not escape the gap by staying silent about where they landed.
-func keptAnyPath(paths []string, inWorkspace func(string) bool) bool {
-	if inWorkspace == nil || len(paths) == 0 {
+func keptAnyPath(r evidence.Receipt, inWorkspace func(string) bool) bool {
+	if len(r.Paths) == 0 {
 		return true
 	}
-	return slices.ContainsFunc(paths, inWorkspace)
+	return slices.ContainsFunc(r.Paths, func(p string) bool {
+		return !slices.Contains(r.HostOwned, p) && (inWorkspace == nil || inWorkspace(p))
+	})
 }
 
 // browserCheckTool is the browser call the host can classify as a check.
@@ -341,9 +343,8 @@ func gapsOf(rep Report, c *taskcontract.Contract) []Gap {
 	// Only report the blanket gap when no declared check already said it: a
 	// contract with checks states the same absence in more specific words.
 	if rep.Mutations > 0 && !proven && !missingCheck {
-		// The kind's own phrase already says the absence in the reader's
-		// language; the detail says what was there instead, which is the part
-		// a turn that just ran a command of its own cannot get from the phrase.
+		// The kind's own phrase says the absence in the reader's language; the
+		// detail is only the command the host declined, never a sentence.
 		gaps = append(gaps, Gap{Kind: GapUnverifiedChange, Detail: unreadCheckDetail(rep.UnreadCheck)})
 	}
 	for _, ch := range rep.Changes {
@@ -445,5 +446,5 @@ func unreadCheckDetail(command string) string {
 	if len(command) > unreadCheckLimit {
 		command = command[:unreadCheckLimit] + "…"
 	}
-	return "`" + command + "` ran, but the host does not read it as a check"
+	return command
 }

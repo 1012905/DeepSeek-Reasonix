@@ -15,6 +15,8 @@ import (
 	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/safety/endpointclient"
+	"reasonix/internal/safety/redirectguard"
 )
 
 // hostGrants are the surfaces a host opens on behalf of its one local client.
@@ -38,6 +40,8 @@ func (s *Server) AllowProviderEdit() { s.grants.providerEdit = true }
 func (s *Server) registerProviderRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /providers", s.providers)
 	mux.HandleFunc("GET /providers/protocols", s.providerProtocols)
+	mux.HandleFunc("GET /providers/presets", s.providerPresets)
+	mux.HandleFunc("POST /providers/presets/install", s.installProviderPreset)
 	mux.HandleFunc("POST /providers", s.saveProvider)
 	mux.HandleFunc("POST /providers/probe", s.probeProvider)
 	mux.HandleFunc("POST /providers/remove", s.removeProvider)
@@ -79,11 +83,17 @@ type providerView struct {
 	// has no format for it, so the answer differs per protocol on one account.
 	CanWebSearch bool `json:"canWebSearch"`
 	WebSearch    bool `json:"webSearch"`
+	// CanListModels is false where the protocol declares no model listing, so
+	// the editor does not offer to read one.
+	CanListModels bool `json:"canListModels"`
 	// SendsThinking is whether thinking/reasoning_effort may go on the wire.
 	// CanSetThinking is false where the protocol never carries them, so the UI
 	// offers the switch only where a gateway can actually reject the request.
 	CanSetThinking bool `json:"canSetThinking"`
 	SendsThinking  bool `json:"sendsThinking"`
+	// EffortField is where a chosen effort level lands in this wire's request
+	// body, declared by the protocol so every panel words it from one source.
+	EffortField string `json:"effortField"`
 	// Continuation is how this endpoint carries context between turns, and
 	// CanSetContinuation whether its protocol has the choice at all. Empty is
 	// vendor detection, which is what an uncharacterised endpoint must keep.
@@ -150,8 +160,10 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			VisionSettable:     nonNilStrings(settable),
 			CanWebSearch:       config.HasServerWebSearchCapability(p),
 			WebSearch:          config.EffectiveWebSearch(p),
+			CanListModels:      config.CanListModels(p),
 			CanSetThinking:     config.CanConfigureThinkingParams(p),
 			SendsThinking:      config.SendsThinkingParams(p),
+			EffortField:        config.EffortFieldForEntry(p),
 			CanSetContinuation: config.CanConfigureContinuation(p),
 			Continuation:       string(config.ContinuationOf(p)),
 			Default:            p.DefaultModel(),
@@ -186,6 +198,10 @@ type protocolView struct {
 	Discovery       string `json:"discovery"`
 	ServerWebSearch bool   `json:"serverWebSearch"`
 	ReasoningParams bool   `json:"reasoningParams"`
+	EffortField     string `json:"effortField"`
+	// EffortUnder is the reasoning protocols under which the field holds; empty
+	// when the wire fixes it.
+	EffortUnder []string `json:"effortUnder"`
 }
 
 // providerProtocols lists what a chooser may offer, so a wire added to the
@@ -200,6 +216,8 @@ func (s *Server) providerProtocols(w http.ResponseWriter, _ *http.Request) {
 			Discovery:       p.Discovery,
 			ServerWebSearch: p.ServerWebSearch,
 			ReasoningParams: p.ReasoningParams,
+			EffortField:     p.EffortField,
+			EffortUnder:     nonNilStrings(p.EffortUnder),
 		})
 	}
 	writeJSON(w, out)
@@ -328,33 +346,7 @@ func (s *Server) saveProvider(w http.ResponseWriter, r *http.Request) {
 	if taken {
 		entry.DisplayName = prev.DisplayName
 	}
-	entry.APIKeyEnv, err = keyEnvForNewSource(known, entry.Name, entry.BaseURL, body.APIKey, body.Replace)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	if key := strings.TrimSpace(body.APIKey); key != "" {
-		if _, err := config.SetCredential(entry.APIKeyEnv, key); err != nil {
-			// The slot is derived from the name, so this is the person's to
-			// fix and the name is the field to point them at — not the key,
-			// which is what an unclassified failure here reads as.
-			if errors.Is(err, config.ErrInvalidCredentialKey) {
-				refuse(w, http.StatusBadRequest, "provider.bad_key_slot",
-					"the name does not make a usable credential slot",
-					map[string]any{"name": entry.Name, "slot": entry.APIKeyEnv})
-				return
-			}
-			writeErr(w, http.StatusInternalServerError, err)
-			return
-		}
-	}
-	cfg := config.LoadForEdit(config.UserConfigPath())
-	if err := cfg.UpsertProvider(entry); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+	if !storeProviderEntries(w, known, []config.ProviderEntry{entry}, body.APIKey, body.Replace) {
 		return
 	}
 	// No rebuild: the model list and every switch read config from disk, so the
@@ -388,7 +380,8 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := config.LoadForEdit(config.UserConfigPath())
-	if err := cfg.RemoveProvider(name); err != nil {
+	removal, err := cfg.RemoveProvider(name)
+	if err != nil {
 		switch {
 		case errors.Is(err, config.ErrProviderNotFound):
 			// Already gone is the state the caller asked for: a second click, or
@@ -411,7 +404,24 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	w.WriteHeader(http.StatusNoContent)
+	if len(removal.Moved) == 0 && len(removal.Cleared) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, providerRemovalView{
+		MovedTo: removal.MovedTo,
+		Moved:   nonNilStrings(removal.Moved),
+		Cleared: nonNilStrings(removal.Cleared),
+	})
+}
+
+// providerRemovalView is what a removal changed besides the provider: role ids
+// ("default", "planner", "vision", "subagent:<skill>", ...) handed to MovedTo or
+// emptied.
+type providerRemovalView struct {
+	MovedTo string   `json:"movedTo"`
+	Moved   []string `json:"moved"`
+	Cleared []string `json:"cleared"`
 }
 
 // removalSuccessor is where a conversation on a removed provider goes: the saved
@@ -419,7 +429,8 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 func removalSuccessor(cfg *config.Config) string {
 	target := cfg.DefaultModel
 	if _, found := cfg.ResolveModel(target); !found && target != "" {
-		target, _, _ = cfg.ResolveStartupChatModel()
+		start, _ := cfg.ResolveStartupChatModel()
+		target = start.Ref
 	}
 	return target
 }
@@ -478,8 +489,8 @@ func probeClients() (proxied, direct *http.Client) {
 	if cfg, err := config.Load(); err == nil && cfg != nil {
 		spec = cfg.NetworkProxySpec()
 	}
-	proxied, _ = netclient.NewHTTPClient(spec, netclient.TransportOptions{})
-	direct, _ = netclient.NewHTTPClient(netclient.ProxySpec{Mode: netclient.ModeOff}, netclient.TransportOptions{})
+	proxied, _ = endpointclient.New(spec, netclient.TransportOptions{})
+	direct, _ = endpointclient.New(netclient.ProxySpec{Mode: netclient.ModeOff}, netclient.TransportOptions{})
 	return proxied, direct
 }
 
@@ -508,9 +519,15 @@ const (
 	codeProbeNoChatModels    = "provider.probe.no_chat_models"
 	codeProbeUpstreamError   = "provider.probe.upstream_error"
 	codeProbeTimeout         = "provider.probe.timeout"
+	codeProbeRedirectRefused = "provider.probe.redirect_refused"
 	codeProbeUnreachable     = "provider.probe.unreachable"
 	codeProbeNotCompatible   = "provider.probe.not_compatible"
 	codeProbeFailed          = "provider.probe.failed"
+
+	codeProbeDecisionPathNotFound  = "provider.probe.decision_path_not_found"
+	codeProbeDecisionNotCompatible = "provider.probe.decision_not_compatible"
+	codeProbeDecisionRejected      = "provider.probe.decision_rejected"
+	codeNoModelsPicked             = "provider.no_models_picked"
 )
 
 // probeReasonRefusal is the one place a probe identity becomes a status and a dotted
@@ -535,6 +552,8 @@ func probeReasonRefusal(reason catalog.ProbeReason) (status int, code string) {
 		return http.StatusGatewayTimeout, codeProbeTimeout
 	case catalog.ProbeUnreachable:
 		return http.StatusBadGateway, codeProbeUnreachable
+	case catalog.ProbeRedirectRefused:
+		return http.StatusBadGateway, codeProbeRedirectRefused
 	default:
 		return http.StatusBadGateway, codeProbeNotCompatible
 	}
@@ -553,6 +572,11 @@ func writeProbeFailure(w http.ResponseWriter, err error, apiKey string) {
 	message := "probe: " + string(probe.Reason)
 	if detail := endpointDetail(probe.Body, func() string { return apiKey }); detail != "" {
 		message += ": " + detail
+	}
+	var left *redirectguard.OriginLeft
+	if errors.As(err, &left) {
+		message = left.Error()
+		probe.Params = map[string]any{"from": left.From, "target": left.To}
 	}
 	refuse(w, status, code, message, probe.Params)
 }

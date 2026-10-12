@@ -102,9 +102,13 @@ func (c computerRead) ExecuteWithImages(ctx context.Context, args json.RawMessag
 		if err != nil {
 			return "", nil, err
 		}
-		return fmt.Sprintf("%s (%s): front window\n[image: screenshot]", app.Name, app.Bundle), []string{shot}, nil
+		return screenshotCaption(app), []string{shot}, nil
 	}
 	return "", nil, &computer.Failure{Code: computer.CodeBadStep, Detail: fmt.Sprintf("what=%q is not one of apps, snapshot, screenshot", p.What)}
+}
+
+func screenshotCaption(app computer.App) string {
+	return fmt.Sprintf("%s (%s): front window\n[image: screenshot]", computer.ShownName(app.Name), computer.ShownBundle(app.Bundle))
 }
 
 type computerAct struct{ session *computer.Session }
@@ -157,8 +161,8 @@ func (c computerAct) Execute(ctx context.Context, args json.RawMessage) (string,
 	res, stepErr := c.session.Act(ctx, p.App, p.Steps)
 	var out strings.Builder
 	fmt.Fprintf(&out, "Completed %d of %d step(s).\n", res.Done, len(p.Steps))
-	for i, note := range res.Notes {
-		fmt.Fprintf(&out, "  %d. %s\n", i+1, note)
+	for i, step := range res.Steps {
+		fmt.Fprintf(&out, "  %d. %s%s\n", i+1, step.Note, renderEffect(step.Effect))
 	}
 	if stepErr != nil {
 		fmt.Fprintf(&out, "Step %d failed: %v\n", res.FailedAt+1, stepErr)
@@ -182,17 +186,17 @@ func renderApps(apps []computer.App) string {
 		if app.Active {
 			mark = "*"
 		}
-		fmt.Fprintf(&b, "%s %s — %s", mark, app.Bundle, app.Name)
+		fmt.Fprintf(&b, "%s %s — %s", mark, computer.ShownBundle(app.Bundle), computer.ShownName(app.Name))
 		if why := computer.Refused(app.Bundle); why != "" {
 			fmt.Fprintf(&b, " (never operated: %s)", why)
 		}
 		b.WriteString("\n")
 		for _, w := range app.Windows {
-			title := w.Title
-			if title == "" {
-				title = "(untitled)"
+			title := `"(untitled)"`
+			if w.Title != "" {
+				title = computer.ShownName(w.Title)
 			}
-			fmt.Fprintf(&b, "    window %q %.0f×%.0f\n", title, w.Bounds.Width, w.Bounds.Height)
+			fmt.Fprintf(&b, "    window %s %.0f×%.0f\n", title, w.Bounds.Width, w.Bounds.Height)
 		}
 	}
 	if b.Len() == 0 {
@@ -201,9 +205,39 @@ func renderApps(apps []computer.App) string {
 	return b.String()
 }
 
+// effectSaid and evidenceSaid are how a step's effect reads to the model.
+var effectSaid = map[computer.EffectClass]string{
+	computer.EffectConfirmed:     "took effect",
+	computer.EffectSuspectedNoop: "no effect seen",
+	computer.EffectUnverifiable:  "effect not verified",
+}
+
+var evidenceSaid = map[computer.Evidence]string{
+	computer.EvidenceValueReadback:  "value read back",
+	computer.EvidenceValueUnchanged: "value unchanged",
+}
+
+func renderEffect(e computer.Effect) string {
+	if e.Class == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(" — " + effectSaid[e.Class])
+	for _, ev := range e.Evidence {
+		b.WriteString(" (" + evidenceSaid[ev] + ")")
+	}
+	if e.BlockedBy != nil {
+		b.WriteString(", into " + e.BlockedBy.String())
+	}
+	return b.String()
+}
+
 func renderComputerSnapshot(snap computer.Snapshot) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s (%s)\n", snap.App.Name, snap.App.Bundle)
+	fmt.Fprintf(&b, "%s (%s)\n", computer.ShownName(snap.App.Name), computer.ShownBundle(snap.App.Bundle))
+	for _, m := range snap.Modals {
+		fmt.Fprintf(&b, "Blocked: %s holds this application's input; the window behind it takes none until it is answered.\n", m)
+	}
 	if snap.Note != "" {
 		b.WriteString(snap.Note + "\n")
 	}
