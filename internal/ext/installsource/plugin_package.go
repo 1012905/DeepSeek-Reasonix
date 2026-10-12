@@ -759,34 +759,6 @@ func (t *Tool) applyRemovePluginPackage(_ request, act *action) error {
 	return nil
 }
 
-// A replacement published beside the old tree leaves that tree, and any earlier
-// replacement, on disk so a watched directory cannot block it. Removing the
-// plugin is when those are reclaimed; one that cannot be removed now is left
-// for the next removal and does not fail an uninstall the registry already
-// recorded.
-func removeSupersededPluginCopies(reasonixHome, pluginsDir, name string) {
-	_ = os.RemoveAll(filepath.Join(pluginsDir, name))
-	entries, err := os.ReadDir(pluginsDir)
-	if err != nil {
-		return
-	}
-	// Another plugin's name may share the prefix, so a directory the registry
-	// still points at is never touched.
-	inUse := map[string]bool{}
-	if st, err := pluginpkg.LoadState(reasonixHome); err == nil {
-		for _, p := range st.Plugins {
-			inUse[filepath.Clean(pluginpkg.ResolveRoot(reasonixHome, p.Root))] = true
-		}
-	}
-	prefix := "." + name + ".staging-"
-	for _, entry := range entries {
-		path := filepath.Join(pluginsDir, entry.Name())
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) && !inUse[filepath.Clean(path)] {
-			_ = os.RemoveAll(path)
-		}
-	}
-}
-
 func removePluginSymlink(target, source string) error {
 	info, err := os.Lstat(target)
 	if os.IsNotExist(err) {
