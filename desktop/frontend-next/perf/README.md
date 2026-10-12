@@ -61,6 +61,7 @@ node perf/concurrent.mjs # 多会话并发的守卫：9 个会话同时流式，
 node perf/wheel.mjs      # 滚轮轨迹（只报告、不判红）：向上滚时 scrollTop 不倒走、单步不超滚轮、scrollHeight 不缩水；WHEEL_STRICT=1 判红
 node perf/idle.mjs       # 闲置的守卫：看不见的东西不许动，闲着的窗口不许烧 CPU
 node perf/effects.mjs    # Effects guard: a sky pack idles quietly, a hidden window draws no sky, Reduced removes blur, sky and grain
+node perf/text-glow.mjs  # Transcript glow, pack switching and prose contrast across schemes, wallpapers, widths, effects and motion
 node perf/shipped.mjs    # 产物的守卫：dist 里的东西必须比源码新（构建可以成功而编的是别的树）
 node perf/reason.mjs     # 内核拒绝的双语落地：同一个码，中英各说各的
 node perf/budget.mjs     # 预算的守卫：输入框上下堆满东西时，转录还剩多少

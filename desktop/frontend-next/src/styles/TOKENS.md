@@ -244,6 +244,11 @@ raised with its ratios kept.
 - Default light Studio replies use `--w-read: 400` for prose only. Headings,
   emphasis and small UI text keep their existing weights. A chosen weight,
   installed pack or dark scheme falls back to `--w-reg`.
+- `background.textGlow: none` paints `--flow-text-shadow: none` through the
+  pack sheet. The backdrop transcript rule defaults to its 2px shadow and 7px
+  halo when this variable is absent. The choice affects text only; the frosted
+  backing remains. Reduced effects overrides the text shadow.
+
 - Stroke weight is an axis beside contrast, not part of it: however bright the
   colour, 400 Han at 11px is thin. Han strokes are dense and blur at a size
   Latin still holds, so the Chinese interface starts at medium.
