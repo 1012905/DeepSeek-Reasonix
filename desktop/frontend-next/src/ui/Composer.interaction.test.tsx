@@ -10,6 +10,16 @@ import { draftKey } from "./drafts";
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
+it("labels the active model with its alias while keeping the raw reference in details", async () => {
+  const port = new MockPort();
+  vi.spyOn(port, "models").mockResolvedValue([
+    { ref: "relay/vendor/long-v1", provider: "relay", model: "vendor/long-v1", modelAlias: "Short" },
+  ]);
+  draw({ port, st: status({ modelRef: "relay/vendor/long-v1" }) });
+  const trigger = await screen.findByRole("button", { name: /Short/ });
+  expect(trigger.title).toBe("relay/vendor/long-v1");
+});
+
 // The workspace's git answer, the way /workspace/git words it. Tests that name
 // an override get it; the rest get a plain repository on main.
 const git = (over: Partial<WorkspaceGit> = {}): WorkspaceGit =>

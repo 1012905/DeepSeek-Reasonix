@@ -256,6 +256,7 @@ type modelEntry struct {
 	// DisplayName labels Provider on screen; Ref and Provider stay the identity.
 	DisplayName string `json:"displayName,omitempty"`
 	Model       string `json:"model"`
+	ModelAlias  string `json:"modelAlias,omitempty"`
 	Kind        string `json:"kind,omitempty"`
 	// What this model produces, projected from the protocol table so a chooser
 	// filters on a declaration rather than on a kind's spelling.

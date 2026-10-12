@@ -812,7 +812,7 @@ func cloneProviderEntry(e ProviderEntry) ProviderEntry {
 	e.Models = append([]string(nil), e.Models...)
 	e.VisionModels = append([]string(nil), e.VisionModels...)
 	e.SupportedEfforts = append([]string(nil), e.SupportedEfforts...)
-	e.Headers = cloneStringMap(e.Headers)
+	e.Headers, e.ModelAliases = cloneStringMap(e.Headers), cloneStringMap(e.ModelAliases)
 	e.ExtraBody = cloneAnyMap(e.ExtraBody)
 	e.Price = clonePricing(e.Price)
 	e.Prices = clonePricingMap(e.Prices)
