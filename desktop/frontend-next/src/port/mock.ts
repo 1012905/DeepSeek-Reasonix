@@ -717,6 +717,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     this.ungate();
   }
 
+  async extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]> { return []; }
   async invokeExtensionAction(name: string) {
     return `${name} 在 mock 里没有真实扩展可执行`;
   }

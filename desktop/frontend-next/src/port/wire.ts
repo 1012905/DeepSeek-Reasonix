@@ -400,6 +400,7 @@ export interface ExtensionView {
 }
 
 export interface ExtensionSurface {
+  code?: string;
   pluginId: string;
   surfaceId: string;
   sessionId?: string;

@@ -22,6 +22,7 @@ export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running"];
 
 const SAID: Record<string, string> = {
+  "surface.replay_incomplete": "扩展界面恢复失败",
   "shell.destructive_target": "递归删除目标受保护或超出授权范围；请使用工作区或授权目录内的字面路径",
   "shell.analysis_unknown": "无法确定递归删除范围；请使用字面命令名、路径和解释器内容",
   "shell.delete_sequence": "请拆分命令；递归删除前只能使用字面路径切换目录，不能依赖变量赋值",

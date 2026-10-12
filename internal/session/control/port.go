@@ -431,7 +431,12 @@ type Commits interface {
 // SessionAPI is the full driving port — the composition of every sub-port, for
 // a frontend that drives all of it: the TUI does, and the HTTP server all but
 // one. A leaner frontend names EditorAPI instead.
+type SurfaceHistory interface {
+	ExtensionSurfaces() []event.ExtensionSurfacePayload
+}
+
 type SessionAPI interface {
+	SurfaceHistory
 	Lifecycle
 	TurnControl
 	Approvals

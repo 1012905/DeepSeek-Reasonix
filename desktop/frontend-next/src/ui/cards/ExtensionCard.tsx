@@ -1,3 +1,4 @@
+import "../RestoreNotice.css";
 import { useState } from "react";
 import { ExtensionView } from "./ExtensionView";
 import type { ExtensionSurface, ExtensionFormField } from "../../port/wire";
@@ -47,6 +48,12 @@ export function ExtensionCard({ ext, onInvoke, onSubmit }: Props) {
 
   const set = (key: string, v: unknown) => setValues((prev) => ({ ...prev, [key]: v }));
   const missing = (ext.form?.fields ?? []).filter((f) => f.required && empty(values[f.key]));
+  if (ext.code) return (
+    <div className="restore-notice" role="status" data-code={ext.code}>
+      <span>{t("扩展界面已失效")}</span>
+      <span className="why">{ext.pluginId}/{ext.surfaceId}</span>
+    </div>
+  );
 
   return (
     <div className="call" data-k="extension">

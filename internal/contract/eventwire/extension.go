@@ -11,6 +11,7 @@ import (
 
 // ExtensionSurface is the JSON form of an event.ExtensionSurfacePayload.
 type ExtensionSurface struct {
+	Code         string                 `json:"code,omitempty"`
 	PluginID     string                 `json:"pluginId"`
 	SurfaceID    string                 `json:"surfaceId"`
 	SessionID    string                 `json:"sessionId,omitempty"`
@@ -117,7 +118,7 @@ func ToWireExtensionSurface(p *event.ExtensionSurfacePayload) *ExtensionSurface 
 		return nil
 	}
 	out := &ExtensionSurface{
-		PluginID: p.PluginID, SurfaceID: p.SurfaceID, SessionID: p.SessionID,
+		Code: p.Code, PluginID: p.PluginID, SurfaceID: p.SurfaceID, SessionID: p.SessionID,
 		Generation: p.Generation, Kind: p.Kind,
 	}
 	if s := p.Status; s != nil {
