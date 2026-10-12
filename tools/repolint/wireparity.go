@@ -154,6 +154,7 @@ var mirroredWireTypes = []wireMirror{
 	// has them; a field it cannot read is a row that never offers one.
 	{"internal/platform/update/hub.go", "VersionEntry", tsVersionFile, "VersionEntry"},
 	{"internal/platform/update/hub.go", "VersionHub", tsVersionFile, "VersionHub"},
+	{"internal/platform/update/hub.go", "WithdrawnNote", tsVersionFile, "WithdrawnNote"},
 	{"internal/platform/update/notes.go", "VersionNotes", tsVersionFile, "VersionNotes"},
 	// Where the logs and crash files are. A field the page cannot read is a path
 	// it cannot show to someone asked where to look.
