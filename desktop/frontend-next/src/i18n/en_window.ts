@@ -17,6 +17,7 @@ export const EN_WINDOW: Record<string, string> = {
   "所选会话正在运行，停止后才能操作": "Selected sessions are running. Stop them before continuing.",
   "正在处理所选会话…": "Processing selected sessions…",
   "删除 {n} 个会话？": "Delete {n} sessions?",
+  "请先打开一个会话，再查看它的文件。": "Open a session first to browse its files.",
   "运行指标": "Run metrics",
   "时间线": "Timeline",
   "定位": "Locate",

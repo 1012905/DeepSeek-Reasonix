@@ -28,6 +28,7 @@ import { Metrics } from "./Metrics";
 import { railOf } from "./panels/derive";
 import { accountOf, useHidesAmounts, useWallet } from "./wallet";
 import { PaneNav } from "./PaneNav";
+import { useOnBump } from "./useOnBump";
 import { useShowView } from "./showview";
 import { useSubmit } from "./usesubmit";
 import { useSurfaceSlots } from "./usesurfaceslots";
@@ -73,7 +74,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, onSettings, onOpenSession, needsProject, onOpenProject, onKeepHere, theme, dockW, dockMax, onDockW, manualBrowser = false, browserAsk = 0, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onOpenSession, needsProject, onOpenProject, onKeepHere, theme, dockW, dockMax, onDockW, manualBrowser = false, browserAsk = 0, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -296,6 +297,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     setRevealChanges((n) => n + 1);
     showView("browser");
   }, [showView]);
+  useOnBump(filesPulse, openChanges);
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   useEffect(() => { void loadFoldWorkPref(port); }, [port]);
   const foldWork = useFoldsTurnWork(port);

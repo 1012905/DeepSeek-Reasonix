@@ -57,6 +57,7 @@ interface Props {
   accountUnread: string;
   wallet: string;
   onSettings: (section?: string) => void;
+  onFiles: () => void;
   onFeedback: (tab?: "send" | "mine") => void;
   // Reports with a new reply or a question waiting; the entry and the palette say so.
   feedbackUnread: number;
@@ -102,6 +103,7 @@ export function Sidebar({
   accountUnread,
   wallet,
   onSettings,
+  onFiles,
   onFeedback,
   feedbackUnread,
   onFind,
@@ -149,7 +151,8 @@ export function Sidebar({
         run: () => void onOpen({ root: newSessionRoot }).catch(onError) },
       { id: "find", label: t("在这段对话里查找"), icon: "search", keywords: "find search conversation 查找 搜索 对话",
         keys: chord("F"), run: onFind },
-      { id: "storage", label: t("文件"), icon: "file", keywords: "files storage 文件 存储",
+      { id: "files", label: t("文件"), icon: "file", keywords: "files workspace explorer 文件 工作区", run: onFiles },
+      { id: "storage", label: t("存储"), icon: "file", keywords: "storage disk data 存储 磁盘 数据",
         run: () => onSettings("storage") },
       { id: "ext", label: t("工具与集成"), icon: "plug", keywords: "tools mcp skills 工具 集成",
         run: () => onSettings("ext") },
@@ -168,7 +171,7 @@ export function Sidebar({
       { id: "settings", label: t("设置"), icon: "settings", keywords: "settings preferences 设置 偏好",
         run: () => onSettings() },
     ],
-    [newSessionRoot, onOpen, onSettings, onFeedback, feedbackUnread, onFind, onError],
+    [newSessionRoot, onOpen, onFiles, onSettings, onFeedback, feedbackUnread, onFind, onError],
   );
   const sessionCount = tree.reduce(
     (n, ws) => n + (ws.total === undefined ? ws.sessions.filter((session) => !session.archived).length : ws.total - (ws.archived ?? 0)),
@@ -231,7 +234,7 @@ export function Sidebar({
         </button>
         {!navShown && (
           <div className="studio-quicknav">
-            <button data-action="settings.section" data-value="storage" onClick={() => onSettings("storage")}><span aria-hidden="true"><StudioIcon name="file" /></span><b>{t("文件")}</b></button>
+            <button data-action="files.open" onClick={onFiles}><span aria-hidden="true"><StudioIcon name="file" /></span><b>{t("文件")}</b></button>
             <button data-action="settings.section" data-value="ext" onClick={() => onSettings("ext")}><span aria-hidden="true"><StudioIcon name="plug" /></span><b>{t("工具与集成")}</b><small>MCP · Skills</small></button>
             <button data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}><span aria-hidden="true"><StudioIcon name="server" /></span><b>{t("运行环境")}</b><small>Local / SSH</small></button>
           </div>
