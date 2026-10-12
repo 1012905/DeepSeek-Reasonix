@@ -7,6 +7,7 @@ import * as hostModule from "../port/host";
 import type { BrowserTab } from "../port/port";
 import { SsePort } from "../port/sse";
 import { WorkbenchPanel } from "./WorkbenchPanel";
+import { openPage, unseenPageOpenings } from "./browser_open";
 
 const ROOT = "/ws/site";
 const page = (over: Partial<BrowserTab> = {}): BrowserTab => ({
@@ -46,6 +47,57 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it.each([["before", false], ["before", true], ["after", false], ["after", true]])("keeps newer Files intent through a failed preview (event %s response, mixed=%s)", async (order, mixed) => {
+  const user = userEvent.setup();
+  const { port, open } = setup();
+  let reply!: (response: Response) => void;
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { reply = resolve; })));
+  const wire = new SsePort("", "r1");
+  open.mockImplementation((url) => wire.browserOpen(url, true));
+  const agent = page({ id: "agent", target: "ta", url: "https://example.com", title: "Agent", active: true });
+  const fresh = page({ id: "fresh", target: "tf", url: "https://example.com/fresh", title: "Fresh" });
+  const { container, rerender } = render(panel(port, { tabs: [agent] }));
+  await user.click(await screen.findByRole("button", { name: "index.html" }));
+  await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+  await user.click(container.querySelector('[data-action="workbench.files"]')!);
+  expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+  const tabs = mixed ? [agent, fresh, page()] : [agent, page()];
+  if (order === "before") {
+    rerender(panel(port, { tabs }));
+    expect(screen.queryByRole("tab", { name: "Landing" })).toBeNull();
+  }
+  await act(async () => reply(new Response(JSON.stringify({ code: "browser.open_failed", params: { tab: page().id, error: "net::ERR_FILE_NOT_FOUND" } }), { status: 400 })));
+  if (order === "after") rerender(panel(port, { tabs }));
+  await waitFor(() => expect(unseenPageOpenings(port)).toHaveLength(0));
+  expect(screen.getByRole("tab", { name: "Landing" }).getAttribute("aria-selected")).toBe("false");
+  await waitFor(() => expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(!mixed));
+  if (mixed) expect(screen.getByRole("tab", { name: "Fresh" }).getAttribute("aria-selected")).toBe("true");
+  rerender(panel(port, { tabs: [{ ...agent, active: false }, page({ active: true, url: "https://example.com/reused" })] }));
+  await waitFor(() => expect(screen.getByRole("tab", { name: "Landing" }).getAttribute("aria-selected")).toBe("true"));
+});
+
+it("keeps a superseded successful user tab owned while a separate preview claim hides it", async () => {
+  const user = userEvent.setup();
+  const { port, open } = setup();
+  let previewDone!: (tab: BrowserTab) => void;
+  let userDone!: (tab: BrowserTab) => void;
+  open.mockReturnValueOnce(new Promise((resolve) => { previewDone = resolve; }));
+  open.mockReturnValueOnce(new Promise((resolve) => { userDone = resolve; }));
+  const userTab = page({ id: "user", target: "tu", url: "https://example.com", title: "User page" });
+  const { container, rerender } = render(panel(port));
+  await user.click(await screen.findByRole("button", { name: "index.html" }));
+  await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+  const pending = openPage(port, userTab.url);
+  await user.click(container.querySelector('[data-action="workbench.files"]')!);
+  await act(async () => { userDone(userTab); await pending; });
+  rerender(panel(port, { tabs: [userTab, page()] }));
+  expect(screen.queryByRole("tab", { name: "User page" })).toBeNull();
+  await act(async () => previewDone(page()));
+  await waitFor(() => expect(unseenPageOpenings(port)).toHaveLength(0));
+  expect(screen.getByRole("tab", { name: "User page" }).getAttribute("aria-selected")).toBe("false");
+  expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+});
+
 describe("opening an HTML file from the explorer", () => {
   it("shows the file as a page on click, through the browser's own file path", async () => {
     const user = userEvent.setup();
@@ -54,10 +106,12 @@ describe("opening an HTML file from the explorer", () => {
     await user.click(await screen.findByRole("button", { name: "index.html" }));
     await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
     expect(open).toHaveBeenCalledWith(`${ROOT}/index.html`, true);
+    expect(unseenPageOpenings(port)).toHaveLength(1);
     rerender(panel(port, { tabs: [page()] }));
     await waitFor(() => expect(document.querySelector(".workbench-canvas .bpanel")).toBeTruthy());
     expect(screen.getByRole("button", { name: "预览" }).getAttribute("aria-pressed")).toBe("true");
     expect(document.querySelector(".cm-content")).toBeNull();
+    expect(unseenPageOpenings(port)).toHaveLength(0);
   });
 
   it("does not turn the page it opened for the file into a second tab", async () => {
@@ -75,6 +129,7 @@ describe("opening an HTML file from the explorer", () => {
     expect(screen.queryByRole("tab", { name: "Landing" })).toBeNull();
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["index.html"]);
     expect(screen.getByRole("tab", { name: "index.html" }).getAttribute("aria-selected")).toBe("true");
+    expect(unseenPageOpenings(port)).toHaveLength(0);
   });
 
   it("opens from the keyboard with Enter on the focused row", async () => {
