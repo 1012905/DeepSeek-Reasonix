@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld("reasonixHost", {
   revealPath: (base, rel) => ipcRenderer.invoke("shell:reveal", String(base), String(rel)),
   // A project the sidebar lists, which may have no pane at all.
   revealWorkspace: (root) => ipcRenderer.invoke("shell:reveal-workspace", String(root)),
+  revealLogs: () => ipcRenderer.invoke("shell:reveal-logs"),
   // Where a dropped file lives. Resolved here rather than in the page: the
   // renderer is handed a File and never a path, and a turn that has to work on
   // the file itself cannot do it on a copy of the bytes.

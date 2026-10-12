@@ -205,7 +205,7 @@ test("an unreachable kernel is an answer, not a crash", async () => {
   assert.equal(await dead.trayState(), null);
 });
 
-const { reveal, revealWorkspace } = require("../src/reveal.js");
+const { reveal, revealWorkspace, revealLogs } = require("../src/reveal.js");
 
 // A kernel that answers /workspace/locate as the test says, and a shell that
 // only records what it was asked to open.
@@ -2048,4 +2048,14 @@ test("tray: a refused close-to-tray save redraws the checkbox, and a menu that f
   assert.equal(menus.length, 2, "a refused save left the flipped checkbox on screen");
   assert.equal(menus[1].template.find((item) => item.type === "checkbox").checked, false);
   tray.close();
+});
+
+test("revealLogs opens only the folder the shell itself names, and reports why it could not", async () => {
+  const opened = [];
+  const shell = { openPath: async (target) => (opened.push(target), "") };
+  assert.equal(await revealLogs(shell, "/user/logs"), null);
+  assert.deepEqual(opened, ["/user/logs"]);
+  const refusing = { openPath: async () => "no application is associated with this folder" };
+  assert.deepEqual(await revealLogs(refusing, "/user/logs"), { error: "no application is associated with this folder" });
+  assert.deepEqual(await revealLogs(shell, ""), { error: "the logs folder is unknown" });
 });
