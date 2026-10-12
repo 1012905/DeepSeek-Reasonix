@@ -355,7 +355,8 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
   // composer answering for an endpoint that never spoke.
   const declared = efforts.length > 0;
   const forcedThinking = forcesThinkingFor(models, status?.modelRef);
-  const modelLb = status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—";
+  const modelLb = models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
+    || (status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—");
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole
   // shelf says nothing can change while only one control waits on the kernel.

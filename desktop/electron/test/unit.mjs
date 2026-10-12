@@ -2099,3 +2099,11 @@ test("a parked page is attached again when it is shown, and a page already on sc
   assert.deepEqual(calls, ["remove", "add", "bounds 10"], "a page put away and shown again is attached again");
 });
 
+test("rewind notice dismissal survives the desktop preference disk round trip", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rewind-notice-prefs-"));
+  const file = path.join(dir, "prefs.json");
+  t.after(() => { fs.rmSync(file, { force: true }); fs.rmdirSync(dir); });
+  const record = { "rx-rewind-notice-dismissed:tx-saved": "1" };
+  savePrefs(file, record);
+  assert.deepEqual(loadPrefs(file), record);
+});

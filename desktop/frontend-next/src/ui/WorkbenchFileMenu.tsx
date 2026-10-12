@@ -55,6 +55,7 @@ export function WorkbenchFileMenu({ menu, root, revealable, platform, onReveal, 
   return createPortal(
     <div
       className="tabmenu"
+      data-action-keydown="layer.dismiss"
       role="menu"
       ref={(el) => { if (el) pinToViewport(el, menu.x, menu.y); }}
       onClick={(e) => e.stopPropagation()}

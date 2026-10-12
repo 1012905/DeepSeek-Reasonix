@@ -15,12 +15,13 @@ type ProviderEntry struct {
 	DisplayName   string            `toml:"display_name"` // what the UI calls this entry; Name stays the identity refs point at
 	Kind          string            `toml:"kind"`
 	BaseURL       string            `toml:"base_url"`
-	ChatURL       string            `toml:"chat_url"`    // legacy OpenAI chat endpoint override; retained with its historical semantics
-	RequestURL    string            `toml:"request_url"` // exact provider request URL written by current settings UI
-	Model         string            `toml:"model"`       // a single model (back-compat)
-	Models        []string          `toml:"models"`      // a vendor's model list (one base_url/key, many models)
-	ModelsURL     string            `toml:"models_url"`  // auto-fetch models from this URL on startup
-	Default       string            `toml:"default"`     // default model when Models is set (else Models[0])
+	ChatURL       string            `toml:"chat_url"`      // legacy OpenAI chat endpoint override; retained with its historical semantics
+	RequestURL    string            `toml:"request_url"`   // exact provider request URL written by current settings UI
+	Model         string            `toml:"model"`         // a single model (back-compat)
+	Models        []string          `toml:"models"`        // a vendor's model list (one base_url/key, many models)
+	ModelAliases  map[string]string `toml:"model_aliases"` // display only; keys are exact model IDs within this provider
+	ModelsURL     string            `toml:"models_url"`    // auto-fetch models from this URL on startup
+	Default       string            `toml:"default"`       // default model when Models is set (else Models[0])
 	APIKeyEnv     string            `toml:"api_key_env"`
 	PresetID      string            `toml:"preset_id"`      // curated preset provenance: UI dedupe, and the vetting a wire contract reads.
 	PresetVersion int               `toml:"preset_version"` // curated preset schema version for future migrations.
@@ -101,6 +102,10 @@ type ProviderEntry struct {
 	// send nothing — before headers or between events — before it is dropped.
 	// Zero keeps the 300s default; a silent pre-header wait is retried once.
 	IdleTimeoutSeconds int `toml:"idle_timeout_seconds"`
+
+	// searchAssigned is set on resolved copies when a dedicated search model is
+	// selected, so no conversation request also carries the built-in tool.
+	searchAssigned bool
 }
 
 type ProviderModelOverride struct {

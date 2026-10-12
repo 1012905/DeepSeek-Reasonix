@@ -41,6 +41,7 @@ export function EditConn({
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState<string[]>(seededModels);
   const [picked, setPicked] = useState<string[]>(entry.models);
+  const [aliases, setAliases] = useState<Record<string, string>>(entry.modelAliases ?? {});
   const [vision, setVision] = useState<string[]>(seededVision);
   const [visionSettable, setVisionSettable] = useState<string[] | undefined>(
     entry.visionSettable ? [...new Set([...entry.visionSettable, ...(initialCheck?.vision ?? [])])] : undefined,
@@ -251,6 +252,7 @@ export function EditConn({
     baseUrl: baseUrl.trim(),
     apiKey: apiKey.trim(),
     models: picked,
+    modelAliases: Object.fromEntries(Object.entries(aliases).filter(([m, value]) => picked.includes(m) && value.trim()).map(([m, value]) => [m, value.trim()])),
     default: picked.includes(def) ? def : picked[0] ?? "",
     vision: vision.filter((m) => picked.includes(m)),
     contextWindow: Number(win.replace(/\D/g, "")) || 0,
@@ -413,6 +415,8 @@ export function EditConn({
           facts={facts}
           visionLocked={visionLocked}
           onCheck={checkModel}
+          aliases={aliases}
+          onAlias={(m, value) => setAliases((current) => ({ ...current, [m]: value }))}
           checkDisabled={busy !== "" || testing}
           onToggle={(m) => toggle(picked, setPicked, m)}
           onVision={(m) => toggle(vision, setVision, m)}

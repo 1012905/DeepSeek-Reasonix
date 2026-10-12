@@ -155,6 +155,7 @@ type SessionHistory interface {
 	Rewind(turn int, scope RewindScope) error
 	PrepareRewind(turn int, scope RewindScope) (checkpoint.RewindPlan, error)
 	CommitRewind(planID string) (checkpoint.RewindResult, error)
+	AvailableUndo() (*checkpoint.RewindUndo, error)
 	UndoRewind(transactionID string) (checkpoint.RewindResult, error)
 	PrepareFileRevert(path string) (checkpoint.RewindPlan, error)
 	CommitFileRevert(planID string, resolution checkpoint.ConflictResolution) (checkpoint.RewindResult, error)
@@ -258,6 +259,8 @@ type MCPControl interface {
 // file that failed to parse. None of it is a capability listing, so a pane that lists
 // skills or MCP servers cannot reach a permission rule from the same port.
 type RuntimeSettings interface {
+	WebSearchModel() (WebSearchModelSetting, error)
+	SaveWebSearchModel(ref string) error
 	NetworkSettings() NetworkSettings
 	SaveNetworkSettings(in NetworkSettings, password string, clearPassword bool) error
 	DiagnoseNetwork(ctx context.Context) []NetworkProbe

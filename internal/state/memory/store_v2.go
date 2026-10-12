@@ -562,11 +562,30 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 		}
 		return SaveResult{}, err
 	}
+	// A failed recovery must not leave one id active and archived at once. Both
+	// steps below run after the active file exists, so each undoes it; if the
+	// index write fails too, the retry below rewrites that line.
+	drop := func(cause error) (SaveResult, error) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return SaveResult{}, fmt.Errorf("%w (and the restored %q could not be withdrawn: %w)", cause, restored.Name, err)
+		}
+		lines, _, err := indexLinesExceptIn(base, restored.Name)
+		if err != nil {
+			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
+		}
+		if err := flushIndexIn(base, lines); err != nil {
+			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
+		}
+		return SaveResult{}, cause
+	}
 	if err := reindexIn(base, restored.Name, restored); err != nil {
-		return SaveResult{Path: path, Memory: restored}, err
+		return drop(err)
+	}
+	if err := fault("remove", archivePath); err != nil {
+		return drop(err)
 	}
 	if err := os.Remove(archivePath); err != nil && !os.IsNotExist(err) {
-		return SaveResult{Path: path, Memory: restored}, err
+		return drop(err)
 	}
 	return SaveResult{Path: path, Memory: restored}, nil
 }

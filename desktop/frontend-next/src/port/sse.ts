@@ -1,5 +1,5 @@
 import { PLAN_ACTIONS, type PlanAction } from "./session";
-import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
+import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
 import { HttpError, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles } from "./port";
 import { SseWorkspace } from "./sse_workspace";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -138,6 +138,17 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.post("/memory/restore", { name, revision });
   }
 
+  async trustMcp(name: string, digest: string) {
+    const res = await fetch(this.base + "/mcp/trust", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ name, digest }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { state?: string; tools?: number | unknown[]; error?: string };
+    if (!res.ok && !body.error) throw new Error(`/mcp/trust: ${res.status}`);
+    return { state: body.state ?? (res.ok ? "ready" : "failed"), tools: typeof body.tools === "number" ? body.tools : body.tools?.length, error: body.error };
+  }
   async reconnectMcp(name: string) {
     const res = await fetch(this.base + "/mcp/reconnect", {
       method: "POST",
@@ -500,6 +511,7 @@ export class SsePort extends SseWorkspace implements AgentPort {
   async branchAt(turn: number, name: string) {
     return (await this.post0<{ path: string }>("/branch/at", { turn, name })).path;
   }
+  availableUndo() { return this.get<RewindUndo | null>("/rewind/undo"); }
 
   undoRewind(transactionId: string) {
     return this.post("/rewind/undo", { transactionId });

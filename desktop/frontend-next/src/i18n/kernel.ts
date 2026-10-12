@@ -66,6 +66,7 @@ const SAID: Record<string, string> = {
   "provider.default_not_selected": "默认模型「{model}」不在已选择的模型中",
   "provider.display_name_too_long": "显示名称最多 {max} 个字符",
   "provider.display_name_invalid": "显示名称不能包含换行或其他控制字符",
+  "provider.model_alias_unlisted": "显示别名必须使用已选择模型的完整 ID",
 
   // ── 来源：这个协议做不到 ─────────────────────────────────────────
   "provider.no_thinking_param": "该协议不发送思考参数，启用后不会生效",
@@ -105,6 +106,11 @@ const SAID: Record<string, string> = {
   "model.decision_only": "「{model}」是决策来源，只服务 system_one 的询问，不能用作对话模型",
   "model.not_decision_source": "「{model}」是对话模型，不是决策来源；决策只能选择「模型服务」里添加的决策来源",
   "roles.override_not_in_user_config": "「{key}」不在用户配置里，可能已被清除，或来自项目配置",
+  "roles.search_model_bad_ref": "搜索模型「{model}」的格式应为 服务/模型",
+  "roles.search_model_not_added": "搜索模型「{model}」所在的连接已被移出",
+  "roles.search_model_removed": "搜索模型「{model}」已不在配置里",
+  "roles.search_model_unsupported": "搜索模型「{model}」的协议不支持原生搜索，或已关闭搜索",
+  "roles.search_model_no_credentials": "搜索模型「{model}」所在的连接没有凭据",
   "shell.editing_disabled": "这台服务器未开放 shell 设置",
   "account.signin_disabled": "这台服务器未开放账号登录",
   "backup.signed_out": "登录账号后才能使用云备份",

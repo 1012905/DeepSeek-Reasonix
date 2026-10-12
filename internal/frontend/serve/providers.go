@@ -63,10 +63,11 @@ var providerNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 type providerView struct {
 	Name string `json:"name"`
 	// DisplayName is the label a person gave this entry; empty is none set.
-	DisplayName string   `json:"displayName,omitempty"`
-	Kind        string   `json:"kind"`
-	BaseURL     string   `json:"baseUrl"`
-	Models      []string `json:"models"`
+	DisplayName  string            `json:"displayName,omitempty"`
+	Kind         string            `json:"kind"`
+	BaseURL      string            `json:"baseUrl"`
+	Models       []string          `json:"models"`
+	ModelAliases map[string]string `json:"modelAliases,omitempty"`
 	// VisionModels is which of them read images, so the form shows the current
 	// answer instead of asking the user to remember it.
 	VisionModels []string `json:"visionModels"`
@@ -155,6 +156,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			Kind:               strings.ToLower(strings.TrimSpace(p.Kind)),
 			BaseURL:            p.BaseURL,
 			Models:             nonNilStrings(p.ChatModelList()),
+			ModelAliases:       p.ModelAliases,
 			VisionModels:       nonNilStrings(visionModelsOf(cfg, p)),
 			CanSetVision:       len(settable) > 0 || config.CanConfigureVision(p),
 			VisionSettable:     nonNilStrings(settable),

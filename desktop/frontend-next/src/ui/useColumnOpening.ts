@@ -12,9 +12,11 @@ interface Opening {
   agentNow: MutableRefObject<string>;
   dropBlankStart: () => void;
   pick: (key: string) => void;
+  follow: (key: string) => void;
+  current: () => () => boolean;
   setFailed: Dispatch<SetStateAction<string>>;
   setBrowsers: Dispatch<SetStateAction<string[]>>;
-  setSelected: Dispatch<SetStateAction<string>>;
+  manualSelection: string;
 }
 
 /** What the workbench column does when it is opened. It follows the agent's page,
@@ -22,18 +24,19 @@ interface Opening {
  *  its launcher until a browser is asked for. The title bar's Browser button
  *  asks for one itself: each press is one ask, and a page already on its way is
  *  shared rather than requested twice. */
-export function useColumnOpening({ manual, browserAsk, port, agentNow, dropBlankStart, pick, setFailed, setBrowsers, setSelected }: Opening) {
+export function useColumnOpening({ manual, browserAsk, port, agentNow, dropBlankStart, pick, follow, current, setFailed, setBrowsers, manualSelection }: Opening) {
   useEffect(() => {
     if (!manual) return;
     if (agentNow.current) {
       dropBlankStart();
-      pick(`browser:${agentNow.current}`);
+      follow(`browser:${agentNow.current}`);
       return;
     }
+    const valid = current();
     pageInFlight(port)
-      ?.then((tab) => pick(`browser:${tab.target}`))
-      .catch((e) => setFailed(reason(e)));
-  }, [manual, agentNow, dropBlankStart, pick, port, setFailed]);
+      ?.then((tab) => { if (valid()) follow(`browser:${tab.target}`); })
+      .catch((e) => { if (valid()) setFailed(reason(e)); });
+  }, [manual, agentNow, dropBlankStart, follow, current, port, setFailed]);
 
   const asked = useRef(browserAsk);
   useEffect(() => {
@@ -48,12 +51,13 @@ export function useColumnOpening({ manual, browserAsk, port, agentNow, dropBlank
     // A shell that draws views opens a view here too: a framed page is refused
     // by any site sending X-Frame-Options or frame-ancestors, as many do.
     if (host().drawsBrowserViews()) {
+      const valid = current();
       pageForEmptyColumn(port)
-        .then((tab) => pick(`browser:${tab.target}`))
-        .catch((e) => setFailed(reason(e)));
+        .then((tab) => { if (valid()) pick(`browser:${tab.target}`); })
+        .catch((e) => { if (valid()) setFailed(reason(e)); });
       return;
     }
     setBrowsers((open) => (open.length ? open : ["b0"]));
-    setSelected((at) => (at.startsWith("manual:") ? at : "manual:b0"));
-  }, [browserAsk, manual, agentNow, dropBlankStart, pick, port, setFailed, setBrowsers, setSelected]);
+    pick(manualSelection);
+  }, [browserAsk, manual, agentNow, dropBlankStart, pick, current, port, setFailed, setBrowsers, manualSelection]);
 }

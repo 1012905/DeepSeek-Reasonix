@@ -102,6 +102,14 @@ export function useRewindActions(port: AgentPort, reloadSession: (current?: () =
     void operation.finally(() => { if (owner.undo === operation) owner.undo = null; });
     return operation;
   }, [port, owner, publish, onReloadSession]);
+  const onUndoAvailable = useCallback(async (transactionId: string) => {
+    if (!owner.active) throw new Error(t("会话已切换，请重新选择还原位置"));
+    if (owner.commit || owner.reload || (owner.undo && owner.notice?.tx !== transactionId)) throw new Error(t("正在还原…"));
+    // Backend offers survive reloads that retired the local restore receipt.
+    if (owner.notice?.tx !== transactionId) publish({ tx: transactionId, files: 0, working: false, error: "" });
+    await onUndoRewind(transactionId);
+    if (owner.notice?.tx === transactionId && owner.notice.error) throw new Error(owner.notice.error);
+  }, [owner, publish, onUndoRewind]);
   const dismissRestore = useCallback(() => { if (!owner.notice?.working) publish(null); }, [owner, publish]);
   const onPrepareFileRevert = useCallback((path: string) => port.prepareFileRevert(path), [port]);
   const onCommitFileRevert = useCallback(async (planId: string, resolution?: string) => {
@@ -110,5 +118,5 @@ export function useRewindActions(port: AgentPort, reloadSession: (current?: () =
     if (owner.active && owner.epoch === epoch && result.transactionId) publish(null);
     return result;
   }, [port, owner, publish]);
-  return { reloadFailure: reloadFailure?.owner === owner ? reloadFailure : null, onReloadSession, restoreNotice: notice?.owner === owner ? notice.value : null, dismissRestore, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert };
+  return { onUndoAvailable, reloadFailure: reloadFailure?.owner === owner ? reloadFailure : null, onReloadSession, restoreNotice: notice?.owner === owner ? notice.value : null, dismissRestore, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert };
 }

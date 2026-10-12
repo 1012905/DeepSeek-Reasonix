@@ -21,6 +21,8 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  "加宽浏览器": "Widen browser",
+  "恢复浏览器分栏": "Restore browser split",
   "工作台": "Workbench",
   "从右侧选择文件，或打开浏览器": "Choose a file on the right, or open a browser",
   ...EN_SETTINGS,
@@ -549,6 +551,13 @@ export const EN: Record<string, string> = {
   "忘记": "Forget",
   "重连": "Reconnect",
   "立即连接": "Connect now",
+  "定义有改动": "Definition changed",
+  "无法核对": "Cannot be checked",
+  "等待你批准的工具": "Tools waiting for your approval",
+  "这个服务有 {n} 个工具的定义与你批准过的不一致，已暂时不交给模型：": "{n} of this service's tools differ from what you approved and are withheld from the model for now:",
+  "还有 {n} 个没有列出，批准时会一并生效。": "{n} more are not listed; approving covers them too.",
+  "批准并重新连接": "Approve and reconnect",
+  "批准中…": "Approving…",
   "记的是 {had}，但它答的是 {got}。": "Recorded as {had}, but it answers as {got}.",
   // 收工回执
   "没有未经验证的部分": "nothing left unverified",
@@ -761,6 +770,11 @@ export const EN: Record<string, string> = {
   "正在还原…": "Restoring…",
   "会话已切换，请重新选择还原位置": "The conversation changed. Choose a restore point again.",
   "撤销这次还原": "Undo this restore",
+  "回退已完成": "Rewind completed",
+  "关闭回退提示": "Dismiss rewind notice",
+  "无法保存关闭状态：{error}": "Could not save dismissal: {error}",
+  "撤销这次回退": "Undo this rewind",
+  "正在撤销…": "Undoing…",
   "仍还原其余部分": "Restore the rest anyway",
   "还原失败": "Could not restore",
   "回退范围内未修改任何文件": "No files changed in this rewind range",
