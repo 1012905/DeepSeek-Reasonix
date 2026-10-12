@@ -792,13 +792,6 @@ type SkillsConfig struct {
 	MaxDepth                  int      `toml:"max_depth"`
 }
 
-// ImplicitSkillInvocationEnabled reports whether the model may discover and
-// invoke skills without an explicit user slash command. The zero value keeps
-// the historical default enabled for old configs.
-func (c *Config) ImplicitSkillInvocationEnabled() bool {
-	return c == nil || !c.Skills.DisableImplicitInvocation
-}
-
 // SkillCustomPaths returns the configured custom skill roots with ${VAR}
 // expanded; empty entries are dropped.
 func (c *Config) SkillCustomPaths() []string {
@@ -1082,7 +1075,8 @@ type AgentConfig struct {
 	// MaxParallelWriters bounds concurrent writer-capable sub-agents that
 	// declare non-overlapping write_paths. 0 means the default (3). Must not
 	// exceed MaxSubagentConcurrency after normalization.
-	MaxParallelWriters int `toml:"max_parallel_writers"`
+	MaxParallelWriters int    `toml:"max_parallel_writers"`
+	WriteLease         string `toml:"write_lease"` // "strict" (default) or "optimistic"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
 	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
@@ -1406,6 +1400,7 @@ func Default() *Config {
 			MaxSubagentDepth:       2,
 			MaxSubagentConcurrency: 6,
 			MaxParallelWriters:     3,
+			WriteLease:             "strict",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask
 		// resolves to allow) while `reasonix` prompts before writers. Users add
