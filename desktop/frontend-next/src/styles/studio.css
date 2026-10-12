@@ -3287,11 +3287,9 @@ body { font-size: 14px; line-height: 1.75; }
   color: var(--text);
 }
 
-/* View switching belongs to app chrome. Keeping this row on a stable surface
-   prevents wallpapers from changing the apparent contrast of inactive tabs. */
 .pane > .tabs {
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border-bottom-color: var(--border);
+  background: transparent;
+  border-bottom-color: transparent;
 }
 .pane > .tabs .tab { color: var(--muted); }
 .pane > .tabs .tab:hover { color: var(--text); background: var(--overlay); }
