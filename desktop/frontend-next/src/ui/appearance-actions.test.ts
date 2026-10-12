@@ -78,7 +78,7 @@ describe("what the appearance page says a person is doing", () => {
   it("keeps neighbouring intents apart", () => {
     const ids = new Set(ACTIONS.map((a) => a.id));
     for (const id of ["theme.activate", "wallpaper.change", "wallpaper.remove", "appearance.scheme", "appearance.background",
-      "appearance.weight", "appearance.contrast"]) {
+      "appearance.weight", "appearance.contrast", "appearance.effects"]) {
       expect(ids.has(id), `${id} is missing`).toBe(true);
     }
   });
@@ -89,5 +89,12 @@ describe("what the appearance page says a person is doing", () => {
   it("names the setting and not the surface it is reached from", () => {
     const surfaces = /(^|\.)(settings|prefs|panel|sheet|dialog|page)(\.|$)/;
     expect(ACTIONS.map((a) => a.id).filter((id) => id.startsWith("appearance.") && surfaces.test(id))).toEqual([]);
+  });
+});
+
+describe("the line width choices", () => {
+  it("offer the composer-too width through the same action as the others", () => {
+    expect(SOURCE).toContain('["full-all", "连输入框一起铺满"');
+    expect(idsOf("appearance.measure").length).toBeGreaterThan(0);
   });
 });

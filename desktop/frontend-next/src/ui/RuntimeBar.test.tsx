@@ -46,6 +46,13 @@ describe("what the runtime has to say about itself", () => {
     expect(screen.getByRole("status").textContent).toContain("recovered a forked session");
   });
 
+  it("words a recovered inbox from its count, not the payload", () => {
+    render(<RuntimeBar notices={[notice({ code: "inbox_recovered", text: "Recovered 3 pending instruction(s).", detail: '{"count":3}' })]} onSeen={() => {}} />);
+    const bar = screen.getByRole("status");
+    expect(bar.textContent).toContain("已恢复 3 条未完成的指令");
+    expect(bar.textContent).not.toContain("count");
+  });
+
   it("hands back the id of the one dismissed", async () => {
     const onSeen = vi.fn();
     render(<RuntimeBar notices={[notice(), notice({ id: "r2" })]} onSeen={onSeen} />);
@@ -106,5 +113,51 @@ describe("an extension left out because its sidecar is not running", () => {
   it("leaves other notices without the integrations entry", () => {
     render(<RuntimeBar notices={[notice()]} onSeen={() => {}} onSettings={() => {}} />);
     expect(screen.queryByRole("button", { name: "打开「工具与集成」" })).toBeNull();
+  });
+});
+
+describe("notices whose sentence has placeholders", () => {
+  const dormant = JSON.stringify({ rules: [{ list: "ask", rule: "Foo(bar)" }, { list: "deny", rule: "Baz" }] });
+  const said = () => document.querySelector(".rtbar .t")?.textContent ?? "";
+
+  it("fills dormant permission rules from their payload", () => {
+    render(<RuntimeBar notices={[notice({ code: "permission_rules_dormant", text: "2 rules match no tool", detail: dormant })]} onSeen={() => {}} />);
+    expect(said()).toContain("有 2 条权限规则没有对应的工具");
+    expect(said()).toContain("「询问」里的 Foo(bar)");
+    expect(said()).not.toMatch(/\{\w+\}/);
+    expect(document.querySelector(".rtbar .why")).toBeNull();
+  });
+
+  it("keeps the kernel's English when the dormant payload is malformed", () => {
+    render(<RuntimeBar notices={[notice({ code: "permission_rules_dormant", text: "2 permission rules match no tool", detail: "not json" })]} onSeen={() => {}} />);
+    expect(said()).toContain("2 permission rules match no tool");
+    expect(said()).not.toMatch(/\{\w+\}/);
+  });
+
+  it.each([
+    ["job_finished", "后台任务已结束：build"],
+    ["job_killed", "后台任务已终止：build"],
+    ["job_failed", "后台任务 build 失败，需要处理"],
+  ])("names the job in %s", (code, sentence) => {
+    render(<RuntimeBar notices={[notice({ code, text: "Job done", detail: JSON.stringify({ id: "j1", label: "build" }) })]} onSeen={() => {}} />);
+    expect(said()).toBe(sentence);
+  });
+
+  it.each(["job_finished", "job_killed", "job_failed"])("keeps the kernel's English for a malformed %s", (code) => {
+    render(<RuntimeBar notices={[notice({ code, text: "Background job ended", detail: "garbage" })]} onSeen={() => {}} />);
+    expect(said()).toContain("Background job ended");
+    expect(said()).not.toMatch(/\{\w+\}/);
+  });
+
+  it("keeps a failed job's error text as the diagnostic", () => {
+    render(<RuntimeBar notices={[notice({ code: "job_failed", detail: JSON.stringify({ id: "j1", label: "build", error: "exit 2" }) })]} onSeen={() => {}} />);
+    expect(said()).toBe("后台任务 build 失败，需要处理");
+    expect(document.querySelector(".rtbar .why")?.textContent).toBe("exit 2");
+  });
+
+  it("keeps an unrecognised compaction reason code as the diagnostic", () => {
+    render(<RuntimeBar notices={[notice({ code: "compact_failed", text: "Compaction failed", detail: "future_reason" })]} onSeen={() => {}} />);
+    expect(said()).toContain("Compaction failed");
+    expect(document.querySelector(".rtbar .why")?.textContent).toBe("future_reason");
   });
 });

@@ -56,9 +56,13 @@ export const ACTIONS: UIAction[] = [
   { id: "chart.data", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.policy", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.rail", kind: "view", target: "none", proof: "browser" },
+  { id: "chrome.more", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.theme", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.nav-rail", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.search", kind: "view", target: "none", proof: "interaction" },
   { id: "session.filter", kind: "view", target: "none", proof: "interaction" },
+  { id: "session.more", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "chrome.settings", kind: "navigation", target: "none", proof: "interaction" },
   { id: "browser.open", kind: "view", target: "none", proof: "interaction" },
   { id: "browser.back", kind: "navigation", target: "none", proof: "interaction" },
@@ -68,7 +72,11 @@ export const ACTIONS: UIAction[] = [
   { id: "tool.copy-output", kind: "shell-native", target: "none", proof: "interaction" },
   // The way out of a window whose assets an update replaced underneath it.
   { id: "chrome.reload", kind: "navigation", target: "none", proof: "interaction" },
+  { id: "chrome.changed-files", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "chrome.fold-work", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "changes.open", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.receipt", kind: "view", target: "none", proof: "interaction" },
+  { id: "chrome.receipt-line", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.keep-awake", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold-preset", kind: "view", target: "none", proof: "interaction" },
@@ -126,6 +134,11 @@ export const ACTIONS: UIAction[] = [
   { id: "commit.confirm", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "commit.close", kind: "view", target: "none", proof: "interaction" },
 
+  // ── Which branch the workspace is on ─────────────────────────────────────
+  // The composer's branch chip opens the locals; picking one checks it out in
+  // the workspace and re-reads what the checkout moved.
+  { id: "git.branch", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+
   // ── What is waiting to be sent ───────────────────────────────────────────
   { id: "queue.edit", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   // Giving a session a name of your own. The sidebar's tree and the pane tabs
@@ -176,6 +189,8 @@ export const ACTIONS: UIAction[] = [
   { id: "community.douyin-qr", kind: "view", target: "none", proof: "interaction" },
   { id: "community.author", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "community.more", kind: "view", target: "none", proof: "interaction" },
+  { id: "sponsor.paypal", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "sponsor.qr", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.open", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.tab", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.category", kind: "view", target: "none", proof: "interaction" },
@@ -236,6 +251,10 @@ export const ACTIONS: UIAction[] = [
   { id: "extensions.finish", kind: "navigation", target: "none", proof: "interaction" },
   { id: "extensions.add", kind: "navigation", target: "none", proof: "interaction" },
   { id: "extensions.pick-folder", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "folders.pick", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "folders.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "folders.remove", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "folders.retry", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "extensions.export", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "extensions.enabled", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "extensions.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
@@ -349,6 +368,11 @@ export const ACTIONS: UIAction[] = [
   { id: "provider.model-check-all", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "provider.model-check", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "provider.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "provider.preset", kind: "view", target: "entity", proof: "interaction" },
+  { id: "provider.preset-retry", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "provider.preset-toggle", kind: "view", target: "none", proof: "interaction" },
+  { id: "provider.preset-back", kind: "view", target: "none", proof: "interaction" },
+  { id: "provider.preset-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "provider.add-start", kind: "view", target: "none", proof: "interaction" },
   { id: "provider.select", kind: "view", target: "entity", proof: "interaction" },
   { id: "provider.move", kind: "view", target: "entity", proof: "interaction" },
@@ -356,6 +380,7 @@ export const ACTIONS: UIAction[] = [
   { id: "provider.rename", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "provider.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "roles.model", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "roles.override.clear", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "permissions.rule-level", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "sandbox.workspace-root", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Where compaction starts. Declaring it rebuilds the runtime, which is why
@@ -390,6 +415,9 @@ export const ACTIONS: UIAction[] = [
   { id: "versions.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "versions.restart", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "versions.later", kind: "view", target: "none", proof: "interaction" },
+  { id: "versions.notes", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "versions.notes-retry", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "versions.notes-close", kind: "view", target: "none", proof: "interaction" },
   { id: "shell.executor", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "shell.custom-path", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "hooks.recipe", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
@@ -402,12 +430,15 @@ export const ACTIONS: UIAction[] = [
   { id: "notify.turn-done", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.approval", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.ask", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "notify.feedback-reply", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "notify.sound", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.editor", kind: "repeatable", target: "none", proof: "authority-effect" },
   { id: "wallpaper.remove", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "wallpaper.change", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "theme.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "theme.import", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "theme.folder", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "theme.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
 
   // Usage changes what report is read, not canonical session state.
   { id: "usage.range.start", kind: "view", target: "none", proof: "interaction" },
@@ -437,6 +468,7 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.scheme", kind: "view", target: "none", proof: "browser" },
   { id: "appearance.weight", kind: "view", target: "none", proof: "browser" },
   { id: "appearance.contrast", kind: "view", target: "none", proof: "browser" },
+  { id: "appearance.effects", kind: "view", target: "none", proof: "browser" },
   { id: "pane.close", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "settings.section", kind: "navigation", target: "none", proof: "interaction" },
   // Finding a setting changes what is on screen and nothing else: it reaches
@@ -446,6 +478,9 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.isolate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "reasoning.effort", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workbench.new-browser", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.launch-files", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.launch-changes", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.launch-browser", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.tab", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.close", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.mode", kind: "view", target: "none", proof: "interaction" },
@@ -492,9 +527,14 @@ export const ACTIONS: UIAction[] = [
   { id: "browser-tools.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
+  { id: "auto-archive.notice-dismiss", kind: "view", target: "none", proof: "interaction" },
+  { id: "auto-archive.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "auto-archive.days", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // The kernel announces the change on the stream, so no rebuild stands between
   // the click and the canonical change.
   { id: "currency.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "ask-timeout.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "ask-timeout.seconds", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.pause", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.rounds", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.token-multiple", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

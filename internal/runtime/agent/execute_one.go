@@ -56,6 +56,7 @@ type toolCallPlan struct {
 	cctx                 context.Context
 	releaseParentWrite   func()
 	releaseMutationWrite func()
+	releaseLeaseHold     func()
 
 	// pathsBefore is the state of the turn's known paths taken before an
 	// unclassifiable call ran, so its receipt can say what it actually touched.
@@ -74,7 +75,9 @@ type toolCallPlan struct {
 	criteriaRewritten []string
 	mutationObserved  bool
 	mutationAfterDone bool
-	executed          bool
+	// ranClean: the tool's own Execute returned no error, before tool.after ruled.
+	ranClean bool
+	executed bool
 	// nestedOrigin is the first external origin among calls this tool made
 	// through its invoker; it labels the result when the tool declares none.
 	nestedOrigin tool.Provenance
@@ -105,6 +108,9 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 		if plan.releaseMutationWrite != nil {
 			plan.releaseMutationWrite()
 		}
+		if plan.releaseLeaseHold != nil {
+			plan.releaseLeaseHold()
+		}
 		if plan.releaseParentWrite != nil {
 			plan.releaseParentWrite()
 		}
@@ -134,6 +140,9 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	// Read after tool.before: an extension may have substituted the call, and the
 	// batch scan judged the one the model wrote.
 	defer func() { out.endsRound = out.endsRound || tool.IsDecisionBarrier(plan.tool) }()
+	if blocked, early := a.refuseNetworkToolPaths(plan); early {
+		return blocked
+	}
 	if blocked, early := a.resolveToolPolicy(ctx, turn, plan); early {
 		return blocked
 	}
@@ -160,7 +169,7 @@ func (a *Agent) parseToolCall(ctx context.Context, plan *toolCallPlan) (toolOutc
 				output: fmt.Sprintf("MCP server %q is connected; its real tools are now available", server),
 			}, true
 		}
-		if refusal, ok := a.svc.tools.DisabledMCPRefusal(plan.call.Name); ok {
+		if refusal, ok := a.svc.tools.MCPRefusal(plan.call.Name); ok {
 			msg := refusal.String()
 			return toolOutcome{output: msg, blocked: true, errMsg: firstLine(msg), refusalCode: refusal.Code}, true
 		}
@@ -552,7 +561,8 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Hooks can write beyond a tool's paths, so permission precedes lease
 	// acquisition and hooks follow it under a conservative workspace claim.
 	if plan.mutates && a.svc.workspaceLease != nil {
-		if err := a.svc.workspaceLease.AcquirePaths(ctx, a.workspaceWritePaths(plan)); err != nil {
+		end, err := a.svc.workspaceLease.HoldPaths(ctx, a.workspaceWritePaths(plan))
+		if err != nil {
 			return toolOutcome{
 				output:         fmt.Sprintf("blocked: %v", err),
 				blocked:        true,
@@ -561,6 +571,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 				workspaceLease: workspaceLeaseConflictScope(err),
 			}, true
 		}
+		plan.releaseLeaseHold = end
 	}
 	// Hold the parent claim before PreToolUse: hooks are user shell code and may
 	// mutate the same workspace. The reservation remains live through hooks,
@@ -649,6 +660,7 @@ func toolHooksMayMutateWorkspace(hooks ToolHooks) bool {
 // post hooks and recovery observation, and truncates the model-facing result.
 func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) toolOutcome {
 	plan.executed = true
+	a.announceDelegation(plan)
 	cctx := plan.cctx
 	runTool := plan.runTool
 	runArgs := plan.runArgs
@@ -713,6 +725,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
+	plan.ranClean = err == nil
 	result, err = a.interceptToolAfter(ctx, call, result, err)
 	// A tool that refused its own call never ran: report it like the permission
 	// and plan-mode blocks above rather than as an execution failure.

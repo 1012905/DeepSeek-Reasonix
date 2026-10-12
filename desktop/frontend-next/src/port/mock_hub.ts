@@ -1,5 +1,5 @@
 import type { AgentPort } from "./port";
-import type { HubPort, RuntimeView, TreeWorkspace } from "./hub";
+import type { HubPort, RuntimeView, TreeWindow, TreeWorkspace } from "./hub";
 import type { RemoteHost, RemoteListing, RemoteProbe } from "./remote";
 import type { ShareStatus } from "./share";
 import { MockPort } from "./mock";
@@ -10,6 +10,7 @@ import { MockPort } from "./mock";
 export class MockHub implements HubPort {
   private readonly ports = new Map<string, AgentPort>();
   private readonly machine = { configured: false };
+  private readonly settings = new MockPort();
   private readonly views: RuntimeView[] = [
     { id: "r1", base: "", root: "~/projects/DeepSeek-Reasonix", name: "DeepSeek-Reasonix", sessionPath: "/sessions/mock.jsonl" },
   ];
@@ -158,7 +159,9 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
-  tree() {
+  onTreeChanged(_listener: () => void) { return () => {}; }
+
+  tree(_window?: TreeWindow) {
     const open = new Map(this.views.filter((v) => v.sessionPath).map((v) => [v.sessionPath!, v.id]));
     return Promise.resolve(
       this.roots.map<TreeWorkspace>((root, i) => ({
@@ -211,6 +214,14 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
+  pinSession(_path: string, _pinned: boolean) {
+    return Promise.resolve();
+  }
+
+  syncPins(_paths: string[]) {
+    return Promise.resolve();
+  }
+
   renameSession(_path: string, _title: string) {
     return Promise.resolve();
   }
@@ -221,7 +232,7 @@ export class MockHub implements HubPort {
   }
 
   importLegacySessions(_path: string, _workspace: string) {
-    return Promise.resolve({ summary: "mock migration complete", imported: 0, warnings: 0, recognised: true });
+    return Promise.resolve({ summary: "mock migration complete", imported: 0, warnings: 0, recognised: true, skipped: [] });
   }
 
   hostCapabilities() {
@@ -241,7 +252,7 @@ export class MockHub implements HubPort {
     ],
     devices: [],
     cloudDevices: [],
-    cloudRemote: { online: false },
+    cloudRemote: { online: false, reason: "signed_out" },
   };
 
   shareStatus() {
@@ -290,6 +301,13 @@ export class MockHub implements HubPort {
       cloudDevices: this.share.cloudDevices.filter((d) => d.id !== id),
     };
     return Promise.resolve({ ...this.share });
+  }
+
+  machinePort(runtimeId?: string): AgentPort {
+    const local = this.views.find((rt) => rt.id === runtimeId && !rt.host);
+    if (local) return this.portFor(local);
+    this.settings.machine = this.machine;
+    return this.settings;
   }
 
   portFor(rt: RuntimeView): AgentPort {

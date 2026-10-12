@@ -10,6 +10,7 @@ import (
 
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/ext/extension"
 	"reasonix/internal/runtime/taskpolicy"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/instruction"
@@ -398,7 +399,24 @@ func (a *Agent) mutationEpoch() uint64 {
 // requirement it replaced.
 func (a *Agent) checkContract() evidence.CheckContract {
 	return evidence.CaptureCheckContract(a.task.checkpoint.BaselineChecks, a.declaredChecks()).
-		WithCapturedTests(len(a.task.baselineCriteria)).WithWorkspaceProseOnly(a.workspaceIsProseOnly(), a.deliveryProfile).WithObserveRoot(a.observeRoot)
+		WithCapturedTests(len(a.task.baselineCriteria)).WithDelivery(a.deliveryProfile).WithObserveRoot(a.observeRoot).
+		WithUnseenWriter(a.unseenToolWriter() || a.runningJobWriter())
+}
+
+// unseenToolWriter reports a writer that runs around tool calls and names no
+// paths: a tool hook, or an extension sidecar on a point every call passes
+// (tool.before, permission.decision, tool.after), outside the bash sandbox.
+func (a *Agent) unseenToolWriter() bool {
+	d := a.svc.extensions
+	return toolHooksMayMutateWorkspace(a.svc.hooks) || d.Intercepts(extension.PointToolBefore) ||
+		d.Intercepts(extension.PointPermissionDecision) || d.Intercepts(extension.PointToolAfter)
+}
+
+// runningJobWriter reports a background job of this session that has not
+// exited: its writes reach the ledger only when the turn collects it, so until
+// then no receipt bounds what it changes.
+func (a *Agent) runningJobWriter() bool {
+	return a.svc.jobs != nil && len(a.svc.jobs.RunningForSession(a.turn.jobSession)) > 0
 }
 
 // DeclaredProjectChecks is the declaration this process loaded, for a host that
@@ -485,8 +503,9 @@ func (a *Agent) appendUnseenRenderGap(out *finalReadinessCheck, missing []string
 // ran, it declines to judge rather than guessing.
 func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string, writer int, blockedWithCheck, verified bool) []string {
 	if a.deliveryProfile || !a.turn.policySet || a.turn.policy.Verification < taskpolicy.VerifyTargeted ||
-		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.checkEstablished(writer, verified) ||
-		a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) {
+		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.task.ledger.HandedBackAfter(writer) || a.checkEstablished(writer, verified) ||
+		a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) ||
+		a.task.ledger.VerifiedBeneathProse(a.checkContract(), writer, a.writerBaselineThrough) {
 		return missing
 	}
 	gap, owed := a.verificationGap(writer)
@@ -504,7 +523,7 @@ func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string
 // to the model that just ran one; what it needs is the command named and a
 // shape whose status answers for the check.
 func (a *Agent) verificationGap(writer int) (string, bool) {
-	const ask = "run a relevant verification command after the latest write for the current role setting"
+	ask := "run a relevant verification command after the latest write for the current role setting" + a.verificationCause()
 	if unreadable, ok := a.task.ledger.LatestUnreadableVerificationAfter(writer); ok && strings.TrimSpace(unreadable.Command) != "" {
 		return fmt.Sprintf("%s — %q ran, but its exit status is the last stage's, not the check's, "+
 			"so it proves nothing either way; re-run the check on its own", ask, strings.TrimSpace(unreadable.Command)), true
@@ -529,6 +548,51 @@ func (a *Agent) verificationGap(writer int) (string, bool) {
 		}
 	}
 	return ask, true
+}
+
+// verificationCause names what keeps the check owed. A turn whose every change
+// is prose, in a project declaring no checks, owes none; the paths that are not
+// prose, or the declaration, are what lifts that.
+func (a *Agent) verificationCause() string {
+	contract := a.checkContract()
+	paths, scoped := a.task.ledger.MutationPathsBeyondProse(contract)
+	switch {
+	case len(paths) > 0:
+		const shown = 3
+		paths = a.relativeUnique(paths)
+		list := strings.Join(quoteEach(paths[:min(len(paths), shown)]), ", ")
+		if len(paths) > shown {
+			list += fmt.Sprintf(" and %d more", len(paths)-shown)
+		}
+		return " (not documentation-only: " + list + " changed)"
+	case !scoped:
+		return " (a change ran whose extent the host could not establish)"
+	case contract.DeclaresChecks():
+		return " (checks are declared for this task or project)"
+	case contract.UnseenWriter():
+		if a.runningJobWriter() && !a.unseenToolWriter() {
+			return " (a background job is still running and may change files no receipt reports)"
+		}
+		return " (a tool hook or extension runs around tool calls and may change files no tool reports)"
+	}
+	return ""
+}
+
+// relativeUnique spells each path from the workspace root when it lies inside
+// it, so one file written under two spellings is named once.
+func (a *Agent) relativeUnique(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if filepath.IsAbs(p) && a.observeRoot != "" {
+			if rel, err := filepath.Rel(a.observeRoot, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				p = rel
+			}
+		}
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func quoteEach(items []string) []string {
