@@ -13,12 +13,26 @@ export interface HostInfo {
   titleBar: boolean;
 }
 
+/** How this launch draws. `launchedOff` is what the shell applied at start,
+ *  `savedOff` the saved choice alone (absent from an older shell), and
+ *  `compositing` Electron's own status string ("" when it has none yet). */
+export interface GraphicsInfo {
+  launchedOff: boolean;
+  savedOff?: boolean;
+  compositing: string;
+}
+
 export interface HostPort {
+  /** Whether this page runs inside the desktop shell, as opposed to a browser
+   *  tab, where the browser's own keys (zoom among them) are the reader's. */
+  inShell(): boolean;
   describe(): Promise<HostInfo>;
   minimiseWindow(): void;
   toggleMaximiseWindow(): void;
   isWindowMaximised(): Promise<boolean>;
   closeWindow(): void;
+  /** How the shell draws this launch; null where it has no say, as in a tab. */
+  graphics(): Promise<GraphicsInfo | null>;
   openExternal(url: string): void | Promise<void>;
   /** Where dropped files live. Empty where the shell cannot say — a browser
    *  tab never learns a path. */
@@ -41,6 +55,11 @@ export interface HostPort {
   /** Show a project the sidebar lists, which needs no pane. The hub answers
    *  where it is and refuses any folder it does not list. */
   revealWorkspace(root: string): Promise<Refusal | null>;
+  /** Whether this shell can open the folder it writes its own logs to. */
+  revealsLogs(): boolean;
+  /** Open that folder in the platform's file manager; null once shown,
+   *  otherwise why it was not. */
+  revealLogs(): Promise<Refusal | null>;
   /** Whether this shell draws the agent's browser pages inside the window. */
   drawsBrowserViews(): boolean;
   /** Draw one of the agent's pages over rect, in on-screen coordinates, and
@@ -128,6 +147,7 @@ interface ElectronBridge {
   toggleMaximiseWindow(): Promise<void>;
   isWindowMaximised(): Promise<boolean>;
   closeWindow(): Promise<void>;
+  graphics?(): Promise<GraphicsInfo | null>;
   openExternal(url: string): Promise<void>;
   pathForFile(file: File): string;
   saveText(name: string, content: string): Promise<string>;
@@ -135,6 +155,7 @@ interface ElectronBridge {
   pickFolder(startIn: string): Promise<string>;
   revealPath?(base: string, path: string): Promise<Refusal | null>;
   revealWorkspace?(root: string): Promise<Refusal | null>;
+  revealLogs?(): Promise<Refusal | null>;
   showBrowserView?(target: string, rect: ViewRect): Promise<void>;
   hideBrowserView?(): Promise<void>;
   freezeBrowserView?(): Promise<string>;
@@ -156,6 +177,9 @@ function normalise(platform: string): string {
 }
 
 class ElectronHost implements HostPort {
+  inShell() {
+    return true;
+  }
   constructor(private readonly api: ElectronBridge) {}
   describe() {
     return Promise.resolve({
@@ -175,6 +199,9 @@ class ElectronHost implements HostPort {
   }
   closeWindow() {
     void this.api.closeWindow();
+  }
+  graphics() {
+    return this.api.graphics?.().catch(() => null) ?? Promise.resolve(null);
   }
   openExternal(url: string) {
     return this.api.openExternal(url);
@@ -201,6 +228,12 @@ class ElectronHost implements HostPort {
   }
   revealWorkspace(root: string) {
     return this.api.revealWorkspace?.(root) ?? Promise.resolve({ error: "this shell cannot show files" });
+  }
+  revealsLogs() {
+    return typeof this.api.revealLogs === "function";
+  }
+  revealLogs() {
+    return this.api.revealLogs?.() ?? Promise.resolve({ error: "this shell cannot show files" });
   }
   // A shell older than the verbs has no views to draw, and says so by lacking them.
   drawsBrowserViews() {
@@ -238,6 +271,9 @@ class ElectronHost implements HostPort {
 }
 
 class BrowserHost implements HostPort {
+  inShell() {
+    return false;
+  }
   describe() {
     return Promise.resolve({ shell: "browser" as const, platform: "", titleBar: false });
   }
@@ -247,6 +283,9 @@ class BrowserHost implements HostPort {
     return Promise.resolve(false);
   }
   closeWindow() {}
+  graphics() {
+    return Promise.resolve(null);
+  }
   openExternal(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
   }
@@ -269,6 +308,12 @@ class BrowserHost implements HostPort {
     return Promise.resolve({ error: "a browser tab cannot show files" });
   }
   revealWorkspace() {
+    return Promise.resolve({ error: "a browser tab cannot show files" });
+  }
+  revealsLogs() {
+    return false;
+  }
+  revealLogs() {
     return Promise.resolve({ error: "a browser tab cannot show files" });
   }
   drawsBrowserViews() {

@@ -108,7 +108,7 @@ func (t *Tool) planGitHubPluginPackage(ctx context.Context, req request) ([]acti
 
 func (t *Tool) planClaudeMarketplace(ctx context.Context, req request, src githubRepoSource, root, commit string) ([]action, []string, error) {
 	manifestPath := filepath.Join(root, filepath.FromSlash(claudeMarketplaceManifest))
-	body, err := os.ReadFile(manifestPath)
+	body, err := readBounded(manifestPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -193,7 +193,7 @@ func (t *Tool) planClaudeMarketplace(ctx context.Context, req request, src githu
 			if err != nil {
 				var unsupported *unsupportedMarketplaceObject
 				if selected == "" && errors.As(err, &unsupported) {
-					warnings = append(warnings, fmt.Sprintf("skipped Claude marketplace plugin %q: %s", entryName, unsupported.warning))
+					warnings = append(warnings, skippedMarketplaceWarning(entryName, unsupported.warning))
 					continue
 				}
 				return nil, warnings, fmt.Errorf("marketplace plugin %q: %w", entryName, err)
@@ -382,7 +382,7 @@ func (t *Tool) pluginPackageAction(req request, pkg pluginpkg.Package, source st
 	}
 	if a.Runtime != nil {
 		a.RiskLevel = RiskHigh
-		a.RiskReasons = append(a.RiskReasons, "FULL TRUST: declares a runtime process ("+pluginpkg.RuntimeCommandLine(pkg.Manifest.Runtime)+") that runs inside Reasonix — it can read the full session and environment, bypass permissions, and operate this machine directly")
+		a.RiskReasons = append(a.RiskReasons, "FULL TRUST: declares a runtime process that runs inside Reasonix — it can read the full session and environment, bypass permissions, and operate this machine directly. Command: "+hostLiteral(pluginpkg.RuntimeCommandLine(pkg.Manifest.Runtime)))
 	}
 	slices.Sort(a.Skills)
 	slices.Sort(a.Agents)
@@ -449,6 +449,13 @@ func (t *Tool) applyInstallPluginPackage(ctx context.Context, req request, act *
 			return newErr(ErrApprovalDenied, "plugin source changed since the approved plan (approved commit %s, found %s) and the approved snapshot could not be restored: %v; re-run without apply to review the new plan", act.Commit, commit, err)
 		}
 	}
+	if act.Mode == "copy" {
+		var err error
+		sourceRoot, err = act.copySource(sourceRoot)
+		if err != nil {
+			return err
+		}
+	}
 	if act.Mode == "link" {
 		resolved, err := filepath.EvalSymlinks(sourceRoot)
 		if err != nil {
@@ -481,7 +488,7 @@ func (t *Tool) applyInstallPluginPackage(ctx context.Context, req request, act *
 		if act.treeDigest == "" {
 			return newErr(ErrApprovalDenied, "copy installation requires an approved content snapshot")
 		}
-		target, discardCopy, err = installPluginCopy(pkg, sourceRoot, target, req.Replace, act.treeDigest)
+		target, discardCopy, err = installPluginCopy(pkg, sourceRoot, target, req.Replace, act.resolvedSource, act.treeDigest)
 		if err != nil {
 			return err
 		}
@@ -667,17 +674,25 @@ func pluginGitCommand(ctx context.Context, args ...string) *exec.Cmd {
 	return gitcmd.CommandWithConfig(ctx, "", []string{"core.autocrlf=false"}, args...)
 }
 
-// Validation must finish before the previous installation can be displaced.
-func installCopiedPlugin(pkg pluginpkg.Package, sourceRoot, target string, replace bool, expected ...string) error {
+// installCopiedPlugin copies sourceRoot into a staging directory next to
+// target, verifies the staged tree resolves to the capability set the plan
+// approved, and only then swaps it into place with a backup-protected rename.
+// Any failure before the swap leaves an existing installation completely
+// intact, so a bad update can never destroy the working version it was meant
+// to replace.
+func installCopiedPlugin(pkg pluginpkg.Package, sourceRoot, target string, replace bool, approvedRoot string, expected ...string) error {
 	if _, err := os.Lstat(target); err == nil && !replace {
 		return newErr(ErrAlreadyExists, "plugin package already exists at %s; retry with replace=true to update it", target)
 	}
-	staging, err := stagePluginCopy(pkg, sourceRoot, target, expected...)
+	staging, err := stagePluginCopy(pkg, sourceRoot, target, approvedRoot, expected...)
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(staging)
-	// A dot-prefixed random backup cannot collide with a valid plugin name.
+	// The backup name derives from the staging dir: dot-prefixed and randomized,
+	// it can never pass IsValidName, so it cannot collide with a sibling
+	// plugin's install dir (plugin names may legally contain dots) and needs no
+	// pre-cleanup that could delete such a neighbor.
 	backup := staging + ".old"
 	hadOld := false
 	if _, err := os.Lstat(target); err == nil {
@@ -762,4 +777,10 @@ func removePluginSymlink(target, source string) error {
 		return nil
 	}
 	return os.Remove(target)
+}
+
+// skippedMarketplaceWarning keeps the sentence whole and shows the reason as a
+// literal: it can carry text from the marketplace's own source.
+func skippedMarketplaceWarning(entry, reason string) string {
+	return fmt.Sprintf("skipped Claude marketplace plugin %q: %s", entry, hostLiteral(reason))
 }

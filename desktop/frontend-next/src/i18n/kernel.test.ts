@@ -24,6 +24,12 @@ const coded = (message: string, code: string, params?: Record<string, string | n
 // upstream of this — dotted codes, sentinels, typed families — buys nothing if
 // the last hop prints the English that rode along for the log.
 describe("what a reader is told a refusal was", () => {
+  it("asks for a currency retry when its runtime owner changed", () => {
+    const refusal = coded("fixture fallback", "display_currency.runtime_changed");
+    expect(reason(refusal)).toBe("运行时已更换，费用显示币种未保存，请重试");
+    localStorage.setItem(STORAGE, "en"); boot();
+    expect(reason(refusal)).toBe("The runtime changed; the display currency was not saved. Try again.");
+  });
   it("renders shell refusal causes in Chinese and English", () => {
     for (const code of ["shell.destructive_target", "shell.analysis_unknown", "shell.delete_sequence", "shell.delete_nonliteral", "shell.delete_option", "shell.syntax_error", "shell.parser_unavailable", "shell.parser_timeout", "shell.command_line_too_long"]) {
       localStorage.setItem(STORAGE, "zh"); boot();
@@ -34,6 +40,23 @@ describe("what a reader is told a refusal was", () => {
       expect(english).not.toBe(chinese);
       expect(english).not.toBe("fixture fallback");
     }
+  });
+  it("names the rule and the tool when a permission rule reaches no tool", () => {
+    const refusal = coded("fixture fallback", "permissions.rule_unknown_tool", { list: "ask", rule: "rm", tool: "rm" });
+    const chinese = reason(refusal);
+    expect(chinese).toContain("rm");
+    expect(chinese).not.toContain("fixture fallback");
+    localStorage.setItem(STORAGE, "en"); boot();
+    expect(reason(refusal)).toContain("names no tool");
+  });
+  it("tells a running turn from jobs left after it, and counts the jobs", () => {
+    const turn = reason(coded("fixture fallback", "busy.switch_model"));
+    const jobs = reason(coded("fixture fallback", "busy.switch_model_jobs", { count: 3 }));
+    expect(turn).toContain("回合正在进行");
+    expect(jobs).toContain("3 个后台任务");
+    expect(jobs).toContain("回合已结束");
+    localStorage.setItem(STORAGE, "en"); boot();
+    expect(reason(coded("fixture fallback", "busy.switch_model_jobs", { count: 3 }))).toContain("3 background job(s)");
   });
   it("explains a serve left running instead of replaced, in both languages", () => {
     for (const code of ["remote.serve_provider_mismatch", "remote.serve_not_attachable"]) {

@@ -25,11 +25,14 @@ contextBridge.exposeInMainWorld("reasonixHost", {
   toggleMaximiseWindow: () => ipcRenderer.invoke("window:toggle-maximise"),
   isWindowMaximised: () => ipcRenderer.invoke("window:is-maximised"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
+  // What the shell's graphics are running as this launch.
+  graphics: () => ipcRenderer.invoke("shell:graphics"),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", String(url)),
   // A pane and a path inside its workspace; main asks the kernel where that is.
   revealPath: (base, rel) => ipcRenderer.invoke("shell:reveal", String(base), String(rel)),
   // A project the sidebar lists, which may have no pane at all.
   revealWorkspace: (root) => ipcRenderer.invoke("shell:reveal-workspace", String(root)),
+  revealLogs: () => ipcRenderer.invoke("shell:reveal-logs"),
   // Where a dropped file lives. Resolved here rather than in the page: the
   // renderer is handed a File and never a path, and a turn that has to work on
   // the file itself cannot do it on a copy of the bytes.

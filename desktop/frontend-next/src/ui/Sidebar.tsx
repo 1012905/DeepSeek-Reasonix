@@ -13,13 +13,16 @@ import { useHiddenHosts } from "../state/remotehide";
 import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
 import { Workspaces } from "./Workspaces";
+import type { TreePaging } from "./treewindow";
 import { MASK, useHidesAmounts } from "./wallet";
+import { useFileDrop } from "./filedrop";
 
 interface Props {
   hub: HubPort;
   // Collapsed, the column keeps its scroll position and its folds; inert is the
   // other half of that — a column nobody can see must not be reachable by Tab.
   collapsed: boolean;
+  navShown: boolean;
   tree: TreeWorkspace[];
   treeRead: boolean;
   runtimes: RuntimeView[];
@@ -39,6 +42,7 @@ interface Props {
   reloadRemoteTrees: () => Promise<void>;
   readRemoteTree: (host: string) => Promise<void>;
   reloadTree: () => Promise<void>;
+  paging: TreePaging;
   adder: Adder;
   opening?: string;
   onOpen: (req: { root?: string; sessionPath?: string }) => Promise<void>;
@@ -67,6 +71,7 @@ interface Props {
 export function Sidebar({
   hub,
   collapsed,
+  navShown,
   tree,
   treeRead,
   runtimes,
@@ -82,6 +87,7 @@ export function Sidebar({
   reloadRemoteTrees,
   readRemoteTree,
   reloadTree,
+  paging,
   adder,
   opening,
   onOpen,
@@ -113,6 +119,15 @@ export function Sidebar({
     [remotes, hiddenHosts],
   );
   const newSessionRoot = activeWorkspace?.root;
+  const [over, setOver] = useState(false);
+  const drop = useFileDrop((d) => {
+    if (collapsed || adder.busy || d.text) return;
+    if (d.paths.length !== 1) {
+      onError(new Error(d.paths.length ? t("请一次拖入一个文件夹") : t("无法取得本机路径，请使用添加文件夹")));
+      return;
+    }
+    adder.addPath(d.paths[0], (workspace) => onOpen({ root: workspace.root }));
+  }, (on, dt) => setOver(on && !!dt?.types.includes("Files")));
 
   // The shortcut the button prints. It was drawn and never bound, so the one
   // thing a person learns from the label did nothing.
@@ -155,8 +170,11 @@ export function Sidebar({
     ],
     [newSessionRoot, onOpen, onSettings, onFeedback, feedbackUnread, onFind, onError],
   );
-  const sessionCount = tree.reduce((n, ws) => n + ws.sessions.filter((session) => !session.archived).length, 0);
-  const archivedCount = tree.reduce((n, ws) => n + ws.sessions.filter((session) => session.archived).length, 0);
+  const sessionCount = tree.reduce(
+    (n, ws) => n + (ws.total === undefined ? ws.sessions.filter((session) => !session.archived).length : ws.total - (ws.archived ?? 0)),
+    0,
+  );
+  const archivedCount = tree.reduce((n, ws) => n + (ws.archived ?? ws.sessions.filter((session) => session.archived).length), 0);
   const liveCount = liveIds(runtimes.map((rt) => rt.id)).length;
 
   const onFold = (root: string, shut: boolean) =>
@@ -190,7 +208,8 @@ export function Sidebar({
         中的面板。inert 是「看不见就够不着」那一半 —— 只做视觉隐藏的话，
         屏幕上没有的栏还能被 Tab 走进去。 */}
     <button className="railveil" data-action="chrome.rail" tabIndex={-1} aria-label={t("收起工作区栏")} onClick={() => onCollapse()} />
-    <div className="rail" inert={collapsed}>
+    <div className="rail" inert={collapsed} ref={drop}>
+      {over && !collapsed && !adder.busy && <div className="rail-drop" role="status"><StudioIcon name="folder" /><span>{t("松开以添加项目文件夹")}</span></div>}
       <div className="railscroll">
       <div className="studio-rail-head">
         <div className="studio-brand" aria-label="Reasonix Studio">
@@ -199,7 +218,6 @@ export function Sidebar({
             <b>reasoni<span className="studio-brand-accent">x</span></b>
             <small>studio</small>
           </span>
-          <button className="studio-collapse" data-action="chrome.rail" onClick={() => onCollapse()} aria-label={t("收起工作区栏")} title={t("收起侧栏")}><StudioIcon name="panel" /></button>
         </div>
         <button
           className="studio-new-task"
@@ -211,11 +229,13 @@ export function Sidebar({
         <button className="studio-search" data-action="workspace.search" onClick={() => setPalette(true)}>
           <span aria-hidden="true"><StudioIcon name="search" /></span><b className="studio-label">{t("搜索与快捷操作")}</b><kbd>Ctrl K</kbd>
         </button>
-        <div className="studio-quicknav">
-          <button data-action="settings.section" data-value="storage" onClick={() => onSettings("storage")}><span aria-hidden="true"><StudioIcon name="file" /></span><b>{t("文件")}</b></button>
-          <button data-action="settings.section" data-value="ext" onClick={() => onSettings("ext")}><span aria-hidden="true"><StudioIcon name="plug" /></span><b>{t("工具与集成")}</b><small>MCP · Skills</small></button>
-          <button data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}><span aria-hidden="true"><StudioIcon name="server" /></span><b>{t("运行环境")}</b><small>Local / SSH</small></button>
-        </div>
+        {!navShown && (
+          <div className="studio-quicknav">
+            <button data-action="settings.section" data-value="storage" onClick={() => onSettings("storage")}><span aria-hidden="true"><StudioIcon name="file" /></span><b>{t("文件")}</b></button>
+            <button data-action="settings.section" data-value="ext" onClick={() => onSettings("ext")}><span aria-hidden="true"><StudioIcon name="plug" /></span><b>{t("工具与集成")}</b><small>MCP · Skills</small></button>
+            <button data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}><span aria-hidden="true"><StudioIcon name="server" /></span><b>{t("运行环境")}</b><small>Local / SSH</small></button>
+          </div>
+        )}
         <div className="studio-section-label studio-session-label"><span>{t("会话")}</span></div>
         <div className="studio-session-filters" role="group" aria-label={t("会话范围")}>
           <div className="studio-session-segments">
@@ -237,6 +257,7 @@ export function Sidebar({
         folded={folded}
         onFold={onFold}
         reload={reloadTree}
+        paging={paging}
         opening={opening}
         onOpen={onOpen}
         onFocus={onFocusPane}
@@ -272,7 +293,7 @@ export function Sidebar({
       </Workspaces>
       </RailSearch>
       </div>
-      <div className="railfoot">
+      {!navShown && <div className="railfoot">
         <button className="studio-wallet" data-action="settings.section" data-value="usage" onClick={() => onSettings("usage")}><span aria-hidden="true"><StudioIcon name="wallet" /></span><b>{t("钱包与用量")}</b>{wallet && <small>{hideAmounts ? MASK : wallet}</small>}</button>
         <button className="studio-wallet studio-feedback" data-action="feedback.open" onClick={() => onFeedback(feedbackEntryTab(feedbackUnread))}>
           <span aria-hidden="true"><StudioIcon name="feedback" /></span>
@@ -284,7 +305,7 @@ export function Sidebar({
           <span className="studio-workspace-kind">{t(account?.signedIn ? "个人工作空间" : "本地工作空间")}</span>
           <button className="studio-settings" data-action="chrome.settings" onClick={() => onSettings()} aria-label={t("设置")}><StudioIcon name="settings" /></button>
         </div>
-      </div>
+      </div>}
     </div>
     </>
   );

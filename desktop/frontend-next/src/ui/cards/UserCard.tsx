@@ -8,9 +8,8 @@ import { t } from "../../i18n";
 import { StudioIcon } from "../StudioIcon";
 import { messageSource } from "../source";
 import { touchKeyboard } from "../touchKeyboard";
+import { useFitHeight } from "../fitHeight";
 import { useViewer } from "../../state/viewer";
-
-const SAVED_IMAGE = /(?:^|\s)@(\.reasonix\/attachments\/clipboard-[\d.-]+\.(?:png|jpe?g|gif|webp|bmp|svg))(?=\s|$)/gi;
 
 function SavedImage({ path, src }: { path: string; src: string }) {
   const [failed, setFailed] = useState(false);
@@ -26,7 +25,6 @@ export function UserCard({
   onResend,
   onPrepareRewind,
   onCommitRewind,
-  onUndoRewind,
 }: {
   item: Extract<Item, { t: "user" }>;
   port?: Pick<AgentPort, "workspaceImageURL">;
@@ -34,7 +32,6 @@ export function UserCard({
   onResend?: (turn: number, text: string) => Promise<void>;
   onPrepareRewind?: (turn: number, scope: RewindScope) => Promise<RewindPlan>;
   onCommitRewind?: (planId: string, text?: string) => Promise<RewindResult>;
-  onUndoRewind?: (transactionId: string) => Promise<void>;
 }) {
   // A rewind needs a turn the kernel claimed, and a queued line has not
   // happened yet — there is nothing behind it to take back.
@@ -45,8 +42,8 @@ export function UserCard({
   const box = useRef<HTMLTextAreaElement>(null);
   const source = messageSource(item.via, useViewer());
   const reopen = editable && draft === null;
-  const rewind = !!(cp && onPrepareRewind && onCommitRewind && onUndoRewind);
-  const images = useMemo(() => [...new Set(Array.from(item.text.matchAll(SAVED_IMAGE), (match) => match[1]))], [item.text]);
+  const rewind = !!(cp && onPrepareRewind && onCommitRewind);
+  const images = useMemo(() => [...new Set((item.attachments ?? []).map((a) => a.path))], [item.attachments]);
 
   useEffect(() => {
     const el = box.current;
@@ -54,6 +51,8 @@ export function UserCard({
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }, [draft === null]);
+
+  useFitHeight(box, draft ?? "");
 
   const resend = () => {
     const text = (draft ?? "").trim();
@@ -96,7 +95,7 @@ export function UserCard({
                 data-action-keydown="turn.resend"
                 data-target={item.id}
                 value={draft}
-                rows={Math.min(12, draft.split("\n").length + 1)}
+                rows={1}
                 readOnly={sending}
                 aria-label={t("改写这条消息")}
                 onChange={(ev) => setDraft(ev.target.value)}
@@ -140,7 +139,7 @@ export function UserCard({
             </button>
           )}
           {rewind && (
-            <RewindControl cp={cp!} compact onPrepare={onPrepareRewind!} onCommit={(planId) => onCommitRewind!(planId, item.text)} onUndo={onUndoRewind!} />
+            <RewindControl cp={cp!} compact onPrepare={onPrepareRewind!} onCommit={(planId) => onCommitRewind!(planId, item.text)} />
           )}
         </div>
       </div>

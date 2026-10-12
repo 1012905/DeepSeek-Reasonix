@@ -69,7 +69,8 @@ it("always draws the rail by default, with every entry in it", async () => {
   await open();
   expect(nav()).not.toBeNull();
   expect(app().dataset.nav).toBe("on");
-  for (const name of ["会话", "用量", "工具与权限", "扩展", "记忆", "远程", "发送反馈", "账号", "设置"]) {
+  expect(document.querySelector(".railfoot")).toBeNull();
+  for (const name of ["会话", "用量", "文件", "工具与权限", "扩展", "记忆", "远程", "发送反馈", "账号", "设置"]) {
     expect(within(navEl()!).getByRole("button", { name: new RegExp(`^${name}`) }), name).toBeTruthy();
   }
 });
@@ -116,13 +117,16 @@ it("in collapsed mode follows the sidebar without remounting the rail", async ()
   expect(app().dataset.rail).toBe("on");
   expect(app().dataset.nav).toBe("off");
   expect(nav()).toBeNull();
+  expect(document.querySelector(".railfoot")).not.toBeNull();
   await toggleSidebar();
   expect(app().dataset.rail).toBe("off");
   expect(app().dataset.nav).toBe("on");
   expect(nav()).not.toBeNull();
+  expect(document.querySelector(".railfoot")).toBeNull();
   expect(navEl()).toBe(el);
   await toggleSidebar();
   expect(app().dataset.nav).toBe("off");
+  expect(document.querySelector(".railfoot")).not.toBeNull();
   expect(navEl()).toBe(el);
 });
 
@@ -137,8 +141,27 @@ it("always mode keeps the rail beside an open sidebar and a closed one", async (
 it("still reaches settings with the rail off", async () => {
   localStorage.setItem(KEY, "off");
   await open();
+  const footer = document.querySelector<HTMLElement>(".railfoot")!;
+  expect(footer).not.toBeNull();
+  for (const name of ["钱包与用量", "发送反馈", "账号", "设置"]) {
+    expect(within(footer).getByRole("button", { name: new RegExp(`^${name}`) }), name).toBeTruthy();
+  }
   await openAppearance();
   expect(pressed("不显示")).toBe("true");
+});
+
+it.each(["on", "off"])("reaches usage, account, and settings with the rail %s", async (mode) => {
+  localStorage.setItem(KEY, mode);
+  await open();
+  const entries = mode === "on" ? navEl()! : document.querySelector<HTMLElement>(".railfoot")!;
+  for (const [label, section, action] of [[mode === "on" ? "用量" : "钱包与用量", "usage"], ["账号", "account", "chrome.account"], ["设置", "session", "chrome.settings"]]) {
+    const button = within(entries).getByRole("button", { name: new RegExp(`^${label}`) });
+    if (action) expect(entries.querySelector(`[data-action="${action}"]`)).toBe(button);
+    await userEvent.click(button);
+    expect((await screen.findByRole("tabpanel")).getAttribute("data-sec")).toBe(section);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
+  }
 });
 
 it("never draws the rail under the scene fold, in any state, and restores it after", async () => {
@@ -152,9 +175,11 @@ it("never draws the rail under the scene fold, in any state, and restores it aft
     act(() => room(390));
     await waitFor(() => expect(nav()).toBeNull());
     expect(navEl()).toBeNull();
+    expect(document.querySelector(".railfoot")).not.toBeNull();
     expect(localStorage.getItem(KEY)).toBe(mode);
     act(() => room(1440));
     await waitFor(() => expect(nav() !== null).toBe(mode !== "off"));
+    expect(document.querySelector(".railfoot") !== null).toBe(mode === "off");
   }
 });
 
@@ -177,4 +202,51 @@ it("opens feedback from the rail like the sidebar entry does, badge included", a
   expect(entry.querySelector(".fbk-badge")?.textContent).toBe("3");
   await userEvent.click(entry);
   expect(await screen.findByRole("tab", { name: "我的反馈", selected: true })).toBeTruthy();
+});
+
+it("the conversation item opens and closes the workspace column, and from settings it goes home", async () => {
+  await open();
+  const item = () => within(navEl()!).getByRole("button", { name: /^会话/ });
+  expect(app().dataset.rail).toBe("on");
+  await userEvent.click(item());
+  expect(app().dataset.rail).toBe("off");
+  await userEvent.click(item());
+  expect(app().dataset.rail).toBe("on");
+  await userEvent.click(within(navEl()!).getByRole("button", { name: /^用量/ }));
+  expect(item().getAttribute("aria-current")).toBeNull();
+  await userEvent.click(item());
+  expect(item().getAttribute("aria-current")).toBe("page");
+  expect(item().hasAttribute("aria-pressed")).toBe(false);
+  expect(app().dataset.rail).toBe("on");
+});
+
+it("keeps the sidebar toggle working while the settings sheet is over the window", async () => {
+  await open();
+  const toggle = () => document.querySelector<HTMLButtonElement>(".studio-menu")!;
+  await userEvent.click(within(navEl()!).getByRole("button", { name: /^用量/ }));
+  expect(toggle().disabled).toBe(false);
+  expect(app().dataset.rail).toBe("on");
+  await userEvent.click(toggle());
+  expect(app().dataset.rail).toBe("off");
+  await userEvent.click(toggle());
+  expect(app().dataset.rail).toBe("on");
+  await userEvent.click(within(navEl()!).getByRole("button", { name: /^会话/ }));
+  expect(toggle().disabled).toBe(false);
+});
+
+it("keeps one sidebar toggle, and the sidebar does not repeat what the rail already holds", async () => {
+  await open();
+  const toggles = screen.getAllByRole("button", { name: /收起工作区栏|展开工作区栏/ }).filter((b) => b.tabIndex !== -1);
+  expect(toggles).toHaveLength(1);
+  expect(toggles[0].classList.contains("studio-menu")).toBe(true);
+  expect(document.querySelector(".studio-quicknav")).toBeNull();
+  await toggleSidebar();
+  await toggleSidebar();
+  expect(screen.getAllByRole("button", { name: /收起工作区栏|展开工作区栏/ }).filter((b) => b.tabIndex !== -1)).toHaveLength(1);
+});
+
+it("with the rail off the sidebar keeps its own quick entries", async () => {
+  localStorage.setItem(KEY, "off");
+  await open();
+  expect(document.querySelector(".studio-quicknav")).not.toBeNull();
 });

@@ -12,9 +12,9 @@ import (
 // cannot be renamed, so a replacement is published beside the old tree.
 var siblingPublication = runtime.GOOS == "windows"
 
-func installPluginCopy(pkg pluginpkg.Package, sourceRoot, target string, replace bool, expected string) (string, func(), error) {
+func installPluginCopy(pkg pluginpkg.Package, sourceRoot, target string, replace bool, approvedRoot, expected string) (string, func(), error) {
 	if !replace || !siblingPublication {
-		if err := installCopiedPlugin(pkg, sourceRoot, target, replace, expected); err != nil {
+		if err := installCopiedPlugin(pkg, sourceRoot, target, replace, approvedRoot, expected); err != nil {
 			return "", nil, err
 		}
 		if replace {
@@ -24,14 +24,14 @@ func installPluginCopy(pkg pluginpkg.Package, sourceRoot, target string, replace
 	}
 	// A sibling keeps the old tree intact through content validation and pointer
 	// publication, including Windows watches that deny ancestor renames.
-	root, err := stagePluginCopy(pkg, sourceRoot, target, expected)
+	root, err := stagePluginCopy(pkg, sourceRoot, target, approvedRoot, expected)
 	if err != nil {
 		return "", nil, err
 	}
 	return root, func() { _ = os.RemoveAll(root) }, nil
 }
 
-func stagePluginCopy(pkg pluginpkg.Package, sourceRoot, target string, expected ...string) (string, error) {
+func stagePluginCopy(pkg pluginpkg.Package, sourceRoot, target, approvedRoot string, expected ...string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return "", err
 	}
@@ -45,7 +45,7 @@ func stagePluginCopy(pkg pluginpkg.Package, sourceRoot, target string, expected 
 			_ = os.RemoveAll(staging)
 		}
 	}()
-	if err := copyDir(sourceRoot, staging, tarballTotalLimit); err != nil {
+	if err := copyDir(sourceRoot, staging, tarballTotalLimit, approvedRoot); err != nil {
 		return "", err
 	}
 	// Copying a symlink must not silently remove approved capabilities.

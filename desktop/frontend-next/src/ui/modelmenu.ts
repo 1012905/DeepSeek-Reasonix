@@ -9,7 +9,7 @@ import { orderAccounts } from "../state/providerorder";
 // Every account gets a heading with its endpoint: the provider name is the
 // config's word for an entry, not the user's for an endpoint, and two doors onto
 // one account share it. Rows carry the wire format beside the model name.
-export function modelMenu(models: ModelEntry[], order: readonly string[] = []): MenuItem[] {
+export function modelMenu(models: ModelEntry[], order: readonly string[] = [], current?: string): MenuItem[] {
   const accounts = orderAccounts(groupVendors(models), order);
   const out: MenuItem[] = [];
   for (const [i, a] of accounts.entries()) {
@@ -19,13 +19,23 @@ export function modelMenu(models: ModelEntry[], order: readonly string[] = []): 
       for (const m of a.byKind[kind]) {
         out.push({
           value: m.ref,
-          label: m.model,
+          label: m.modelAlias?.trim() || m.model,
+          desc: m.modelAlias?.trim() ? m.model : undefined,
           meta: t(KIND_LABEL[kind] ?? kind),
           badge: m.vision ? t("读图") : undefined,
           mono,
         });
       }
     }
+  }
+  const held = out.find((item) => item.value === current);
+  if (held) {
+    out.splice(out.indexOf(held), 1);
+    for (let i = out.length - 1; i >= 0; i--) {
+      if (out[i].header && (!out[i + 1] || out[i + 1].header)) out.splice(i, 1);
+    }
+    for (const item of out) if (item.header) item.divide = true;
+    out.unshift(held);
   }
   out.push({
     value: "__manage-models",

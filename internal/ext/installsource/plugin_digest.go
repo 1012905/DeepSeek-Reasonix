@@ -18,7 +18,7 @@ func snapshotPlugin(pkg pluginpkg.Package) (pluginpkg.Package, string, func(), e
 		return pkg, "", nil, err
 	}
 	cleanup := func() { _ = os.RemoveAll(root) }
-	if err := copyDir(pkg.Root, root, tarballTotalLimit); err != nil {
+	if err := copyDir(pkg.Root, root, tarballTotalLimit, ""); err != nil {
 		cleanup()
 		return pkg, "", nil, err
 	}
