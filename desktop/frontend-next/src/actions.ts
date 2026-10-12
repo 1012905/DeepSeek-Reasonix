@@ -82,6 +82,7 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.receipt", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.receipt-line", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.keep-awake", kind: "view", target: "none", proof: "interaction" },
+  { id: "composer.send-shortcut", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold-preset", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold-preview", kind: "view", target: "none", proof: "interaction" },
