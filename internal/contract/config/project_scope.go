@@ -22,6 +22,7 @@ type heldScope struct {
 	permissions  PermissionsConfig
 	approvalMode string
 	autoSubmit   bool
+	writeLease   string
 	shell        ShellConfig
 	rgPath       string
 	lsp          map[string]LSPServer
@@ -44,6 +45,7 @@ func holdUserScope(c *Config) heldScope {
 		permissions:  p,
 		approvalMode: c.Desktop.DefaultToolApprovalMode,
 		autoSubmit:   c.AutoSubmit,
+		writeLease:   c.Agent.WriteLease,
 		shell:        shell,
 		rgPath:       c.Tools.Search.RgPath,
 		lsp:          maps.Clone(c.LSP.Servers),
@@ -135,6 +137,12 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.AutoSubmit != h.autoSubmit {
 		c.ignoreProject("auto_submit", fmt.Sprintf("%t", c.AutoSubmit), ProjectUserOnly)
 		c.AutoSubmit = h.autoSubmit
+	}
+	// The cross-session write lease protects other sessions from this one, so a
+	// cloned repo must not relax it, nor tighten what the user chose.
+	if c.Agent.WriteLease != h.writeLease {
+		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
+		c.Agent.WriteLease = h.writeLease
 	}
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
