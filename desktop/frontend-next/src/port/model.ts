@@ -49,6 +49,7 @@ export interface ModelEntry {
   // What the user renamed provider to; provider stays the identity.
   displayName?: string;
   model: string;
+  modelAlias?: string;
   kind?: string;
   active?: boolean;
   default?: boolean;

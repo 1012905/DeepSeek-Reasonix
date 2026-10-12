@@ -3682,6 +3682,7 @@ body { font-size: 14px; line-height: 1.75; }
 .addp .fields select,
 .addp .fields textarea,
 .mline .nm { font-size: var(--fs-ui); }
+.mline .malias { min-width: 0; width: 100%; box-sizing: border-box; font-size: var(--fs-ui); }
 .prefs-main { padding-top: 28px; }
 .prefs-col { max-width: 820px; }
 .grp { padding: 20px 22px 18px; }

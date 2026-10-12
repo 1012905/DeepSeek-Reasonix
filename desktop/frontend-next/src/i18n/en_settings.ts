@@ -2,6 +2,9 @@
 // alone — one catalogue is still the model, and this file is read as its
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
+  "{name} 的显示别名": "Display alias for {name}",
+  "显示别名（留空使用模型 ID）": "Display alias (empty uses model ID)",
+  "仅用于显示，不改变请求中的模型 ID": "Display only; the model ID sent in requests is unchanged",
   "浏览器标签": "Browser tabs",
   "关闭其他浏览器标签": "Close other browser tabs",
   "关闭全部浏览器标签": "Close all browser tabs",
