@@ -70,7 +70,7 @@ func TestContractOwesTheCheckTheTaskBeganUnder(t *testing.T) {
 	if got.ContractRevision != 1 || got.ContractDecision != string(contract.Accepted) || got.Outcome == "completed" {
 		t.Fatalf("audit = %+v, want revision 1 accepted and the turn not completed", got)
 	}
-	if v := sealedVerdict(t, store, got.Record, "contract@command@"+evidence.VerificationIdentity(began)); v != "owed" {
+	if v := sealedVerdict(t, store, sealedRecord(t, got), "contract@command@"+evidence.VerificationIdentity(began)); v != "owed" {
 		t.Fatalf("frozen criterion verdict = %q, want owed", v)
 	}
 	c, err := contract.Load(store, a.DeliveryCheckpoint().Contract)
@@ -88,9 +88,19 @@ func TestContractCriterionIsSatisfiedByItsOwnCheck(t *testing.T) {
 	store := trustedstate.Open(t.TempDir(), nil)
 	a, sink := contractAgent(t, writeThenRun(began), began, store)
 	_ = a.Run(deliveryGoalContext("goal-1", "edit"), "edit")
-	if v := sealedVerdict(t, store, sink.last(t).Record, "contract@command@"+evidence.VerificationIdentity(began)); v != "satisfied" {
+	if v := sealedVerdict(t, store, sealedRecord(t, sink.last(t)), "contract@command@"+evidence.VerificationIdentity(began)); v != "satisfied" {
 		t.Fatalf("frozen criterion verdict = %q, want satisfied by the check it names", v)
 	}
+}
+
+// sealedRecord is the record a turn's audit names, and fails with the store's
+// cause when the bundle was not sealed instead of reading an empty digest.
+func sealedRecord(t *testing.T, a event.EvidenceBundleAudit) string {
+	t.Helper()
+	if !a.Sealed {
+		t.Fatalf("bundle not sealed: failure %q, contract failure %q", a.FailureCode, a.ContractFailure)
+	}
+	return a.Record
 }
 
 // sealedVerdict reads one obligation's verdict out of a sealed bundle.
@@ -184,7 +194,7 @@ func TestPlanCriterionIsVerifiedByItsStepsCommands(t *testing.T) {
 		a, sink := contractAgent(t, writeThenRun(tc.ran), "", store)
 		a.SetPlanContract(&plan)
 		_ = a.Run(deliveryGoalContext("goal-1", "fix"), "fix")
-		record := sink.last(t).Record
+		record := sealedRecord(t, sink.last(t))
 		if v := sealedVerdict(t, store, record, "contract@command@"+evidence.VerificationIdentity("go test ./parser/")); v != tc.want {
 			t.Fatalf("after %q the plan check is %q, want %q", tc.ran, v, tc.want)
 		}
@@ -304,7 +314,7 @@ func TestAPlanNamingFilesIsOwedAProvenChange(t *testing.T) {
 		a.SetPlanContract(&plan)
 		_ = a.Run(deliveryGoalContext("goal-1", "fix"), "fix")
 		got := sink.last(t)
-		v := sealedVerdict(t, store, got.Record, "contract@"+contract.PlanDeliverable)
+		v := sealedVerdict(t, store, sealedRecord(t, got), "contract@"+contract.PlanDeliverable)
 		listed := slices.ContainsFunc(unprovenDetails(a.CompletionReceipt()), func(d string) bool { return strings.Contains(d, "no change was proven") })
 		if tc.owed && (v != "owed" || got.Outcome == "completed" || !listed) {
 			t.Fatalf("%s: deliverable %q, outcome %q, receipt lists it %v; want owed, not completed, listed", tc.name, v, got.Outcome, listed)
