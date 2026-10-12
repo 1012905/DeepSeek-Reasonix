@@ -162,6 +162,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/studio_logs.go", "studioLogs", tsVersionFile, "StudioLogs"},
 	{"internal/frontend/serve/studio_logs.go", "studioCrashes", tsVersionFile, "StudioCrash"},
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
+	{"internal/state/checkpoint/types.go", "RewindUndo", tsSessionFile, "RewindUndo"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
 	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},
 	// A source and a model as the pickers name them. A label the page cannot

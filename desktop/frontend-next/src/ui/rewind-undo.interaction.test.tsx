@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, expect, it, vi } from "vitest";
 import { Pane } from "./Pane";
 import { MockPort } from "../port/mock";
-import type { HistoryMessage, RewindResult } from "../port/port";
+import type { HistoryMessage, RewindResult, RewindUndo } from "../port/port";
 import type { WireEvent } from "../port/wire";
 import type { RuntimeView } from "../port/hub";
 
@@ -29,6 +29,9 @@ async function open(conversation = true, holdInitialStatus = false, runtimePath:
   if (display) await port.saveFoldWorkSettings(display.foldWork);
   let session = "session-a";
   let running = false;
+  let offer: RewindUndo | null = null;
+  let transaction = 0;
+  vi.spyOn(port, "availableUndo").mockImplementation(async () => running ? null : offer);
   let emit: (event: WireEvent) => void = () => {};
   const subscribe = port.subscribe.bind(port);
   vi.spyOn(port, "subscribe").mockImplementation((onEvent, onGap, bootstrap) => { emit = onEvent; return subscribe(onEvent, onGap, bootstrap); });
@@ -41,12 +44,14 @@ async function open(conversation = true, holdInitialStatus = false, runtimePath:
   vi.spyOn(port, "prepareRewind").mockResolvedValue({ planId: "plan-1", turn: 1, coverage: "full", canFiles: true, canConversation: true, fileCount: mutation ? 3 : 1, requiresConfirmation: false });
   vi.spyOn(port, "commitRewind").mockImplementation(async () => {
     if (conversation) history = [];
-    return { ok: true, conversationOk: conversation, transactionId: "tx-1", undoAvailable: true, deleted: ["file.txt"], ...mutation };
+    const result = { ok: true, conversationOk: conversation, transactionId: `tx-${++transaction}`, undoAvailable: true, deleted: ["file.txt"], ...mutation };
+    offer = { transactionId: result.transactionId, turn: 1, files: (result.written?.length ?? 0) + (result.deleted?.length ?? 0) };
+    return result;
   });
-  const undo = vi.spyOn(port, "undoRewind").mockImplementation(async () => { history = messages; });
+  const undo = vi.spyOn(port, "undoRewind").mockImplementation(async () => { history = messages; offer = null; });
   const view = render(<Pane {...props} rt={{ ...props.rt, sessionPath: runtimePath }} port={port} />);
   await screen.findByRole("button", { name: "回到这里" });
-  return { port, reads, undo, view, resolveStatus, start: () => { running = true; emit({ kind: "turn_started" } as WireEvent); }, setSession: (next: string) => { session = next; } };
+  return { port, reads, undo, view, resolveStatus, start: () => { running = true; emit({ kind: "turn_started" } as WireEvent); }, setSession: (next: string) => { session = next; offer = null; } };
 }
 async function restore(scope = "代码和对话") {
   fireEvent.click(screen.getByRole("button", { name: "回到这里" }));
@@ -59,7 +64,7 @@ it("preserves canonical attachments through conversation restore and undo", asyn
   const src = port.workspaceImageURL(".reasonix/attachments/restore-picture.png");
   expect(image().getAttribute("src")).toBe(src);
   await restore();
-  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "撤销这次还原" });
+  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "撤销这次回退" });
   await waitFor(() => expect(button.disabled).toBe(false));
   expect(screen.queryByRole("img", { name: "restore-picture.png" })).toBeNull();
   fireEvent.click(button);
@@ -88,13 +93,13 @@ it.each([false, true])("preserves speaker grouping and work folding through rest
   };
   await waitFor(assertTranscript);
   await restore();
-  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "撤销这次还原" });
+  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "撤销这次回退" });
   await waitFor(() => expect(button.disabled).toBe(false));
   expect(document.querySelectorAll('[data-k="say"]')).toHaveLength(0);
   fireEvent.click(button);
   await waitFor(() => expect(undo).toHaveBeenCalledExactlyOnceWith("tx-1"));
   await waitFor(assertTranscript);
-  expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull();
 });
 
 it.each([true, false])("keeps undo through the real Pane reload with conversation removal %j", async (conversation) => {
@@ -104,41 +109,41 @@ it.each([true, false])("keeps undo through the real Pane reload with conversatio
   await waitFor(() => expect(reads.mock.calls.length).toBeGreaterThan(before));
   await waitFor(() => expect(!!screen.queryByRole("button", { name: "回到这里" })).toBe(!conversation));
   expect(screen.getByText("已还原 1 个文件")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "撤销这次还原" }));
+  fireEvent.click(screen.getByRole("button", { name: "撤销这次回退" }));
   await waitFor(() => expect(undo).toHaveBeenCalledExactlyOnceWith("tx-1"));
   await screen.findByRole("button", { name: "回到这里" });
-  expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull();
 });
 
 it("keeps undo after unrelated rerender, supports a refused undo retry and repeated restore", async () => {
   const h = await open();
   await restore();
-  await screen.findByRole("button", { name: "撤销这次还原" });
+  await screen.findByRole("button", { name: "撤销这次回退" });
   h.view.rerender(<Pane {...props} port={h.port} title="Renamed conversation" />);
   h.undo.mockRejectedValueOnce(new Error("Tracked file changed"));
-  fireEvent.click(screen.getByRole("button", { name: "撤销这次还原" }));
+  fireEvent.click(screen.getByRole("button", { name: "撤销这次回退" }));
   await screen.findByRole("alert", { name: "" });
   expect(screen.getByText("Tracked file changed")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "撤销这次还原" }));
+  fireEvent.click(screen.getByRole("button", { name: "撤销这次回退" }));
   await screen.findByRole("button", { name: "回到这里" });
   await restore();
-  await screen.findByRole("button", { name: "撤销这次还原" });
+  await screen.findByRole("button", { name: "撤销这次回退" });
   expect(h.port.commitRewind).toHaveBeenCalledTimes(2);
 });
 
 it("allows explicit dismissal without invoking undo", async () => {
   const h = await open(); await restore();
-  await screen.findByRole("button", { name: "撤销这次还原" });
-  fireEvent.click(screen.getByRole("button", { name: "知道了" }));
+  await screen.findByRole("button", { name: "撤销这次回退" });
+  fireEvent.click(screen.getByRole("button", { name: "关闭回退提示" }));
   expect(screen.queryByText("已还原 1 个文件")).toBeNull(); expect(h.undo).not.toHaveBeenCalled();
 });
 
 it("clears the receipt when host status changes even while runtime metadata is stale", async () => {
   const h = await open(); await restore();
-  await screen.findByRole("button", { name: "撤销这次还原" });
+  await screen.findByRole("button", { name: "撤销这次回退" });
   h.setSession("session-b");
   h.view.rerender(<Pane {...props} port={h.port} pulse={1} />);
-  await waitFor(() => expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull());
   expect(h.undo).not.toHaveBeenCalled();
 });
 
@@ -151,7 +156,7 @@ it("does not publish a pending old-session restore or append its prompt to the n
   await screen.findByRole("button", { name: "回到这里" });
   const before = h.reads.mock.calls.length;
   await act(async () => resolve({ ok: true, conversationOk: true, transactionId: "tx-1", undoAvailable: true, deleted: ["file.txt"] }));
-  expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull();
   expect(h.reads.mock.calls).toHaveLength(before);
   expect((screen.getByRole("combobox", { name: "任务输入" }) as HTMLTextAreaElement).value).toBe("");
 });
@@ -159,40 +164,42 @@ it("does not publish a pending old-session restore or append its prompt to the n
 it("does not mistake initial status hydration for leaving the known conversation", async () => {
   const h = await open(true, true);
   await restore();
-  await screen.findByRole("button", { name: "撤销这次还原" });
+  await screen.findByRole("button", { name: "撤销这次回退" });
   await act(async () => h.resolveStatus!());
-  expect(screen.getByRole("button", { name: "撤销这次还原" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "撤销这次回退" })).toBeTruthy();
 });
 
 it("disables repeated undo clicks while the operation is in flight", async () => {
   const h = await open(); await restore();
-  const button = await screen.findByRole("button", { name: "撤销这次还原" });
+  const button = await screen.findByRole("button", { name: "撤销这次回退" });
   let resolve!: () => void;
-  h.undo.mockReturnValue(new Promise((done) => { resolve = done; }));
+  const applyUndo = h.undo.getMockImplementation()!;
+  const pending = new Promise<void>((done) => { resolve = done; });
+  h.undo.mockImplementation(async (tx) => { await pending; await applyUndo(tx); });
   fireEvent.click(button); fireEvent.click(button);
   expect((button as HTMLButtonElement).disabled).toBe(true);
   expect(h.undo).toHaveBeenCalledExactlyOnceWith("tx-1");
   await act(async () => resolve());
-  expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull();
 });
 
 it("keeps a receipt when runtime metadata catches up to the known host session", async () => {
   const h = await open(true, false, "");
   await restore();
-  await screen.findByRole("button", { name: "撤销这次还原" });
+  await screen.findByRole("button", { name: "撤销这次回退" });
   h.view.rerender(<Pane {...props} port={h.port} />);
-  expect(screen.getByRole("button", { name: "撤销这次还原" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "撤销这次回退" })).toBeTruthy();
 });
 
 it("retries history after a successful undo without applying the transaction twice", async () => {
   const h = await open(); await restore();
-  const undo = await screen.findByRole("button", { name: "撤销这次还原" });
+  const undo = await screen.findByRole("button", { name: "撤销这次回退" });
   await waitFor(() => expect((undo as HTMLButtonElement).disabled).toBe(false));
   h.reads.mockRejectedValueOnce(new Error("History unavailable"));
   fireEvent.click(undo);
   const retry = await screen.findByRole("button", { name: "重试刷新会话" });
   expect(screen.getByRole("alert").textContent).toBe("History unavailable");
-  expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull();
   fireEvent.click(retry);
   await screen.findByRole("button", { name: "回到这里" });
   expect(screen.queryByRole("button", { name: "重试刷新会话" })).toBeNull();
@@ -202,7 +209,7 @@ it("retries history after a successful undo without applying the transaction twi
 
 it.each(["commit", "undo"])("reloads the actual Pane after %s completes behind a new-run event", async (operation) => {
   const h = await open();
-  if (operation === "undo") { await restore(); await screen.findByRole("button", { name: "撤销这次还原" }); }
+  if (operation === "undo") { await restore(); await screen.findByRole("button", { name: "撤销这次回退" }); }
   let release!: () => void;
   const response = new Promise<void>((resolve) => { release = resolve; });
   const commit = vi.mocked(h.port.commitRewind);
@@ -210,14 +217,14 @@ it.each(["commit", "undo"])("reloads the actual Pane after %s completes behind a
   if (operation === "commit") commit.mockImplementation(async (plan) => { const result = await mutation(plan); await response; return result as RewindResult; });
   else h.undo.mockImplementation(async (tx) => { await mutation(tx); await response; });
   if (operation === "commit") await restore();
-  else fireEvent.click(screen.getByRole("button", { name: "撤销这次还原" }));
+  else fireEvent.click(screen.getByRole("button", { name: "撤销这次回退" }));
   await act(async () => h.start());
   const before = h.reads.mock.calls.length;
   await act(async () => release());
   await waitFor(() => expect(h.reads.mock.calls.length).toBeGreaterThan(before));
   const userCards = h.view.container.querySelectorAll('[data-k="me"] .txt');
   expect([...userCards].map((card) => card.textContent)).toEqual(operation === "undo" ? ["Restore this turn"] : []);
-  expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull();
   expect((screen.getByRole("combobox", { name: "任务输入" }) as HTMLTextAreaElement).value).toBe(operation === "undo" ? "Restore this turn" : "");
 });
 
@@ -226,10 +233,10 @@ it("does not replay a pending rewind history read into a switched conversation",
   let resolve!: (history: HistoryMessage[]) => void;
   h.reads.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
   await restore();
-  await screen.findByRole("button", { name: "撤销这次还原" });
+  await screen.findByRole("button", { name: "撤销这次回退" });
   h.setSession("session-b");
   h.view.rerender(<Pane {...props} port={h.port} pulse={1} />);
-  await waitFor(() => expect(screen.queryByRole("button", { name: "撤销这次还原" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("button", { name: "撤销这次回退" })).toBeNull());
   await act(async () => resolve([{ role: "user", content: "Stale prior-session text", msgIndex: 0 }]));
   expect(screen.queryByText("Stale prior-session text")).toBeNull();
 });
@@ -247,7 +254,7 @@ it.each([
   expect(screen.getAllByText("3 个文件")).toHaveLength(2);
   fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(conversation ? "只回退对话" : "只还原代码") }));
   await screen.findByText(`已还原 ${count} 个文件`);
-  const undo = screen.getByRole<HTMLButtonElement>("button", { name: "撤销这次还原" });
+  const undo = screen.getByRole<HTMLButtonElement>("button", { name: "撤销这次回退" });
   await waitFor(() => expect(undo.disabled).toBe(false));
   fireEvent.click(undo);
   await waitFor(() => expect(h.undo).toHaveBeenCalledExactlyOnceWith("tx-1"));
