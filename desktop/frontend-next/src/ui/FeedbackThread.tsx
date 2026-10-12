@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { current, t } from "../i18n";
 import { FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, FEEDBACK_REPLYABLE, isUnderReview, type FeedbackItem, type FeedbackReply } from "../port/feedback";
 import type { AgentPort } from "../port/port";
@@ -34,8 +34,9 @@ interface ThreadProps {
 // formatted or interpreted, whoever wrote them.
 export function FeedbackThread({ item, fresh, onView }: ThreadProps) {
   const [all, setAll] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(item.needsInput);
   const id = useId();
+  useEffect(() => { if (item.needsInput) onView?.(item.receipt, false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const replies = item.replies;
   const hidden = all ? 0 : Math.max(0, replies.length - SHOWN);
   const shown = replies.slice(hidden);

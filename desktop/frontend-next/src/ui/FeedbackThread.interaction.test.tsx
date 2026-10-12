@@ -307,7 +307,6 @@ describe("review fixes", () => {
     port.feedbackSeen = vi.fn(async () => { throw new Error("disk"); });
     const onUnread = vi.fn();
     render(<FeedbackMine port={port} onFile={() => {}} onUnread={onUnread} />);
-    await userEvent.click(await screen.findByRole("button", { name: /展开对话/ }));
     await waitFor(() => expect(port.feedbackSeen).toHaveBeenCalledWith("FB-AAAA-0001", 1));
     await waitFor(() => expect(onUnread).toHaveBeenCalledWith(1));
     expect(onUnread).not.toHaveBeenCalledWith(2);

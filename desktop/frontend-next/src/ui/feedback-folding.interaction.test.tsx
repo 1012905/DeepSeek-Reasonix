@@ -30,6 +30,15 @@ function setup(read: () => Mine) {
 }
 
 describe("folded feedback conversations", () => {
+  it("opens a conversation that is waiting on the reporter, so the question is on screen", async () => {
+    const { seen } = setup(() => mine([{ ...item("FB-AAAA-0001", 1), status: "needs_info", needsInput: true }, item("FB-AAAA-0002", 0)]));
+    await screen.findByText("FB-AAAA-0002");
+    expect(toggle("FB-AAAA-0001").getAttribute("aria-expanded")).toBe("true");
+    expect(within(row("FB-AAAA-0001").querySelector<HTMLElement>(".fbk-thread")!).getByRole("list")).toBeTruthy();
+    expect(toggle("FB-AAAA-0002").getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() => expect(seen).toHaveBeenCalledWith("FB-AAAA-0001", 2));
+  });
+
   it("starts folded, exposes reply counts and leaves hidden replies unread until opened", async () => {
     const { seen, onUnread } = setup(() => mine([item()]));
     await screen.findByText("FB-AAAA-0001");
