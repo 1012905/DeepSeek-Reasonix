@@ -8,8 +8,23 @@ import (
 	fileencoding "reasonix/internal/base/fileutil/encoding"
 )
 
+// memoryFault, when non-nil, may fail one durable step. It is the single test
+// seam for this package: production leaves it nil, and tests set it through
+// withFault, which restores the previous value.
+var memoryFault func(op, path string) error
+
+func fault(op, path string) error {
+	if memoryFault == nil {
+		return nil
+	}
+	return memoryFault(op, path)
+}
+
 // readIndexIn treats a missing index as empty, but does not hide other read errors.
 func readIndexIn(dir string) ([]byte, error) {
+	if err := fault("read-index", filepath.Join(dir, indexFile)); err != nil {
+		return nil, err
+	}
 	existing, err := fileencoding.ReadFileUTF8(filepath.Join(dir, indexFile))
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -36,16 +51,4 @@ func indexLinesExceptIn(dir, name string) (map[string]string, bool, error) {
 		}
 	}
 	return keep, contains, nil
-}
-
-func removeMemoryFromDir(path, name string) error {
-	dir := filepath.Dir(path)
-	lines, _, err := indexLinesExceptIn(dir, name)
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return flushIndexIn(dir, lines)
 }

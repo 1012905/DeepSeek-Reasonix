@@ -268,16 +268,8 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 			return SaveResult{}, err
 		}
 	}
-	if err := writeMemoryAtomic(path, []byte(render(m, m.Name)), 0o644); err != nil {
+	if err := s.publishRename(dir, path, existingPath, existing, m, exists); err != nil {
 		return SaveResult{}, err
-	}
-	if exists && cleanMemoryPath(existingPath) != cleanMemoryPath(path) {
-		if err := removeMemoryFromDir(existingPath, existing.Name); err != nil {
-			return SaveResult{}, err
-		}
-	}
-	if err := reindexIn(dir, m.Name, m); err != nil {
-		return SaveResult{Path: path, Memory: m}, err
 	}
 	// Legacy unqualified name updates keep the previous single-active-copy
 	// behavior. Stable IDs and scope-qualified references select one identity
@@ -294,13 +286,89 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 			}
 		}
 	}
-
 	result := SaveResult{Path: path, Memory: m}
 	if exists {
 		previous := existing
 		result.Previous = &previous
 	}
 	return result, nil
+}
+
+// publishRename retires the old name before publishing the new one, so no
+// failure can leave one id with two active names; steps before publication are
+// undone from the retired copy.
+func (s Store) publishRename(dir, path, existingPath string, existing, m Memory, exists bool) error {
+	if !exists || cleanMemoryPath(existingPath) == cleanMemoryPath(path) {
+		if err := writeMemoryAtomic(path, []byte(render(m, m.Name)), 0o644); err != nil {
+			return err
+		}
+		return reindexIn(dir, m.Name, m)
+	}
+	srcDir := filepath.Dir(existingPath)
+	srcRoot, err := os.OpenRoot(srcDir)
+	if err != nil {
+		return err
+	}
+	defer srcRoot.Close()
+	dstRoot, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer dstRoot.Close()
+	stamp := time.Now().UnixNano()
+	stash := fmt.Sprintf(".retired-%s-%d", existing.Name, stamp)
+	staged := fmt.Sprintf(".staged-%s-%d", m.Name, stamp)
+	if err := writeMemoryAtomic(filepath.Join(dir, staged), []byte(render(m, m.Name)), 0o644); err != nil {
+		return err
+	}
+	existingRel, pathRel := filepath.Base(existingPath), filepath.Base(path)
+	undo := func(cause error) error {
+		if err := renameMemoryFile(srcRoot, stash, existingRel); err != nil {
+			return fmt.Errorf("%w (and the retired %q could not be put back: %w)", cause, existing.Name, err)
+		}
+		if err := reindexIn(srcDir, existing.Name, existing); err != nil {
+			return fmt.Errorf("%w (and %q could not be restored in the index: %w)", cause, existing.Name, err)
+		}
+		_ = dstRoot.Remove(staged)
+		return cause
+	}
+	if err := renameMemoryFile(srcRoot, existingRel, stash); err != nil {
+		_ = dstRoot.Remove(staged)
+		return err
+	}
+	lines, _, err := indexLinesExceptIn(srcDir, existing.Name)
+	if err != nil {
+		return undo(err)
+	}
+	if err := flushIndexIn(srcDir, lines); err != nil {
+		return undo(err)
+	}
+	if err := renameMemoryFile(dstRoot, staged, pathRel); err != nil {
+		return undo(err)
+	}
+	if err := reindexIn(dir, m.Name, m); err != nil {
+		rmErr := fault("remove", pathRel)
+		if rmErr == nil {
+			rmErr = dstRoot.Remove(pathRel)
+		}
+		if rmErr != nil {
+			// The new file cannot be withdrawn either, so finish forwards:
+			// leaving one id with two live identities is a state the caller
+			// cannot act on.
+			if again := reindexIn(dir, m.Name, m); again != nil {
+				return fmt.Errorf("%w (and %q could not be withdrawn: %w; retrying the index also failed: %w)", err, m.Name, rmErr, again)
+			}
+			return nil
+		}
+		return undo(err)
+	}
+	// Past this point the save is committed: the retired copy is a hidden,
+	// non-.md name, so failing to remove it must not turn a committed save into
+	// an error the caller would retry.
+	if err := fault("remove", stash); err == nil {
+		_ = srcRoot.Remove(stash)
+	}
+	return nil
 }
 
 func (s Store) Read(ref string) (Memory, bool) {
@@ -632,4 +700,37 @@ func cleanMemoryPath(path string) string {
 		return filepath.Clean(path)
 	}
 	return filepath.Clean(abs)
+}
+
+func renameMemoryFile(root *os.Root, path, dest string) error {
+	if err := fault("rename", path); err != nil {
+		return err
+	}
+	err := root.Rename(path, dest)
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	if !os.IsPermission(err) {
+		return err
+	}
+	repairOwnerWrite(root, path, false)
+	repairOwnerWrite(root, filepath.Dir(path), true)
+	repairOwnerWrite(root, filepath.Dir(dest), true)
+	err = root.Rename(path, dest)
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+func repairOwnerWrite(root *os.Root, path string, dir bool) {
+	info, err := root.Stat(path)
+	if err != nil {
+		return
+	}
+	need := os.FileMode(0o600)
+	if dir {
+		need = 0o700
+	}
+	_ = root.Chmod(path, info.Mode().Perm()|need)
 }

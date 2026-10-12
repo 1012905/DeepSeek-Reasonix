@@ -1,5 +1,5 @@
 import { PLAN_ACTIONS, type PlanAction } from "./session";
-import type { AccountState, AgentPort, Appearance, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
+import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
 import { HttpError, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles } from "./port";
 import { SseWorkspace } from "./sse_workspace";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -248,6 +248,12 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return (await res.json()) as VersionNotes;
   }
 
+  async studioLogs(): Promise<StudioLogs> {
+    const res = await fetch("/studio/logs", { credentials: "same-origin" });
+    if (!res.ok) await SsePort.fail("/studio/logs", res);
+    return (await res.json()) as StudioLogs;
+  }
+
   async pinVersion(version: string): Promise<void> {
     const res = await fetch("/studio/pin", {
       method: "POST",
@@ -491,6 +497,10 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.post0<RewindResult>("/rewind/commit", { planId });
   }
 
+  async branchAt(turn: number, name: string) {
+    return (await this.post0<{ path: string }>("/branch/at", { turn, name })).path;
+  }
+
   undoRewind(transactionId: string) {
     return this.post("/rewind/undo", { transactionId });
   }
@@ -678,6 +688,9 @@ export class SsePort extends SseWorkspace implements AgentPort {
   browserOpen(url: string, newTab: boolean) {
     return this.post0<BrowserTab>("/browser/open", { url, newTab });
   }
+  browserClose(tab: string) {
+    return this.post0<void>("/browser/close", { tab });
+  }
   async readQueued(itemId: string) {
     const r = await this.get<{ envelope?: { displayText?: string } }>("/inbox/items/" + encodeURIComponent(itemId));
     // Every stored entry has a body — the kernel refuses an empty one at
@@ -731,21 +744,6 @@ export class SsePort extends SseWorkspace implements AgentPort {
       answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected })),
     });
   }
-  async uploadWallpaper(blob: Blob) {
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    const res = await fetch(this.base + "/appearance/wallpaper", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ mime: blob.type, data: btoa(bin) }),
-    });
-    const body = (await res.json().catch(() => ({}))) as Appearance & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/appearance/wallpaper: ${res.status}`);
-    return body;
-  }
-
   async invokeExtensionAction(name: string) {
     const out = await this.post0<{ message?: string }>("/extensions/action", { name });
     return out.message ?? "";

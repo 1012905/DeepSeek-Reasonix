@@ -70,6 +70,7 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_subagent_depth = 2              # nested delegation depth; set 1 for the old single-layer boundary
 # max_subagent_concurrency = 6        # session-wide sub-agent concurrency (task/fleet/skills)
 # max_parallel_writers = 3            # concurrent writers with non-overlapping write_paths
+# write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace against other sessions; default strict
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
 # max_output_tokens = 32768        # ordinary coding / cost control
@@ -952,7 +953,7 @@ Picker and approval shortcuts:
 
 | Context | Keys | What they do |
 | --- | --- | --- |
-| Slash or `@` completion | `Up` / `Down`, `Ctrl+P` / `Ctrl+N`, `Tab` / `Enter`, `Esc` | Move, accept, or close the completion menu. |
+| Slash or `@` completion | `Up` / `Down`, `Ctrl+P` / `Ctrl+N`, `Tab` / `Enter`, `Esc` | Move, accept, or close the completion menu. While a turn is running, `Esc` also stops it, except in vi mode. |
 | Tool approval prompt | `y`/`1`, `a`/`2`, `p`/`3`, `n`/`4`, `Enter`, `Esc`, `Ctrl+C` | Allow once, allow for session, persist allow, deny, accept default allow once, deny, or cancel the turn. |
 | Ask question card | `Up`/`Down` or `j`/`k`, `Left`/`Right` or `h`/`l`, `Space`, `Enter`, `1`-`9`, `Esc`, `Ctrl+C` | Navigate answers/tabs, toggle multi-select answers, submit/activate, pick numbered options, dismiss, or cancel the turn. |
 | Rewind picker | `Up`/`Down` or `j`/`k`, `Enter`, `b`, `c`, `d`, `f`, `s`, `u`, `Esc` | Choose a turn, apply both/conversation/code/fork/summarize actions, or go back/close. |
@@ -1198,9 +1199,9 @@ headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 ```
 
 For a remote HTTP server without a static `Authorization` header, an
-authentication challenge is shown as **Sign in**. Run
-`reasonix mcp auth <name>` in the CLI, or click **Sign in** for that server in
-the Desktop MCP panel. Reasonix performs OAuth metadata discovery, dynamic
+authentication challenge (HTTP 401 with a `Bearer` challenge) is reported as
+needing sign-in. Run `reasonix mcp auth <name>` in the CLI; Studio has no
+sign-in control yet. Reasonix performs OAuth metadata discovery, dynamic
 client registration, PKCE S256 authorization, and refresh-token
 rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
@@ -1356,6 +1357,8 @@ Markdown files under `.reasonix/commands/` (project) or `~/.reasonix/commands/`
 (user) — `review.md` becomes `/review`, a subdirectory namespaces it
 (`git/commit.md` → `/git:commit`). The body is a prompt template; invoking the
 command sends it as a turn.
+
+In Studio, a finished reply has a "Branch into a new conversation" button. It copies the conversation up to that reply into a new session titled "<title> · branch" and leaves the original as it was. It needs a live turn boundary, so a session restored after a restart does not offer it.
 
 ### Subagent profiles
 

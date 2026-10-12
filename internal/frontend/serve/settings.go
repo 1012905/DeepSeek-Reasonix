@@ -33,7 +33,6 @@ func (s *Server) preset(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) registerModelRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /model", s.model)
-	mux.HandleFunc("POST /default-model", s.setDefaultModel)
 }
 
 func (s *Server) model(w http.ResponseWriter, r *http.Request) {
@@ -257,6 +256,7 @@ type modelEntry struct {
 	// DisplayName labels Provider on screen; Ref and Provider stay the identity.
 	DisplayName string `json:"displayName,omitempty"`
 	Model       string `json:"model"`
+	ModelAlias  string `json:"modelAlias,omitempty"`
 	Kind        string `json:"kind,omitempty"`
 	// What this model produces, projected from the protocol table so a chooser
 	// filters on a declaration rather than on a kind's spelling.

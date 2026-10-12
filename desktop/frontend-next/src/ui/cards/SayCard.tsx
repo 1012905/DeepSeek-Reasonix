@@ -62,6 +62,8 @@ export interface ReplyActions {
   canRegenerate: (id: string) => boolean;
   hasLaterTurns: (id: string) => boolean;
   onRegenerate: (id: string) => void;
+  canBranch: (id: string) => boolean;
+  onBranch: (id: string) => void;
   model?: string;
   onConfigureModel?: () => void;
   onRunDetail?: () => void;
@@ -88,7 +90,7 @@ function download(text: string) {
   URL.revokeObjectURL(url);
 }
 
-export function SayCard({ item, afterAnswer, reply }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; reply?: ReplyActions }) {
+export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; reply?: ReplyActions; quiet?: boolean }) {
   const start = useStartsOpen("thinking", !item.done && !item.text);
   const [touched, setOpen] = useState<boolean | null>(null);
   const open = touched ?? start;
@@ -101,7 +103,7 @@ export function SayCard({ item, afterAnswer, reply }: { item: Extract<Item, { t:
   // does rather than tracking the wire's bursts.
   const thought = useRevealed(item.reasoning ?? "", !item.done && open);
   return (
-    <div className="call" data-k="say">
+    <div className="call" data-k="say" data-quiet={quiet ? "" : undefined}>
       <div className="g">
         <Sym glyph="◦" />
         <span className="line" />
@@ -141,6 +143,11 @@ export function SayCard({ item, afterAnswer, reply }: { item: Extract<Item, { t:
               {reply && (
                 <button type="button" data-action="reply.quote" title={t("引用到输入框")} aria-label={t("引用到输入框")} onClick={(e) => reply.onQuote(selectedIn(e.currentTarget.closest(".call")) || item.text, item.id)}>
                   <StudioIcon name="quote" />
+                </button>
+              )}
+              {reply?.canBranch(item.id) && (
+                <button type="button" data-action="reply.branch" title={t("分支为新会话")} aria-label={t("分支为新会话")} onClick={() => reply.onBranch(item.id)}>
+                  <StudioIcon name="branch" />
                 </button>
               )}
               {reply?.canRegenerate(item.id) && (

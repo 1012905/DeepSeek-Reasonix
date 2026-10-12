@@ -3,8 +3,25 @@ import { boot as bootLang } from "../src/i18n";
 import { track as trackWidth } from "../src/ui/viewport";
 import "../src/styles/tokens.css";
 import "../src/styles/app.css";
+import "../src/styles/dock.css";
 import "../src/styles/studio.css";
+import "../src/styles/changedpill.css";
+import "../src/styles/chart.css";
+import "../src/styles/community.css";
+import "../src/styles/providerpresets.css";
+import "../src/styles/sessionnotes.css";
+import "../src/styles/sessionquick.css";
+import "../src/styles/sidebardrop.css";
+import "../src/styles/sponsor.css";
+import "../src/styles/versions.css";
+import "../src/styles/phonecomposer.css";
+import "../src/styles/tips.css";
+import "../src/styles/waitnote.css";
+import "../src/styles/narrow.css";
+import "../src/styles/workfold.css";
+import "../src/styles/workbench-launcher.css";
 import "../src/styles/feedback.css";
+import "../src/styles/themes.css";
 import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
@@ -76,6 +93,10 @@ class BenchPort extends MockPort {
 
   async providerSetup() {
     return ONBOARDING ? { required: true, provider: "", model: "" } : null;
+  }
+
+  async foldWorkSettings() {
+    return { ...(await super.foldWorkSettings()), fold: query.has("fold") };
   }
 
   async workspaceGit() {
@@ -209,6 +230,11 @@ const NO_PANES = PANES === 0;
 
 class BenchHub extends MockHub {
   readonly feeds = new Map<string, BenchPort>();
+  private readonly settingsPort = new BenchPort();
+
+  machinePort(): AgentPort {
+    return this.settingsPort;
+  }
 
   portFor(rt: RuntimeView): AgentPort {
     let port = this.feeds.get(rt.id);

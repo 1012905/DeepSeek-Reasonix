@@ -10,6 +10,7 @@ import { effortMenu, effortReading, effortsFor, forcesThinkingFor, routeEffortPi
 import { CompletionMenu, useCompletion } from "./Completion";
 import { ChipMirror, useSkillChips } from "./ChipMirror";
 import { useIme } from "./ime";
+import { usePlaceholderFit } from "./placeholderfit";
 import { useFitHeight } from "./fitHeight";
 import { countLines, pasteIsLong, planTone, planVerb } from "./intake";
 import { kindOf, nameOf, previewURL } from "./chipfile";
@@ -43,6 +44,7 @@ interface Props {
   onError: (e: unknown) => void;
   onSettings?: (section?: string) => void;
   changeCount?: number;
+  countElsewhere?: boolean;
   // The work tree's Git state as git itself reports it, refreshed on the same
   // path as changeCount (turn boundaries, writes). null is "not answered yet";
   // repo:false is a workspace with no repository, and the two render apart.
@@ -100,7 +102,7 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
+export function Composer({ port, status, running, quote, restore, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const [submitting, setSubmitting] = useState(false);
@@ -198,6 +200,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     pending.current = null;
   }, []);
   useFitHeight(box, text, placeCaret);
+  const placeholder = usePlaceholderFit(box, [t("描述任务、问题或要改的内容…"), t("描述任务…"), "…"]);
 
   // Attachments ride into the turn as path references, exactly as they do from
   // the CLI — the host saved the bytes, the turn parser resolves the token. A
@@ -352,7 +355,8 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
   // composer answering for an endpoint that never spoke.
   const declared = efforts.length > 0;
   const forcedThinking = forcesThinkingFor(models, status?.modelRef);
-  const modelLb = status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—";
+  const modelLb = models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
+    || (status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—");
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole
   // shelf says nothing can change while only one control waits on the kernel.
@@ -493,7 +497,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
           rows={1}
           value={text}
           data-chips={chips.list.length > 0 ? "" : undefined}
-          placeholder={t("描述任务、问题或要改的内容…")}
+          placeholder={placeholder}
           role="combobox"
           aria-label={t("任务输入")}
           aria-describedby={guide}
@@ -646,7 +650,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
             label={<><StudioIcon name="agent" /><span className="studio-sr-label">{t("计划")}</span><span>{status?.plan ? "Plan" : "Agent"}</span><StudioIcon name="down" /></>}
           />
         </div>
-        <BranchChip port={port} git={git} changeCount={changeCount} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />
+        <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />
         {/* The toggle keeps its legacy meaning: it follows `plan`, which the
             kernel turns off the moment a plan is approved. The lifecycle is a
             separate reading — an approved plan is still running, and saying so
@@ -665,7 +669,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
             place="bottom"
             title={status?.modelRef ?? modelLb}
             current={status?.modelRef}
-            items={modelMenu(models, providerOrder)}
+            items={modelMenu(models, providerOrder, status?.modelRef)}
             menuClassName="studio-model-menu"
             searchAlways
             searchPlaceholder={t("搜索模型或服务商…")}
