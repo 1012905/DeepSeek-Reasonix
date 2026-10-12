@@ -9,7 +9,8 @@ import type {
   WorkspaceChange,
   WorkspaceFile,
 } from "../port/port";
-import { openPage } from "./browser_open";
+import { openPage, observePageTabs } from "./browser_open";
+import { useBrowserSelection } from "./useBrowserSelection";
 import { useColumnOpening } from "./useColumnOpening";
 import { WorkbenchLauncher } from "./WorkbenchLauncher";
 import { AgentBrowserPanel, ManualBrowserPanel, UNREAD_TABS } from "./BrowserPanel";
@@ -142,21 +143,24 @@ export function WorkbenchPanel({
   const [files, setFiles] = useState<string[]>([]),
     [directories, setDirectories] = useState<string[]>([]),
     [openFiles, setOpenFiles] = useState<string[]>([]);
-  // Docked, the body is too narrow for two columns, so the explorer is hidden
-  // — and the workbench is always docked now, which left the files with no way
-  // in at all. The toggle is that way in, at any width.
   const [showFiles, setShowFiles] = useState(false);
+  const [launcher, setLauncher] = useState(false);
+  const newTab = useRef<HTMLButtonElement>(null);
+  const toggleLauncher = () => { supersede(); setLauncher((open) => !open); };
+  const chooseFiles = () => { supersede(); setLauncher(false); setShowFiles(true); };
   const commit = useCommitCard(port, () => onTreeChanged?.());
-  useOnBump(revealChanges, () => setShowFiles(true));
+  useOnBump(revealChanges, chooseFiles);
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
   // Docked, the file list hides the canvas a page is drawn in, so choosing any
   // surface steps the list aside.
-  const pick = useCallback((key: string) => {
+  const select = useCallback((key: string) => {
     setShowFiles(false);
+    setLauncher(false);
     setFailed("");
     setSelected(key);
   }, []);
+  const { pick, follow, supersede, current } = useBrowserSelection(port, select, allTabs);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set()),
     [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   // The explorer's own failure, drawn in the explorer: the file view's error
@@ -254,11 +258,7 @@ export function WorkbenchPanel({
       live = false;
     };
   }, [port, shown, changeKey, query, hidden, glance, running, wrote]);
-  // The button in the chrome says "show me the browser", not "show me this one
-  // browser". When the agent has a page, that page is the browser; the start
-  // page is only for an empty column, and steps aside unused once the agent
-  // opens something. Closing the panel is not closing the pages: they come
-  // back with it, and only a tab's own × takes one away.
+  // Closing the column preserves its tabs; only each tab’s close button removes it.
   const agentPage = tabs.find((tab) => tab.active) ?? tabs[0];
   const agentTarget = agentPage?.target ?? "";
   const agentAt = agentPage ? `${agentPage.target} ${agentPage.url}` : "";
@@ -267,7 +267,7 @@ export function WorkbenchPanel({
   const dropBlankStart = useCallback(() => setBrowsers((open) => open.filter((id) => !!visited.current[id])), []);
   const agentNow = useRef(agentTarget);
   agentNow.current = agentTarget;
-  useColumnOpening({ manual, browserAsk, port, agentNow, dropBlankStart, pick, setFailed, setBrowsers, setSelected });
+  useColumnOpening({ manual, browserAsk, port, agentNow, dropBlankStart, pick, follow, current, setFailed, setBrowsers, manualSelection: selected.startsWith("manual:") ? selected : `manual:${browsers[0] ?? "b0"}` });
   // A page that has just appeared is the one somebody wants to see, whoever
   // opened it: the agent's popup, or a link the person followed, which opens
   // beside the agent's tab without becoming the one it acts on.
@@ -283,9 +283,9 @@ export function WorkbenchPanel({
     for (const id of ids) known.current.add(id);
     if (fresh.length) {
       dropBlankStart();
-      pick(`browser:${fresh[fresh.length - 1]}`);
+      fresh.forEach((id) => follow(`browser:${id}`));
     }
-  }, [tabs, dropBlankStart, pick]);
+  }, [tabs, dropBlankStart, follow, port]);
   // Where the agent is looking, followed as it moves: a new page, or the same
   // tab sent somewhere else.
   const lastAgent = useRef<string | null>(null);
@@ -294,8 +294,11 @@ export function WorkbenchPanel({
     lastAgent.current = agentAt;
     if (!before || !agentAt || before === agentAt) return;
     dropBlankStart();
-    pick(`browser:${agentTarget}`);
-  }, [agentAt, agentTarget, dropBlankStart, pick]);
+    follow(`browser:${agentTarget}`);
+  }, [agentAt, agentTarget, dropBlankStart, follow]);
+  // Preview claims hide fresh tabs until settlement; both followers must capture
+  // the revealed notification before its openings retire.
+  useEffect(() => { if (allTabs !== UNREAD_TABS) observePageTabs(port, allTabs, !preview.pending); }, [port, allTabs, preview.pending]);
   const noteHost = useCallback(
     (id: string, host: string) =>
       setHosts((v) => (v[id] === host ? v : { ...v, [id]: host })),
@@ -329,12 +332,12 @@ export function WorkbenchPanel({
   const { open: openPreview, sync: syncPreview } = preview;
   const revision = file?.path === filePath ? file.revision : undefined;
   useEffect(() => {
-    if (mode !== "preview" || !previewable || !shown || previewTab || (!revision && !failed)) return;
+    if (mode !== "preview" || !previewable || !shown || showFiles || launcher || previewTab || (!revision && !failed)) return;
     openPreview(filePath, revision).catch((e) => {
       setFailed(reason(e));
       setMode("file");
     });
-  }, [mode, previewable, shown, previewTab, revision, failed, filePath, openPreview, tabs]);
+  }, [mode, previewable, shown, showFiles, launcher, previewTab, revision, failed, filePath, openPreview, tabs]);
   useEffect(() => {
     if (mode === "preview" && revision) syncPreview(filePath, revision);
   }, [mode, filePath, revision, syncPreview]);
@@ -443,25 +446,29 @@ export function WorkbenchPanel({
       setListFailed(reason(e));
     }
   };
-  // One browser: a tab opened here is a tab the agent can read and drive, and
-  // it is drawn as a view rather than framed — which is the only way a site
-  // that refuses to be framed opens at all. A shell with no views has no such
-  // page to give, so there the iframe surface is still what there is.
+  // Native views support sites that refuse framing; web hosts retain the iframe fallback.
+  const openingBrowser = useRef<Promise<BrowserTab> | null>(null);
   const addBrowser = async () => {
+    supersede();
+    const valid = current();
     if (!host().drawsBrowserViews()) {
       const id = `b${(minted.current += 1)}`;
       setBrowsers((v) => [...v, id]);
       pick(`manual:${id}`);
       return;
     }
+    const page = openingBrowser.current ??= openPage(port, "about:blank");
     try {
-      const tab = await openPage(port, "about:blank");
-      pick(`browser:${tab.target}`);
+      const tab = await page;
+      if (valid()) pick(`browser:${tab.target}`);
     } catch (e) {
-      setFailed(reason(e));
+      if (valid()) setFailed(reason(e));
+    } finally {
+      if (openingBrowser.current === page) openingBrowser.current = null;
     }
   };
-  const { close, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
+  const { close: closeTabs, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles: showFiles || launcher, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
+  const close = (targets: Surface[]) => { supersede(); return closeTabs(targets); };
   const dismissTabMenu = useCallback(() => setTabMenu(null), []);
   const [tabMenu, setTabMenu] = useState<{ surface: Surface; x: number; y: number; anchor: HTMLElement } | null>(null);
   const save = async () => {
@@ -478,7 +485,9 @@ export function WorkbenchPanel({
     }
   };
   return (
-    <section className="workbench" aria-label={t("工作台")}>
+    <section className="workbench" aria-label={t("工作台")} data-action-keydown="layer.dismiss" onKeyDown={(e) => {
+      if (launcher && e.key === "Escape") { e.stopPropagation(); toggleLauncher(); newTab.current?.focus(); }
+    }}>
       <header className="workbench-tabs">
         <div
           className="workbench-tablist"
@@ -493,7 +502,7 @@ export function WorkbenchPanel({
             className="workbench-tab"
             key={keyOf(surface)}
             role="tab"
-            aria-selected={surface === active}
+            aria-selected={!launcher && surface === active}
             data-live={surface.kind === "browser" && surface.tab.active ? "" : undefined}
             data-action-contextmenu="workbench.browser-menu" data-target={keyOf(surface)}
             onContextMenu={(e) => {
@@ -536,41 +545,43 @@ export function WorkbenchPanel({
         <button
           className="workbench-files"
           data-action="workbench.files"
-          aria-pressed={showFiles}
+          aria-pressed={showFiles && !launcher}
           aria-label={t("文件")}
           title={t("文件")}
-          onClick={() => setShowFiles((on) => !on)}
+          onClick={() => { supersede(); setLauncher(false); setShowFiles((on) => launcher || !on); }}
         >
           <StudioIcon name="folder" />
         </button>
         <button
           className="workbench-new"
-          data-action="workbench.new-browser"
-          aria-label={t("新建浏览器标签")}
-          title={t("新建浏览器标签")}
-          onClick={() => void addBrowser()}
+          data-action="workbench.new"
+          ref={newTab}
+          aria-label={t("新建标签")}
+          title={t("新建标签")}
+          aria-expanded={launcher}
+          onClick={toggleLauncher}
         >
           <StudioIcon name="plus" />
         </button>
       </header>
       {closeFailure && <div className="workbench-error workbench-close-error" role="alert">{closeFailure}</div>}
-      <div className="workbench-body" data-files={showFiles ? "" : undefined}>
+      <div className="workbench-body" data-files={showFiles && !launcher ? "" : undefined}>
         <main className="workbench-canvas">
-          {failed && active?.kind !== "file" && (
+          {failed && (launcher || active?.kind !== "file") && (
             <div className="workbench-error" role="alert">
               {failed}
             </div>
           )}
-          {!active && (
+          {(launcher || !active) && (
             <WorkbenchLauncher
+              key={String(launcher)} focus={launcher}
               changes={changes.length}
-              onFiles={() => setShowFiles(true)}
+              onFiles={chooseFiles}
               onChanges={() => changes[0] && openFile(changes[0].path)}
               onBrowser={() => void addBrowser()}
             />
           )}
-          {/* Every open browser stays mounted: a tab switch must not throw away
-              where that page had got to. */}
+          <div className="workbench-content" hidden={launcher || !active}>
           {browsers.map((id) => (
             <ManualBrowserPanel
               key={id}
@@ -584,7 +595,7 @@ export function WorkbenchPanel({
           {active?.kind === "browser" && (
             <AgentBrowserPanel
               tabs={[active.tab]}
-              shown={shown}
+              shown={shown && !launcher}
               showTabs={false}
             />
           )}
@@ -606,7 +617,7 @@ export function WorkbenchPanel({
               )}
               {mode === "preview" ? (
                 previewTab ? (
-                  <AgentBrowserPanel tabs={[previewTab]} shown={shown} showTabs={false} />
+                  <AgentBrowserPanel tabs={[previewTab]} shown={shown && !launcher} showTabs={false} />
                 ) : (
                   <div className="workbench-empty">{t("正在读取…")}</div>
                 )
@@ -634,6 +645,7 @@ export function WorkbenchPanel({
               ) : null}
             </>
           )}
+          </div>
         </main>
         <aside className="workbench-explorer">
           <WorkbenchExplorerHead

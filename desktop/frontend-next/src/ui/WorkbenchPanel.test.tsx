@@ -113,13 +113,14 @@ describe("WorkbenchPanel", () => {
         expect(alert.textContent).not.toContain("{");
       });
 
-      it(`says why when + is refused with ${code}`, async () => {
+      it(`says why when the browser chosen after + is refused with ${code}`, async () => {
         drawsViews();
         const user = userEvent.setup();
         const port = new MockPort();
         refusedLikeTheKernel(port, code, detail);
         render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
-        await user.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+        await user.click(screen.getByRole("button", { name: "新建标签" }));
+        await user.click(screen.getByRole("button", { name: "浏览器" }));
         const alert = await screen.findByRole("alert");
         expect(alert.textContent).toBe(words);
         expect(alert.textContent).not.toContain("{");
@@ -132,7 +133,8 @@ describe("WorkbenchPanel", () => {
       const port = new MockPort();
       vi.spyOn(port, "browserOpen").mockRejectedValue(new Error("profile is in use"));
       render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
-      await user.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
       await screen.findByRole("alert");
       await user.click(await screen.findByRole("button", { name: "README.md" }));
       await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
@@ -145,9 +147,10 @@ describe("WorkbenchPanel", () => {
       const open = vi.spyOn(port, "browserOpen");
       open.mockRejectedValueOnce(new Error("profile is in use"));
       render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
-      await user.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
       await screen.findByRole("alert");
-      await user.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
       await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
       expect(open).toHaveBeenCalledTimes(2);
     });
@@ -295,7 +298,7 @@ describe("WorkbenchPanel", () => {
     const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
     await user.click(screen.getAllByRole("button", { name: "文件" })[0]);
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+    await user.click(screen.getByRole("button", { name: "新建标签" }));
     await waitFor(() => expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false));
   });
 

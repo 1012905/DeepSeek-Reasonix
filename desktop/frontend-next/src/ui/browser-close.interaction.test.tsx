@@ -28,7 +28,8 @@ describe("closing browser pages", () => {
     const { port } = draw();
     vi.spyOn(port, "browserOpen").mockRejectedValue(new Error("launch blocked"));
     fireEvent.click(screen.getByRole("button", { name: "First" }));
-    fireEvent.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建标签" }));
+    fireEvent.click(screen.getByRole("button", { name: "浏览器" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "launch blocked");
     fireEvent.click(screen.getByRole("button", { name: "关闭 Second" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Second" })).toBeNull());
