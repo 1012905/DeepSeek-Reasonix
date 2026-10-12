@@ -7,6 +7,7 @@ import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/dock.css";
 import "./styles/studio.css";
+import "./styles/planpeek.css";
 import "./styles/phonecomposer.css";
 import "./styles/tips.css";
 import "./styles/waitnote.css";
