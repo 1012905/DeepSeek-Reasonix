@@ -38,7 +38,7 @@ func treeMatches(repo, rev string, files []string) error {
 	args := append([]string{"-C", repo, "diff", "--exit-code", rev, "--"}, files...)
 	out, err := exec.Command("git", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s does not match %s after restore: %v: %s", repo, rev, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%s does not match %s after restore: %w: %s", repo, rev, err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
