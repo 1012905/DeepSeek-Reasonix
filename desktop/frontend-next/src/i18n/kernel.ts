@@ -66,6 +66,7 @@ const SAID: Record<string, string> = {
   "provider.default_not_selected": "默认模型「{model}」不在已选择的模型中",
   "provider.display_name_too_long": "显示名称最多 {max} 个字符",
   "provider.display_name_invalid": "显示名称不能包含换行或其他控制字符",
+  "provider.model_alias_unlisted": "显示别名必须使用已选择模型的完整 ID",
 
   // ── 来源：这个协议做不到 ─────────────────────────────────────────
   "provider.no_thinking_param": "该协议不发送思考参数，启用后不会生效",
