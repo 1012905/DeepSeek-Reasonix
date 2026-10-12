@@ -223,6 +223,11 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
     setConfirm(path);
   };
 
+  const archive = (session: TreeSession) => {
+    setSessionMenu("");
+    void onArchive(session.path, !session.archived, session.runtimeId).catch(onError);
+  };
+
   const dropSession = async (session: TreeSession) => {
     if (confirm !== session.path) {
       setConfirm(session.path);
@@ -587,6 +592,22 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             {`+${kept.length}`}
                           </button>
                         )}
+                        <span className="sessquick">
+                          <button
+                            data-action="session.archive" data-target={session.path}
+                            data-value={session.archived ? "restore" : "archive"}
+                            title={t(session.archived ? "取消归档" : "归档会话")}
+                            aria-label={t(session.archived ? "取消归档：{title}" : "归档会话：{title}", { title: rowLabel(session) })}
+                            disabled={!!session.runtimeId && liveIds([session.runtimeId]).length > 0}
+                            onClick={(ev) => { ev.stopPropagation(); archive(session); }}
+                          ><StudioIcon name="archive" /></button>
+                          <button
+                            className="danger" data-action="session.delete" data-target={session.path}
+                            title={t("删除会话")}
+                            aria-label={t("删除会话：{title}", { title: rowLabel(session) })}
+                            onClick={(ev) => { ev.stopPropagation(); askDelete(session.path); }}
+                          ><StudioIcon name="trash" /></button>
+                        </span>
                         {sessionMenu === session.path && (
                           <SessionMenu
                             ref={sessionMenuPortal}
@@ -603,10 +624,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                               setSessionMenu("");
                               void onClose([id]).catch(onError);
                             }}
-                            onArchive={() => {
-                              setSessionMenu("");
-                              void onArchive(session.path, !session.archived, session.runtimeId).catch(onError);
-                            }}
+                            onArchive={() => archive(session)}
                             onCopyInfo={() => { void copyText(sessionInfoText(session, ws.root)).catch(onError); setSessionMenu(""); }}
                             onExport={() => void saveSession(session)}
                             onDelete={() => { setConfirm(session.path); setSessionMenu(""); }}
