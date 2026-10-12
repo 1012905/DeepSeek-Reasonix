@@ -348,36 +348,6 @@ func safeJoin(base, name string) (string, error) {
 	return pathAbs, nil
 }
 
-func renameMemoryFile(root *os.Root, path, dest string) error {
-	err := root.Rename(path, dest)
-	if err == nil || os.IsNotExist(err) {
-		return nil
-	}
-	if !os.IsPermission(err) {
-		return err
-	}
-	repairOwnerWrite(root, path, false)
-	repairOwnerWrite(root, filepath.Dir(path), true)
-	repairOwnerWrite(root, filepath.Dir(dest), true)
-	err = root.Rename(path, dest)
-	if err == nil || os.IsNotExist(err) {
-		return nil
-	}
-	return err
-}
-
-func repairOwnerWrite(root *os.Root, path string, dir bool) {
-	info, err := root.Stat(path)
-	if err != nil {
-		return
-	}
-	need := os.FileMode(0o600)
-	if dir {
-		need = 0o700
-	}
-	_ = root.Chmod(path, info.Mode().Perm()|need)
-}
-
 // indexLineRe matches a managed index line so reindex/Delete can target the line
 // for one memory by its filename without disturbing the rest of a hand-edited
 // MEMORY.md.
@@ -387,6 +357,9 @@ var indexLineRe = regexp.MustCompile(`(?m)^\s*-\s\[.+?\]\(([^)]+)\.md\)\s*—\s.
 // preserving hand-written content. Managed lines are updated or removed, and
 // new managed entries are appended in sorted order.
 func flushIndexIn(dir string, lines map[string]string) error {
+	if err := fault("publish-index", filepath.Join(dir, indexFile)); err != nil {
+		return err
+	}
 	path := filepath.Join(dir, indexFile)
 	existing, err := readIndexIn(dir)
 	if err != nil {
