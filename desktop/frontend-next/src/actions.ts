@@ -486,7 +486,7 @@ export const ACTIONS: UIAction[] = [
   { id: "settings.search", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.isolate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "reasoning.effort", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
-  { id: "workbench.new-browser", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.new", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.launch-files", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.launch-changes", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.launch-browser", kind: "view", target: "none", proof: "interaction" },

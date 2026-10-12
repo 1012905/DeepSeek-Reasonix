@@ -101,7 +101,7 @@ export const EN_WINDOW: Record<string, string> = {
   "失败步数": "Failed",
   "待确认": "Awaiting you",
   "内置 Browser": "Built-in Browser",
-  "新建浏览器标签": "New browser tab",
+  "新建标签": "New tab",
   "调整浏览器宽度": "Resize the browser",
   "模型正在操作这个页面": "The model is working on this page",
   "网页地址": "Web address",
