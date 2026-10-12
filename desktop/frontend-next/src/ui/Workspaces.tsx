@@ -19,6 +19,7 @@ import { asksDelete } from "./keys";
 import { clearDraftForSession } from "./drafts";
 import { WorkspaceOrder, workspaceMenuKeys } from "./WorkspaceOrder";
 import { WorkspaceReveal } from "./WorkspaceReveal";
+import { SessionMenu } from "./SessionMenu";
 import { Confirm, removeHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
@@ -607,68 +608,27 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             onClick={(ev) => { ev.stopPropagation(); askDelete(session.path); }}
                           ><StudioIcon name="trash" /></button>
                         </span>
-                        {sessionMenu === session.path && createPortal(
-                          <div ref={sessionMenuPortal} className="session-pop" role="menu" aria-label={t("会话操作")} style={{ maxHeight: "calc(100vh / var(--zoom, 1) - 24px)", overflowY: "auto" }} onClick={(ev) => ev.stopPropagation()}>
-                            <div className="session-pop-head">
-                              <b>{rowLabel(session)}</b>
-                              <small>{session.runtimeId && liveIds([session.runtimeId]).length ? t("执行中") : t("已完成")} · {t("本地工作区")}</small>
-                            </div>
-                            <div className="session-pop-group">
-                              <button role="menuitem" data-action="session.pin" data-target={session.path} onClick={() => { onPin(session.path); setSessionMenu(""); }}>
-                                <StudioIcon name="pin" /><span>{pinned.has(session.path) ? t("取消置顶") : t("置顶会话")}</span>
-                              </button>
-                              <button role="menuitem" data-action="session.rename" data-target={session.path} onClick={() => { setEditing(session.path); setSessionMenu(""); }}>
-                                <StudioIcon name="edit" /><span>{t("重命名")}</span>
-                              </button>
-                              {session.runtimeId && liveIds([session.runtimeId]).length > 0 && (
-                                <button role="menuitem" data-action="session.pause" data-target={session.path} onClick={() => { onPause(session.runtimeId!); setSessionMenu(""); }}>
-                                  <StudioIcon name="pause" /><span>{t("暂停执行")}</span>
-                                </button>
-                              )}
-                              {session.runtimeId && (
-                                <button
-                                  role="menuitem"
-                                  data-action="session.close"
-                                  data-target={session.path}
-                                  disabled={liveIds([session.runtimeId]).length > 0}
-                                  title={liveIds([session.runtimeId]).length > 0 ? t("正在运行，暂停后才能关闭") : undefined}
-                                  onClick={() => {
-                                    const id = session.runtimeId!;
-                                    setSessionMenu("");
-                                    void onClose([id]).catch(onError);
-                                  }}
-                                >
-                                  <StudioIcon name="close" /><span>{t("关闭会话")}</span>
-                                </button>
-                              )}
-                              <button
-                                role="menuitem"
-                                data-action="session.archive"
-                                data-target={session.path}
-                                data-value={session.archived ? "restore" : "archive"}
-                                disabled={!!session.runtimeId && liveIds([session.runtimeId]).length > 0}
-                                onClick={() => archive(session)}
-                              >
-                                <StudioIcon name="archive" /><span>{t(session.archived ? "取消归档" : "归档会话")}</span>
-                              </button>
-                            </div>
-                            <div className="session-pop-divider" />
-                            <div className="session-pop-group">
-                              <button role="menuitem" data-action="session.copy-info" data-target={session.path} onClick={() => { void copyText(sessionInfoText(session, ws.root)).catch(onError); setSessionMenu(""); }}>
-                                <StudioIcon name="copy" /><span>{t("复制会话信息")}</span>
-                              </button>
-                              <button role="menuitem" data-action="session.export" data-target={session.path} disabled={busy === "export:" + session.path} onClick={() => void saveSession(session)}>
-                                <StudioIcon name="download" /><span>{t("导出会话")}</span><small>JSON</small>
-                              </button>
-                            </div>
-                            <div className="session-pop-divider" />
-                            <div className="session-pop-group">
-                              <button className="danger" role="menuitem" data-action="session.delete" data-target={session.path} onClick={() => { setConfirm(session.path); setSessionMenu(""); }}>
-                                <StudioIcon name="trash" /><span>{t("删除会话")}</span>
-                              </button>
-                            </div>
-                          </div>,
-                          document.body,
+                        {sessionMenu === session.path && (
+                          <SessionMenu
+                            ref={sessionMenuPortal}
+                            session={session}
+                            label={rowLabel(session)}
+                            live={!!session.runtimeId && liveIds([session.runtimeId]).length > 0}
+                            pinned={pinned.has(session.path)}
+                            exporting={busy === "export:" + session.path}
+                            onPin={() => { onPin(session.path); setSessionMenu(""); }}
+                            onRename={() => { setEditing(session.path); setSessionMenu(""); }}
+                            onPause={() => { onPause(session.runtimeId!); setSessionMenu(""); }}
+                            onClose={() => {
+                              const id = session.runtimeId!;
+                              setSessionMenu("");
+                              void onClose([id]).catch(onError);
+                            }}
+                            onArchive={() => archive(session)}
+                            onCopyInfo={() => { void copyText(sessionInfoText(session, ws.root)).catch(onError); setSessionMenu(""); }}
+                            onExport={() => void saveSession(session)}
+                            onDelete={() => { setConfirm(session.path); setSessionMenu(""); }}
+                          />
                         )}
                       </div>
                       {open &&
