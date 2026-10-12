@@ -9,9 +9,12 @@ import type {
   WorkspaceChange,
   WorkspaceFile,
 } from "../port/port";
-import { openPage, pageForEmptyColumn } from "./browser_open";
+import { openPage } from "./browser_open";
+import { useColumnOpening } from "./useColumnOpening";
+import { WorkbenchLauncher } from "./WorkbenchLauncher";
 import { AgentBrowserPanel, ManualBrowserPanel, UNREAD_TABS } from "./BrowserPanel";
 import { DiffView } from "./cards/DiffView";
+import { useOnBump } from "./useOnBump";
 import { StudioIcon } from "./StudioIcon";
 import { LazyMarkdown } from "./LazyMarkdown";
 import type { LocalRefs } from "./Markdown";
@@ -19,6 +22,9 @@ import { docRef } from "./docrefs";
 import { useGlance } from "./glance";
 import { useMarkdownPoll } from "./useMarkdownPoll";
 import { pinToViewport } from "./place";
+import { keyOf, labelOf, type Surface } from "./workbench_tabs";
+import { useTabClose } from "./useTabClose";
+import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { useHtmlPreview } from "./useHtmlPreview";
@@ -28,27 +34,12 @@ import { useCommitCard } from "./CommitCard";
 // The editor and its grammars load with the first file opened, not with Studio.
 const CodeEditor = lazy(() => import("./CodeEditor"));
 
-type Surface =
-  | { kind: "manual"; id: string }
-  | { kind: "browser"; tab: BrowserTab }
-  | { kind: "file"; path: string };
 type TreeRow = {
   kind: "folder" | "file";
   path: string;
   name: string;
   depth: number;
 };
-
-function keyOf(s: Surface) {
-  return `${s.kind}:${s.kind === "manual" ? s.id : s.kind === "browser" ? s.tab.target : s.path}`;
-}
-function labelOf(s: Surface, hosts: Record<string, string>) {
-  return s.kind === "manual"
-    ? hosts[s.id] || t("浏览器")
-    : s.kind === "browser"
-      ? s.tab.title || s.tab.url || t("空白页")
-      : s.path.split("/").at(-1) || s.path;
-}
 
 /** Folders first at every level, with the tree still reading as a tree. Sorting
  *  flat paths as text interleaves `bin/` with `boot.test.exe`, because text is
@@ -110,6 +101,7 @@ export function WorkbenchPanel({
   port,
   tabs: allTabs,
   manual,
+  browserAsk = 0,
   shown,
   scheme,
   changes,
@@ -117,6 +109,7 @@ export function WorkbenchPanel({
   running = false,
   wrote = 0,
   remote = false,
+  revealChanges = 0,
   onCloseManual,
   onSurfaces,
   onExternal,
@@ -124,6 +117,8 @@ export function WorkbenchPanel({
   port: AgentPort;
   tabs: BrowserTab[];
   manual: boolean;
+  /** Counts the title-bar Browser presses; a change asks for a browser, not just the column. */
+  browserAsk?: number;
   shown: boolean;
   scheme: "light" | "dark";
   changes: WorkspaceChange[];
@@ -136,6 +131,7 @@ export function WorkbenchPanel({
   wrote?: number;
   /** The workspace is on another machine, so its paths mean nothing here. */
   remote?: boolean;
+  revealChanges?: number;
   onCloseManual: () => void;
   // How many surfaces the strip holds, for the pane's own tab to count.
   onSurfaces: (n: number) => void;
@@ -151,6 +147,7 @@ export function WorkbenchPanel({
   // in at all. The toggle is that way in, at any width.
   const [showFiles, setShowFiles] = useState(false);
   const commit = useCommitCard(port, () => onTreeChanged?.());
+  useOnBump(revealChanges, () => setShowFiles(true));
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
   // Docked, the file list hides the canvas a page is drawn in, so choosing any
@@ -270,24 +267,7 @@ export function WorkbenchPanel({
   const dropBlankStart = useCallback(() => setBrowsers((open) => open.filter((id) => !!visited.current[id])), []);
   const agentNow = useRef(agentTarget);
   agentNow.current = agentTarget;
-  useEffect(() => {
-    if (!manual) return;
-    if (agentNow.current) {
-      dropBlankStart();
-      pick(`browser:${agentNow.current}`);
-      return;
-    }
-    // A shell that draws views opens a view here too: a framed page is refused
-    // by any site sending X-Frame-Options or frame-ancestors, as many do.
-    if (host().drawsBrowserViews()) {
-      pageForEmptyColumn(port)
-        .then((tab) => pick(`browser:${tab.target}`))
-        .catch((e) => setFailed(reason(e)));
-      return;
-    }
-    setBrowsers((open) => (open.length ? open : ["b0"]));
-    setSelected((at) => (at.startsWith("manual:") ? at : "manual:b0"));
-  }, [manual, dropBlankStart, pick, port]);
+  useColumnOpening({ manual, browserAsk, port, agentNow, dropBlankStart, pick, setFailed, setBrowsers, setSelected });
   // A page that has just appeared is the one somebody wants to see, whoever
   // opened it: the agent's popup, or a link the person followed, which opens
   // beside the agent's tab without becoming the one it acts on.
@@ -481,21 +461,9 @@ export function WorkbenchPanel({
       setFailed(reason(e));
     }
   };
-  // The column folds only when its last tab goes, whatever kind that tab is: a
-  // page opened with + or a file still open is a reason to keep it, and so is
-  // an explorer someone has open.
-  const close = (surface: Surface) => {
-    const key = keyOf(surface);
-    if (surface.kind === "manual") setBrowsers((v) => v.filter((id) => id !== surface.id));
-    else if (surface.kind === "file")
-      setOpenFiles((v) => v.filter((p) => p !== surface.path));
-    else setDismissed((v) => new Set(v).add(key));
-    if (selected === key) {
-      setSelected("");
-      setFailed("");
-    }
-    if (!showFiles && surfaces.every((s) => keyOf(s) === key)) onCloseManual();
-  };
+  const { close, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
+  const dismissTabMenu = useCallback(() => setTabMenu(null), []);
+  const [tabMenu, setTabMenu] = useState<{ surface: Surface; x: number; y: number; anchor: HTMLElement } | null>(null);
   const save = async () => {
     if (!file || draft === file.content) return;
     setBusy(true);
@@ -527,6 +495,14 @@ export function WorkbenchPanel({
             role="tab"
             aria-selected={surface === active}
             data-live={surface.kind === "browser" && surface.tab.active ? "" : undefined}
+            data-action-contextmenu="workbench.browser-menu" data-target={keyOf(surface)}
+            onContextMenu={(e) => {
+              if (surface.kind === "file" || closing) return;
+              e.preventDefault();
+              const anchor = e.currentTarget.querySelector<HTMLElement>(".workbench-tab-pick")!;
+              const rect = anchor.getBoundingClientRect();
+              setTabMenu({ surface, x: e.clientX || rect.left, y: e.clientY || rect.bottom, anchor });
+            }}
           >
             <button
               className="workbench-tab-pick"
@@ -549,7 +525,8 @@ export function WorkbenchPanel({
               data-target={keyOf(surface)}
               aria-label={t("关闭 {name}", { name: labelOf(surface, hosts) })}
               title={t("关闭")}
-              onClick={() => close(surface)}
+              disabled={closing}
+              onClick={() => void close([surface])}
             >
               <StudioIcon name="close" />
             </button>
@@ -576,6 +553,7 @@ export function WorkbenchPanel({
           <StudioIcon name="plus" />
         </button>
       </header>
+      {closeFailure && <div className="workbench-error workbench-close-error" role="alert">{closeFailure}</div>}
       <div className="workbench-body" data-files={showFiles ? "" : undefined}>
         <main className="workbench-canvas">
           {failed && active?.kind !== "file" && (
@@ -584,10 +562,12 @@ export function WorkbenchPanel({
             </div>
           )}
           {!active && (
-            <div className="workbench-empty">
-              <StudioIcon name="file" />
-              <span>{t("从右侧选择文件，或打开浏览器")}</span>
-            </div>
+            <WorkbenchLauncher
+              changes={changes.length}
+              onFiles={() => setShowFiles(true)}
+              onChanges={() => changes[0] && openFile(changes[0].path)}
+              onBrowser={() => void addBrowser()}
+            />
           )}
           {/* Every open browser stays mounted: a tab switch must not throw away
               where that page had got to. */}
@@ -791,6 +771,11 @@ export function WorkbenchPanel({
           )}
         </aside>
       </div>
+      {tabMenu && <BrowserTabMenu menu={tabMenu} others={surfaces.some((s) => s.kind !== "file" && keyOf(s) !== keyOf(tabMenu.surface))} onDismiss={dismissTabMenu} onClose={(mode) => {
+        const target = tabMenu.surface;
+        setTabMenu(null);
+        void close(mode === "one" ? [target] : surfaces.filter((s) => s.kind !== "file" && (mode === "all" || keyOf(s) !== keyOf(target))));
+      }} />}
     </section>
   );
 }

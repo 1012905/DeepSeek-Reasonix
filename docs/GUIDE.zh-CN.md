@@ -79,6 +79,7 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_subagent_depth = 2              # 子代理嵌套委派深度；设为 1 可恢复旧的单层边界
 # max_subagent_concurrency = 6        # 会话级子代理总并发（task/fleet/skills）
 # max_parallel_writers = 3            # 互不重叠 write_paths 时的并行写入上限
+# write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
 # max_output_tokens = 0            # 推荐：自动（DeepSeek 默认 high → 约 64K；不是无限）
 # max_output_tokens = 32768        # 普通编码 / 控制费用
@@ -755,7 +756,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 
 | 上下文 | 按键 | 作用 |
 | --- | --- | --- |
-| 斜杠或 `@` 补全 | `Up` / `Down`、`Ctrl+P` / `Ctrl+N`、`Tab` / `Enter`、`Esc` | 移动、接受或关闭补全菜单。 |
+| 斜杠或 `@` 补全 | `Up` / `Down`、`Ctrl+P` / `Ctrl+N`、`Tab` / `Enter`、`Esc` | 移动、接受或关闭补全菜单。回合运行中按 `Esc` 还会同时停止该回合（vi 模式除外）。 |
 | 工具审批提示 | `y`/`1`、`a`/`2`、`p`/`3`、`n`/`4`、`Enter`、`Esc`、`Ctrl+C` | 允许一次、本会话允许、持久允许、拒绝、默认允许一次、拒绝，或取消当前 turn。 |
 | Ask 问题卡 | `Up`/`Down` 或 `j`/`k`、`Left`/`Right` 或 `h`/`l`、`Space`、`Enter`、`1`-`9`、`Esc`、`Ctrl+C` | 导航答案/问题标签、切换多选、提交/激活、选择编号选项、关闭，或取消当前 turn。 |
 | Rewind 选择器 | `Up`/`Down` 或 `j`/`k`、`Enter`、`b`、`c`、`d`、`f`、`s`、`u`、`Esc` | 选择 turn，应用 both/conversation/code/fork/summarize 动作，或返回/关闭。 |
@@ -942,8 +943,8 @@ Reasonix 是一个 MCP 客户端。`[[plugins]]` 的 `type` 选择传输：`stdi
 headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 ```
 
-远程 HTTP server 未配置静态 `Authorization` header 时，认证要求会显示为 **登录**。
-CLI 可运行 `reasonix mcp auth <name>`，桌面端则在 MCP 面板点击该 server 的 **登录**。
+远程 HTTP server 未配置静态 `Authorization` header 时，认证要求（HTTP 401 且带 `Bearer` 质询）会被识别为需要登录。
+CLI 可运行 `reasonix mcp auth <name>`；Studio 暂时还没有登录入口。
 Reasonix 会执行 OAuth 元数据发现、动态客户端注册、PKCE S256 授权与
 refresh token 轮换；发现和 token 请求与 MCP 连接使用相同的 Reasonix 网络代理设置。
 
@@ -1064,6 +1065,8 @@ RPC 调用。两者都可按服务器覆盖。
 是放在 `.reasonix/commands/`（项目）或 `~/.reasonix/commands/`（用户）下的 Markdown 文件——
 `review.md` 即 `/review`，子目录构成命名空间（`git/commit.md` → `/git:commit`）。文件正文
 是 prompt 模板，调用即作为一轮对话发出。
+
+在 Studio 里，每条已完成的回复下有「分支为新会话」按钮：把对话复制到这条回复为止，生成标题为「原标题 · 分支」的新会话，原会话保持不变。它依赖运行中产生的回合边界，所以重启后恢复的会话不提供。
 
 ### 子智能体 Profile
 

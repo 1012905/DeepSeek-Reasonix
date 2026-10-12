@@ -15,6 +15,12 @@ export interface VersionNotes {
   cached: boolean;
 }
 
+// The running version was pulled after publication; reason is the publisher's.
+export interface WithdrawnNote {
+  version: string;
+  reason: string;
+}
+
 // err rides alongside the data: an unreachable catalog must not hide which
 // version is running.
 export interface VersionHub {
@@ -24,6 +30,7 @@ export interface VersionHub {
   latest: string;
   newer: boolean;
   versions: VersionEntry[];
+  withdrawn?: WithdrawnNote;
   err?: string;
 }
 
@@ -42,4 +49,20 @@ export interface UpdateProgress {
   err?: string;
   code?: string;
   delta_skipped?: string;
+}
+
+// Where this install keeps its logs, and the crash files the kernel left there.
+// at is when the file was last written, as an RFC 3339 instant.
+export interface StudioLogs {
+  dir: string;
+  crashDir: string;
+  crashes: StudioCrash[];
+  // More crash files exist than are listed.
+  truncated: boolean;
+}
+
+export interface StudioCrash {
+  name: string;
+  at: string;
+  bytes: number;
 }
