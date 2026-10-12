@@ -565,7 +565,6 @@ export function App({ hub }: { hub: HubPort }) {
         rail={rail}
         theme={scheme}
         onRail={() => setRail((v) => !v)}
-        railLocked={!!settings}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
         onFind={openFind}
         hub={hub} onError={fail}

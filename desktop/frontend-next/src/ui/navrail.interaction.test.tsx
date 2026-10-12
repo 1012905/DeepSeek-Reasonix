@@ -220,12 +220,16 @@ it("the conversation item opens and closes the workspace column, and from settin
   expect(app().dataset.rail).toBe("on");
 });
 
-it("leaves the sidebar toggle alone while the settings sheet is over the window", async () => {
+it("keeps the sidebar toggle working while the settings sheet is over the window", async () => {
   await open();
   const toggle = () => document.querySelector<HTMLButtonElement>(".studio-menu")!;
-  expect(toggle().disabled).toBe(false);
   await userEvent.click(within(navEl()!).getByRole("button", { name: /^用量/ }));
-  expect(toggle().disabled).toBe(true);
+  expect(toggle().disabled).toBe(false);
+  expect(app().dataset.rail).toBe("on");
+  await userEvent.click(toggle());
+  expect(app().dataset.rail).toBe("off");
+  await userEvent.click(toggle());
+  expect(app().dataset.rail).toBe("on");
   await userEvent.click(within(navEl()!).getByRole("button", { name: /^会话/ }));
   expect(toggle().disabled).toBe(false);
 });
