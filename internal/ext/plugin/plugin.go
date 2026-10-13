@@ -1442,11 +1442,11 @@ func validateMCPToolNames(server, stripRawPrefix string, tools []mcpTool) error 
 	seen := make(map[string]string, len(tools))
 	for _, candidate := range tools {
 		if strings.TrimSpace(candidate.Name) == "" {
-			return fmt.Errorf("tools/list returned an empty tool name")
+			return fmt.Errorf("%w: tools/list returned an empty tool name", ErrAmbiguousToolCatalog)
 		}
 		name := toolName(server, strings.TrimPrefix(candidate.Name, stripRawPrefix))
 		if previous, ok := seen[name]; ok {
-			return fmt.Errorf("tools/list names %q and %q share model-visible name %q", previous, candidate.Name, name)
+			return fmt.Errorf("%w: tools/list names %q and %q share model-visible name %q", ErrAmbiguousToolCatalog, previous, candidate.Name, name)
 		}
 		seen[name] = candidate.Name
 	}

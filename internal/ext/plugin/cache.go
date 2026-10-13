@@ -4,7 +4,7 @@
 // capabilities under the user cache dir keyed by load-bearing, non-secret Spec
 // fields, so the next launch can register tools optimistically
 // without waiting for the network/subprocess. Caching is purely an
-// optimisation: any failure (missing dir, bad JSON, key mismatch) silently
+// optimisation: a cache miss (missing dir, bad JSON, key mismatch) silently
 // degrades to a fresh handshake.
 package plugin
 
@@ -23,6 +23,7 @@ import (
 
 	"reasonix/internal/base/fileutil"
 	fileencoding "reasonix/internal/base/fileutil/encoding"
+	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/tool"
 )
@@ -144,7 +145,7 @@ func LoadCachedSchemaForSpec(s Spec) (*CachedSchema, bool) {
 	current := SchemaCacheKey(s)
 	if cs, ok := LoadCachedSchema(s.Name, current); ok {
 		cs.Tools = s.EnabledCachedTools(cs.Tools)
-		if validateCachedToolNames(s, cs.Tools) != nil {
+		if !cachedToolNamesUsable(s, cs.Tools) {
 			return nil, false
 		}
 		return cs, true
@@ -159,11 +160,19 @@ func LoadCachedSchemaForSpec(s Spec) (*CachedSchema, bool) {
 	}
 	cs.CacheKey = current
 	cs.Tools = s.EnabledCachedTools(cs.Tools)
-	if validateCachedToolNames(s, cs.Tools) != nil {
+	if !cachedToolNamesUsable(s, cs.Tools) {
 		return nil, false
 	}
 	_ = SaveCachedSchema(s.Name, *cs)
 	return cs, true
+}
+
+func cachedToolNamesUsable(s Spec, tools []CachedTool) bool {
+	if err := validateCachedToolNames(s, tools); err != nil {
+		slog.Warn("plugin cache: catalog rejected", "server", s.Name, "err", secrets.DiagnosticError(err))
+		return false
+	}
+	return true
 }
 
 // LoadCachedSchemaAny returns the cached schema regardless of cache-key match,

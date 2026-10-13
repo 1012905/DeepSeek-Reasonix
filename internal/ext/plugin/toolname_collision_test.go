@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,7 +41,7 @@ func TestToolCatalogRejectsModelNameCollisions(t *testing.T) {
 			}
 			c := &Client{name: spec.Name, spec: spec, t: &countingToolsTransport{raw: body}}
 			tools, err := c.listTools(context.Background())
-			if err == nil || len(tools) != 0 || c.toolsListed {
+			if !errors.Is(err, ErrAmbiguousToolCatalog) || len(tools) != 0 || c.toolsListed {
 				t.Errorf("colliding live catalog was accepted: tools=%v err=%v", toolNames(tools), err)
 			}
 			host := NewHost()
@@ -155,7 +156,7 @@ func TestHostRejectsCollidingCatalogAndRecovers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	tools, err := host.Add(ctx, spec)
-	if err == nil || len(tools) != 0 || host.HasClient(spec.Name) {
+	if !errors.Is(err, ErrAmbiguousToolCatalog) || len(tools) != 0 || host.HasClient(spec.Name) {
 		t.Fatalf("ambiguous server connected: tools=%v err=%v", toolNames(tools), err)
 	}
 	collision.Store(false)

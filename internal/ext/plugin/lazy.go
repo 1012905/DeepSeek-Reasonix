@@ -432,7 +432,7 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 	}
 	shared.generation = host.registerDeferredCancel(spec.Name, cancel)
 
-	if cs != nil && validateCachedToolNames(spec, cs.Tools) != nil {
+	if cs != nil && !cachedToolNamesUsable(spec, cs.Tools) {
 		cs = nil
 	}
 	var out []tool.Tool
