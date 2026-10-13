@@ -212,13 +212,22 @@ describe("who may reply", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
-  it("offers nothing on received, fixed, wont-fix, duplicate, closed and unreadable reports", async () => {
-    const items = (["received", "fixed", "wontfix", "duplicate", "closed"] as const).map((status, i) => item({ receipt: `FB-AAAA-000${i + 1}`, status }));
+  it("offers nothing on received, wont-fix, duplicate, closed and unreadable reports", async () => {
+    const items = (["received", "wontfix", "duplicate", "closed"] as const).map((status, i) => item({ receipt: `FB-AAAA-000${i + 1}`, status }));
     items.push(item({ receipt: "FB-AAAA-0009", status: "needs_info", needsInput: true, statusUnavailable: true }));
     render(<FeedbackMine port={portWith(() => mine(items))} onFile={() => {}} />);
     await screen.findByText("FB-AAAA-0001");
     expect(screen.queryByRole("button", { name: "回复" })).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("lets the reporter say a fix did not hold, and says that reopens the report", async () => {
+    render(<FeedbackMine port={portWith(() => mine([item({ status: "fixed", issueNumber: 11350 })]))} onFile={() => {}} />);
+    await screen.findByText("FB-AAAA-0001");
+    expect(screen.queryByRole("button", { name: "回复" })).toBeNull();
+    await userEvent.click(within(row("FB-AAAA-0001")).getByRole("button", { name: "仍未解决，回复" }));
+    expect(within(row("FB-AAAA-0001")).getByRole("textbox")).toBeTruthy();
+    expect(screen.getByText(/重新打开/)).toBeTruthy();
   });
 
   it("says replies wait for the network when the list is the offline copy", async () => {
