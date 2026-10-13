@@ -59,9 +59,13 @@ export function parseSurface(raw: unknown): SurfaceSpec | null {
       case "meter": if (!finite(v.progress) || v.progress < 0 || v.progress > 1) return false; allowed = ["label", "progress", "tone"]; break;
       case "divider": allowed = []; break;
       case "row": case "stack": if (!Array.isArray(v.children) || !v.children.length) return false; allowed = ["children"]; break;
-      case "field": case "choice_card":
+      case "diff_preview":
+        if (!object(v.diff) || !keys(v.diff, ["before", "after"]) || typeof v.diff.before !== "string" || typeof v.diff.after !== "string" || !text(v.diff.before, 4000) || !text(v.diff.after, 4000)) return false;
+        allowed = ["label", "diff"]; break;
+      case "field": case "choice_card": case "editable_text":
         if (!id(v.key) || fields.has(v.key) || fields.size >= 16 || !text(v.label, 200, true) || !field(v.field)) return false;
         if (v.kind === "choice_card" && v.field.type !== "choice" && v.field.type !== "multichoice") return false;
+        if (v.kind === "editable_text" && v.field.type !== "string") return false;
         fields.add(v.key); allowed = ["key", "label", "field"]; break;
       default: return false;
     }

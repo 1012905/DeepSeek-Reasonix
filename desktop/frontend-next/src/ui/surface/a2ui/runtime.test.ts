@@ -4,7 +4,7 @@ import { createSurfaceRuntime } from "./runtime";
 
 it("maps field ids to safe bindings and returns typed values from the library data model", () => {
   const runtime = createSurfaceRuntime([
-    { kind: "field", key: "__proto__", label: "Draft", field: { type: "string", required: true, default: "  initial\n" } },
+    { kind: "editable_text", key: "__proto__", label: "Draft", field: { type: "string", required: true, default: "  initial\n" } },
     { kind: "field", key: "constructor", label: "Count", field: { type: "number", default: 0 } },
     { kind: "field", key: "toString", label: "Enabled", field: { type: "bool", default: false } },
   ]);

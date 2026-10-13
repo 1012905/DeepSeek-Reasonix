@@ -1529,15 +1529,15 @@
 
   .other-wrap { margin-top: 8px }
   .ask[data-sealed] .other-wrap:not([data-on]) { display: none }
-  .other-wrap input {
+  .other-wrap input, .other-wrap textarea {
     width: 100%; padding: 9px 11px; border-radius: var(--r-sm);
     border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--border));
     background: var(--surface); color: var(--text);
     font: var(--w-reg) var(--fs-ui) var(--ui); outline: none;
   }
-  .other-wrap input::placeholder { color: var(--ghost) }
-  .other-wrap input:focus { border-color: var(--accent) }
-
+  .other-wrap textarea { resize: vertical; min-height: 120px; }
+  .other-wrap input::placeholder, .other-wrap textarea::placeholder { color: var(--ghost) }
+  .other-wrap input:focus, .other-wrap textarea:focus { border-color: var(--accent) }
   .ask-foot { display: flex; align-items: center; gap: 12px; padding: 13px }
   .ask-foot .dismiss {
     margin-left: auto; background: none; border: 0; cursor: pointer;
@@ -1553,7 +1553,7 @@
   .ask[data-sealed] .opt:hover { border-color: var(--border) }
   .ask[data-sealed] .opt[data-on]:hover { border-color: var(--accent) }
   .ask[data-sealed] .ask-hint { opacity: .5 }
-  .ask[data-sealed] .other-wrap input { opacity: .8 }
+  .ask[data-sealed] .other-wrap input, .ask[data-sealed] .other-wrap textarea { opacity: .8 }
   .ask[data-sealed] .ask-tab { cursor: pointer }
 
   .ask-done {

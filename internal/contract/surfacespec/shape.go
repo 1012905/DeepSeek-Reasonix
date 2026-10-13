@@ -35,6 +35,15 @@ func nodeShapes(raw []map[string]json.RawMessage, nodes []Node) error {
 		if err := allowedKeys(raw[i], "kind "+allowed); err != nil {
 			return err
 		}
+		if n.Diff != nil {
+			var diff map[string]json.RawMessage
+			if err := json.Unmarshal(raw[i]["diff"], &diff); err != nil || len(diff["before"]) == 0 || len(diff["after"]) == 0 {
+				return fail(CodeSchemaInvalid, "/diff")
+			}
+			if err := allowedKeys(diff, "before after"); err != nil {
+				return err
+			}
+		}
 		if n.Field != nil {
 			var f map[string]json.RawMessage
 			if err := json.Unmarshal(raw[i]["field"], &f); err != nil {

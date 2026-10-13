@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { Checkbox, Group as MantineGroup, Paper, Radio, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
+import { Checkbox, Group as MantineGroup, Paper, Radio, SimpleGrid, Stack, Text, Textarea, TextInput } from "@mantine/core";
 import type { ExtensionViewNode } from "../../port/wire";
 
 interface Props {
@@ -13,6 +13,7 @@ export function SurfaceField({ node, value, disabled, change }: Props) {
   const f = node.field!;
   const group = useId();
   const input = { label: node.label, "aria-label": node.label, "aria-required": f.required || undefined, required: f.required, readOnly: disabled };
+  if (node.kind === "editable_text") return <Textarea data-action="surface.edit" data-target={node.key} {...input} rows={6} value={value === undefined ? "" : String(value)} onChange={e => change(e.target.value)} />;
   if (f.type === "bool") return <Checkbox data-action="surface.edit" data-target={node.key} label={node.label} checked={value === true} disabled={disabled} onChange={e => change(e.target.checked)} />;
   if (f.type !== "choice" && f.type !== "multichoice") return <TextInput data-action="surface.edit" data-target={node.key} {...input} type={f.type === "number" ? "number" : "text"} min={f.min} max={f.max} step="any" value={value === undefined ? "" : String(value)} onChange={e => change(e.target.value)} />;
   const Indicator = f.type === "choice" ? Radio.Indicator : Checkbox.Indicator;

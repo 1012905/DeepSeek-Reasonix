@@ -380,7 +380,7 @@ export interface ExtensionNotification {
 export type ExtensionViewTone = "dim" | "strong" | "ok" | "warn" | "err" | "accent";
 
 export interface ExtensionViewNode {
-  kind: "text" | "markdown" | "row" | "stack" | "kv" | "meter" | "pip" | "button" | "divider" | "field" | "choice_card";
+  kind: "text" | "markdown" | "row" | "stack" | "kv" | "meter" | "pip" | "button" | "divider" | "field" | "choice_card" | "editable_text" | "diff_preview";
   value?: string;
   key?: string;
   label?: string;
@@ -389,6 +389,12 @@ export interface ExtensionViewNode {
   actionId?: string;
   children?: ExtensionViewNode[];
   field?: SurfaceField;
+  diff?: SurfaceDiff;
+}
+
+export interface SurfaceDiff {
+  before: string;
+  after: string;
 }
 
 export interface SurfaceField {

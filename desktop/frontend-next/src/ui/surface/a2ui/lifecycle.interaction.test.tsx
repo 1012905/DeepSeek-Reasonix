@@ -7,7 +7,7 @@ import { ExtensionView } from "../../cards/ExtensionView";
 import type { Item } from "../../../state/session";
 
 afterEach(cleanup);
-const ask = (id: string): Extract<Item, {t:"ask"}> => ({ t: "ask", id, ask: { id, questions: [{ id: "surface", prompt: id, options: [], surface: { spec_version: 1, body: [{ kind: "field", key: "draft", label: id, field: { type: "string", required: true } }] } }] } });
+const ask = (id: string): Extract<Item, {t:"ask"}> => ({ t: "ask", id, ask: { id, questions: [{ id: "surface", prompt: id, options: [], surface: { spec_version: 1, body: [{ kind: "editable_text", key: "draft", label: id, field: { type: "string", required: true } }] } }] } });
 
 it("keeps library models isolated through StrictMode and disposing another surface", async () => {
   const answer = vi.fn(async () => {});
@@ -17,7 +17,7 @@ it("keeps library models isolated through StrictMode and disposing another surfa
   fireEvent.change(await screen.findByLabelText("first"), { target: { value: "one" } });
   fireEvent.change(screen.getByLabelText("second"), { target: { value: "two" } });
   view.rerender(<StrictMode><SurfaceCard key="second" item={second} onAnswer={answer} /></StrictMode>);
-  expect((screen.getByLabelText("second") as HTMLInputElement).value).toBe("two");
+  expect((screen.getByLabelText("second") as HTMLTextAreaElement).value).toBe("two");
   fireEvent.click(screen.getByRole("button", { name: "提交" }));
   await waitFor(() => expect(answer).toHaveBeenCalledWith("second", "second", [{questionId:"surface",selected:[],value:{draft:"two"}}]));
 });
@@ -26,9 +26,9 @@ it("retains drafts when an equivalent prompt is replayed without calling answer"
   const answer = vi.fn(async () => {});
   const item = ask("Draft");
   const view = render(<SurfaceCard item={item} onAnswer={answer} />);
-  fireEvent.change(await screen.findByLabelText("Draft"), { target: { value: "retained" } });
+  fireEvent.change(await screen.findByLabelText("Draft"), { target: { value: "  retained\n" } });
   view.rerender(<SurfaceCard item={JSON.parse(JSON.stringify(item))} onAnswer={answer} />);
-  expect((screen.getByLabelText("Draft") as HTMLInputElement).value).toBe("retained");
+  expect((screen.getByLabelText("Draft") as HTMLTextAreaElement).value).toBe("  retained\n");
   expect(answer).not.toHaveBeenCalled();
 });
 
@@ -38,7 +38,7 @@ it("clears unsent input after a dismissed prompt settles", async () => {
   const view = render(<SurfaceCard item={item} onAnswer={answer} />);
   fireEvent.change(await screen.findByLabelText("Draft"), { target: { value: "unsent" } });
   view.rerender(<SurfaceCard item={{ ...item, answered: [] }} onAnswer={answer} />);
-  expect((screen.getByLabelText("Draft") as HTMLInputElement).value).toBe("");
+  expect((screen.getByLabelText("Draft") as HTMLTextAreaElement).value).toBe("");
   expect(screen.queryByRole("button", { name: "提交" })).toBeNull();
   expect(answer).not.toHaveBeenCalled();
 });

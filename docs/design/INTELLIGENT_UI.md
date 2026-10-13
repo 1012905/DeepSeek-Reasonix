@@ -69,6 +69,18 @@ Replaying or mounting a restored row owes no entrance motion.
 
 The native renderer reuses `ExtensionView`, existing choice controls and input styling. Markdown and previews remain plain text. Both live and historical surface specs pass host credential redaction. Model surfaces cannot publish actions, grant permissions or settle approval prompts.
 
+## P2 drafts and previews
+
+`editable_text` uses the existing string field contract with a multiline native textarea. Submitted drafts preserve whitespace and newlines through the controller's typed answer, provider tool result and canonical session record. Failed submissions retain the local draft; settled replay is read-only.
+
+`diff_preview` carries bounded `before` and `after` strings. The native renderer preserves literal text, including apparent diff headers and markup, and shows shared leading/trailing lines around the replaced middle.
+
+Previews do not interpret paths or expose file operations. Both sides pass the same credential redaction as other display text.
+
+The draft and preview vocabulary is mirrored under wire parity. Existing form controls and Studio colours render both components without a gutter or vertical rail. Display-only previews return immediately; draft forms retain the existing blocking ask semantics.
+
+This slice does not complete P2: nonblocking `surface_action` delivery, queue/withdraw/steer integration and their full lifecycle acceptance remain pending. No improvement in user turns has been measured.
+
 ## A2UI renderer integration
 
 The desktop uses pinned `@a2ui/react` and `@a2ui/web_core` 0.13.0 through their v0.9 entry points. A local adapter converts existing surface nodes to A2UI messages. The model-facing spec, hidden discovery and controller answer channel keep their existing contracts.

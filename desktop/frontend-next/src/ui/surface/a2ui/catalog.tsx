@@ -4,6 +4,7 @@ import { createComponentImplementation, type ReactComponentImplementation } from
 import { z } from "zod";
 import type { ExtensionViewNode } from "../../../port/wire";
 import { SurfaceField } from "../SurfaceField";
+import { SurfaceDiffPreview } from "../SurfaceDiffPreview";
 
 export const SurfaceContext = createContext<{ disabled: boolean; inputs: boolean; onAction?: (id: string) => void }>({ disabled: true, inputs: false });
 
@@ -29,6 +30,8 @@ const implementations: ReactComponentImplementation[] = [
     const { disabled, inputs } = useContext(SurfaceContext);
     return inputs ? <SurfaceField node={props.node} value={props.value} disabled={disabled} change={value => props.setValue(value as string | number | boolean | string[])} /> : null;
   }),
+  createComponentImplementation({ name: "DiffPreview", schema: z.object({ before: z.string(), after: z.string(), label: z.string().optional() }).strict() }, ({ props }) =>
+    <SurfaceDiffPreview diff={{ before: props.before, after: props.after }} label={props.label} />),
 ];
 
 export const studioCatalog = new Catalog("reasonix:studio:surface:v1", "v0.9", implementations, []);

@@ -18,7 +18,7 @@ type RenderSurfaceTool struct{}
 func NewRenderSurfaceTool() *RenderSurfaceTool { return &RenderSurfaceTool{} }
 func (*RenderSurfaceTool) Name() string        { return surfacespec.ToolName }
 func (*RenderSurfaceTool) Description() string {
-	return "Show a native structured form or choice cards for information only the user can supply. Fields accept string, number, bool, choice or multichoice values keyed by stable ids. Display-only trees return a summary. Interactive trees wait for the user through ask. Never use surfaces to approve tools or grant permissions. No HTML, CSS, URLs or executable components."
+	return "Show a native structured form, choice cards, editable_text drafts or diff_preview text comparisons. Fields accept string, number, bool, choice or multichoice values keyed by stable ids. Drafts use string fields; diff previews carry before/after text and do not modify files. Display-only trees return a summary. Interactive trees wait for the user through ask. Never use surfaces to approve tools or grant permissions. No HTML, CSS, URLs or executable components."
 }
 func (*RenderSurfaceTool) ReadOnly() bool        { return true }
 func (*RenderSurfaceTool) Reach() tool.Reach     { return tool.ReachHostControl }

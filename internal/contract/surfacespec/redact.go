@@ -10,6 +10,10 @@ func (s *Spec) Redact(redact func(string) string) {
 			n := &nodes[i]
 			n.Value = redact(n.Value)
 			n.Label = redact(n.Label)
+			if n.Diff != nil {
+				n.Diff.Before = redact(n.Diff.Before)
+				n.Diff.After = redact(n.Diff.After)
+			}
 			if n.Kind == "kv" {
 				n.Key = redact(n.Key)
 			}

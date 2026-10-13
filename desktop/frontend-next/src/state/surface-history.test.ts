@@ -5,6 +5,14 @@ import type { HistoryMessage } from "../port/port";
 const spec = { spec_version: 1, title: "Count", body: [{ kind: "field", key: "count", label: "Count", field: { type: "number", required: true } }] };
 const call = { id: "call-1", name: "use_capability", resolvedName: "render_surface", arguments: JSON.stringify({ action: "call", capability_id: "tool:render_surface", arguments: spec }) };
 
+it("restores edited drafts verbatim with their preview and no entrance motion", () => {
+  const draft = "  edited\n\n@file /command <script>\t ";
+  const surface = { spec_version: 1, body: [{ kind: "editable_text", key: "draft", label: "Draft", field: { type: "string", required: true } }, { kind: "diff_preview", diff: { before: "old\n", after: "new\n" } }] };
+  const history = fromHistory([{ role: "assistant", content: "", msgIndex: 0, toolCalls: [{ ...call, arguments: JSON.stringify({ action: "call", capability_id: "tool:render_surface", arguments: surface }) }] }, { role: "tool", content: JSON.stringify({ surface_id: "surface-1", values: { draft } }), msgIndex: 1, toolCallId: "call-1" }]);
+  expect(history.items[0]).toMatchObject({ t: "ask", surfaceValues: { draft }, answered: [[]] });
+  expect(reduce(emptyState, { kind: "__restore", ...history }).entranceOwed).toEqual([]);
+});
+
 it("restores typed answers as settled fields and leaves missing answers explicitly expired", () => {
   const messages: HistoryMessage[] = [{ role: "assistant", content: "", msgIndex: 0, toolCalls: [call] }];
   const missing = fromHistory(messages);
