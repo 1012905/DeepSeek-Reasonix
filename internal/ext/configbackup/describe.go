@@ -3,6 +3,7 @@ package configbackup
 import (
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 
 	"reasonix/internal/base/secrets"
@@ -86,7 +87,10 @@ func details(it Item) ([]string, string) {
 		if json.Unmarshal(it.Data, &h) != nil {
 			return nil, ""
 		}
-		out := labelled("event", h.Event, "match", h.Hook.Match, "cwd", h.Hook.Cwd, "contextFile", h.Hook.ContextFile)
+		out := labelled("event", h.Event, "match", h.Hook.Match, "cwd", h.Hook.Cwd, "contextFile", h.Hook.ContextFile, "description", h.Hook.Description)
+		if h.Hook.Timeout != 0 {
+			out = append(out, "timeout: "+strconv.Itoa(h.Hook.Timeout)+" ms")
+		}
 		return append(out, pairs("env", h.Hook.Env)...), ""
 	case KindMemory:
 		var m memoryData
