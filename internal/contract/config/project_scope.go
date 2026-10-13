@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -21,6 +22,8 @@ type heldScope struct {
 	permissions  PermissionsConfig
 	approvalMode string
 	autoSubmit   bool
+	writeLease   string
+	hostVerif    string
 	shell        ShellConfig
 	rgPath       string
 	lsp          map[string]LSPServer
@@ -43,6 +46,8 @@ func holdUserScope(c *Config) heldScope {
 		permissions:  p,
 		approvalMode: c.Desktop.DefaultToolApprovalMode,
 		autoSubmit:   c.AutoSubmit,
+		writeLease:   c.Agent.WriteLease,
+		hostVerif:    c.Agent.HostVerification,
 		shell:        shell,
 		rgPath:       c.Tools.Search.RgPath,
 		lsp:          maps.Clone(c.LSP.Servers),
@@ -68,6 +73,9 @@ const (
 	ProjectAwaitingApproval IgnoredProjectReason = "awaiting_approval"
 	// ProjectApprovalUnavailable: the approval record could not be read.
 	ProjectApprovalUnavailable IgnoredProjectReason = "approval_store_unavailable"
+	// ProjectRootRefused: an extra folder the user granted that no longer passes
+	// vetting where it resolves now.
+	ProjectRootRefused IgnoredProjectReason = "extra_root_refused"
 	// ProjectProgramWritable: a single program where sandboxed commands write.
 	ProjectProgramWritable IgnoredProjectReason = "program_in_writable_location"
 )
@@ -78,6 +86,7 @@ var ignoredProjectReasonText = map[IgnoredProjectReason]string{
 	ProjectUserOnly:            "only your user config sets this",
 	ProjectAwaitingApproval:    "it runs only after you approve it; run `reasonix trust` in this workspace",
 	ProjectApprovalUnavailable: "the approval record could not be read, so it stays off",
+	ProjectRootRefused:         "the granted folder now resolves somewhere that cannot take writes; grant it again if it is still wanted",
 	ProjectProgramWritable:     "it names a file in this workspace or another place sandboxed commands can write; point it at an installed program",
 }
 
@@ -92,6 +101,17 @@ type projectScopeReport struct {
 	ignored  []IgnoredProjectSetting
 	pending  []ProjectProgram
 	admitted []ProjectProgram
+	// extraRoots are the granted folders that passed vetting at this load.
+	extraRoots []string
+}
+
+// ExtraRoots lists the user-granted extra workspace folders as vetted at this
+// load, each under the path it resolves to now.
+func (c *Config) ExtraRoots() []string {
+	if c == nil {
+		return nil
+	}
+	return slices.Clone(c.projectScope.extraRoots)
 }
 
 // IgnoredProjectSettings lists the project values this load refused.
@@ -120,6 +140,18 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("auto_submit", fmt.Sprintf("%t", c.AutoSubmit), ProjectUserOnly)
 		c.AutoSubmit = h.autoSubmit
 	}
+	// The cross-session write lease protects other sessions from this one, so a
+	// cloned repo must not relax it, nor tighten what the user chose.
+	if c.Agent.WriteLease != h.writeLease {
+		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
+		c.Agent.WriteLease = h.writeLease
+	}
+	// What the host asks of a turn before it may finish is the user's own call,
+	// so a cloned repo can neither switch it off nor undo the user's choice.
+	if c.Agent.HostVerification != h.hostVerif {
+		c.ignoreProject("agent.host_verification", c.Agent.HostVerification, ProjectUserOnly)
+		c.Agent.HostVerification = h.hostVerif
+	}
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
 	if NormalizeToolApprovalMode(c.Desktop.DefaultToolApprovalMode) != NormalizeToolApprovalMode(h.approvalMode) {
@@ -137,7 +169,27 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	}
 	grant := grantedToWorkspace(r.Home(), ws)
 	c.Permissions.Allow = appendMissing(c.Permissions.Allow, grant.Allow...)
-	c.Sandbox.AllowWrite = appendMissing(c.Sandbox.AllowWrite, grant.AllowWrite...)
+	for _, entry := range grant.AllowWrite {
+		if !filepath.IsAbs(entry) {
+			c.Sandbox.AllowWrite = appendMissing(c.Sandbox.AllowWrite, entry)
+			continue
+		}
+		resolved, err := c.VetExtraRoot(ws, entry, c.projectScope.extraRoots)
+		if err != nil {
+			var refusal *WorkspaceRootError
+			code := "unreadable"
+			if errors.As(err, &refusal) {
+				code = string(refusal.Code)
+			}
+			c.ignoreProject("workspace_roots["+code+"]", entry, ProjectRootRefused)
+			continue
+		}
+		if !samePath(resolved, entry) {
+			c.ignoreProject("workspace_roots[moved_to "+resolved+"]", entry, ProjectRootRefused)
+			continue
+		}
+		c.projectScope.extraRoots = appendMissing(c.projectScope.extraRoots, resolved)
+	}
 	store := NewProjectProgramStore(r.Home())
 	h.gatePrograms(c, store, ws)
 	h.endpoints.gateEndpoints(c, store, ws)

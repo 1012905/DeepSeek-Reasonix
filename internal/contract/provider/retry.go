@@ -152,6 +152,10 @@ func WithRequestAttemptCounter(ctx context.Context) context.Context {
 	return context.WithValue(ctx, requestAttemptCounterKey{}, &requestAttemptCounter{})
 }
 
+func WithIndependentRequestAttemptCounter(ctx context.Context) context.Context {
+	return context.WithValue(ctx, requestAttemptCounterKey{}, &requestAttemptCounter{})
+}
+
 // RequestAttemptCount returns the number of HTTP requests started through
 // SendWithRetry for the counter attached to ctx.
 func RequestAttemptCount(ctx context.Context) int {
@@ -215,7 +219,7 @@ type APIError struct {
 	Status      int
 	Body        string
 	TraceID     string // provider trace identifier from the response headers, when present
-	ToolContext string // resolved Reasonix/MCP identity for provider-indexed tool schema errors
+	ToolContext string // what the host knows about the part of the request a rejection points at: a tool's identity, or the shape of the request body
 }
 
 func (e *APIError) Error() string {

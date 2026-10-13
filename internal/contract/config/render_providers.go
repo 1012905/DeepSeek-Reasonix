@@ -31,6 +31,7 @@ func renderProviderEntryAnnotated(b *strings.Builder, p ProviderEntry) {
 		fmt.Fprintf(b, "models_url  = %q   # auto-fetch models from this URL on startup\n", p.ModelsURL)
 	}
 	renderProviderIdentity(b, p.APIKeyEnv, p.DisplayName)
+	renderModelAliases(b, p.ModelAliases)
 	if p.PresetID != "" {
 		fmt.Fprintf(b, "preset_id   = %q   # curated preset identity; settings UI uses it to avoid duplicate installs\n", p.PresetID)
 	}
@@ -146,6 +147,7 @@ func renderProviderEntryPlain(b *strings.Builder, p ProviderEntry) {
 		fmt.Fprintf(b, "models_url  = %q\n", p.ModelsURL)
 	}
 	renderProviderIdentity(b, p.APIKeyEnv, p.DisplayName)
+	renderModelAliases(b, p.ModelAliases)
 	if p.PresetID != "" {
 		fmt.Fprintf(b, "preset_id   = %q\n", p.PresetID)
 	}

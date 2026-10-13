@@ -43,6 +43,7 @@ type Event struct {
 	Readiness       *FinalReadiness     `json:"readiness,omitempty"`
 	Receipt         *CompletionReceipt  `json:"receipt,omitempty"`
 	CheckpointTurn  *int                `json:"checkpointTurn,omitempty"`
+	WorkDurationMs  int64               `json:"workDurationMs,omitempty"` // TurnDone: run time up to the final answer
 	// Which producer wrote this frame: the executor, the planner, a sub-agent.
 	// A turn can carry two models, and the alternative is reading it off the
 	// last phase marker — an adjacency a replay cannot even see.
@@ -52,9 +53,9 @@ type Event struct {
 	// own user row, so this is the only thing that names which one.
 	AuthoredTurn *int `json:"authoredTurn,omitempty"`
 	MsgIndex     *int `json:"msgIndex,omitempty"`
-	// turn_started / steer: the paired device the message came from; absent is
-	// the window. The message itself rides text.
-	Via *Via `json:"via,omitempty"`
+	// turn_started / steer: the sending device (absent is the window); the message rides text.
+	Via         *Via         `json:"via,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"` // turn_started / steer
 	// steer: the host wrote this guidance, not the person.
 	HostAuthored bool `json:"hostAuthored,omitempty"`
 	// Which model wrote this. None means the turn's own, which a client
@@ -133,7 +134,7 @@ type StreamAttempt struct {
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
 func ToWire(e event.Event) Event {
-	w := Event{Kind: kindNames[e.Kind], Text: e.Text, Detail: e.Detail, Reasoning: e.Reasoning, ThoughtMs: e.ThoughtMs, ItemID: e.ItemID, Source: e.Source}
+	w := Event{Kind: kindNames[e.Kind], Text: e.Text, Detail: e.Detail, Reasoning: e.Reasoning, ThoughtMs: e.ThoughtMs, ItemID: e.ItemID, Source: e.Source, Attachments: ToWireAttachments(e.Attachments)}
 	w.ModelRef = wireModelRef(e)
 	if len(e.MemoryCitations) > 0 {
 		w.MemoryCitations = ToWireMemoryCitations(e.MemoryCitations)
@@ -192,9 +193,8 @@ func ToWire(e event.Event) Event {
 		w.Via = ToWireVia(e.Via)
 		w.HostAuthored = e.HostAuthored
 	case event.TurnDone:
-		w.Cancelled = e.Cancelled
-		w.Outcome = e.Outcome
-		w.CheckpointTurn = e.CheckpointTurn
+		w.Cancelled, w.Outcome = e.Cancelled, e.Outcome
+		w.CheckpointTurn, w.WorkDurationMs = e.CheckpointTurn, e.WorkDurationMs
 		w.Receipt = completionReceiptWire(e.Receipt)
 		if e.Readiness != nil {
 			w.Readiness = &FinalReadiness{Attempts: e.Readiness.Attempts, Missing: append([]string(nil), e.Readiness.Missing...)}
@@ -699,63 +699,6 @@ func ToWireCacheDiagnostics(d *event.CacheDiagnostics) *CacheDiagnostics {
 		BodyChanged:         d.BodyChanged,
 		BodyHash:            d.BodyHash,
 	}
-}
-
-// KindNames returns every stable frontend event kind in event.Kind order. It is
-// the protocol-neutral source used by consumers such as the Remote schema
-// generator; callers receive a copy and may sort it without mutating eventwire.
-func KindNames() []string {
-	names := make([]string, 0, int(event.KindCount))
-	for kind := range event.KindCount {
-		if name, ok := kindNames[kind]; ok {
-			names = append(names, name)
-		}
-	}
-	return names
-}
-
-// KindName returns the stable wire name of one event kind, or false for a
-// kind outside the known set.
-func KindName(kind event.Kind) (string, bool) {
-	name, ok := kindNames[kind]
-	return name, ok
-}
-
-var kindNames = map[event.Kind]string{
-	event.TurnStarted:             "turn_started",
-	event.Reasoning:               "reasoning",
-	event.Text:                    "text",
-	event.Message:                 "message",
-	event.ToolDispatch:            "tool_dispatch",
-	event.ToolResult:              "tool_result",
-	event.Usage:                   "usage",
-	event.Notice:                  "notice",
-	event.Phase:                   "phase",
-	event.ApprovalRequest:         "approval_request",
-	event.AskRequest:              "ask_request",
-	event.TurnDone:                "turn_done",
-	event.CompactionStarted:       "compaction_started",
-	event.CompactionProgress:      "compaction_progress",
-	event.CompactionDone:          "compaction_done",
-	event.ToolProgress:            "tool_progress",
-	event.MCPSurfaceReady:         "mcp_surface_ready",
-	event.Retrying:                "retrying",
-	event.Steer:                   "steer",
-	event.GuardianAssessment:      "guardian_assessment",
-	event.ExtensionSurface:        "extension_surface",
-	event.ExtensionStatus:         "extension_status",
-	event.StreamAttempt:           "stream_attempt",
-	event.ContextMaintenanceEvent: "context_maintenance",
-	event.TodoProgressEvent:       "todo_progress",
-	event.WorkspaceLeaseEvent:     "workspace_lease",
-	event.WorkspaceChanged:        "workspace_changed",
-	event.TurnPhase:               "turn_phase",
-	event.CompletionSummary:       "completion_summary",
-	event.AdjudicationsChanged:    "adjudications_changed",
-	event.BrowserTabsChanged:      "browser_tabs_changed",
-	event.InboxChanged:            "inbox_changed",
-	event.GraphDelta:              "graph_delta",
-	event.ProgressWatchEvent:      "progress_watch",
 }
 
 func toWireTodoProgress(p *event.TodoProgress) *TodoProgress {

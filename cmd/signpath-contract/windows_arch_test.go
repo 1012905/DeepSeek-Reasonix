@@ -191,12 +191,14 @@ func TestPublishRefusesAPartialWindowsSet(t *testing.T) {
 	root := parseWorkflowFile(t, "../../.github/workflows/release-studio.yml")
 	publish := mappingValue(jobsOf(t, root), "publish")
 	run := mappingScalar(stepNamed(t, publish, "Collect artifacts"), "run")
-	if !strings.Contains(run, `"$count" -lt 9`) {
-		t.Error("publish does not require at least 9 ReasonixStudio-* packages")
+	if !strings.Contains(run, `"$count" -lt 12`) {
+		t.Error("publish does not require at least 12 ReasonixStudio-* packages")
 	}
 	for _, name := range []string{
 		"ReasonixStudio-windows-amd64-installer.exe", "ReasonixStudio-windows-arm64-installer.exe",
 		"ReasonixStudio-windows-amd64.zip", "ReasonixStudio-windows-arm64.zip",
+		"ReasonixStudio-linux-amd64.deb", "ReasonixStudio-linux-amd64.rpm",
+		"ReasonixStudio-linux-arm64.deb", "ReasonixStudio-linux-arm64.rpm",
 	} {
 		if !strings.Contains(run, "'"+name+"'") {
 			t.Errorf("publish does not require %s by name", name)

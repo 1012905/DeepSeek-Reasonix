@@ -25,7 +25,13 @@ export function asksDelete(ev: { key: string; metaKey: boolean; ctrlKey: boolean
 
 // ariaChord is chord for aria-keyshortcuts, which names modifiers in words.
 export function ariaChord(key: string): string {
-  return `${mac ? "Meta" : "Control"}+${key.toUpperCase()}`;
+  return `${mac ? "Meta" : "Control"}+${key.length === 1 ? key.toUpperCase() : key}`;
+}
+
+/** Whether the platform's own modifier is held alone: Cmd on macOS, Ctrl
+ *  elsewhere, with neither Alt (AltGr types characters) nor the other one. */
+export function modifierAlone(ev: { metaKey: boolean; ctrlKey: boolean; altKey: boolean }): boolean {
+  return !ev.altKey && (mac ? ev.metaKey && !ev.ctrlKey : ev.ctrlKey && !ev.metaKey);
 }
 
 /** Whether a press is the platform's modifier chord for `key`. A letter is also

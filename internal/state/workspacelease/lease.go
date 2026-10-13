@@ -61,6 +61,18 @@ type Wait struct {
 // must not call back into Owner.
 type WaitNotice func(Wait)
 
+// Option configures an Owner when it is built.
+type Option func(*Owner)
+
+// WithoutWholeWorkspaceHold makes a writer that declared no extent (bash, MCP,
+// a sub-agent given no write_paths) claim nothing, instead of the whole
+// workspace. A writer that did declare paths, including paths that cannot be
+// resolved, still claims them. The choice belongs to the session, so another
+// Owner on the same workspace keeps its own.
+func WithoutWholeWorkspaceHold() Option {
+	return func(o *Owner) { o.undeclaredFree = true }
+}
+
 // Owner is one Delivery session's re-entrant workspace lease. One Owner may be
 // shared by the root agent and all of its subagents. Different sessions must
 // use different Owners, even when they share a workspace.
@@ -71,6 +83,8 @@ type Owner struct {
 	// holder names this session to a session waiting on it. Read when the
 	// lease is taken, so a rename mid-hold shows on the next hold.
 	holder func() string
+	// undeclaredFree is set at construction and never changes.
+	undeclaredFree bool
 
 	mu            sync.Mutex
 	activeRuns    int
@@ -116,7 +130,7 @@ var localRegistry = struct {
 // New returns a Delivery-session lease owner for workspaceRoot. lockDir must be
 // shared by Reasonix processes for cross-process protection; it is kept outside
 // the workspace so acquiring a lease never dirties user files.
-func New(workspaceRoot, lockDir string, onWait WaitNotice) (*Owner, error) {
+func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Owner, error) {
 	canonical, err := CanonicalWorkspace(workspaceRoot)
 	if err != nil {
 		return nil, err
@@ -140,12 +154,16 @@ func New(workspaceRoot, lockDir string, onWait WaitNotice) (*Owner, error) {
 	}
 	localRegistry.Unlock()
 
-	return &Owner{
+	o := &Owner{
 		lockPath: filepath.Join(lockDir, key+".lock"),
 		onWait:   onWait,
 		local:    local,
 		scope:    pathLeaseState{root: canonical, identity: rand.Text()},
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o, nil
 }
 
 // CanonicalWorkspace returns the stable identity used to key a workspace. It
@@ -265,6 +283,9 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if o.undeclaredFree && len(paths) == 0 {
+		return func() {}, nil
 	}
 	claim := o.normalizePaths(paths)
 	for {

@@ -1,7 +1,3 @@
-// A run's state, drawn as a letter. Not the brand: the pane repaints this one
-// by state — grey idle, --net running, --ok done — and its dash offset is what
-// says a turn is under way. Anything that should stay the brand wants
-// SymbolMark instead.
 export function RMark({ className = "rmark" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
@@ -12,10 +8,7 @@ export function RMark({ className = "rmark" }: { className?: string }) {
   );
 }
 
-// The product symbol, from logo-symbol.svg — the mark main-v2 already uses at
-// 22px where the wordmark cannot go. Inlined rather than referenced as an
-// <img> so it can take currentColor: the surfaces that use this one paint it
-// in a theme colour, and an <img> would hand back the file's hard-coded blue.
+// Inline geometry lets the product symbol inherit the surface's theme colour.
 export function SymbolMark({ className = "sym-mark" }: { className?: string }) {
   return (
     <svg className={className} viewBox="245 70 235 245" fill="currentColor" aria-hidden="true">

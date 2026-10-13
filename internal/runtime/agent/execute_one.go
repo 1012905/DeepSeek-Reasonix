@@ -75,7 +75,9 @@ type toolCallPlan struct {
 	criteriaRewritten []string
 	mutationObserved  bool
 	mutationAfterDone bool
-	executed          bool
+	// ranClean: the tool's own Execute returned no error, before tool.after ruled.
+	ranClean bool
+	executed bool
 	// nestedOrigin is the first external origin among calls this tool made
 	// through its invoker; it labels the result when the tool declares none.
 	nestedOrigin tool.Provenance
@@ -167,7 +169,7 @@ func (a *Agent) parseToolCall(ctx context.Context, plan *toolCallPlan) (toolOutc
 				output: fmt.Sprintf("MCP server %q is connected; its real tools are now available", server),
 			}, true
 		}
-		if refusal, ok := a.svc.tools.DisabledMCPRefusal(plan.call.Name); ok {
+		if refusal, ok := a.svc.tools.MCPRefusal(plan.call.Name); ok {
 			msg := refusal.String()
 			return toolOutcome{output: msg, blocked: true, errMsg: firstLine(msg), refusalCode: refusal.Code}, true
 		}
@@ -376,7 +378,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 			// A connected mcp-server call completes during resolution by listing
 			// its live tools, so account for that successful call here too.
 			if rc.ProxyAction == "call" && !rc.Unavailable {
-				a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), nil)
+				a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), nil, nil)
 			}
 			result := rc.Result
 			if a.task.ledger != nil {
@@ -723,6 +725,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
+	plan.ranClean = err == nil
 	result, err = a.interceptToolAfter(ctx, call, result, err)
 	// A tool that refused its own call never ran: report it like the permission
 	// and plan-mode blocks above rather than as an execution failure.
@@ -734,7 +737,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	a.recordToolReceipts(ctx, plan, result, execution, err)
 	result = a.withObligationNotice(result, owedBefore, execution, readOnly)
 	// Track skill/capability outcomes for Delivery gates.
-	a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), err)
+	a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), runTool, err)
 	a.notifyToolHooks(ctx, permName, permArgs, result, err)
 	// Always re-read after post hooks — partial writes and hook side effects can
 	// change the previewed path even when the concrete tool returned an error.

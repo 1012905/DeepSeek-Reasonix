@@ -19,7 +19,6 @@ const SOURCES = import.meta.glob(["../**/*.tsx", "!../**/*.test.*"], {
 // Monospace earns these: they are marks and identifiers, not sentences. The
 // welcome screen is the one deliberate exception — its STUDIO line and tagline
 // are set in the terminal's own face because that is the product's vernacular.
-// The wordmark above them is the brand asset and says nothing itself.
 const MARKS: Record<string, string> = {
   x: "× — the close mark, sized to hold its cell beside ✓",
   "ptab-x": "× — same mark on a pane tab",
@@ -38,7 +37,7 @@ const MARKS: Record<string, string> = {
 const MIXED = new Set([
   "c", "cnt", "cost", "cur", "d", "delta", "dt", "fail", "isolab", "k",
   "lb", "meta", "mk", "n", "nm", "ntimes", "path", "pill", "pt", "r", "rmtcand", "rt",
-  "sc", "sessmeta", "st", "sym", "sz", "tag", "u", "uspan", "v", "wsmeta",
+  "sc", "sessmeta", "st", "sym", "sz", "tag", "u", "uspan", "v",
 ]);
 
 const TRANSLATORS = ["t", "tx", "plural"];

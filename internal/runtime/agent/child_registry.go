@@ -279,10 +279,10 @@ func newSubagentCapabilityFrontend(parent *tool.Registry, runtime *usecap.MCPCap
 }
 
 // mcpCapabilityAllowlist converts profile/call tool names into capability IDs
-// for the restricted use_capability proxy. Accepts complete mcp-tool:<s>/<t>,
-// mcp-server:<s>, model-visible mcp__* names, and wildcards expanded against
-// the parent. Incomplete prefixes such as "mcp-server:" or "mcp-tool:foo" are
-// rejected so they cannot install a restricted proxy with an empty server set.
+// for the restricted use_capability proxy. Complete mcp-tool:<s>/<t> and
+// mcp-server:<s> IDs work before connection; callable names and wildcards need
+// parent metadata because normalized names cannot establish raw identity.
+// Incomplete IDs are rejected so a restricted proxy cannot have an empty server set.
 func mcpCapabilityAllowlist(parent *tool.Registry, names []string) map[string]bool {
 	if len(names) == 0 {
 		return nil
@@ -311,18 +311,10 @@ func mcpCapabilityAllowlist(parent *tool.Registry, names []string) map[string]bo
 		default:
 			if parent != nil {
 				if tl, ok := parent.Get(name); ok {
-					if m, ok := tl.(tool.MCPMetadata); ok {
-						server := strings.TrimSpace(m.MCPServerName())
-						raw := strings.TrimSpace(m.MCPRawToolName())
-						if server != "" && raw != "" {
-							allowed["mcp-tool:"+server+"/"+raw] = true
-							continue
-						}
+					if binding, ok := tool.MCPBindingFor(tl); ok {
+						allowed[binding.CapabilityID] = true
 					}
 				}
-			}
-			if server, raw, ok := tool.SplitMCPName(name); ok {
-				allowed["mcp-tool:"+server+"/"+raw] = true
 			}
 		}
 	}
@@ -515,7 +507,7 @@ func (t *restrictedCapabilityProxy) check(args json.RawMessage) error {
 		return fmt.Errorf("invalid args: %w", err)
 	}
 	action := strings.ToLower(strings.TrimSpace(p.Action))
-	if action == "list" || action == "search" {
+	if usecap.IsIDlessCatalogAction(action) {
 		return nil
 	}
 	id := strings.TrimSpace(p.CapabilityID)
@@ -541,9 +533,9 @@ func (t *restrictedCapabilityProxy) ResolveCall(ctx context.Context, args json.R
 	}
 	_ = json.Unmarshal(args, &p)
 	action := strings.ToLower(strings.TrimSpace(p.Action))
-	if action == "list" && rc.SkipExecute {
+	if action == usecap.ActionList && rc.SkipExecute {
 		rc.Result = usecap.FilterCapabilityListResult(rc.Result, t.servers)
-	} else if action == "search" && rc.SkipExecute {
+	} else if action == usecap.ActionSearch && rc.SkipExecute {
 		rc.Result = usecap.FilterCapabilitySearchResult(rc.Result, t.allowed)
 	}
 	return rc, nil
@@ -563,9 +555,9 @@ func (t *restrictedCapabilityProxy) Execute(ctx context.Context, args json.RawMe
 	_ = json.Unmarshal(args, &p)
 	action := strings.ToLower(strings.TrimSpace(p.Action))
 	switch action {
-	case "list":
+	case usecap.ActionList:
 		return usecap.FilterCapabilityListResult(out, t.servers), nil
-	case "search":
+	case usecap.ActionSearch:
 		return usecap.FilterCapabilitySearchResult(out, t.allowed), nil
 	}
 	return out, nil

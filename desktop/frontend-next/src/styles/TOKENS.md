@@ -82,6 +82,9 @@ grid to break.
 
 ## Surfaces
 
+- Studio's default light palette separates the frame (`#F0F0ED`), reading
+  surface (`#FAFAF8`) and composer (`--raised`). Its composer uses a short
+  `--compose-shadow`; installed packs retain their existing surface recipe.
 - `--float` / `--float-hi` exist apart from `--raised`. In dark, `--raised` and
   what it covers are nearly the same lightness, and a black shadow on a
   near-black ground paints nothing, so a menu read as transparent. A floating
@@ -172,6 +175,10 @@ raised with its ratios kept.
 - `--t-live` (.6s) is not a weight. A meter or a fill reports work that is
   running, and reports it by growing, so this tier drives a fill's own geometry
   and never answers a click — at .6s it would answer late.
+- `--tip-delay` (.3s) is how long a pointer rests before a hint is drawn: VS Code
+  waits 250ms by default, and an instant hint flashes on every pass across a
+  column of icons. Keyboard focus is not hovering and is never delayed. It is a
+  wait, not motion, so reduced motion keeps it: dropping it would bring the flash back.
 - `--t-press` (.06s) is contact itself; anything slower reads as the interface
   thinking it over. What a press looks like is a token, so reduced motion
   answers for every control by changing one value.
@@ -233,6 +240,19 @@ raised with its ratios kept.
   letters.
 
 ## Weight and contrast
+
+- Default and plain-palette light Studio replies use `--w-read: 400` for prose only. Headings,
+  emphasis and small UI text keep their existing weights. A chosen weight,
+  illustrated/sky pack or dark scheme falls back to `--w-reg`.
+- `--default-*` holds the canonical Studio preview palette independently of
+  the active pack. Default surfaces and the default picker card share it.
+- `--accent-ink` is text on ordinary or tinted surfaces, distinct from
+  `--accent-fg` on filled controls. Packs may set `accentInk`; legacy packs
+  derive it by mixing their accent towards their body text colour.
+- `background.textGlow: none` paints `--flow-text-shadow: none` through the
+  pack sheet. The backdrop transcript rule defaults to its 2px shadow and 7px
+  halo when this variable is absent. The choice affects text only; the frosted
+  backing remains. Reduced effects overrides the text shadow.
 
 - Stroke weight is an axis beside contrast, not part of it: however bright the
   colour, 400 Han at 11px is thin. Han strokes are dense and blur at a size

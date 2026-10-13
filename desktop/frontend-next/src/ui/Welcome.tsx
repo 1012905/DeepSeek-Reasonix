@@ -21,14 +21,7 @@ interface Props {
 const COLLAPSE_MS = 9600;
 const SHORT_MS = 6200;
 
-// Welcome is the opening sequence: aurora on a fixed dark ground, the R drawn
-// and then traced by a light, the wordmark swept by a highlight, three lines
-// of introduction, and a collapse that turns the whole group into the header
-// of whatever comes next. It plays once per machine.
-//
-// The ground is dark whatever the app theme is. This is a ceremony rather than
-// a screen of the app, the way an OS out-of-box sequence does not follow the
-// user's colour scheme.
+// The opening scene keeps a dark ground across application themes.
 export function Welcome({ variant, children, replay, onDone }: Props) {
   const [leaving, setLeaving] = useState(false);
   const done = useRef(false);

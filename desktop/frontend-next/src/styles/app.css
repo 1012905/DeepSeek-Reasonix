@@ -82,8 +82,8 @@
   }
 
   :root[data-bg] .flow:not([data-empty]) {
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
-                 0 0 7px color-mix(in srgb, var(--page) 72%, transparent);
+    text-shadow: var(--flow-text-shadow, 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
+                 0 0 7px color-mix(in srgb, var(--page) 72%, transparent));
   }
   :root[data-bg] .compose {
     background: color-mix(in srgb, var(--raised) 80%, transparent);
@@ -153,7 +153,7 @@
     --chrome-h: 51px; --lights-w: 96px; --lights-h: var(--chrome-h);
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="off"] .chrome {
-    padding-left: calc(var(--lights-w) - var(--nav-w));
+    padding-left: calc(var(--lights-w) + 50px - var(--nav-w));
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="on"] .studio-rail-head {
     padding-top: var(--lights-h); -webkit-app-region: drag;
@@ -527,11 +527,10 @@
   .call[data-pending] > .c { opacity: .7 }
 
   .app {
-    --nav-w: 0px; --rail-w: var(--rail-open); --side-w: 0px; --dock-w: var(--dock-open);
-    transition: --nav-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --rail-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --side-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --dock-w var(--t-panel) cubic-bezier(.32, .72, 0, 1);
+    --nav-w: 0px; --rail-w: var(--rail-open); --side-w: 0px;
+    transition: --nav-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --rail-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --side-w var(--t-panel) cubic-bezier(.32, .72, 0, 1);
   }
   .app[data-rail="off"] { --rail-w: 0px }
-  .app[data-browser="off"] { --dock-w: 0px }
   .app[data-side="on"] { --side-w: var(--side-open) }
 
   .app[data-drag] { transition: none }
@@ -550,10 +549,10 @@
   [data-rail="off"] .rail, .app:not([data-side="on"]) .side { opacity: 0; transition: opacity var(--m-exit) }
 
   .gutter {
-    position: absolute; top: 0; bottom: 0; width: 11px; z-index: 5;
+    position: absolute; top: 0; bottom: 0; width: 7px; z-index: 5;
     cursor: col-resize; touch-action: none;
   }
-  .gutter-l { left: -6px; z-index: 13 }
+  .gutter-l { left: -1px; z-index: 13 }
   .gutter-r { right: -6px }
   .gutter::after {
     content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px;
@@ -570,7 +569,7 @@
   @keyframes edgebump { 0%, 100% { transform: none } 40% { transform: translateX(var(--bump, 0px)) } }
   .gutter:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; border-radius: var(--r-xs) }
 
-  .gutter[data-shut] { width: 14px }
+  .gutter[data-shut] { width: 14px; top: 50%; bottom: auto; height: 46px; margin-top: -23px }
   [data-rail="off"] .gutter-l { left: 0 }
   [data-rail="off"] .gutter-l .grip { margin-left: -6px }
   .grip {
@@ -743,7 +742,7 @@
      and the composer's; a child of the body would stop at the composer's edge. */
   .pane:has(> .pbody[data-dock]) {
     display: grid;
-    grid-template: "nav nav" auto "find find" auto "body side" minmax(0, 1fr) "compose side" auto / minmax(0, 1fr) var(--dock-w);
+    grid-template: "nav side" auto "find side" auto "body side" minmax(0, 1fr) "compose side" auto / minmax(var(--dock-left-min), 1fr) minmax(0, var(--dock-w));
   }
   .pane:has(> .pbody[data-dock]) > .tabs { grid-area: nav }
   .pane:has(> .pbody[data-dock]) > .findhost { grid-area: find }
@@ -756,7 +755,8 @@
     position: relative; inset: auto; grid-area: side; justify-self: start; align-self: stretch;
     width: 11px; margin-left: -6px; z-index: 6;
   }
-  .app[data-browser="off"] .pane > .gutter-r { margin-left: -14px }
+  .pane:has(> .pbody[data-dock]) > .pbody { padding-right: 6px }
+  .pane:has(> .pbody[data-dock]) > .gutter-r[data-shut] { width: 14px; margin: 0 0 0 -30px; align-self: center }
   .app[data-browser="off"] .pane:has(> .pbody[data-dock]) > .scroll[data-pane="browser"] { visibility: hidden; transition-property: visibility; transition-duration: 0s; transition-delay: var(--t-panel) }
   .pane:has(> .pbody[data-dock]) .workbench-body:not([data-files]) { grid-template-columns: minmax(0, 1fr) }
   .pane:has(> .pbody[data-dock]) .workbench-body:not([data-files]) .workbench-explorer { display: none }
@@ -804,17 +804,10 @@
   [data-pane="flow"]:has(.hero) { justify-content: center }
   [data-pane="flow"]:has(.hero) .flow { margin-top: 0 }
   .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 34px }
-  /* The product symbol, filled rather than stroked — the old mark drew itself
-     in, which is a stroke's trick and a fill's is not. It rises instead, and
-     it no longer recolours with the run state: that is RMark's job, and a
-     brand mark that turns --net when the pane is busy is not a brand mark. */
   .hero .sym-mark {
     width: 78px; height: 78px; display: block;
     color: var(--faint); opacity: .92;
-    animation: herorise 1.1s var(--ease-out) both;
   }
-  @keyframes herorise { from { opacity: 0; transform: translateY(8px) scale(.94) }
-                         to { opacity: .92; transform: none } }
   .hero .t {
     margin-top: 26px; font: var(--w-reg) 25px/1.25 var(--ui);
     letter-spacing: var(--track-display); color: var(--text);
@@ -912,11 +905,6 @@
   }
 
   .chunk { display: flow-root }
-
-  .chunk > .enterbox > .call {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 216px;
-  }
 
   .flow-end { height: 1px; margin-top: -1px }
 
@@ -1537,8 +1525,8 @@
   .opt-other .lb { color: var(--muted) }
   .opt-other[data-on] .lb { color: var(--text) }
 
-  .other-wrap { display: none; margin-top: 7px }
-  .other-wrap[data-on] { display: block; animation: card var(--t-card) var(--ease-out) both }
+  .other-wrap { margin-top: 8px }
+  .ask[data-sealed] .other-wrap:not([data-on]) { display: none }
   .other-wrap input {
     width: 100%; padding: 9px 11px; border-radius: var(--r-sm);
     border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--border));
@@ -1666,7 +1654,7 @@
     margin: 0 auto 18px;
     width: calc(100% - var(--srail-w) * 2 - var(--flow-pad) * 2);
 
-    --aux-budget: min(calc(34vh / var(--zoom, 1)), 320px);
+    --aux-budget: min(calc(34vh / var(--zoom, 1)), 320px); --notes-floor: 9.5rem;
     max-width: calc(var(--doc) - var(--flow-pad) * 2);
 
     --pad-x: 15px; --pad-b: 11px;
@@ -1679,12 +1667,12 @@
 
   .composeaux {
     display: flex; flex-direction: column; min-height: 0; overflow: hidden;
-    max-height: calc(var(--aux-budget) * .72);
+    max-height: max(calc(var(--aux-budget) - max(calc(var(--aux-budget) * .28), var(--notes-floor))), 3.5rem);
   }
   .composeaux > * { min-height: 0 }
 
   .composenotes {
-    max-height: calc(var(--aux-budget) * .28);
+    max-height: max(calc(var(--aux-budget) * .28), var(--notes-floor));
     overflow-y: auto; overscroll-behavior: contain;
   }
 
@@ -1913,7 +1901,7 @@
 
   .reask { display: flex; flex-direction: column; gap: 9px; margin-top: 4px }
   .reask textarea {
-    width: 100%; box-sizing: border-box; resize: vertical; min-height: 60px;
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 60px; max-height: min(60vh, 28rem); max-height: min(60dvh, 28rem);
     border: 1px solid var(--border); border-radius: var(--r-md); background: var(--raised); color: var(--text);
     padding: 10px 12px; font: var(--w-reg) var(--fs-ui)/1.62 var(--ui); outline: 0;
   }
@@ -2271,7 +2259,6 @@
     .ag, .file, .jump, .menu, .nest-ret, .hl .cost, .sym, .pip[data-settled],
     .plan .s[data-done] .b,
     .rmark, .rmark path, .await i, .apv, .guard, .rrow, .shot, .intake { animation: none !important }
-    .hero .sym-mark { animation: none !important; opacity: .92 !important }
     .pane[data-intake] .compose { transform: none !important }
     .rmark path { stroke-dashoffset: 0 !important }
 
@@ -2323,14 +2310,14 @@
   .railveil { display: none }
   [data-fold~="scene"] .cols { grid-template-columns: var(--nav-w) 0 minmax(0, 1fr) var(--side-w) }
   [data-fold~="scene"] :is(.gutter-l, .pane > .gutter-r) { display: none }
-  [data-fold~="scene"] .app[data-browser="on"] .pane:has(> .pbody[data-dock]) { grid-template-columns: 0 minmax(0, 1fr) }
+  [data-fold~="scene"] .app[data-browser="on"] .pane:has(> .pbody[data-dock]) { grid-template: "nav nav" auto "find find" auto "side side" minmax(0, 1fr) / 0 minmax(0, 1fr) }
   [data-fold~="scene"] .app[data-browser="on"] .pane:has(> .pbody[data-dock]) > :is(.pbody, .compose) { display: none }
   [data-fold~="scene"] .app[data-browser="on"] .pane:has(> .pbody[data-dock]) > .scroll[data-pane="browser"] { border-left: 0 }
   [data-fold~="scene"] .app[data-rail="on"] .railveil {
     display: block; position: fixed; inset: 0; z-index: 11; padding: 0; border: 0;
     background: color-mix(in srgb, #000 34%, transparent); cursor: default;
   }
-  [data-fold~="short"] .compose { --aux-budget: min(calc(24vh / var(--zoom, 1)), 176px) }
+  [data-fold~="short"] .compose { --aux-budget: min(calc(24vh / var(--zoom, 1)), 176px); --notes-floor: 0px }
   [data-fold~="short"] .compose textarea { max-height: min(calc(var(--read, 15px) * 9.6), calc(24vh / var(--zoom, 1))) }
   [data-fold~="short"] .slashmenu { max-height: min(calc(38vh / var(--zoom, 1)), 220px) }
   [data-fold~="short"][data-fold~="side"] .side { max-height: calc(26vh / var(--zoom, 1)) }
@@ -3394,7 +3381,7 @@
     background: var(--accent-ink); transition: width var(--m-panel) ;
   }
   .cmp .note { margin-top: 8px }
-  .threshold-control { width: min(360px, 100%); display: flex; align-items: center; gap: 7px }
+  .threshold-row { flex-wrap: wrap } .threshold-row .tx { flex-basis: 14em } .threshold-control { width: min(360px, 100%); display: flex; align-items: center; gap: 7px }
   .threshold-control .unit-field { flex: 1 }
   .threshold-control input { height: 30px; padding: 4px 8px; color: var(--text); font: var(--w-reg) var(--fs-ui) var(--mono) }
   .threshold-presets { display: flex; align-items: center; gap: 3px }
@@ -3832,8 +3819,8 @@
     background: color-mix(in srgb, var(--warn) 8%, transparent);
     color: var(--warn-ink);
   }
-  .rtbar .t { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: var(--w-med) }
-  .rtbar .why { flex: 1; min-width: 0; color: var(--ghost); word-break: break-word }
+  .rtbar .t { flex: 1 1 0; min-width: 12rem; overflow-wrap: anywhere; font-weight: var(--w-med) }
+  .rtbar .why { order: 1; flex: 1 0 100%; min-width: 0; color: var(--ghost); word-break: break-word }
   .rtbar button {
     flex: none; border: 0; background: transparent; cursor: pointer; color: inherit;
     font: var(--w-med) var(--fs-meta) var(--ui); text-decoration: underline; text-underline-offset: 3px;
@@ -3846,9 +3833,9 @@
   .rc { margin: 4px 0 2px }
   .rc-ok {
     display: flex; flex-direction: row; align-items: baseline; gap: 8px;
-    font: var(--w-reg) var(--fs-ui)/1.6 var(--ui); color: var(--ghost);
+    font: var(--w-reg) var(--fs-ui)/1.6 var(--ui); color: var(--ghost); background: none; border: 0; padding: 0; text-align: start; cursor: pointer;
   }
-  .rc-ok .rc-tick { flex: none; color: var(--ok) }
+  .rc-ok .rc-tick { flex: none; color: var(--rc-c, var(--ok)) }
   .rc-ok .rc-t { flex: none }
   .rc-ok .rc-src { min-width: 0; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .rc-hd { padding: 8px 0 2px; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--ghost) }
@@ -4254,17 +4241,11 @@
     text-align: center; padding: 0 40px; width: 100%;
   }
 
-  /* The real wordmark in its own blue — this is the one moment in the product
-     that should show the brand at full strength rather than borrow the scene's
-     warm face. The ground here is near-black, where #0153e5 sits at roughly
-     2.5:1, under the 3:1 a graphic is held to, so a steady glow carries it. */
   .oobe-lockup { display: grid; justify-items: center; }
   .oobe-mark {
     display: block; margin: 0 auto; width: 300px; aspect-ratio: 1692.66 / 392.25;
     filter: drop-shadow(0 0 18px rgb(1 83 229 / .45));
   }
-  /* The warm trace that used to run along the R's stroke becomes the moment the
-     mark lights up, on the same beat the old lume ran. */
   .oobe[data-play] .oobe-mark {
     opacity: 0;
     animation: oobebrand .9s var(--ease-out) .25s forwards,
@@ -4277,7 +4258,7 @@
   }
 
   .oobe-brand {
-    margin: 16px 0 0; font: 650 20px/1 var(--mono); letter-spacing: .21em;
+    margin: 16px 0 0; font: 650 var(--fs-display)/1 var(--mono); letter-spacing: .21em;
     text-transform: uppercase; white-space: nowrap;
     color: rgb(255 255 255 / .72);
   }
@@ -4340,7 +4321,7 @@
     .oobe[data-play][data-held] .onb { opacity: 1 }
   }
   [data-fold~="scene"] .oobe-mark { width: 240px }
-  [data-fold~="scene"] .oobe-brand { font-size: 16px }
+  [data-fold~="scene"] .oobe-brand { font-size: var(--fs-title) }
   [data-fold~="scene"] .oobe-line b { font-size: var(--fs-display) }
 
   .onb-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100% }
@@ -4573,6 +4554,12 @@
 
   .sessrow:hover .sessmeta, .sessrow[data-on] .sessmeta { color: var(--faint) }
 
+  .sessarch { flex: none; margin-left: 6px; font: var(--w-med) var(--fs-micro) var(--ui); font-style: normal; color: var(--ghost) }
+  .errbar[data-kind="note"] { border-color: var(--border); background: var(--surface); color: var(--text) }
+  .errbar[data-kind="note"] button { color: var(--text) }
+  .cmpalert > .errbar[data-kind="note"],
+  .composenotes > .errbar[data-kind="note"],
+  .main > .errbar[data-kind="note"] { top: 106px; bottom: auto }
   .sesscopies {
     flex: none; padding: 0 5px; height: 15px;
     border: 1px solid var(--border); border-radius: var(--r-xs);

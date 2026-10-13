@@ -2,6 +2,9 @@ import { ApplyNote } from "./Group";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { effectsMode, onEffectsChange, setEffectsMode, type EffectsMode } from "../state/prefs";
 import type { AgentPort, Appearance as Look, ThemePack } from "../port/port";
+import { ZOOM_PRESETS } from "./zoom";
+import { chord } from "./keys";
+import { host } from "../port/host";
 import { MONO_FAMILIES, UI_FAMILIES, installed, readSizeOf, readSteps } from "./look";
 import { STORAGE as LANG_KEY, t } from "../i18n";
 import { pct } from "../i18n/format";
@@ -10,7 +13,12 @@ import { Notifications } from "./Notifications";
 import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
 import { NavRailSection } from "./NavRailSection";
+import { GraphicsSection } from "./GraphicsSection";
+import { SendShortcut } from "./SendShortcut";
+import { SessionTabsSetting } from "./SessionTabsSetting";
+import { EscStopSetting } from "./EscStopSetting";
 import { ThemeImport } from "./ThemeImport";
+import { ThemeRemove } from "./ThemeRemove";
 import { useThemeInventory } from "./useThemeInventory";
 
 // "" follows the machine; the rest are explicit, the same shape the light/dark
@@ -41,22 +49,6 @@ interface Props {
   onLook: (look: Look) => void;
 }
 
-// Whole-interface scale. Named by what it does to reading rather than by its
-// number: nobody wants "115%", they want it bigger.
-const ZOOMS: [number, string][] = [
-  [0.9, "紧凑"],
-  [1, "标准"],
-  [1.15, "宽松"],
-  [1.3, "更大"],
-];
-
-// The named steps stop where a 1080p window does. Past that there is no step
-// anyone could have named in advance — a 2560 display wants something a 3840 one
-// does not — so the range takes over rather than the list growing a tail of
-// numbers. It reaches this far safely because the layout now folds on the room
-// it actually has (see viewport.ts) instead of on the unscaled window.
-const ZOOM_RANGE = { min: 0.8, max: 2.5, step: 0.05 };
-
 // Body size in the transcript alone, so the frame stays where the layout put it.
 // The steps live in look.ts next to the default they have to agree with.
 
@@ -75,6 +67,7 @@ const WEIGHTS: [string, string, string][] = [
 const MEASURES: [string, string, string][] = [
   ["standard", "适宜阅读", "每行长度控制在一眼能回到行首的范围"],
   ["full", "铺满窗口", "正文跟随窗口宽度，宽屏上不留两侧空白"],
+  ["full-all", "连输入框一起铺满", "正文和输入框都跟随窗口宽度；输入框很宽时一行不易回到行首"],
 ];
 
 const EFFECTS: [EffectsMode, string, string][] = [
@@ -147,20 +140,43 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
     [port, load, reloadThemes],
   );
 
+  const remove = useCallback(
+    (id: string) => {
+      setFailed("");
+      return port
+        .removeTheme(id)
+        .then(() => {
+          load();
+          reloadThemes();
+        })
+        .catch((e) => setFailed(reason(e)));
+    },
+    [port, load, reloadThemes],
+  );
+  const cell = (p: ThemePack) => (
+    <div className="pal-cell" key={p.id}>
+      <Swatch pack={p} theme={theme} name={t(p.name)} on={!!p.active} onPick={() => pick(p.id)} />
+      {p.removable && <ThemeRemove name={p.name} onRemove={() => remove(p.id)} />}
+    </div>
+  );
+
   const custom = packs.some((p) => p.active);
   // Calm, workbench-like themes stay in the first shelf. Illustrated packs
   // are still first-class installed themes, but they no longer dominate the
   // page a user opens merely to switch between light and dark. If one of them
   // is active it remains visible beside the foundations, so the current state
   // never disappears into a closed disclosure.
-  const foundations = packs.filter((p) => !p.background?.image);
-  const activeIllustrated = packs.find((p) => p.active && p.background?.image);
+  const foundations = packs.filter((p) => !p.background?.image && !p.sky);
+  const activeIllustrated = packs.find((p) => p.active && (p.background?.image || p.sky));
   const featured = activeIllustrated ? [...foundations, activeIllustrated] : foundations;
-  const illustrated = packs.filter((p) => p.background?.image && p.id !== activeIllustrated?.id);
+  const illustrated = packs.filter((p) => (p.background?.image || p.sky) && p.id !== activeIllustrated?.id);
 
   // A change lands on screen through App's own effect; this only sends it on
   // so the next launch opens the same way.
   const set = useCallback((patch: Partial<Look>) => onLook({ ...look, ...patch }), [look, onLook]);
+  // Until the kernel has announced its range there is nothing to draw the
+  // slider from; it is held inert rather than given a range of its own.
+  const zoomRange = look.zoomRange ?? { min: 0, max: 2, step: 1 };
   const setPaper = useCallback(
     (patch: Partial<NonNullable<Look["wallpaper"]>>) =>
       look.wallpaper && onLook({ ...look, wallpaper: { ...look.wallpaper, ...patch } }),
@@ -257,9 +273,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="palettes" role="group" aria-label={t("界面主题")}>
             <Swatch name={t("默认")} on={!custom} onPick={() => pick("")} />
-            {featured.map((p) => (
-              <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-            ))}
+            {featured.map(cell)}
           </div>
           {illustrated.length > 0 && (
             <details className="theme-more">
@@ -271,9 +285,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 <span className="now">{t("{n} 个", { n: illustrated.length })}</span>
               </summary>
               <div className="palettes" role="group" aria-label={t("更多已安装主题")}>
-                {illustrated.map((p) => (
-                  <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-                ))}
+                {illustrated.map(cell)}
               </div>
             </details>
           )}
@@ -318,11 +330,12 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           <h3>{t("大小")}</h3>
         </div>
         <p className="hint">{t("「界面」会同时缩放边距与控件，「正文」仅调整对话中的文字大小，两者独立设置。")}</p>
+        {host().inShell() && <p className="hint">{t("键盘：{up} 放大，{down} 缩小，{reset} 恢复标准，同样调整「界面」大小。", { up: chord("+"), down: chord("-"), reset: chord("0") })}</p>}
         <div className="grp-items">
           <div className="prow">
             <span className="tx">{t("界面")}</span>
             <div className="seg" data-text role="group" aria-label={t("界面大小")}>
-              {ZOOMS.map(([v, name]) => (
+              {ZOOM_PRESETS.map(([v, name]) => (
                 <button key={v} data-action="appearance.zoom" aria-pressed={(look.zoom || 1) === v} onClick={() => set({ zoom: v })}>
                   {t(name)}
                 </button>
@@ -333,11 +346,12 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             <span className="tx">{t("微调")}</span>
             <input
               className="slider"
-              style={at(look.zoom || 1, ZOOM_RANGE.min, ZOOM_RANGE.max)}
+              style={at(look.zoom || 1, zoomRange.min, zoomRange.max)}
               type="range"
-              min={ZOOM_RANGE.min}
-              max={ZOOM_RANGE.max}
-              step={ZOOM_RANGE.step}
+              min={zoomRange.min}
+              max={zoomRange.max}
+              step={zoomRange.step}
+              disabled={!look.zoomRange}
               value={look.zoom || 1}
               aria-label={t("界面大小微调")}
               data-action="appearance.zoom"
@@ -533,6 +547,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <WindowSection port={port} />
       <NavRailSection />
+      <GraphicsSection />
+      <SendShortcut />
+      <EscStopSetting />
+      <SessionTabsSetting />
       <Folding />
       <Notifications port={port} />
 
@@ -702,7 +720,7 @@ function Swatch({
     : undefined;
 
   return (
-    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description || name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
+    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description ? t(pack.description) : name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
       <span className="pal-art" style={style}>
         <span className="pal-rail" />
         <span className="pal-body">

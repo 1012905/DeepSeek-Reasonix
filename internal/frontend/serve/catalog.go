@@ -262,7 +262,24 @@ type mcpEntry struct {
 	Launch string `json:"launch,omitempty"`
 	// PendingReason says why a pending server waits for the user, as a code.
 	PendingReason string `json:"pendingReason,omitempty"`
+	// Held lists tools withheld from the model for a definition the user has not
+	// approved. HeldDigest names that whole set and comes back with the approval.
+	// HeldMore counts the withheld tools past the list's cap.
+	Held       []mcpHeld `json:"held,omitempty"`
+	HeldDigest string    `json:"heldDigest,omitempty"`
+	HeldMore   int       `json:"heldMore,omitempty"`
 }
+
+// mcpHeld is one withheld tool: its visible name and how it differs from what
+// was approved (added, changed, or unverifiable when the record cannot be read).
+type mcpHeld struct {
+	Name  string `json:"name"`
+	Class string `json:"class"`
+}
+
+// mcpHeldLimit bounds how many withheld tools one row lists; the rest are only
+// counted, so a server that withholds thousands cannot make the page heavy.
+const mcpHeldLimit = 50
 
 // mcpTool is one tool as the server describes it, plus the two hints that
 // decide how a call is classified. Error carries a schema the host rejected:
@@ -356,10 +373,23 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 		}
 		if configured {
 			row.Launch = launchText(st.Entry)
+			row.Held, row.HeldDigest, row.HeldMore = mcpHeldViews(st.Held)
 		}
 		out = append(out, row)
 	}
 	writeJSON(w, map[string]any{"servers": out, "scope": scopeView(ctl)})
+}
+
+func mcpHeldViews(held []plugin.HeldTool) ([]mcpHeld, string, int) {
+	if len(held) == 0 {
+		return nil, "", 0
+	}
+	shown := held[:min(len(held), mcpHeldLimit)]
+	out := make([]mcpHeld, len(shown))
+	for i, h := range shown {
+		out[i] = mcpHeld{Name: displayText(h.VisibleName, mcpServerTextLimit), Class: string(h.Class)}
+	}
+	return out, plugin.HeldDigest(held), len(held) - len(shown)
 }
 
 // remembered fills a row that has no live connection to ask with what the last
@@ -380,6 +410,17 @@ func remembered(st control.MCPServerState, e mcpEntry) mcpEntry {
 	return e
 }
 
+func (s *Server) mcpRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /mcp", s.mcp)
+	mux.HandleFunc("POST /mcp/reconnect", s.mcpReconnect)
+	mux.HandleFunc("POST /mcp/trust", s.mcpTrust)
+	mux.HandleFunc("POST /mcp/enabled", s.mcpEnabled)
+	mux.HandleFunc("POST /mcp/load", s.mcpLoad)
+	mux.HandleFunc("POST /mcp/parse", s.mcpParse)
+	mux.HandleFunc("POST /mcp/install", s.mcpInstall)
+	mux.HandleFunc("POST /mcp/remove", s.mcpRemove)
+}
+
 // mcpReconnect retries one server. It answers with the refreshed row rather than
 // a bare 204: the outcome the user is waiting for is the new state, and a
 // follow-up GET would race the connect that just finished.
@@ -398,6 +439,40 @@ func (s *Server) mcpReconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "tools": tools})
+}
+
+// mcpTrust approves the definitions a server's connection withheld and
+// reconnects it, answering like mcpReconnect with the refreshed row.
+func (s *Server) mcpTrust(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name   string `json:"name"`
+		Digest string `json:"digest"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	name, digest := strings.TrimSpace(body.Name), strings.TrimSpace(body.Digest)
+	if name == "" {
+		missingField(w, "name")
+		return
+	}
+	if digest == "" {
+		missingField(w, "digest")
+		return
+	}
+	tools, err := s.ctl().AcceptMCPHeldTools(name, digest)
+	switch {
+	case errors.Is(err, control.ErrMCPDigestMismatch):
+		refuse(w, http.StatusConflict, "mcp.digest_mismatch", err.Error(), nil)
+	case errors.Is(err, control.ErrMCPNothingHeld):
+		refuse(w, http.StatusConflict, "mcp.nothing_held", err.Error(), nil)
+	case errors.Is(err, control.ErrMCPApprovalOwed):
+		refuse(w, http.StatusConflict, "mcp.approval_owed", err.Error(), nil)
+	case err != nil:
+		writeJSONStatus(w, http.StatusBadGateway, map[string]any{"name": name, "state": control.MCPHealthFailed, "error": err.Error()})
+	default:
+		writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "tools": tools})
+	}
 }
 
 // mcpLoad sets whether a server's tools load into the provider schema. An

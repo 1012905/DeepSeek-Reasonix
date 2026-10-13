@@ -6,6 +6,7 @@ import { SWAP_MARK } from "./swap";
 import { occluded, visibleBox } from "./occlusion";
 import { BrowserFailure } from "./BrowserFailure";
 import { AgentPageNote } from "./AgentPageNote";
+import { readPageTabs } from "./browser_open";
 
 const START = "reasonix://start";
 
@@ -162,7 +163,7 @@ export function useBrowserTabs(port: AgentPort, moved: number): BrowserTab[] {
   const [tabs, setTabs] = useState<BrowserTab[]>(UNREAD_TABS);
   useEffect(() => {
     let live = true;
-    port.browserTabs().then((next) => live && setTabs(next), () => {});
+    readPageTabs(port).then((next) => live && setTabs(next), () => {});
     return () => { live = false; };
   }, [port, moved]);
   return tabs;
