@@ -3,6 +3,7 @@ package serve
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"reasonix/internal/base/testenv"
@@ -39,7 +40,7 @@ func TestWorkspacePageMarksRowsKeptInThe1xStore(t *testing.T) {
 		`{"schema_version":2,"at":"2026-09-25T13:00:00Z","type":"writer","writer":"w1","pid":42}`,
 		`{"schema_version":2,"at":"2026-09-25T13:00:00Z","type":"message","id":"m1","parent":"","head":"main","msgs":[{"role":"system","content":"sys"}]}`,
 	}
-	if err := os.WriteFile(store.SessionEventLog(foreign), []byte(joinLines(lines)), 0o600); err != nil {
+	if err := os.WriteFile(store.SessionEventLog(foreign), []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if !sessionstore.IsForeignSessionLog(foreign) {
@@ -57,12 +58,4 @@ func TestWorkspacePageMarksRowsKeptInThe1xStore(t *testing.T) {
 	if legacy["20260925-120000-native.jsonl"] {
 		t.Errorf("this build's own row is marked: %v", legacy)
 	}
-}
-
-func joinLines(lines []string) string {
-	out := ""
-	for _, line := range lines {
-		out += line + "\n"
-	}
-	return out
 }
