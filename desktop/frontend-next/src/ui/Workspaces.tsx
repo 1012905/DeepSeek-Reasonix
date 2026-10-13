@@ -8,6 +8,7 @@ import type { Adder } from "./addws";
 import { pinToViewport } from "./place";
 import { useRailQuery } from "./railsearch";
 import { StudioIcon } from "./StudioIcon";
+import { RowCount } from "./RowCount";
 import { Cross } from "./glyphs";
 import { copyText } from "./CopyButton";
 import { sessionInfoText } from "./sessionInfo";
@@ -68,9 +69,6 @@ interface Props {
 
 // A conversation a pane holds before its first turn is written has only a file
 // name; calling it that would show a timestamp where every other row shows words.
-const countLabel = (c: { shown: number; of?: number }) =>
-  c.of === undefined ? t("{n} 会话", { n: c.shown }) : t("{n} / {total} 会话", { n: c.shown, total: c.of });
-
 const rowLabel = (session: TreeSession) =>
   session.title || (session.runtimeId && !session.turns ? t("新会话") : session.name);
 
@@ -356,7 +354,8 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
             </button>
             <i className="rmtpip" aria-hidden="true" />
             <span className="rmtname">{t("这台机器")}</span>
-            {treeRead && <span className="rmtsub">{t("{n} 个项目", { n: tree.length })}</span>}
+            <span className="rowswap">
+            {treeRead && <span className="rowcount" title={t("{n} 个项目", { n: tree.length })} aria-label={t("{n} 个项目", { n: tree.length })}>{tree.length}</span>}
             <button
               className="machpick"
               data-busy={adder.busy ? "" : undefined}
@@ -372,6 +371,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                 <path d="M8 3.7v8.6M3.7 8h8.6" />
               </svg>
             </button>
+            </span>
           </div>
           {shutHere ? null : shownTree.map((ws) => {
             // A fold is a resting-state preference; while a query is on it would hide
@@ -425,16 +425,18 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                     <span className="wsname" title={ws.root}>
                       {ws.name}
                     </span>
-                    {/* 第二行是这个项目的身份，不是它的动作。名字于是拿到整行宽——
-                        在 214px 的栏里，名字、标签、计数、删除挤在一行，被截的总是名字。 */}
-                    <span className="wsmeta">
-                      {(ws.isolated || twice.has(ws.name)) && (
+                    {/* A tag is this project's identity, so it takes a second line and
+                        the name keeps the row; the count and the actions share one slot. */}
+                    {(ws.isolated || twice.has(ws.name)) && (
+                      <span className="wsmeta">
                         <em className="wstag">{ws.isolated ? t("隔离") : parentOf(ws.root)}</em>
-                      )}
-                      {countLabel(pagedScope ? sessionCount(ws, ws.sessions.length) : { shown: ws.sessions.length })}
-                    </span>
+                      </span>
+                    )}
                     <span className="wsacts">
                       {shut && <UnreadCount n={ws.sessions.filter((x) => x.unread).length} />}
+                      <span className="rowswap">
+                      <RowCount c={pagedScope ? sessionCount(ws, ws.sessions.length) : { shown: ws.sessions.length }} />
+                      <span className="rowbtns">
                       <button
                         data-action="session.new"
                         className="wsadd"
@@ -467,6 +469,8 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                       >
                         <StudioIcon name="more" />
                       </button>
+                      </span>
+                      </span>
                     </span>
                     {sessionMenu === ws.root && createPortal(
                       <div ref={sessionMenuPortal} className="session-pop" role="menu" aria-label={t("项目操作")} data-action-keydown="workspace.menu" data-target={ws.root} onKeyDown={workspaceMenuKeys} onClick={(ev) => ev.stopPropagation()}>

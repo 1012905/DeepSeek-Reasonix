@@ -75,6 +75,25 @@ for (const scheme of ["light", "dark"]) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${process.env.SIDEBAR_TAG ?? "shot"}-replies-${scheme}.png` });
   await page.close();
 }
+for (const scheme of ["light", "dark"]) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, reducedMotion: "reduce" });
+  await page.goto(`${BASE}?pref=zh&turns=3`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".wsrow");
+  await page.mouse.move(900, 500);
+  const look = () => page.evaluate(() => {
+    const row = document.querySelector(".wsrow");
+    const op = (sel) => Number(getComputedStyle(row.querySelector(sel)).opacity);
+    return { height: Math.round(row.getBoundingClientRect().height), count: op(".rowcount"), actions: op(".rowbtns") };
+  });
+  const rest = await look();
+  check(`${scheme}: a project row is one line`, rest.height <= 36, String(rest.height));
+  check(`${scheme}: at rest the row shows its count and not its actions`, rest.count === 1 && rest.actions === 0, JSON.stringify(rest));
+  await page.locator(".wsrow").first().hover();
+  await page.waitForTimeout(250);
+  const hover = await look();
+  check(`${scheme}: on hover the actions take the count's place`, hover.count === 0 && hover.actions === 1, JSON.stringify(hover));
+  await page.close();
+}
 await browser.close();
 if (fails.length) {
   console.log(`\n${fails.length} failed`);

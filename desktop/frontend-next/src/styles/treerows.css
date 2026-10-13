@@ -1,0 +1,19 @@
+.rowswap { display: grid; align-items: center; justify-items: end; }
+.rowswap > * { grid-area: 1 / 1; transition: opacity var(--m-line); }
+.machrow > .rowswap { grid-area: 1 / 4; }
+.rowcount { padding-inline: 4px; font: var(--w-reg) var(--fs-micro)/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); }
+.rowbtns { display: flex; align-items: center; gap: 2px; }
+.rowbtns, .rowswap > .machpick { opacity: 0; }
+:is(.wsrow, .machrow):is(:hover, :focus-within) :is(.rowbtns, .rowswap > .machpick),
+.rowswap:has([aria-expanded="true"], [data-busy]) :is(.rowbtns, .machpick) { opacity: 1; }
+:is(.wsrow, .machrow):is(:hover, :focus-within) .rowcount,
+.rowswap:has([aria-expanded="true"], [data-busy]) .rowcount { opacity: 0; }
+@media (hover: none) {
+  .rowbtns, .rowswap > .machpick { opacity: 1; }
+  .rowcount { display: none; }
+}
+.rowswap .machpick, .rowbtns :is(.wsadd, .wsmore) { width: 20px; height: 20px; color: var(--muted); }
+.rowswap .machpick:hover:not(:disabled), .rowbtns .wsmore:hover { background: var(--overlay); color: var(--text); }
+.wsrow .rowbtns .wsmore { opacity: 1; }
+.studio-session-segments button { font-size: 11px; }
+.studio-session-segments b { font-size: 10px; }
