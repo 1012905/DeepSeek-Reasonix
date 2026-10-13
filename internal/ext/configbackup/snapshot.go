@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// FormatVersion is the snapshot schema this build writes. A reader refuses a
+// FormatVersion is the latest snapshot schema this build writes. A reader refuses a
 // newer one rather than guessing at fields it does not know. Version 2 adds
 // complete hook identities; version 1 remains readable.
 const FormatVersion = 2

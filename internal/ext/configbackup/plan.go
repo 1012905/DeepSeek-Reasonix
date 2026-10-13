@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"reasonix/internal/contract/config"
-	"reasonix/internal/ext/hook"
 )
 
 // Item status against this machine.
@@ -160,7 +159,7 @@ func samePlatform(platform string) bool {
 	return goos == runtime.GOOS
 }
 
-// localState is this machine's view for the same items, keyed by item ID.
+// localState is this machine's view for the same items, keyed by restore identity.
 type localState struct {
 	items     map[string]Item
 	providers map[string]config.ProviderEntry
@@ -178,7 +177,7 @@ func collectLocal(s *Snapshot) (*localState, error) {
 	}
 	st := &localState{items: map[string]Item{}, providers: map[string]config.ProviderEntry{}}
 	for _, it := range c.items {
-		st.items[it.ID] = it
+		st.items[restoreIdentity(it)] = it
 	}
 	for _, p := range c.cfg.Providers {
 		st.providers[p.Name] = p
@@ -196,15 +195,7 @@ func planItem(it Item, s *Snapshot, local *localState, same bool) PlanItem {
 			row.Files = len(sk.Files)
 		}
 	}
-	have, exists := local.items[it.ID]
-	if it.Kind == KindHook {
-		var d hookData
-		if json.Unmarshal(it.Data, &d) == nil {
-			d.Hook = hook.NormalizeConfig(d.Hook)
-			it.Data, _ = json.Marshal(d)
-			have, exists = local.items[itemID(KindHook, hookName(d.Event, d.Hook))]
-		}
-	}
+	have, exists := local.items[restoreIdentity(it)]
 	switch {
 	case it.Kind == KindPlugin:
 		row.Status = StatusInstall
@@ -213,7 +204,7 @@ func planItem(it Item, s *Snapshot, local *localState, same bool) PlanItem {
 		}
 	case !exists:
 		row.Status = StatusNew
-	case bytes.Equal(canonical(have.Data), canonical(it.Data)):
+	case it.Kind == KindHook || bytes.Equal(canonical(have.Data), canonical(it.Data)):
 		row.Status = StatusSame
 	default:
 		row.Status = StatusChanged

@@ -227,6 +227,7 @@ func applyHooks(items []Item) error {
 	if settings.Hooks == nil {
 		settings.Hooks = map[hook.Event][]hook.HookConfig{}
 	}
+	added := false
 	for _, it := range items {
 		var d hookData
 		if err := json.Unmarshal(it.Data, &d); err != nil {
@@ -242,16 +243,12 @@ func applyHooks(items []Item) error {
 			continue
 		}
 		settings.Hooks[event] = append(settings.Hooks[event], d.Hook)
+		added = true
+	}
+	if !added {
+		return nil
 	}
 	return hook.Save(hook.ScopeGlobal, "", settings)
-}
-
-// hook.Save retains native editor fields; env and context-file restoration
-// are unsupported, so those fields must not create additional native copies.
-func nativeHookName(event string, h hook.HookConfig) string {
-	h = hook.NormalizeConfig(h)
-	h.Env, h.ContextFile = nil, ""
-	return hookName(event, h)
 }
 
 func writeOne(it Item) error {

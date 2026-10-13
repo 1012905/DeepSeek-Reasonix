@@ -44,7 +44,7 @@ func Collect(opts CollectOptions) (*Snapshot, error) {
 		now = time.Now()
 	}
 	s := &Snapshot{
-		Format: FormatVersion, CreatedAt: now.UTC(), AppVersion: opts.AppVersion,
+		Format: 1, CreatedAt: now.UTC(), AppVersion: opts.AppVersion,
 		Platform: runtime.GOOS + "/" + runtime.GOARCH, Categories: opts.Categories,
 	}
 	c := newCollector(slices.Contains(opts.Categories, CategorySecrets))
@@ -57,6 +57,9 @@ func Collect(opts CollectOptions) (*Snapshot, error) {
 		}
 	}
 	s.Items, s.Omitted = c.items, c.omitted
+	if slices.ContainsFunc(s.Items, func(it Item) bool { return it.Kind == KindHook }) {
+		s.Format = FormatVersion
+	}
 	return s, nil
 }
 

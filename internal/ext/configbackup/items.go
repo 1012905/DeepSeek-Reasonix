@@ -193,10 +193,30 @@ func holdsLocal(restored, have config.PluginEntry) bool {
 		(slices.Equal(have.Args, restored.Args) || slices.Equal(secrets.RedactArgs(have.Args), restored.Args))
 }
 
+// Hook IDs include the JSON field set; adding fields without omitempty changes
+// existing identities even when their values are empty.
 func hookName(event string, h hook.HookConfig) string {
 	raw, _ := json.Marshal(h)
 	sum := sha256.Sum256(append([]byte(event+"\x00"), raw...))
 	return event + "#" + hex.EncodeToString(sum[:6])
+}
+
+func restoreIdentity(it Item) string {
+	if it.Kind == KindHook {
+		var d hookData
+		if json.Unmarshal(it.Data, &d) == nil {
+			return itemID(KindHook, nativeHookName(d.Event, d.Hook))
+		}
+	}
+	return it.ID
+}
+
+// hook.Save retains native editor fields; env and context-file restoration
+// are unsupported, so those fields must not create additional native copies.
+func nativeHookName(event string, h hook.HookConfig) string {
+	h = hook.NormalizeConfig(h)
+	h.Env, h.ContextFile = nil, ""
+	return hookName(event, h)
 }
 
 // Secret placeholders keep the scope used by existing backups.

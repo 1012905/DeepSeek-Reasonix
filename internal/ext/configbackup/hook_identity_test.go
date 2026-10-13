@@ -1,6 +1,7 @@
 package configbackup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,6 +67,75 @@ func TestHookBackupVariantsRoundTrip(t *testing.T) {
 		if !slices.ContainsFunc(plan.Items, func(row PlanItem) bool { return slices.Contains(row.Details, detail) }) {
 			t.Fatalf("preview omits %q", detail)
 		}
+	}
+}
+
+func TestHookPreviewMatchesNativeImportIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		env         map[string]string
+		contextFile string
+		secrets     bool
+	}{
+		{"placeholder env", map[string]string{"TOKEN": "${SOURCE_TOKEN}"}, "", true},
+		{"redacted env", map[string]string{"OTHER": "incoming-secret"}, "", false},
+		{"context file", nil, "/incoming/context.md", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			machine(t, "")
+			h := hook.HookConfig{Match: "edit_file", Command: "echo check", Env: tc.env, ContextFile: tc.contextFile}
+			writeSettings := func(h hook.HookConfig) []byte {
+				raw, err := json.Marshal(hook.Settings{Hooks: map[hook.Event][]hook.HookConfig{hook.PostToolUse: {h}}})
+				must(t, err)
+				must(t, os.WriteFile(hook.GlobalSettingsPath(""), raw, 0o600))
+				return raw
+			}
+			writeSettings(h)
+			cats := []Category{CategoryAutomation}
+			if tc.secrets {
+				cats = append(cats, CategorySecrets)
+			}
+			s := collectAll(t, cats...)
+			sealed, err := Seal(s, passphrase)
+			must(t, err)
+			s, err = Open(sealed, passphrase)
+			must(t, err)
+			if tc.env != nil {
+				h.Env = map[string]string{"TOKEN": "local-secret"}
+			}
+			if tc.contextFile != "" {
+				h.ContextFile = "/local/context.md"
+			}
+			before := writeSettings(h)
+			for range 2 {
+				p := NewPlanner()
+				plan, err := p.Preview(s)
+				must(t, err)
+				row := planRow(t, plan, s.Items[0].ID)
+				if row.Status != StatusSame || row.Recommended || row.Consent != ConsentExecutes {
+					t.Errorf("native-equivalent hook preview: %+v", row)
+				}
+				ids := []string{row.ID}
+				if _, err := p.Apply(ApplyRequest{PlanID: plan.ID, Items: ids}); !errors.Is(err, ErrConsentRequired) {
+					t.Fatalf("missing consent: %v", err)
+				}
+				refused, err := os.ReadFile(hook.GlobalSettingsPath(""))
+				must(t, err)
+				if !bytes.Equal(before, refused) {
+					t.Fatal("consent refusal rewrote local settings")
+				}
+				result, err := p.Apply(ApplyRequest{PlanID: plan.ID, Items: ids, Consented: ids})
+				must(t, err)
+				if len(result.Failed) != 0 || !slices.Equal(result.Applied, ids) {
+					t.Fatalf("apply: %+v", result)
+				}
+				after, err := os.ReadFile(hook.GlobalSettingsPath(""))
+				must(t, err)
+				if !bytes.Equal(before, after) {
+					t.Fatal("native-equivalent import rewrote local settings")
+				}
+			}
+		})
 	}
 }
 
