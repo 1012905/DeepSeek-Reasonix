@@ -57,6 +57,7 @@ import { LiveWork, useLiveWork } from "../state/foldpref";
 import { loadChangedFilesPref, useShowsChangedFiles } from "../state/changedfiles";
 import { loadFoldWorkPref, useFoldsTurnWork } from "../state/foldwork";
 import { ChangedFilesPill } from "./ChangedFilesPill";
+import { useConversationFiles } from "./useConversationFiles";
 
 export type { PaneReport };
 
@@ -107,6 +108,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const fail = useCallback((e: unknown) => {
     dispatch({ kind: "__error", text: reason(e) } as never);
   }, []);
+  const conversationFiles = useConversationFiles(port, status?.workspaceRoot ?? rt.root, !!rt.host, visible && tab === "flow", revealBrowser, fail);
   const compact = useCompactNow(port, running || s.items.some((item) => item.t === "compaction" && !item.done), fail);
   // Elapsed is a clock reading and belongs on the tick. Throughput is not: it
   // follows the deltas themselves, and expires rather than being re-derived.
@@ -364,6 +366,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
   const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
+  const fileReply = useMemo(() => ({ ...reply, files: conversationFiles.refs }), [reply, conversationFiles.refs]);
 
   // Where the bottom is moves as blocks mount under it, so this only asks the
   // transcript to follow again and lets it scroll itself into place.
@@ -427,7 +430,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       <Transcript port={port}
         foldWork={foldWork}
         turnRunning={running}
-        reply={reply}
+        reply={fileReply}
         onResend={onResend}
         items={s.items}
         entering={s.entranceOwed}
@@ -461,6 +464,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       </LiveWork.Provider>
       </PaneShown.Provider>
       </ReceiptPrefContext.Provider>
+      {conversationFiles.menuView}
 
       <div className="scroll" data-pane="analysis" hidden={tab !== "analysis"}>
         {tab === "analysis" && (
@@ -482,6 +486,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       <div className="scroll" data-pane="browser" hidden={tab === "analysis"} inert={!workbench}>
           <WorkbenchPanel
             port={port}
+            fileRequest={conversationFiles.request}
             tabs={pages}
             wideMode={docked ? { wide: browserSize.size === "wide", onToggle: browserSize.toggle } : undefined}
             manual={manualBrowser}

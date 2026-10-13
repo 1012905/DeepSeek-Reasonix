@@ -17,7 +17,7 @@ const { uiLanguage } = require("./uilang");
 const { installFullScreenKey } = require("./fullscreen");
 const { installReload } = require("./reload");
 const { externalTarget } = require("./links");
-const { reveal, revealWorkspace, revealLogs, openWorkspace } = require("./reveal");
+const { reveal, revealWorkspace, revealLogs, openWorkspace, openFile } = require("./reveal");
 const { appIcon } = require("./appicon");
 const { setUnreadBadge } = require("./badge");
 const layout = require("./layout");
@@ -435,6 +435,9 @@ ipcMain.handle("shell:open-workspace", (event, root) =>
 );
 ipcMain.handle("shell:reveal", (event, base, rel) =>
   fromWindow(event) && client ? reveal(client, shell, String(base), String(rel)) : { code: "", error: "no window" },
+);
+ipcMain.handle("shell:open-file", (event, base, rel) =>
+  fromWindow(event) && client ? openFile(client, shell, String(base), String(rel)) : { code: "", error: "no window" },
 );
 
 // A dismissed dialog answers with "", which is what the page reads as "they

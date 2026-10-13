@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("reasonixHost", {
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", String(url)),
   // A pane and a path inside its workspace; main asks the kernel where that is.
   revealPath: (base, rel) => ipcRenderer.invoke("shell:reveal", String(base), String(rel)),
+  openFile: (base, rel) => ipcRenderer.invoke("shell:open-file", String(base), String(rel)),
   // A project the sidebar lists, which may have no pane at all.
   revealWorkspace: (root) => ipcRenderer.invoke("shell:reveal-workspace", String(root)),
   revealLogs: () => ipcRenderer.invoke("shell:reveal-logs"),
