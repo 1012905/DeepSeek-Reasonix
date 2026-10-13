@@ -2083,6 +2083,24 @@ test("kernel acts: show brings the window forward, relaunch arms the restart, qu
   assert.deepEqual(calls, ["show", "relaunch", "quit"]);
 });
 
+test("kernel acts: a click that reaches the shell is written to its log, an unknown act is not", () => {
+  const { actHandler } = require("../src/acts.js");
+  const lines = [];
+  const handle = actHandler({ app: { relaunch() {}, quit() {} }, showWindow() {}, log: (line) => lines.push(line) });
+  for (const act of ["show", "unknown"]) handle(act);
+  assert.deepEqual(lines, ["kernel act: show"]);
+});
+
+test("raise: answers whether the window is focused once it has tried", () => {
+  const { raise } = require("../src/raise.js");
+  const make = (grants) => {
+    let focused = false;
+    return { show() {}, focus: () => { if (grants()) focused = true; }, isFocused: () => focused, setAlwaysOnTop() {} };
+  };
+  assert.equal(raise(make(() => true), "win32"), true);
+  assert.equal(raise(make(() => false), "win32"), false);
+});
+
 test("raise: a window the platform would not focus is lifted once and returned to normal stacking", () => {
   const { raise } = require("../src/raise.js");
   const run = (platform, focusedAfterFocus) => {
