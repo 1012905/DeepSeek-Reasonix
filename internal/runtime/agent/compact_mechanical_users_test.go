@@ -44,7 +44,7 @@ func TestMechanicalFoldCarriesTheUsersWordsShortened(t *testing.T) {
 
 func TestMechanicalFoldStaysBoundedForAHugeNumberOfTurns(t *testing.T) {
 	var fold []provider.Message
-	for i := 0; i < 3000; i++ {
+	for range 3000 {
 		fold = append(fold, provider.Message{Role: provider.RoleUser, Content: strings.Repeat("x", 600)})
 	}
 	if got := len(mechanicalFoldDigest(fold)); got > mechanicalUserTotalChars+1500 {
@@ -55,7 +55,7 @@ func TestMechanicalFoldStaysBoundedForAHugeNumberOfTurns(t *testing.T) {
 func TestADegradedCompactionKeepsWhatTheUserSaidThatTheBudgetCouldNotHold(t *testing.T) {
 	big := strings.Repeat("word ", 400)
 	msgs := []provider.Message{{Role: provider.RoleSystem, Content: "sys"}, {Role: provider.RoleUser, Content: "first task"}}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		msgs = append(msgs,
 			provider.Message{Role: provider.RoleAssistant, Content: big},
 			provider.Message{Role: provider.RoleUser, Content: "constraint-" + string(rune('a'+i)) + " " + strings.Repeat("detail ", 300)},
