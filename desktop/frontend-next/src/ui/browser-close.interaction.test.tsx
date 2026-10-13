@@ -23,12 +23,25 @@ function menu(name: string) {
 }
 
 describe("closing browser pages", () => {
+  it("keeps an explicit launcher open while closing every actual browser page", async () => {
+    const { close, onCloseManual } = draw();
+    fireEvent.click(screen.getByRole("button", { name: "新建标签" }));
+    menu("First");
+    fireEvent.click(screen.getByRole("menuitem", { name: "关闭全部浏览器标签" }));
+    await waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("tab", { name: "First" })).toBeNull());
+    expect(screen.queryByRole("tab", { name: "Second" })).toBeNull();
+    expect(screen.getByRole("group", { name: "开始" })).toBeTruthy();
+    expect(onCloseManual).not.toHaveBeenCalled();
+  });
+
   it("clears an open failure only when the selected tab closes", async () => {
     vi.spyOn(host(), "drawsBrowserViews").mockReturnValue(true);
     const { port } = draw();
     vi.spyOn(port, "browserOpen").mockRejectedValue(new Error("launch blocked"));
     fireEvent.click(screen.getByRole("button", { name: "First" }));
-    fireEvent.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建标签" }));
+    fireEvent.click(screen.getByRole("button", { name: "浏览器" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "launch blocked");
     fireEvent.click(screen.getByRole("button", { name: "关闭 Second" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Second" })).toBeNull());

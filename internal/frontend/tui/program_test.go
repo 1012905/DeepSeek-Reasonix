@@ -61,7 +61,7 @@ func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/sessions":
 		_ = json.NewEncoder(w).Encode([]map[string]any{
 			{"name": "a", "path": "/s/a.jsonl", "title": "fix the parser", "turns": 3, "current": true},
-			{"name": "b", "path": "/s/b.jsonl", "title": "write the docs", "turns": 2},
+			{"name": "b", "path": "/s/b.jsonl", "title": "write the docs", "turns": 2, "unread": true},
 			{"name": "c", "path": "/s/c.jsonl", "title": "fix the lexer", "turns": 1},
 		})
 	case "/history":
@@ -605,8 +605,8 @@ func TestAskAutoSubmitArrowStopsAtLastQuestion(t *testing.T) {
 	if m.ask == nil || m.ask.tab != 1 {
 		t.Fatalf("right must stop at the last question, got tab %d", m.ask.tab)
 	}
-	if calls := strings.Join(k.seen(), "\n"); strings.Contains(calls, "POST /answer") {
-		t.Fatalf("an arrow must make no /answer call:\n%s", calls)
+	if calls := strings.Join(k.seen(), "\n"); strings.Contains(calls, `"answers"`) {
+		t.Fatalf("an arrow must not submit an answer:\n%s", calls)
 	}
 }
 

@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import { host } from "../port/host";
@@ -7,9 +6,9 @@ import type {
   AgentPort,
   BrowserTab,
   WorkspaceChange,
-  WorkspaceFile,
 } from "../port/port";
-import { openPage } from "./browser_open";
+import { openPage, observePageTabs } from "./browser_open";
+import { useBrowserSelection } from "./useBrowserSelection";
 import { useColumnOpening } from "./useColumnOpening";
 import { WorkbenchLauncher } from "./WorkbenchLauncher";
 import { AgentBrowserPanel, ManualBrowserPanel, UNREAD_TABS } from "./BrowserPanel";
@@ -20,16 +19,19 @@ import { LazyMarkdown } from "./LazyMarkdown";
 import type { LocalRefs } from "./Markdown";
 import { docRef } from "./docrefs";
 import { useGlance } from "./glance";
-import { useMarkdownPoll } from "./useMarkdownPoll";
-import { pinToViewport } from "./place";
+import { useWorkbenchFiles } from "./useWorkbenchFiles";
 import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
+import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
+import { WorkbenchChanges } from "./WorkbenchChanges";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
 import { useCommitCard } from "./CommitCard";
+import { BrowserWideToggle } from "./BrowserWideToggle";
+import { WorkspaceImage, isWorkspaceImage } from "./WorkspaceImage";
 
 // The editor and its grammars load with the first file opened, not with Studio.
 const CodeEditor = lazy(() => import("./CodeEditor"));
@@ -109,10 +111,14 @@ export function WorkbenchPanel({
   running = false,
   wrote = 0,
   remote = false,
+  workspaceRoot = "",
   revealChanges = 0,
   onCloseManual,
   onSurfaces,
   onExternal,
+  onAddToChat,
+  wideMode,
+  fileRequest,
 }: {
   port: AgentPort;
   tabs: BrowserTab[];
@@ -131,32 +137,39 @@ export function WorkbenchPanel({
   wrote?: number;
   /** The workspace is on another machine, so its paths mean nothing here. */
   remote?: boolean;
+  workspaceRoot?: string;
   revealChanges?: number;
   onCloseManual: () => void;
   // How many surfaces the strip holds, for the pane's own tab to count.
   onSurfaces: (n: number) => void;
   onExternal: (url: string) => void;
+  onAddToChat?: (reference: string) => void;
+  wideMode?: { wide: boolean; onToggle: () => void };
+  fileRequest?: { path: string };
 }) {
   const preview = useHtmlPreview(port, allTabs, remote);
   const tabs = preview.tabs;
   const [files, setFiles] = useState<string[]>([]),
     [directories, setDirectories] = useState<string[]>([]),
     [openFiles, setOpenFiles] = useState<string[]>([]);
-  // Docked, the body is too narrow for two columns, so the explorer is hidden
-  // — and the workbench is always docked now, which left the files with no way
-  // in at all. The toggle is that way in, at any width.
   const [showFiles, setShowFiles] = useState(false);
+  const [launcher, setLauncher] = useState(false);
+  const newTab = useRef<HTMLButtonElement>(null);
+  const toggleLauncher = () => { supersede(); setLauncher((open) => !open); };
+  const chooseFiles = () => { supersede(); setLauncher(false); setShowFiles(true); };
   const commit = useCommitCard(port, () => onTreeChanged?.());
-  useOnBump(revealChanges, () => setShowFiles(true));
+  useOnBump(revealChanges, chooseFiles);
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
   // Docked, the file list hides the canvas a page is drawn in, so choosing any
   // surface steps the list aside.
-  const pick = useCallback((key: string) => {
+  const select = useCallback((key: string) => {
     setShowFiles(false);
+    setLauncher(false);
     setFailed("");
     setSelected(key);
   }, []);
+  const { pick, follow, supersede, current } = useBrowserSelection(port, select, allTabs);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set()),
     [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   // The explorer's own failure, drawn in the explorer: the file view's error
@@ -169,44 +182,32 @@ export function WorkbenchPanel({
     [hosts, setHosts] = useState<Record<string, string>>({});
   const minted = useRef(0);
   const [mode, setMode] = useState<FileMode>("file");
-  const [file, setFile] = useState<WorkspaceFile | null>(null),
-    [draft, setDraft] = useState(""),
-    [diff, setDiff] = useState("");
-  const [busy, setBusy] = useState(false),
-    [failed, setFailed] = useState("");
+  const [failed, setFailed] = useState("");
   // Showing a file where it lives needs a shell on the kernel's own machine.
   const revealable = !remote && port.revealsFiles();
   const [platform, setPlatform] = useState("");
   useEffect(() => void host().describe().then((h) => setPlatform(h.platform)), []);
-  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
-  useEffect(() => {
-    if (!menu) return;
-    // Enter and Space are the focused item being chosen, not the menu dismissed.
-    const shut = (e: Event) => {
-      if (e instanceof KeyboardEvent && (e.key === "Enter" || e.key === " ")) return;
-      setMenu(null);
-    };
-    addEventListener("click", shut);
-    addEventListener("keydown", shut);
-    addEventListener("blur", shut);
-    return () => {
-      removeEventListener("click", shut);
-      removeEventListener("keydown", shut);
-      removeEventListener("blur", shut);
-    };
-  }, [menu]);
+  const scope = useMemo(() => ({ port, workspaceRoot }), [port, workspaceRoot]);
+  const listedScope = useRef(scope);
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const folderRequests = useMemo(() => new Map<string, symbol>(), [scope]);
+  const menuId = useRef(0);
+  const [menu, setMenu] = useState<(FileMenu & { scope: typeof scope; id: number }) | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  useEffect(closeMenu, [closeMenu, scope, shown]);
   const reveal = (path: string) => {
     setMenu(null);
     port.revealInFileManager(path).then(() => setListFailed(""), (e) => setListFailed(reason(e)));
   };
   // The system menu stays wherever there is text to copy: this one is a shortcut.
-  const offerReveal = (e: MouseEvent<HTMLElement>, path: string) => {
-    if (!revealable || document.getSelection()?.isCollapsed === false) return;
+  const offerMenu = (e: MouseEvent<HTMLElement>, path: string, folder: boolean) => {
+    if (listedScope.current !== scope || document.getSelection()?.isCollapsed === false) return;
     e.preventDefault();
     // The context-menu key reports no pointer, so the row itself is the anchor.
     const row = e.currentTarget.getBoundingClientRect();
     const keyed = e.clientX === 0 && e.clientY === 0;
-    setMenu({ path, x: keyed ? row.left + 24 : e.clientX, y: keyed ? row.bottom : e.clientY });
+    setMenu({ path, folder, scope, id: ++menuId.current, anchor: e.currentTarget, x: keyed ? row.left + 24 : e.clientX, y: keyed ? row.bottom : e.clientY });
   };
   const changeKey = changes
     .map((change) => `${change.status}:${change.path}`)
@@ -217,6 +218,7 @@ export function WorkbenchPanel({
   const glance = useGlance();
   useEffect(() => {
     if (!shown) return;
+    folderRequests.clear();
     let live = true;
     void (async () => {
       try {
@@ -242,6 +244,7 @@ export function WorkbenchPanel({
           }
         }
         if (!live) return;
+        listedScope.current = scope;
         setFiles([...new Set(files)]);
         setDirectories([...new Set(dirs)]);
         setCollapsed(query ? new Set() : new Set(dirs.filter((path) => !open.has(path))));
@@ -253,12 +256,8 @@ export function WorkbenchPanel({
     return () => {
       live = false;
     };
-  }, [port, shown, changeKey, query, hidden, glance, running, wrote]);
-  // The button in the chrome says "show me the browser", not "show me this one
-  // browser". When the agent has a page, that page is the browser; the start
-  // page is only for an empty column, and steps aside unused once the agent
-  // opens something. Closing the panel is not closing the pages: they come
-  // back with it, and only a tab's own × takes one away.
+  }, [port, scope, folderRequests, shown, changeKey, query, hidden, glance, running, wrote]);
+  // Closing the column preserves its tabs; only each tab’s close button removes it.
   const agentPage = tabs.find((tab) => tab.active) ?? tabs[0];
   const agentTarget = agentPage?.target ?? "";
   const agentAt = agentPage ? `${agentPage.target} ${agentPage.url}` : "";
@@ -267,7 +266,8 @@ export function WorkbenchPanel({
   const dropBlankStart = useCallback(() => setBrowsers((open) => open.filter((id) => !!visited.current[id])), []);
   const agentNow = useRef(agentTarget);
   agentNow.current = agentTarget;
-  useColumnOpening({ manual, browserAsk, port, agentNow, dropBlankStart, pick, setFailed, setBrowsers, setSelected });
+  const filesAsk = useMemo(() => ({ revealChanges, fileRequest }), [revealChanges, fileRequest]);
+  useColumnOpening({ manual, browserAsk, filesAsk, port, agentNow, dropBlankStart, pick, follow, current, setFailed, setBrowsers, manualSelection: selected.startsWith("manual:") ? selected : `manual:${browsers[0] ?? "b0"}` });
   // A page that has just appeared is the one somebody wants to see, whoever
   // opened it: the agent's popup, or a link the person followed, which opens
   // beside the agent's tab without becoming the one it acts on.
@@ -283,9 +283,9 @@ export function WorkbenchPanel({
     for (const id of ids) known.current.add(id);
     if (fresh.length) {
       dropBlankStart();
-      pick(`browser:${fresh[fresh.length - 1]}`);
+      fresh.forEach((id) => follow(`browser:${id}`));
     }
-  }, [tabs, dropBlankStart, pick]);
+  }, [tabs, dropBlankStart, follow, port]);
   // Where the agent is looking, followed as it moves: a new page, or the same
   // tab sent somewhere else.
   const lastAgent = useRef<string | null>(null);
@@ -294,8 +294,11 @@ export function WorkbenchPanel({
     lastAgent.current = agentAt;
     if (!before || !agentAt || before === agentAt) return;
     dropBlankStart();
-    pick(`browser:${agentTarget}`);
-  }, [agentAt, agentTarget, dropBlankStart, pick]);
+    follow(`browser:${agentTarget}`);
+  }, [agentAt, agentTarget, dropBlankStart, follow]);
+  // Preview claims hide fresh tabs until settlement; both followers must capture
+  // the revealed notification before its openings retire.
+  useEffect(() => { if (allTabs !== UNREAD_TABS) observePageTabs(port, allTabs, !preview.pending); }, [port, allTabs, preview.pending]);
   const noteHost = useCallback(
     (id: string, host: string) =>
       setHosts((v) => (v[id] === host ? v : { ...v, [id]: host })),
@@ -327,14 +330,18 @@ export function WorkbenchPanel({
   }, [filePath, readable, previewable]);
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
-  const revision = file?.path === filePath ? file.revision : undefined;
+  const { file, draft, diff, busy, error: fileFailed, setDraft, save } = useWorkbenchFiles({
+    port, workspaceRoot, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
+    poll: (readable && mode === "read") || (previewable && mode === "preview"),
+  });
+  const revision = file?.revision;
   useEffect(() => {
-    if (mode !== "preview" || !previewable || !shown || previewTab || (!revision && !failed)) return;
+    if (mode !== "preview" || !previewable || !shown || showFiles || launcher || previewTab || (!revision && !fileFailed && !failed)) return;
     openPreview(filePath, revision).catch((e) => {
       setFailed(reason(e));
       setMode("file");
     });
-  }, [mode, previewable, shown, previewTab, revision, failed, filePath, openPreview, tabs]);
+  }, [mode, previewable, shown, showFiles, launcher, previewTab, revision, fileFailed, failed, filePath, openPreview, tabs]);
   useEffect(() => {
     if (mode === "preview" && revision) syncPreview(filePath, revision);
   }, [mode, filePath, revision, syncPreview]);
@@ -350,54 +357,9 @@ export function WorkbenchPanel({
   useEffect(() => {
     strip.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [activeKey, surfaces.length]);
-  const held = useRef({ file, draft });
-  held.current = { file, draft };
-  // Revisions are opaque, so only order says which answer is current: a read
-  // counts only if no save or later read has been issued since it started.
-  const issued = useRef(0);
-  const openPath = active?.kind === "file" ? active.path : "";
-  // The file is read again on the same occasions as the tree, because the agent
-  // and other applications write it without telling this view. Unsaved edits
-  // win: overwriting a draft with the disk would lose work nobody asked to drop.
-  useEffect(() => {
-    if (!openPath) return;
-    const prior = held.current.file?.path === openPath ? held.current.file : null;
-    if (prior && (!shown || held.current.draft !== prior.content)) return;
-    let live = true;
-    const ticket = ++issued.current;
-    if (!prior) {
-      setBusy(true);
-      setFailed("");
-    }
-    Promise.all([
-      port.workspaceFile(openPath),
-      port
-        .changeDiff(openPath)
-        .catch(() => ({ path: openPath, diff: "", truncated: false })),
-    ])
-      .then(
-        ([next, patch]) => {
-          if (!live || ticket !== issued.current) return;
-          const now = held.current;
-          if (prior && (now.file?.path !== openPath || now.draft !== now.file.content)) return;
-          setFailed("");
-          if (!prior || now.file?.revision !== next.revision) {
-            setFile(next);
-            setDraft(next.content);
-          }
-          setDiff(patch.diff);
-        },
-        (e) => live && ticket === issued.current && setFailed(reason(e)),
-      )
-      .finally(() => live && !prior && setBusy(false));
-    return () => {
-      live = false;
-    };
-  }, [port, openPath, shown, changeKey, glance, running, wrote]);
-  useMarkdownPoll({ port, filePath: shown && ((readable && mode === "read") || (previewable && mode === "preview")) ? filePath : "", held, issued, setFailed, setFile, setDraft });
   // Picking a file is asking to read it. Docked, the list and the file share one
   // column, so the list steps aside; side by side it stays where it is.
-  const openFile = (path: string) => {
+  const openFile = useCallback((path: string) => {
     setOpenFiles((v) => (v.includes(path) ? v : [...v, path]));
     setDismissed((v) => {
       const n = new Set(v);
@@ -405,7 +367,8 @@ export function WorkbenchPanel({
       return n;
     });
     pick(`file:${path}`);
-  };
+  }, [pick]);
+  useEffect(() => { if (fileRequest) openFile(fileRequest.path); }, [fileRequest, openFile]);
   // A rendered document's own links open beside it and its images load from the
   // tree. Held stable per document, so typing re-renders the text alone.
   const openRef = useRef(openFile);
@@ -424,12 +387,17 @@ export function WorkbenchPanel({
     [filePath, port],
   );
   const toggleFolder = async (path: string) => {
+    if (listedScope.current !== scope) return;
+    const ticket = Symbol();
+    folderRequests.set(path, ticket);
+    const current = () => currentScope.current === scope && folderRequests.get(path) === ticket;
     if (!collapsed.has(path)) {
       setCollapsed((v) => new Set(v).add(path));
       return;
     }
     try {
       const result = await port.workspaceFiles(path, "", hidden);
+      if (!current()) return;
       setFiles((v) => [...new Set([...v, ...result.files])]);
       setDirectories((v) => [...new Set([...v, ...result.directories])]);
       setCollapsed((v) => {
@@ -440,45 +408,38 @@ export function WorkbenchPanel({
       });
       setListFailed("");
     } catch (e) {
-      setListFailed(reason(e));
+      if (current()) setListFailed(reason(e));
     }
   };
-  // One browser: a tab opened here is a tab the agent can read and drive, and
-  // it is drawn as a view rather than framed — which is the only way a site
-  // that refuses to be framed opens at all. A shell with no views has no such
-  // page to give, so there the iframe surface is still what there is.
+  // Native views support sites that refuse framing; web hosts retain the iframe fallback.
+  const openingBrowser = useRef<Promise<BrowserTab> | null>(null);
   const addBrowser = async () => {
+    supersede();
+    const valid = current();
     if (!host().drawsBrowserViews()) {
       const id = `b${(minted.current += 1)}`;
       setBrowsers((v) => [...v, id]);
       pick(`manual:${id}`);
       return;
     }
+    const page = openingBrowser.current ??= openPage(port, "about:blank");
     try {
-      const tab = await openPage(port, "about:blank");
-      pick(`browser:${tab.target}`);
+      const tab = await page;
+      if (valid()) pick(`browser:${tab.target}`);
     } catch (e) {
-      setFailed(reason(e));
+      if (valid()) setFailed(reason(e));
+    } finally {
+      if (openingBrowser.current === page) openingBrowser.current = null;
     }
   };
-  const { close, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
+  const { close: closeTabs, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles: showFiles || launcher, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
+  const close = (targets: Surface[]) => { supersede(); return closeTabs(targets); };
   const dismissTabMenu = useCallback(() => setTabMenu(null), []);
   const [tabMenu, setTabMenu] = useState<{ surface: Surface; x: number; y: number; anchor: HTMLElement } | null>(null);
-  const save = async () => {
-    if (!file || draft === file.content) return;
-    setBusy(true);
-    setFailed("");
-    issued.current++;
-    try {
-      setFile(await port.saveWorkspaceFile({ ...file, content: draft }));
-    } catch (e) {
-      setFailed(reason(e));
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
-    <section className="workbench" aria-label={t("工作台")}>
+    <section className="workbench" aria-label={t("工作台")} data-action-keydown="layer.dismiss" onKeyDown={(e) => {
+      if (launcher && e.key === "Escape") { e.stopPropagation(); toggleLauncher(); newTab.current?.focus(); }
+    }}>
       <header className="workbench-tabs">
         <div
           className="workbench-tablist"
@@ -493,7 +454,7 @@ export function WorkbenchPanel({
             className="workbench-tab"
             key={keyOf(surface)}
             role="tab"
-            aria-selected={surface === active}
+            aria-selected={!launcher && surface === active}
             data-live={surface.kind === "browser" && surface.tab.active ? "" : undefined}
             data-action-contextmenu="workbench.browser-menu" data-target={keyOf(surface)}
             onContextMenu={(e) => {
@@ -533,44 +494,47 @@ export function WorkbenchPanel({
           </div>
         ))}
         </div>
+        {wideMode && <BrowserWideToggle {...wideMode} />}
         <button
           className="workbench-files"
           data-action="workbench.files"
-          aria-pressed={showFiles}
+          aria-pressed={showFiles && !launcher}
           aria-label={t("文件")}
           title={t("文件")}
-          onClick={() => setShowFiles((on) => !on)}
+          onClick={() => { supersede(); setLauncher(false); setShowFiles((on) => launcher || !on); }}
         >
           <StudioIcon name="folder" />
         </button>
         <button
           className="workbench-new"
-          data-action="workbench.new-browser"
-          aria-label={t("新建浏览器标签")}
-          title={t("新建浏览器标签")}
-          onClick={() => void addBrowser()}
+          data-action="workbench.new"
+          ref={newTab}
+          aria-label={t("新建标签")}
+          title={t("新建标签")}
+          aria-expanded={launcher}
+          onClick={toggleLauncher}
         >
           <StudioIcon name="plus" />
         </button>
       </header>
       {closeFailure && <div className="workbench-error workbench-close-error" role="alert">{closeFailure}</div>}
-      <div className="workbench-body" data-files={showFiles ? "" : undefined}>
+      <div className="workbench-body" data-files={showFiles && !launcher ? "" : undefined}>
         <main className="workbench-canvas">
-          {failed && active?.kind !== "file" && (
+          {failed && (launcher || active?.kind !== "file") && (
             <div className="workbench-error" role="alert">
               {failed}
             </div>
           )}
-          {!active && (
+          {(launcher || !active) && (
             <WorkbenchLauncher
+              key={String(launcher)} focus={launcher}
               changes={changes.length}
-              onFiles={() => setShowFiles(true)}
+              onFiles={chooseFiles}
               onChanges={() => changes[0] && openFile(changes[0].path)}
               onBrowser={() => void addBrowser()}
             />
           )}
-          {/* Every open browser stays mounted: a tab switch must not throw away
-              where that page had got to. */}
+          <div className="workbench-content" hidden={launcher || !active}>
           {browsers.map((id) => (
             <ManualBrowserPanel
               key={id}
@@ -584,11 +548,11 @@ export function WorkbenchPanel({
           {active?.kind === "browser" && (
             <AgentBrowserPanel
               tabs={[active.tab]}
-              shown={shown}
+              shown={shown && !launcher}
               showTabs={false}
             />
           )}
-          {active?.kind === "file" && (
+          {active?.kind === "file" && (isWorkspaceImage(active.path) ? <WorkspaceImage key={active.path} port={port} path={active.path} /> : (
             <>
               <WorkbenchFileBar
                 path={active.path}
@@ -596,17 +560,17 @@ export function WorkbenchPanel({
                 onMode={setMode}
                 readable={readable}
                 previewable={previewable}
-                canSave={!busy && !!file && draft !== file.content}
+                canSave={!busy && file?.path === active.path && draft !== file.content}
                 onSave={() => void save()}
               />
-              {failed && !(mode === "preview" && previewTab) && (
+              {(fileFailed || failed) && !(mode === "preview" && previewTab) && (
                 <div className="workbench-error" role="alert">
-                  {failed}
+                  {fileFailed || failed}
                 </div>
               )}
               {mode === "preview" ? (
                 previewTab ? (
-                  <AgentBrowserPanel tabs={[previewTab]} shown={shown} showTabs={false} />
+                  <AgentBrowserPanel tabs={[previewTab]} shown={shown && !launcher} showTabs={false} />
                 ) : (
                   <div className="workbench-empty">{t("正在读取…")}</div>
                 )
@@ -633,7 +597,8 @@ export function WorkbenchPanel({
                 </Suspense>
               ) : null}
             </>
-          )}
+          ))}
+          </div>
         </main>
         <aside className="workbench-explorer">
           <WorkbenchExplorerHead
@@ -671,35 +636,17 @@ export function WorkbenchPanel({
               file only once its folder is expanded, so a change three levels
               down was invisible until someone went looking for it. */}
           {changes.length > 0 && (
-            <div className="workbench-changes">
-              <div className="workbench-explorer-head">
-                <span>{t("改动")}</span>
-                <small>{changes.length}</small>
-                {onTreeChanged && commit.button}
-              </div>
-              {commit.card}
-              {changes.map((item) => (
-                <button
-                  className="workbench-change-row"
-                  data-action="workbench.diff"
-                  data-target={item.path}
-                  key={`c:${item.path}`}
-                  title={item.path}
-                  aria-current={active?.kind === "file" && active.path === item.path && mode === "diff" ? "page" : undefined}
-                  onClick={() => {
-                    openFile(item.path);
-                    setMode("diff");
-                  }}
-                >
-                  <em data-status={item.status}>{item.status || "M"}</em>
-                  <span>{item.path.slice(item.path.lastIndexOf("/") + 1)}</span>
-                  {/* Absent counts print nothing: a binary file did not change
-                      by zero lines, git simply did not count it. */}
-                  {item.insertions !== undefined && <i data-io="up">+{item.insertions}</i>}
-                  {item.deletions !== undefined && <i data-io="down">-{item.deletions}</i>}
-                </button>
-              ))}
-            </div>
+            <WorkbenchChanges
+              port={port}
+              changes={changes}
+              current={active?.kind === "file" && mode === "diff" ? active.path : ""}
+              onOpen={(path) => {
+                openFile(path);
+                setMode("diff");
+              }}
+              onChanged={onTreeChanged}
+              commit={commit}
+            />
           )}
           <div className="workbench-filelist">
             {rows.map((row) =>
@@ -713,7 +660,7 @@ export function WorkbenchPanel({
                   aria-expanded={!collapsed.has(row.path)}
                   onClick={() => void toggleFolder(row.path)}
                   data-action-contextmenu="workbench.menu"
-                  onContextMenu={(e) => offerReveal(e, row.path)}
+                  onContextMenu={(e) => offerMenu(e, row.path, true)}
                 >
                   <StudioIcon
                     name={collapsed.has(row.path) ? "chevron" : "down"}
@@ -736,7 +683,7 @@ export function WorkbenchPanel({
                   }
                   onClick={() => openFile(row.path)}
                   data-action-contextmenu="workbench.menu"
-                  onContextMenu={(e) => offerReveal(e, row.path)}
+                  onContextMenu={(e) => offerMenu(e, row.path, false)}
                 >
                   <span />
                   <StudioIcon name="file" />
@@ -754,20 +701,9 @@ export function WorkbenchPanel({
               <p className="workbench-no-files">{t("没有匹配的文件")}</p>
             )}
           </div>
-          {menu && createPortal(
-            <div
-              className="tabmenu"
-              role="menu"
-              ref={(el) => {
-                if (el) pinToViewport(el, menu.x, menu.y);
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button role="menuitem" autoFocus data-action="workbench.reveal" data-target={menu.path} onClick={() => reveal(menu.path)}>
-                {platform === "darwin" ? t("在访达中显示") : platform === "windows" ? t("在文件资源管理器中显示") : t("在系统文件管理器中显示")}
-              </button>
-            </div>,
-            document.body,
+          {menu?.scope === scope && shown && (
+            <WorkbenchFileMenu key={menu.id} menu={menu} root={workspaceRoot}
+              revealable={revealable} platform={platform} onReveal={reveal} onAddToChat={onAddToChat} onClose={closeMenu} />
           )}
         </aside>
       </div>

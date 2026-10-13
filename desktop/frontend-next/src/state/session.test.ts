@@ -760,3 +760,22 @@ describe("an ask the host skipped on timeout", () => {
     expect(ask.answered).toEqual([]);
   });
 });
+
+// The kernel's progress frame carries the call id and the newest chunk only, so
+// folding it like a dispatch would blank the call's name and keep one chunk.
+describe("a running call's live output", () => {
+  const chunk = (output: string) => ({ kind: "tool_progress", tool: { id: "c1", name: "", output } }) as SessionEvent;
+
+  it("keeps the call's name and adds each chunk to what came before", () => {
+    const s = run([full("c1"), chunk("step 1\n"), chunk("step 2\n")]);
+    expect(tools(s)).toHaveLength(1);
+    expect(tools(s)[0].tool.name).toBe("write_file");
+    expect(tools(s)[0].tool.output).toBe("step 1\nstep 2\n");
+    expect(tools(s)[0].running).toBe(true);
+  });
+
+  it("gives way to the final result", () => {
+    const s = run([full("c1"), chunk("step 1\n"), { kind: "tool_result", tool: { id: "c1", name: "bash", output: "all done" } } as SessionEvent]);
+    expect(tools(s)[0].tool.output).toBe("all done");
+  });
+});

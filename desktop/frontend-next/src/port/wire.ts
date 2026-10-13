@@ -32,6 +32,7 @@ export type Kind =
   | "workspace_changed"
   | "completion_summary"
   | "inbox_changed"
+  | "rewind_changed"
   | "adjudications_changed"
   | "browser_tabs_changed"
   | "graph_delta"

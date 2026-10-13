@@ -24,7 +24,7 @@ import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
 import { nameQueued, withoutPendingRow } from "./queued";
-import { dropTool, foldLastRead, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
+import { dropTool, foldLastRead, foldProgress, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
 export { chipLabel };
 export { quoteAmount };
 
@@ -60,6 +60,7 @@ export const initialState: SessionState = {
   steerQueue: [], takenBack: [], subagentPhase: {},
   awaitingTurnStart: [],
   queueMoved: 0,
+  rewindMoved: 0,
   browserTabsMoved: 0,
   panels: [],
   views: [],
@@ -232,6 +233,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     return left.length === s.entranceOwed.length ? s : { ...s, entranceOwed: left };
   }
   if (ev.kind === "__runtime_seen") return { ...s, runtime: s.runtime.filter((n) => n.id !== ev.id) };
+  if (ev.kind === "rewind_changed") return { ...s, rewindMoved: s.rewindMoved + 1 };
   if (ev.kind === "inbox_changed") return { ...s, queueMoved: s.queueMoved + 1 };
   if (ev.kind === "browser_tabs_changed") return { ...s, browserTabsMoved: s.browserTabsMoved + 1 };
   // Both event.Message emitters carry assistant text, so nothing on the wire
@@ -382,7 +384,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     case "tool_progress":
       if (ev.tool && isSubagentProgress(ev.tool.name)) return { ...s, subagentPhase: notePhase(s.subagentPhase, ev.tool) };
       return ev.tool
-        ? { ...s, executions: noteTool(s.executions, ev.tool, false), items: foldTool(s.items, ev.tool, true) }
+        ? { ...s, executions: noteTool(s.executions, ev.tool, false), items: foldProgress(s.items, ev.tool) }
         : s;
 
     case "tool_result": {
