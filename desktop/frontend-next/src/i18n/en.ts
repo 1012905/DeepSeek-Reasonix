@@ -596,6 +596,7 @@ export const EN: Record<string, string> = {
   "模型提问时": "When the model asks you something",
   "模型停下来问你一个问题，没有答案它就不会往下走": "The model stopped to ask a question and will not go on without an answer",
   "反馈有新回复时": "When feedback gets a reply",
+  "技能说明": "Skill text",
   "磁盘空间不足时": "When disk space is low",
   "项目或会话所在的磁盘剩余空间很少时提醒（不足 5 GB 或不足 3%），同一块盘长时间不重复提醒；只提醒，不会清理任何文件": "Warns when the drive holding your project or sessions runs short (under 5 GB or 3%), and does not repeat for the same drive for hours. It only warns; it never deletes anything.",
   "你提交的反馈收到回复、或需要你补充信息时提醒一次，不带回复内容": "One alert when a report you sent gets a reply or needs more from you, without its text",
