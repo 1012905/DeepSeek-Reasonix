@@ -436,6 +436,8 @@ export interface AgentPort {
   /** Show a workspace entry, "" being the root, in the system file manager.
    *  Refuses with the kernel's code for anything outside the workspace. */
   revealInFileManager(path: string): Promise<void>;
+  opensFiles(): boolean;
+  openFile(path: string): Promise<void>;
   sessions(): Promise<SessionEntry[]>;
   resume(path: string): Promise<void>;
   newSession(): Promise<void>;

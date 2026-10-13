@@ -53,6 +53,8 @@ export interface HostPort {
    *  root. The shell asks the kernel where that is and selects only the answer;
    *  null once shown, otherwise why it was not. */
   revealPath(base: string, path: string): Promise<Refusal | null>;
+  opensFiles(): boolean;
+  openFile(base: string, path: string): Promise<Refusal | null>;
   /** Show a project the sidebar lists, which needs no pane. The hub answers
    *  where it is and refuses any folder it does not list. */
   revealWorkspace(root: string): Promise<Refusal | null>;
@@ -161,6 +163,7 @@ interface ElectronBridge {
   saveBytes(name: string, bytes: Uint8Array): Promise<string>;
   pickFolder(startIn: string): Promise<string>;
   revealPath?(base: string, path: string): Promise<Refusal | null>;
+  openFile?(base: string, path: string): Promise<Refusal | null>;
   revealWorkspace?(root: string): Promise<Refusal | null>;
   revealLogs?(): Promise<Refusal | null>;
   openWorkspace?(root: string): Promise<Refusal | null>;
@@ -236,6 +239,10 @@ class ElectronHost implements HostPort {
   }
   revealPath(base: string, path: string) {
     return this.api.revealPath?.(base, path) ?? Promise.resolve({ error: "this shell cannot show files" });
+  }
+  opensFiles() { return typeof this.api.openFile === "function"; }
+  openFile(base: string, path: string) {
+    return this.api.openFile?.(base, path) ?? Promise.resolve({ error: "this shell cannot open files" });
   }
   revealWorkspace(root: string) {
     return this.api.revealWorkspace?.(root) ?? Promise.resolve({ error: "this shell cannot show files" });
@@ -327,6 +334,8 @@ class BrowserHost implements HostPort {
   revealPath() {
     return Promise.resolve({ error: "a browser tab cannot show files" });
   }
+  opensFiles() { return false; }
+  openFile() { return Promise.resolve({ error: "a browser tab cannot open files" }); }
   revealWorkspace() {
     return Promise.resolve({ error: "a browser tab cannot show files" });
   }

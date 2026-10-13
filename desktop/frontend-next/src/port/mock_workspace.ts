@@ -3,6 +3,9 @@ import type { ChangeDiff, StageRequest, WorkspaceChange, WorkspaceChanges, Works
 import { MockFeedback } from "./mock_feedback";
 
 export class MockWorkspace extends MockFeedback {
+  opensFiles() { return false; }
+  async openFile() {}
+
   // Held in a field so a switch is visible to the next read, as the kernel's endpoints keep.
   branchState: WorkspaceGit = { repo: true, name: "reasonix", branch: "main", detached: false, added: 2, removed: 1, untracked: 3 };
 
