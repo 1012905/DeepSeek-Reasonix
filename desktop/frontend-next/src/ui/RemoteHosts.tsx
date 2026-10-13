@@ -139,6 +139,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
   // Folded rows. A host's key is its name; a workspace's carries the host, so
   // one machine collapsing never takes a folder on another with it.
   const [shut, setShut] = useState<Set<string>>(new Set());
+  const [groupShut, setGroupShut] = useState(false);
   const needle = useRailQuery();
   const hit = makeHit(needle);
 
@@ -227,7 +228,27 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
           }}
         />
       ) : null}
-      {hosts.map((host) => {
+      <div
+        className="machrow"
+        data-group=""
+        data-action="remote.group"
+        role="treeitem"
+        aria-level={1}
+        aria-expanded={!!needle || !groupShut}
+        onClick={() => setGroupShut((v) => !v)}
+      >
+        <button className="twist" tabIndex={-1} aria-hidden="true">
+          <svg viewBox="0 0 10 10">
+            <path d="M3.4 1.6 6.8 5 3.4 8.4" />
+          </svg>
+        </button>
+        <i className="rmtpip" aria-hidden="true" />
+        <span className="rmtname">{t("远程机器")}</span>
+        <span className="rowswap">
+          <span className="rowcount" title={t("{n} 台机器", { n: hosts.length })} aria-label={t("{n} 台机器", { n: hosts.length })}>{hosts.length}</span>
+        </span>
+      </div>
+      {!needle && groupShut ? null : hosts.map((host) => {
         // Panes on this machine, which is also what makes the connection worth
         // holding: the link goes down with the last of them.
         const panes = runtimes.filter((rt) => rt.host === host.name);
@@ -249,7 +270,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
               className="machrow"
               title={host.target}
               role="treeitem"
-              aria-level={1}
+              aria-level={2}
               aria-expanded={!folded}
               onClick={() => fold(host.name)}
             >
@@ -320,7 +341,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                       <div
                         className="wsrow rmtwsrow"
                         role="treeitem"
-                        aria-level={2}
+                        aria-level={3}
                         aria-expanded={!folded}
                         onClick={() => fold(key)}
                       >
@@ -407,7 +428,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                                 key={session.path}
                                 className="sessrow sessrow-remote"
                                 role="treeitem"
-                                aria-level={3}
+                                aria-level={4}
                                 aria-selected={held?.id === active}
                                 data-on={held?.id === active ? "" : undefined}
                                 data-live={held ? "" : undefined}
@@ -450,7 +471,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                     key={rt.id}
                     className="sessrow"
                     role="treeitem"
-                    aria-level={3}
+                    aria-level={4}
                     aria-selected={rt.id === active}
                     data-on={rt.id === active ? "" : undefined}
                     data-live=""
