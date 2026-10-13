@@ -77,6 +77,7 @@ node perf/narrow.mjs    # 窄窗口 + 1.8 倍缩放：标题栏与输入区的�
 node perf/sidebar.mjs   # 侧栏开关只有一个且位置不变（图标栏 开/仅收起时/关 × 浅/深）；同一模型连续回复只在首条带头
 node perf/stickyfold.mjs # 展开的长执行过程：滚动时头部吸在顶部、有自己的底（浅/深）
 node perf/crumb.mjs # 标题栏里会话标题紧跟项目名，长名字也不溢出（宽/窄）
+node perf/hoverradius.mjs # 输入框底行的按钮悬停时圆角和底色一致（浅/深）
 node perf/sessionrows.mjs # 会话行样式：34px、无额外行间距、单行省略；本机/远程、悬浮/焦点、浅/深、窄/宽
 node perf/start.mjs     # 经工作台标签/边缘把手打开工作台先出入口页（文件/改动/浏览器），不替人开浏览器；标题栏 Browser 按钮仍直达浏览器（浅/深 × 宽/窄）
 ```

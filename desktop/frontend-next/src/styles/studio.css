@@ -2230,7 +2230,6 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-branch-pop { position: relative; flex: none; }
 .studio-branch {
   cursor: pointer;
-  border-radius: 6px !important;
   box-shadow: none;
   transform: none;
   transition: background-color 130ms ease, color 130ms ease;
@@ -2238,7 +2237,6 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-branch:hover,
 .studio-branch:focus-visible {
   color: var(--text);
-  background: var(--hair);
   transform: none;
 }
 .studio-branch:hover { outline: none; }
@@ -2587,8 +2585,6 @@ body { font-size: 14px; line-height: 1.75; }
 :root[data-theme="light"] .portmenu,
 :root[data-theme="light"] .polmenu { background: var(--surface); border-color: var(--border); box-shadow: 0 18px 44px -20px #596057; }
 :root[data-theme="light"] .studio-branch-card { color: var(--text); }
-:root[data-theme="light"] .studio-branch:hover,
-:root[data-theme="light"] .studio-branch:focus-visible { background: var(--overlay) !important; border-color: transparent !important; color: var(--text) !important; }
 :root[data-theme="light"] .studio-attach:hover,
 :root[data-theme="light"] .studio-attach:focus-visible { background: var(--overlay) !important; border-color: transparent !important; color: var(--text) !important; }
 :root[data-theme="light"] .studio-attach:focus-visible { background: transparent !important; box-shadow: none !important; }
