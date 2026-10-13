@@ -38,7 +38,6 @@ import (
 	"reasonix/internal/platform/appupdate"
 	"reasonix/internal/platform/computer"
 	"reasonix/internal/platform/crashreport"
-	"reasonix/internal/platform/diskhealth"
 	"reasonix/internal/platform/feedback"
 	"reasonix/internal/platform/instanceid"
 	"reasonix/internal/platform/notify"
