@@ -435,6 +435,9 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 	}
 	shared.generation = host.registerDeferredCancel(spec.Name, cancel)
 
+	if cs != nil && !cachedToolNamesUsable(spec, cs.Tools) {
+		cs = nil
+	}
 	var out []tool.Tool
 	// A snapshot with zero tools presents nothing the model could call, so it
 	// gets the same connect stub as a cache miss — otherwise the live tools
