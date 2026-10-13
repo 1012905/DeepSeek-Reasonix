@@ -140,7 +140,7 @@ describe("opening an HTML file from the explorer", () => {
     }
     await waitFor(() => expect(unseenPageOpenings(port)).toHaveLength(0));
     expect(screen.getByRole("tab", { name: "Landing" }).getAttribute("aria-selected")).toBe("false");
-    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(!mixed);
+    await waitFor(() => expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(!mixed));
     if (mixed) expect(screen.getByRole("tab", { name: "Fresh" }).getAttribute("aria-selected")).toBe("true");
     rerender(panel(port, { tabs: [{ ...agent, active: false }, page({ active: true, url: "https://reused.example" }), fresh] }));
     await waitFor(() => expect(screen.getByRole("tab", { name: "Landing" }).getAttribute("aria-selected")).toBe("true"));
