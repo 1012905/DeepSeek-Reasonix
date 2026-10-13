@@ -16,7 +16,9 @@ function mount(open: boolean) {
   const onWidth = vi.fn();
   const view = render(
     <div className="app">
-      <Gutter edge="r" span={DOCK} width={560} label="resize" open={open} onWidth={onWidth} onOpen={onOpen} />
+      <section className="pane">
+        <Gutter edge="r" span={DOCK} width={560} label="resize" open={open} onWidth={onWidth} onOpen={onOpen} />
+      </section>
     </div>,
   );
   const bar = view.container.querySelector(".gutter") as HTMLElement;
