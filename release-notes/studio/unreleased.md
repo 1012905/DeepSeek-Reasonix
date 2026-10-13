@@ -7,3 +7,5 @@
 - Adds Clear Blue and Tea Green in light/dark and system modes, preserving the default. Fixes default-preview tint leakage and inconsistent control colours. Refs #12909.
 - 动态天空主题移至「更多已安装主题」，激活的背景主题仍在首组显示。关联 #12909。
 - Dynamic-sky themes move to More installed themes; the active backdrop remains in the first group. Refs #12909.
+- 展开很长的执行过程时，头部会吸在顶部，随时可以直接折叠，不用再往上翻。关联 #12931。
+- A long expanded process group keeps its header at the top while you scroll, so it can be folded without scrolling back up. Fixes #12931.
