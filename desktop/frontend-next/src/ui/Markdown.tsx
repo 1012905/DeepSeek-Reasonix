@@ -1,5 +1,5 @@
-import { isValidElement, memo, useEffect, useState, type ReactNode, type MouseEvent, type KeyboardEvent } from "react";
-import ReactMarkdown from "react-markdown";
+import { createElement, isValidElement, memo, useEffect, useState, type JSX, type ReactNode, type MouseEvent, type KeyboardEvent } from "react";
+import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import { CodeBlock } from "./CodeBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -167,6 +167,30 @@ export interface LocalRefs {
   menu?(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, href: string): void;
 }
 
+// Each block takes its direction from its own first strong character, so a
+// Persian or Arabic paragraph reads right to left beside an English one. Code
+// keeps the document's direction: pre is not in this list.
+function directed<T extends "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "ul" | "ol" | "blockquote" | "td" | "th">(tag: T) {
+  return function Directed({ node: _node, ...props }: JSX.IntrinsicElements[T] & ExtraProps) {
+    return createElement(tag, { ...props, dir: "auto" });
+  };
+}
+
+const DIRECTED: Components = {
+  p: directed("p"),
+  h1: directed("h1"),
+  h2: directed("h2"),
+  h3: directed("h3"),
+  h4: directed("h4"),
+  h5: directed("h5"),
+  h6: directed("h6"),
+  ul: directed("ul"),
+  ol: directed("ol"),
+  blockquote: directed("blockquote"),
+  td: directed("td"),
+  th: directed("th"),
+};
+
 // live is the tail of a message still arriving; tail alone is only the last
 // block, which a settled message has too.
 const Block = memo(function Block({ src, math, emoji, code, tail, live, local, images }: { src: string; math: Plugin | null; emoji: Plugin | null; code: Plugin | null; tail?: boolean; live?: boolean; local?: LocalRefs; images: boolean }) {
@@ -177,6 +201,7 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local, i
       remarkPlugins={([...BASE_REMARK, [remarkFileLinks, local?.path], ...(emoji ? [emoji] : [])]) as never}
       rehypePlugins={([...BASE_REHYPE, math, code].filter(Boolean)) as never}
       components={{
+        ...DIRECTED,
         // Every link here comes from model output; a webview navigating away
         // would replace the app with the page.
         a: ({ children, href }) => {
