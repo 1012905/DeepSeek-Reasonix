@@ -116,12 +116,15 @@ func TestOnlyChangedPathsAreAcceptedAndTheyAreLiteral(t *testing.T) {
 	dir, repo := fixture(t)
 	write(t, dir, "one.txt", "1\n")
 	write(t, dir, "two.txt", "2\n")
-	write(t, dir, "*.txt", "star\n")
-	if err := Stage(context.Background(), repo, []string{"*.txt"}, false); err != nil {
+	// As a glob this name matches one.txt and two.txt; it avoids * and ?, which
+	// a Windows file name cannot hold.
+	const glob = "[ot][nw][eo].txt"
+	write(t, dir, glob, "glob\n")
+	if err := Stage(context.Background(), repo, []string{glob}, false); err != nil {
 		t.Fatal(err)
 	}
 	st := statusOf(t, dir)
-	if !st["*.txt"].Staged || st["one.txt"].Staged || st["two.txt"].Staged {
+	if !st[glob].Staged || st["one.txt"].Staged || st["two.txt"].Staged {
 		t.Fatalf("a glob matched files it did not name: %+v", st)
 	}
 	for _, bad := range []string{"../outside.txt", "/etc/passwd", "--all", ":(top)a.go", "missing.txt", ""} {
