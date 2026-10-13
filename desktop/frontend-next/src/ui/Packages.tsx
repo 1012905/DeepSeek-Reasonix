@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { t } from "../i18n";
 import type { AgentPort, PluginExport, PluginItem, PluginPackage } from "../port/port";
 import { Switch } from "./Switch";
+import { CopyButton } from "./CopyButton";
 import { reason } from "../i18n/kernel";
 
 interface Props {
@@ -196,6 +197,11 @@ function Package({
             : t("该包不需要填写任何密钥。")}
         </div>
       )}
+      {exported?.savedTo && (
+        <div className="acts">
+          <CopyButton text={exported.savedTo} label={t("复制路径")} />
+        </div>
+      )}
     </>
   );
 
@@ -261,6 +267,7 @@ function Contributions({ items }: { items?: PluginItem[] }) {
           <span className="d">·</span>
           <span>{it.invocation || it.name}</span>
           <span className="sc">{it.description}</span>
+          {it.invocation && <CopyButton key={it.invocation} text={it.invocation} iconOnly label={t("复制调用命令 {command}", { command: it.invocation })} />}
         </div>
       ))}
     </>
