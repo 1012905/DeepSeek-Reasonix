@@ -197,6 +197,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/commit.go", "CommitProposal", tsWorkspaceFile, "CommitProposal"},
 	{"internal/session/control/commit.go", "CommitRequest", tsWorkspaceFile, "CommitRequest"},
 	{"internal/session/control/commit.go", "CommitResult", tsWorkspaceFile, "CommitResult"},
+	{"internal/session/control/commit.go", "StageRequest", tsWorkspaceFile, "StageRequest"},
 	{"internal/platform/gitcommit/gitcommit.go", "File", tsWorkspaceFile, "CommitFile"},
 	// The scale range the slider is drawn from: a bound the page cannot read
 	// would leave it a range of its own.

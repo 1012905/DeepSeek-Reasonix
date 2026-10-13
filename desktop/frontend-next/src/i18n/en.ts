@@ -1408,8 +1408,14 @@ export const EN: Record<string, string> = {
   "回合运行中，等它结束后再分支": "A turn is running; branch after it ends",
   "这个位置无法分支（重启后恢复的会话，或已被压缩的历史）": "This point cannot be branched (a session restored after a restart, or history that was compacted)",
   "分支失败，请重试": "Branching failed; try again",
-  "暂存区是空的，先用 git add 暂存要提交的文件":
-    "Nothing is staged; stage the files to commit with git add first",
+  "暂存区是空的：先在改动列表里勾选要提交的文件，或点「暂存全部」":
+    "Nothing is staged: tick the files to commit in the changes list, or press Stage all",
+  "这个文件已经不在改动列表里了，请刷新后再试": "That file is no longer in the changes list; refresh and try again",
+  "暂存请求无法识别": "The stage request was not understood",
+  "暂存 {path}": "Stage {path}",
+  "暂存全部": "Stage all",
+  "取消全部暂存": "Unstage all",
+  "暂存失败，请重试": "Staging failed; try again",
   "暂存区在你确认之后又变了，请重新起草":
     "The staged changes changed after you reviewed them; draft again",
   "暂存的内容里有疑似密钥的文件，需要你确认后才能提交":

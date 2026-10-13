@@ -422,12 +422,13 @@ type LocalShell interface {
 }
 
 // Commits proposes a commit message for the staged changes and records a local
-// commit once the person has confirmed the text. It never stages, pushes or
-// rewrites history. It also moves the workspace between local git branches —
+// commit once the person has confirmed the text. It stages or unstages only what
+// the person names, and never pushes or rewrites history. It also moves the workspace between local git branches —
 // a workspace write like a commit, refused typed while a turn runs.
 type Commits interface {
 	ProposeCommit(ctx context.Context) (CommitProposal, error)
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
+	StageChanges(ctx context.Context, req StageRequest) error
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 

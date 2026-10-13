@@ -256,7 +256,10 @@ const SAID: Record<string, string> = {
   "conversation_branch.failed": "分支失败，请重试",
 
   "commit.no_repository": "这个工作区不是 git 仓库，无法提交",
-  "commit.nothing_staged": "暂存区是空的，先用 git add 暂存要提交的文件",
+  "commit.nothing_staged": "暂存区是空的：先在改动列表里勾选要提交的文件，或点「暂存全部」",
+  "stage.unknown_path": "这个文件已经不在改动列表里了，请刷新后再试",
+  "stage.bad_request": "暂存请求无法识别",
+  "stage.failed": "暂存失败，请重试",
   "commit.staged_changed": "暂存区在你确认之后又变了，请重新起草",
   "commit.secrets_staged": "暂存的内容里有疑似密钥的文件，需要你确认后才能提交",
   "commit.empty_message": "提交说明是空的",

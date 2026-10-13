@@ -18,6 +18,7 @@ import "../src/styles/phonecomposer.css";
 import "../src/styles/stophint.css";
 import "../src/styles/dialogcenter.css";
 import "../src/styles/treerows.css";
+import "../src/styles/workbench-changes.css";
 import "../src/styles/vthumb.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
