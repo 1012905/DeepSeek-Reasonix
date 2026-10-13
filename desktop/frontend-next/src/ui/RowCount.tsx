@@ -6,7 +6,7 @@ const countLabel = (c: { shown: number; of?: number }) =>
 export function RowCount({ c }: { c: { shown: number; of?: number } }) {
   const label = countLabel(c);
   return (
-    <span className="rowcount" title={label} aria-label={label}>
+    <span className="rowcount" data-pill="" title={label} aria-label={label}>
       {c.of === undefined ? c.shown : `${c.shown}/${c.of}`}
     </span>
   );

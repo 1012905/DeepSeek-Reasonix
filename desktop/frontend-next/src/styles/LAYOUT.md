@@ -1510,3 +1510,10 @@ what exists.
   the job the blur did.
 - `feedback-veil.test.ts` scans every stylesheet: no rule on `.fbk-veil` may
   carry a backdrop filter or an endless animation.
+
+## Session tree levels
+
+- Machine and remote-group rows are section headers: 11px, 640 weight, tracked, muted; their count is words ("2 个项目", "3 台机器"), never a bare number.
+- A project or remote folder row is the strongest line in the tree; its session count is a numeric pill (`data-pill`), so the two levels never share a count style.
+- A scope filter shows its count only when it is above zero; the label stays at 12px.
+- The row actions (`+`, `…`, refresh) are revealed on hover or focus, 22px, outlined, and share one hover, press, expanded and busy state, whichever row they sit on. Remote host actions are always drawn and outline only on those states.

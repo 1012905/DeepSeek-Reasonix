@@ -355,7 +355,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
             <i className="rmtpip" aria-hidden="true" />
             <span className="rmtname">{t("这台机器")}</span>
             <span className="rowswap">
-            {treeRead && <span className="rowcount" title={t("{n} 个项目", { n: tree.length })} aria-label={t("{n} 个项目", { n: tree.length })}>{tree.length}</span>}
+            {treeRead && <span className="rowcount" data-words="">{t("{n} 个项目", { n: tree.length })}</span>}
             <button
               className="machpick"
               data-busy={adder.busy ? "" : undefined}
