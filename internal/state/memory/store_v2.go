@@ -81,6 +81,15 @@ func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
 			}
 			frontmatter, _ := splitFrontmatter(string(raw))
 			if strings.TrimSpace(frontmatter["id"]) != "" && parsePositiveInt(frontmatter["revision"]) > 0 {
+				// A previous run can have rewritten the fact and then failed to
+				// publish the index, which leaves a migrated fact with a stale
+				// line. Repairing it is what makes the retry converge.
+				if migrated, ok := loadMemory(path); ok {
+					migrated.Name = slug(migrated.Name)
+					if err := reindexIn(dir, migrated.Name, migrated); err != nil {
+						return report, err
+					}
+				}
 				continue
 			}
 			memory, ok := loadMemory(path)
