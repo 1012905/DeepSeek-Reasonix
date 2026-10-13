@@ -41,6 +41,8 @@ it("lets the reader inspect literal profile declarations without running or chan
   expect(summary.getAttribute("aria-label")).toBe("review 的子代理声明");
   expect(details.open).toBe(false);
   await userEvent.tab();
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "复制调用命令 /review" }));
+  await userEvent.tab();
   expect(document.activeElement).toBe(screen.getByRole("switch"));
   await userEvent.tab();
   expect(document.activeElement).toBe(summary);
