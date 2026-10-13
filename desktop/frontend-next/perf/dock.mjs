@@ -17,7 +17,9 @@ const geometry = (page) =>
       const r = el?.getBoundingClientRect();
       return r && r.width > 0 ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
     };
-    return { pane: box(".pane"), tabs: box(".pane > .tabs"), side: box('.pane > .scroll[data-pane="browser"]'), body: box(".pane > .pbody") };
+    const card = document.querySelector('.pane > .scroll[data-pane="browser"] > .workbench');
+    const divider = card ? parseFloat(getComputedStyle(card).borderLeftWidth) : 0;
+    return { pane: box(".pane"), tabs: box(".pane > .tabs"), side: box('.pane > .scroll[data-pane="browser"]'), body: box(".pane > .pbody"), strip: box(".workbench-tabs"), divider };
   });
 
 const browser = await chromium.launch();
@@ -41,6 +43,8 @@ for (const scheme of ["light", "dark"]) {
           check(`${tag} ${round}: it starts at the top of the pane, beside the navigation row`, Math.abs(open.side.top - open.pane.top) <= 1 && Math.abs(open.tabs.top - open.pane.top) <= 1, `pane ${open.pane.top} tabs ${open.tabs.top} column ${open.side.top}`);
           check(`${tag} ${round}: it runs to the bottom of the pane`, Math.abs(open.side.bottom - open.pane.bottom) <= 1, `${open.side.bottom} against ${open.pane.bottom}`);
           check(`${tag} ${round}: the navigation row stays left of it`, open.tabs.right <= open.side.left + 1, `${open.tabs.right} / ${open.side.left}`);
+          check(`${tag} ${round}: its strip ends on the navigation row's line, so the two rows read as one`, !!open.strip && Math.abs(open.strip.bottom - open.tabs.bottom) <= 1, JSON.stringify([open.tabs, open.strip]));
+          check(`${tag} ${round}: the workbench card's own edge separates it from the conversation`, open.divider >= 1, String(open.divider));
         } else {
           check(`${tag} ${round}: the navigation row stays above the page`, !!open.tabs && open.side.top >= open.tabs.bottom - 1, JSON.stringify([open.tabs, open.side]));
         }

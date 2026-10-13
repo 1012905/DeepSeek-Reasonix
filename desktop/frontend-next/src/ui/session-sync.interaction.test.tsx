@@ -81,7 +81,7 @@ it("converges two App trees and counts after another client's changes and page r
   });
   await waitFor(() => clients.forEach((_, i) => {
     expect(count(i, "all")).toBe("2");
-    expect(count(i, "archived")).toBe("0");
+    expect(count(i, "archived")).toBeUndefined();
   }));
   expect(ids(1)).toEqual([]);
   const reads = clients.map((hub) => vi.mocked(hub.tree).mock.calls.length);
@@ -90,7 +90,7 @@ it("converges two App trees and counts after another client's changes and page r
   await waitFor(() => clients.forEach((hub, i) => expect(hub.tree).toHaveBeenCalledTimes(reads[i] + 1)));
   clients.forEach((_, i) => expect(count(i, "all")).toBe("2"));
   await act(async () => { book = []; notify(); });
-  await waitFor(() => clients.forEach((_, i) => expect(count(i, "all")).toBe("0")));
+  await waitFor(() => clients.forEach((_, i) => expect(count(i, "all")).toBeUndefined()));
 });
 
 

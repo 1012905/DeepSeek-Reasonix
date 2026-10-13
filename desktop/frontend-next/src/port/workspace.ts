@@ -4,6 +4,10 @@ export interface WorkspaceChange {
   oldPath?: string;
   // git porcelain XY, trimmed: "M", "A", "D", "R", "??".
   status: string;
+  // The index differs from HEAD for this path / the work tree differs from the
+  // index (or the path is untracked). One path can be both. Absent is false.
+  staged?: boolean;
+  unstaged?: boolean;
   // How much the file differs by. Absent is "git did not say" — a binary file,
   // or one nothing counted — which is not the same as changed by nothing.
   insertions?: number;
@@ -110,6 +114,14 @@ export interface CommitRequest {
   message: string;
   fingerprint: string;
   acknowledgeSecrets: boolean;
+}
+
+// POST /changes/stage. Paths are changes the workspace lists; all means every
+// listed change. Unstage moves them out of the index and keeps their content.
+export interface StageRequest {
+  paths?: string[];
+  all?: boolean;
+  unstage?: boolean;
 }
 
 export interface CommitResult {

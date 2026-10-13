@@ -75,6 +75,9 @@ function say(p: UpdateProgress): string {
   }
 }
 
+// The newest few older releases stay on the page; the rest are history one click away.
+const PAST_SHOWN = 3;
+
 export function Versions({ port }: { port: Port }) {
   const [hub, setHub] = useState<VersionHub | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,6 +88,7 @@ export function Versions({ port }: { port: Port }) {
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [later, setLater] = useState("");
   const [running, setRunning] = useState(0);
+  const [allPast, setAllPast] = useState(false);
   const [openNotes, setOpenNotes] = useState("");
   const [notes, setNotes] = useState<Record<string, NotesState>>({});
 
@@ -220,6 +224,10 @@ export function Versions({ port }: { port: Port }) {
   const ready = progress?.phase === "ready" ? progress.version : "";
   const locked = busy || starting !== "" || moving !== "";
   const readyOlder = ready !== "" && list.some((v) => v.version === ready && v.older);
+  const past = list.filter((v) => v.older && !v.current);
+  const held = new Set([moving, ready, hub.pinned, openNotes].filter(Boolean));
+  const shown = allPast ? list : list.filter((v) => !v.older || v.current || past.indexOf(v) < PAST_SHOWN || held.has(v.version));
+  const hidden = list.length - shown.length;
   const failure = progress?.phase === "error" ? failureCopy(progress, hub.current) : null;
   return (
     <div className="vers">
@@ -319,7 +327,7 @@ export function Versions({ port }: { port: Port }) {
       {/* Newest first: the list reads as history, and where you are in it is
           marked the way every other "this one" in the app is. */}
       <div className="vlist">
-        {list.map((v, i) => (
+        {shown.map((v, i) => (
           <Fragment key={v.version}>
           <div
             className="vrow"
@@ -386,6 +394,11 @@ export function Versions({ port }: { port: Port }) {
           )}
           </Fragment>
         ))}
+        {hidden > 0 && (
+          <button className="lnk vmore" data-action="versions.more" onClick={() => setAllPast(true)}>
+            {t("显示更早的 {n} 个版本", { n: hidden })}
+          </button>
+        )}
       </div>
     </div>
   );

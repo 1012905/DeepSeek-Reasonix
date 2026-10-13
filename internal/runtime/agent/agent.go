@@ -684,12 +684,8 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 			path:         strings.TrimSpace(opts.SessionPath),
 			win:          windowState{cacheState: CacheStateUnknown},
 		},
-		task: newTaskRuntime(opts.TaskBudget),
-		role: agentRole{
-			requireVisibleFinal: opts.RequireVisibleFinal,
-			readOnlyExecution:   opts.ReadOnlyExecution,
-			plannerMCPExecution: opts.PlannerMCPExecution,
-		},
+		task:        newTaskRuntime(opts.TaskBudget),
+		role:        newAgentRole(opts),
 		eventSource: opts.EventSource,
 		recovery: recoveryIdentity{
 			agentID: strings.TrimSpace(opts.RecoveryAgentID),

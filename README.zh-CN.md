@@ -139,7 +139,7 @@ Reasonix 分为两条版本线，调整的原因见[版本路线公告](https://
 | --- | --- | --- |
 | macOS | `.dmg` 或 `.zip` | Apple Silicon（`arm64`）/ Intel（`amd64`） |
 | Windows | 安装器 `-installer.exe` 或便携 `.zip` | x64 |
-| Linux | `.deb` | x64 |
+| Linux | `.deb` 或 `.rpm` | x64（`amd64`）/ ARM64（`arm64`，aarch64） |
 
 每个安装包都附带 `.minisig` 签名，发布页另有 `SHA256SUMS`。安装后 Studio 会在
 应用内自行更新。

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"reasonix/internal/contract/config"
 	"reasonix/internal/model/billing"
 )
 
@@ -36,7 +35,6 @@ type walletLine struct {
 // provider has no wallet" — an absence to render as nothing, not as a failure.
 func (s *Server) balance(w http.ResponseWriter, r *http.Request) {
 	reading := s.ctl().Balance(r.Context())
-	s.adoptWalletCurrency(reading)
 	if !reading.Configured {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -74,17 +72,5 @@ func walletCode(err error) string {
 		return "wallet.unreadable"
 	default:
 		return "wallet.unreachable"
-	}
-}
-
-// adoptWalletCurrency lets a single-currency wallet select an existing
-// valuation. Runtime-only: a hint is never persisted as configuration or
-// history, and a user's own preference always wins.
-func (s *Server) adoptWalletCurrency(reading billing.Reading) {
-	if reading.Balance == nil {
-		return
-	}
-	if cfg, err := config.Load(); err == nil && cfg.DisplayCurrencyPref() == "" {
-		s.bc.SetDisplayCurrency(reading.Balance.PrimaryCurrency())
 	}
 }

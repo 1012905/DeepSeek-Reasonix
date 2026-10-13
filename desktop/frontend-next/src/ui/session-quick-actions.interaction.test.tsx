@@ -38,6 +38,13 @@ const row = () => screen.getByRole("treeitem", { name: new RegExp(TITLE) });
 const archive = () => within(row()).getByRole("button", { name: `归档会话：${TITLE}` });
 const trash = () => within(row()).getByRole("button", { name: `删除会话：${TITLE}` });
 
+it("keeps the full local title available on hover alongside quick actions", () => {
+  const title = "这是什么？ @.reasonix/attachments/" + "clipboard-long-title".repeat(10);
+  draw({ title });
+  expect(screen.getByTitle(title).textContent).toBe(title);
+  expect(screen.getByRole("button", { name: `归档会话：${title}` })).toBeTruthy();
+});
+
 it.each([undefined, "r1"])("archives directly without opening or focusing the session held by %j", async (runtimeId) => {
   const { onArchive, onOpen, onFocus } = draw({ runtimeId });
   await userEvent.click(archive());

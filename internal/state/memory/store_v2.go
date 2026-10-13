@@ -81,6 +81,15 @@ func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
 			}
 			frontmatter, _ := splitFrontmatter(string(raw))
 			if strings.TrimSpace(frontmatter["id"]) != "" && parsePositiveInt(frontmatter["revision"]) > 0 {
+				// A previous run can have rewritten the fact and then failed to
+				// publish the index, which leaves a migrated fact with a stale
+				// line. Repairing it is what makes the retry converge.
+				if migrated, ok := loadMemory(path); ok {
+					migrated.Name = slug(migrated.Name)
+					if err := reindexIn(dir, migrated.Name, migrated); err != nil {
+						return report, err
+					}
+				}
 				continue
 			}
 			memory, ok := loadMemory(path)
@@ -294,15 +303,46 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 	return result, nil
 }
 
+// undoPlainWrite puts a fact file back the way it was before a save whose index
+// publication failed: a new fact is removed, an update is rewritten from the
+// bytes and mode that were on disk, so nothing the user wrote is normalised.
+func undoPlainWrite(path string, preimage []byte, mode os.FileMode, exists bool) error {
+	if !exists {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return writeMemoryAtomic(path, preimage, mode)
+}
+
 // publishRename retires the old name before publishing the new one, so no
 // failure can leave one id with two active names; steps before publication are
 // undone from the retired copy.
 func (s Store) publishRename(dir, path, existingPath string, existing, m Memory, exists bool) error {
 	if !exists || cleanMemoryPath(existingPath) == cleanMemoryPath(path) {
+		var preimage []byte
+		mode := os.FileMode(0o644)
+		if exists {
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			preimage = raw
+			if info, err := os.Stat(path); err == nil {
+				mode = info.Mode().Perm()
+			}
+		}
 		if err := writeMemoryAtomic(path, []byte(render(m, m.Name)), 0o644); err != nil {
 			return err
 		}
-		return reindexIn(dir, m.Name, m)
+		if err := reindexIn(dir, m.Name, m); err != nil {
+			if undone := undoPlainWrite(path, preimage, mode, exists); undone != nil {
+				return fmt.Errorf("%w (and the saved %q could not be withdrawn: %w)", err, m.Name, undone)
+			}
+			return err
+		}
+		return nil
 	}
 	srcDir := filepath.Dir(existingPath)
 	srcRoot, err := os.OpenRoot(srcDir)
@@ -562,11 +602,30 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 		}
 		return SaveResult{}, err
 	}
+	// A failed recovery must not leave one id active and archived at once. Both
+	// steps below run after the active file exists, so each undoes it; if the
+	// index write fails too, the retry below rewrites that line.
+	drop := func(cause error) (SaveResult, error) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return SaveResult{}, fmt.Errorf("%w (and the restored %q could not be withdrawn: %w)", cause, restored.Name, err)
+		}
+		lines, _, err := indexLinesExceptIn(base, restored.Name)
+		if err != nil {
+			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
+		}
+		if err := flushIndexIn(base, lines); err != nil {
+			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
+		}
+		return SaveResult{}, cause
+	}
 	if err := reindexIn(base, restored.Name, restored); err != nil {
-		return SaveResult{Path: path, Memory: restored}, err
+		return drop(err)
+	}
+	if err := fault("remove", archivePath); err != nil {
+		return drop(err)
 	}
 	if err := os.Remove(archivePath); err != nil && !os.IsNotExist(err) {
-		return SaveResult{Path: path, Memory: restored}, err
+		return drop(err)
 	}
 	return SaveResult{Path: path, Memory: restored}, nil
 }

@@ -42,7 +42,7 @@
 @property --nav-w { syntax: "<length>"; inherits: true; initial-value: 0px }
 @property --rail-w { syntax: "<length>"; inherits: true; initial-value: 264px }
 @property --side-w { syntax: "<length>"; inherits: true; initial-value: 316px }
-@property --dock-w { syntax: "<length>"; inherits: true; initial-value: 560px }
+@property --dock-w { syntax: "<length>"; inherits: false; initial-value: 560px }
 
 @property --win-ar { syntax: "<number>"; inherits: true; initial-value: 1.6 }
 
@@ -120,6 +120,9 @@
     --track-tight: -.02em; --track-lead: .06em; --track-cap: .12em;
 
     --r-xs: 4px; --r-sm: 6px; --r-md: 9px; --r-lg: 12px; --r-pill: 999px;
+
+    --sp-1: 2px; --sp-2: 4px; --sp-3: 6px; --sp-4: 8px;
+    --sp-5: 10px; --sp-6: 12px; --sp-7: 16px; --sp-8: 24px;
 
     --fs-micro: 11px; --fs-meta: 12px; --fs-ui: 13px;
     --fs-lead: 15px; --fs-title: 17px; --fs-display: 22px;

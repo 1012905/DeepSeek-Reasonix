@@ -10,6 +10,7 @@ import { host } from "../port/host";
 import { useAddWorkspace } from "./addws";
 import { install as installDrops } from "./filedrop";
 import { Sidebar } from "./Sidebar";
+import logoWordmark from "../assets/logo-wordmark.svg";
 import { NO_PAGING } from "./treewindow";
 
 let clock = Date.now();
@@ -34,6 +35,7 @@ function draw(collapsed = false) {
     return <>
       {error && <div role="alert">{error}</div>}
       <Sidebar
+        onFiles={vi.fn()}
         hub={hub} collapsed={collapsed} navShown={false} paging={NO_PAGING} tree={[]} treeRead runtimes={[]} runs={{}} active="remote-pane"
         activeWorkspace={undefined} liveIds={() => []} pinned={new Set()} onPin={() => {}}
         remotes={null} remoteTrees={{}} reloadRemotes={async () => {}} reloadRemoteTrees={async () => {}}
@@ -162,4 +164,13 @@ it("preserves the existing Add folder picker path", async () => {
   await userEvent.click(screen.getByRole("button", { name: "打开或新建项目…" }));
   await waitFor(() => expect(add).toHaveBeenCalledWith("/work/picked"));
   expect(open).not.toHaveBeenCalled();
+});
+
+it("draws the official wordmark with the Studio subtitle", () => {
+  draw();
+  const mark = document.querySelector<HTMLImageElement>(".studio-brand-logo");
+  expect(mark?.tagName).toBe("IMG");
+  expect(mark?.getAttribute("src")).toBe(logoWordmark);
+  expect(mark?.draggable).toBe(false);
+  expect(document.querySelector(".studio-brand-sub")?.textContent).toBe("studio");
 });

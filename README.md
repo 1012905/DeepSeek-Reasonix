@@ -151,7 +151,7 @@ pre-releases):
 | --- | --- | --- |
 | macOS | `.dmg` or `.zip` | Apple Silicon (`arm64`) / Intel (`amd64`) |
 | Windows | Installer `-installer.exe` or portable `.zip` | x64 |
-| Linux | `.deb` | x64 |
+| Linux | `.deb` or `.rpm` | x64 (`amd64`) / ARM64 (`arm64`, aarch64) |
 
 Every package ships with a `.minisig` signature, and the release carries
 `SHA256SUMS`. Once installed, Studio updates itself in place.
