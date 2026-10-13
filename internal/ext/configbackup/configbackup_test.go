@@ -443,3 +443,32 @@ func TestPrivateKeySlotRuleIsExact(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotVersionsThroughEncryptedEnvelope(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		format int
+		want   error
+	}{
+		{"legacy", 1, nil},
+		{"hook identities", 2, nil},
+		{"future", FormatVersion + 1, ErrUnsupportedFormat},
+		{"missing", 0, ErrMalformed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Snapshot{Format: tc.format, Categories: []Category{CategoryAutomation}}
+			sealed, err := Seal(s, passphrase)
+			must(t, err)
+			if sealed[len(envelopeMagic)] != 1 {
+				t.Fatal("snapshot versions must retain the existing encrypted envelope")
+			}
+			back, err := Open(sealed, passphrase)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("open format %d: %v, want %v", tc.format, err, tc.want)
+			}
+			if err == nil && back.Format != tc.format {
+				t.Fatalf("format changed on round trip: %d", back.Format)
+			}
+		})
+	}
+}

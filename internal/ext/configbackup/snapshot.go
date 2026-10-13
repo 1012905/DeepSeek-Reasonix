@@ -13,8 +13,9 @@ import (
 )
 
 // FormatVersion is the snapshot schema this build writes. A reader refuses a
-// newer one rather than guessing at fields it does not know.
-const FormatVersion = 1
+// newer one rather than guessing at fields it does not know. Version 2 adds
+// complete hook identities; version 1 remains readable.
+const FormatVersion = 2
 
 // Category is one box the user ticks at export.
 type Category string

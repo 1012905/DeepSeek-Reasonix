@@ -3,6 +3,7 @@ package configbackup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"slices"
 	"testing"
@@ -20,6 +21,9 @@ func TestHookBackupVariantsRoundTrip(t *testing.T) {
 	want := []hook.HookConfig{base, directory, timeout, description}
 	must(t, hook.Save(hook.ScopeGlobal, "", hook.Settings{Hooks: map[hook.Event][]hook.HookConfig{hook.PostToolUse: want}}))
 	s := collectAll(t, CategoryAutomation)
+	if s.Format < 2 {
+		t.Fatalf("distinct hook identities need snapshot format 2 or newer, got %d", s.Format)
+	}
 	sealed, err := Seal(s, passphrase)
 	must(t, err)
 	s, err = Open(sealed, passphrase)
@@ -103,6 +107,9 @@ func TestLegacyHookBackupPreviewAndImport(t *testing.T) {
 		row := planRow(t, plan, s.Items[0].ID)
 		if row.Status != StatusSame {
 			t.Fatalf("legacy backup misidentified: %+v", row)
+		}
+		if _, err := p.Apply(ApplyRequest{PlanID: plan.ID, Items: []string{row.ID}}); !errors.Is(err, ErrConsentRequired) {
+			t.Fatalf("legacy hook without consent: %v", err)
 		}
 		result, err := p.Apply(ApplyRequest{PlanID: plan.ID, Items: []string{row.ID}, Consented: []string{row.ID}})
 		must(t, err)
