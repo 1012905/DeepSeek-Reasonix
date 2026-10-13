@@ -26,6 +26,7 @@ import { Confirm, removeHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
+import { LocalMachine } from "./LocalMachine";
 
 const parentOf = (root: string) => root.replace(/[/\\]+$/, "").split(/[/\\]/).slice(-2, -1)[0] ?? "";
 
@@ -332,47 +333,14 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
   return (
     <>
       <SessionBatch hub={hub} selection={selection} selected={selected} displayed={displayed} onSelect={setSelection}
-        onExit={() => treeKeys.ref.current?.querySelector<HTMLElement>('[role="treeitem"]')?.focus()}
+        onExit={() => treeKeys.ref.current?.querySelector<HTMLElement>('[data-action="machine.menu"]')?.focus()}
         onBusy={(pending) => { setBusy(pending ? "batch" : ""); if (pending) { setSessionMenu(""); setEditing(""); setConfirm(""); } }}
         onClose={onClose} onArchive={onArchive} liveIds={liveIds} reload={reload} onError={onError} />
       <div className="scroll">
         <div role="tree" aria-label={t("机器、工作区与会话")} aria-multiselectable={selection !== null} inert={busy === "batch"} data-action-keydown="tree.navigate" ref={treeKeys.ref} onKeyDown={treeKeys.onKeyDown}>
-          {/* This machine is the first row of the list rather than another kind of
-              thing, and its add button sits where a host's does: open a folder
-              on this machine. */}
-          <div
-            className="machrow"
-            data-here=""
-            role="treeitem"
-            aria-expanded={!shutHere}
-            onClick={() => setHereShut((v) => !v)}
-          >
-            <button className="twist" tabIndex={-1} aria-hidden="true">
-              <svg viewBox="0 0 10 10">
-                <path d="M3.4 1.6 6.8 5 3.4 8.4" />
-              </svg>
-            </button>
-            <i className="rmtpip" aria-hidden="true" />
-            <span className="rmtname">{t("这台机器")}</span>
-            <span className="rowswap">
-            {treeRead && <span className="rowcount" data-words="">{t("{n} 个项目", { n: tree.length })}</span>}
-            <button
-              className="machpick"
-              data-busy={adder.busy ? "" : undefined}
-              title={t("打开或新建项目…")}
-              aria-label={t("打开或新建项目…")}
-              data-action="workspace.add"
-              onClick={(ev) => {
-                ev.stopPropagation();
-                adder.add();
-              }}
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M8 3.7v8.6M3.7 8h8.6" />
-              </svg>
-            </button>
-            </span>
-          </div>
+          <LocalMachine shut={shutHere} count={treeRead ? tree.length : undefined} adder={adder}
+            canSelect={displayed.length > 0} selecting={selection !== null}
+            onToggle={() => setHereShut((v) => !v)} onSelect={() => setSelection(new Set())} />
           {shutHere ? null : shownTree.map((ws) => {
             // A fold is a resting-state preference; while a query is on it would hide
             // the very rows the query just found.
@@ -697,7 +665,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                               }}
                             >
                               <i className="pip" />
-                              <span className="sesstitle">
+                              <span className="sesstitle" title={rowLabel(copy)}>
                                 <span>{version ? t("早先版本 · {n} 轮", { n: copy.turns ?? 0 }) : t("恢复副本")}</span>
                               </span>
                               <button
