@@ -162,9 +162,8 @@ body { background: var(--page); }
 }
 .studio-rail-head { flex: none; padding: 16px 12px 8px; }
 .studio-brand { display: flex; align-items: center; gap: 9px; padding: 0 4px 15px; color: var(--text); }
-.studio-brand > span:nth-child(2) { display: flex; align-items: baseline; gap: 4px; }
-.studio-brand b { font: 650 17px/1 var(--ui); letter-spacing: -.03em; }
-.studio-brand small { color: var(--ghost); font: 500 10px/1 var(--ui); }
+.studio-brand-logo { display: block; width: 118px; height: 24px; object-fit: contain; object-position: left center; }
+.studio-brand-sub { color: var(--ghost); font: 500 10px/1 var(--ui); }
 .studio-new-task {
   width: 100%;
   height: 36px;
@@ -279,19 +278,22 @@ body { background: var(--page); }
   padding: 0 26px;
   border-bottom: 1px solid var(--hair);
 }
-.onb-brandmark {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--text);
-  color: var(--page);
-  font: 650 16px/1 var(--ui);
+.onb-lockup { display: grid; grid-template-rows: 24px 9px; row-gap: 1px; align-content: center; }
+.onb-wordmark {
+  display: block; width: 118px; height: 24px;
+  object-fit: contain; object-position: left center;
+  margin-left: -14px;
 }
-.onb-brandname { display: flex; align-items: baseline; gap: 4px; }
-.onb-brandname b { font: 650 18px/1 var(--ui); letter-spacing: -.03em; }
-.onb-brandname small { color: var(--ghost); font: 500 10px/1 var(--ui); }
+:root[data-theme="dark"] .onb-wordmark { filter: brightness(0) invert(1); opacity: .94; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .onb-wordmark { filter: brightness(0) invert(1); opacity: .94; }
+}
+.onb-brandsub {
+  display: block; padding-left: 21px; color: var(--ghost);
+  font-family: "Reasonix Display", var(--ui); font-size: 7.5px; font-weight: 650;
+  line-height: 9px; letter-spacing: .21em; text-transform: uppercase;
+  font-variation-settings: "wght" 650, "opsz" 12;
+}
 .onb-shell {
   width: min(920px, calc(100% - 48px));
   margin: auto;
@@ -552,11 +554,8 @@ body { background: var(--page) !important; }
 .studio-icon[data-flip] { transform: rotate(180deg); }
 .studio-rail-head { padding: 23px 22px 5px; container-type: inline-size; }
 .studio-brand { padding: 0 0 19px; gap: 9px; }
-.studio-brand > span:nth-child(2) { display: grid; grid-template-rows: 15px 9px; row-gap: 2px; align-content: center; }
-.studio-brand b { color: var(--text); font-size: 17px; line-height: 15px; }
-.studio-brand small { color: var(--faint); font-size: 9px; line-height: 9px; letter-spacing: .08em; }
-.studio-brand b,
-.studio-brand small { display: block; }
+.studio-brand-logo { width: 118px; height: 24px; }
+.studio-brand-sub { display: block; color: var(--faint); font-size: 9px; line-height: 9px; letter-spacing: .08em; }
 .studio-new-task {
   height: 34px;
   padding: 0 10px;
@@ -1660,7 +1659,7 @@ body { background: var(--page) !important; }
 .onb-foot { flex: none; padding: 14px 24px 18px; text-align: center; color: var(--ghost); font: 500 10px/1 var(--ui); }
 
 @media (max-width: 760px) {
-  .studio-brand > span:nth-child(2) small { display: none; }
+  .studio-brand-sub { display: none; }
   .flow { width: calc(100% - 20px); margin-inline: auto; padding-inline: 0; }
   .compose { width: calc(100% - 20px); margin-inline: auto; }
 }
@@ -2895,27 +2894,23 @@ body { font-size: 14px; line-height: 1.75; }
 /* Product wordmark: the interface face remains neutral; the brand gets its
    own tighter optical rhythm and one restrained accent instead of effects. */
 .studio-brand { gap: 10px; }
-.studio-brand-mark { flex: none; display: block; width: 37px; height: 37px; margin: -3.5px; user-select: none; }
-.studio-brand > .studio-brand-word {
-  min-width: 0; display: grid; grid-template-rows: 17px 9px; align-content: center; gap: 4px;
+.studio-brand-lockup { display: grid; grid-template-rows: 24px 9px; row-gap: 1px; align-content: center; }
+.studio-brand-logo {
+  flex: none; display: block; width: 118px; height: 24px;
+  object-fit: contain; object-position: left center;
+  margin-left: -14px;
 }
-.studio-brand-word b {
-  display: block; color: var(--text);
-  font-family: "Reasonix Display", var(--ui); font-size: 18.5px; font-style: normal;
-  font-weight: 690; line-height: 17px; letter-spacing: -.025em;
-  font-variation-settings: "wght" 690, "opsz" 30;
-  -webkit-font-smoothing: antialiased;
+:root[data-theme="dark"] .studio-brand-logo { filter: brightness(0) invert(1); opacity: .94; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .studio-brand-logo { filter: brightness(0) invert(1); opacity: .94; }
 }
-.studio-brand-accent { font: inherit; }
-.studio-brand-word small {
-  display: block; padding-left: 1px; color: var(--faint);
+.studio-brand-sub {
+  display: block; padding-left: 21px; color: var(--faint);
   font-family: "Reasonix Display", var(--ui); font-size: 7.5px; font-weight: 650;
   line-height: 9px; letter-spacing: .21em; text-transform: uppercase;
   font-variation-settings: "wght" 650, "opsz" 12;
 }
-:root[data-theme="light"] .studio-brand-word b { color: var(--text); }
-:root[data-theme="light"] .studio-brand-accent { color: #526a9f; }
-:root[data-theme="light"] .studio-brand-word small { color: var(--ghost); }
+:root[data-theme="light"] .studio-brand-sub { color: var(--ghost); }
 
 /* ──────────────────────────────────────────────────────────────────────────
    Theme token closure
@@ -2947,14 +2942,10 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-settings { color: var(--ghost); }
 .chrome .badge,
 .chrome .top-action[aria-pressed="true"] { background: var(--overlay); color: var(--muted); border-color: var(--border); }
-.chrome .browser-action,
-.studio-brand-accent { color: var(--accent); }
+.chrome .browser-action { color: var(--accent); }
 .chrome .browser-action[aria-pressed="true"] { color: var(--accent); background: var(--accent-wash); }
 
-.studio-brand b,
-.studio-brand-word b { color: var(--text); }
-.studio-brand small,
-.studio-brand-word small { color: var(--faint); }
+.studio-brand-sub { color: var(--faint); }
 .studio-settings:hover,
 .studio-search:hover,
 .studio-quicknav button:hover { color: var(--text); background: var(--overlay); }

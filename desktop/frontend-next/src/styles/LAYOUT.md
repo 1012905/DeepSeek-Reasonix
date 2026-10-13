@@ -1191,11 +1191,14 @@ what exists.
 
 - Fixed dark, not following the app theme: it is a ceremony, not part of the
   interface. It plays once in a lifetime, any key skips it, and every animation
-  moves only transform and opacity.
-- A highlight sweeps the wordmark; the gradient is the glyph's fill, so `color`
-  must be transparent. The name is written in the product's own mother tongue —
-  Inter 200 is the weight every AI product reaches for, while mono is the coding
-  agent's own face and is already in the bundle.
+  leaves the brand visible when reduced motion disables it.
+- The welcome wordmark uses `logo-wordmark.svg` in its own blue with a steady
+  glow. Its brief highlight changes the image filter; the Studio subtitle uses
+  the shared display and title size tokens and the shipped mono face.
+- Sidebar and onboarding use the same 118 by 24 wordmark and stacked Studio
+  subtitle. A -14px margin offsets the asset's transparent left padding; dark
+  surfaces invert the image to white. The empty-session symbol inherits theme
+  colour and stays still across remounts; `RMark` remains the run indicator.
 - The subtitle is a tracked, uppercased line: chrome that looks the same in any
   theme. It is a sentence, not a badge.
 - The progress line says only how much of the opening is left; once the sequence
