@@ -102,6 +102,12 @@ export interface RewindFileStage {
   compensateError?: string;
 }
 
+export interface RewindUndo {
+  transactionId: string;
+  turn: number;
+  files: number;
+}
+
 export interface RewindResult {
   ok?: boolean;
   transactionId?: string;

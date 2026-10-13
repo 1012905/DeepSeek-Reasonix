@@ -1197,13 +1197,7 @@ func (s *Store) recoverTransactions(applier ConversationApplier) []string {
 			if tx.Kind == "undo" || undoneParents[tx.ID] {
 				continue
 			}
-			// Keep as last undo if newer.
-			s.mu.Lock()
-			if s.lastUndo == nil || s.lastUndo.UpdatedAt.Before(tx.UpdatedAt) {
-				cp := tx
-				s.lastUndo = &cp
-			}
-			s.mu.Unlock()
+			s.restoreUndoOffer(tx)
 		}
 	}
 	return notes

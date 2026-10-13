@@ -37,6 +37,7 @@ import (
 	"reasonix/internal/platform/account"
 	"reasonix/internal/platform/appupdate"
 	"reasonix/internal/platform/crashreport"
+	"reasonix/internal/platform/diskhealth"
 	"reasonix/internal/platform/feedback"
 	"reasonix/internal/platform/instanceid"
 	"reasonix/internal/platform/notify"
@@ -384,7 +385,12 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	owner := &shellOwner{to: handshakeTo}
 	// A toast the user clicks is answered here, in the process that sent it, and
 	// the shell is the one that can bring its window forward.
-	notify.OnActivate(showOnToastClick(owner))
+	notify.OnActivate(showOnToastClick(owner, logs))
+	// A toast that did not go out is invisible to the person it was for, so the
+	// reason belongs in the log the shell keeps.
+	notify.OnSendFailure(func(err error) { fmt.Fprintf(logs, "notify: %v\n", err) })
+	sender := notify.NewPlatformSender()
+	go watchDisk(ctx, notifySet, sender, []string{root, serve.SessionDirFor(root)}, diskWatchEvery, diskhealth.Read)
 	hub := serve.NewHub(serve.HubOptions{
 		Serve:         hubCfg,
 		Surface:       surface.Desktop,
@@ -393,7 +399,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		DecorateSink:  decorate,
 		Tray:          &studioTray{tracker: tracker},
 		Notifications: notifySet,
-		NotifySender:  notify.NewPlatformSender(),
+		NotifySender:  sender,
 		BrowserHost:   browserHost,
 		Asks:          asks,
 		Remote:        remotehost.New(ctx, version, asks),

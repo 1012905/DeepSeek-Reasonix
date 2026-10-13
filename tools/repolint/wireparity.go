@@ -90,6 +90,7 @@ var mirroredWireTypes = []wireMirror{
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},
+	{"internal/frontend/serve/catalog.go", "mcpHeld", tsMcpFile, "McpHeld"},
 	// The fold bounds and the one in force: a field the panel cannot read is a
 	// threshold a user sets and never sees applied.
 	{"internal/session/control/compaction_settings.go", "CompactionSettings", tsModelFile, "CompactionSettings"},
@@ -162,6 +163,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/studio_logs.go", "studioLogs", tsVersionFile, "StudioLogs"},
 	{"internal/frontend/serve/studio_logs.go", "studioCrashes", tsVersionFile, "StudioCrash"},
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
+	{"internal/state/checkpoint/types.go", "RewindUndo", tsSessionFile, "RewindUndo"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
 	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},
 	// A source and a model as the pickers name them. A label the page cannot
@@ -196,6 +198,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/commit.go", "CommitProposal", tsWorkspaceFile, "CommitProposal"},
 	{"internal/session/control/commit.go", "CommitRequest", tsWorkspaceFile, "CommitRequest"},
 	{"internal/session/control/commit.go", "CommitResult", tsWorkspaceFile, "CommitResult"},
+	{"internal/session/control/commit.go", "StageRequest", tsWorkspaceFile, "StageRequest"},
 	{"internal/platform/gitcommit/gitcommit.go", "File", tsWorkspaceFile, "CommitFile"},
 	// The scale range the slider is drawn from: a bound the page cannot read
 	// would leave it a range of its own.

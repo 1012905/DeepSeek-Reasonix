@@ -12,7 +12,7 @@ const { uiLanguage } = require("../src/uilang.js");
 const { externalTarget } = require("../src/links.js");
 const { offerCleanup, ownBundle } = require("../src/legacy.js");
 const { stripPackageGrants, readReport, unpaintedWindowCause } = require("../src/packagegrants.js");
-const { groundFor, GROUND } = require("../src/ground.js");
+const { groundFor, themeSourceFor, GROUND } = require("../src/ground.js");
 const { pick, loadPrefs, savePrefs, registerPrefs } = require("../src/prefs.js");
 
 const TOKEN = "a".repeat(64);
@@ -205,7 +205,7 @@ test("an unreachable kernel is an answer, not a crash", async () => {
   assert.equal(await dead.trayState(), null);
 });
 
-const { reveal, revealWorkspace, revealLogs } = require("../src/reveal.js");
+const { reveal, revealWorkspace, revealLogs, openWorkspace } = require("../src/reveal.js");
 
 // A kernel that answers /workspace/locate as the test says, and a shell that
 // only records what it was asked to open.
@@ -224,8 +224,74 @@ async function revealRig(answer, platform = process.platform) {
     openPath: async (p) => (opened.push(["open", p]), ""),
     showItemInFolder: (p) => opened.push(["select", p]),
   };
-  return { asked, opened, run: (base, rel) => reveal(client, shell, base, rel, platform), workspace: (root) => revealWorkspace(client, shell, root, platform), close: () => server.close() };
+  return {
+    asked, opened, close: () => server.close(),
+    run: (base, rel) => reveal(client, shell, base, rel, platform),
+    workspace: (root) => revealWorkspace(client, shell, root, platform),
+    open: (root, fsApi) => openWorkspace(client, shell, root, platform, fsApi),
+  };
 }
+
+// The sidebar's project entered rather than selected in its parent: the same
+// kernel answer revealWorkspace asks for, through the folder-opening verb.
+const folderFs = (over = {}) => ({
+  stat: async () => ({ isDirectory: () => true }),
+  access: async () => {
+    throw new Error("ENOENT");
+  },
+  ...over,
+});
+
+test("openWorkspace enters the folder the kernel named", async (t) => {
+  for (const [platform, target] of [[process.platform, ROOT], ["darwin", "/Users/studio/workspace"], ["linux", "/home/studio/workspace"], ["win32", "C:\\Studio\\workspace"]]) {
+    await t.test(`${platform}: ${target}`, async () => {
+      const rig = await revealRig(() => [200, { path: target, dir: true }], platform);
+      try {
+        assert.equal(await rig.open("/w", folderFs()), null);
+        assert.deepEqual(rig.opened, [["open", target]]);
+        assert.equal(rig.asked[0], "/host/workspaces/locate?root=%2Fw");
+      } finally {
+        rig.close();
+      }
+    });
+  }
+});
+
+// openPath launches an application bundle instead of showing it, so a root
+// that is one is only selected, and so is anything that is not a directory.
+test("openWorkspace only selects an application bundle", async () => {
+  const bundle = "/Applications/Workspace.app";
+  const rig = await revealRig(() => [200, { path: bundle, dir: true }], "darwin");
+  try {
+    assert.equal(await rig.open("/w", folderFs({ access: async () => {} })), null);
+    assert.deepEqual(rig.opened, [["select", bundle]]);
+  } finally {
+    rig.close();
+  }
+});
+
+test("openWorkspace only selects what is not a directory or cannot be read", async () => {
+  for (const fsApi of [folderFs({ stat: async () => ({ isDirectory: () => false }) }), folderFs({ stat: async () => { throw new Error("EACCES"); } })]) {
+    const rig = await revealRig(() => [200, { path: ROOT, dir: true }]);
+    try {
+      assert.equal(await rig.open("/w", fsApi), null);
+      assert.deepEqual(rig.opened, [["select", ROOT]]);
+    } finally {
+      rig.close();
+    }
+  }
+});
+
+test("openWorkspace refuses a folder the hub does not list", async () => {
+  const rig = await revealRig(() => [404, { code: "host.unknown_workspace", error: "not listed" }]);
+  try {
+    const why = await rig.open("/nope");
+    assert.equal(why.code, "host.unknown_workspace");
+    assert.deepEqual(rig.opened, []);
+  } finally {
+    rig.close();
+  }
+});
 
 const ROOT = path.resolve(os.tmpdir(), "rx-workspace");
 
@@ -908,7 +974,7 @@ test("only the Studio window reads or writes the preferences", () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function elf64(interpreter) {
+function elf64(interpreter, machine = 62) {
   const phoff = 64, phentsize = 56, phnum = interpreter ? 2 : 1;
   const dataOffset = phoff + phnum * phentsize;
   const path = Buffer.from(interpreter ? `${interpreter}\0` : "", "latin1");
@@ -918,7 +984,7 @@ function elf64(interpreter) {
   bytes[5] = 1;
   bytes[6] = 1;
   bytes.writeUInt16LE(2, 16);
-  bytes.writeUInt16LE(62, 18);
+  bytes.writeUInt16LE(machine, 18);
   bytes.writeBigUInt64LE(BigInt(phoff), 32);
   bytes.writeUInt16LE(64, 52);
   bytes.writeUInt16LE(phentsize, 54);
@@ -949,6 +1015,26 @@ test("a Linux Go binary that needs the build host's dynamic loader is refused", 
     fs.writeFileSync(helper, elf64(null));
     assert.deepEqual(dynamicallyLinked([host, helper]), [{ file: host, interpreter: "/lib64/ld-linux-x86-64.so.2" }]);
     assert.deepEqual(dynamicallyLinked([helper]), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a Linux package's Go binaries must be built for the architecture the package is named for", () => {
+  const { elfArchitecture, assertArchitecture } = require("../packaging/elf.js");
+  assert.equal(elfArchitecture(elf64(null, 62)), "amd64");
+  assert.equal(elfArchitecture(elf64(null, 183)), "arm64");
+  assert.throws(() => elfArchitecture(elf64(null, 40)), /unsupported ELF machine/);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reasonix-elf-"));
+  try {
+    const host = path.join(dir, "reasonix-studio-host");
+    const helper = path.join(dir, "reasonix-studio-update-helper");
+    fs.writeFileSync(host, elf64(null, 62));
+    fs.writeFileSync(helper, elf64(null, 183));
+    assert.throws(() => assertArchitecture([host, helper], "arm64"), /is amd64, expected arm64/);
+    assert.throws(() => assertArchitecture([host, helper], "amd64"), /is arm64, expected amd64/);
+    assert.doesNotThrow(() => assertArchitecture([host], "amd64"));
+    assert.throws(() => assertArchitecture([host], "riscv64"), /unsupported release architecture/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -1722,6 +1808,16 @@ test("the window ground follows the stored theme and, for auto, the system", () 
   assert.equal(groundFor(undefined, true), GROUND.dark);
 });
 
+// Windows draws a frameless window's border from the frame's scheme, so a dark
+// page on a light system must set it, or the border is a light line.
+test("the window frame takes the stored theme, and auto follows the system", () => {
+  assert.equal(themeSourceFor({ "rx-theme": "dark" }), "dark");
+  assert.equal(themeSourceFor({ "rx-theme": "light" }), "light");
+  assert.equal(themeSourceFor({ "rx-theme": "auto" }), "system");
+  assert.equal(themeSourceFor({ "rx-theme": "midnight" }), "system");
+  assert.equal(themeSourceFor(undefined), "system");
+});
+
 const { accelerationOff, shouldDisableGpu, graphicsReport, graphicsHandler, PREF_KEY: GPU_PREF } = require("../src/graphics.js");
 
 test("hardware acceleration is off only when the saved preference says exactly that", () => {
@@ -1987,6 +2083,44 @@ test("kernel acts: show brings the window forward, relaunch arms the restart, qu
   assert.deepEqual(calls, ["show", "relaunch", "quit"]);
 });
 
+test("kernel acts: a click that reaches the shell is written to its log, an unknown act is not", () => {
+  const { actHandler } = require("../src/acts.js");
+  const lines = [];
+  const handle = actHandler({ app: { relaunch() {}, quit() {} }, showWindow() {}, log: (line) => lines.push(line) });
+  for (const act of ["show", "unknown"]) handle(act);
+  assert.deepEqual(lines, ["kernel act: show"]);
+});
+
+test("raise: answers whether the window is focused once it has tried", () => {
+  const { raise } = require("../src/raise.js");
+  const make = (grants) => {
+    let focused = false;
+    return { show() {}, focus: () => { if (grants()) focused = true; }, isFocused: () => focused, setAlwaysOnTop() {} };
+  };
+  assert.equal(raise(make(() => true), "win32"), true);
+  assert.equal(raise(make(() => false), "win32"), false);
+});
+
+test("raise: a window the platform would not focus is lifted once and returned to normal stacking", () => {
+  const { raise } = require("../src/raise.js");
+  const run = (platform, focusedAfterFocus) => {
+    const calls = [];
+    let focused = false;
+    const win = {
+      show: () => calls.push("show"),
+      focus: () => { calls.push("focus"); if (focusedAfterFocus) focused = true; },
+      isFocused: () => focused,
+      setAlwaysOnTop: (on) => calls.push(on ? "top" : "untop"),
+    };
+    raise(win, platform);
+    return calls;
+  };
+  assert.deepEqual(run("win32", true), ["show", "focus"]);
+  assert.deepEqual(run("win32", false), ["show", "focus", "top", "focus", "untop"]);
+  assert.deepEqual(run("darwin", false), ["show", "focus"]);
+  assert.deepEqual(run("linux", false), ["show", "focus"]);
+});
+
 test("tray: the menu is replaced only when what it says changes, so an open menu is not torn down by the poll", async () => {
   const { installTray } = require("../src/tray.js");
   const menus = [];
@@ -2099,3 +2233,41 @@ test("a parked page is attached again when it is shown, and a page already on sc
   assert.deepEqual(calls, ["remove", "add", "bounds 10"], "a page put away and shown again is attached again");
 });
 
+test("rewind notice dismissal survives the desktop preference disk round trip", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rewind-notice-prefs-"));
+  const file = path.join(dir, "prefs.json");
+  t.after(() => { fs.rmSync(file, { force: true }); fs.rmdirSync(dir); });
+  const record = { "rx-rewind-notice-dismissed:tx-saved": "1" };
+  savePrefs(file, record);
+  assert.deepEqual(loadPrefs(file), record);
+});
+
+const { setUnreadBadge } = require("../src/badge.js");
+
+test("macOS marks and clears the application Dock badge", () => {
+  const badges = [];
+  const app = { dock: { setBadge: (text) => badges.push(text) } };
+  setUnreadBadge(true, {}, { app }, "darwin");
+  setUnreadBadge(false, {}, { app }, "darwin");
+  assert.deepEqual(badges, ["•", ""]);
+});
+
+test("Windows uses a red dot overlay and removes it when all sessions are read", () => {
+  const calls = [];
+  const win = { setOverlayIcon: (...args) => calls.push(args) };
+  let pixels;
+  const nativeImage = { createFromBitmap: (buffer, size) => { pixels = buffer; assert.deepEqual(size, { width: 16, height: 16 }); return "dot"; } };
+  setUnreadBadge(true, win, { nativeImage }, "win32");
+  setUnreadBadge(false, win, { nativeImage }, "win32");
+  assert.equal(pixels[3], 0);
+  assert.equal(pixels[(8 * 16 + 8) * 4 + 3], 255);
+  assert.deepEqual(calls, [["dot", "Reasonix Studio"], [null, ""]]);
+});
+
+test("Linux clears its launcher badge without requiring Dock APIs", () => {
+  const counts = [];
+  const app = { setBadgeCount: (count) => counts.push(count) };
+  setUnreadBadge(true, {}, { app }, "linux");
+  setUnreadBadge(false, {}, { app }, "linux");
+  assert.deepEqual(counts, [1, 0]);
+});

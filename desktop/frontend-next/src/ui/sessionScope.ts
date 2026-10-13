@@ -12,3 +12,9 @@ export function inScope(session: TreeSession, scope: SessionScope, searching: bo
   if (scope === "pinned") return pinned;
   return true;
 }
+
+// Whether a session belongs in the running list: while its turn runs, and for
+// the grace the reader chose after the turn was seen to finish.
+export function listedAsLive(live: boolean, finishedAt: number | undefined, now: number, graceMinutes: number): boolean {
+  return live || (graceMinutes > 0 && finishedAt !== undefined && now - finishedAt < graceMinutes * 60_000);
+}

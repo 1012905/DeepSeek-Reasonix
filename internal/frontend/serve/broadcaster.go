@@ -35,13 +35,14 @@ func NewBroadcaster() *Broadcaster {
 }
 
 // droppable reports whether losing this frame degrades the view rather than
-// breaking it. A streaming delta is superseded by the text after it and the
-// full version is in /history; a prompt, a result or a turn boundary has no
-// successor carrying it, and a frontend that misses one waits forever on a
-// state that already changed.
-func droppable(k event.Kind) bool {
-	switch k {
-	case event.Text, event.Reasoning, event.ToolProgress, event.CompactionProgress:
+// breaking it. A streaming delta is superseded by the text after it; a prompt,
+// a result, a turn boundary or a sub-agent's terminal status has no successor,
+// and a frontend that misses one waits forever on a state that already changed.
+func droppable(e event.Event) bool {
+	switch e.Kind {
+	case event.ToolProgress:
+		return e.Tool.Name != event.SubagentProgressStatusName
+	case event.Text, event.Reasoning, event.CompactionProgress:
 		return true
 	}
 	return false
@@ -105,7 +106,7 @@ func (b *Broadcaster) SessionCostQuote() pricing.CostQuote {
 // and ask for them back. A marshal failure is dropped silently — one bad event
 // shouldn't stall the stream.
 func (b *Broadcaster) Emit(e event.Event) {
-	drop := droppable(e.Kind)
+	drop := droppable(e)
 	b.mu.Lock()
 	defer func() {
 		observer := b.onTreeChanged
@@ -164,7 +165,7 @@ func (b *Broadcaster) EmitTo(target <-chan Frame, e event.Event) {
 	if err != nil {
 		return
 	}
-	drop := droppable(e.Kind)
+	drop := droppable(e)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for s := range b.subs {

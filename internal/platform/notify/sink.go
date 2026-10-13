@@ -62,7 +62,9 @@ func announce(sender Sender, cfg config.NotificationsConfig, msg Message) {
 		return
 	}
 	if cfg.Enabled {
-		_ = sender.Send(msg)
+		if err := sender.Send(msg); err != nil {
+			sendFailed(err)
+		}
 	}
 	if cfg.Sound {
 		if c, ok := sender.(Chimer); ok {

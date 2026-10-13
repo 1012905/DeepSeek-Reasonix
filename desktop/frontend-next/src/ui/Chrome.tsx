@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { host as hostBridge } from "../port/host";
 import type { HubPort } from "../port/hub";
 import type { AccountState, AgentPort, SessionStatus, WorkspaceInfo } from "../port/port";
 import { DeviceBar } from "./DeviceBar";
@@ -29,9 +30,7 @@ interface Props {
   onBrowser: () => void;
   browser: boolean;
   account: AccountState | null;
-  rail: boolean;
   theme: string;
-  onRail: () => void;
   onTheme: () => void;
   onFind: () => void;
   // The window's port, for what belongs to the window rather than a pane.
@@ -39,9 +38,18 @@ interface Props {
   onError?: (e: unknown) => void;
 }
 
-export function Chrome({ port, status, title, steer, onSettings, onBrowser, browser, account, host, rail, theme, onRail, onTheme, onFind, hub, onError }: Props) {
+export function Chrome({ port, status, title, steer, onSettings, onBrowser, browser, account, host, theme, onTheme, onFind, hub, onError }: Props) {
   const root = status?.workspaceRoot || status?.cwd || "";
   const project = root ? base(root) : "—";
+  // The folder mark opens the project itself. Only a shell that can enter a
+  // folder offers it, and only once a pane names where that folder is; a
+  // pane driven from another machine names a path this shell cannot enter,
+  // so the mark stays disabled there. The kernel is still the one that
+  // answers where the folder lives.
+  const canOpenProject = !!hub && root !== "" && !host && hostBridge().opensFolders();
+  const openProject = () => {
+    if (hub && root) void hub.openWorkspace(root).catch((e) => onError?.(e));
+  };
   // Only for the "隔离" tag: the folder list and the switch itself moved to the
   // sidebar, where adding one and opening one are the same gesture.
   const [ws, setWs] = useState<WorkspaceInfo | null>(null);
@@ -71,13 +79,20 @@ export function Chrome({ port, status, title, steer, onSettings, onBrowser, brow
   return (
     <>
     {hub && <DeviceBar hub={hub} />}
-    <button className="studio-menu" data-action="chrome.rail" onClick={onRail} aria-pressed={rail} aria-label={rail ? t("收起工作区栏") : t("展开工作区栏")}>
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10" /></svg>
-    </button>
     <div className="chrome" onDoubleClick={zoomOnTitleBar}>
 
       <div className="crumb">
-        <svg className="crumb-folder" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
+        <button
+          type="button"
+          className="crumb-folder"
+          data-action="chrome.open-project"
+          aria-label={t("打开项目文件夹")}
+          title={t("打开项目文件夹")}
+          disabled={!canOpenProject}
+          onClick={openProject}
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
+        </button>
         <span className="crumb-proj" title={root}>
           {project}
         </span>
