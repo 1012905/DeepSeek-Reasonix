@@ -16,6 +16,7 @@ import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { SendShortcut } from "./SendShortcut";
 import { SessionTabsSetting } from "./SessionTabsSetting";
+import { EscStopSetting } from "./EscStopSetting";
 import { ThemeImport } from "./ThemeImport";
 import { ThemeRemove } from "./ThemeRemove";
 import { useThemeInventory } from "./useThemeInventory";
@@ -548,6 +549,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <NavRailSection />
       <GraphicsSection />
       <SendShortcut />
+      <EscStopSetting />
       <SessionTabsSetting />
       <Folding />
       <Notifications port={port} />

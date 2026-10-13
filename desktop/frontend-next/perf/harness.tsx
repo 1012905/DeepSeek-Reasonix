@@ -15,6 +15,7 @@ import "../src/styles/sidebardrop.css";
 import "../src/styles/sponsor.css";
 import "../src/styles/versions.css";
 import "../src/styles/phonecomposer.css";
+import "../src/styles/stophint.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/narrow.css";
