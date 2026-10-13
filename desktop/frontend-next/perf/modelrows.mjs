@@ -17,7 +17,7 @@ try {
     const page = await ctx.newPage();
     await page.goto(BASE, { waitUntil: "networkidle" });
     await page.waitForSelector(".app", { timeout: 20000 });
-    await page.keyboard.press("Meta+Comma");
+    await page.getByRole("button", { name: "设置", exact: true }).click();
     await page.getByText("模型服务", { exact: true }).first().click();
     await page.getByText("myrelay", { exact: true }).first().click();
     await page.getByText("从服务商读取可用模型").first().click();
