@@ -8,7 +8,7 @@ interface Opening {
   manual: boolean;
   /** Counts the title-bar Browser presses; a change asks for a browser, not just the column. */
   browserAsk: number;
-  filesAsk: number;
+  filesAsk: unknown;
   port: AgentPort;
   agentNow: MutableRefObject<string>;
   dropBlankStart: () => void;

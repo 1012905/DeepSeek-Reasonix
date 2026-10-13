@@ -13,6 +13,15 @@ it("offers reveal only when the shell can show both a pane's file and a project"
   expect((await hostOver({ revealPath: async () => null })).revealsFiles()).toBe(false);
 });
 
+it("offers opening files only with a native bridge and preserves its refusal", async () => {
+  expect((await hostOver({})).opensFiles()).toBe(false);
+  const openFile = vi.fn().mockResolvedValue({ code: "workspace.file_missing", error: "missing" });
+  const host = await hostOver({ openFile });
+  expect(host.opensFiles()).toBe(true);
+  expect(await host.openFile("/rt/r1", "report.pdf")).toEqual({ code: "workspace.file_missing", error: "missing" });
+  expect(openFile).toHaveBeenCalledExactlyOnceWith("/rt/r1", "report.pdf");
+});
+
 it("offers the logs folder only when the shell can open it, and passes its refusal through", async () => {
   expect((await hostOver({})).revealsLogs()).toBe(false);
   const refusing = await hostOver({ revealLogs: async () => ({ error: "no such folder" }) });

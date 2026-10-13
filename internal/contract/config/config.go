@@ -1463,12 +1463,8 @@ func (c *Config) Provider(name string) (*ProviderEntry, bool) {
 // without duplicating base_url/api_key_env. Single-`model` entries still resolve
 // by provider name, keeping older configs working unchanged.
 func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
-	if ref == "" {
-		return nil, false
-	}
-	if ref == UnconfiguredRef && len(c.Providers) == 0 {
-		e := UnconfiguredEntry()
-		return &e, true
+	if e, ok := standIn(c, ref); ok || ref == "" {
+		return e, ok
 	}
 	if access := desktopProviderAccessMap(c.Desktop.ProviderAccess); len(access) > 0 {
 		if access["deepseek"] && !canCanonicalizeLegacyDeepSeekProviders(c) {
@@ -1531,13 +1527,8 @@ func (c *Config) ResolveNewSessionChatModel() (NewSessionModel, bool) {
 }
 
 func (c *Config) resolveNewSessionChatModel(providerAllowed func(string) bool, preserveUnknownDefault bool) (resolvedRef string, fallback bool, ok bool) {
-	if c == nil {
-		return "", false, false
-	}
-	// With nothing configured there is no stale default to preserve: every caller
-	// opens on the stand-in, and the window asks for a connection.
-	if len(c.Providers) == 0 {
-		return UnconfiguredRef, false, true
+	if c == nil || len(c.Providers) == 0 {
+		return noProviderStart(c)
 	}
 	if providerAllowed == nil {
 		providerAllowed = func(string) bool { return true }
@@ -1706,11 +1697,8 @@ func (c *Config) Validate(model string) error {
 	if !ok {
 		return fmt.Errorf("unknown model %q (configured: %s)", model, c.providerNames())
 	}
-	if e.Kind == UnconfiguredKind {
-		return fmt.Errorf("%w; run `reasonix setup` to add one", provider.ErrNoProvider)
-	}
-	if e.Kind == "" {
-		return fmt.Errorf("provider %q: kind is required", model)
+	if err := kindError(e, model); err != nil {
+		return err
 	}
 	if e.BaseURL == "" {
 		return fmt.Errorf("provider %q: base_url is required", model)
