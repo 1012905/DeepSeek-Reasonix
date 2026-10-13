@@ -19,7 +19,10 @@ export const PROVIDER_EDIT_DISABLED = "provider.editing_disabled";
 // A paired device answers this for every account route, votes included.
 export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 // The write landed and only applying it to the open conversation did not.
-export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running"];
+export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running", "context.window_after_this_turn"];
+
+/** Whether a refused save had already written the setting: it holds, but the running session has not taken it. */
+export const savedNotApplied = (e: unknown): boolean => e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
 
 const SAID: Record<string, string> = {
   "surface.value_invalid": "填写内容不符合字段要求，请检查后重试",
@@ -73,6 +76,7 @@ const SAID: Record<string, string> = {
   "provider.default_not_selected": "默认模型「{model}」不在已选择的模型中",
   "provider.display_name_too_long": "显示名称最多 {max} 个字符",
   "provider.display_name_invalid": "显示名称不能包含换行或其他控制字符",
+  "provider.model_alias_unlisted": "显示别名必须使用已选择模型的完整 ID",
 
   // ── 来源：这个协议做不到 ─────────────────────────────────────────
   "provider.no_thinking_param": "该协议不发送思考参数，启用后不会生效",
@@ -112,6 +116,11 @@ const SAID: Record<string, string> = {
   "model.decision_only": "「{model}」是决策来源，只服务 system_one 的询问，不能用作对话模型",
   "model.not_decision_source": "「{model}」是对话模型，不是决策来源；决策只能选择「模型服务」里添加的决策来源",
   "roles.override_not_in_user_config": "「{key}」不在用户配置里，可能已被清除，或来自项目配置",
+  "roles.search_model_bad_ref": "搜索模型「{model}」的格式应为 服务/模型",
+  "roles.search_model_not_added": "搜索模型「{model}」所在的连接已被移出",
+  "roles.search_model_removed": "搜索模型「{model}」已不在配置里",
+  "roles.search_model_unsupported": "搜索模型「{model}」的协议不支持原生搜索，或已关闭搜索",
+  "roles.search_model_no_credentials": "搜索模型「{model}」所在的连接没有凭据",
   "shell.editing_disabled": "这台服务器未开放 shell 设置",
   "account.signin_disabled": "这台服务器未开放账号登录",
   "backup.signed_out": "登录账号后才能使用云备份",
@@ -194,12 +203,14 @@ const SAID: Record<string, string> = {
   "share.port_in_use": "端口 {port} 已被其他程序占用，请换一个端口，或清空后让系统自动选择。",
   "share.port_out_of_range": "端口需要在 {min}–{max} 之间，或清空后让系统自动选择。",
   "share.port_save_failed": "无法保存端口设置：{error}",
+  "share.remember_save_failed": "无法保存配对记忆设置：{error}",
   "share.device_unknown": "没有这台已配对的设备，可能已被移除。",
   "picker.unsupported": "这个系统没有可用的文件夹选择框，请直接填写路径。",
   "picker.failed": "打不开文件夹选择框：{error}",
   "provider.bad_key_slot": "名称「{name}」不能用来存放密钥：密钥槽位由名称推导，而它不能以数字开头。改一个以字母开头的名称即可，密钥本身没有问题。",
   "page.not_built": "这个内核没有带界面，只提供接口",
   "provider.key_missing": "当前模型还没有 API key，请先在设置里添加",
+  "provider.none_configured": "还没有可用的模型服务，请先添加一个",
   "provider.key_required": "请填写 API key",
   "provider.key_too_large": "该 key 长度异常，可能粘贴了错误内容",
   "provider.setup_done": "已连接，无需重复配置",
@@ -257,7 +268,10 @@ const SAID: Record<string, string> = {
   "conversation_branch.failed": "分支失败，请重试",
 
   "commit.no_repository": "这个工作区不是 git 仓库，无法提交",
-  "commit.nothing_staged": "暂存区是空的，先用 git add 暂存要提交的文件",
+  "commit.nothing_staged": "暂存区是空的：先在改动列表里勾选要提交的文件，或点「暂存全部」",
+  "stage.unknown_path": "这个文件已经不在改动列表里了，请刷新后再试",
+  "stage.bad_request": "暂存请求无法识别",
+  "stage.failed": "暂存失败，请重试",
   "commit.staged_changed": "暂存区在你确认之后又变了，请重新起草",
   "commit.secrets_staged": "暂存的内容里有疑似密钥的文件，需要你确认后才能提交",
   "commit.empty_message": "提交说明是空的",

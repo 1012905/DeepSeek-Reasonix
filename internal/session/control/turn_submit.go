@@ -171,6 +171,9 @@ func (c *Controller) runPreparedInvocationTurn(
 	frozenImages []string,
 ) error {
 	ctx = withInvokedSkills(ctx, prepared.inlineSkillNames)
+	if strings.TrimSpace(raw) == "" {
+		raw = display
+	}
 	if len(prepared.subagents) == 0 {
 		return c.runTurnLoop(ctx, orchestratedTurn{
 			input: prepared.composed, raw: raw, display: display, images: c.frozenTurnImages(frozenImages),

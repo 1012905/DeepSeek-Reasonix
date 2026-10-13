@@ -168,6 +168,10 @@ interface (`call` / `notify` / `close`) abstracts that, so the MCP-level logic
   answer `roots/list` with its file URI. `tools/call` includes a per-call
   `_meta.progressToken`; matching `notifications/progress` messages stream into
   the existing tool-progress event path.
+- A local stdio server's `tools/call` also carries `_meta["io.reasonix/cwd"]` (the
+  workspace root) and `_meta["io.reasonix/readOnly"]` (true in plan mode).
+- Remote HTTP and SSE servers get neither, so no local path leaves the machine. A
+  key the call already carries is kept, and both are hints, not authority.
 - A stdio server uses one persistent transport for initialize, reads, and
   writes, preserving state such as browser sessions across tool calls. The
   process uses the server's process sandbox because process confinement cannot

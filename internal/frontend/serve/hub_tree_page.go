@@ -81,7 +81,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 			lead[recoveryLineageRoot(si, byID)] = len(out)
 		}
 		out = append(out, treeSession{
-			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread,
+			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread, Legacy: sessionstore.IsForeignSessionLog(si.Path),
 		})
 		decorateArchiveState(&out[len(out)-1], si.Path)
 	}

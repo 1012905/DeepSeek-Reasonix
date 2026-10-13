@@ -310,16 +310,7 @@ func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, ori
 	// A question blocks the run on the user exactly like an approval prompt.
 	go c.hooks.Notification(ctx, askNotificationText(questions, origin), "question_prompt")
 
-	waitCtx, cancelWait := c.askWaitContext(ctx, origin)
-	defer cancelWait()
-
-	select {
-	case ans := <-reply:
-		c.closeBarrier(id, barrierResolved)
-		return ans, nil
-	case <-waitCtx.Done():
-		return c.endUnansweredAsk(waitCtx, id, reply)
-	}
+	return c.waitForAsk(ctx, id, reply, origin)
 }
 
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.

@@ -63,10 +63,11 @@ var providerNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 type providerView struct {
 	Name string `json:"name"`
 	// DisplayName is the label a person gave this entry; empty is none set.
-	DisplayName string   `json:"displayName,omitempty"`
-	Kind        string   `json:"kind"`
-	BaseURL     string   `json:"baseUrl"`
-	Models      []string `json:"models"`
+	DisplayName  string            `json:"displayName,omitempty"`
+	Kind         string            `json:"kind"`
+	BaseURL      string            `json:"baseUrl"`
+	Models       []string          `json:"models"`
+	ModelAliases map[string]string `json:"modelAliases,omitempty"`
 	// VisionModels is which of them read images, so the form shows the current
 	// answer instead of asking the user to remember it.
 	VisionModels []string `json:"visionModels"`
@@ -155,6 +156,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			Kind:               strings.ToLower(strings.TrimSpace(p.Kind)),
 			BaseURL:            p.BaseURL,
 			Models:             nonNilStrings(p.ChatModelList()),
+			ModelAliases:       p.ModelAliases,
 			VisionModels:       nonNilStrings(visionModelsOf(cfg, p)),
 			CanSetVision:       len(settable) > 0 || config.CanConfigureVision(p),
 			VisionSettable:     nonNilStrings(settable),
@@ -349,9 +351,12 @@ func (s *Server) saveProvider(w http.ResponseWriter, r *http.Request) {
 	if !storeProviderEntries(w, known, []config.ProviderEntry{entry}, body.APIKey, body.Replace) {
 		return
 	}
-	// No rebuild: the model list and every switch read config from disk, so the
-	// new provider is selectable on the next call without disturbing the
-	// conversation that is running.
+	// No rebuild: switches read config from disk. A runtime that started with
+	// no provider holds a stand-in, so it moves to the new one now.
+	if err := s.leaveNoProvider(r.Context(), entry); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	writeJSON(w, map[string]any{"name": entry.Name, "models": nonNilStrings(entry.ModelList())})
 }
 
@@ -396,13 +401,18 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// With nothing left there is no model to move to; the window finds the
-	// empty config and asks for a connection, as it does on a first launch.
-	if target := removalSuccessor(cfg); inUse && target != "" {
+	// With nothing left the runtime moves to the stand-in, which is what makes
+	// the window ask for a connection now, as it does on a first launch.
+	if inUse {
+		target := removalSuccessor(cfg)
+		if target == "" {
+			target = config.UnconfiguredRef
+		}
 		if err := s.switchModel(r.Context(), target); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
+		s.refreshProviderSetup(currentModelRef(s.ctl()))
 	}
 	if len(removal.Moved) == 0 && len(removal.Cleared) == 0 {
 		w.WriteHeader(http.StatusNoContent)
@@ -579,4 +589,18 @@ func writeProbeFailure(w http.ResponseWriter, err error, apiKey string) {
 		probe.Params = map[string]any{"from": left.From, "target": left.To}
 	}
 	refuse(w, status, code, message, probe.Params)
+}
+
+// firstModelRef is the ref a freshly saved provider is selected by: its default
+// model, or its first when none is marked.
+func firstModelRef(e config.ProviderEntry) string {
+	models := e.ModelList()
+	if len(models) == 0 {
+		return ""
+	}
+	model := models[0]
+	if d := strings.TrimSpace(e.Default); d != "" && slices.Contains(models, d) {
+		model = d
+	}
+	return e.Name + "/" + model
 }

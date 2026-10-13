@@ -1,13 +1,11 @@
 import { t } from "../i18n";
 import { StudioIcon } from "./StudioIcon";
 
-/** What an empty workbench offers. Opening the column is asking for a place to
- *  work, not for one particular tool, so the choice is the person's. */
-export function WorkbenchLauncher({ changes, onFiles, onChanges, onBrowser }: { changes: number; onFiles: () => void; onChanges: () => void; onBrowser: () => void }) {
+export function WorkbenchLauncher({ changes, focus = false, onFiles, onChanges, onBrowser }: { changes: number; focus?: boolean; onFiles: () => void; onChanges: () => void; onBrowser: () => void }) {
   return (
     <div className="workbench-launcher" role="group" aria-label={t("开始")}>
       <StudioIcon name="spark" />
-      <button data-action="workbench.launch-files" onClick={onFiles}>
+      <button autoFocus={focus} data-action="workbench.launch-files" onClick={onFiles}>
         <StudioIcon name="folder" />
         <b>{t("文件")}</b>
       </button>

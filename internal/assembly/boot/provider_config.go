@@ -95,6 +95,7 @@ func providerFingerprint(e *config.ProviderEntry, proxy netclient.ProxySpec) str
 	delete(extra, "effort")
 	entry := *e
 	entry.Effort = ""
+	entry.ModelAliases = nil
 	payload := struct {
 		Entry  config.ProviderEntry
 		APIKey string

@@ -11,13 +11,14 @@ import (
 
 // NotifyPrefs is what a window can be asked about the desktop notifications it
 // sends on this machine's behalf. Enabled gates the system notification; Sound
-// is a chime of its own. The other four say which events either is for.
+// is a chime of its own. The others say which events either is for.
 type NotifyPrefs struct {
 	Enabled       bool `json:"enabled"`
 	TurnDone      bool `json:"turnDone"`
 	Approval      bool `json:"approval"`
 	Ask           bool `json:"ask"`
 	FeedbackReply bool `json:"feedbackReply"`
+	DiskLow       bool `json:"diskLow"`
 	Sound         bool `json:"sound"`
 }
 
@@ -49,7 +50,7 @@ func (h *Hub) NotifyPrefs() NotifyPrefs {
 		return NotifyPrefs{}
 	}
 	cfg := config.LoadForEdit(config.UserConfigPath()).Notifications
-	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest, FeedbackReply: cfg.FeedbackReply, Sound: cfg.Sound}
+	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest, FeedbackReply: cfg.FeedbackReply, DiskLow: cfg.DiskLow, Sound: cfg.Sound}
 }
 
 // SetNotifyPrefs persists the switches and hands the holder the same answer, so
@@ -62,6 +63,7 @@ func (h *Hub) SetNotifyPrefs(next NotifyPrefs) (NotifyPrefs, error) {
 		ApprovalRequest: next.Approval,
 		AskRequest:      next.Ask,
 		FeedbackReply:   next.FeedbackReply,
+		DiskLow:         next.DiskLow,
 		Sound:           next.Sound,
 	}
 	path := config.UserConfigPath()

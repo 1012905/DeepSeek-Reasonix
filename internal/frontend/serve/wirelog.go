@@ -66,6 +66,9 @@ var wireLogSkipped = map[string]bool{
 	// Content-free invalidation: a reopened window reads /adjudications, and
 	// replaying the notice would tell it to re-read something it just read.
 	"adjudications_changed": true,
+	// Content-free invalidation: a reopened pane reads the undo offer from
+	// /rewind/undo, so replaying the notice would only repeat that read.
+	"rewind_changed": true,
 	// The agent's tabs are read from the session that owns them.
 	"browser_tabs_changed": true,
 }

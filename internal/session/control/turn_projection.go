@@ -121,10 +121,12 @@ func (c *Controller) activeGoalTurnBlock(goal, goalStatus string) string {
 // records why it did not retrieve instead of retrieving again.
 func (c *Controller) recallTail(source string, hasNotes bool) string {
 	if hasNotes {
-		c.memory.recordRecall(memory.RecallResult{
+		suppressed := memory.RecallResult{
 			Query:      strings.TrimSpace(source),
 			Suppressed: "memory update already supplies the new fact",
-		})
+		}
+		c.memory.recordRecall(suppressed)
+		event.RecordMemoryRecall(c.sink, memoryRecallAudit(suppressed))
 		return ""
 	}
 	if c.ablation.Off(ablation.Retrieval) {

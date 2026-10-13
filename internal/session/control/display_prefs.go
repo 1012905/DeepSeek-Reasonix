@@ -12,6 +12,9 @@ import (
 type displayPrefs struct {
 	currencyGroup *DisplayCurrencyGroup
 	quoteContext  *event.QuoteContext
+	// walletCurrency is the wallet's currency last announced while the user
+	// left the display currency automatic; empty once they choose one.
+	walletCurrency string
 	// Preferences a frontend sets mid-session; empty means follow the language
 	// policy of the current user turn.
 	responseLanguage  string

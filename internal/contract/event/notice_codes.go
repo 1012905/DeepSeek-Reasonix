@@ -8,6 +8,7 @@ package event
 // wire-stable: never rename or reuse one once shipped.
 const (
 	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
+	NoticeCodeCheckpointRecordingFailed                         = "checkpoint_recording_failed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
@@ -92,4 +93,10 @@ const (
 	NoticeCodeJobKilled = "job_killed"
 	// A background job failed; Detail is the JobNotice payload, its text the English fallback.
 	NoticeCodeJobFailed = "job_failed"
+	// The selected web search model cannot serve, so search is off; Detail is the provider/model, the code names why.
+	NoticeCodeWebSearchModelBadRef        = "web_search_model_bad_ref"
+	NoticeCodeWebSearchModelNotAdded      = "web_search_model_not_added"
+	NoticeCodeWebSearchModelRemoved       = "web_search_model_removed"
+	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
+	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
 )
