@@ -296,6 +296,50 @@ test("openWorkspace refuses a folder the hub does not list", async () => {
 
 const ROOT = path.resolve(os.tmpdir(), "rx-workspace");
 
+test("file opening refuses scripts, executables and unknown types on every platform", async () => {
+  const { openFile } = require("../src/reveal.js");
+  const opened = [];
+  const shell = { openPath: async (target) => { opened.push(target); return ""; } };
+  for (const platform of ["darwin", "win32", "linux"]) {
+    for (const name of ["task.command", "task.sh", "task.bat", "task.cmd", "task.ps1", "task.lnk", "task.jar", "task.desktop", "task.scpt", "task.exe", "task.EXE", "report.pdf.exe", "task", "task.unknown", "page.html", "image.svg"]) {
+      const target = platform === "win32" ? `C:\\work\\${name}` : `/work/${name}`;
+      const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: target }) }) };
+      const why = await openFile(client, shell, "/rt/r1", "report.pdf", platform, { stat: async () => ({ isFile: () => true }) });
+      assert.ok(why?.error, `${platform}: ${name} must be refused`);
+    }
+  }
+  assert.deepEqual(opened, []);
+});
+
+test("file opening accepts kernel-located documents and media on every platform", async () => {
+  const { openFile } = require("../src/reveal.js");
+  for (const platform of ["darwin", "win32", "linux"]) {
+    for (const name of ["report.pdf", "notes.TXT", "report.docx", "table.xlsx", "slides.pptx", "data.csv", "notes.md", "image.PNG", "photo.jpg", "video.mp4", "audio.mp3"]) {
+      const target = platform === "win32" ? `C:\\work\\${name}` : `/work/${name}`;
+      const opened = [];
+      const shell = { openPath: async (p) => { opened.push(p); return ""; } };
+      const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: target }) }) };
+      assert.equal(await openFile(client, shell, "/rt/r1", name, platform, { stat: async () => ({ isFile: () => true }) }), null);
+      assert.deepEqual(opened, [target]);
+    }
+  }
+});
+
+test("file opening uses only a kernel-located regular file and reports shell failures", async () => {
+  const { openFile } = require("../src/reveal.js");
+  const opened = [];
+  const shell = { openPath: async (target) => { opened.push(target); return "no application"; } };
+  const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: path.join(ROOT, "report.pdf") }) }) };
+  assert.deepEqual(await openFile(client, shell, "/rt/r1", "report.pdf", process.platform, { stat: async () => ({ isFile: () => true }) }), { error: "no application", code: "" });
+  assert.deepEqual(opened, [path.join(ROOT, "report.pdf")]);
+  opened.length = 0;
+  assert.ok(await openFile(client, shell, "/rt/r1", "folder", process.platform, { stat: async () => ({ isFile: () => false }) }));
+  assert.ok(await openFile(client, shell, "https://attacker.test", "report.pdf"));
+  const refused = { request: async () => ({ status: 400, body: JSON.stringify({ code: "workspace.path_outside_tree", error: "outside" }) }) };
+  assert.equal((await openFile(refused, shell, "/rt/r1", "../secret.pdf")).code, "workspace.path_outside_tree");
+  assert.deepEqual(opened, []);
+});
+
 test("reveal opens only what the kernel located inside the pane's workspace", async () => {
   const rig = await revealRig((url) => {
     const rel = url.searchParams.get("path") ?? "";

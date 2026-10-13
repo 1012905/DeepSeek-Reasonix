@@ -435,6 +435,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "技能": "Skills",
   "当前工作目录下没有技能。": "No skills in this working directory.",
   "未提供说明": "No description written",
+  "搜索 {name} 的工具": "Search tools in {name}",
+  "没有匹配的工具。": "No matching tool.",
   "只读": "Read-only",
 
   // ── 设置：其余分区 ───────────────────────────────────────────────
@@ -839,6 +841,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "完整": "Full",
   "思考了 6 秒": "Thought for 6s",
   "3 项操作 · 1 项失败": "3 actions · 1 failed",
+  "扩展界面已失效": "Extension surface expired",
+  "扩展界面恢复失败": "Could not restore extension surfaces",
   "扩展 · {id}": "Extension · {id}",
   "极高风险": "Critical risk",
   "已拦截": "Blocked",

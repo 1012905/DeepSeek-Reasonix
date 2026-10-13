@@ -5,6 +5,12 @@ const path = require("node:path");
 // A pane's base as the hub publishes it. Nothing else may steer a request this
 // process sends with the credential, and the unprefixed root is no pane.
 const PANE_BASE = /^\/rt\/[A-Za-z0-9_-]+$/;
+const DOCUMENT_MEDIA = new Set([
+  ".pdf", ".txt", ".md", ".csv", ".tsv", ".json", ".yaml", ".yml", ".xml", ".rtf",
+  ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".avif", ".heic",
+  ".mp3", ".wav", ".ogg", ".m4a", ".flac", ".mp4", ".mov", ".webm", ".mkv",
+]);
 
 function refused(error, code = "") {
   return { code, error };
@@ -110,4 +116,18 @@ async function openWorkspace(client, shell, root, platform = process.platform, f
   return why ? refused(why) : null;
 }
 
-module.exports = { reveal, revealWorkspace, revealLogs, openWorkspace };
+async function openFile(client, shell, base, rel, platform = process.platform, fsApi = fs.promises) {
+  const found = await locate(client, String(base), String(rel), platform);
+  if (found.refusal) return found.refusal;
+  try {
+    if (!(await fsApi.stat(found.target)).isFile()) return refused("not a regular file");
+    const ext = (platform === "win32" ? path.win32 : path.posix).extname(found.target).toLowerCase();
+    if (!DOCUMENT_MEDIA.has(ext)) return refused("only documents and media can be opened");
+    const why = await shell.openPath(found.target);
+    return why ? refused(why) : null;
+  } catch (err) {
+    return refused(err.message);
+  }
+}
+
+module.exports = { reveal, revealWorkspace, revealLogs, openWorkspace, openFile };

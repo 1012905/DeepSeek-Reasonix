@@ -13,6 +13,7 @@ import "./styles/dialogcenter.css";
 import "./styles/stophint.css";
 import "./styles/phonecomposer.css";
 import "./styles/tips.css";
+import "./styles/skillpin.css";
 import "./styles/waitnote.css";
 import "./styles/narrow.css";
 import "./styles/workfold.css";

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"golang.org/x/term"
 
 	"reasonix/internal/base/i18n"
 	"reasonix/internal/frontend/termrender"
@@ -56,6 +58,10 @@ func Run(ctx context.Context, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	m := newModel(ctx, opts)
+	m.reportOn = term.IsTerminal(int(os.Stdout.Fd()))
+	if m.reportOn {
+		defer fmt.Fprint(os.Stdout, termrender.StatusClear)
+	}
 	p := tea.NewProgram(m, tea.WithContext(ctx))
 	if clusters, ok := clustersEmoji(); ok && clusters {
 		go p.Send(clusterReport)
@@ -130,6 +136,10 @@ type model struct {
 	yoloRestore string
 	// verbose keeps an answer's thinking open as it settles; /verbose toggles it.
 	verbose bool
+	// reportOn is set when stdout is a terminal that can be told the state
+	// (OSC 7501); status7501 is the last state it was told.
+	reportOn   bool
+	status7501 reportedStatus
 }
 
 type (
@@ -301,6 +311,11 @@ func tickStatus() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	return next, tea.Batch(cmd, m.reportStatus())
+}
+
+func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.resize(msg)

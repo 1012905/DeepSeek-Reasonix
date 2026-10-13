@@ -8,6 +8,8 @@ package event
 // Surface kinds carried by ExtensionSurfacePayload.Kind, mirroring the
 // protocol's own. "request" is reserved: a blocking prompt currently routes
 // through the ordinary AskRequest channel rather than arriving as a surface.
+const SurfaceExpired = "surface.expired"
+
 const (
 	ExtensionSurfaceStatus       = "status"
 	ExtensionSurfaceCard         = "card"
@@ -21,6 +23,7 @@ const (
 // ExtensionSurface / ExtensionStatus kinds. Exactly one sub-struct is set,
 // selected by Kind.
 type ExtensionSurfacePayload struct {
+	Code         string
 	PluginID     string
 	SurfaceID    string
 	SessionID    string

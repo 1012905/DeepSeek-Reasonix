@@ -226,6 +226,8 @@ export interface SessionState {
   // event, which replaces the estimate with what was billed — a reading that is
   // still an estimate says so rather than passing for the measured one.
   outLive: number;
+  interactionIDs: { asked:string[]; answered:string[] };
+  interactions: { requests:number; questions:number; options:number; answers:number; customAnswers:number };
   metrics: Metrics;
   waiting: Waiting;
   running: boolean;
