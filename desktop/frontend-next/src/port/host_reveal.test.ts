@@ -20,3 +20,13 @@ it("offers the logs folder only when the shell can open it, and passes its refus
   expect(await refusing.revealLogs()).toEqual({ error: "no such folder" });
   expect(await (await hostOver({ revealLogs: async () => null })).revealLogs()).toBeNull();
 });
+
+
+it("forwards unread badge changes and tolerates a shell without badge support", async () => {
+  const setUnreadBadge = vi.fn().mockResolvedValue(undefined);
+  const host = await hostOver({ setUnreadBadge });
+  await host.setUnreadBadge(true);
+  await host.setUnreadBadge(false);
+  expect(setUnreadBadge.mock.calls).toEqual([[true], [false]]);
+  await expect((await hostOver({})).setUnreadBadge(true)).resolves.toBeUndefined();
+});

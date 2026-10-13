@@ -580,7 +580,7 @@ export const EN: Record<string, string> = {
   "在系统文件管理器中显示": "Show in file manager",
   "已在 {app} 中打开": "Opened in {app}",
   "通知": "Notifications",
-  "只在你没盯着窗口的时候有用：一轮跑完、停下来等批准、模型反过来问你、反馈有了回复，都可以让系统提醒一次。": "Only useful while you are not watching: a turn finishing, a stop for approval, the model asking you something, or a reply to your feedback can each raise one system alert.",
+  "一轮结束、等待批准、模型提问或反馈收到回复时，可以发送系统通知。完成后未读的会话会在应用图标上显示标记，查看对应会话后清除。": "Send system notifications when a turn ends, approval is needed, the model asks a question, or feedback receives a reply. Unread completed conversations mark the application icon until you view them.",
   "发送系统通知": "Send system notifications",
   "默认关闭。开启后，无论窗口是否在前台都会由系统弹出提醒；声音由系统决定。立即生效，正在跑的会话下一次事件就按新设置来": "Off by default. When on, the system raises the alert whether or not this window is in front; the sound is whatever the system decides. Immediate: a running session follows the new setting from its next event.",
   "播放提示音": "Play a sound",

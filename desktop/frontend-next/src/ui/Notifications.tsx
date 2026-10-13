@@ -37,7 +37,7 @@ export function Notifications({ port }: { port: AgentPort }) {
       <div className="grp-hd">
         <h3>{t("通知")}</h3>
       </div>
-      <p className="hint">{t("只在你没盯着窗口的时候有用：一轮跑完、停下来等批准、模型反过来问你、反馈有了回复，都可以让系统提醒一次。")}</p>
+      <p className="hint">{t("一轮结束、等待批准、模型提问或反馈收到回复时，可以发送系统通知。完成后未读的会话会在应用图标上显示标记，查看对应会话后清除。")}</p>
       <div className="grp-items">
         <div className="lrow">
           <span className="tx">
