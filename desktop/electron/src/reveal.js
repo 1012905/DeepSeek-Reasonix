@@ -1,4 +1,5 @@
 "use strict";
+const fs = require("node:fs");
 const path = require("node:path");
 
 // A pane's base as the hub publishes it. Nothing else may steer a request this
@@ -67,4 +68,46 @@ async function revealWorkspace(client, shell, root, platform = process.platform)
   return null;
 }
 
-module.exports = { reveal, revealWorkspace };
+// The shell's own logs folder. The shell names it, never the page, and it is
+// opened rather than selected: it is a directory this app created. null means
+// it was shown.
+async function revealLogs(shell, dir) {
+  if (!dir) return { error: "the logs folder is unknown" };
+  const failed = await shell.openPath(String(dir));
+  return failed ? { error: failed } : null;
+}
+
+// A folder openPath may enter: a directory, and on macOS not an application
+// bundle, which openPath would launch instead of showing.
+async function isPlainFolder(target, platform, fsApi) {
+  let stat;
+  try {
+    stat = await fsApi.stat(target);
+  } catch {
+    return false;
+  }
+  if (!stat.isDirectory()) return false;
+  if (platform !== "darwin") return true;
+  try {
+    await fsApi.access(path.join(target, "Contents", "Info.plist"));
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+// openWorkspace enters a folder the sidebar lists instead of selecting it in
+// its parent. The kernel names the folder; anything that is not a plain folder
+// is only selected, as revealWorkspace does.
+async function openWorkspace(client, shell, root, platform = process.platform, fsApi = fs.promises) {
+  const found = await ask(client, `/host/workspaces/locate?root=${encodeURIComponent(String(root))}`, platform);
+  if (found.refusal) return found.refusal;
+  if (!(await isPlainFolder(found.target, platform, fsApi))) {
+    shell.showItemInFolder(found.target);
+    return null;
+  }
+  const why = await shell.openPath(found.target);
+  return why ? refused(why) : null;
+}
+
+module.exports = { reveal, revealWorkspace, revealLogs, openWorkspace };

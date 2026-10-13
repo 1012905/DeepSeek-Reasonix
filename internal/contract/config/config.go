@@ -260,6 +260,7 @@ type NotificationsConfig struct {
 	ApprovalRequest bool `toml:"approval_request"`
 	AskRequest      bool `toml:"ask_request"`
 	FeedbackReply   bool `toml:"feedback_reply"`
+	DiskLow         bool `toml:"disk_low"`
 	// Sound plays a short system chime for the events switched on above, whether
 	// or not system notifications are; off unless asked for.
 	Sound bool `toml:"sound"`
@@ -675,6 +676,10 @@ type ServeConfig struct {
 	// SharePort fixes the port of the phone-access LAN link; zero picks a free
 	// one each time the door opens. User-global like the rest of [serve].
 	SharePort int `toml:"share_port"`
+	// RememberPairedDevices keeps paired phones across restarts: the next process
+	// reopens the share where it was and adopts the devices that paired against it.
+	// Off by default, like every other promise about a device you are not holding.
+	RememberPairedDevices bool `toml:"remember_paired_devices"`
 }
 
 // NetworkConfig controls ordinary outbound HTTP traffic such as model providers,
@@ -790,13 +795,6 @@ type SkillsConfig struct {
 	DisableImplicitInvocation bool     `toml:"disable_implicit_invocation"`
 	SuppressWarnings          bool     `toml:"suppress_warnings"`
 	MaxDepth                  int      `toml:"max_depth"`
-}
-
-// ImplicitSkillInvocationEnabled reports whether the model may discover and
-// invoke skills without an explicit user slash command. The zero value keeps
-// the historical default enabled for old configs.
-func (c *Config) ImplicitSkillInvocationEnabled() bool {
-	return c == nil || !c.Skills.DisableImplicitInvocation
 }
 
 // SkillCustomPaths returns the configured custom skill roots with ${VAR}
@@ -1035,11 +1033,11 @@ type AgentConfig struct {
 	RecoveryTemperature float64           `toml:"recovery_temperature"`
 	SubagentModel       string            `toml:"subagent_model"`
 	SubagentModels      map[string]string `toml:"subagent_models"`
-	// VisionModel reads the images a text-only main model cannot. Empty leaves
-	// them with whatever model the receiving sub-agent already runs, which is
-	// chosen for other reasons — a cheap worker is usually text-only, and the
-	// attachment is then dropped during serialization with nothing to show why.
-	VisionModel string `toml:"vision_model"`
+	// A text-only worker can drop images during serialization. A dedicated
+	// reader keeps those attachments available independently of the main model.
+	// Empty retains the receiving sub-agent's model.
+	VisionModel    string `toml:"vision_model"`
+	WebSearchModel string `toml:"web_search_model"`
 	// TriageModel answers the small classifications the static tables come up
 	// short on (is this unrecognized command read-only?). Empty falls back to
 	// subagent_model, then the main model — set it to point them somewhere cheap.
@@ -1082,7 +1080,9 @@ type AgentConfig struct {
 	// MaxParallelWriters bounds concurrent writer-capable sub-agents that
 	// declare non-overlapping write_paths. 0 means the default (3). Must not
 	// exceed MaxSubagentConcurrency after normalization.
-	MaxParallelWriters int `toml:"max_parallel_writers"`
+	MaxParallelWriters int    `toml:"max_parallel_writers"`
+	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
+	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
 	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
@@ -1389,6 +1389,7 @@ func Default() *Config {
 			ApprovalRequest: true,
 			AskRequest:      true,
 			FeedbackReply:   true,
+			DiskLow:         true,
 		},
 		Agent: AgentConfig{
 			SystemPrompt: DefaultSystemPrompt,
@@ -1406,6 +1407,8 @@ func Default() *Config {
 			MaxSubagentDepth:       2,
 			MaxSubagentConcurrency: 6,
 			MaxParallelWriters:     3,
+			WriteLease:             "strict",
+			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask
 		// resolves to allow) while `reasonix` prompts before writers. Users add
@@ -1463,6 +1466,10 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 	if ref == "" {
 		return nil, false
 	}
+	if ref == UnconfiguredRef && len(c.Providers) == 0 {
+		e := UnconfiguredEntry()
+		return &e, true
+	}
 	if access := desktopProviderAccessMap(c.Desktop.ProviderAccess); len(access) > 0 {
 		if access["deepseek"] && !canCanonicalizeLegacyDeepSeekProviders(c) {
 			delete(access, "deepseek")
@@ -1470,23 +1477,11 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 		ref = retargetDesktopOfficialRef(ref, access)
 	}
 	ref = c.refForFoldedDeepSeek(ref)
-	// "provider/model"
-	if prov, model, ok := strings.Cut(ref, "/"); ok {
-		if e, found := c.Provider(prov); found && e.HasModel(model) {
-			return e.forModel(model), true
-		}
+	e, ok := c.lookupModel(ref)
+	if ok {
+		e.searchAssigned = c.explicitWebSearchRef() != ""
 	}
-	// a provider name → its default model
-	if e, found := c.Provider(ref); found {
-		return e.forModel(e.DefaultModel()), true
-	}
-	// a bare model name → the provider that lists it
-	for i := range c.Providers {
-		if c.Providers[i].HasModel(ref) {
-			return c.Providers[i].forModel(ref), true
-		}
-	}
-	return nil, false
+	return e, ok
 }
 
 // ResolveModelWithFallback resolves a model reference to the canonical
@@ -1538,6 +1533,11 @@ func (c *Config) ResolveNewSessionChatModel() (NewSessionModel, bool) {
 func (c *Config) resolveNewSessionChatModel(providerAllowed func(string) bool, preserveUnknownDefault bool) (resolvedRef string, fallback bool, ok bool) {
 	if c == nil {
 		return "", false, false
+	}
+	// With nothing configured there is no stale default to preserve: every caller
+	// opens on the stand-in, and the window asks for a connection.
+	if len(c.Providers) == 0 {
+		return UnconfiguredRef, false, true
 	}
 	if providerAllowed == nil {
 		providerAllowed = func(string) bool { return true }
@@ -1705,6 +1705,9 @@ func (c *Config) Validate(model string) error {
 	e, ok := c.ResolveModel(model)
 	if !ok {
 		return fmt.Errorf("unknown model %q (configured: %s)", model, c.providerNames())
+	}
+	if e.Kind == UnconfiguredKind {
+		return fmt.Errorf("%w; run `reasonix setup` to add one", provider.ErrNoProvider)
 	}
 	if e.Kind == "" {
 		return fmt.Errorf("provider %q: kind is required", model)

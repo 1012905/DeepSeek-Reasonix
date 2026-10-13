@@ -34,6 +34,7 @@ export interface HostPort {
   /** How the shell draws this launch; null where it has no say, as in a tab. */
   graphics(): Promise<GraphicsInfo | null>;
   openExternal(url: string): void | Promise<void>;
+  setUnreadBadge(unread: boolean): Promise<void>;
   /** Where dropped files live. Empty where the shell cannot say — a browser
    *  tab never learns a path. */
   pathsForFiles(files: File[]): string[];
@@ -55,6 +56,16 @@ export interface HostPort {
   /** Show a project the sidebar lists, which needs no pane. The hub answers
    *  where it is and refuses any folder it does not list. */
   revealWorkspace(root: string): Promise<Refusal | null>;
+  /** Whether this shell can open the folder it writes its own logs to. */
+  revealsLogs(): boolean;
+  /** Open that folder in the platform's file manager; null once shown,
+   *  otherwise why it was not. */
+  revealLogs(): Promise<Refusal | null>;
+  /** Whether this shell can enter a folder in the platform's file manager. */
+  opensFolders(): boolean;
+  /** Enter a project the sidebar lists: the same kernel answer revealWorkspace
+   *  asks for, opened rather than selected in its parent folder. */
+  openWorkspace(root: string): Promise<Refusal | null>;
   /** Whether this shell draws the agent's browser pages inside the window. */
   drawsBrowserViews(): boolean;
   /** Draw one of the agent's pages over rect, in on-screen coordinates, and
@@ -144,12 +155,15 @@ interface ElectronBridge {
   closeWindow(): Promise<void>;
   graphics?(): Promise<GraphicsInfo | null>;
   openExternal(url: string): Promise<void>;
+  setUnreadBadge?(unread: boolean): Promise<void>;
   pathForFile(file: File): string;
   saveText(name: string, content: string): Promise<string>;
   saveBytes(name: string, bytes: Uint8Array): Promise<string>;
   pickFolder(startIn: string): Promise<string>;
   revealPath?(base: string, path: string): Promise<Refusal | null>;
   revealWorkspace?(root: string): Promise<Refusal | null>;
+  revealLogs?(): Promise<Refusal | null>;
+  openWorkspace?(root: string): Promise<Refusal | null>;
   showBrowserView?(target: string, rect: ViewRect): Promise<void>;
   hideBrowserView?(): Promise<void>;
   freezeBrowserView?(): Promise<string>;
@@ -200,6 +214,9 @@ class ElectronHost implements HostPort {
   openExternal(url: string) {
     return this.api.openExternal(url);
   }
+  setUnreadBadge(unread: boolean) {
+    return this.api.setUnreadBadge?.(unread) ?? Promise.resolve();
+  }
   pathsForFiles(files: File[]) {
     // Resolved one at a time because that is the shape the platform offers;
     // a file the shell cannot place answers with "" and is dropped here.
@@ -222,6 +239,18 @@ class ElectronHost implements HostPort {
   }
   revealWorkspace(root: string) {
     return this.api.revealWorkspace?.(root) ?? Promise.resolve({ error: "this shell cannot show files" });
+  }
+  revealsLogs() {
+    return typeof this.api.revealLogs === "function";
+  }
+  revealLogs() {
+    return this.api.revealLogs?.() ?? Promise.resolve({ error: "this shell cannot show files" });
+  }
+  opensFolders() {
+    return typeof this.api.openWorkspace === "function";
+  }
+  openWorkspace(root: string) {
+    return this.api.openWorkspace?.(root) ?? Promise.resolve({ error: "this shell cannot open folders" });
   }
   // A shell older than the verbs has no views to draw, and says so by lacking them.
   drawsBrowserViews() {
@@ -277,6 +306,9 @@ class BrowserHost implements HostPort {
   openExternal(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
   }
+  setUnreadBadge() {
+    return Promise.resolve();
+  }
   pathsForFiles() {
     return [];
   }
@@ -297,6 +329,18 @@ class BrowserHost implements HostPort {
   }
   revealWorkspace() {
     return Promise.resolve({ error: "a browser tab cannot show files" });
+  }
+  revealsLogs() {
+    return false;
+  }
+  revealLogs() {
+    return Promise.resolve({ error: "a browser tab cannot show files" });
+  }
+  opensFolders() {
+    return false;
+  }
+  openWorkspace() {
+    return Promise.resolve({ error: "a browser tab cannot open folders" });
   }
   drawsBrowserViews() {
     return false;

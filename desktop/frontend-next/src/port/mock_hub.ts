@@ -187,6 +187,8 @@ export class MockHub implements HubPort {
 
   async revealWorkspace() {}
 
+  async openWorkspace() {}
+
   removeWorkspace(path: string) {
     const at = this.roots.indexOf(path);
     if (at >= 0) this.roots.splice(at, 1);
@@ -267,6 +269,17 @@ export class MockHub implements HubPort {
   setSharePort(port: number) {
     this.share = { ...this.share, port: port || undefined };
     return Promise.resolve({ ...this.share });
+  }
+
+  private remember = false;
+
+  shareRemember() {
+    return Promise.resolve<{ remember: boolean } | null>({ remember: this.remember });
+  }
+
+  setShareRemember(remember: boolean) {
+    this.remember = remember;
+    return Promise.resolve({ remember: this.remember });
   }
 
   closeShare() {

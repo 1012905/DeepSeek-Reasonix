@@ -21,6 +21,17 @@ export class SseMcp extends SseProvider {
   // whole point of the button, so it is read rather than thrown away.
   // 502 carries the diagnosis in the body — the reason the retry failed is the
   // whole point of the button, so it is read rather than thrown away.
+  async trustMcp(name: string, digest: string) {
+    const res = await fetch(this.base + "/mcp/trust", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ name, digest }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { state?: string; tools?: number | unknown[]; error?: string };
+    if (!res.ok && !body.error) throw new Error(`/mcp/trust: ${res.status}`);
+    return { state: body.state ?? (res.ok ? "ready" : "failed"), tools: typeof body.tools === "number" ? body.tools : body.tools?.length, error: body.error };
+  }
   async reconnectMcp(name: string) {
     const res = await fetch(this.base + "/mcp/reconnect", {
       method: "POST",

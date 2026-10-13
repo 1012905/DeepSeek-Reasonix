@@ -243,6 +243,7 @@ export interface SessionState {
   // and this is what asks it again. Counting, not the kernel's own revision:
   // the point is that it changed, and a counter cannot arrive out of order.
   queueMoved: number;
+  rewindMoved: number;
   // How many times the agent's browser tabs moved; the tabs are read back.
   browserTabsMoved: number;
   // Standing extension surfaces, keyed by plugin and surface id. They describe

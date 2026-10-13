@@ -1,12 +1,13 @@
 import { watchTreeWake } from "./treewake";
 import { usePinnedSessions } from "./usePinnedSessions";
 import { AutoArchiveNotice } from "./AutoArchiveNotice";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import { Chrome } from "./Chrome";
+import { RailToggle } from "./RailToggle";
 import { useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
 import { useTreeWindow, type TreePaging } from "./treewindow";
@@ -17,6 +18,8 @@ import { Pane, type PaneReport } from "./Pane";
 import { clearDraftForSession } from "./drafts";
 import { DOCK, Gutter, RAIL, dockMax, keepWidth, widthOf } from "./Gutter";
 import { useWindowKeys, type Shortcut } from "./windowkeys";
+import { useEscStop } from "../state/escstop";
+import { StopHint } from "./StopHint";
 import { folded as roomGaveUp, onRoomWidth } from "./viewport";
 import { useFoldAway } from "./foldaway";
 import { useDrawerCloses } from "./drawer";
@@ -36,7 +39,9 @@ import { Sidebar } from "./Sidebar";
 import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
-import { isUnread, useViewed } from "./unread";
+import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
+import { useLiveGrace } from "./useLiveGrace";
+import { isUnread, useViewed, useUnreadBadge } from "./unread";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
@@ -75,6 +80,7 @@ const NO_REPORT: PaneReport = {
 // conversation — its transcript, metrics and event stream — lives in the Pane
 // that owns it. That split is what lets two sessions run side by side.
 export function App({ hub }: { hub: HubPort }) {
+  const sessionTabs = useSyncExternalStore(onShowsSessionTabsChange, showsSessionTabs, showsSessionTabs);
   const [runtimes, setRuntimes] = useState<RuntimeView[]>([]);
   const [panesRead, setPanesRead] = useState(false);
   const [active, setActive] = useState(savedActivePane);
@@ -102,6 +108,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [dockLimit, setDockLimit] = useState(() => dockMax(document.body.clientWidth));
   const [report, setReport] = useState<PaneReport>(NO_REPORT);
   const [findPulse, setFindPulse] = useState(0);
+  const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
   // false = closed, true = open at its last section, a string = open there.
   const [settings, setSettings] = useState<string | boolean>(false);
@@ -136,7 +143,10 @@ export function App({ hub }: { hub: HubPort }) {
   // a few hundred sessions each frame — which is what its memo is there for.
   const liveIds = useCallback((ids: string[]) => ids.filter((id) => runsRef.current[id]?.live), []);
 
+  const { listedIds, noteReport } = useLiveGrace(runsRef, runs);
+
   const onReport = useCallback((id: string, next: PaneReport) => {
+    noteReport(id, next.live);
     setRuns((prev) =>
       prev[id]?.run === next.run && prev[id]?.live === next.live ? prev : { ...prev, [id]: { run: next.run, live: next.live } },
     );
@@ -146,7 +156,7 @@ export function App({ hub }: { hub: HubPort }) {
     // cost of a window render per background beat.
     reportsRef.current[id] = next;
     if (id === activeRef.current) setReport(next);
-  }, []);
+  }, [noteReport]);
 
   // The window's title, run pill and status belong to the pane in front. They
   // were only ever written when a pane reported, so switching to an idle pane
@@ -321,7 +331,8 @@ export function App({ hub }: { hub: HubPort }) {
   // Transition made a simple sidebar click pay for a full-page texture before
   // the active id changed. Selection feedback should be immediate.
   const reloadBooks = useCallback(() => Promise.all([reloadTree(), reloadRemoteTrees()]), [reloadTree, reloadRemoteTrees]);
-  const viewed = useViewed({ runtimes, ports: panePorts, active, tree, remote: remoteTrees, reload: reloadBooks });
+  const viewed = useViewed({ runtimes, ports: panePorts, active: settings || feedback ? "" : active, tree, remote: remoteTrees, reload: reloadBooks });
+  useUnreadBadge(viewed.tree, viewed.remote);
   const focusPane = useCallback(
     (id: string) => {
       sw.cancel();
@@ -341,6 +352,16 @@ export function App({ hub }: { hub: HubPort }) {
     setSettings(false);
     void reloadRemotes();
   }, [reloadRemotes]);
+
+  const openFiles = useCallback(() => {
+    if (!panePorts.has(active)) {
+      setError(t("请先打开一个会话，再查看它的文件。"));
+      return;
+    }
+    hidePrefs();
+    if (roomGaveUp("scene")) setRail(false);
+    setFilesRequests((requests) => ({ ...requests, [active]: (requests[active] ?? 0) + 1 }));
+  }, [active, panePorts, hidePrefs]);
 
   const openPane = useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes: refreshPanes, sw });
 
@@ -397,7 +418,9 @@ export function App({ hub }: { hub: HubPort }) {
   );
   const closeBrowser = useCallback(() => setBrowser(false), []);
   const stopTurn = useCallback(() => activePort?.cancel(), [activePort]);
-  useWindowKeys(shortcuts, { browser, settings: !!settings, running, closeBrowser, stop: stopTurn });
+  const escMode = useEscStop();
+  const [stopArmed, setStopArmed] = useState(false);
+  useWindowKeys(shortcuts, { browser, settings: !!settings, running, confirm: escMode === "confirm", closeBrowser, stop: stopTurn, onArm: setStopArmed });
 
   // A setting changed in the pane is a fact about the session behind it, and
   // the pane is what holds that fact. Without a nudge it keeps polling only
@@ -562,10 +585,7 @@ export function App({ hub }: { hub: HubPort }) {
         }}
         browser={browser}
         account={account}
-        rail={rail}
         theme={scheme}
-        onRail={() => setRail((v) => !v)}
-        railLocked={!!settings}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
         onFind={openFind}
         hub={hub} onError={fail}
@@ -578,9 +598,14 @@ export function App({ hub }: { hub: HubPort }) {
           <Nav
             at={settings === false ? null : settings === true ? "" : settings}
             onGo={showPrefs}
+            onFiles={openFiles}
             onHome={hidePrefs}
             onRail={() => setRail((v) => !v)}
             onFeedback={() => setFeedback(feedbackEntryTab(feedbackUnread))}
+            onNew={() => {
+              hidePrefs();
+              void openPane({ root: newSessionRoot }).catch(fail);
+            }}
             feedbackUnread={feedbackUnread}
             shown={navRail.shown}
           />
@@ -596,6 +621,7 @@ export function App({ hub }: { hub: HubPort }) {
           active={active}
           activeWorkspace={activeWorkspace}
           liveIds={liveIds}
+          listedIds={listedIds}
           pinned={pinnedSessions}
           onPin={togglePinnedSession}
           remotes={remotes}
@@ -619,6 +645,7 @@ export function App({ hub }: { hub: HubPort }) {
           accountUnread={accountUnread}
           wallet={report.wallet}
           onSettings={showPrefs}
+          onFiles={openFiles}
           onFeedback={(tab) => setFeedback(tab ?? "send")}
           feedbackUnread={feedbackUnread}
           onFind={openFind}
@@ -638,7 +665,7 @@ export function App({ hub }: { hub: HubPort }) {
           {/* One conversation on screen at a time. Side by side, two panes
               squeezed each other and a glance could not tell which composer
               belonged to which run; the ones behind keep streaming either way. */}
-          {tabs.length > 1 && (
+          {sessionTabs && tabs.length > 1 && (
             <PaneTabs
               tabs={tabs}
               active={active}
@@ -671,6 +698,7 @@ export function App({ hub }: { hub: HubPort }) {
                   onSessionChanged={refreshPanes}
                   pulse={settingsPulse}
                   findPulse={findPulse}
+                  filesPulse={filesRequests[rt.id] ?? 0}
                   alert={rt.id === active ? bar : undefined}
                   needsProject={needsProject}
                   onOpenProject={() => {
@@ -682,6 +710,7 @@ export function App({ hub }: { hub: HubPort }) {
                     setClaimed(true);
                   }}
                   onSettings={(section) => section ? showPrefs(section) : showPrefs()}
+                  onOpenSession={(path) => void openPane({ root: rt.root, sessionPath: path }).catch(fail)}
                   theme={scheme}
                   dockW={shownDockW}
                   dockMax={dockLimit}
@@ -758,6 +787,8 @@ export function App({ hub }: { hub: HubPort }) {
         </Suspense>
         </Boundary>
       )}
+      <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
+      <StopHint armed={stopArmed} />
     </div>
   );
 }

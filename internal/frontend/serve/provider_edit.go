@@ -55,7 +55,8 @@ func (s *Server) editProvider(w http.ResponseWriter, r *http.Request) {
 		ModelEfforts *map[string]modelEffortView `json:"modelEfforts"`
 		// Per-model window and output cap, with the same listed-models-are-the-
 		// whole-answer rule; a model sent empty inherits the connection's.
-		ModelLimits *map[string]modelLimitsView `json:"modelLimits"`
+		ModelLimits  *map[string]modelLimitsView `json:"modelLimits"`
+		ModelAliases *map[string]string          `json:"modelAliases"`
 	}
 	if !decodeProviderBody(w, r, &body) {
 		return
@@ -87,6 +88,10 @@ func (s *Server) editProvider(w http.ResponseWriter, r *http.Request) {
 	entry.Models = models
 	entry.Model = ""
 	entry.Default = def
+	if bad := applyModelAliases(entry, body.ModelAliases); bad != nil {
+		refuse(w, http.StatusBadRequest, bad.code, bad.message, bad.detail)
+		return
+	}
 	applyVisionSelection(entry, trimmedNonEmpty(body.Vision))
 
 	if !applyNumericFields(w, entry, body.ContextWindow, body.MaxOutputTokens, body.IdleTimeoutSeconds) {

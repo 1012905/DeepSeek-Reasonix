@@ -82,8 +82,8 @@
   }
 
   :root[data-bg] .flow:not([data-empty]) {
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
-                 0 0 7px color-mix(in srgb, var(--page) 72%, transparent);
+    text-shadow: var(--flow-text-shadow, 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
+                 0 0 7px color-mix(in srgb, var(--page) 72%, transparent));
   }
   :root[data-bg] .compose {
     background: color-mix(in srgb, var(--raised) 80%, transparent);
@@ -153,7 +153,7 @@
     --chrome-h: 51px; --lights-w: 96px; --lights-h: var(--chrome-h);
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="off"] .chrome {
-    padding-left: calc(var(--lights-w) + 50px - var(--nav-w));
+    padding-left: calc(var(--lights-w) + var(--rail-toggle-gap) - var(--nav-w));
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="on"] .studio-rail-head {
     padding-top: var(--lights-h); -webkit-app-region: drag;
@@ -191,7 +191,7 @@
 
   .crumb-proj {
     font-weight: var(--w-med); color: var(--muted);
-    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .chrome .r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .btn {
@@ -410,7 +410,6 @@
   @keyframes breathe { 0%, 100% { opacity: .45 } 50% { opacity: 1 } }
 
   .pane[data-run="done"] .rmark { color: var(--ok) }
-  @keyframes drawin { from { stroke-dashoffset: 100 } to { stroke-dashoffset: 0 } }
 
   .queue {
     display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;
@@ -528,11 +527,10 @@
   .call[data-pending] > .c { opacity: .7 }
 
   .app {
-    --nav-w: 0px; --rail-w: var(--rail-open); --side-w: 0px; --dock-w: var(--dock-open);
-    transition: --nav-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --rail-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --side-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --dock-w var(--t-panel) cubic-bezier(.32, .72, 0, 1);
+    --nav-w: 0px; --rail-w: var(--rail-open); --side-w: 0px;
+    transition: --nav-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --rail-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --side-w var(--t-panel) cubic-bezier(.32, .72, 0, 1);
   }
   .app[data-rail="off"] { --rail-w: 0px }
-  .app[data-browser="off"] { --dock-w: 0px }
   .app[data-side="on"] { --side-w: var(--side-open) }
 
   .app[data-drag] { transition: none }
@@ -806,10 +804,10 @@
   [data-pane="flow"]:has(.hero) { justify-content: center }
   [data-pane="flow"]:has(.hero) .flow { margin-top: 0 }
   .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 34px }
-  .hero .rmark { width: 78px; height: 78px; color: var(--faint); opacity: .92 }
-  .hero .rmark path { stroke-width: .42; animation: drawin 1.4s var(--ease-out) both }
-  .hero .rmark path:nth-child(2) { animation-delay: .22s }
-  .hero .rmark path:nth-child(3) { animation-delay: .44s }
+  .hero .sym-mark {
+    width: 78px; height: 78px; display: block;
+    color: var(--faint); opacity: .92;
+  }
   .hero .t {
     margin-top: 26px; font: var(--w-reg) 25px/1.25 var(--ui);
     letter-spacing: var(--track-display); color: var(--text);
@@ -4243,30 +4241,26 @@
     text-align: center; padding: 0 40px; width: 100%;
   }
 
-  .oobe-mark { width: 54px; height: 54px; display: block; margin: 0 auto }
-  .oobe-mark path { fill: none; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round }
-  .oobe-mark .base { stroke: rgba(255,255,255,.92) }
-  .oobe-mark .lume { stroke: #FFE9B8; filter: drop-shadow(0 0 4px rgba(255,215,130,.9)); opacity: 0 }
-  .oobe[data-play] .oobe-mark .base {
-    stroke-dasharray: 100; stroke-dashoffset: 100;
-    animation: oobedraw 1s var(--ease-out) .25s forwards;
+  .oobe-lockup { display: grid; justify-items: center; }
+  .oobe-mark {
+    display: block; margin: 0 auto; width: 300px; aspect-ratio: 1692.66 / 392.25;
+    filter: drop-shadow(0 0 18px rgb(1 83 229 / .45));
   }
-  .oobe[data-play] .oobe-mark .base:nth-of-type(2) { animation-delay: .45s }
-  .oobe[data-play] .oobe-mark .base:nth-of-type(3) { animation-delay: .65s }
-  .oobe[data-play] .oobe-mark .lume {
-    stroke-dasharray: 14 86; stroke-dashoffset: 100;
-    animation: oobetrace 1.5s ease-in-out 1.25s forwards;
+  .oobe[data-play] .oobe-mark {
+    opacity: 0;
+    animation: oobebrand .9s var(--ease-out) .25s forwards,
+               oobelume 1.6s ease-in-out 1.25s forwards;
   }
-  @keyframes oobedraw { to { stroke-dashoffset: 0 } }
-  @keyframes oobetrace { 0% { opacity: 0; stroke-dashoffset: 100 } 15%,85% { opacity: 1 }
-                         100% { opacity: 0; stroke-dashoffset: -20 } }
+  @keyframes oobelume {
+    0% { filter: drop-shadow(0 0 5px rgb(255 215 130 / .9)) brightness(1.45) }
+    32% { filter: drop-shadow(0 0 26px rgb(255 233 184 / .85)) brightness(1.25) }
+    100% { filter: drop-shadow(0 0 18px rgb(1 83 229 / .45)) brightness(1) }
+  }
 
   .oobe-brand {
-    margin: 26px 0 0; font: 300 40px/1.15 var(--mono); letter-spacing: -.02em; white-space: nowrap;
-    background: linear-gradient(100deg,
-      #7C766A 0%, #7C766A 34%, #FFEFCB 45%, #FFFFFF 50%, #FFEFCB 55%, #7C766A 66%, #7C766A 100%);
-    background-size: 260% 100%; background-position: 130% 0;
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin: 16px 0 0; font: 650 var(--fs-display)/1 var(--mono); letter-spacing: .21em;
+    text-transform: uppercase; white-space: nowrap;
+    color: rgb(255 255 255 / .72);
   }
 
   .oobe-sub {
@@ -4275,13 +4269,11 @@
   }
   .oobe[data-play] .oobe-brand {
     opacity: 0;
-    animation: oobebrand .9s var(--ease-out) 1.5s forwards,
-               oobesweep 2.2s cubic-bezier(.4,0,.2,1) 2s forwards;
+    animation: oobebrand .9s var(--ease-out) 1.5s forwards;
   }
   .oobe[data-play] .oobe-sub { opacity: 0; animation: ooberise .8s var(--ease-out) 2.1s forwards }
   @keyframes oobebrand { from { opacity: 0; transform: translateY(10px); filter: blur(6px) }
                          to { opacity: 1; transform: none; filter: none } }
-  @keyframes oobesweep { from { background-position: 130% 0 } to { background-position: -40% 0 } }
   @keyframes ooberise  { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 
   .oobe-lines { position: relative; height: 96px; width: 100%; margin-top: 4px }
@@ -4320,14 +4312,16 @@
 
   @media (prefers-reduced-motion: reduce) {
     .oobe[data-play] * { animation: none !important }
+    .oobe[data-play] .oobe-mark,
     .oobe[data-play] .oobe-brand,
     .oobe[data-play] .oobe-sub { opacity: 1 }
+    .oobe[data-play] .oobe-mark { filter: drop-shadow(0 0 18px rgb(1 83 229 / .45)) }
     .oobe[data-play][data-held] .oobe-scene { transform: translateY(calc(-14vh / var(--zoom, 1))) scale(.62) }
     .oobe[data-play][data-held] .oobe-lines { height: 0; opacity: 0 }
     .oobe[data-play][data-held] .onb { opacity: 1 }
-    .oobe[data-play] .oobe-brand { background-position: -40% 0 }
   }
-  [data-fold~="scene"] .oobe-brand { font-size: 32px }
+  [data-fold~="scene"] .oobe-mark { width: 240px }
+  [data-fold~="scene"] .oobe-brand { font-size: var(--fs-title) }
   [data-fold~="scene"] .oobe-line b { font-size: var(--fs-display) }
 
   .onb-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100% }
