@@ -8,6 +8,7 @@ import (
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/eventwire"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/surfacespec"
 	"reasonix/internal/contract/tool"
 )
 
@@ -83,11 +84,17 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 	out := make([]historyMessage, 0, len(msgs))
 	worked := sessionstore.TurnWorkMs(msgs)
 	for i, m := range msgs {
+		if m.LocalOnly && m.Name == surfacespec.ActionMessageName {
+			continue
+		}
 		// A steer is the person speaking into a running turn, so it stays a
 		// user message and carries what it was. The host's own mid-turn notice
 		// rides the same prefix and is not theirs to have said.
 		if m.Role == provider.RoleUser {
 			if steerText, host, isSteer := sessionstore.SteerKind(m.Content); isSteer {
+				if m.RawContent != "" {
+					steerText = m.RawContent
+				}
 				out = append(out, historyMessage{
 					Role: string(provider.RoleUser), Content: steerText, Steer: true,
 					HostAuthored: host || m.HostAuthored, MsgIndex: i, Via: eventwire.ToWireVia(m.Via),

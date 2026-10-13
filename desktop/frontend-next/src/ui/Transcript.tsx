@@ -34,7 +34,7 @@ import { landingBox, useFindLanding, useFindPaint } from "./findland";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL">;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort,"surfaceAction"|"surfaceActionState"|"cancelQueued">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -717,7 +717,7 @@ const Row = memo(function Row({
       // needs. Drawing the tool call too put two copies of the same question on
       // screen, each answerable.
       if (it.tool.name === "ask") return null;
-      { const surface = surfaceTool(it.tool, it.running); if (surface !== undefined) return surface; }
+      { const surface = surfaceTool(it.tool, it.running, port); if (surface !== undefined) return surface; }
       return (() => {
         const card = (
           <ToolCard

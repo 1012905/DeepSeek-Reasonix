@@ -26,7 +26,7 @@ func chartCall(t *testing.T, id string, spec string) string {
 	return string(b)
 }
 
-func buildChartAssembly(t *testing.T, kind string, probe *capabilityProbeProvider, dir string, sinks ...event.Sink) *control.Controller {
+func buildChartAssembly(t *testing.T, kind string, probe provider.Provider, dir string, sinks ...event.Sink) *control.Controller {
 	t.Helper()
 	provider.Register(kind, func(provider.Config) (provider.Provider, error) { return probe, nil })
 	writeFile(t, dir, "reasonix.toml", `

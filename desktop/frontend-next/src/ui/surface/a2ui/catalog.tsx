@@ -1,3 +1,4 @@
+import { Button } from "@mantine/core";
 import { createContext, useContext } from "react";
 import { Catalog, CommonSchemas } from "@a2ui/web_core/v0_9";
 import { createComponentImplementation, type ReactComponentImplementation } from "@a2ui/react/v0_9";
@@ -6,7 +7,7 @@ import type { ExtensionViewNode } from "../../../port/wire";
 import { SurfaceField } from "../SurfaceField";
 import { SurfaceDiffPreview } from "../SurfaceDiffPreview";
 
-export const SurfaceContext = createContext<{ disabled: boolean; inputs: boolean; onAction?: (id: string) => void }>({ disabled: true, inputs: false });
+export const SurfaceContext = createContext<{ disabled: boolean; inputs: boolean; actionDisabled?: boolean; onAction?: (id: string) => void }>({ disabled: true, inputs: false });
 
 const tone = z.string().optional();
 const textSchema = z.object({ value: z.string(), tone }).strict();
@@ -23,7 +24,8 @@ const implementations: ReactComponentImplementation[] = [
   createComponentImplementation({ name: "Pip", schema: z.object({ tone }).strict() }, ({ props }) => <i className="pip" data-tone={props.tone} />),
   createComponentImplementation({ name: "Divider", schema: z.object({}).strict() }, () => <hr className="xv-hr" />),
   createComponentImplementation({ name: "ExtensionButton", schema: z.object({ label: z.string(), actionId: z.string() }).strict() }, ({ props }) => {
-    const { onAction } = useContext(SurfaceContext);
+    const { onAction, inputs, disabled, actionDisabled } = useContext(SurfaceContext);
+    if (inputs) return <Button data-action="surface.action" data-target={props.actionId} disabled={disabled||actionDisabled} onClick={()=>onAction?.(props.actionId)}>{props.label}</Button>;
     return <button className="act" data-action="extensions.invoke" onClick={() => onAction?.(props.actionId)}>{props.label}</button>;
   }),
   createComponentImplementation({ name: "Field", schema: z.object({ node: z.custom<ExtensionViewNode>(), value: fieldValue }).strict() }, ({ props }) => {

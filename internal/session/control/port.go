@@ -437,6 +437,7 @@ type SurfaceHistory interface {
 }
 
 type SessionAPI interface {
+	SurfaceActions
 	SurfaceHistory
 	Lifecycle
 	TurnControl

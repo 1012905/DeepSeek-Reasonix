@@ -30,7 +30,7 @@ describe("surface contract", () => {
 
   it.each([
     { kind: "html", value: "<script/>" },
-    { kind: "button", label: "Approve", actionId: "approve" },
+    { kind: "button", label: "Approve", actionId: "approve", operation: "approve" },
     { kind: "text", value: "hi", actionId: "" },
     { kind: "text", value: "hi", children: [] },
     { kind: "text", value: "hi", tone: ["ok"] },
@@ -54,4 +54,10 @@ describe("surface contract", () => {
     for (let i = 0; i < 8; i++) deep = { kind: "stack", children: [deep] };
     expect(parseSurface({ spec_version: 1, body: [deep] })).toBeNull();
   });
+});
+it("accepts opaque action buttons while rejecting executable properties and duplicate ids", () => {
+ const button = {kind:"button",label:"Continue",actionId:"continue"};
+ expect(parseSurface({spec_version:1,body:[button]})).not.toBeNull();
+ expect(parseSurface({spec_version:1,body:[button,button]})).toBeNull();
+ expect(parseSurface({spec_version:1,body:[{...button,approve:true}]})).toBeNull();
 });

@@ -17,6 +17,6 @@ export function useSurfaceRuntime(body: ExtensionViewNode[], restored?: Record<s
   return runtime;
 }
 
-export function SurfaceView({ runtime, disabled = true, inputs = false, onAction }: { runtime: SurfaceRuntime; disabled?: boolean; inputs?: boolean; onAction?: (id: string) => void }) {
-  return <SurfaceContext.Provider value={{ disabled, inputs, onAction }}><div className="xview"><A2uiSurface surface={runtime.surface} /></div></SurfaceContext.Provider>;
+export function SurfaceView({ runtime, disabled = true, inputs = false, actionDisabled, onAction }: { runtime: SurfaceRuntime; disabled?: boolean; inputs?: boolean; actionDisabled?: boolean; onAction?: (id: string) => void }) {
+  return <SurfaceContext.Provider value={{ disabled, inputs, actionDisabled, onAction }}><div className="xview"><A2uiSurface surface={runtime.surface} /></div></SurfaceContext.Provider>;
 }

@@ -749,6 +749,8 @@ export const EN: Record<string, string> = {
   "排队中 · 下一个工具边界送达": "Queued · delivered at the next tool boundary",
   "排队中 · 本轮结束后发送": "Queued · goes as soon as this turn lands",
   "撤回": "Take it back",
+  "已撤回": "Withdrawn",
+  "插入当前任务": "Steer current task",
   "改动": "Changes",
   "独立上下文 · 不进主轨迹": "Its own context · stays out of the main trajectory",
   "计划已移入右栏": "The plan is in the right rail",

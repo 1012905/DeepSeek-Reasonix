@@ -2,10 +2,8 @@ package agent
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/event"
@@ -13,12 +11,16 @@ import (
 	"reasonix/internal/contract/tool"
 )
 
+type NativeSurfacePublisher interface {
+	PublishNativeSurface(callID, surfaceID string) error
+}
+
 type RenderSurfaceTool struct{}
 
 func NewRenderSurfaceTool() *RenderSurfaceTool { return &RenderSurfaceTool{} }
 func (*RenderSurfaceTool) Name() string        { return surfacespec.ToolName }
 func (*RenderSurfaceTool) Description() string {
-	return "Show a native structured form, choice cards, editable_text drafts or diff_preview text comparisons. Fields accept string, number, bool, choice or multichoice values keyed by stable ids. Drafts use string fields; diff previews carry before/after text and do not modify files. Display-only trees return a summary. Interactive trees wait for the user through ask. Never use surfaces to approve tools or grant permissions. No HTML, CSS, URLs or executable components."
+	return "Show a native structured form, choice cards, editable_text drafts or diff_preview text comparisons. Fields accept string, number, bool, choice or multichoice values keyed by stable ids. Drafts use string fields; diff previews carry before/after text and do not modify files. Display-only trees return a summary. Trees with button nodes return immediately; clicks deliver typed surface_action notes through the controller. Forms without buttons wait through ask. Never use surfaces to approve tools or grant permissions. No HTML, CSS, URLs or executable components."
 }
 func (*RenderSurfaceTool) ReadOnly() bool        { return true }
 func (*RenderSurfaceTool) Reach() tool.Reach     { return tool.ReachHostControl }
@@ -37,11 +39,22 @@ func (*RenderSurfaceTool) Execute(ctx context.Context, args json.RawMessage) (st
 	if err := s.Validate(); err != nil {
 		return "", err
 	}
-	canonical, err := s.Canonical()
-	if err != nil {
-		return "", err
+	id := s.ID()
+	if len(s.Actions()) > 0 {
+		actionCallID, _, actionAsker, available := CallContext(ctx)
+		if !available || actionAsker == nil {
+			return "unresolved: this run has no interactive user. Do not supply their answers or choose on their behalf.", nil
+		}
+		publisher, canPublish := actionAsker.(NativeSurfacePublisher)
+		if !canPublish {
+			return "unresolved: this run has no native surface publisher. Use an ordinary question instead.", nil
+		}
+		if err := publisher.PublishNativeSurface(actionCallID, id); err != nil {
+			return "", err
+		}
+		result, marshalErr := json.Marshal(map[string]any{"surface_id": id, "nonblocking": true})
+		return string(result), marshalErr
 	}
-	id := fmt.Sprintf("surface-%x", sha256.Sum256(canonical))[:24]
 	if len(s.Fields()) == 0 {
 		return "surface_id: " + id + "\nDisplayed: " + s.Title, nil
 	}

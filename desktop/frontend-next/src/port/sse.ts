@@ -1,3 +1,4 @@
+import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { PLAN_ACTIONS, type PlanAction } from "./session";
 import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
 import { HttpError, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles } from "./port";
@@ -744,6 +745,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
       answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected, ...(a.value !== undefined ? { Value: a.value } : {}) })),
     });
   }
+  surfaceAction(request: SurfaceActionRequest) {return this.post0<Queued>("/surfaces/action",request);}
+  surfaceActionState(callId: string) {return this.get<SurfaceActionRecord>("/surfaces/"+encodeURIComponent(callId)+"/action");}
   extensionSurfaces() {
     return this.get<import("./wire").ExtensionSurface[]>("/extensions/surfaces");
   }
