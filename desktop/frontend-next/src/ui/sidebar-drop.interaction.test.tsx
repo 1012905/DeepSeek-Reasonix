@@ -10,6 +10,7 @@ import { host } from "../port/host";
 import { useAddWorkspace } from "./addws";
 import { install as installDrops } from "./filedrop";
 import { Sidebar } from "./Sidebar";
+import appIcon from "../../../electron/assets/icon.svg";
 import { NO_PAGING } from "./treewindow";
 
 let clock = Date.now();
@@ -163,4 +164,13 @@ it("preserves the existing Add folder picker path", async () => {
   await userEvent.click(screen.getByRole("button", { name: "打开或新建项目…" }));
   await waitFor(() => expect(add).toHaveBeenCalledWith("/work/picked"));
   expect(open).not.toHaveBeenCalled();
+});
+
+// The mark beside the wordmark is the installed app's own icon, one source with
+// the desktop shell, not a glyph drawn to resemble it.
+it("draws the app icon as the sidebar's brand mark", () => {
+  draw();
+  const mark = document.querySelector<HTMLImageElement>(".studio-brand-mark");
+  expect(mark?.tagName).toBe("IMG");
+  expect(mark?.getAttribute("src")).toBe(appIcon);
 });

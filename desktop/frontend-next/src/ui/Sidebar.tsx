@@ -8,6 +8,7 @@ import type { Adder } from "./addws";
 import { AccountRow } from "./AccountRow";
 import { RailSearch } from "./railsearch";
 import { RemoteHosts } from "./RemoteHosts";
+import appIcon from "../../../electron/assets/icon.svg";
 import { StudioIcon } from "./StudioIcon";
 import { useHiddenHosts } from "../state/remotehide";
 import { chord } from "./keys";
@@ -216,7 +217,7 @@ export function Sidebar({
       <div className="railscroll">
       <div className="studio-rail-head">
         <div className="studio-brand" aria-label="Reasonix Studio">
-          <span className="studio-brand-mark" aria-hidden="true"><StudioIcon name="brand" /></span>
+          <img className="studio-brand-mark" src={appIcon} alt="" aria-hidden="true" draggable={false} />
           <span className="studio-brand-word" aria-hidden="true">
             <b>reasoni<span className="studio-brand-accent">x</span></b>
             <small>studio</small>

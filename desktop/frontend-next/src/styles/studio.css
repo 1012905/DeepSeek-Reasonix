@@ -183,16 +183,6 @@ body { background: var(--page); }
 }
 .studio-rail-head { flex: none; padding: 16px 12px 8px; }
 .studio-brand { display: flex; align-items: center; gap: 9px; padding: 0 4px 15px; color: var(--text); }
-.studio-brand-mark {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--text);
-  color: var(--page);
-  font: 650 15px/1 var(--ui);
-}
 .studio-brand > span:nth-child(2) { display: flex; align-items: baseline; gap: 4px; }
 .studio-brand b { font: 650 17px/1 var(--ui); letter-spacing: -.03em; }
 .studio-brand small { color: var(--ghost); font: 500 10px/1 var(--ui); }
@@ -568,8 +558,6 @@ body { background: var(--page) !important; }
 .studio-icon[data-flip] { transform: rotate(180deg); }
 .studio-rail-head { padding: 23px 22px 5px; container-type: inline-size; }
 .studio-brand { padding: 0 0 19px; gap: 9px; }
-.studio-brand-mark { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: var(--accent); color: var(--accent-fg); font-weight: 750; }
-.studio-brand-mark .studio-icon { width: 17px; height: 17px; stroke-width: 1.9; }
 .studio-brand > span:nth-child(2) { display: grid; grid-template-rows: 15px 9px; row-gap: 2px; align-content: center; }
 .studio-brand b { color: var(--text); font-size: 17px; line-height: 15px; }
 .studio-brand small { color: var(--faint); font-size: 9px; line-height: 9px; letter-spacing: .08em; }
@@ -1534,7 +1522,6 @@ body { background: var(--page) !important; }
 :root[data-theme="light"] .flow .tool-disclosure .dif-hd { background: var(--overlay); }
 :root[data-theme="light"] .flow .copy { color: var(--ghost); }
 :root[data-theme="light"] .flow .copy:hover { color: var(--text); }
-:root[data-theme="light"] .studio-brand-mark { background: var(--accent); color: var(--accent-fg); }
 :root[data-theme="light"] .studio-new-task { border-color: transparent; font-weight: 590; }
 :root[data-theme="light"] .studio-search:hover,
 :root[data-theme="light"] .studio-settings:hover,
@@ -2913,12 +2900,7 @@ body { font-size: 14px; line-height: 1.75; }
 /* Product wordmark: the interface face remains neutral; the brand gets its
    own tighter optical rhythm and one restrained accent instead of effects. */
 .studio-brand { gap: 10px; }
-.studio-brand-mark {
-  width: 30px; height: 30px; border: 1px solid rgb(255 255 255 / .14);
-  border-radius: 9px; background: linear-gradient(145deg, var(--accent), var(--accent));
-  color: var(--accent-fg); box-shadow: 0 5px 16px -10px #000, inset 0 1px rgb(255 255 255 / .78);
-}
-.studio-brand-mark .studio-icon { width: 18px; height: 18px; stroke-width: 1.75; }
+.studio-brand-mark { flex: none; display: block; width: 37px; height: 37px; margin: -3.5px; user-select: none; }
 .studio-brand > .studio-brand-word {
   min-width: 0; display: grid; grid-template-rows: 17px 9px; align-content: center; gap: 4px;
 }
@@ -2935,10 +2917,6 @@ body { font-size: 14px; line-height: 1.75; }
   font-family: "Reasonix Display", var(--ui); font-size: 7.5px; font-weight: 650;
   line-height: 9px; letter-spacing: .21em; text-transform: uppercase;
   font-variation-settings: "wght" 650, "opsz" 12;
-}
-:root[data-theme="light"] .studio-brand-mark {
-  border-color: #1e211e; background: linear-gradient(145deg, var(--accent), var(--accent));
-  color: var(--accent-fg); box-shadow: 0 6px 16px -11px #2a3028, inset 0 1px rgb(255 255 255 / .11);
 }
 :root[data-theme="light"] .studio-brand-word b { color: var(--text); }
 :root[data-theme="light"] .studio-brand-accent { color: #526a9f; }
@@ -2978,7 +2956,6 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-brand-accent { color: var(--accent); }
 .chrome .browser-action[aria-pressed="true"] { color: var(--accent); background: var(--accent-wash); }
 
-.studio-brand-mark { background: var(--text); color: var(--page); }
 .studio-brand b,
 .studio-brand-word b { color: var(--text); }
 .studio-brand small,
