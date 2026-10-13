@@ -13,6 +13,18 @@ describe("the Studio shell closes over the active theme", () => {
     expect(css.slice(at + MARKER.length)).not.toContain(MARKER);
   });
 
+  it("shares plain reading surfaces and weight with foundation palettes", () => {
+    expect(css).toContain(':root[data-theme="light"]:not([data-bg]) {');
+    expect(css).toContain(':root[data-theme="light"]:not([data-bg]):not([data-weight]) {');
+  });
+
+  it("previews the default from its own palette even while a pack is active", () => {
+    const preview = css.match(/\.pal\[data-value=""\] \.pal-art\s*\{([^}]*)\}/s)?.[1] ?? "";
+    for (const name of ["page", "surface", "panel", "border", "text", "dim", "accent"]) {
+      expect(preview).toContain(`--pal-${name}: var(--default-${name})`);
+    }
+  });
+
   it("covers every persistent product surface", () => {
     for (const selector of [
       ".chrome", ".rail", ".compose", ".activity-group", ".studio-browser", ".btn.send",
@@ -53,7 +65,7 @@ describe("the Studio shell closes over the active theme", () => {
 
   it("keeps the sidebar brand on the same title-bar row as the chrome", () => {
     expect(closure).toMatch(/\.studio-brand\s*\{[^}]*height:\s*var\(--chrome-h\)/s);
-    expect(closure).toMatch(/\.studio-collapse\s*\{[^}]*width:\s*30px[^}]*height:\s*30px/s);
+    expect(css).toMatch(/\.studio-menu\s*\{[^}]*position:\s*fixed[^}]*width:\s*30px[^}]*height:\s*30px/s);
   });
 
   it("gives light-theme run data readable surfaces and leaves the composer metrics unframed", () => {

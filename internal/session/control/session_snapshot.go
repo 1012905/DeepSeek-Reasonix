@@ -93,13 +93,17 @@ func (c *Controller) autosaveWhileRunning(ctx context.Context) {
 	}
 }
 
-// snapshotWithDurability reports whether the canonical transcript reached disk
+// guardedSnapshotWithDurability reports whether the canonical transcript reached disk
 // even when a later sidecar update failed. Callers that guard a crash marker
 // need this distinction: a metadata error must not make a complete transcript
 // look like an in-memory-only turn.
-func (c *Controller) snapshotWithDurability(markActivity, forceRewrite, shutdownRecovery bool) (bool, error) {
+func (c *Controller) guardedSnapshotWithDurability(markActivity, forceRewrite, shutdownRecovery bool) (bool, error) {
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
+	return c.snapshotWithDurability(markActivity, forceRewrite, shutdownRecovery)
+}
+
+func (c *Controller) snapshotWithDurability(markActivity, forceRewrite, shutdownRecovery bool) (bool, error) {
 
 	c.mu.Lock()
 	path := c.sessionPath
@@ -462,7 +466,7 @@ func (c *Controller) snapshotActivityIfChanged(startMessages int) (bool, error) 
 	if c.messageCount() <= startMessages {
 		return true, nil
 	}
-	return c.snapshotWithDurability(true, false, false)
+	return c.guardedSnapshotWithDurability(true, false, false)
 }
 
 // SessionHasUnsavedChanges tells desktop history whether it may safely refresh

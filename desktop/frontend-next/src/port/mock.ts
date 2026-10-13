@@ -1,8 +1,9 @@
+import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import type { PlanAction } from "./session";
 import { HttpError } from "./port";
-import type { AccountState, AgentPort, ChangeDiff, Completion, CompletionItem, DeviceGrant, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, WorkspaceChanges, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
+import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
-import { MockFeedback } from "./mock_feedback";
+import { MockWorkspace } from "./mock_workspace";
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
 import { MockExecutionHold, mockExecutionGraph } from "./mock_graph";
 import { mockStorage, mockStoragePlan } from "./mock_storage";
@@ -12,12 +13,12 @@ import { mockUsage } from "./mock_usage";
 
 
 
-export class MockPort extends MockFeedback implements AgentPort {
+export class MockPort extends MockWorkspace implements AgentPort {
   private listeners = new Set<(ev: WireEvent) => void>();
   private log: WireEvent[] = [];
   // What the user has sent, so checkpoints() can mirror one per turn.
   private prompts: string[] = [];
-  private undone: string[] | null = null;
+  private undone: { prompts: string[]; offer: RewindUndo } | null = null;
   private at = 0;
   // The kernel numbers every frame a client cannot afford to miss, and a
   // bootstrap cut is read against those numbers.
@@ -67,6 +68,7 @@ export class MockPort extends MockFeedback implements AgentPort {
 
   // The subagent runs somewhere cheaper; everything else rides the main model.
   private assigned: RoleAssignments = {
+    web_search: "",
     planner: "",
     subagent: "deepseek/deepseek-flash",
     guardian: "",
@@ -92,9 +94,11 @@ export class MockPort extends MockFeedback implements AgentPort {
     this.overrides = { ...this.overrides, [role]: (this.overrides[role] ?? []).filter((o) => o.key !== key) };
   }
 
-  async models(): Promise<ModelEntry[]> {
+  async models(answers: "chat" | "decision" | "all" = "chat"): Promise<ModelEntry[]> {
     const efforts = ["auto", "low", "high", "max"];
-    return mockModels(efforts).map((m) => ({ ...m, default: m.ref === this.defaultRef }));
+    return mockModels(efforts)
+      .filter((m) => answers === "all" || (m.answers ?? "chat") === answers)
+      .map((m) => ({ ...m, default: m.ref === this.defaultRef }));
   }
 
   // The one model the catalogue marks as default, so a pick in the settings row
@@ -183,6 +187,14 @@ export class MockPort extends MockFeedback implements AgentPort {
   async pinVersion(): Promise<void> {}
   async versionNotes(version: string): Promise<VersionNotes> {
     return { version, markdown: "", cached: false };
+  }
+  async studioLogs(): Promise<StudioLogs> {
+    return {
+      dir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs",
+      crashDir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs\\crash",
+      crashes: [{ name: "host-20261010T230806Z-2.31.0-4412.log", at: "2026-10-10T23:08:06Z", bytes: 8421 }],
+      truncated: false,
+    };
   }
   async acknowledgeLaunchHealth(): Promise<void> {} // booted from no update
   async goToVersion(): Promise<void> {
@@ -273,6 +285,8 @@ export class MockPort extends MockFeedback implements AgentPort {
     { label: "/review", insert: "/review ", hint: "复核这一轮改动，给出严重度分级", kind: "subagent" },
     { label: "/init", insert: "/init ", hint: "为这个仓库生成一份项目说明", kind: "skill" },
     { label: "/security-review", insert: "/security-review ", hint: "只读地过一遍安全面", kind: "subagent" },
+    { label: "/mcp__docs__summarize", insert: "/mcp__docs__summarize ", hint: "总结一份文档", kind: "prompt",
+      args: [{ name: "topic", description: "要总结的主题", required: true }, { name: "length", description: "篇幅，如 short 或 long" }] },
   ];
 
   async refinePrompt(draft: string): Promise<string> {
@@ -323,6 +337,7 @@ export class MockPort extends MockFeedback implements AgentPort {
   }
 
   async newSession() {
+    this.clearUndo();
     this.log = [];
     this.at = 0;
     this.state.goal = "";
@@ -357,44 +372,6 @@ export class MockPort extends MockFeedback implements AgentPort {
     return paths.map((path) => ({ ref: "@" + path, path }));
   }
 
-  // The tree the scripted transcript is written against. It used to answer
-  // repo:false, which made the panel fall back to the transcript — and left
-  // every row unopenable, because only git can say what a path differs by.
-  async changes(): Promise<WorkspaceChanges> {
-    return {
-      repo: true,
-      changes: [
-        { path: "internal/provider/retry.go", status: "M" },
-        { path: "internal/config/credentials.go", status: "M" },
-        { path: "internal/provider/openai/streaming/chunk_decoder.go", status: "A" },
-      ],
-    };
-  }
-
-  // Scripted, because there is no tree to read: enough of a diff for the
-  // preview to be worked on without a kernel behind the window.
-  async changeDiff(path: string): Promise<ChangeDiff> {
-    return {
-      path,
-      diff: [
-        `--- a/${path}`,
-        `+++ b/${path}`,
-        "@@ -1,6 +1,7 @@",
-        " package permission",
-        " ",
-        "-func allows(cmd string) bool {",
-        "-	return strings.Contains(cmd, \"rm -rf\")",
-        "+func allows(cmd string) bool {",
-        "+	ast, err := shellparse.Parse(cmd)",
-        "+	if err != nil {",
-        "+		return false",
-        "+	}",
-        " }",
-      ].join("\n"),
-      truncated: false,
-    };
-  }
-
   async workspaceFiles(path = "", query = "", hidden = false) {
     const all = ["README.md", "internal/provider/retry.go", ...(hidden ? [".gitignore", ".reasonix/REASONIX.local.md"] : [])];
     if (query) return { files: all.filter((p) => p.toLowerCase().includes(query.toLowerCase())), directories: [] };
@@ -427,7 +404,11 @@ export class MockPort extends MockFeedback implements AgentPort {
   // Mock mode has to be able to show the rewind entry, so every prompt it has
   // seen becomes a checkpoint the way the kernel opens one per user turn.
   async checkpoints(): Promise<Checkpoint[]> {
-    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: i === 0 ? 0 : 3, msgIndex: mockMsgIndex(i + 1) }));
+    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: this.prompts.length > 1 ? 3 : 0, msgIndex: mockMsgIndex(i + 1) }));
+  }
+
+  async branchAt(turn: number): Promise<string> {
+    return `/mock/branch-${turn}.jsonl`;
   }
 
   // The second prompt onwards is scripted to have run bash, so mock mode can
@@ -443,21 +424,34 @@ export class MockPort extends MockFeedback implements AgentPort {
         : undefined,
       canFiles: true,
       canConversation: true,
-      files: ["note.txt"],
-      fileCount: turn > 0 ? 3 : 0,
+      files: this.prompts.length > 1 ? ["note.txt", "main.ts", "style.css"] : [],
+      fileCount: this.prompts.length > 1 ? 3 : 0,
       requiresConfirmation: partial,
     };
   }
 
   async commitRewind(planId: string): Promise<RewindResult> {
-    const turn = Number(planId.split("-")[2] ?? 0);
-    this.undone = this.prompts.slice();
-    this.prompts = this.prompts.slice(0, turn);
-    return { ok: true, transactionId: `mock-tx-${turn}`, undoAvailable: true, deleted: ["note.txt"] };
+    const turn = Number(planId.split("-")[2] ?? 0), files = !planId.endsWith("conversation") && this.prompts.length > 1;
+    const scope = planId.split("-")[3];
+    const offer = { transactionId: `mock-tx-${turn}-${crypto.randomUUID()}`, turn, files: files ? 3 : 0 };
+    this.undone = { prompts: this.prompts.slice(), offer };
+    this.emit({ kind: "rewind_changed" });
+    if (scope !== "code") this.prompts = this.prompts.slice(0, turn);
+    return { ok: true, transactionId: offer.transactionId, undoAvailable: true, conversationOk: scope !== "code",
+      written: files ? ["main.ts", "style.css"] : [], deleted: files ? ["note.txt"] : [] };
   }
 
+  private clearUndo() {
+    if (!this.undone) return;
+    this.undone = null;
+    this.emit({ kind: "rewind_changed" });
+  }
+
+  async availableUndo(): Promise<RewindUndo | null> { return this.state.running ? null : this.undone?.offer ?? null; }
+
   async undoRewind(_transactionId: string): Promise<void> {
-    if (this.undone) this.prompts = this.undone;
+    if (this.undone) this.prompts = this.undone.prompts;
+    this.clearUndo();
   }
 
   subscribe(onEvent: (ev: WireEvent) => void, _onGap?: () => void, bootstrap?: () => Promise<number>) {
@@ -571,7 +565,7 @@ export class MockPort extends MockFeedback implements AgentPort {
 
   // The fixture has a window with an icon, because the state worth designing
   // is the one where both switches mean something.
-  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true };
+  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, diskLow: true, sound: false };
 
   async notifyPrefs(): Promise<NotifyPrefs | null> {
     return { ...this.notifications };
@@ -610,6 +604,8 @@ export class MockPort extends MockFeedback implements AgentPort {
   async browserOpen(url: string): Promise<BrowserTab> {
     return { id: "mock", target: "mock", url, title: url, active: true };
   }
+
+  async browserClose(_tab: string): Promise<void> {}
 
   async queue(): Promise<Queue> {
     return {
@@ -678,6 +674,7 @@ export class MockPort extends MockFeedback implements AgentPort {
     window.clearTimeout(at);
     this.queued.delete(itemId);
     this.dropQueued(itemId);
+    for(const [id,record] of this.surfaceActions) if(record.itemId===itemId)this.surfaceActions.set(id,{...record,status:"withdrawn"});
   }
 
   async submit(text: string, chips?: ChipCall): Promise<Queued | void> {
@@ -686,6 +683,7 @@ export class MockPort extends MockFeedback implements AgentPort {
       this.emit({ kind: "steer", text });
       return;
     }
+    this.clearUndo();
     this.prompts.push(text);
     // The first turn is what puts the session on disk. serve answers with a
     // truncated first message straight away and swaps in the generated title
@@ -711,6 +709,7 @@ export class MockPort extends MockFeedback implements AgentPort {
   }
 
   async resume(_path: string) {
+    this.clearUndo();
     this.log = [];
     this.at = 0;
   }
@@ -736,7 +735,12 @@ export class MockPort extends MockFeedback implements AgentPort {
   async answer(_id: string, _answers: { questionId: string; selected: string[] }[]) {
     this.ungate();
   }
+  async engageQuestion(_id: string) {}
 
+  private surfaceActions = new Map<string,SurfaceActionRecord>();
+  async surfaceActionState(callId: string):Promise<SurfaceActionRecord> {return this.surfaceActions.get(callId) ?? {active:true,action:{surfaceId:"mock",sessionId:"mock",callId,actionId:"",requestId:"",values:{}}};}
+  async surfaceAction(request: SurfaceActionRequest) {const rec=await (request.delivery==="steer"?this.steer(JSON.stringify(request.action)):this.queueFollowup(JSON.stringify(request.action)));this.surfaceActions.set(request.action.callId,{active:true,action:request.action,itemId:rec.itemId,status:"accepted",canWithdraw:true});return rec;}
+  async extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]> { return []; }
   async invokeExtensionAction(name: string) {
     return `${name} 在 mock 里没有真实扩展可执行`;
   }

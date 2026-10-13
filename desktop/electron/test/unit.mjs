@@ -6,13 +6,14 @@ import os from "node:os";
 import fs from "node:fs";
 
 const require = createRequire(import.meta.url);
+const cuaContract = require("../../../internal/platform/computer/cua-driver.lock.json");
 const { parse, readActs, start } = require("../src/host.js");
 const { contextTemplate, editMenuTemplate, applicationMenuTemplate, menuInstaller } = require("../src/editmenu.js");
 const { uiLanguage } = require("../src/uilang.js");
 const { externalTarget } = require("../src/links.js");
 const { offerCleanup, ownBundle } = require("../src/legacy.js");
 const { stripPackageGrants, readReport, unpaintedWindowCause } = require("../src/packagegrants.js");
-const { groundFor, GROUND } = require("../src/ground.js");
+const { groundFor, themeSourceFor, GROUND } = require("../src/ground.js");
 const { pick, loadPrefs, savePrefs, registerPrefs } = require("../src/prefs.js");
 
 const TOKEN = "a".repeat(64);
@@ -205,7 +206,7 @@ test("an unreachable kernel is an answer, not a crash", async () => {
   assert.equal(await dead.trayState(), null);
 });
 
-const { reveal, revealWorkspace } = require("../src/reveal.js");
+const { reveal, revealWorkspace, revealLogs, openWorkspace } = require("../src/reveal.js");
 
 // A kernel that answers /workspace/locate as the test says, and a shell that
 // only records what it was asked to open.
@@ -224,10 +225,120 @@ async function revealRig(answer, platform = process.platform) {
     openPath: async (p) => (opened.push(["open", p]), ""),
     showItemInFolder: (p) => opened.push(["select", p]),
   };
-  return { asked, opened, run: (base, rel) => reveal(client, shell, base, rel, platform), workspace: (root) => revealWorkspace(client, shell, root, platform), close: () => server.close() };
+  return {
+    asked, opened, close: () => server.close(),
+    run: (base, rel) => reveal(client, shell, base, rel, platform),
+    workspace: (root) => revealWorkspace(client, shell, root, platform),
+    open: (root, fsApi) => openWorkspace(client, shell, root, platform, fsApi),
+  };
 }
 
+// The sidebar's project entered rather than selected in its parent: the same
+// kernel answer revealWorkspace asks for, through the folder-opening verb.
+const folderFs = (over = {}) => ({
+  stat: async () => ({ isDirectory: () => true }),
+  access: async () => {
+    throw new Error("ENOENT");
+  },
+  ...over,
+});
+
+test("openWorkspace enters the folder the kernel named", async (t) => {
+  for (const [platform, target] of [[process.platform, ROOT], ["darwin", "/Users/studio/workspace"], ["linux", "/home/studio/workspace"], ["win32", "C:\\Studio\\workspace"]]) {
+    await t.test(`${platform}: ${target}`, async () => {
+      const rig = await revealRig(() => [200, { path: target, dir: true }], platform);
+      try {
+        assert.equal(await rig.open("/w", folderFs()), null);
+        assert.deepEqual(rig.opened, [["open", target]]);
+        assert.equal(rig.asked[0], "/host/workspaces/locate?root=%2Fw");
+      } finally {
+        rig.close();
+      }
+    });
+  }
+});
+
+// openPath launches an application bundle instead of showing it, so a root
+// that is one is only selected, and so is anything that is not a directory.
+test("openWorkspace only selects an application bundle", async () => {
+  const bundle = "/Applications/Workspace.app";
+  const rig = await revealRig(() => [200, { path: bundle, dir: true }], "darwin");
+  try {
+    assert.equal(await rig.open("/w", folderFs({ access: async () => {} })), null);
+    assert.deepEqual(rig.opened, [["select", bundle]]);
+  } finally {
+    rig.close();
+  }
+});
+
+test("openWorkspace only selects what is not a directory or cannot be read", async () => {
+  for (const fsApi of [folderFs({ stat: async () => ({ isDirectory: () => false }) }), folderFs({ stat: async () => { throw new Error("EACCES"); } })]) {
+    const rig = await revealRig(() => [200, { path: ROOT, dir: true }]);
+    try {
+      assert.equal(await rig.open("/w", fsApi), null);
+      assert.deepEqual(rig.opened, [["select", ROOT]]);
+    } finally {
+      rig.close();
+    }
+  }
+});
+
+test("openWorkspace refuses a folder the hub does not list", async () => {
+  const rig = await revealRig(() => [404, { code: "host.unknown_workspace", error: "not listed" }]);
+  try {
+    const why = await rig.open("/nope");
+    assert.equal(why.code, "host.unknown_workspace");
+    assert.deepEqual(rig.opened, []);
+  } finally {
+    rig.close();
+  }
+});
+
 const ROOT = path.resolve(os.tmpdir(), "rx-workspace");
+
+test("file opening refuses scripts, executables and unknown types on every platform", async () => {
+  const { openFile } = require("../src/reveal.js");
+  const opened = [];
+  const shell = { openPath: async (target) => { opened.push(target); return ""; } };
+  for (const platform of ["darwin", "win32", "linux"]) {
+    for (const name of ["task.command", "task.sh", "task.bat", "task.cmd", "task.ps1", "task.lnk", "task.jar", "task.desktop", "task.scpt", "task.exe", "task.EXE", "report.pdf.exe", "task", "task.unknown", "page.html", "image.svg"]) {
+      const target = platform === "win32" ? `C:\\work\\${name}` : `/work/${name}`;
+      const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: target }) }) };
+      const why = await openFile(client, shell, "/rt/r1", "report.pdf", platform, { stat: async () => ({ isFile: () => true }) });
+      assert.ok(why?.error, `${platform}: ${name} must be refused`);
+    }
+  }
+  assert.deepEqual(opened, []);
+});
+
+test("file opening accepts kernel-located documents and media on every platform", async () => {
+  const { openFile } = require("../src/reveal.js");
+  for (const platform of ["darwin", "win32", "linux"]) {
+    for (const name of ["report.pdf", "notes.TXT", "report.docx", "table.xlsx", "slides.pptx", "data.csv", "notes.md", "image.PNG", "photo.jpg", "video.mp4", "audio.mp3"]) {
+      const target = platform === "win32" ? `C:\\work\\${name}` : `/work/${name}`;
+      const opened = [];
+      const shell = { openPath: async (p) => { opened.push(p); return ""; } };
+      const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: target }) }) };
+      assert.equal(await openFile(client, shell, "/rt/r1", name, platform, { stat: async () => ({ isFile: () => true }) }), null);
+      assert.deepEqual(opened, [target]);
+    }
+  }
+});
+
+test("file opening uses only a kernel-located regular file and reports shell failures", async () => {
+  const { openFile } = require("../src/reveal.js");
+  const opened = [];
+  const shell = { openPath: async (target) => { opened.push(target); return "no application"; } };
+  const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: path.join(ROOT, "report.pdf") }) }) };
+  assert.deepEqual(await openFile(client, shell, "/rt/r1", "report.pdf", process.platform, { stat: async () => ({ isFile: () => true }) }), { error: "no application", code: "" });
+  assert.deepEqual(opened, [path.join(ROOT, "report.pdf")]);
+  opened.length = 0;
+  assert.ok(await openFile(client, shell, "/rt/r1", "folder", process.platform, { stat: async () => ({ isFile: () => false }) }));
+  assert.ok(await openFile(client, shell, "https://attacker.test", "report.pdf"));
+  const refused = { request: async () => ({ status: 400, body: JSON.stringify({ code: "workspace.path_outside_tree", error: "outside" }) }) };
+  assert.equal((await openFile(refused, shell, "/rt/r1", "../secret.pdf")).code, "workspace.path_outside_tree");
+  assert.deepEqual(opened, []);
+});
 
 test("reveal opens only what the kernel located inside the pane's workspace", async () => {
   const rig = await revealRig((url) => {
@@ -324,7 +435,7 @@ test("on Windows a share or device path from the kernel is refused", async () =>
   }
 });
 
-const { hostBinary, computerHelper, pageDir } = require("../src/layout.js");
+const { hostBinary, computerDriver, pageDir } = require("../src/layout.js");
 
 // Packaged, both live in resources/ beside app.asar. Reading them from inside
 // it is the failure this pins: a child process cannot be spawned out of an
@@ -342,13 +453,13 @@ test("the kernel and the page are found in both layouts", () => {
   }
 });
 
-test("the computer-use helper is found beside the kernel on macOS and Windows, and nowhere else", () => {
+test("the CUA Driver is found beside the kernel on all supported platforms", () => {
   const mac = { packaged: true, resourcesPath: "/res", dirname: "/d/src", platform: "darwin" };
-  assert.equal(computerHelper(mac), path.join("/res", "bin", "reasonix-computer-helper"));
-  assert.equal(computerHelper({ ...mac, packaged: false, dirname: path.join("/repo", "electron", "src") }), path.join("/repo", "electron", "bin", "reasonix-computer-helper"));
-  assert.equal(computerHelper({ ...mac, platform: "win32" }), path.join("/res", "bin", "reasonix-computer-helper.exe"));
-  assert.equal(computerHelper({ ...mac, platform: "linux" }), "");
-  assert.equal(computerHelper({ ...mac, platform: "linux", env: { REASONIX_COMPUTER_HELPER: "/custom/helper" } }), "/custom/helper");
+  assert.equal(computerDriver(mac), path.join("/res", "bin", "cua-driver"));
+  assert.equal(computerDriver({ ...mac, packaged: false, dirname: path.join("/repo", "electron", "src") }), path.join("/repo", "electron", "bin", "cua-driver"));
+  assert.equal(computerDriver({ ...mac, platform: "win32" }), path.join("/res", "bin", "cua-driver.exe"));
+  assert.equal(computerDriver({ ...mac, platform: "linux" }), path.join("/res", "bin", "cua-driver"));
+  assert.equal(computerDriver({ ...mac, platform: "linux", env: { REASONIX_CUA_DRIVER: "/custom/cua-driver" } }), "/custom/cua-driver");
 });
 
 test("Windows gets the suffix spawn needs, and an override wins over both", () => {
@@ -908,7 +1019,7 @@ test("only the Studio window reads or writes the preferences", () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function elf64(interpreter) {
+function elf64(interpreter, machine = 62) {
   const phoff = 64, phentsize = 56, phnum = interpreter ? 2 : 1;
   const dataOffset = phoff + phnum * phentsize;
   const path = Buffer.from(interpreter ? `${interpreter}\0` : "", "latin1");
@@ -918,7 +1029,7 @@ function elf64(interpreter) {
   bytes[5] = 1;
   bytes[6] = 1;
   bytes.writeUInt16LE(2, 16);
-  bytes.writeUInt16LE(62, 18);
+  bytes.writeUInt16LE(machine, 18);
   bytes.writeBigUInt64LE(BigInt(phoff), 32);
   bytes.writeUInt16LE(64, 52);
   bytes.writeUInt16LE(phentsize, 54);
@@ -949,6 +1060,26 @@ test("a Linux Go binary that needs the build host's dynamic loader is refused", 
     fs.writeFileSync(helper, elf64(null));
     assert.deepEqual(dynamicallyLinked([host, helper]), [{ file: host, interpreter: "/lib64/ld-linux-x86-64.so.2" }]);
     assert.deepEqual(dynamicallyLinked([helper]), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a Linux package's Go binaries must be built for the architecture the package is named for", () => {
+  const { elfArchitecture, assertArchitecture } = require("../packaging/elf.js");
+  assert.equal(elfArchitecture(elf64(null, 62)), "amd64");
+  assert.equal(elfArchitecture(elf64(null, 183)), "arm64");
+  assert.throws(() => elfArchitecture(elf64(null, 40)), /unsupported ELF machine/);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reasonix-elf-"));
+  try {
+    const host = path.join(dir, "reasonix-studio-host");
+    const helper = path.join(dir, "reasonix-studio-update-helper");
+    fs.writeFileSync(host, elf64(null, 62));
+    fs.writeFileSync(helper, elf64(null, 183));
+    assert.throws(() => assertArchitecture([host, helper], "arm64"), /is amd64, expected arm64/);
+    assert.throws(() => assertArchitecture([host, helper], "amd64"), /is arm64, expected amd64/);
+    assert.doesNotThrow(() => assertArchitecture([host], "amd64"));
+    assert.throws(() => assertArchitecture([host], "riscv64"), /unsupported release architecture/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -1720,4 +1851,561 @@ test("the window ground follows the stored theme and, for auto, the system", () 
   assert.equal(groundFor({ "rx-theme": "auto" }, true), GROUND.dark);
   assert.equal(groundFor({}, false), GROUND.light);
   assert.equal(groundFor(undefined, true), GROUND.dark);
+});
+
+// Windows draws a frameless window's border from the frame's scheme, so a dark
+// page on a light system must set it, or the border is a light line.
+test("the window frame takes the stored theme, and auto follows the system", () => {
+  assert.equal(themeSourceFor({ "rx-theme": "dark" }), "dark");
+  assert.equal(themeSourceFor({ "rx-theme": "light" }), "light");
+  assert.equal(themeSourceFor({ "rx-theme": "auto" }), "system");
+  assert.equal(themeSourceFor({ "rx-theme": "midnight" }), "system");
+  assert.equal(themeSourceFor(undefined), "system");
+});
+
+const { accelerationOff, shouldDisableGpu, graphicsReport, graphicsHandler, PREF_KEY: GPU_PREF } = require("../src/graphics.js");
+
+test("hardware acceleration is off only when the saved preference says exactly that", () => {
+  assert.equal(GPU_PREF, "rx-hw-accel");
+  assert.equal(accelerationOff({}), false);
+  assert.equal(accelerationOff(undefined), false);
+  assert.equal(accelerationOff({ "rx-hw-accel": "on" }), false);
+  assert.equal(accelerationOff({ "rx-hw-accel": "" }), false);
+  assert.equal(accelerationOff({ "rx-hw-accel": "off" }), true);
+});
+
+test("the graphics report says what this launch applied and passes Electron's status through untouched", () => {
+  const app = (compositing) => ({ getGPUFeatureStatus: () => ({ gpu_compositing: compositing }) });
+  const auto = { launchedOff: false, savedOff: false };
+  for (const value of ["enabled", "enabled_force", "enabled_on", "disabled_software", "unavailable_off", ""]) {
+    assert.deepEqual(graphicsReport(app(value), auto), { ...auto, compositing: value });
+  }
+  assert.deepEqual(graphicsReport(app("disabled_software"), { launchedOff: true, savedOff: true }), { launchedOff: true, savedOff: true, compositing: "disabled_software" });
+  assert.deepEqual(graphicsReport(app("enabled"), { launchedOff: true, savedOff: false }), { launchedOff: true, savedOff: false, compositing: "enabled" });
+  assert.deepEqual(graphicsReport({ getGPUFeatureStatus: () => { throw new Error("not ready"); } }, auto), { ...auto, compositing: "" });
+  assert.deepEqual(graphicsReport({ getGPUFeatureStatus: () => ({}) }, auto), { ...auto, compositing: "" });
+});
+
+test("the GPU is disabled by the saved preference, the environment or the flag, and only then", () => {
+  const off = (over) => shouldDisableGpu({ prefs: {}, env: {}, argv: [], ...over });
+  assert.equal(off({}), false);
+  assert.equal(off({ prefs: { "rx-hw-accel": "off" } }), true);
+  assert.equal(off({ prefs: { "rx-hw-accel": "on" } }), false);
+  assert.equal(off({ prefs: undefined }), false);
+  assert.equal(off({ env: { REASONIX_DISABLE_GPU: "1" } }), true);
+  assert.equal(off({ env: { REASONIX_DISABLE_GPU: "0" } }), false);
+  assert.equal(off({ argv: ["studio", "--disable-gpu"] }), true);
+  assert.equal(off({ argv: ["--disable-gpu-sandbox"] }), false);
+});
+
+test("a prefs file that is missing or corrupt keeps hardware acceleration", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gpu-"));
+  const file = path.join(dir, "window-prefs.json");
+  assert.equal(shouldDisableGpu({ prefs: loadPrefs(file), env: {}, argv: [] }), false);
+  fs.writeFileSync(file, "{ not json");
+  assert.equal(shouldDisableGpu({ prefs: loadPrefs(file), env: {}, argv: [] }), false);
+});
+
+test("the graphics report is refused to any sender that is not the Studio window", () => {
+  const app = { getGPUFeatureStatus: () => ({ gpu_compositing: "enabled" }) };
+  const win = { id: "studio" };
+  const handle = graphicsHandler(app, (event) => (event.sender === "studio" ? win : null), { launchedOff: true, savedOff: false });
+  assert.deepEqual(handle({ sender: "studio" }), { launchedOff: true, savedOff: false, compositing: "enabled" });
+  assert.equal(handle({ sender: "agent-browser-page" }), null);
+});
+
+test("a kernel that dies after its handshake leaves its exit and last words in shell.log and a marker for the next launch", () => {
+  const { openLogs } = require("../src/shelllog.js");
+  const { crashDir, recordHostExit, pendingHostExit, clearHostExit } = require("../src/hostexit.js");
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "hostexit-"));
+  const logs = openLogs(userData);
+  const dir = crashDir(logs.dir);
+  fs.mkdirSync(dir, { recursive: true });
+  const started = Date.now() - 1000;
+  const stale = path.join(dir, "host-20200101T000000Z-2.0.0-1.log");
+  fs.writeFileSync(stale, "fatal error: an earlier run\n");
+  fs.utimesSync(stale, new Date(2020, 0, 1), new Date(2020, 0, 1));
+  const body = Array.from({ length: 80 }, (_, i) => `frame ${i}`).join("\n");
+  fs.writeFileSync(path.join(dir, "host-20261010T000000Z-2.31.0-7.log"), `fatal error: out of memory\n${body}\n`);
+
+  assert.equal(pendingHostExit(userData), null, "no marker before any exit");
+  recordHostExit({ logs, userData, code: 2, signal: null, startedAt: started });
+
+  const shell = fs.readFileSync(logs.shell.file, "utf8");
+  assert.match(shell, /host: died code=2 signal=null crash=host-20261010T000000Z-2\.31\.0-7\.log/);
+  assert.match(shell, /frame 79/, "the tail of the crash file must reach shell.log");
+  assert.doesNotMatch(shell, /frame 10\b/, "only the tail is quoted");
+  assert.doesNotMatch(shell, /an earlier run/, "a crash file from before this launch is not this death");
+
+  const pending = pendingHostExit(userData);
+  assert.equal(pending.code, 2);
+  assert.equal(pending.crashFile, "host-20261010T000000Z-2.31.0-7.log");
+  clearHostExit(userData);
+  assert.equal(pendingHostExit(userData), null, "acknowledging clears the marker");
+});
+
+test("a kernel killed by a signal with no crash file is still recorded", () => {
+  const { openLogs } = require("../src/shelllog.js");
+  const { recordHostExit, pendingHostExit } = require("../src/hostexit.js");
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "hostexit-"));
+  const logs = openLogs(userData);
+  recordHostExit({ logs, userData, code: null, signal: "SIGKILL", startedAt: Date.now() });
+  assert.match(fs.readFileSync(logs.shell.file, "utf8"), /host: died code=null signal=SIGKILL crash=\(none\)/);
+  assert.equal(pendingHostExit(userData).signal, "SIGKILL");
+});
+
+test("the notice names where the logs are in both languages and shows how it ended", () => {
+  const { hostExitNotice } = require("../src/hostexit.js");
+  const en = hostExitNotice("en-US", { code: 2, signal: null }, "/logs");
+  const zh = hostExitNotice("zh-CN", { code: 2, signal: null }, "/logs");
+  assert.notEqual(en.message, zh.message);
+  for (const text of [en, zh]) assert.match(text.detail, /\/logs/);
+  assert.match(zh.message, /内核/);
+  assert.match(en.detail, /code 2/);
+  assert.match(zh.detail, /2/);
+});
+
+test("packaging: an rpm fpm spelled x86_64 leaves the build as the release arch", async () => {
+  const arch = require("../packaging/arch.js");
+  const hook = require("../packaging/canonical-artifact-names.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rpm-name-"));
+  const deb = path.join(dir, "ReasonixStudio-linux-amd64.deb");
+  const rpm = path.join(dir, "ReasonixStudio-linux-x86_64.rpm");
+  fs.writeFileSync(deb, "d");
+  fs.writeFileSync(rpm, "r");
+  arch.record(deb, "x64");
+  arch.record(rpm, "x64");
+  const out = await hook({ artifactPaths: [deb, rpm] });
+  assert.deepEqual(out.map((f) => path.basename(f)), ["ReasonixStudio-linux-amd64.deb", "ReasonixStudio-linux-amd64.rpm"]);
+  assert.ok(fs.existsSync(path.join(dir, "ReasonixStudio-linux-amd64.rpm")));
+  assert.ok(!fs.existsSync(rpm));
+});
+
+test("packaging: a name still carrying an fpm spelling is refused", async () => {
+  const arch = require("../packaging/arch.js");
+  const hook = require("../packaging/canonical-artifact-names.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rpm-name-"));
+  const stray = path.join(dir, "ReasonixStudio-linux-aarch64.rpm");
+  fs.writeFileSync(stray, "r");
+  arch.record(stray, "x64");
+  await assert.rejects(hook({ artifactPaths: [stray] }), /aarch64/);
+});
+
+test("packaging: a Windows installer named for x64 is renamed to amd64", async () => {
+  const arch = require("../packaging/arch.js");
+  const hook = require("../packaging/canonical-artifact-names.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "win-name-"));
+  const installer = path.join(dir, "ReasonixStudio-windows-x64-installer.exe");
+  const zip = path.join(dir, "ReasonixStudio-windows-x64.zip");
+  for (const f of [installer, zip]) {
+    fs.writeFileSync(f, "x");
+    arch.record(f, "x64");
+  }
+  const out = await hook({ artifactPaths: [installer, zip] });
+  assert.deepEqual(
+    out.map((f) => path.basename(f)),
+    ["ReasonixStudio-windows-amd64-installer.exe", "ReasonixStudio-windows-amd64.zip"],
+  );
+});
+
+const { stateFile, loadState, saveState, placement, track } = require("../src/windowstate.js");
+const { EventEmitter } = require("node:events");
+
+const AREA = { x: 0, y: 0, width: 1920, height: 1040 };
+const SECOND = { x: 1920, y: 0, width: 1280, height: 1000 };
+const MIN = { width: 760, height: 480 };
+const FALLBACK = { width: 1440, height: 900 };
+const open = (saved, areas = [AREA, SECOND]) => placement({ saved, areas, primary: areas[0], fallback: FALLBACK, min: MIN });
+
+test("window state: only a whole rectangle is read back, and it survives a round trip", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "winstate-"));
+  const file = stateFile(dir);
+  assert.equal(loadState(file), null);
+  fs.writeFileSync(file, "{not json");
+  assert.equal(loadState(file), null);
+  for (const bad of [{ width: 0, height: 500 }, { width: "900", height: 500 }, { width: 900.5, height: 500 }, [], null]) {
+    fs.writeFileSync(file, JSON.stringify(bad));
+    assert.equal(loadState(file), null, JSON.stringify(bad));
+  }
+  saveState(file, { x: 40, y: 60, width: 1000, height: 700, maximized: true });
+  assert.deepEqual(loadState(file), { x: 40, y: 60, width: 1000, height: 700, maximized: true });
+  fs.writeFileSync(file, JSON.stringify({ width: 1000, height: 700 }));
+  assert.deepEqual(loadState(file), { width: 1000, height: 700, maximized: false });
+});
+
+test("window state: a first launch opens at the default size and a saved rectangle is reopened as it was", () => {
+  assert.deepEqual(open(null), { ...FALLBACK, maximized: false });
+  const saved = { x: 300, y: 120, width: 1100, height: 760, maximized: false };
+  assert.deepEqual(open(saved), saved);
+  assert.deepEqual(open({ ...saved, x: 2100, y: 100 }), { ...saved, x: 2100, y: 100 });
+});
+
+test("window state: a rectangle no display shows keeps its size and loses its place", () => {
+  const gone = { x: 2400, y: 100, width: 1100, height: 760, maximized: false };
+  assert.deepEqual(open(gone, [AREA]), { width: 1100, height: 760, maximized: false });
+  const above = { x: 300, y: -500, width: 1100, height: 760, maximized: false };
+  assert.deepEqual(open(above, [AREA]), { width: 1100, height: 760, maximized: false });
+  const huge = { x: 5000, y: 0, width: 4000, height: 3000, maximized: true };
+  assert.deepEqual(open(huge, [AREA]), { width: 1920, height: 1040, maximized: true });
+});
+
+test("window state: a saved size is raised to the layout's floor", () => {
+  const small = open({ x: 10, y: 10, width: 300, height: 200, maximized: false });
+  assert.deepEqual([small.width, small.height], [760, 480]);
+});
+
+function fakeWindow(normal) {
+  const win = new EventEmitter();
+  Object.assign(win, { maximized: false, destroyed: false, normal });
+  win.getNormalBounds = () => win.normal;
+  win.isMaximized = () => win.maximized;
+  win.isDestroyed = () => win.destroyed;
+  win.minimized = false;
+  win.fullscreen = false;
+  win.isMinimized = () => win.minimized;
+  win.isFullScreen = () => win.fullscreen;
+  return win;
+}
+
+test("window state: moves are written once they settle, a close is written at once, and a maximised window keeps its normal bounds", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "winstate-"));
+  const file = stateFile(dir);
+  const timers = [];
+  const win = fakeWindow({ x: 10, y: 20, width: 900, height: 600 });
+  track(win, file, { timer: (fn) => timers.push(fn) - 1, untimer: (id) => (timers[id] = () => {}) });
+  win.emit("resize");
+  win.emit("move");
+  win.emit("resize");
+  assert.equal(loadState(file), null);
+  timers.at(-1)();
+  assert.deepEqual(loadState(file), { x: 10, y: 20, width: 900, height: 600, maximized: false });
+  win.normal = { x: 50, y: 60, width: 1000, height: 650 };
+  win.maximized = true;
+  win.emit("close");
+  assert.deepEqual(loadState(file), { x: 50, y: 60, width: 1000, height: 650, maximized: true });
+  win.destroyed = true;
+  win.normal = { x: 1, y: 1, width: 5, height: 5 };
+  win.emit("move");
+  timers.at(-1)();
+  assert.equal(loadState(file).width, 1000);
+});
+
+test("window state: a minimised or full-screen close keeps the last settled record", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "winstate-"));
+  const file = stateFile(dir);
+  const win = fakeWindow({ x: 10, y: 20, width: 900, height: 600 });
+  track(win, file, { timer: () => 0, untimer: () => {} });
+  win.emit("close");
+  const kept = loadState(file);
+  win.normal = { x: 0, y: 0, width: 1920, height: 1040 };
+  win.minimized = true;
+  win.emit("close");
+  assert.deepEqual(loadState(file), kept);
+  win.minimized = false;
+  win.fullscreen = true;
+  win.emit("close");
+  assert.deepEqual(loadState(file), kept);
+});
+
+test("window state: a saved size is cut to the display it opens on and the window is moved in", () => {
+  const big = { x: 1700, y: 600, width: 1400, height: 900, maximized: false };
+  const out = open(big, [AREA]);
+  assert.deepEqual([out.width, out.height], [1400, 900].map((v, i) => Math.min(v, [1920, 1040][i])));
+  assert.ok(out.x + out.width <= 1920 && out.y + out.height <= 1040, JSON.stringify(out));
+  const small = { x: 100, y: 100, width: 1800, height: 1000, maximized: false };
+  const cut = open(small, [{ x: 0, y: 0, width: 1366, height: 728 }]);
+  assert.deepEqual(cut, { x: 0, y: 0, width: 1366, height: 728, maximized: false });
+});
+
+test("kernel acts: show brings the window forward, relaunch arms the restart, quit ends, anything else is ignored", () => {
+  const { actHandler } = require("../src/acts.js");
+  const calls = [];
+  const handle = actHandler({
+    app: { relaunch: () => calls.push("relaunch"), quit: () => calls.push("quit") },
+    showWindow: () => calls.push("show"),
+  });
+  for (const act of ["show", "relaunch", "quit", "unknown"]) handle(act);
+  assert.deepEqual(calls, ["show", "relaunch", "quit"]);
+});
+
+test("kernel acts: a click that reaches the shell is written to its log, an unknown act is not", () => {
+  const { actHandler } = require("../src/acts.js");
+  const lines = [];
+  const handle = actHandler({ app: { relaunch() {}, quit() {} }, showWindow() {}, log: (line) => lines.push(line) });
+  for (const act of ["show", "unknown"]) handle(act);
+  assert.deepEqual(lines, ["kernel act: show"]);
+});
+
+test("raise: answers whether the window is focused once it has tried", () => {
+  const { raise } = require("../src/raise.js");
+  const make = (grants) => {
+    let focused = false;
+    return { show() {}, focus: () => { if (grants()) focused = true; }, isFocused: () => focused, setAlwaysOnTop() {} };
+  };
+  assert.equal(raise(make(() => true), "win32"), true);
+  assert.equal(raise(make(() => false), "win32"), false);
+});
+
+test("raise: a window the platform would not focus is lifted once and returned to normal stacking", () => {
+  const { raise } = require("../src/raise.js");
+  const run = (platform, focusedAfterFocus) => {
+    const calls = [];
+    let focused = false;
+    const win = {
+      show: () => calls.push("show"),
+      focus: () => { calls.push("focus"); if (focusedAfterFocus) focused = true; },
+      isFocused: () => focused,
+      setAlwaysOnTop: (on) => calls.push(on ? "top" : "untop"),
+    };
+    raise(win, platform);
+    return calls;
+  };
+  assert.deepEqual(run("win32", true), ["show", "focus"]);
+  assert.deepEqual(run("win32", false), ["show", "focus", "top", "focus", "untop"]);
+  assert.deepEqual(run("darwin", false), ["show", "focus"]);
+  assert.deepEqual(run("linux", false), ["show", "focus"]);
+});
+
+test("tray: the menu is replaced only when what it says changes, so an open menu is not torn down by the poll", async () => {
+  const { installTray } = require("../src/tray.js");
+  const menus = [];
+  let tips = 0;
+  class FakeTray {
+    on() {}
+    setImage() {}
+    setToolTip() { tips++; }
+    setContextMenu(menu) { menus.push(menu); }
+    destroy() {}
+  }
+  const electron = {
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    Tray: FakeTray,
+    nativeImage: { createFromPath: () => ({ isEmpty: () => false }), createFromBuffer: () => ({ isEmpty: () => false }) },
+    screen: { getPrimaryDisplay: () => ({ scaleFactor: 1 }), on() {}, removeListener() {} },
+  };
+  let fold = { line: "1 running", labels: { open: "Open", quit: "Quit", closeToTray: "Keep running" } };
+  const host = { trayPrefs: async () => ({ closeToTray: false }), trayState: async () => fold, setTrayPrefs: async () => ({ closeToTray: true }) };
+  const tray = installTray(host, { onOpen() {}, onQuit() {} }, electron);
+  await tray.refresh();
+  await tray.refresh();
+  await tray.refresh();
+  assert.equal(menus.length, 1, "three identical reads rebuilt the menu");
+  assert.equal(tips, 1);
+  fold = { ...fold, line: "2 running" };
+  await tray.refresh();
+  assert.equal(menus.length, 2);
+  assert.equal(menus[1].template.find((item) => item.enabled === false).label, "2 running");
+  tray.close();
+});
+
+test("tray: a refused close-to-tray save redraws the checkbox, and a menu that failed to draw is tried again", async () => {
+  const { installTray } = require("../src/tray.js");
+  const menus = [];
+  let failNext = false;
+  class FakeTray {
+    on() {}
+    setImage() {}
+    setToolTip() {}
+    setContextMenu(menu) { if (failNext) { failNext = false; throw new Error("indicator busy"); } menus.push(menu); }
+    destroy() {}
+  }
+  const electron = {
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    Tray: FakeTray,
+    nativeImage: { createFromPath: () => ({ isEmpty: () => false }), createFromBuffer: () => ({ isEmpty: () => false }) },
+    screen: { getPrimaryDisplay: () => ({ scaleFactor: 1 }), on() {}, removeListener() {} },
+  };
+  const fold = { line: "idle", labels: { open: "Open", quit: "Quit", closeToTray: "Keep running" } };
+  const host = { trayPrefs: async () => ({ closeToTray: false }), trayState: async () => fold, setTrayPrefs: async () => null };
+  const tray = installTray(host, { onOpen() {}, onQuit() {} }, electron);
+  failNext = true;
+  await assert.rejects(tray.refresh());
+  await tray.refresh();
+  assert.equal(menus.length, 1, "a menu whose draw threw was never retried");
+  const toggle = menus[0].template.find((item) => item.type === "checkbox");
+  await toggle.click();
+  assert.equal(menus.length, 2, "a refused save left the flipped checkbox on screen");
+  assert.equal(menus[1].template.find((item) => item.type === "checkbox").checked, false);
+  tray.close();
+});
+
+test("revealLogs opens only the folder the shell itself names, and reports why it could not", async () => {
+  const opened = [];
+  const shell = { openPath: async (target) => (opened.push(target), "") };
+  assert.equal(await revealLogs(shell, "/user/logs"), null);
+  assert.deepEqual(opened, ["/user/logs"]);
+  const refusing = { openPath: async () => "no application is associated with this folder" };
+  assert.deepEqual(await revealLogs(refusing, "/user/logs"), { error: "no application is associated with this folder" });
+  assert.deepEqual(await revealLogs(shell, ""), { error: "the logs folder is unknown" });
+});
+
+// The built-in browser drew a white page after switching away from a tab and
+// back until the window was resized: a parked view moved onscreen with
+// setBounds alone does not repaint. Bringing it back attaches it again.
+test("a parked page is attached again when it is shown, and a page already on screen is left alone", () => {
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: class {}, session: { fromPartition: () => ({}) } };
+    return load.call(this, request, ...rest);
+  };
+  let BrowserViews;
+  try {
+    ({ BrowserViews } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const calls = [];
+  const win = {
+    on() {},
+    isDestroyed: () => false,
+    getContentBounds: () => ({ width: 1200, height: 800 }),
+    contentView: { addChildView: () => calls.push("add"), removeChildView: () => calls.push("remove") },
+  };
+  const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1" });
+  const view = { setBounds: (b) => calls.push("bounds " + b.x), webContents: { isDestroyed: () => false } };
+  views.entries.set("t1", { view, at: null });
+  const rect = { x: 10, y: 20, width: 600, height: 400 };
+
+  views.show("t1", rect);
+  assert.deepEqual(calls, ["remove", "add", "bounds 10"]);
+  calls.length = 0;
+  views.show("t1", rect);
+  assert.deepEqual(calls, [], "the same rectangle on a page already shown does no work");
+  views.hide();
+  calls.length = 0;
+  views.show("t1", rect);
+  assert.deepEqual(calls, ["remove", "add", "bounds 10"], "a page put away and shown again is attached again");
+});
+
+test("rewind notice dismissal survives the desktop preference disk round trip", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rewind-notice-prefs-"));
+  const file = path.join(dir, "prefs.json");
+  t.after(() => { fs.rmSync(file, { force: true }); fs.rmdirSync(dir); });
+  const record = { "rx-rewind-notice-dismissed:tx-saved": "1" };
+  savePrefs(file, record);
+  assert.deepEqual(loadPrefs(file), record);
+});
+
+const { setUnreadBadge } = require("../src/badge.js");
+
+test("macOS marks and clears the application Dock badge", () => {
+  const badges = [];
+  const app = { dock: { setBadge: (text) => badges.push(text) } };
+  setUnreadBadge(true, {}, { app }, "darwin");
+  setUnreadBadge(false, {}, { app }, "darwin");
+  assert.deepEqual(badges, ["•", ""]);
+});
+
+test("Windows uses a red dot overlay and removes it when all sessions are read", () => {
+  const calls = [];
+  const win = { setOverlayIcon: (...args) => calls.push(args) };
+  let pixels;
+  const nativeImage = { createFromBitmap: (buffer, size) => { pixels = buffer; assert.deepEqual(size, { width: 16, height: 16 }); return "dot"; } };
+  setUnreadBadge(true, win, { nativeImage }, "win32");
+  setUnreadBadge(false, win, { nativeImage }, "win32");
+  assert.equal(pixels[3], 0);
+  assert.equal(pixels[(8 * 16 + 8) * 4 + 3], 255);
+  assert.deepEqual(calls, [["dot", "Reasonix Studio"], [null, ""]]);
+});
+
+test("Linux clears its launcher badge without requiring Dock APIs", () => {
+  const counts = [];
+  const app = { setBadgeCount: (count) => counts.push(count) };
+  setUnreadBadge(true, {}, { app }, "linux");
+  setUnreadBadge(false, {}, { app }, "linux");
+  assert.deepEqual(counts, [1, 0]);
+});
+
+test("CUA readiness refuses a different process, host or driver version", () => {
+  const { accepts } = require("../src/cua");
+  const result = { pid: 123, embedded: true, host_bundle_id: "io.reasonix.studio", driver_version: "0.34.1", contract_version: "0.8.0", tools_list_schema_version: "1", capability_version: "1", mcp_protocol_version: "2025-06-18" };
+  assert.equal(accepts({ ok: true, result }, 123, cuaContract), true);
+  for (const [key, value] of Object.entries({ pid: 124, embedded: false, host_bundle_id: "other", driver_version: "0.35.0", contract_version: "0.9.0", mcp_protocol_version: "2026-07-28" })) {
+    assert.equal(accepts({ ok: true, result: { ...result, [key]: value } }, 123, cuaContract), false);
+  }
+  assert.equal(accepts({ ok: false, result }, 123), false);
+});
+
+
+test("CUA interruption waits for the owned service to stop", async () => {
+  const { spawn } = require("node:child_process");
+  const { stopProcess } = require("../src/cua");
+  const child = spawn(process.execPath, ["-e", "process.stdin.resume();setInterval(()=>{},1000);process.stdin.on('end',()=>setTimeout(()=>process.exit(0),80))"], { stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
+  await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+  await stopProcess(child, true);
+  assert.ok(child.exitCode !== null || child.signalCode !== null);
+});
+
+test("CUA embedded control stops the old service before admitting a fresh one", { skip: process.platform === "win32" }, async () => {
+  const { spawn } = require("node:child_process");
+  const net = require("node:net");
+  const { startEmbedded, metadata } = require("../src/cua");
+  const fake = path.join(path.dirname(require("node:url").fileURLToPath(import.meta.url)), "cua-service-fixture.js");
+  const owned = await startEmbedded(process.execPath, cuaContract, () => {}, (_exe, args, options) => spawn(process.execPath, [fake, ...args], options));
+  try {
+    const before = await metadata(owned.socket);
+    const reply = await new Promise((resolve, reject) => {
+      const peer = net.createConnection(owned.abortSocket);
+      let text = "";
+      peer.once("error", reject);
+      peer.on("connect", () => peer.write('{"op":"abort"}\n'));
+      peer.on("data", bytes => { text += bytes; if (text.includes("\n")) { peer.destroy(); resolve(JSON.parse(text)); } });
+    });
+    assert.equal(reply.ok, true);
+    const after = await metadata(owned.socket);
+    assert.notEqual(after.result.pid, before.result.pid);
+    assert.throws(() => process.kill(before.result.pid, 0));
+  } finally { await owned.stop(); }
+  assert.equal(fs.existsSync(owned.socket), false);
+  assert.equal(fs.existsSync(owned.abortSocket), false);
+});
+
+
+test("CUA repeated quit waits for owned driver cleanup", async () => {
+  const { createQuitGate } = require("../src/cua");
+  let resolveStop;
+  const stopped = new Promise(resolve => { resolveStop = resolve; });
+  let stops = 0, quits = 0, prevented = 0;
+  const gate = createQuitGate(() => ({ stop: () => { stops++; return stopped; } }), () => { quits++; }, assert.fail);
+  const event = { preventDefault: () => { prevented++; } };
+  gate(event);
+  gate(event);
+  await Promise.resolve();
+  assert.equal(stops, 1);
+  assert.equal(prevented, 2);
+  assert.equal(quits, 0);
+  resolveStop();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(quits, 1);
+  gate(event);
+  assert.equal(prevented, 2);
+});
+
+
+test("CUA extraction handles ZIP archives when GNU tar precedes the Windows reader", { skip: process.platform !== "win32" || !fs.existsSync("C:/Program Files/Git/usr/bin/tar.exe") }, () => {
+  const { spawnSync } = require("node:child_process");
+  const tar = "C:/Program Files/Git/usr/bin/tar.exe";
+  const stage = fs.mkdtempSync(path.join(os.tmpdir(), "reasonix-cua-extract-"));
+  try {
+    fs.writeFileSync(path.join(stage, "driver.zip"), Buffer.from("UEsDBBQAAAAIANomTV3uQOUFCQAAAAcAAAAOAAAAY3VhLWRyaXZlci5leGVLy6woKS1KBQBQSwECFAAUAAAACADaJk1d7kDlBQkAAAAHAAAADgAAAAAAAAAAAAAAgAEAAAAAY3VhLWRyaXZlci5leGVQSwUGAAAAAAEAAQA8AAAANQAAAAAA", "base64"));
+    const target = path.join(stage, "extracted");
+    fs.mkdirSync(target);
+    const script = `require(${JSON.stringify(require.resolve("../packaging/install-cua-driver"))}).extract(process.argv[1], process.argv[2])`;
+    const unpacked = spawnSync(process.execPath, ["-e", script, path.join(stage, "driver.zip"), target], { env: { ...process.env, PATH: path.dirname(tar) + path.delimiter + process.env.PATH } });
+    assert.equal(unpacked.status, 0, unpacked.stderr.toString());
+    assert.equal(fs.readFileSync(path.join(target, "cua-driver.exe"), "utf8"), "fixture");
+  } finally {
+    assert.ok(path.resolve(stage).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    fs.rmSync(stage, { recursive: true, force: true });
+  }
+});
+
+
+test("CUA layout resolves one canonical contract in development and packaging", () => {
+ const { computerDriverContract } = require("../src/layout");
+ const dirname = path.dirname(require("node:url").fileURLToPath(import.meta.url));
+ const source = computerDriverContract({ packaged: false, dirname: path.join(dirname, "../src") });
+ assert.deepEqual(JSON.parse(fs.readFileSync(source, "utf8")), cuaContract);
+ assert.equal(computerDriverContract({ packaged: true, resourcesPath: "/res" }), path.join("/res", "bin", "cua-driver.lock.json"));
 });

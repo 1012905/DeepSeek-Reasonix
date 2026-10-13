@@ -19,6 +19,7 @@ const SURFACE: Record<string, string[]> = {
   fgStrong: ["--text-strong"],
   accent: ["--accent"],
   accentFg: ["--accent-fg"],
+  accentInk: ["--accent-ink"],
   link: ["--link"],
   brand: ["--brand"],
   halo: ["--halo"],
@@ -42,6 +43,7 @@ const SURFACE: Record<string, string[]> = {
 
 // What a pack's own surfaces imply for the grounds it did not name.
 const DERIVED: [string, { source: string; paint: (t: Record<string, string>) => string }][] = [
+  ["accentInk", { source: "accent", paint: (t) => `color-mix(in srgb, ${t.accent} 65%, ${t.fg ?? "var(--text)"})` }],
   ["float", { source: "panel", paint: (t) => t.panel }],
   ["floatHi", { source: "bgElev", paint: (t) => t.bgElev }],
   ["codeBg", { source: "bgSoft", paint: (t) => `color-mix(in srgb, ${t.bgSoft} 50%, ${t.bg ?? t.bgSoft})` }],
@@ -173,6 +175,7 @@ function declarations(pack: ThemePack, scheme: "light" | "dark", busy: boolean, 
   }
 
   const bg = pack.background;
+  if (bg?.textGlow === "none") out.push(["--flow-text-shadow", "none"]);
   if (!bg?.image) return out;
   // The server owns freshness for this mutable URL. encodeURIComponent keeps
   // a pack id out of the CSS url() grammar.

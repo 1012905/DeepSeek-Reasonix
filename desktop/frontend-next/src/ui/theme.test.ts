@@ -83,6 +83,17 @@ describe("a pack is delivered by a generated stylesheet", () => {
     expect(read("--page")).toBe("#101010");
   });
 
+  it("gives accent text its own ink and derives it for older packs", () => {
+    apply(pack, "light");
+    expect(read("--accent-ink")).toBe("color-mix(in srgb, #0066CC 65%, #1A1A1A)");
+    apply({ ...pack, tokens: { ...pack.tokens, light: { ...pack.tokens.light, accentInk: "#004488" } } }, "light");
+    expect(read("--accent-ink")).toBe("#004488");
+    apply(pack, "dark");
+    expect(read("--accent-ink")).toContain("#66AAFF");
+    apply(null, "dark");
+    expect(read("--accent-ink")).toBe("");
+  });
+
   it("keeps a value that would end a rule inside its declaration", () => {
     apply({ ...pack, tokens: { light: { bg: "#fff} body{display:none", fg: "#111" }, dark: {} } }, "light");
     expect(sheet()?.sheet?.cssRules).toHaveLength(1);

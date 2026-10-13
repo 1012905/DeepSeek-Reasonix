@@ -6,7 +6,7 @@ import "encoding/json"
 // sentence is worded from, so a sink that prints Text must not append it again.
 func DetailIsPayload(code string) bool {
 	return code == NoticeCodeUnappliedSteer || code == NoticeCodeExtensionSkipped || code == NoticeCodeInboxRecovered ||
-		code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed
+		code == NoticeCodePermissionRulesDormant || code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed
 }
 
 // ExtensionSkipReasonNoLiveSidecar: the extension's companion process is not running.
@@ -72,6 +72,10 @@ type JobNotice struct {
 	Label string `json:"label,omitempty"`
 	// Error is the job function's own error text, set on a failure only.
 	Error string `json:"error,omitempty"`
+	// ExitCode and Signal say how a failed process ended, when the producer
+	// knew: Signal is the signal number that ended it, zero when none did.
+	ExitCode *int `json:"exitCode,omitempty"`
+	Signal   int  `json:"signal,omitempty"`
 }
 
 // Encode renders the payload as the notice's Detail.
@@ -91,4 +95,26 @@ func DecodeJobNotice(detail string) (JobNotice, bool) {
 		return JobNotice{}, false
 	}
 	return p, true
+}
+
+// DormantPermissionRule is one saved rule no tool can match: the list it sits
+// in, the rule as written, and the tool name it parsed to.
+type DormantPermissionRule struct {
+	List string `json:"list"`
+	Rule string `json:"rule"`
+	Tool string `json:"tool"`
+}
+
+// PermissionRulesDormant is the Detail payload of NoticeCodePermissionRulesDormant.
+type PermissionRulesDormant struct {
+	Rules []DormantPermissionRule `json:"rules"`
+}
+
+// Encode renders the payload as the notice's Detail.
+func (p PermissionRulesDormant) Encode() string {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }

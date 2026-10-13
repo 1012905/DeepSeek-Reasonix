@@ -82,6 +82,9 @@ grid to break.
 
 ## Surfaces
 
+- Studio's default light palette separates the frame (`#F0F0ED`), reading
+  surface (`#FAFAF8`) and composer (`--raised`). Its composer uses a short
+  `--compose-shadow`; installed packs retain their existing surface recipe.
 - `--float` / `--float-hi` exist apart from `--raised`. In dark, `--raised` and
   what it covers are nearly the same lightness, and a black shadow on a
   near-black ground paints nothing, so a menu read as transparent. A floating
@@ -176,6 +179,10 @@ pack states a shape, never a number the layout has to agree with.
 - `--t-live` (.6s) is not a weight. A meter or a fill reports work that is
   running, and reports it by growing, so this tier drives a fill's own geometry
   and never answers a click — at .6s it would answer late.
+- `--tip-delay` (.3s) is how long a pointer rests before a hint is drawn: VS Code
+  waits 250ms by default, and an instant hint flashes on every pass across a
+  column of icons. Keyboard focus is not hovering and is never delayed. It is a
+  wait, not motion, so reduced motion keeps it: dropping it would bring the flash back.
 - `--t-press` (.06s) is contact itself; anything slower reads as the interface
   thinking it over. What a press looks like is a token, so reduced motion
   answers for every control by changing one value.
@@ -193,6 +200,23 @@ pack states a shape, never a number the layout has to agree with.
 
 ## Space
 
+- Layout spacing is eight steps, 2 / 4 / 6 / 8 / 10 / 12 / 16 / 24px. The floor
+  is 2px, below which a gap stops reading as a gap, and 24px is the ceiling:
+  past it the distance is layout rather than spacing.
+- Which step a surface takes belongs to that surface: 2px between a mark and
+  its label, 4px between a control's own parts, 6px inside a chip, 8px between
+  rows, 10px inside a dense card, 12px inside a card, 16px between blocks, 24px
+  between sections.
+- A distance off the scale takes the nearer step; a tie takes the lower one,
+  because an off-scale distance is a step with air added by hand, and the tie
+  returns the air and nothing else.
+
+| Written | 3 | 5 | 7 | 9 | 11 | 14 | 20 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Takes | 2 | 4 | 6 | 8 | 10 | 12 | 16 |
+
+- A surface that still writes a distance has not been migrated yet; it is not
+  an exception the scale allows.
 - `--y-line` / `--y-card` / `--y-panel` are the same three weights in space.
   With only the durations tiered, a one-file read and a call carrying twenty
   lines of output weighed the same, and a long turn had no readable sections.
@@ -242,6 +266,19 @@ pack states a shape, never a number the layout has to agree with.
   letters.
 
 ## Weight and contrast
+
+- Default and plain-palette light Studio replies use `--w-read: 400` for prose only. Headings,
+  emphasis and small UI text keep their existing weights. A chosen weight,
+  illustrated/sky pack or dark scheme falls back to `--w-reg`.
+- `--default-*` holds the canonical Studio preview palette independently of
+  the active pack. Default surfaces and the default picker card share it.
+- `--accent-ink` is text on ordinary or tinted surfaces, distinct from
+  `--accent-fg` on filled controls. Packs may set `accentInk`; legacy packs
+  derive it by mixing their accent towards their body text colour.
+- `background.textGlow: none` paints `--flow-text-shadow: none` through the
+  pack sheet. The backdrop transcript rule defaults to its 2px shadow and 7px
+  halo when this variable is absent. The choice affects text only; the frosted
+  backing remains. Reduced effects overrides the text shadow.
 
 - Stroke weight is an axis beside contrast, not part of it: however bright the
   colour, 400 Han at 11px is thin. Han strokes are dense and blur at a size

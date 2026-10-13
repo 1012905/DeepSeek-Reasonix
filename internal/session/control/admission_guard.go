@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/ext/extension"
@@ -18,7 +19,23 @@ const (
 	turnDroppedClosed
 	turnDroppedDraining // generation no longer published after rebuild
 	turnDroppedWriteAuthority
+	turnDroppedWorkspace
+	// turnNoTurn is an input that needed no turn: a verb or a note.
+	turnNoTurn
 )
+
+// Admission is what a submission became: started, parked behind the turn
+// finishing, refused, or never a turn at all.
+type Admission = admissionResult
+
+// Refused reports a submission the controller dropped: nothing will run it.
+func (r admissionResult) Refused() bool {
+	switch r {
+	case turnStarted, turnParked, turnNoTurn:
+		return false
+	}
+	return true
+}
 
 // runGuarded runs body under a fresh context, guarding concurrent turns.
 // Finishing-window arrivals park instead of dropping (see admissionResult).
@@ -46,6 +63,22 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "input was not accepted: this session is no longer writable — reopen it and try again"})
 		return turnDroppedWriteAuthority
 	}
+	releaseWorkspace, err := c.tryWorkspaceActivity()
+	if err != nil {
+		if errors.Is(err, ErrTurnRunning) {
+			if onStart == nil {
+				c.noticeInputRefused("input was not accepted: the workspace branch is being switched — please resend")
+			}
+			return turnDroppedWorkspace
+		}
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "input was not accepted: workspace unavailable: " + err.Error()})
+		return turnDroppedRunning
+	}
+	defer func() {
+		if releaseWorkspace != nil {
+			releaseWorkspace.release()
+		}
+	}()
 	c.mu.Lock()
 	if c.gate.closed {
 		c.mu.Unlock()
@@ -58,7 +91,7 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 	}
 	if c.gate.rotating {
 		c.mu.Unlock()
-		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "input was not accepted: the session is being switched — please resend"})
+		c.noticeInputRefused("input was not accepted: the session is being switched — please resend")
 		return turnDroppedRotating
 	}
 	if c.gate.running {
@@ -81,10 +114,15 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 	}
 	ctx, cancel := context.WithCancel(extension.ContextWithRuntimeOwner(context.Background(), c.runtimeOwner))
 	c.gate.begin(cancel)
+	c.gate.workspaceRelease, releaseWorkspace = releaseWorkspace, nil
 	c.mu.Unlock()
 	if onStart != nil {
 		onStart()
 	}
 	c.spawnGuardedTurn(ctx, cancel, body)
 	return turnStarted
+}
+
+func (c *Controller) noticeInputRefused(text string) {
+	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: event.NoticeCodeInputRefused, Text: text})
 }

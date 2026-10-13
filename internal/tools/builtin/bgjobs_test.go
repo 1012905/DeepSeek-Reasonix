@@ -329,3 +329,81 @@ func TestReadingAFailedJobIsAFailedCall(t *testing.T) {
 		t.Fatalf("bash_output on a killed job: %v", err)
 	}
 }
+
+func TestBashOutputWithoutJobIDListsTheRunningJobs(t *testing.T) {
+	m := jobs.NewManager(event.Discard)
+	defer m.Close()
+	ctx := jobs.WithSession(jobs.WithManager(context.Background(), m), "session-a")
+
+	none, err := bashOutput{}.Execute(ctx, []byte(`{}`))
+	if err != nil || !strings.Contains(none, "No background jobs are running") {
+		t.Fatalf("empty listing = %q, %v", none, err)
+	}
+
+	for _, command := range []string{"sleep 5", "sleep 6"} {
+		if _, err := (bash{}).Execute(ctx, []byte(`{"command":"`+command+`","run_in_background":true}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := bashOutput{}.Execute(ctx, []byte(`{}`))
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, want := range []string{"Running background jobs (2)", "bash-1", "bash-2", "kind=bash", "sleep 5", "sleep 6", "elapsed="} {
+		if !strings.Contains(got, want) {
+			t.Errorf("listing lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestBashOutputListingIsFailSafeAndBounded(t *testing.T) {
+	m := jobs.NewManager(event.Discard)
+	defer m.Close()
+	mine := jobs.WithSession(jobs.WithManager(context.Background(), m), "session-a")
+	block := func(ctx context.Context, _ io.Writer) (string, error) { <-ctx.Done(); return "", ctx.Err() }
+	for range maxListedJobs + 3 {
+		m.StartForSession("session-a", "bash", "wait", block)
+	}
+	m.StartForSession("session-b", "bash", "other session", block)
+
+	got, err := bashOutput{}.Execute(mine, []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Running background jobs (53)") || !strings.Contains(got, "3 more running job(s) not listed") || strings.Contains(got, "other session") {
+		t.Fatalf("listing:\n%s", got)
+	}
+	if n := strings.Count(got, "\n- "); n != maxListedJobs {
+		t.Fatalf("listed %d rows, want %d", n, maxListedJobs)
+	}
+
+	noSession, err := bashOutput{}.Execute(jobs.WithManager(context.Background(), m), []byte(`{}`))
+	if err != nil || !strings.Contains(noSession, "No background jobs are running") {
+		t.Fatalf("without a session the listing must be empty, got %q, %v", noSession, err)
+	}
+}
+
+// A wait shows the work it waits on: what the job writes reaches the call's
+// live progress, the channel a running bash already streams through.
+func TestWaitStreamsTheJobOutputAsProgress(t *testing.T) {
+	m := jobs.NewManager(event.Discard)
+	defer m.Close()
+	release := make(chan struct{})
+	j := m.Start("bash", "build", func(ctx context.Context, w io.Writer) (string, error) {
+		<-release
+		_, _ = io.WriteString(w, "step 1\nstep 2\n")
+		return "", nil
+	})
+	var live strings.Builder
+	ctx := tool.WithProgress(jobs.WithManager(context.Background(), m), func(chunk string) { live.WriteString(chunk) })
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		close(release)
+	}()
+	if _, err := (waitJob{}).Execute(ctx, []byte(`{"job_ids":["`+j.ID+`"]}`)); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if live.String() != "step 1\nstep 2\n" {
+		t.Fatalf("progress = %q, want the job's lines", live.String())
+	}
+}

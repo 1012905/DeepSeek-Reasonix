@@ -11,6 +11,10 @@ import (
 // whether the resolver answered here or on the machine holding the keys.
 var ErrUnknownModel = errors.New("unknown model")
 
+// ErrNoProvider is what a request answers while no model provider is configured:
+// the runtime started without one so the window could ask for a connection.
+var ErrNoProvider = errors.New("no model provider is configured")
+
 // Descriptor is the non-sensitive provider/model metadata shared across
 // process boundaries. It intentionally contains no endpoint, credential,
 // header, proxy, or environment-variable information.

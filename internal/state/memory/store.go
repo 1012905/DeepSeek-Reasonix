@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/base/fileutil"
 	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/frontmatter"
 	"reasonix/internal/contract/config"
@@ -213,6 +212,13 @@ func (s Store) archiveLocked(name string) (string, error) {
 		}
 		return archiveMemoryInDir(s.DirFor(parsed.scope), parsed.name)
 	} else {
+		p, repaired, err := s.repairArchivedRef(ref)
+		if err != nil {
+			return "", err
+		}
+		if repaired {
+			return p, nil
+		}
 		name = slug(name)
 	}
 	if name == "" {
@@ -227,11 +233,11 @@ func (s Store) archiveLocked(name string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		p, err := archiveInDir(dir, name)
+		p, err := archiveInDir(dir, name, lines)
 		if err != nil {
 			return "", err
 		}
-		if p != "" || contains {
+		if p == "" && contains {
 			if err := flushIndexIn(dir, lines); err != nil {
 				return "", err
 			}
@@ -248,11 +254,11 @@ func archiveMemoryInDir(dir, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path, err := archiveInDir(dir, name)
+	path, err := archiveInDir(dir, name, lines)
 	if err != nil {
 		return "", err
 	}
-	if path != "" || contains {
+	if path == "" && contains {
 		if err := flushIndexIn(dir, lines); err != nil {
 			return "", err
 		}
@@ -270,7 +276,45 @@ func (s Store) Delete(name string) error {
 	return err
 }
 
-func archiveInDir(dir, name string) (string, error) {
+// repairArchivedRef reconciles a reference whose active file is already gone. It
+// repairs only a stable id: a legacy name can match several historical archives,
+// and picking the first one would be a guess. It drops the stale index line that
+// still claims the fact is active, and only that removal counts as a hand-off.
+func (s Store) repairArchivedRef(ref string) (string, bool, error) {
+	for _, dir := range s.dirs() {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		entries, err := os.ReadDir(filepath.Join(dir, ".archive"))
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(dir, ".archive", entry.Name())
+			memory, ok := loadMemory(path)
+			if !ok || memory.ID != ref {
+				continue
+			}
+			lines, contains, err := indexLinesExceptIn(dir, slug(memory.Name))
+			if err != nil {
+				return "", false, err
+			}
+			if !contains {
+				continue
+			}
+			if err := flushIndexIn(dir, lines); err != nil {
+				return "", false, err
+			}
+			return path, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func archiveInDir(dir, name string, lines map[string]string) (string, error) {
 	root, err := os.OpenRoot(dir)
 	if os.IsNotExist(err) {
 		return "", nil
@@ -295,6 +339,12 @@ func archiveInDir(dir, name string) (string, error) {
 		return "", err
 	}
 	if err := renameMemoryFile(root, file, dest); err != nil {
+		return "", err
+	}
+	if err := flushIndexIn(dir, lines); err != nil {
+		if back := renameMemoryFile(root, dest, file); back != nil {
+			return "", fmt.Errorf("%w (and %q could not be moved back out of the archive: %w)", err, name, back)
+		}
 		return "", err
 	}
 	out, err := safeJoin(dir, dest)
@@ -348,109 +398,10 @@ func safeJoin(base, name string) (string, error) {
 	return pathAbs, nil
 }
 
-func renameMemoryFile(root *os.Root, path, dest string) error {
-	err := root.Rename(path, dest)
-	if err == nil || os.IsNotExist(err) {
-		return nil
-	}
-	if !os.IsPermission(err) {
-		return err
-	}
-	repairOwnerWrite(root, path, false)
-	repairOwnerWrite(root, filepath.Dir(path), true)
-	repairOwnerWrite(root, filepath.Dir(dest), true)
-	err = root.Rename(path, dest)
-	if err == nil || os.IsNotExist(err) {
-		return nil
-	}
-	return err
-}
-
-func repairOwnerWrite(root *os.Root, path string, dir bool) {
-	info, err := root.Stat(path)
-	if err != nil {
-		return
-	}
-	need := os.FileMode(0o600)
-	if dir {
-		need = 0o700
-	}
-	_ = root.Chmod(path, info.Mode().Perm()|need)
-}
-
 // indexLineRe matches a managed index line so reindex/Delete can target the line
 // for one memory by its filename without disturbing the rest of a hand-edited
 // MEMORY.md.
 var indexLineRe = regexp.MustCompile(`(?m)^\s*-\s\[.+?\]\(([^)]+)\.md\)\s*—\s.*$`)
-
-// flushIndexIn rewrites MEMORY.md in the given directory from the managed lines,
-// preserving hand-written content. Managed lines are updated or removed, and
-// new managed entries are appended in sorted order.
-func flushIndexIn(dir string, lines map[string]string) error {
-	path := filepath.Join(dir, indexFile)
-	existing, err := readIndexIn(dir)
-	if err != nil {
-		return err
-	}
-	processed := map[string]bool{}
-	var preserved strings.Builder
-	preservedEmpty := true
-	for line := range strings.SplitSeq(string(existing), "\n") {
-		trimmed := strings.TrimRight(line, "\r")
-		if mt := indexLineRe.FindStringSubmatch(trimmed); mt != nil {
-			name := mt[1]
-			if fresh, ok := lines[name]; ok {
-				preserved.WriteString(fresh)
-				preserved.WriteString("\n")
-				processed[name] = true
-				preservedEmpty = false
-			}
-			continue
-		}
-		preserved.WriteString(trimmed)
-		preserved.WriteString("\n")
-		if strings.TrimSpace(trimmed) != "" {
-			preservedEmpty = false
-		}
-	}
-
-	names := make([]string, 0, len(lines))
-	for n := range lines {
-		if !processed[n] {
-			names = append(names, n)
-		}
-	}
-	slices.Sort(names)
-
-	var b strings.Builder
-	if preservedEmpty && len(names) > 0 {
-		b.WriteString("# Memory\n\n")
-	} else {
-		b.WriteString(preserved.String())
-	}
-	for _, n := range names {
-		b.WriteString(lines[n])
-		b.WriteString("\n")
-	}
-	result := strings.TrimRight(b.String(), "\n")
-	if result != "" {
-		result += "\n"
-	}
-	// The index is derived state, but a torn write would still hide facts
-	// from the next session's prefix until the next reindex.
-	return fileutil.AtomicWriteFile(path, []byte(result), 0o644)
-}
-
-// reindexIn rewrites the MEMORY.md line for name in the given directory,
-// preserving every other managed line.
-func reindexIn(dir, name string, m Memory) error {
-	lines, _, err := indexLinesExceptIn(dir, name)
-	if err != nil {
-		return err
-	}
-	lines[name] = renderIndexLine(name, m)
-	return flushIndexIn(dir, lines)
-}
 
 func renderIndexLine(name string, m Memory) string {
 	marker := ""

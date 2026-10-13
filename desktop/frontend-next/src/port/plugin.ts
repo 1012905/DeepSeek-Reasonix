@@ -83,6 +83,7 @@ export interface PluginAction {
   riskReasons?: string[];
   name?: string;
   source?: string;
+  commit?: string;
   target?: string;
   version?: string;
   manifestKind?: string;
@@ -108,6 +109,7 @@ export interface PluginAction {
   warnings?: string[];
   error?: string;
   next?: string;
+  errorCode?: string;
   // The kernel shortened a field or list of this step; what is shown is not all of it.
   previewTruncated?: boolean;
 }

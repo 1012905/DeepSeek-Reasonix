@@ -186,6 +186,10 @@ JSON Schema: [theme-pack.schema.json](./theme-pack.schema.json)
 
 Studio also reads `link`, `brand`, `halo` and `labelAgent` (hyperlinks, the product tint, hover emphasis, agent names). `net`, `deleg` and the other status colours are not tokens and are dropped with a warning.
 
+`accentInk` optionally supplies accent-coloured text independently of the
+`accent` fill and `accentFg` button text. See the [current author guide](THEME_AUTHOR_GUIDE.md#current-token-vocabulary)
+for runtime vocabulary and fallback behaviour.
+
 Colors must **not** include `url()`, gradients, or arbitrary CSS.
 
 ## Engine behavior
