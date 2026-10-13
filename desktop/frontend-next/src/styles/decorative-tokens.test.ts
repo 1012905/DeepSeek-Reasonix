@@ -23,7 +23,6 @@ const DECORATIVE: [string, string, string[]][] = [
   ["studio", ".agent-tx-hd .who", ["--label-agent"]],
   ["studio", '.chipmirror .skillchip[data-kind="subagent"]', ["--label-agent", "--label-agent-wash"]],
   ["studio", ".chipmirror .skillchip", ["--brand", "--brand-wash"]],
-  ["studio", ".studio-brand-accent", []],
   ["studio", ".studio-wallet > span", ["--brand"]],
   ["studio", ':root[data-theme="light"] .studio-wallet > span', ["--brand"]],
   ["studio", ".chrome .browser-action", ["--brand"]],
@@ -57,6 +56,7 @@ const STATUS: [string, string, string][] = [
   ["studio", '.tool-state[data-state="running"]', "--net"],
   ["studio", ".run-live", "--net"],
   ["studio", ".activity-running", "--net"],
+  ["studio", ".studio-runstate[data-running] .studio-runlabel", "--net"],
 ];
 
 describe("decorative roles are not painted with a status hue", () => {
@@ -68,6 +68,15 @@ describe("decorative roles are not painted with a status hue", () => {
       for (const token of tokens) expect(body).toContain(`var(${token})`);
     });
   }
+});
+
+it("keeps composer labels quiet until the pane is running", () => {
+  const css = sheet("studio");
+  const label = css.match(/^\.studio-runlabel\s*\{([^}]*)\}/m)?.[1] ?? "";
+  expect(label).toMatch(/font:\s*inherit/);
+  expect(label).not.toMatch(/padding:|background:|font-weight:/);
+  expect(bodies(css, ".studio-runstate[data-waiting] .studio-runlabel")).toBe("");
+  expect(bodies(css, ".studio-runstate[data-idle] .studio-runlabel")).toBe("");
 });
 
 describe("status roles keep the status hues", () => {

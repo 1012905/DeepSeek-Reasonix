@@ -16,13 +16,13 @@ const ROUTES = [
   "/events", "/history", "/status", "/balance", "/submit", "/cancel", "/approve", "/answer",
   "/adjudications", "/execution-graph", "/jobs",
   "/plan", "/plan-decision", "/goal", "/resume", "/models", "/tool-approval-mode", "/workspace-trust", "/preset",
-  "/model", "/effort", "/new", "/sessions", "/delete-session", "/provider-setup",
+  "/model", "/default-model", "/effort", "/new", "/sessions", "/delete-session", "/provider-setup",
   "/inbox", "/trajectory", "/mcp", "/skills", "/complete", "/prompt", "/workspace", "/capability-scope",
   "/providers", "/decision-models", "/roles", "/account", "/backups", "/hooks", "/memory", "/network", "/shell", "/todos",
-  "/changes", "/commit", "/attachments", "/drop", "/checkpoints", "/branches", "/compact", "/compaction", "/rewind",
+  "/changes", "/commit", "/attachments", "/drop", "/checkpoints", "/branches", "/compact", "/compaction", "/rewind", "/branch",
   "/extensions", "/themes", "/plugins", "/market", "/surfaces", "/feedback",
   "/fork", "/summarize", "/forget", "/bypass", "/auto-approve-tools",
-  "/permissions", "/sandbox", "/progress-watch", "/display-currency", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update",
+  "/permissions", "/sandbox", "/progress-watch", "/ask-timeout", "/changed-files-settings", "/fold-work-settings", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings",
   "/host", "/notifications", "/share", "/pair", "/device",
   "/slash", "/workspaces", "/welcome", "/usage", "/config", "/studio",
 ];
@@ -48,6 +48,9 @@ export default defineConfig(({ mode }) => {
     // that goes red by arrangement teaches people to re-run it, not read it.
     test: {
       css: true,
+      setupFiles: ["./src/testsetup.ts"],
+      testTimeout: 60_000,
+      hookTimeout: 60_000,
       pool: "threads",
     },
     server: {

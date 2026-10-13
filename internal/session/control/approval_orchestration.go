@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 
 	"reasonix/internal/contract/config"
@@ -288,7 +285,7 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 	return c.ask(ctx, questions, nil)
 }
 
-func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, origin *event.AskOrigin) ([]event.AskAnswer, error) {
+func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, origin *event.AskOrigin) (_ []event.AskAnswer, err error) {
 	// Registering after the lock left a queued question invisible everywhere:
 	// no event, absent from the snapshot, unreachable by ReplayPendingPrompts.
 	// The record comes first: registration is what makes it answerable.
@@ -297,6 +294,7 @@ func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, ori
 		return nil, err
 	}
 	reply := c.approval.registerAsk(id, questions, origin)
+	defer c.yieldWorkspaceNow(ctx, &err)()
 
 	if !c.lockPromptFor(ctx, "question") {
 		c.approval.cancelAsk(id)
@@ -312,48 +310,40 @@ func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, ori
 	// A question blocks the run on the user exactly like an approval prompt.
 	go c.hooks.Notification(ctx, askNotificationText(questions, origin), "question_prompt")
 
-	waitCtx, cancelWait := c.approval.waitContext(ctx)
-	defer cancelWait()
-
-	select {
-	case ans := <-reply:
-		c.closeBarrier(id, barrierResolved)
-		return ans, nil
-	case <-waitCtx.Done():
-		c.approval.cancelAsk(id)
-		c.closeBarrier(id, barrierCancelled)
-		return nil, waitCtx.Err()
-	}
+	return c.waitForAsk(ctx, id, reply, origin)
 }
 
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.
-// Unknown/expired IDs are ignored.
-func (c *Controller) AnswerQuestion(id string, answers []event.AskAnswer) {
-	c.AnswerQuestionFrom(id, answers, nil)
+// Invalid answers retain the pending prompt; expired identities are refused.
+func (c *Controller) AnswerQuestion(id string, answers []event.AskAnswer) error {
+	return c.AnswerQuestionFrom(id, answers, nil)
 }
 
 // AnswerQuestionFrom is AnswerQuestion for answers given on a paired device,
 // which the answer's receipt names and nothing else reads.
-func (c *Controller) AnswerQuestionFrom(id string, answers []event.AskAnswer, via *provider.Via) {
-	if pending, ok := c.approval.resolveAsk(id); ok {
-		// No selections is the explicit "skip" path: it ends the turn rather than
-		// feeding a prose dismissal back to the model (#6869). An external
-		// party's form is refused to that party instead, and the turn goes on.
-		if !askAnswersHaveSelection(answers) && pending.origin == nil {
-			c.mu.Lock()
-			activeTurn := c.gate.cancel != nil
-			c.mu.Unlock()
-			if activeTurn {
-				c.cancelTurn(causeAskSkipped)
-				return
-			}
-		}
-		c.recordAskDecisionReceipt(id, pending, answers, via)
-		pending.reply <- answers // buffered, never blocks
+func (c *Controller) AnswerQuestionFrom(id string, answers []event.AskAnswer, via *provider.Via) error {
+	pending, err := c.approval.resolveAskAnswer(id, answers)
+	if err != nil {
+		return err
 	}
+	// No selections is the explicit "skip" path: it ends the turn rather than
+	// feeding a prose dismissal back to the model (#6869). An external
+	// party's form is refused to that party instead, and the turn goes on.
+	if !askAnswersHaveSelection(answers) && pending.origin == nil {
+		c.mu.Lock()
+		activeTurn := c.gate.cancel != nil
+		c.mu.Unlock()
+		if activeTurn {
+			c.cancelTurn(causeAskSkipped)
+			return nil
+		}
+	}
+	c.recordAskDecisionReceipt(id, pending, answers, "answered", via)
+	pending.reply <- answers // buffered, never blocks
+	return nil
 }
 
-func (c *Controller) recordAskDecisionReceipt(id string, pending pendingAsk, answers []event.AskAnswer, via *provider.Via) {
+func (c *Controller) recordAskDecisionReceipt(id string, pending pendingAsk, answers []event.AskAnswer, outcome string, via *provider.Via) {
 	if c == nil || c.executor == nil {
 		return
 	}
@@ -376,7 +366,7 @@ func (c *Controller) recordAskDecisionReceipt(id string, pending pendingAsk, ans
 		}
 		parts = append(parts, prompt+": "+answer)
 	}
-	subject, outcome := clipUTF8(strings.Join(parts, " · "), 240), "answered"
+	subject := clipUTF8(strings.Join(parts, " · "), 240)
 	if pending.origin != nil {
 		subject, outcome = formReceipt(pending.origin, pending.questions, answers)
 	}
@@ -561,7 +551,7 @@ func (c *Controller) requestApproval(ctx context.Context, req approvalRequest) (
 // posture) for the same scope short-circuits; the approvalManager's promptMu
 // serialises outstanding prompts. It authorises nothing on its own — that is
 // requestApproval's half.
-func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRequest) (approvalReply, error) {
+func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRequest) (_ approvalReply, err error) {
 	// YOLO/full access and the just-approved-plan execution window auto-allow
 	// approval-gated tools without prompting. Plan approval is a user decision,
 	// not a tool permission, so it deliberately stays interactive.
@@ -569,6 +559,8 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 		return approvalReply{allow: true}, nil
 	}
 
+	yield, restore := c.yieldWorkspace(ctx, &err)
+	defer restore()
 	c.approval.promptMu.Lock()
 	defer c.approval.promptMu.Unlock()
 
@@ -603,6 +595,7 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 		}
 	}
 
+	yield()
 	c.approval.promptEmitMu.Lock()
 	var id string
 	var reply chan approvalReply
@@ -678,57 +671,12 @@ func (c *Controller) DefaultApprovalMode() string {
 
 // TrustableFolder leaves out the folders nobody should grant wholesale: a
 // filesystem root, a home directory or anything holding one, and Reasonix's own
-// home and state, whose files decide what the agent may do. It judges the
-// folder symlinks resolve to, so a link cannot stand in for any of them.
+// storage and the directories that hold keys and credentials, whose files decide
+// what the agent may do. config.Roots.FolderGrantRefusal is the one judgement;
+// extra workspace roots read it too.
 func TrustableFolder(root string) bool {
-	root = strings.TrimSpace(root)
-	if root == "" {
-		return false
-	}
-	root = resolvedDir(root)
-	if root == "." || filepath.Dir(root) == root {
-		return false
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" && dirWithin(root, resolvedDir(home)) {
-		return false
-	}
-	for _, id := range []config.RootID{config.RootHome, config.RootState} {
-		if dir := config.RootDir(id); dir != "" {
-			if d := resolvedDir(dir); dirWithin(d, root) || dirWithin(root, d) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// resolvedDir resolves symlinks through the deepest part of p that exists, so
-// a folder not yet created compares against the same spelling as its parent.
-func resolvedDir(p string) string {
-	if abs, err := filepath.Abs(p); err == nil {
-		p = abs
-	}
-	p = filepath.Clean(p)
-	rest := ""
-	for dir := p; ; dir = filepath.Dir(dir) {
-		if r, err := filepath.EvalSymlinks(dir); err == nil {
-			return filepath.Join(r, rest)
-		}
-		if filepath.Dir(dir) == dir {
-			return p
-		}
-		rest = filepath.Join(filepath.Base(dir), rest)
-	}
-}
-
-// dirWithin reports whether p is root or lies under it, comparing case-blind
-// where the filesystem usually is.
-func dirWithin(root, p string) bool {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		root, p = strings.ToLower(root), strings.ToLower(p)
-	}
-	rel, err := filepath.Rel(root, p)
-	return err == nil && (rel == "." || filepath.IsLocal(rel))
+	_, refused := config.RootsForHome("").FolderGrantRefusal(root)
+	return !refused
 }
 
 // WorkspaceTrust is the person's recorded decision about this workspace; an

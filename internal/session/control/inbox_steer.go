@@ -60,6 +60,18 @@ func (c *Controller) readSteerCandidate(st *sessioninbox.Store, id string) (sess
 	return st.ReadItem(id)
 }
 
+// holdWhilePaused answers a steer reaching a paused queue: refuse it, or keep
+// the item as a follow-up. The caller holds the admission lock.
+func holdWhilePaused(st *sessioninbox.Store, id string, capacity sessioninbox.Capacity, hold bool) (sessioninbox.InboxReceipt, error) {
+	if !hold {
+		return sessioninbox.InboxReceipt{}, sessioninbox.ErrPaused
+	}
+	if err := st.ConvertIntent(id, sessioninbox.IntentFollowup); err != nil {
+		return sessioninbox.InboxReceipt{}, err
+	}
+	return sessioninbox.InboxReceipt{ItemID: id, Disposition: sessioninbox.DispositionQueuedFollowup, Paused: true, Capacity: capacity}, nil
+}
+
 func (c *Controller) unlockInboxSteerAdmission(dispatch *bool) {
 	c.inbox.admissionMu.Unlock()
 	if *dispatch {
@@ -73,6 +85,12 @@ func (c *Controller) unlockInboxSteerAdmission(dispatch *bool) {
 // The agent loader only captures the item ID and re-reads the blob on consume
 // so large steer bodies do not accumulate in the agent heap.
 func (c *Controller) TrySteerInboxItem(id string) (sessioninbox.InboxReceipt, error) {
+	return c.steerInboxItem(id, false)
+}
+
+// steerInboxItem is TrySteerInboxItem; holdIfPaused makes a paused queue keep
+// the item as a follow-up instead of refusing, under the same admission lock.
+func (c *Controller) steerInboxItem(id string, holdIfPaused bool) (sessioninbox.InboxReceipt, error) {
 	c.inbox.admissionMu.Lock()
 	dispatchAfterUnlock := false
 	defer c.unlockInboxSteerAdmission(&dispatchAfterUnlock)
@@ -101,7 +119,7 @@ func (c *Controller) TrySteerInboxItem(id string) (sessioninbox.InboxReceipt, er
 	}
 	snapshot := st.Snapshot()
 	if snapshot.Paused {
-		return sessioninbox.InboxReceipt{}, sessioninbox.ErrPaused
+		return holdWhilePaused(st, id, snapshot.Capacity, holdIfPaused)
 	}
 	if meta.State == sessioninbox.StateUncertain {
 		if err := st.SetState(id, sessioninbox.StateQueued, ""); err != nil {
@@ -158,7 +176,7 @@ func (c *Controller) TrySteerInboxItem(id string) (sessioninbox.InboxReceipt, er
 		}
 	}
 	c.mu.Lock()
-	accepted := !c.gate.closed && !c.gate.rotating && c.gate.running && c.executor != nil && len(env.FrozenImages) == 0 && c.steerItemAs(meta.Origin, id, loader, env.Via)
+	accepted := !c.gate.closed && !c.gate.rotating && c.gate.running && c.executor != nil && len(env.FrozenImages) == 0 && c.steerItemAs(meta.Origin, id, loader, env.Via, env.DisplayText)
 	if accepted {
 		c.inbox.mu.Lock()
 		c.inbox.trackActive(id)
@@ -196,11 +214,11 @@ func (c *Controller) TrySteerInboxItem(id string) (sessioninbox.InboxReceipt, er
 
 // steerItemAs queues the item under the attribution the manifest recorded, so a
 // host-authored item is never delivered as something the user said. Holds c.mu.
-func (c *Controller) steerItemAs(origin sessioninbox.PromptOrigin, id string, loader func() (string, error), via *provider.Via) bool {
+func (c *Controller) steerItemAs(origin sessioninbox.PromptOrigin, id string, loader func() (string, error), via *provider.Via, display string) bool {
 	if origin.IsHost() {
 		return c.executor.SteerHostItem(id, loader)
 	}
-	return c.executor.SteerItemFrom(id, loader, via)
+	return c.executor.SteerDisplayedItemFrom(id, loader, display, via)
 }
 
 // TrySteer queues mid-turn guidance only when the active agent turn accepts it.
@@ -285,7 +303,7 @@ func (c *Controller) lockPromptFor(ctx context.Context, kind string) bool {
 
 func askAnswersHaveSelection(answers []event.AskAnswer) bool {
 	for _, answer := range answers {
-		if len(answer.Selected) > 0 {
+		if len(answer.Selected) > 0 || len(answer.Value) > 0 {
 			return true
 		}
 	}

@@ -219,9 +219,11 @@ otherwise the block the model already has goes on reading as current.
 - `#<note>` in chat quick-adds an always-on instruction. The `remember` tool
   instead saves a fallible background fact (frontmatter file + `MEMORY.md`
   index). Fact `type` classifies content; independent `scope` controls whether it
-  is project-only (the default) or explicitly global. The index loads into the
-  stable prefix on the next session; global user/feedback bodies also load as
-  lower-priority compatibility guidance. The current turn receives a tail note.
+  is project-only (the default) or explicitly global.
+- The saved-fact index stays out of the stable prefix and is reached through the
+  `memory` tool; pinned bodies and global user/feedback bodies load into it, the
+  latter as lower-priority compatibility guidance. The current turn receives a
+  tail note.
 
 ## Notes
 
@@ -367,6 +369,7 @@ out of how a path is spelled, which cannot tell `internal/auth` from
 - sensitive: internal/ext/pluginpkg/**
 - sensitive: internal/base/netclient/**
 - sensitive: internal/safety/redirectguard/**
+- sensitive: internal/safety/endpointclient/**
 - sensitive: internal/safety/egress/**
 - sensitive: internal/platform/browser/**
 - sensitive: internal/platform/computer/**
@@ -400,8 +403,8 @@ observation, never by a check that ran afterwards.
 What follows bounds Observable today. It is not a restatement of the invariant:
 moving a number here must not move the promise.
 
-- `scanWorkspace` walks the workspace recursively, skips VCS store dirs, and is
-  `complete` only below 50k files. Over that, or past a walk error, it
+- `scanWorkspace` walks the workspace and every granted extra root recursively,
+  skips VCS store dirs, and is `complete` only below 50k files in total. Over that, or past a walk error, it
   establishes nothing and the mutation stays unproven.
 - Symlinks are recorded by `Lstat`, so a write through one lands outside what
   the walk compares. Confining the resolved target is the sandbox's job.

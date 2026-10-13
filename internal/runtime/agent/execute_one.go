@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reasonix/internal/contract/event"
 	"reasonix/internal/runtime/usecap"
 	"strings"
 
@@ -57,6 +56,7 @@ type toolCallPlan struct {
 	cctx                 context.Context
 	releaseParentWrite   func()
 	releaseMutationWrite func()
+	releaseLeaseHold     func()
 
 	// pathsBefore is the state of the turn's known paths taken before an
 	// unclassifiable call ran, so its receipt can say what it actually touched.
@@ -75,7 +75,9 @@ type toolCallPlan struct {
 	criteriaRewritten []string
 	mutationObserved  bool
 	mutationAfterDone bool
-	executed          bool
+	// ranClean: the tool's own Execute returned no error, before tool.after ruled.
+	ranClean bool
+	executed bool
 	// nestedOrigin is the first external origin among calls this tool made
 	// through its invoker; it labels the result when the tool declares none.
 	nestedOrigin tool.Provenance
@@ -101,10 +103,13 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	defer func() { out.todoEcho = a.todoWriteEchoes(call, todosBefore, out.errMsg) }()
 	defer func() {
 		if plan.mutationObserved && !plan.mutationAfterDone {
-			a.observeAfterMutation(plan)
+			out.checkpointErr = a.observeAfterMutation(plan)
 		}
 		if plan.releaseMutationWrite != nil {
 			plan.releaseMutationWrite()
+		}
+		if plan.releaseLeaseHold != nil {
+			plan.releaseLeaseHold()
 		}
 		if plan.releaseParentWrite != nil {
 			plan.releaseParentWrite()
@@ -134,7 +139,12 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	}
 	// Read after tool.before: an extension may have substituted the call, and the
 	// batch scan judged the one the model wrote.
-	defer func() { out.endsRound = out.endsRound || tool.IsDecisionBarrier(plan.tool) }()
+	defer func() {
+		out.endsRound = out.endsRound || tool.IsDecisionBarrierCall(plan.tool, json.RawMessage(plan.call.Arguments)) || tool.IsDecisionBarrier(plan.execTool)
+	}()
+	if blocked, early := a.refuseNetworkToolPaths(plan); early {
+		return blocked
+	}
 	if blocked, early := a.resolveToolPolicy(ctx, turn, plan); early {
 		return blocked
 	}
@@ -161,7 +171,7 @@ func (a *Agent) parseToolCall(ctx context.Context, plan *toolCallPlan) (toolOutc
 				output: fmt.Sprintf("MCP server %q is connected; its real tools are now available", server),
 			}, true
 		}
-		if refusal, ok := a.svc.tools.DisabledMCPRefusal(plan.call.Name); ok {
+		if refusal, ok := a.svc.tools.MCPRefusal(plan.call.Name); ok {
 			msg := refusal.String()
 			return toolOutcome{output: msg, blocked: true, errMsg: firstLine(msg), refusalCode: refusal.Code}, true
 		}
@@ -370,7 +380,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 			// A connected mcp-server call completes during resolution by listing
 			// its live tools, so account for that successful call here too.
 			if rc.ProxyAction == "call" && !rc.Unavailable {
-				a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), nil)
+				a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), nil, nil)
 			}
 			result := rc.Result
 			if a.task.ledger != nil {
@@ -553,7 +563,8 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Hooks can write beyond a tool's paths, so permission precedes lease
 	// acquisition and hooks follow it under a conservative workspace claim.
 	if plan.mutates && a.svc.workspaceLease != nil {
-		if err := a.svc.workspaceLease.AcquirePaths(ctx, a.workspaceWritePaths(plan)); err != nil {
+		end, err := a.svc.workspaceLease.HoldPaths(ctx, a.workspaceWritePaths(plan))
+		if err != nil {
 			return toolOutcome{
 				output:         fmt.Sprintf("blocked: %v", err),
 				blocked:        true,
@@ -562,6 +573,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 				workspaceLease: workspaceLeaseConflictScope(err),
 			}, true
 		}
+		plan.releaseLeaseHold = end
 	}
 	// Hold the parent claim before PreToolUse: hooks are user shell code and may
 	// mutate the same workspace. The reservation remains live through hooks,
@@ -581,12 +593,12 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Acquire the checkpoint barrier before preimage capture and any hook. It is
 	// held through post hooks and AfterMutation so rewind cannot interleave with
 	// writer-side user code.
-	if !plan.readOnly && a.svc.mutationObserver != nil && a.svc.mutationObserver.Store() != nil {
-		barrier := a.svc.mutationObserver.Store().Barrier()
-		if err := barrier.EnterWrite(); err != nil {
-			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: mutation barrier unavailable"}, true
+	if !plan.readOnly && a.svc.mutationObserver != nil {
+		release, err := a.svc.mutationObserver.BeginWrite()
+		if err != nil {
+			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: checkpoint write preparation failed"}, true
 		}
-		plan.releaseMutationWrite = barrier.ExitWrite
+		plan.releaseMutationWrite = release
 	}
 	// Checkpoint the file this writer is about to change before PreToolUse.
 	// A hook may mutate and then block the call, so the deferred AfterMutation
@@ -650,6 +662,7 @@ func toolHooksMayMutateWorkspace(hooks ToolHooks) bool {
 // post hooks and recovery observation, and truncates the model-facing result.
 func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) toolOutcome {
 	plan.executed = true
+	a.announceDelegation(plan)
 	cctx := plan.cctx
 	runTool := plan.runTool
 	runArgs := plan.runArgs
@@ -714,6 +727,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
+	plan.ranClean = err == nil
 	result, err = a.interceptToolAfter(ctx, call, result, err)
 	// A tool that refused its own call never ran: report it like the permission
 	// and plan-mode blocks above rather than as an execution failure.
@@ -725,11 +739,11 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	a.recordToolReceipts(ctx, plan, result, execution, err)
 	result = a.withObligationNotice(result, owedBefore, execution, readOnly)
 	// Track skill/capability outcomes for Delivery gates.
-	a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), err)
+	a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), runTool, err)
 	a.notifyToolHooks(ctx, permName, permArgs, result, err)
 	// Always re-read after post hooks — partial writes and hook side effects can
 	// change the previewed path even when the concrete tool returned an error.
-	a.observeAfterMutation(plan)
+	checkpointErr := a.observeAfterMutation(plan)
 	plan.mutationAfterDone = true
 	if a.svc.recoveryGate != nil {
 		a.observeRecoveryResult(ctx, evidenceName, evidenceArgs, readOnly, mutates, result, err, false, false, recoveryGen)
@@ -748,18 +762,19 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
 			output: body, images: images, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
-			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err),
+			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
 		if truncMsg != "" {
 			out.rawOutput = rawErr
 		}
 		return out
 	}
+	a.observeTouchedPaths(runTool, runArgs)
 	result = silentSuccessDetail(evidenceName, evidenceArgs, result)
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
 		output: body, images: images, bound: bound, truncMsg: truncMsg,
-		execution: execution, provenance: plan.provenanceOf(runTool, runArgs),
+		execution: execution, provenance: plan.provenanceOf(runTool, runArgs), checkpointErr: checkpointErr,
 	}
 	if truncMsg != "" {
 		out.rawOutput = result
@@ -780,16 +795,4 @@ func annotateShellSubject(execution *tool.ShellExecution, args json.RawMessage) 
 	if subject, cut := shellrun.OperativeCommand(cmd); cut {
 		execution.Subject = subject
 	}
-}
-
-// delegationProfile reports the sub-agents a call dispatches. A nil profile is
-// what says the call kept the work in this context.
-func delegationProfile(t tool.Tool, args json.RawMessage) *event.Profile {
-	pr, ok := t.(interface {
-		ResolveProfile(json.RawMessage) *event.Profile
-	})
-	if !ok {
-		return nil
-	}
-	return pr.ResolveProfile(args)
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
+import logoWordmark from "../assets/logo-wordmark.svg";
 import { HttpError } from "../port/port";
 import type { AgentPort, Protocol, ProviderProbe, ProviderSetup } from "../port/port";
 import { KIND_LABEL, nameFrom } from "./vendors";
@@ -143,7 +144,8 @@ export function Onboarding({ port, setup, onDone }: Props) {
         vision: found.vision,
         replace: true,
       });
-      await port.setModel(`${name}/${model}`, true);
+      await port.setModel(`${name}/${model}`);
+      await port.setDefaultModel(`${name}/${model}`);
       onDone();
     } catch (e) {
       setErr(failed(e));
@@ -170,8 +172,10 @@ export function Onboarding({ port, setup, onDone }: Props) {
   return (
     <div className="onb-stage">
       <header className="onb-brandbar" onDoubleClick={zoomOnTitleBar}>
-        <span className="onb-brandmark" aria-hidden="true">R</span>
-        <span className="onb-brandname"><b>reasonix</b><small>studio</small></span>
+        <span className="onb-lockup">
+          <img className="onb-wordmark" src={logoWordmark} alt="Reasonix Studio" draggable={false} />
+          <small className="onb-brandsub" aria-hidden="true">studio</small>
+        </span>
         <WindowControls />
       </header>
       <div className="onb-shell">

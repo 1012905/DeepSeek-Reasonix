@@ -18,6 +18,16 @@ export class SseExtensions extends SseLook {
   reloadExtensions() {
     return this.post("/extensions/reload");
   }
+  extensionSurfaces() {
+    return this.get<import("./wire").ExtensionSurface[]>("/extensions/surfaces");
+  }
+  async invokeExtensionAction(name: string) {
+    const out = await this.post0<{ message?: string }>("/extensions/action", { name });
+    return out.message ?? "";
+  }
+  submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>) {
+    return this.post("/extensions/submit", { pluginId, surfaceId, values });
+  }
   setSkillEnabled(name: string, enabled: boolean, scope: ScopeLayer = "project", root?: string) {
     return this.post("/skills/enabled", { name, enabled, scope, root });
   }
@@ -49,8 +59,8 @@ export class SseExtensions extends SseLook {
     const query = params.toString();
     return this.get<MarketList>("/market/packages" + (query ? "?" + query : ""));
   }
-  marketDetail(slug: string) {
-    return this.get<MarketDetail>(marketPath(slug));
+  marketDetail(slug: string, opts?: { refresh?: boolean }) {
+    return this.get<MarketDetail>(marketPath(slug) + (opts?.refresh ? "?refresh=1" : ""));
   }
   marketMyVote(slug: string) {
     return this.get<MarketVote>(marketPath(slug) + "/vote");

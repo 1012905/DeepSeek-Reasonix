@@ -97,6 +97,9 @@ type Status struct {
 	Newer     bool
 	AutoOK    bool // may be installed without asking; false while pinned
 	StalePin  bool
+	// Withdrawn is set when the running version itself was pulled, so a panel
+	// can say so and point at Latest instead of presenting an ordinary update.
+	Withdrawn *WithdrawnEntry
 	Entries   []IndexEntry
 }
 
@@ -110,6 +113,9 @@ func (u *Updater) Check(ctx context.Context) (Status, error) {
 		return st, err
 	}
 	st.Entries = idx.Versions
+	if w, gone := idx.WithdrawnVersion(st.Current); gone {
+		st.Withdrawn = &w
+	}
 	for _, e := range idx.Versions {
 		if st.Latest == "" || CompareVersions(e.Version, st.Latest) > 0 {
 			st.Latest = e.Version

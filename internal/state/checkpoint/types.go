@@ -107,12 +107,12 @@ type Meta struct {
 	Time               time.Time
 	Prompt             string
 	Paths              []string
+	RewindFiles        int
 	Coverage           Coverage
 	CoverageGaps       []CoverageGap
 	ExpiredFilePayload bool
 	ActiveWriters      []ActiveWriter
 	Legacy             bool
-	CanUndoFiles       bool
 	DisabledReason     string
 }
 
@@ -191,6 +191,13 @@ type RewindPlan struct {
 	ConflictResolution string `json:"conflictResolution,omitempty"`
 }
 
+// RewindUndo describes the currently retained undo offer.
+type RewindUndo struct {
+	TransactionID string `json:"transactionId"`
+	Turn          int    `json:"turn"`
+	Files         int    `json:"files"`
+}
+
 // RewindResult is returned after commit or undo.
 type RewindResult struct {
 	OK             bool             `json:"ok"`
@@ -221,11 +228,12 @@ const (
 type TransactionState string
 
 const (
-	TxPrepared   TransactionState = "prepared"
-	TxCommitting TransactionState = "committing"
-	TxCommitted  TransactionState = "committed"
-	TxAborted    TransactionState = "aborted"
-	TxUndone     TransactionState = "undone"
+	TxPrepared    TransactionState = "prepared"
+	TxCommitting  TransactionState = "committing"
+	TxCommitted   TransactionState = "committed"
+	TxAborted     TransactionState = "aborted"
+	TxUndone      TransactionState = "undone"
+	TxInvalidated TransactionState = "invalidated"
 )
 
 // TransactionTarget is one file's forward/restore payload inside a transaction.

@@ -48,6 +48,29 @@ export const PRIMITIVES: Primitive[] = [
   { file: "ui/Menu.tsx", callbacks: { onPick: "click" } },
 ];
 
+export const LIBRARY_PRIMITIVES: { module: string; name: string; callbacks: Record<string, string> }[] = [
+  { module: "@mantine/core", name: "Button", callbacks: { onClick: "click" } },
+  { module: "@mantine/core", name: "TextInput", callbacks: { onChange: "change" } },
+  { module: "@mantine/core", name: "Textarea", callbacks: { onChange: "change" } },
+  { module: "@mantine/core", name: "Checkbox", callbacks: { onChange: "change" } },
+  { module: "@mantine/core", name: "Radio.Card", callbacks: { onClick: "click" } },
+  { module: "@mantine/core", name: "Checkbox.Card", callbacks: { onClick: "click" } },
+];
+
+function libraryPrimitive(tree: Node, target: string): { callbacks: Record<string, string> } | undefined {
+  const [local, ...members] = target.split(".");
+  let contract: { callbacks: Record<string, string> } | undefined;
+  walk(tree, n => {
+    if (n.type !== "ImportDeclaration") return;
+    for (const sp of (n.specifiers as Node[])) {
+      if (sp.type !== "ImportSpecifier" || (sp.local as Node).name !== local) continue;
+      const name = [(sp.imported as Node).name, ...members].join(".");
+      contract = LIBRARY_PRIMITIVES.find(p => p.module === (n.source as Node).value && p.name === name);
+    }
+  });
+  return contract;
+}
+
 /** A primitive is the file, wherever the tree being scanned is rooted. The
  *  callers key their trees three different ways — the gate relative to the
  *  package, the census absolute, and the fixture corpus under a root that is
@@ -66,7 +89,7 @@ export const USER_INPUT = new Set([
   "paste", "cut", "copy", "drop", "dragstart", "dragover", "dragleave", "dragenter", "dragend", "wheel",
 ]);
 export const RUNTIME_EVENT = new Set([
-  "resize", "visibilitychange", "online", "offline", "load", "error", "beforeunload", "pagehide",
+  "resize", "visibilitychange", "online", "offline", "load", "error", "beforeunload", "pagehide", "pageshow",
   "unload", "message", "storage", "focus", "blur", "transitionend", "animationend", "popstate",
   "hashchange", "languagechange", "themechange", "fullscreenchange", "abort", "close", "open",
 ]);
@@ -502,13 +525,13 @@ export function certifyRoots(sources: Map<string, string | Node>, opts: Options 
         let abstraction: "host" | "primitive" | "wiring" | "unknown" = "host";
         // Set only for a certified primitive: the contract that says which of
         // its props are inputs, so this does not fall back to reading names.
-        let contract: Primitive | undefined;
+        let contract: { callbacks: Record<string, string> } | undefined;
         if (/^[A-Z]/.test(el)) {
           const imp = importsOf.get(path)?.get(el);
           const decl = imp?.file ?? (declaresLocally(trees.get(path)!, imp?.name ?? el) ? path : null);
           const prim = decl === null ? undefined : primitiveAt(certified, decl);
-          contract = prim;
-          abstraction = decl === null ? "unknown" : prim ? "primitive" : "wiring";
+          contract = prim ?? libraryPrimitive(tree, el);
+          abstraction = contract ? "primitive" : decl === null ? "unknown" : "wiring";
         }
         const a: Record<string, unknown> = {};
         for (const at of (n.attributes as Node[])) {

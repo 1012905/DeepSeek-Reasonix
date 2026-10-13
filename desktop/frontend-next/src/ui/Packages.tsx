@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { t } from "../i18n";
 import type { AgentPort, PluginExport, PluginItem, PluginPackage } from "../port/port";
 import { Switch } from "./Switch";
+import { CopyButton } from "./CopyButton";
 import { reason } from "../i18n/kernel";
 
 interface Props {
@@ -152,7 +153,10 @@ function Package({
           void run("remove", async () => {
             const out = await port.removePlugin(p.name);
             setConfirming(false);
-            if (out.applied && out.reloadError) onReloadError(out.reloadError);
+            if (out.applied) {
+              if (out.reloadError) onReloadError(out.reloadError);
+              else onReloaded();
+            }
             if (!out.ok) setFailed(out.error || out.next || t("没能删掉"));
           })
         }
@@ -193,6 +197,11 @@ function Package({
             : t("该包不需要填写任何密钥。")}
         </div>
       )}
+      {exported?.savedTo && (
+        <div className="acts">
+          <CopyButton text={exported.savedTo} label={t("复制路径")} />
+        </div>
+      )}
     </>
   );
 
@@ -218,8 +227,8 @@ function Package({
             <span className="sc">{name}</span>
           </div>
         ))}
-        {p.hooks?.map((h) => (
-          <div className="row" data-run key={h.event + h.command}>
+        {p.hooks?.map((h, index) => (
+          <div className="row" data-run key={index}>
             <span className="d">▸</span>
             <span>{h.event}</span>
             <span className="sc">{h.description || h.command || h.contextFile}</span>
@@ -259,6 +268,7 @@ function Contributions({ label, items }: { label: string; items?: PluginItem[] }
           <span className="d">·</span>
           <span>{it.invocation || it.name}</span>
           <span className="sc">{it.description}</span>
+          {it.invocation && <CopyButton key={it.invocation} text={it.invocation} iconOnly label={t("复制调用命令 {command}", { command: it.invocation })} />}
         </div>
       ))}
     </div>

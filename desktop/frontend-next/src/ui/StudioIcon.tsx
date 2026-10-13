@@ -2,7 +2,6 @@ import type { SVGProps } from "react";
 
 // Exact outline geometry used by the Reasonix Studio prototype.
 const PATHS = {
-  brand: "M6 20V4h7a5 5 0 0 1 0 10H6m7 0 6 6",
   folder: "M3 7V5h6l3 3h9v12H3V7z",
   reveal: "M12 20H3V5h6l3 3h9v4M15 20l6-6M16 14h5v5",
   file: "M14 3H5v18h14V8l-5-5v5h5M8 12h8M8 16h5",
@@ -12,6 +11,7 @@ const PATHS = {
   plus: "M12 5v14M5 12h14",
   arrow: "M12 20V4m-6 6 6-6 6 6",
   close: "m6 6 12 12M6 18 18 6",
+  expand: "M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7",
   check: "m5 12 4 4L19 6",
   globe: "M3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
   code: "m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18",

@@ -172,8 +172,11 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 	// change without the final-readiness gate ever seeing it. Plan turns defer
 	// this lease like collectBackgroundEvidence does so execution evidence is
 	// consumed and audited only after plan approval.
+	if a.svc.jobs != nil {
+		a.turn.jobSession = jobs.SessionFromContext(ctx)
+	}
 	if a.task.ledger != nil && a.svc.jobs != nil && !a.PlanningPhase() {
-		session := jobs.SessionFromContext(ctx)
+		session := a.turn.jobSession
 		for _, jobID := range a.svc.jobs.PendingEvidenceJobIDsForSession(session) {
 			summary, ready := a.svc.jobs.TryLeaseEvidenceForSession(session, jobID)
 			if !ready {
@@ -266,21 +269,12 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// guidance (with a prefix), not a new task. One cache miss per
 		// steer is unavoidable — the model must see the new instruction.
 		if text, entry, ok := a.consumeSteer(); ok {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(sessionstore.MidTurnSteerMessage(text, entry.host)), Via: entry.via})
-			a.svc.sink.Emit(event.Event{Kind: event.Steer, Text: text, ItemID: entry.itemID, Via: entry.via, HostAuthored: entry.host})
+			a.landSteer(text, entry)
 		} else if entry.itemID != "" {
 			// Loader failed after dequeue: durable entry stays for inspection
 			// (unapplied path marks uncertain + pause via the notice sink).
 			a.recordUnappliedSteer("(body load failed)", entry.host, entry.itemID)
 		}
-		// Context pressure rides the turn tail, never the cached prefix: an
-		// append leaves the prefix byte-stable, and a model that knows a fold
-		// is near can restate what the summary would drop.
-		if notice := a.window().contextBudgetNotice(); notice != "" {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: sessionstore.MidTurnSteerMessage(notice, true)})
-			a.svc.sink.Emit(contextBudgetNoticeEvent(a.ContextBudget()))
-		}
-
 		schemas := a.svc.tools.ProviderSchemas(ctx)
 		a.sess.lastProviderSchemas = schemas
 		prefixShape := a.capturePrefixShape(schemas)
@@ -309,7 +303,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			// Exhausted stream retries (or a non-retryable error): persist one
 			// bounded LocalOnly recovery record for the next real user message.
 			// Intermediate failed attempts never wrote session state.
-			a.recordInterruptedDisplay(text, reasoning, partialCalls, true, state.workDurationMs())
+			a.recordInterruptedDisplay(text, reasoning, partialCalls, true, state.workDurationMs(), provider.StreamFailureCauseOf(err))
 			return err
 		}
 		a.sess.lastPrefixShape = prefixShape
@@ -330,6 +324,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// archive. Most OpenAI-compatible backends do not replay it; providers
 		// with an explicit round-trip contract retain the raw provider text.
 		calls = a.withPreviewFileDiffs(ctx, calls)
+		workMs, committed := state.workDurationMs(), a.callsToCommit(streamed, calls)
 		a.sess.conversation.Add(provider.Message{
 			Role:               provider.RoleAssistant,
 			Content:            text,
@@ -337,12 +332,15 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			ReasoningSignature: signature,
 			ReasoningID:        streamed.reasoningID,
 			ReasoningStatus:    streamed.reasoningStatus,
-			ToolCalls:          a.callsToCommit(streamed, calls),
+			ToolCalls:          committed,
 			ResponsesItems:     responsesItems,
-			WorkDurationMs:     state.workDurationMs(),
+			WorkDurationMs:     workMs,
 			ThoughtMs:          streamed.thoughtMs,
 			ModelRef:           a.modelRef,
 		})
+		if len(committed) == 0 {
+			state.answeredMs = workMs
+		}
 		if cont, perr := a.settlePerseveration(state, streamed); !cont {
 			return perr
 		} else if streamed.perseverationAborted {
@@ -626,10 +624,10 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 		if a.role.requireVisibleFinal || owedSynthesis || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
 			state.emptyFinalBlocks++
 			if state.emptyFinalBlocks >= maxEmptyFinalBlocks {
-				return false, fmt.Errorf("model finished without a visible final answer %d times", state.emptyFinalBlocks)
+				return false, &EmptyFinalError{Blocks: state.emptyFinalBlocks, FinishReason: finishReasonOf(usage)}
 			}
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeEmptyFinal, Text: emptyFinalNotice(), Detail: emptyFinalNoticeDetail(a.svc.prov.Name(), usage, len(reasoning))})
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage()), HostAuthored: true})
+			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage(usage)), HostAuthored: true})
 			return true, nil
 		}
 	}
@@ -731,7 +729,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 	// If the context was cancelled during tool execution, return after storing
 	// the batch results so the session keeps paired tool-call history.
 	if ctx.Err() != nil {
-		a.recordInterruptedDisplay("", "", nil, true, state.workDurationMs())
+		a.recordInterruptedDisplay("", "", nil, true, state.workDurationMs(), "")
 		return false, ctx.Err()
 	}
 	if pause := a.settleProgressRound(state, mark); pause != nil {

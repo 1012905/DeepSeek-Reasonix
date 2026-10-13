@@ -9,12 +9,13 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/event"
-	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/extension"
 	"reasonix/internal/ext/extension/dispatch"
 	"reasonix/internal/platform/browser"
 	"reasonix/internal/runtime/guardian"
 	"reasonix/internal/state/sessiontemp"
+	"reasonix/internal/state/workspacelease"
+	"reasonix/internal/tools/jobs"
 )
 
 // SetOnSessionRecovered installs the ownership handoff invoked before the
@@ -252,25 +253,8 @@ func (c *Controller) Branch(name string) (string, error) {
 	if err := c.Snapshot(); err != nil {
 		return "", c.rewindFail(err)
 	}
-	parentPath := c.SessionPath()
-	parentID := sessionstore.BranchID(parentPath)
-	src := c.executor.Session().Snapshot()
-	branched := append([]provider.Message(nil), src...)
-	sess := sessionstore.NewSession("")
-	sess.Messages = branched
-
-	newPath := sessionstore.NewSessionPath(c.sessionDir, c.label)
-	if err := sess.SaveIfAbsent(newPath); err != nil {
-		return "", c.rewindFail(err)
-	}
-	branchPreview, branchTurns := sessionstore.SessionPreviewFromMessages(branched)
-	if err := sessionstore.SaveBranchMeta(newPath, sessionstore.BranchMeta{
-		Name:          strings.TrimSpace(name),
-		ParentID:      parentID,
-		Preview:       branchPreview,
-		Turns:         branchTurns,
-		SchemaVersion: sessionstore.BranchMetaCountsVersion,
-	}); err != nil {
+	sess, newPath, err := c.seedBranch(c.executor.Session().Snapshot(), name)
+	if err != nil {
 		return "", c.rewindFail(err)
 	}
 	// See snapshotMu: the swap must not interleave with an in-flight save.
@@ -452,7 +436,7 @@ func (c *Controller) setSessionPath(p string, fresh bool) {
 }
 
 func (c *Controller) setActiveJobSession(sessionPath string) {
-	if c.jobs != nil {
+	if c.jobs != nil && !c.borrowsJobs() {
 		c.jobs.SetActiveSessionPath(sessionstore.BranchID(sessionPath), sessionPath)
 	}
 }
@@ -476,6 +460,18 @@ func (c *Controller) parentSessionID() string {
 // between that check and the actual SetSession, a turn could start and then be
 // yanked out from under the run loop.
 func (c *Controller) beginRotation() error {
+	releaseWorkspace, err := c.tryWorkspaceActivity()
+	if err != nil {
+		if errors.Is(err, ErrTurnRunning) {
+			return errTurnRunningRotation
+		}
+		return err
+	}
+	defer func() {
+		if releaseWorkspace != nil {
+			releaseWorkspace.release()
+		}
+	}()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.gate.active() {
@@ -485,6 +481,7 @@ func (c *Controller) beginRotation() error {
 		return errRotationInProgress
 	}
 	c.gate.rotating = true
+	c.gate.workspaceRelease, releaseWorkspace = releaseWorkspace, nil
 	return nil
 }
 
@@ -518,6 +515,33 @@ func (c *Controller) CloseAfterDestroy() {
 	c.close(true, closeJobsAsync)
 }
 
+// CloseHandingOffJobs closes a controller whose replacement adopted its job
+// manager and workspace lease: the jobs keep running on the model they started
+// with, and the resources they use are released once they finish.
+func (c *Controller) CloseHandingOffJobs() {
+	c.close(true, closeJobsHandedOff)
+}
+
+// CloseSharingJobs closes a replacement that never went live. It bound nothing
+// on the manager and lease it adopted, so closing leaves them to the controller
+// they were borrowed from.
+func (c *Controller) CloseSharingJobs() {
+	c.close(false, closeJobsShared)
+}
+
+// JobManager is the manager a replacement adopts to keep this controller's
+// jobs running across a rebuild.
+func (c *Controller) JobManager() *jobs.Manager { return c.jobs }
+
+// WorkspaceLeaseOwner is the write-claim owner a replacement adopts with the
+// job manager, since a running job retains the claim.
+func (c *Controller) WorkspaceLeaseOwner() *workspacelease.Owner { return c.workspaceLease }
+
+// SharesJobsWith reports whether both controllers drive one job manager.
+func (c *Controller) SharesJobsWith(other *Controller) bool {
+	return c != nil && other != nil && c.jobs != nil && c.jobs == other.jobs
+}
+
 func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 	// Desktop tab lifecycles can race a rebind/model-switch/close on the same
 	// controller; make teardown idempotent so a duplicate Close cannot re-fire
@@ -542,6 +566,7 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 			c.gate.canceling = true
 		}
 		c.mu.Unlock()
+		c.leaveCurrencyGroup()
 		if cancel != nil {
 			// clearAll deliberately does not signal waiters. Pair it with the
 			// foreground cancellation so approval/ask waits always unblock.
@@ -556,12 +581,17 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 			switch jobsMode {
 			case closeJobsAsync:
 				c.jobs.CloseAsync()
+			case closeJobsHandedOff, closeJobsShared:
 			default:
 				c.jobs.Close() // cancel any still-running background jobs
 			}
 		}
 		if c.cleanup != nil {
-			c.cleanup()
+			if jobsMode == closeJobsHandedOff && c.jobs != nil {
+				c.jobs.AfterUnfinished(c.cleanup)
+			} else {
+				c.cleanup()
+			}
 		}
 		// Drop the Controller owner reference last so background job leases
 		// that outlive close still pin retired generations until they exit.
@@ -578,7 +608,6 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 // generation — the private temporary directory and the browser — reusing what a
 // hot rebuild hands over, so ReleaseResources/Close never race a replacement.
 func (c *Controller) adoptSessionResources(opts Options) {
-	c.workspaceLease.SetSessionID(func() string { return sessionstore.BranchID(c.SessionPath()) })
 	c.sessionTemp = opts.SessionTemp
 	if c.sessionTemp == nil {
 		c.sessionTemp = sessiontemp.New()
@@ -611,34 +640,7 @@ func (c *Controller) BrowserOpen(ctx context.Context, rawURL, tabID string, newT
 	if !newTab {
 		return c.browser.Visit(ctx, rawURL, tabID, newTab)
 	}
-	return openBeside(ctx, c.browser, rawURL)
-}
-
-// A person's open answers once the page is drawn; only the agent's waits for
-// every subresource, since it reads what loaded.
-type tabOpener interface {
-	Tabs() []browser.TabInfo
-	Visit(ctx context.Context, rawURL, tabID string, newTab bool) (browser.TabInfo, error)
-	Switch(tabID string) (browser.TabInfo, error)
-}
-
-// openBeside opens rawURL in a new tab and hands the active one back to the
-// tab that held it, when one did.
-func openBeside(ctx context.Context, b tabOpener, rawURL string) (browser.TabInfo, error) {
-	held := ""
-	for _, t := range b.Tabs() {
-		if t.Active {
-			held = t.ID
-		}
-	}
-	info, err := b.Visit(ctx, rawURL, "", true)
-	if held == "" || info.ID == "" || info.ID == held {
-		return info, err
-	}
-	if _, serr := b.Switch(held); serr == nil {
-		info.Active = false
-	}
-	return info, err
+	return c.browser.VisitBeside(ctx, rawURL)
 }
 
 // BrowserSession is the agent's browser, which a rebuild hands to the

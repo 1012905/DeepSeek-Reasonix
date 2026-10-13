@@ -119,6 +119,10 @@ type Skill struct {
 	// InvalidProfiles preserves rejected profiles frontmatter values so doctor
 	// can warn about typos; the parser drops them from Profiles silently.
 	InvalidProfiles []string
+	// Paths are globs from `paths:` frontmatter; empty means always eligible.
+	// InvalidPaths keeps rejected globs for doctor.
+	Paths        []string
+	InvalidPaths []string
 }
 
 // SlashName returns the user-facing slash identifier. Plugin skills use a
@@ -181,6 +185,7 @@ type Store struct {
 	stderr           io.Writer
 	requiresReady    func([]string) []string
 	toolBindings     func(Skill) []tool.MCPBinding
+	hits             *PathHits
 }
 
 // New builds a Store. Relative custom paths and a relative project root are made
@@ -224,6 +229,7 @@ func New(opts Options) *Store {
 		stderr = os.Stderr
 	}
 	return &Store{
+		hits:             NewPathHits(base),
 		homeDir:          home,
 		reasonixHomeDir:  reasonixHome,
 		projectRoot:      root,
@@ -434,9 +440,10 @@ func (s *Store) roots() []discoveryRoot {
 		dirs = append(dirs, de{filepath.Join(s.reasonixHomeDir, SkillsDirname), ScopeGlobal, false})
 	}
 	if config.IsolatedHomeDir() == "" {
+		reasonixHome := canonicalSkillPath(s.reasonixHomeDir)
 		for _, c := range config.ConventionDirs {
 			dir := filepath.Join(s.homeDir, c, SkillsDirname)
-			if s.reasonixHomeDir != "" && config.CanonicalSkillPath(filepath.Dir(dir)) == config.CanonicalSkillPath(s.reasonixHomeDir) {
+			if s.reasonixHomeDir != "" && canonicalSkillPath(filepath.Dir(dir)) == reasonixHome {
 				continue
 			}
 			dirs = append(dirs, de{dir, ScopeGlobal, c == ".claude"})
@@ -444,10 +451,10 @@ func (s *Store) roots() []discoveryRoot {
 	}
 	out := make([]discoveryRoot, 0, len(dirs))
 	for _, d := range dirs {
-		if s.excludedPaths[config.CanonicalSkillPath(d.dir)] {
+		key := canonicalSkillPath(d.dir)
+		if s.excludedPaths[key] {
 			continue
 		}
-		key := config.CanonicalSkillPath(d.dir)
 		out = append(out, discoveryRoot{
 			Root:              Root{Dir: d.dir, Scope: d.scope, Priority: len(out), Status: pathStatus(d.dir)},
 			requireFlatMarker: d.requireFlatMarker,
@@ -868,6 +875,7 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 		sk.Invalid = append(sk.Invalid, "frontmatter is not valid YAML; read line by line (quote values that contain [ ] : or #)")
 	}
 	sk.Profiles, sk.InvalidProfiles = parseProfilesFrontmatter(fm[skillFrontmatterProfiles])
+	sk.Paths, sk.InvalidPaths = parsePathsFrontmatter(fm[skillFrontmatterPaths])
 	return sk, true
 }
 
@@ -1328,4 +1336,13 @@ func dedupePaths(paths []string) []string {
 // lives in internal/base/frontmatter.
 func splitFrontmatter(s string) (map[string]string, string) {
 	return frontmatter.SplitLegacy(s)
+}
+
+// PathHits is the files the session has touched, which decide whether a skill
+// that declared `paths:` may be shown to the model. A nil store has none.
+func (s *Store) PathHits() *PathHits {
+	if s == nil {
+		return nil
+	}
+	return s.hits
 }

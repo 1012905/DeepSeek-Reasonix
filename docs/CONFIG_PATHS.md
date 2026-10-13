@@ -175,6 +175,22 @@ If a gateway requires vendor-specific top-level request body fields, set
 are merged into the OpenAI-compatible chat JSON request body without allowing
 core fields such as `model`, `messages`, `tools`, or `stream` to be overridden.
 
+### Web search model
+
+Settings > Model preferences > Web search saves `agent.web_search_model`.
+
+Empty or `"auto"` changes nothing: the conversation provider's own built-in
+search keeps serving, on that provider's account only.
+An explicit `"provider/model"` replaces it with a separate search request on that
+account, which carries no conversation context and is billed on its own.
+
+An unavailable assignment emits a `web_search_model_<reason>` notice
+(`bad_ref`, `not_added`, `removed`, `unsupported`, `no_credentials`) and leaves
+search off. It never selects another account.
+
+Project `reasonix.toml` can override the global preference;
+the settings row shows that override while editing the global value.
+
 ## Global `.env`
 
 `<Reasonix home>/.env` is the single runtime source for provider API keys saved
@@ -319,3 +335,27 @@ Version limits:
 - Plain `/migrate` rescans the legacy locations listed above. Use
   `/migrate --from <path>` only for a known v0.x session source; it is not a
   backup restore tool or a downgrade importer.
+
+## Logs and crash files
+
+Studio keeps its logs next to its window profile, not in the Reasonix home:
+
+| Platform | Logs directory |
+| --- | --- |
+| macOS | `~/Library/Application Support/Reasonix Studio/io.reasonix.studio.<instance>/logs` |
+| Windows | `%APPDATA%\Reasonix Studio\io.reasonix.studio.<instance>\logs` |
+| Linux | `~/.config/Reasonix Studio/io.reasonix.studio.<instance>/logs` |
+
+| File | What it holds |
+| --- | --- |
+| `shell.log` | The window process: launch, kernel start and handshake, and how the kernel exited (`host: died code=… signal=…`) with the tail of its crash file. |
+| `host.log` | The kernel's own output. Successful polling requests are not logged at INFO, so errors stay in it longer. |
+| `crash/host-<time>-<version>-<pid>.log` | What the Go runtime printed when the kernel was killed by a fatal error or panic, for example `fatal error: out of memory`. Newest 5 are kept, each cut to its last 256 KiB. A clean exit leaves none. |
+
+Each file rotates at 1 MiB (3 files kept) except the crash files above. After an
+unexpected kernel exit the next launch says so once.
+
+When reporting a problem, attach `shell.log`, `host.log` and any newer file in
+`crash/`. `shell.log` and `host.log` are redacted of the launch credential; the
+crash files are the runtime's raw output and may contain stack frames, paths and
+panic text. Read them before sharing.

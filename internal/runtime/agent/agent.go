@@ -10,6 +10,7 @@ import (
 	"reasonix/internal/runtime/langpref"
 	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/state/sessionstore"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -486,7 +487,7 @@ func (a *Agent) withTurnPreferences(input string) string {
 		}
 	}
 	input = langpref.WithReasoningLanguage(input, lang)
-	input = WithWorkspace(input, a.writeWorkspaceRoot, a.workspaceVCS)
+	input = WithWorkspace(input, a.writeWorkspaceRoot, a.workspaceVCS, a.extraRoots)
 	// The frozen role setting rides the per-turn <execution-policy>, not a marker.
 	return input
 }
@@ -544,6 +545,7 @@ func (a *Agent) Session() *sessionstore.Session {
 // running turn (it only fires while idle); sessMu guards the pointer swap itself.
 func (a *Agent) SetSession(s *sessionstore.Session) {
 	a.sess.reset(s)
+	a.replayTouchedPaths(s)
 	// The replaced conversation's task is over, but the ledger and the bill
 	// answer to beginRunTurn's scope check rather than to this seam.
 	if s != nil {
@@ -665,6 +667,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 			classifierTaskText:      opts.ClassifierTaskText,
 			writeWorkspaceRoot:      strings.TrimSpace(opts.WriteWorkspaceRoot),
 			observeRoot:             opts.observeRoot(),
+			extraRoots:              slices.Clone(opts.ExtraWorkspaceRoots),
 			workspaceScanLimit:      opts.WorkspaceScanLimit,
 			renderRoot:              strings.TrimSpace(opts.RenderRoot),
 			workspaceVCS:            strings.TrimSpace(opts.WorkspaceVCS),
@@ -681,12 +684,8 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 			path:         strings.TrimSpace(opts.SessionPath),
 			win:          windowState{cacheState: CacheStateUnknown},
 		},
-		task: newTaskRuntime(opts.TaskBudget),
-		role: agentRole{
-			requireVisibleFinal: opts.RequireVisibleFinal,
-			readOnlyExecution:   opts.ReadOnlyExecution,
-			plannerMCPExecution: opts.PlannerMCPExecution,
-		},
+		task:        newTaskRuntime(opts.TaskBudget),
+		role:        newAgentRole(opts),
 		eventSource: opts.EventSource,
 		recovery: recoveryIdentity{
 			agentID: strings.TrimSpace(opts.RecoveryAgentID),
@@ -805,6 +804,7 @@ func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, read
 // in hours or tokens rather than a round count, and every such budget ships off.
 // Turn policy lives in beginRunTurn / runToolLoop / handleFinalResponse.
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
+	ctx, report := takeRunTimeSink(ctx)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey
 	runLimitHostOwned := false
@@ -862,7 +862,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	state.runMaxStepsKey = runMaxStepsKey
 	state.runLimitHostOwned = runLimitHostOwned
 	state.workDurationMs = workDurationMs
-	return a.runToolLoop(ctx, state)
+	err := a.runToolLoop(ctx, state)
+	report(state.answeredMs, err)
+	return err
 }
 
 func boolInt(v bool) int {
@@ -1097,10 +1099,6 @@ func reasoningOnlyFinishHonoured(p provider.Provider, u *provider.Usage, reasoni
 		return false
 	}
 	return strings.TrimSpace(reasoning) != ""
-}
-
-func emptyFinalRetryMessage() string {
-	return "The previous assistant response finished without any visible answer text. Continue the same task now and provide a concise visible answer to the user. Do not send reasoning only."
 }
 
 func emptyFinalNotice() string {
@@ -1405,7 +1403,7 @@ func upsertPartialToolCall(calls []provider.ToolCall, call provider.ToolCall) []
 	return append(calls, call)
 }
 
-func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provider.ToolCall, pending bool, workDurationMs int64) {
+func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provider.ToolCall, pending bool, workDurationMs int64, cause provider.StreamFailureCause) {
 	displayCalls := make([]provider.ToolCall, 0, len(calls))
 	interrupted := make([]string, 0, len(calls))
 	seen := make(map[string]struct{}, len(calls))
@@ -1432,6 +1430,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 		LocalOnly:        true,
 		InterruptedTurn: &provider.InterruptedTurnRecovery{
 			Pending:                 pending,
+			StreamFailure:           cause,
 			InterruptedTools:        interrupted,
 			DroppedPartialText:      strings.TrimSpace(text) != "",
 			DroppedPartialReasoning: strings.TrimSpace(reasoning) != "",
@@ -1538,20 +1537,7 @@ func (a *Agent) emitResolvedToolDispatch(c provider.ToolCall, profile *event.Pro
 			CapabilityID: c.CapabilityID,
 		})
 	}
-	a.svc.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: event.Tool{
-		ID:           c.ID,
-		Name:         c.Name,
-		Args:         c.Arguments,
-		ResolvedName: c.ResolvedName,
-		CapabilityID: c.CapabilityID,
-		ReadOnly:     *c.ResolvedReadOnly,
-		Refreshed:    true,
-		Issuer:       event.IssuedByModel,
-		Profile:      profile,
-		FileDiff: event.FileDiff{
-			Diff: c.Diff, Added: c.Added, Removed: c.Removed,
-		},
-	}})
+	a.emitRefreshedDispatch(c, profile)
 }
 
 // refreshCurrentFileDiff recomputes a writer preview against the state left by
@@ -1730,15 +1716,16 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 		return toolOutcome{}, false
 	}
 
-	switch resolved.ProxyAction {
-	case "list", "inspect":
-		if !resolved.SkipExecute || resolved.Target != nil || !resolved.ReadOnly {
+	if usecap.IsCatalogReadAction(resolved.ProxyAction) {
+		if !isHostResolvedCatalogRead(resolved) {
 			return block("execute a malformed dynamic inspection")
 		}
 		return toolOutcome{}, false
-	case "decline":
+	}
+	switch resolved.ProxyAction {
+	case usecap.ActionDecline:
 		return block("decline a capability decision")
-	case "call":
+	case usecap.ActionCall:
 		if resolved.Target == nil {
 			if a.role.plannerMCPExecution && resolved.HostCompleted && resolved.SkipExecute && resolved.ReadOnly && !resolved.Unavailable {
 				if _, ok := usecap.ParseMCPServerCapabilityID(resolved.CapabilityID); ok {
@@ -1781,8 +1768,14 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 		}
 		return toolOutcome{}, false
 	default:
-		return block("execute an unknown dynamic capability action")
+		return block(fmt.Sprintf("execute dynamic capability action %q; allowed: %s, %s", resolved.ProxyAction, strings.Join(usecap.CatalogReadActions, ", "), usecap.ActionCall+" on a read-only target"))
 	}
+}
+
+// isHostResolvedCatalogRead is the structural shape of a catalog read: answered
+// by the host, no target, no deferred state transition (decline has a Commit).
+func isHostResolvedCatalogRead(rc *tool.ResolvedCall) bool {
+	return rc.SkipExecute && rc.Target == nil && rc.ReadOnly && rc.Commit == nil
 }
 
 func readOnlyExecutionMCPDestructive(t tool.Tool) bool {

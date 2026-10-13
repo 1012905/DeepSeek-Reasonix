@@ -2,6 +2,7 @@ package serve
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -30,50 +31,75 @@ func (s *Server) preset(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) registerModelRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /model", s.model)
+}
+
 func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Ref     string `json:"ref"`
-		Default bool   `json:"default"`
+		Ref string `json:"ref"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Ref) == "" {
 		missingField(w, "ref")
 		return
 	}
-	ref := strings.TrimSpace(body.Ref)
-	if err := s.switchModelRequested(r.Context(), ref); err != nil {
+	if err := s.switchModelRequested(r.Context(), strings.TrimSpace(body.Ref)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
-	}
-	// A switch is the session's own; default_model changes only on request. A
-	// pane resolving through the hub's resolver takes its default from there, so
-	// this machine's default_model is one it never reads.
-	if body.Default && s.resolver == nil {
-		persistDefaultModel(ref, s.ctl().ProviderCatalog())
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// persistDefaultModel records the choice in the user config. A refusal is worth
-// a log and nothing more: the live switch already succeeded, and failing the
-// request would say the model did not change when it did.
-func persistDefaultModel(ref string, catalog []provider.Descriptor) {
-	path := config.UserConfigPath()
-	if path == "" {
+// setDefaultModel records the model new sessions start on in this machine's user
+// config and leaves the session as it is. A pane resolving through a broker
+// takes its default from the home machine, so a write here would land in a file
+// that pane never reads.
+func (s *Server) setDefaultModel(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Ref string `json:"ref"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Ref) == "" {
+		missingField(w, "ref")
 		return
 	}
-	// Serialize against other in-process editors so concurrent writers do not
-	// drop each other's fields.
+	if s.resolver != nil {
+		refuse(w, http.StatusConflict, "settings.default_model_brokered", "this pane's default model belongs to the machine its models come from", nil)
+		return
+	}
+	ref := strings.TrimSpace(body.Ref)
+	catalog := s.ctl().ProviderCatalog()
+	edit := config.LoadForEdit(config.UserConfigPath())
+	if !edit.ModelRefSelectable(ref, catalog) {
+		refuse(w, http.StatusBadRequest, "settings.unknown_model", "no configured model matches that reference", map[string]any{"model": ref})
+		return
+	}
+	if err := edit.RequireAnswers(ref, config.AnswersChat); err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	if err := persistDefaultModel(ref, catalog); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// persistDefaultModel records the choice in the user config.
+func persistDefaultModel(ref string, catalog []provider.Descriptor) error {
+	path := config.UserConfigPath()
+	if path == "" {
+		return errNoUserConfig
+	}
 	unlock := config.LockUserConfigEdits()
 	defer unlock()
 	edit := config.LoadForEdit(path)
 	if err := edit.SetDefaultModel(ref, catalog); err != nil {
-		slog.Warn("serve: persist default model", "ref", ref, "err", err)
-		return
+		return err
 	}
-	if err := edit.SaveTo(path); err != nil {
-		slog.Warn("serve: save default model", "ref", ref, "path", path, "err", err)
-	}
+	return edit.SaveTo(path)
 }
+
+var errNoUserConfig = errors.New("no user configuration path")
 
 // autoApproveTools toggles YOLO/full-access tool auto-approval.
 func (s *Server) autoApproveTools(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +256,7 @@ type modelEntry struct {
 	// DisplayName labels Provider on screen; Ref and Provider stay the identity.
 	DisplayName string `json:"displayName,omitempty"`
 	Model       string `json:"model"`
+	ModelAlias  string `json:"modelAlias,omitempty"`
 	Kind        string `json:"kind,omitempty"`
 	// What this model produces, projected from the protocol table so a chooser
 	// filters on a declaration rather than on a kind's spelling.
@@ -248,6 +275,7 @@ type modelEntry struct {
 	// The capability face; see describeModel. Omitted fields mean "nothing
 	// declares this", never "no".
 	Vision        bool        `json:"vision,omitempty"`
+	WebSearch     bool        `json:"webSearch,omitempty"`
 	Efforts       []string    `json:"efforts,omitempty"`
 	Effort        string      `json:"effort,omitempty"`
 	ContextWindow int         `json:"contextWindow,omitempty"`

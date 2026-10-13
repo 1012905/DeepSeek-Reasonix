@@ -5,8 +5,10 @@ import (
 	"reasonix/internal/state/sessionstore"
 
 	"reasonix/internal/base/diff"
+	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/eventwire"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/surfacespec"
 	"reasonix/internal/contract/tool"
 )
 
@@ -29,6 +31,9 @@ type historyMessage struct {
 	// themselves: a turn that was only an image has no text to rebuild from,
 	// and a reader that sees zero of both drops it as host chrome.
 	Images int `json:"images,omitempty"`
+	// Attachments are the stored files the message references, resolved by the
+	// host so a reopened transcript previews what the live one did.
+	Attachments []eventwire.Attachment `json:"attachments,omitempty"`
 	// The session index this message occupies, which is what a checkpoint's
 	// boundary names. A reader rebuilding a transcript joins on it rather than
 	// on where a row happened to land after host chrome was dropped.
@@ -46,10 +51,12 @@ type historyMessage struct {
 	// Which model wrote this assistant turn. A reopened transcript has no
 	// turn_started to read it off, and the composer's current setting is a
 	// different fact that has usually moved on.
-	ModelRef   string            `json:"modelRef,omitempty"`
-	ThoughtMs  int64             `json:"thoughtMs,omitempty"` // host-measured, so a reopened turn keeps it
-	ToolCalls  []historyToolCall `json:"toolCalls,omitempty"`
-	ToolCallID string            `json:"toolCallId,omitempty"`
+	ModelRef  string `json:"modelRef,omitempty"`
+	ThoughtMs int64  `json:"thoughtMs,omitempty"` // host-measured, so a reopened turn keeps it
+	// WorkDurationMs is the turn's run time, set only on the message that closed it.
+	WorkDurationMs int64             `json:"workDurationMs,omitempty"`
+	ToolCalls      []historyToolCall `json:"toolCalls,omitempty"`
+	ToolCallID     string            `json:"toolCallId,omitempty"`
 	// The host's own account of a result that did not succeed. Without it a
 	// rebuilt card has only the words, which a tool's own output can imitate.
 	ToolFailed      bool   `json:"toolFailed,omitempty"`
@@ -62,17 +69,39 @@ type historyMessage struct {
 }
 
 func historyMessages(msgs []provider.Message) []historyMessage {
+	return historyMessagesWith(msgs, nil)
+}
+
+// historyMessagesWith also names the stored attachments each user message
+// references, through the host's resolver.
+func historyMessagesWith(msgs []provider.Message, attachments func(string) []event.Attachment) []historyMessage {
+	attached := func(text string) []eventwire.Attachment {
+		if attachments == nil {
+			return nil
+		}
+		return eventwire.ToWireAttachments(attachments(text))
+	}
 	out := make([]historyMessage, 0, len(msgs))
+	worked := sessionstore.TurnWorkMs(msgs)
 	for i, m := range msgs {
+		if m.LocalOnly && m.Name == surfacespec.ActionMessageName {
+			continue
+		}
 		// A steer is the person speaking into a running turn, so it stays a
 		// user message and carries what it was. The host's own mid-turn notice
 		// rides the same prefix and is not theirs to have said.
 		if m.Role == provider.RoleUser {
 			if steerText, host, isSteer := sessionstore.SteerKind(m.Content); isSteer {
+				if m.RawContent != "" {
+					steerText = m.RawContent
+				}
 				out = append(out, historyMessage{
 					Role: string(provider.RoleUser), Content: steerText, Steer: true,
 					HostAuthored: host || m.HostAuthored, MsgIndex: i, Via: eventwire.ToWireVia(m.Via),
 				})
+				if !host && !m.HostAuthored {
+					out[len(out)-1].Attachments = attached(steerText)
+				}
 				continue
 			}
 		}
@@ -83,16 +112,20 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 			hm.Content = sessionstore.UserMessageText(m)
 			hm.Images = len(m.Images)
 			hm.Via = eventwire.ToWireVia(m.Via)
+			if !m.HostAuthored {
+				hm.Attachments = attached(hm.Content)
+			}
 		}
 		if m.Role == provider.RoleAssistant {
 			hm.ModelRef = m.ModelRef
 			hm.Reasoning = m.ReasoningContent
 			hm.ThoughtMs = m.ThoughtMs
+			hm.WorkDurationMs = worked[i]
 			if len(m.ToolCalls) > 0 {
 				hm.ToolCalls = make([]historyToolCall, len(m.ToolCalls))
 				for i, tc := range m.ToolCalls {
 					hm.ToolCalls[i] = historyToolCall{
-						ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments,
+						ID: tc.ID, Name: tc.Name, Arguments: eventwire.SurfaceArgs(tc.Name, tc.ResolvedName, tc.Arguments),
 						ResolvedName: tc.ResolvedName, CapabilityID: tc.CapabilityID,
 					}
 				}
@@ -116,7 +149,7 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 // if the client sends If-None-Match with the current ETag, the server returns
 // 304 Not Modified with no body, saving bandwidth on reconnects.
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
-	msgs := historyMessages(s.ctl().History())
+	msgs := historyMessagesWith(s.ctl().History(), s.ctl().StoredAttachments)
 	markHistoryDiffs(msgs, s.ctl().EmbeddedDiffDetectionEnabled())
 	writeJSONCached(w, r, msgs)
 }

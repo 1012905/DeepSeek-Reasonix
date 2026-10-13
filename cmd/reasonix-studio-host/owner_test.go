@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	goruntime "runtime"
 	"strings"
 	"testing"
@@ -78,7 +80,7 @@ func TestAHostThatCannotNameTheApplicationOwnsNoCapability(t *testing.T) {
 		{"an unpackaged launch, which names no version", shellIdentity{exe: "/somewhere/studio", pid: 4321}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := studioUpdateHost(tc.shell, &out); got != nil {
+			if got := studioUpdateHost(tc.shell, &shellOwner{to: &out}); got != nil {
 				t.Fatalf("studioUpdateHost = %#v, want nil so no install route registers", got)
 			}
 		})
@@ -89,7 +91,7 @@ func TestAHostThatCannotNameTheApplicationOwnsNoCapability(t *testing.T) {
 func TestAHostThatNamesTheApplicationOwnsOne(t *testing.T) {
 	var out bytes.Buffer
 	shell := shellIdentity{version: "v2.0.0", exe: "/Applications/Reasonix Studio.app/Contents/MacOS/Reasonix Studio", pid: 4321}
-	if studioUpdateHost(shell, &out) == nil {
+	if studioUpdateHost(shell, &shellOwner{to: &out}) == nil {
 		t.Fatal("a host that stated its application got no capability")
 	}
 }
@@ -116,3 +118,33 @@ func TestTheInstallLayoutFollowsTheStatedApplication(t *testing.T) {
 		t.Fatalf("studioInstall = %+v for a launch that named no version, want nil", got)
 	}
 }
+
+// A clicked toast reaches the shell as one line on the pipe the handshake used,
+// in the same shape the other acts take.
+func TestAToastClickAsksTheShellToShowItsWindow(t *testing.T) {
+	var out bytes.Buffer
+	showOnToastClick(&shellOwner{to: &out}, io.Discard)()
+	if got := out.String(); got != "{\"act\":\"show\"}\n" {
+		t.Fatalf("pipe carried %q, want the show act", got)
+	}
+}
+
+// The click is the first link of a chain that crosses two processes; when the
+// window does not come forward, the log says whether the click arrived and
+// whether the shell was reached.
+func TestAToastClickIsWrittenToTheLog(t *testing.T) {
+	var log bytes.Buffer
+	showOnToastClick(&shellOwner{to: &bytes.Buffer{}}, &log)()
+	if !strings.Contains(log.String(), "toast clicked") {
+		t.Fatalf("log = %q, want the click recorded", log.String())
+	}
+	log.Reset()
+	showOnToastClick(&shellOwner{to: failingWriter{}}, &log)()
+	if !strings.Contains(log.String(), "could not reach the shell") {
+		t.Fatalf("log = %q, want the failed ask recorded", log.String())
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("pipe closed") }

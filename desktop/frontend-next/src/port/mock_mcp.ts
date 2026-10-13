@@ -107,6 +107,16 @@ export class MockMcp extends MockProvider {
     ];
   }
 
+  async trustMcp(name: string, digest: string) {
+    const s = this.servers.find((x) => x.name === name);
+    if (!s) return { state: "failed", error: "no configured MCP server named " + name };
+    if (!s.held?.length || s.heldDigest !== digest) return { state: "failed", error: "the held MCP tool definitions changed since they were shown" };
+    s.held = undefined;
+    s.heldDigest = undefined;
+    s.tools = s.tools + 1;
+    return { state: "ready", tools: s.tools };
+  }
+
   async reconnectMcp(name: string) {
     const s = this.servers.find((x) => x.name === name);
     if (!s) return { state: "failed", error: "no configured MCP server named " + name };

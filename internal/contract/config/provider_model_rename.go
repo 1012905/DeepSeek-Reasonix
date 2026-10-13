@@ -29,6 +29,9 @@ func renameProviderModel(p *ProviderEntry, from, to string) bool {
 	if renameMapKey(p.ModelOverrides, from, to) {
 		changed = true
 	}
+	if renameMapKey(p.ModelAliases, from, to) {
+		changed = true
+	}
 	return changed
 }
 

@@ -2,6 +2,7 @@ import type { AskReason } from "../../port/session";
 import { Sym } from "../Sym";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { reason } from "../../i18n/kernel";
 import type { Item } from "../../state/session";
 import { answerSource } from "../source";
 import { useViewer } from "../../state/viewer";
@@ -13,9 +14,10 @@ const ADVANCE_MS = 220;
 interface Props {
   item: Extract<Item, { t: "ask" }>;
   onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
+  onEngage?: (id: string) => Promise<void>;
 }
 
-export function AskCard({ item, onAnswer }: Props) {
+export function AskCard({ item, onAnswer, onEngage }: Props) {
   const qs = item.ask.questions;
   const answeredBy = answerSource(item.by, useViewer(), item.said);
   const [tab, setTab] = useState(0);
@@ -37,6 +39,19 @@ export function AskCard({ item, onAnswer }: Props) {
   // see what was chosen for each question, and the options stay on screen with
   // the unchosen ones dimmed by the sealed styling.
   const sealed = item.answered !== undefined;
+  const engagement = useRef<"idle" | "pending" | "engaged">("idle");
+  const [engagementError, setEngagementError] = useState("");
+  const engage = () => {
+    if (sealed || !onEngage || engagement.current !== "idle") return;
+    engagement.current = "pending";
+    void onEngage(item.ask.id).then(() => {
+      engagement.current = "engaged";
+      setEngagementError("");
+    }).catch((err: unknown) => {
+      engagement.current = "idle";
+      setEngagementError(reason(err));
+    });
+  };
   const chosen = item.answered ?? picks;
 
   // A single-choice pick keeps the box open as a note that rides with it, so an
@@ -104,6 +119,15 @@ export function AskCard({ item, onAnswer }: Props) {
     if (on && !qs[qi].multi) setPicks((prev) => at(prev, qi, []));
   };
 
+  const type = (qi: number, text: string) => {
+    if (noting(qi)) return setNote((prev) => at(prev, qi, text));
+    setOther((prev) => at(prev, qi, text));
+    if (text && !otherOn[qi]) {
+      setOtherOn((prev) => at(prev, qi, true));
+      if (!qs[qi].multi) setPicks((prev) => at(prev, qi, []));
+    }
+  };
+
   // A pane is display:none until it is the current one, so focus moves after
   // the render that shows it: into its open free-text or note box, else its first option.
   useEffect(() => {
@@ -149,7 +173,10 @@ export function AskCard({ item, onAnswer }: Props) {
           <span className="tag">{t("{n} 个问题", { n: qs.length })}</span>
         </div>
         <div className="out">
-          <div className="ask" data-sealed={sealed ? "" : undefined} aria-busy={submitting}>
+          <div className="ask" data-sealed={sealed ? "" : undefined} aria-busy={submitting}
+            onPointerDownCapture={engage} onKeyDownCapture={engage} onInputCapture={engage}
+            onWheelCapture={engage} onTouchMoveCapture={engage}>
+            {!sealed && engagementError && <div className="err" role="alert">{engagementError}</div>}
             {qs.length > 1 && (
               <div className="ask-tabs" role="tablist">
                 {qs.map((q, i) => (
@@ -222,8 +249,8 @@ export function AskCard({ item, onAnswer }: Props) {
                     aria-label={noteShown(i) ? t("补充说明（可选）") : (customOption(i)?.label ?? t("其他 —— 自行填写"))}
                     value={freeShown(i)}
                     readOnly={sealed}
-                    placeholder={noteShown(i) ? t("补充说明（可选），会随所选项一起发送") : t("在此填写你希望采用的方案")}
-                    onChange={(e) => (noting(i) ? setNote : setOther)((prev) => at(prev, i, e.target.value))}
+                    placeholder={noteShown(i) ? t("补充说明（可选），会随所选项一起发送") : t("或直接输入你的回答")}
+                    onChange={(e) => type(i, e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter" || sealed || ime.isIme(e.nativeEvent)) return;
                       e.preventDefault();
@@ -238,6 +265,8 @@ export function AskCard({ item, onAnswer }: Props) {
               <div className="ask-done" data-recorded={item.recorded !== undefined ? "" : undefined}>
                 {item.recorded !== undefined ? (
                   item.recorded
+                ) : item.timedOut ? (
+                  <b>{t("等待超时，这个问题已被跳过")}</b>
                 ) : item.answeredElsewhere ? (
                   <b>{answeredBy || t("已在其他窗口处理，请以最新运行状态为准。")}</b>
                 ) : (
