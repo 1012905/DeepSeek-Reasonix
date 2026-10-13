@@ -597,6 +597,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "勾「读图」的才会收到图片": "Only the ones marked “reads images” receive them",
   "关掉": "Close",
   "回退到这个版本": "Roll back to this version",
+  "显示更早的 {n} 个版本": "Show {n} earlier versions",
   "记住了": "Remembered",
   "接入": "Connect",
   "查看内容": "See what it is",

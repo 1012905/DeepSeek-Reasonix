@@ -4016,6 +4016,7 @@
     animation: card var(--t-card) var(--ease-out) both;
   }
   .vrow:last-of-type { border-bottom: 1px solid var(--hair) }
+  .vlist .vmore { margin: 10px 0 0 12px }
   .vrow[data-on] { box-shadow: inset 2px 0 0 var(--accent); background: var(--accent-wash) }
   .vrow .nm { grid-column: 1; font: var(--w-reg) var(--fs-ui) var(--mono); color: var(--muted) }
 
