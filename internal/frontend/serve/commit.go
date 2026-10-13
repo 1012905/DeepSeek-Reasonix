@@ -20,6 +20,7 @@ func (s *Server) registerGitRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /workspace/branch/switch", s.workspaceSwitchBranch)
 	mux.HandleFunc("POST /commit/propose", s.commitPropose)
 	mux.HandleFunc("POST /commit", s.commitStaged)
+	mux.HandleFunc("POST /changes/stage", s.stageChanges)
 }
 
 // commitPropose answers the staged changes and a model-proposed message. It
@@ -46,6 +47,30 @@ func (s *Server) commitStaged(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, res)
+}
+
+// stageChanges moves the named changes into the index, or out of it. Only paths
+// the workspace lists as changed are accepted.
+func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
+	var req control.StageRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		refuse(w, http.StatusBadRequest, "stage.bad_request", "the request body is not a JSON stage request", nil)
+		return
+	}
+	if err := s.ctl().StageChanges(r.Context(), req); err != nil {
+		switch {
+		case r.Context().Err() != nil:
+			// The person cancelled; nobody is left to read an answer.
+		case errors.Is(err, gitcommit.ErrNoRepository):
+			refuse(w, http.StatusConflict, "commit.no_repository", err.Error(), nil)
+		case errors.Is(err, gitcommit.ErrUnknownPath):
+			refuse(w, http.StatusBadRequest, "stage.unknown_path", err.Error(), nil)
+		default:
+			refuse(w, http.StatusInternalServerError, "stage.failed", err.Error(), nil)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func refuseCommit(w http.ResponseWriter, r *http.Request, err error) {

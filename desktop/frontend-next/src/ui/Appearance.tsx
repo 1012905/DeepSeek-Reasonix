@@ -12,6 +12,7 @@ import { reason } from "../i18n/kernel";
 import { Notifications } from "./Notifications";
 import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
+import { LiveGraceSection } from "./LiveGraceSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { SendShortcut } from "./SendShortcut";
@@ -155,7 +156,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
   );
   const cell = (p: ThemePack) => (
     <div className="pal-cell" key={p.id}>
-      <Swatch pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
+      <Swatch pack={p} theme={theme} name={t(p.name)} on={!!p.active} onPick={() => pick(p.id)} />
       {p.removable && <ThemeRemove name={p.name} onRemove={() => remove(p.id)} />}
     </div>
   );
@@ -166,10 +167,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
   // page a user opens merely to switch between light and dark. If one of them
   // is active it remains visible beside the foundations, so the current state
   // never disappears into a closed disclosure.
-  const foundations = packs.filter((p) => !p.background?.image);
-  const activeIllustrated = packs.find((p) => p.active && p.background?.image);
+  const foundations = packs.filter((p) => !p.background?.image && !p.sky);
+  const activeIllustrated = packs.find((p) => p.active && (p.background?.image || p.sky));
   const featured = activeIllustrated ? [...foundations, activeIllustrated] : foundations;
-  const illustrated = packs.filter((p) => p.background?.image && p.id !== activeIllustrated?.id);
+  const illustrated = packs.filter((p) => (p.background?.image || p.sky) && p.id !== activeIllustrated?.id);
 
   // A change lands on screen through App's own effect; this only sends it on
   // so the next launch opens the same way.
@@ -547,6 +548,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <WindowSection port={port} />
       <NavRailSection />
+      <LiveGraceSection />
       <GraphicsSection />
       <SendShortcut />
       <EscStopSetting />
@@ -558,12 +560,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           once, not that any one control is obscure. The summary says what is
           folded and whether it has been changed — a disclosure hiding a value
           somebody set is a screen disagreeing with the window itself. */}
-      <details className="advset">
-        <summary>
-          <span className="tx">
-            <span className="lb">{t("高级外观")}</span>
-            <span className="ds">{changed.length ? t("已修改：{list}", { list: changed.join(" · ") }) : t("字体、文字粗细、文字对比度、视觉效果")}</span>
-          </span>
+      <details className="advset appearance-advanced">
+        <summary className="grp" id="set-advanced-appearance" data-setting="advanced-appearance">
+          <h3 className="grp-hd"><span>{t("高级外观")}</span></h3>
+          <span className="hint">{changed.length ? t("已修改：{list}", { list: changed.join(" · ") }) : t("字体、文字粗细、文字对比度、视觉效果")}</span>
         </summary>
         <section className="grp" id="set-font" data-setting="font">
           <div className="grp-hd">
@@ -720,7 +720,7 @@ function Swatch({
     : undefined;
 
   return (
-    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description || name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
+    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description ? t(pack.description) : name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
       <span className="pal-art" style={style}>
         <span className="pal-rail" />
         <span className="pal-body">

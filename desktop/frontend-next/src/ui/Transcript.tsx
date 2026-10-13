@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import type { Item, Waiting } from "../state/session";
 import type { ExtensionSurface } from "../port/wire";
 import type { AgentPort, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../port/port";
-import { RMark } from "./RMark";
+import { SymbolMark } from "./RMark";
 import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
 import { Boundary } from "./Boundary";
@@ -12,6 +12,7 @@ import { chartOfTool } from "./chart/spec";
 import { GuardianCard } from "./cards/GuardianCard";
 import { ApprovalCard, type PlanAction } from "./cards/ApprovalCard";
 import { AskCard } from "./cards/AskCard";
+import { SurfaceCard, surfaceTool } from "./surface/SurfaceCard";
 import { ElicitCard } from "./cards/ElicitCard";
 import { SayCard, type ReplyActions } from "./cards/SayCard";
 import { CompactionCard } from "./cards/CompactionCard";
@@ -34,7 +35,7 @@ import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL">;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -52,7 +53,7 @@ interface Props {
   onApprove: (itemId: string, id: string, v: ApprovalVerdict) => Promise<void>;
   onFullAccess: (itemId: string) => Promise<void>;
   onPlan: (itemId: string, id: string, action: PlanAction) => Promise<void>;
-  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
+  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[]; value?: Record<string, unknown> }[]) => Promise<void>;
   onForget: (itemId: string, name: string) => void;
   // Takes a still-queued line back. Only rows the kernel has given an
   // item id can offer it, and only until the turn reads them.
@@ -66,7 +67,7 @@ interface Props {
   reply?: ReplyActions;
   // Rewriting a message: the turn it takes back, and what to send instead.
   onResend?: (turn: number, text: string) => Promise<void>;
-  onExtSubmit: (pluginId: string, surfaceId: string, values: Record<string, unknown>) => void;
+  onExtSubmit: (pluginId: string, surfaceId: string, values: Record<string, unknown>) => void | Promise<void>;
   // The checkpoint each user card can return to, keyed by item id. Absent for a
   // card whose turn could not be matched — see state/checkpoints.
   needsProject: boolean;
@@ -717,6 +718,7 @@ const Row = memo(function Row({
       // needs. Drawing the tool call too put two copies of the same question on
       // screen, each answerable.
       if (it.tool.name === "ask") return null;
+      { const surface = surfaceTool(it.tool, it.running, port); if (surface !== undefined) return surface; }
       return (() => {
         const card = (
           <ToolCard
@@ -744,7 +746,7 @@ const Row = memo(function Row({
     case "approval":
       return <ApprovalCard item={it} onApprove={onApprove} onFullAccess={onFullAccess} onPlan={onPlan} />;
     case "ask":
-      return it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} />;
+      return it.ask.questions.some(q => q.surface) ? <SurfaceCard item={it} onAnswer={onAnswer} /> : it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} onEngage={port?.engageQuestion?.bind(port)} />;
     case "compaction":
       return <CompactionCard c={it.c} done={it.done} />;
 
@@ -773,7 +775,7 @@ interface HeroProps {
 function Hero({ needsProject, onOpen, onKeep }: HeroProps) {
   return (
     <div className="hero">
-      <RMark />
+      <SymbolMark />
       <div className="t">{needsProject ? t("先打开一个项目") : t("描述任务，其余交给 Reasonix")}</div>
       <div className="s">
         {needsProject

@@ -1,3 +1,4 @@
+import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { PLAN_ACTIONS, type PlanAction } from "./session";
 import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
 import { HttpError, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles } from "./port";
@@ -750,19 +751,15 @@ export class SsePort extends SseWorkspace implements AgentPort {
       persist: verdict === "always",
     });
   }
-  answer(id: string, answers: { questionId: string; selected: string[] }[]) {
+  answer(id: string, answers: { questionId: string; selected: string[]; value?: Record<string, unknown> }[]) {
     return this.postAcked("/answer", {
       id,
-      answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected })),
+      answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected, ...(a.value !== undefined ? { Value: a.value } : {}) })),
     });
   }
-  async invokeExtensionAction(name: string) {
-    const out = await this.post0<{ message?: string }>("/extensions/action", { name });
-    return out.message ?? "";
-  }
-  submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>) {
-    return this.post("/extensions/submit", { pluginId, surfaceId, values });
-  }
+  surfaceAction(request: SurfaceActionRequest) {return this.post0<Queued>("/surfaces/action",request);}
+  surfaceActionState(callId: string) {return this.get<SurfaceActionRecord>("/surfaces/"+encodeURIComponent(callId)+"/action");}
+  engageQuestion(id: string) { return this.postAcked("/answer", { id, engage: true }); }
   setPlanMode(on: boolean) {
     return this.post("/plan", { on });
   }

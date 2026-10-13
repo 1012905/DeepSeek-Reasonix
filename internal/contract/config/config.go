@@ -260,6 +260,7 @@ type NotificationsConfig struct {
 	ApprovalRequest bool `toml:"approval_request"`
 	AskRequest      bool `toml:"ask_request"`
 	FeedbackReply   bool `toml:"feedback_reply"`
+	DiskLow         bool `toml:"disk_low"`
 	// Sound plays a short system chime for the events switched on above, whether
 	// or not system notifications are; off unless asked for.
 	Sound bool `toml:"sound"`
@@ -675,6 +676,10 @@ type ServeConfig struct {
 	// SharePort fixes the port of the phone-access LAN link; zero picks a free
 	// one each time the door opens. User-global like the rest of [serve].
 	SharePort int `toml:"share_port"`
+	// RememberPairedDevices keeps paired phones across restarts: the next process
+	// reopens the share where it was and adopts the devices that paired against it.
+	// Off by default, like every other promise about a device you are not holding.
+	RememberPairedDevices bool `toml:"remember_paired_devices"`
 }
 
 // NetworkConfig controls ordinary outbound HTTP traffic such as model providers,
@@ -1384,6 +1389,7 @@ func Default() *Config {
 			ApprovalRequest: true,
 			AskRequest:      true,
 			FeedbackReply:   true,
+			DiskLow:         true,
 		},
 		Agent: AgentConfig{
 			SystemPrompt: DefaultSystemPrompt,
@@ -1457,8 +1463,8 @@ func (c *Config) Provider(name string) (*ProviderEntry, bool) {
 // without duplicating base_url/api_key_env. Single-`model` entries still resolve
 // by provider name, keeping older configs working unchanged.
 func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
-	if ref == "" {
-		return nil, false
+	if e, ok := standIn(c, ref); ok || ref == "" {
+		return e, ok
 	}
 	if access := desktopProviderAccessMap(c.Desktop.ProviderAccess); len(access) > 0 {
 		if access["deepseek"] && !canCanonicalizeLegacyDeepSeekProviders(c) {
@@ -1521,8 +1527,8 @@ func (c *Config) ResolveNewSessionChatModel() (NewSessionModel, bool) {
 }
 
 func (c *Config) resolveNewSessionChatModel(providerAllowed func(string) bool, preserveUnknownDefault bool) (resolvedRef string, fallback bool, ok bool) {
-	if c == nil {
-		return "", false, false
+	if c == nil || len(c.Providers) == 0 {
+		return noProviderStart(c)
 	}
 	if providerAllowed == nil {
 		providerAllowed = func(string) bool { return true }
@@ -1691,8 +1697,8 @@ func (c *Config) Validate(model string) error {
 	if !ok {
 		return fmt.Errorf("unknown model %q (configured: %s)", model, c.providerNames())
 	}
-	if e.Kind == "" {
-		return fmt.Errorf("provider %q: kind is required", model)
+	if err := kindError(e, model); err != nil {
+		return err
 	}
 	if e.BaseURL == "" {
 		return fmt.Errorf("provider %q: base_url is required", model)

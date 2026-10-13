@@ -1,6 +1,7 @@
 import { FeedbackBadge, feedbackEntryTab } from "./feedbackentry";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
+import logoWordmark from "../assets/logo-wordmark.svg";
 import type { AccountState } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
@@ -8,7 +9,6 @@ import type { Adder } from "./addws";
 import { AccountRow } from "./AccountRow";
 import { RailSearch } from "./railsearch";
 import { RemoteHosts } from "./RemoteHosts";
-import appIcon from "../../../electron/assets/icon.svg";
 import { StudioIcon } from "./StudioIcon";
 import { useHiddenHosts } from "../state/remotehide";
 import { chord } from "./keys";
@@ -33,6 +33,7 @@ interface Props {
   // decides it from the focused pane, so it arrives rather than being derived.
   activeWorkspace: TreeWorkspace | undefined;
   liveIds: (ids: string[]) => string[];
+  listedIds?: (ids: string[]) => string[];
   // Pins outlive this column — archiving a session drops one — so the set is the
   // window's and only the toggle comes down here.
   pinned: Set<string>;
@@ -81,6 +82,7 @@ export function Sidebar({
   active,
   activeWorkspace,
   liveIds,
+  listedIds = liveIds,
   pinned,
   onPin,
   remotes,
@@ -179,7 +181,7 @@ export function Sidebar({
     0,
   );
   const archivedCount = tree.reduce((n, ws) => n + (ws.archived ?? ws.sessions.filter((session) => session.archived).length), 0);
-  const liveCount = liveIds(runtimes.map((rt) => rt.id)).length;
+  const liveCount = listedIds(runtimes.map((rt) => rt.id)).length;
 
   const onFold = (root: string, shut: boolean) =>
     setFolded((prev) => {
@@ -217,10 +219,9 @@ export function Sidebar({
       <div className="railscroll">
       <div className="studio-rail-head">
         <div className="studio-brand" aria-label="Reasonix Studio">
-          <img className="studio-brand-mark" src={appIcon} alt="" aria-hidden="true" draggable={false} />
-          <span className="studio-brand-word" aria-hidden="true">
-            <b>reasoni<span className="studio-brand-accent">x</span></b>
-            <small>studio</small>
+          <span className="studio-brand-lockup" aria-hidden="true">
+            <img className="studio-brand-logo" src={logoWordmark} alt="" draggable={false} />
+            <small className="studio-brand-sub">studio</small>
           </span>
         </div>
         <button
@@ -267,6 +268,7 @@ export function Sidebar({
         onFocus={onFocusPane}
         onClose={onClosePanes}
         liveIds={liveIds}
+        listedIds={listedIds}
         runs={runs}
         scope={railScope}
         pinned={pinned}

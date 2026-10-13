@@ -74,7 +74,7 @@ export function RenameSession({ session, hub, onClose, onSaved }: Props) {
             aria-label={t("关闭")} disabled={!!busy} onClick={onClose}><StudioIcon name="close" /></button>
         </header>
         <p id="session-rename-hint">{t("保持简短且易于识别")}</p>
-        <input ref={input} aria-label={t("聊天标题")} placeholder={t("聊天标题")} value={title} disabled={!!busy}
+        <input ref={input} data-action="session.rename.title" aria-label={t("聊天标题")} placeholder={t("聊天标题")} value={title} disabled={!!busy}
           onChange={(ev) => setTitle(ev.target.value)} autoFocus />
         {error && <p className="session-rename-error" role="alert">{error}</p>}
         <footer>

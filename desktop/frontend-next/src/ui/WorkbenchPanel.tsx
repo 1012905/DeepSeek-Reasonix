@@ -24,12 +24,14 @@ import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
+import { WorkbenchChanges } from "./WorkbenchChanges";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
 import { useCommitCard } from "./CommitCard";
 import { BrowserWideToggle } from "./BrowserWideToggle";
+import { WorkspaceImage, isWorkspaceImage } from "./WorkspaceImage";
 
 // The editor and its grammars load with the first file opened, not with Studio.
 const CodeEditor = lazy(() => import("./CodeEditor"));
@@ -116,6 +118,7 @@ export function WorkbenchPanel({
   onExternal,
   onAddToChat,
   wideMode,
+  fileRequest,
 }: {
   port: AgentPort;
   tabs: BrowserTab[];
@@ -142,6 +145,7 @@ export function WorkbenchPanel({
   onExternal: (url: string) => void;
   onAddToChat?: (reference: string) => void;
   wideMode?: { wide: boolean; onToggle: () => void };
+  fileRequest?: { path: string };
 }) {
   const preview = useHtmlPreview(port, allTabs, remote);
   const tabs = preview.tabs;
@@ -262,7 +266,8 @@ export function WorkbenchPanel({
   const dropBlankStart = useCallback(() => setBrowsers((open) => open.filter((id) => !!visited.current[id])), []);
   const agentNow = useRef(agentTarget);
   agentNow.current = agentTarget;
-  useColumnOpening({ manual, browserAsk, filesAsk: revealChanges, port, agentNow, dropBlankStart, pick, follow, current, setFailed, setBrowsers, manualSelection: selected.startsWith("manual:") ? selected : `manual:${browsers[0] ?? "b0"}` });
+  const filesAsk = useMemo(() => ({ revealChanges, fileRequest }), [revealChanges, fileRequest]);
+  useColumnOpening({ manual, browserAsk, filesAsk, port, agentNow, dropBlankStart, pick, follow, current, setFailed, setBrowsers, manualSelection: selected.startsWith("manual:") ? selected : `manual:${browsers[0] ?? "b0"}` });
   // A page that has just appeared is the one somebody wants to see, whoever
   // opened it: the agent's popup, or a link the person followed, which opens
   // beside the agent's tab without becoming the one it acts on.
@@ -326,7 +331,7 @@ export function WorkbenchPanel({
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
   const { file, draft, diff, busy, error: fileFailed, setDraft, save } = useWorkbenchFiles({
-    port, workspaceRoot, path: filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
+    port, workspaceRoot, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
     poll: (readable && mode === "read") || (previewable && mode === "preview"),
   });
   const revision = file?.revision;
@@ -354,7 +359,7 @@ export function WorkbenchPanel({
   }, [activeKey, surfaces.length]);
   // Picking a file is asking to read it. Docked, the list and the file share one
   // column, so the list steps aside; side by side it stays where it is.
-  const openFile = (path: string) => {
+  const openFile = useCallback((path: string) => {
     setOpenFiles((v) => (v.includes(path) ? v : [...v, path]));
     setDismissed((v) => {
       const n = new Set(v);
@@ -362,7 +367,8 @@ export function WorkbenchPanel({
       return n;
     });
     pick(`file:${path}`);
-  };
+  }, [pick]);
+  useEffect(() => { if (fileRequest) openFile(fileRequest.path); }, [fileRequest, openFile]);
   // A rendered document's own links open beside it and its images load from the
   // tree. Held stable per document, so typing re-renders the text alone.
   const openRef = useRef(openFile);
@@ -546,7 +552,7 @@ export function WorkbenchPanel({
               showTabs={false}
             />
           )}
-          {active?.kind === "file" && (
+          {active?.kind === "file" && (isWorkspaceImage(active.path) ? <WorkspaceImage key={active.path} port={port} path={active.path} /> : (
             <>
               <WorkbenchFileBar
                 path={active.path}
@@ -554,7 +560,7 @@ export function WorkbenchPanel({
                 onMode={setMode}
                 readable={readable}
                 previewable={previewable}
-                canSave={!busy && !!file && draft !== file.content}
+                canSave={!busy && file?.path === active.path && draft !== file.content}
                 onSave={() => void save()}
               />
               {(fileFailed || failed) && !(mode === "preview" && previewTab) && (
@@ -591,7 +597,7 @@ export function WorkbenchPanel({
                 </Suspense>
               ) : null}
             </>
-          )}
+          ))}
           </div>
         </main>
         <aside className="workbench-explorer">
@@ -630,35 +636,17 @@ export function WorkbenchPanel({
               file only once its folder is expanded, so a change three levels
               down was invisible until someone went looking for it. */}
           {changes.length > 0 && (
-            <div className="workbench-changes">
-              <div className="workbench-explorer-head">
-                <span>{t("改动")}</span>
-                <small>{changes.length}</small>
-                {onTreeChanged && commit.button}
-              </div>
-              {commit.card}
-              {changes.map((item) => (
-                <button
-                  className="workbench-change-row"
-                  data-action="workbench.diff"
-                  data-target={item.path}
-                  key={`c:${item.path}`}
-                  title={item.path}
-                  aria-current={active?.kind === "file" && active.path === item.path && mode === "diff" ? "page" : undefined}
-                  onClick={() => {
-                    openFile(item.path);
-                    setMode("diff");
-                  }}
-                >
-                  <em data-status={item.status}>{item.status || "M"}</em>
-                  <span>{item.path.slice(item.path.lastIndexOf("/") + 1)}</span>
-                  {/* Absent counts print nothing: a binary file did not change
-                      by zero lines, git simply did not count it. */}
-                  {item.insertions !== undefined && <i data-io="up">+{item.insertions}</i>}
-                  {item.deletions !== undefined && <i data-io="down">-{item.deletions}</i>}
-                </button>
-              ))}
-            </div>
+            <WorkbenchChanges
+              port={port}
+              changes={changes}
+              current={active?.kind === "file" && mode === "diff" ? active.path : ""}
+              onOpen={(path) => {
+                openFile(path);
+                setMode("diff");
+              }}
+              onChanged={onTreeChanged}
+              commit={commit}
+            />
           )}
           <div className="workbench-filelist">
             {rows.map((row) =>

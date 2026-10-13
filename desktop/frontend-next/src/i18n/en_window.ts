@@ -3,6 +3,9 @@
 // en_settings and en_kernel were — one screen's worth of wording, read together.
 
 export const EN_WINDOW: Record<string, string> = {
+  "这台机器的更多操作": "More actions for this machine",
+  "使用系统默认应用打开": "Open with default application",
+  "图片加载失败，它可能已被移动、删除或超过大小限制": "The image could not be loaded. It may have been moved, deleted, or exceed the size limit.",
   "选择本机会话": "Select local sessions",
   "选择会话：{name}": "Select session: {name}",
   "已选 {n} 个会话": "{n} sessions selected",

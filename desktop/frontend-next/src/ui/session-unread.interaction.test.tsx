@@ -4,6 +4,7 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { App } from "./App";
+import { host } from "../port/host";
 import { MockHub } from "../port/mock_hub";
 import { setShowsSessionTabs } from "../state/prefs";
 import type { AgentPort } from "../port/port";
@@ -174,6 +175,7 @@ describe("opening a session clears its mark", () => {
   });
 
   it("puts the dot back when the kernel refuses, and says nothing", async () => {
+    const badge = vi.spyOn(host(), "setUnreadBadge").mockResolvedValue();
     const k = kernel([RELEASE]);
     k.gate.fail = true;
     render(<App hub={k.hub} />);
@@ -185,6 +187,7 @@ describe("opening a session clears its mark", () => {
     await waitFor(() => expect(k.port(RELEASE)?.markSessionViewed).toHaveBeenCalled());
     await waitFor(() => expect(dotIn(screen.getByRole("treeitem", { name: /Release notes/ }))).toBeTruthy());
     expect(document.querySelector('[role="alert"]')).toBeNull();
+    await waitFor(() => expect(badge).toHaveBeenLastCalledWith(true));
   });
 
   it("clears a session that is already the active pane when its row is clicked again", async () => {
@@ -325,4 +328,56 @@ describe("the mark follows the kernel across reloads", () => {
     await k.emit(RELEASE, { kind: "turn_done" });
     await waitFor(() => expect(dotIn(screen.getByRole("treeitem", { name: /Release notes/ }))).toBeTruthy());
   });
+});
+
+
+describe("the application icon follows unread task completions", () => {
+  it("keeps the badge until every unread conversation has been viewed", async () => {
+    const badge = vi.spyOn(host(), "setUnreadBadge").mockResolvedValue();
+    const k = kernel([RELEASE, DOCS]);
+    render(<App hub={k.hub} />);
+    await waitFor(() => expect(badge).toHaveBeenLastCalledWith(true));
+    await userEvent.click(await row(/Release notes/));
+    await waitFor(() => expect(k.viewed).toContain(RELEASE));
+    expect(badge).toHaveBeenLastCalledWith(true);
+    await userEvent.click(await row(/Docs sweep/));
+    await waitFor(() => expect(badge).toHaveBeenLastCalledWith(false));
+  });
+
+  it("marks a background completion and clears only the active conversation on window focus", async () => {
+    const badge = vi.spyOn(host(), "setUnreadBadge").mockResolvedValue();
+    const k = kernel([]);
+    render(<App hub={k.hub} />);
+    await row(/Billing refactor/);
+    focused(false);
+    k.unread.add(MAIN);
+    await k.emit(MAIN, { kind: "turn_started" });
+    await k.emit(MAIN, { kind: "turn_done" });
+    await waitFor(() => expect(badge).toHaveBeenLastCalledWith(true));
+    focused(true);
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(badge).toHaveBeenLastCalledWith(false));
+    expect(k.viewed).toContain(MAIN);
+  });
+});
+
+
+it("does not clear a completion when focus returns to settings covering the conversation", async () => {
+  const badge = vi.spyOn(host(), "setUnreadBadge").mockResolvedValue();
+  const k = kernel([]);
+  render(<App hub={k.hub} />);
+  await row(/Billing refactor/);
+  await userEvent.click(screen.getByRole("button", { name: "设置" }));
+  focused(false);
+  k.unread.add(MAIN);
+  await k.emit(MAIN, { kind: "turn_started" });
+  await k.emit(MAIN, { kind: "turn_done" });
+  await waitFor(() => expect(badge).toHaveBeenLastCalledWith(true));
+  focused(true);
+  act(() => window.dispatchEvent(new Event("focus")));
+  await act(async () => {});
+  expect(k.viewed).not.toContain(MAIN);
+  expect(badge).toHaveBeenLastCalledWith(true);
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(badge).toHaveBeenLastCalledWith(false));
 });

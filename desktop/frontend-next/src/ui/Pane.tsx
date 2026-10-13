@@ -33,6 +33,7 @@ import { useOnBump } from "./useOnBump";
 import { useShowView } from "./showview";
 import { useSubmit } from "./usesubmit";
 import { useSurfaceSlots } from "./usesurfaceslots";
+import { useSurfaceReplay } from "./surface-replay";
 import { MeterRail } from "./MeterRail";
 import { PlanFold } from "./PlanFold";
 import { RunLine } from "./RunLine";
@@ -57,6 +58,7 @@ import { LiveWork, useLiveWork } from "../state/foldpref";
 import { loadChangedFilesPref, useShowsChangedFiles } from "../state/changedfiles";
 import { loadFoldWorkPref, useFoldsTurnWork } from "../state/foldwork";
 import { ChangedFilesPill } from "./ChangedFilesPill";
+import { useConversationFiles } from "./useConversationFiles";
 
 export type { PaneReport };
 
@@ -107,6 +109,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const fail = useCallback((e: unknown) => {
     dispatch({ kind: "__error", text: reason(e) } as never);
   }, []);
+  const conversationFiles = useConversationFiles(port, status?.workspaceRoot ?? rt.root, !!rt.host, visible && tab === "flow", revealBrowser, fail);
   const compact = useCompactNow(port, running || s.items.some((item) => item.t === "compaction" && !item.done), fail);
   // Elapsed is a clock reading and belongs on the tick. Throughput is not: it
   // follows the deltas themselves, and expires rather than being re-derived.
@@ -124,6 +127,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   const { pacer, shown } = useBackgroundDeltas(visible, dispatch, trajDispatch);
 
+  const surfaceReplay = useSurfaceReplay(port, dispatch);
+
   const reloadMcp = useCallback(() => {
     void port.mcp().then((c) => setMcp(c.servers)).catch(() => setMcp([]));
   }, [port]);
@@ -132,6 +137,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // stream could not close: the transcript is the record, so rebuilding from it
   // is how a hole gets filled rather than rendered as a quiet turn.
   const rebuild = useCallback(() => {
+    void surfaceReplay.refresh();
     port
       .history()
       .then((msgs) => {
@@ -139,12 +145,17 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         dispatch({ kind: "__restore", ...restored });
       })
       .catch(() => {});
-  }, [port]);
+  }, [port, surfaceReplay.refresh]);
 
   // /status is polled four times a second while a turn runs, and most of those
   // answers are word-for-word the previous one. Swapping in an equal object
   // would repaint the rail and the composer for no news at all.
   const applyStatus = useCallback((next: SessionStatus) => {
+    // The typed half /history cannot carry rides every status read: the
+    // kernel commits a text-only round before it decides to continue the
+    // turn, so only this read closes one or vouches one still runs. A
+    // payload that cannot say leaves the wire's own running standing.
+    if (next.running !== undefined) dispatch({ kind: "__running", running: next.running });
     setSessionRead((prev) => (prev.kind === "settled" && prev.status && JSON.stringify(prev.status) === JSON.stringify(next)
       ? prev : { kind: "settled", status: next }));
   }, []);
@@ -168,6 +179,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     () =>
       port.subscribe(
         (ev) => {
+          surfaceReplay.observe(ev);
           compact.onEvent(ev);
           pacer.push(ev); if (ev.kind === "turn_done") onTurnDone?.(rt.id);
           // A server finishing its handshake changes what /mcp answers, and this
@@ -193,7 +205,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           refreshStatus();
         },
       ),
-    [port, pacer, rt.id, onTurnDone, reloadMcp, rebuild, refreshStatus, revalue, compact.onEvent, compact.release],
+    [port, pacer, rt.id, onTurnDone, reloadMcp, rebuild, refreshStatus, revalue, compact.onEvent, compact.release, surfaceReplay.observe],
   );
 
   // What the rows cover is dispatched before the rows themselves, so the table
@@ -238,13 +250,17 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   }, [running, refreshWallet, port]);
 
   useEffect(() => {
-    if (pulse) refreshStatus();
-  }, [pulse, refreshStatus]);
+    if (pulse) {
+      refreshStatus();
+      void surfaceReplay.refresh();
+    }
+  }, [pulse, refreshStatus, surfaceReplay.refresh]);
 
   // Everything on screen belongs to one session; when the kernel moves this
   // pane to another one — a switch, a new session, a rewind — all of it has to
   // be re-read rather than patched.
   const reloadSession = useCallback((current: () => boolean = () => true) => {
+    void surfaceReplay.refresh(current);
     trajDispatch({ kind: "__clear" } as never);
     port.trajectory().then((r) => { if (current()) replayTrajectory(r); }).catch(() => {});
     port.checkpoints().then((cps) => { if (current()) setCheckpoints(cps); }).catch(() => { if (current()) setCheckpoints([]); });
@@ -263,7 +279,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     refreshWallet();
     onSessionChanged();
     return history;
-  }, [port, applyStatus, refreshWallet, onSessionChanged, replayTrajectory, fail]);
+  }, [port, applyStatus, refreshWallet, onSessionChanged, replayTrajectory, fail, surfaceReplay.refresh]);
 
   // Both of these read only the user and tool cards, so they key off the
   // revision rather than the items array: a streamed answer leaves every card
@@ -364,6 +380,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
   const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
+  const fileReply = useMemo(() => ({ ...reply, files: conversationFiles.refs }), [reply, conversationFiles.refs]);
 
   // Where the bottom is moves as blocks mount under it, so this only asks the
   // transcript to follow again and lets it scroll itself into place.
@@ -393,8 +410,9 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       context: ctx,
       mcp,
       wallet: walletDisplay,
+      interactions:s.interactions,
     });
-  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay]);
+  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions]);
 
   return (
     <section
@@ -427,7 +445,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       <Transcript port={port}
         foldWork={foldWork}
         turnRunning={running}
-        reply={reply}
+        reply={fileReply}
         onResend={onResend}
         items={s.items}
         entering={s.entranceOwed}
@@ -461,6 +479,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       </LiveWork.Provider>
       </PaneShown.Provider>
       </ReceiptPrefContext.Provider>
+      {conversationFiles.menuView}
 
       <div className="scroll" data-pane="analysis" hidden={tab !== "analysis"}>
         {tab === "analysis" && (
@@ -482,6 +501,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       <div className="scroll" data-pane="browser" hidden={tab === "analysis"} inert={!workbench}>
           <WorkbenchPanel
             port={port}
+            fileRequest={conversationFiles.request}
             tabs={pages}
             wideMode={docked ? { wide: browserSize.size === "wide", onToggle: browserSize.toggle } : undefined}
             manual={manualBrowser}

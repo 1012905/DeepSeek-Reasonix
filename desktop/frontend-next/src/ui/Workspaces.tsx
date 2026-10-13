@@ -26,6 +26,7 @@ import { Confirm, removeHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
+import { LocalMachine } from "./LocalMachine";
 
 const parentOf = (root: string) => root.replace(/[/\\]+$/, "").split(/[/\\]/).slice(-2, -1)[0] ?? "";
 
@@ -51,6 +52,8 @@ interface Props {
   // Which of these panes are mid-turn. A callback rather than a prop: run state
   // changes constantly and this is only ever asked at confirmation time.
   liveIds: (ids: string[]) => string[];
+  // Which of these belong in the running list: the live ones, and the ones that finished within the chosen grace.
+  listedIds?: (ids: string[]) => string[];
   runs: Record<string, { run: string; live: boolean }>;
   scope?: "all" | "live" | "pinned" | "archived";
   pinned?: Set<string>;
@@ -72,7 +75,7 @@ interface Props {
 const rowLabel = (session: TreeSession) =>
   session.title || (session.runtimeId && !session.turns ? t("新会话") : session.name);
 
-function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, paging = NO_PAGING, onFold, opening = "", onOpen, onFocus, onClose, liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
+function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, paging = NO_PAGING, onFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
   const [busy, setBusy] = useState("");
   // Folding a machine is the reader's own preference, held the way a host row
   // holds it.
@@ -293,7 +296,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
     .map((ws) => ({
       ...ws,
       sessions: pinnedFirst(ws.sessions.filter((session) =>
-        inScope(session, scope, !!needle, !!session.runtimeId && liveIds([session.runtimeId]).length > 0, pinned.has(session.path))), pinned),
+        inScope(session, scope, !!needle, !!session.runtimeId && listedIds([session.runtimeId]).length > 0, pinned.has(session.path))), pinned),
     }))
     .filter((ws) => scope === "all" || ws.sessions.length > 0);
   // A fold is a resting-state preference: while a word is being typed it would
@@ -322,47 +325,14 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
   return (
     <>
       <SessionBatch hub={hub} selection={selection} selected={selected} displayed={displayed} onSelect={setSelection}
-        onExit={() => treeKeys.ref.current?.querySelector<HTMLElement>('[role="treeitem"]')?.focus()}
+        onExit={() => treeKeys.ref.current?.querySelector<HTMLElement>('[data-action="machine.menu"]')?.focus()}
         onBusy={(pending) => { setBusy(pending ? "batch" : ""); if (pending) { setSessionMenu(""); setEditing(""); setConfirm(""); } }}
         onClose={onClose} onArchive={onArchive} liveIds={liveIds} reload={reload} onError={onError} />
       <div className="scroll">
         <div role="tree" aria-label={t("机器、工作区与会话")} aria-multiselectable={selection !== null} inert={busy === "batch"} data-action-keydown="tree.navigate" ref={treeKeys.ref} onKeyDown={treeKeys.onKeyDown}>
-          {/* This machine is the first row of the list rather than another kind of
-              thing, and its add button sits where a host's does: open a folder
-              on this machine. */}
-          <div
-            className="machrow"
-            data-here=""
-            role="treeitem"
-            aria-expanded={!shutHere}
-            onClick={() => setHereShut((v) => !v)}
-          >
-            <button className="twist" tabIndex={-1} aria-hidden="true">
-              <svg viewBox="0 0 10 10">
-                <path d="M3.4 1.6 6.8 5 3.4 8.4" />
-              </svg>
-            </button>
-            <i className="rmtpip" aria-hidden="true" />
-            <span className="rmtname">{t("这台机器")}</span>
-            <span className="rowswap">
-            {treeRead && <span className="rowcount" data-words="">{t("{n} 个项目", { n: tree.length })}</span>}
-            <button
-              className="machpick"
-              data-busy={adder.busy ? "" : undefined}
-              title={t("打开或新建项目…")}
-              aria-label={t("打开或新建项目…")}
-              data-action="workspace.add"
-              onClick={(ev) => {
-                ev.stopPropagation();
-                adder.add();
-              }}
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M8 3.7v8.6M3.7 8h8.6" />
-              </svg>
-            </button>
-            </span>
-          </div>
+          <LocalMachine shut={shutHere} count={treeRead ? tree.length : undefined} adder={adder}
+            canSelect={displayed.length > 0} selecting={selection !== null}
+            onToggle={() => setHereShut((v) => !v)} onSelect={() => setSelection(new Set())} />
           {shutHere ? null : shownTree.map((ws) => {
             // A fold is a resting-state preference; while a query is on it would hide
             // the very rows the query just found.
@@ -525,6 +495,11 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                         data-just-done={session.runtimeId && justDone.has(session.runtimeId) ? "" : undefined}
                         data-busy={opening === session.path ? "" : undefined}
                         onClick={(ev) => { if (selection) toggleSelection(session.path); else if (ev.detail < 2) void pick(ws, session); }}
+                        data-action-dblclick={selection ? undefined : "session.rename"}
+                        onDoubleClick={(ev) => {
+                          if (selection || (ev.target as HTMLElement).closest("input, button, [role='menu']")) return;
+                          setEditing(session.path);
+                        }}
                         onContextMenu={(ev) => {
                           if ((ev.target as HTMLElement).closest("input, textarea, [role='menu']")) return;
                           if (selection) { ev.preventDefault(); return; }
@@ -577,9 +552,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                               }
                             }} />
                         ) : (
-                          <span className="sesstitle" title={rowLabel(session)}
-                            data-action-doubleclick="session.rename-start" data-target={session.path}
-                            onDoubleClick={(ev) => { ev.stopPropagation(); if (!selection) setEditing(session.path); }}>
+                          <span className="sesstitle" title={rowLabel(session)}>
                             {pinned.has(session.path) && <StudioIcon name="pin" className="sesspin" aria-label={t("已置顶")} />}
                             <span>{rowLabel(session)}</span>{session.archived && <em className="sessarch">{t("已归档")}</em>}
                           </span>
@@ -608,6 +581,9 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                           >
                             {`+${kept.length}`}
                           </button>
+                        )}
+                        {session.legacy && (
+                          <span className="sesslegacy" title={t("由 Reasonix 1.x 创建：Studio 只读打开，继续对话会另存为新会话")} aria-label={t("由 Reasonix 1.x 创建：Studio 只读打开，继续对话会另存为新会话")}>{t("旧")}</span>
                         )}
                         <span className="sessquick">
                           <button
@@ -685,7 +661,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                               }}
                             >
                               <i className="pip" />
-                              <span className="sesstitle">
+                              <span className="sesstitle" title={rowLabel(copy)}>
                                 <span>{version ? t("早先版本 · {n} 轮", { n: copy.turns ?? 0 }) : t("恢复副本")}</span>
                               </span>
                               <button

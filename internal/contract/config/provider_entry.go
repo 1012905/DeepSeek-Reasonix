@@ -7,6 +7,20 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
+// The in-memory stand-in for a config that lists no provider: never written
+// out or offered, it lets the kernel start so the window can ask to connect.
+const (
+	UnconfiguredKind  = "unconfigured"
+	UnconfiguredName  = "unconfigured"
+	UnconfiguredModel = "none"
+	UnconfiguredRef   = UnconfiguredName + "/" + UnconfiguredModel
+)
+
+// UnconfiguredEntry is the placeholder entry.
+func UnconfiguredEntry() ProviderEntry {
+	return ProviderEntry{Name: UnconfiguredName, Kind: UnconfiguredKind, Model: UnconfiguredModel}
+}
+
 // ProviderEntry declares a model provider instance. ContextWindow is the model's
 // token budget; the harness compacts older history as a turn's prompt approaches
 // it (see agent compaction). 0 disables compaction for the instance.
@@ -174,4 +188,43 @@ func providerHasAnyModel(e ProviderEntry) bool {
 		}
 	}
 	return false
+}
+
+// emptyProvidersLine is what a user config says when it lists no provider: an
+// absent key reads as a fresh install and brings the built-in providers back.
+func emptyProvidersLine(providers []ProviderEntry) string {
+	if len(providers) > 0 {
+		return ""
+	}
+	return "providers = []   # every provider removed; without this line the built-in DeepSeek providers return\n"
+}
+
+// standIn resolves the reserved stand-in ref while no provider is listed.
+func standIn(c *Config, ref string) (*ProviderEntry, bool) {
+	if ref != UnconfiguredRef || c == nil || len(c.Providers) > 0 {
+		return nil, false
+	}
+	e := UnconfiguredEntry()
+	return &e, true
+}
+
+// noProviderStart is where a new session opens with nothing configured: there is
+// no stale default to preserve, so every caller gets the stand-in and the window
+// asks for a connection.
+func noProviderStart(c *Config) (string, bool, bool) {
+	if c == nil {
+		return "", false, false
+	}
+	return UnconfiguredRef, false, true
+}
+
+// kindError is what a selected entry that cannot be used answers.
+func kindError(e *ProviderEntry, model string) error {
+	switch e.Kind {
+	case UnconfiguredKind:
+		return fmt.Errorf("%w; run `reasonix setup` to add one", provider.ErrNoProvider)
+	case "":
+		return fmt.Errorf("provider %q: kind is required", model)
+	}
+	return nil
 }

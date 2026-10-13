@@ -41,7 +41,8 @@ import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
 import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
-import { isUnread, useViewed } from "./unread";
+import { useLiveGrace } from "./useLiveGrace";
+import { isUnread, useViewed, useUnreadBadge } from "./unread";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
@@ -144,7 +145,10 @@ export function App({ hub }: { hub: HubPort }) {
   // a few hundred sessions each frame — which is what its memo is there for.
   const liveIds = useCallback((ids: string[]) => ids.filter((id) => runsRef.current[id]?.live), []);
 
+  const { listedIds, noteReport } = useLiveGrace(runsRef, runs);
+
   const onReport = useCallback((id: string, next: PaneReport) => {
+    noteReport(id, next.live);
     setRuns((prev) =>
       prev[id]?.run === next.run && prev[id]?.live === next.live ? prev : { ...prev, [id]: { run: next.run, live: next.live } },
     );
@@ -154,7 +158,7 @@ export function App({ hub }: { hub: HubPort }) {
     // cost of a window render per background beat.
     reportsRef.current[id] = next;
     if (id === activeRef.current) setReport(next);
-  }, []);
+  }, [noteReport]);
 
   // The window's title, run pill and status belong to the pane in front. They
   // were only ever written when a pane reported, so switching to an idle pane
@@ -329,7 +333,8 @@ export function App({ hub }: { hub: HubPort }) {
   // Transition made a simple sidebar click pay for a full-page texture before
   // the active id changed. Selection feedback should be immediate.
   const reloadBooks = useCallback(() => Promise.all([reloadTree(), reloadRemoteTrees()]), [reloadTree, reloadRemoteTrees]);
-  const viewed = useViewed({ runtimes, ports: panePorts, active, tree, remote: remoteTrees, reload: reloadBooks });
+  const viewed = useViewed({ runtimes, ports: panePorts, active: settings || feedback ? "" : active, tree, remote: remoteTrees, reload: reloadBooks });
+  useUnreadBadge(viewed.tree, viewed.remote);
   const focusPane = useCallback(
     (id: string) => {
       sw.cancel();
@@ -617,6 +622,7 @@ export function App({ hub }: { hub: HubPort }) {
           active={active}
           activeWorkspace={activeWorkspace}
           liveIds={liveIds}
+          listedIds={listedIds}
           pinned={pinnedSessions}
           onPin={togglePinnedSession}
           remotes={remotes}

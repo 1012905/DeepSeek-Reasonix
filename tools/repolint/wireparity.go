@@ -28,6 +28,7 @@ const (
 	tsLookFile      = "desktop/frontend-next/src/port/look.ts"
 	tsHubFile       = "desktop/frontend-next/src/port/hub.ts"
 	tsChartFile     = "desktop/frontend-next/src/ui/chart/spec.ts"
+	tsSurfaceFile   = "desktop/frontend-next/src/ui/surface/spec.ts"
 )
 
 // mirroredWireTypes are the Go types the desktop keeps a second, hand-written
@@ -36,6 +37,18 @@ const (
 // wrong. Declared and not inferred, for the reason the sensitive paths are: no
 // spelling tells a mirrored contract from a struct with json tags.
 var mirroredWireTypes = []wireMirror{
+	{"internal/contract/surfacespec/action_message.go", "Action", "desktop/frontend-next/src/port/surface.ts", "SurfaceAction"},
+	{"internal/session/control/surface_actions.go", "SurfaceActionRequest", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRequest"},
+	{"internal/session/control/surface_actions.go", "SurfaceActionRecord", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRecord"},
+	{"internal/contract/event/event.go", "AskAnswer", tsWireFile, "AskAnswer"},
+	{"internal/contract/eventwire/ask.go", "AskQuestion", tsWireFile, "AskQuestion"},
+	{"internal/contract/surfacespec/spec.go", "Spec", tsSurfaceFile, "SurfaceSpec"},
+	{"internal/contract/surfacespec/spec.go", "Node", tsWireFile, "ExtensionViewNode"},
+	{"internal/contract/surfacespec/spec.go", "Field", tsWireFile, "SurfaceField"},
+	{"internal/contract/surfacespec/spec.go", "Diff", tsWireFile, "SurfaceDiff"},
+	{"internal/contract/surfacespec/spec.go", "Option", tsWireFile, "SurfaceOption"},
+	{"internal/contract/eventwire/extension.go", "ExtensionViewNode", tsWireFile, "ExtensionViewNode"},
+	{"internal/contract/eventwire/extension.go", "ExtensionSurface", tsWireFile, "ExtensionSurface"},
 	{"internal/contract/event/notice_payload.go", "DormantPermissionRule", tsBoundaryFile, "DormantPermissionRule"},
 	{"internal/frontend/serve/branch.go", "workspaceBranchesView", tsWorkspaceFile, "WorkspaceBranches"},
 	{"internal/platform/gitstatus/branches.go", "Branch", tsWorkspaceFile, "WorkspaceBranch"},
@@ -197,6 +210,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/commit.go", "CommitProposal", tsWorkspaceFile, "CommitProposal"},
 	{"internal/session/control/commit.go", "CommitRequest", tsWorkspaceFile, "CommitRequest"},
 	{"internal/session/control/commit.go", "CommitResult", tsWorkspaceFile, "CommitResult"},
+	{"internal/session/control/commit.go", "StageRequest", tsWorkspaceFile, "StageRequest"},
 	{"internal/platform/gitcommit/gitcommit.go", "File", tsWorkspaceFile, "CommitFile"},
 	// The scale range the slider is drawn from: a bound the page cannot read
 	// would leave it a range of its own.

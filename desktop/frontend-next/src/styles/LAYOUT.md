@@ -1,5 +1,11 @@
 # Layout law
 
+## Native conversation surfaces
+
+Native model forms use Mantine's styled Card, choice cards, inputs, buttons and feedback with the official card patterns. SurfaceKit follows desktop appearance and bridges Studio font and ink tokens. Library defaults own control styling; its layered stylesheet loads on demand.
+
+SimpleGrid and Paper provide choice layouts and literal previews. Drafts and diffs preserve whitespace without file operations or gutters. SurfaceCard.css only carries container compatibility and textarea resizing. Ordinary asks and approvals retain their existing presentation.
+
 `app.css` carries no commentary. The decisions behind its rules live here, in
 the order the stylesheet makes them. Each entry states what holds now; where a
 gate or a component enforces it, that is named.
@@ -96,10 +102,12 @@ rules are written in.
 - The separator between crumbs is a written character, not the 1px hairline
   `.sep`. Sharing that name puts the glyph in a 1px-wide box with a background,
   and the strokes spill out of it.
-- The sidebar has one toggle, and it does not move.
-  - `.studio-menu` is fixed to the window at `--lights-w + 10px`, above the rail column whatever the rail and the icon
-    column are doing; the sidebar header carries no second button.
-  - The bar's content and the sidebar's brand row reserve room for it (`--nav-w` is what the icon column already gives).
+- The desktop sidebar's divider owns collapse, expansion and width adjustment.
+  - Its grip remains visible when collapsed; the separator supports Enter/Space for toggling, arrow keys for sizing,
+    and Home or a double click for restoring the default width. The open width survives collapse and reload.
+  - Under the `scene` fold the divider is hidden and the sidebar becomes a drawer. Only this layout mounts
+    `.studio-menu`, fixed at `--lights-w + 10px` after the shell's drag regions; the sidebar header has no second button.
+  - `--rail-toggle-gap` reserves title-bar space only for the drawer entry; desktop chrome reserves the native lights alone.
   - The icon rail's conversation item toggles the sidebar when the conversation is showing, and returns to it from
     settings; the sidebar's quick entries are drawn only while the rail is not.
   - A run of replies from one model is headed once (`data-quiet`); a change of model, or a user message, brings the
@@ -1191,11 +1199,14 @@ what exists.
 
 - Fixed dark, not following the app theme: it is a ceremony, not part of the
   interface. It plays once in a lifetime, any key skips it, and every animation
-  moves only transform and opacity.
-- A highlight sweeps the wordmark; the gradient is the glyph's fill, so `color`
-  must be transparent. The name is written in the product's own mother tongue —
-  Inter 200 is the weight every AI product reaches for, while mono is the coding
-  agent's own face and is already in the bundle.
+  leaves the brand visible when reduced motion disables it.
+- The welcome wordmark uses `logo-wordmark.svg` in its own blue with a steady
+  glow. Its brief highlight changes the image filter; the Studio subtitle uses
+  the shared display and title size tokens and the shipped mono face.
+- Sidebar and onboarding use the same 118 by 24 wordmark and stacked Studio
+  subtitle. A -14px margin offsets the asset's transparent left padding; dark
+  surfaces invert the image to white. The empty-session symbol inherits theme
+  colour and stays still across remounts; `RMark` remains the run indicator.
 - The subtitle is a tracked, uppercased line: chrome that looks the same in any
   theme. It is a sentence, not a badge.
 - The progress line says only how much of the opening is left; once the sequence

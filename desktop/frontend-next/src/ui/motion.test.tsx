@@ -114,6 +114,15 @@ describe("a card's one entrance", () => {
 // mount for a cause. Written here rather than left to review, because the
 // tempting line is one character short of the correct one.
 describe("mount is not a cause", () => {
+  it("keeps the empty-session brand still when its hero remounts", () => {
+    const rules = [...css.matchAll(/\.hero \.sym-mark\s*\{([^}]*)\}/g)];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const [, body] of rules) {
+      const animation = body.match(/animation:\s*([^;}]+)/)?.[1];
+      expect(animation == null || animation.startsWith("none")).toBe(true);
+    }
+  });
+
   /** Rules that give this selector an entrance animation, by exact term. */
   const entrances = (term: string) =>
     css

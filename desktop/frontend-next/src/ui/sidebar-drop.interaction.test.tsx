@@ -10,7 +10,7 @@ import { host } from "../port/host";
 import { useAddWorkspace } from "./addws";
 import { install as installDrops } from "./filedrop";
 import { Sidebar } from "./Sidebar";
-import appIcon from "../../../electron/assets/icon.svg";
+import logoWordmark from "../assets/logo-wordmark.svg";
 import { NO_PAGING } from "./treewindow";
 
 let clock = Date.now();
@@ -166,11 +166,11 @@ it("preserves the existing Add folder picker path", async () => {
   expect(open).not.toHaveBeenCalled();
 });
 
-// The mark beside the wordmark is the installed app's own icon, one source with
-// the desktop shell, not a glyph drawn to resemble it.
-it("draws the app icon as the sidebar's brand mark", () => {
+it("draws the official wordmark with the Studio subtitle", () => {
   draw();
-  const mark = document.querySelector<HTMLImageElement>(".studio-brand-mark");
+  const mark = document.querySelector<HTMLImageElement>(".studio-brand-logo");
   expect(mark?.tagName).toBe("IMG");
-  expect(mark?.getAttribute("src")).toBe(appIcon);
+  expect(mark?.getAttribute("src")).toBe(logoWordmark);
+  expect(mark?.draggable).toBe(false);
+  expect(document.querySelector(".studio-brand-sub")?.textContent).toBe("studio");
 });
