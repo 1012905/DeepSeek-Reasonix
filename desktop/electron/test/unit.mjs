@@ -242,24 +242,29 @@ const folderFs = (over = {}) => ({
   ...over,
 });
 
-test("openWorkspace enters the folder the kernel named", async () => {
-  const rig = await revealRig(() => [200, { path: ROOT, dir: true }]);
-  try {
-    assert.equal(await rig.open("/w", folderFs()), null);
-    assert.deepEqual(rig.opened, [["open", ROOT]]);
-    assert.equal(rig.asked[0], "/host/workspaces/locate?root=%2Fw");
-  } finally {
-    rig.close();
+test("openWorkspace enters the folder the kernel named", async (t) => {
+  for (const [platform, target] of [[process.platform, ROOT], ["darwin", "/Users/studio/workspace"], ["linux", "/home/studio/workspace"], ["win32", "C:\\Studio\\workspace"]]) {
+    await t.test(`${platform}: ${target}`, async () => {
+      const rig = await revealRig(() => [200, { path: target, dir: true }], platform);
+      try {
+        assert.equal(await rig.open("/w", folderFs()), null);
+        assert.deepEqual(rig.opened, [["open", target]]);
+        assert.equal(rig.asked[0], "/host/workspaces/locate?root=%2Fw");
+      } finally {
+        rig.close();
+      }
+    });
   }
 });
 
 // openPath launches an application bundle instead of showing it, so a root
 // that is one is only selected, and so is anything that is not a directory.
 test("openWorkspace only selects an application bundle", async () => {
-  const rig = await revealRig(() => [200, { path: ROOT, dir: true }], "darwin");
+  const bundle = "/Applications/Workspace.app";
+  const rig = await revealRig(() => [200, { path: bundle, dir: true }], "darwin");
   try {
     assert.equal(await rig.open("/w", folderFs({ access: async () => {} })), null);
-    assert.deepEqual(rig.opened, [["select", ROOT]]);
+    assert.deepEqual(rig.opened, [["select", bundle]]);
   } finally {
     rig.close();
   }
@@ -1016,20 +1021,20 @@ test("a Linux Go binary that needs the build host's dynamic loader is refused", 
 });
 
 test("a Linux package's Go binaries must be built for the architecture the package is named for", () => {
-  const { elfMachine, wrongArchitecture } = require("../packaging/elf.js");
-  assert.equal(elfMachine(elf64(null, 62)), "amd64");
-  assert.equal(elfMachine(elf64(null, 183)), "arm64");
-  assert.equal(elfMachine(elf64(null, 40)), "machine 40");
+  const { elfArchitecture, assertArchitecture } = require("../packaging/elf.js");
+  assert.equal(elfArchitecture(elf64(null, 62)), "amd64");
+  assert.equal(elfArchitecture(elf64(null, 183)), "arm64");
+  assert.throws(() => elfArchitecture(elf64(null, 40)), /unsupported ELF machine/);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reasonix-elf-"));
   try {
     const host = path.join(dir, "reasonix-studio-host");
     const helper = path.join(dir, "reasonix-studio-update-helper");
     fs.writeFileSync(host, elf64(null, 62));
     fs.writeFileSync(helper, elf64(null, 183));
-    assert.deepEqual(wrongArchitecture([host, helper], "arm64"), [{ file: host, machine: "amd64" }]);
-    assert.deepEqual(wrongArchitecture([host, helper], "amd64"), [{ file: helper, machine: "arm64" }]);
-    assert.deepEqual(wrongArchitecture([host], "amd64"), []);
-    assert.throws(() => wrongArchitecture([host], "riscv64"), /no ELF machine/);
+    assert.throws(() => assertArchitecture([host, helper], "arm64"), /is amd64, expected arm64/);
+    assert.throws(() => assertArchitecture([host, helper], "amd64"), /is arm64, expected amd64/);
+    assert.doesNotThrow(() => assertArchitecture([host], "amd64"));
+    assert.throws(() => assertArchitecture([host], "riscv64"), /unsupported release architecture/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

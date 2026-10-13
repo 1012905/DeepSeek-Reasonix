@@ -219,7 +219,7 @@ jobs:
       # not this shell's.
       - name: Install Linux packaging deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y fakeroot rpm
+        run: sudo apt-get update && sudo apt-get install -y fakeroot rpm cpio xvfb xauth policykit-1
 
       # The fpm electron-builder carries is an x86_64 program, so on an ARM64
       # runner the .deb and .rpm are built with one installed from RubyGems.
@@ -371,6 +371,23 @@ jobs:
           app="$(cd ../.. && find dist -maxdepth 2 \( -name '*.app' -o -name '*-unpacked' \) | sort | head -1)"
           pnpm exec electron-builder --prepackaged "../../$app" $arch \
             -c.extraMetadata.version="${version#v}"
+
+      - name: Verify both Linux package formats
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          platform="${{ matrix.platform }}"
+          arch="${platform#linux/}"
+          bash scripts/verify-linux-package.sh "dist/ReasonixStudio-linux-$arch.deb" "dist/ReasonixStudio-linux-$arch.rpm" "$arch"
+
+      - name: Accept the installed Linux package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          platform="${{ matrix.platform }}"
+          arch="${platform#linux/}"
+          version="${{ needs.resolve.outputs.version }}"
+          bash scripts/linux-install-smoke.sh "dist/ReasonixStudio-linux-$arch.deb" "$arch" "${version#v}"
 
       # With signing on, this leg only hands the bundle on: the signing jobs
       # run nothing but the signer, and windows-package packages in between.
@@ -1085,37 +1102,7 @@ jobs:
           done < <(find staging/studio-* -type f -name 'ReasonixStudio-*' -print0
             find staging/cli-archives -type f -print0)
           ls -la dist
-          # Two Windows artifacts (installer, portable zip) per architecture,
-          # two per macOS architecture (dmg, zip) and a Linux .deb and .rpm per
-          # architecture. Fewer
-          # means an artifact was lost between jobs, and a partial release is
-          # worse than a failed one.
-          count=$(find dist -type f -name 'ReasonixStudio-*' | wc -l)
-          if [ "$count" -lt 12 ]; then
-            echo "::error::expected 12 artifacts (Windows installer + zip per architecture, macOS dmg + zip per architecture, Linux .deb and .rpm per architecture), found $count"
-            exit 1
-          fi
-          # Each platform's update channel, and there is exactly one per
-          # platform: dpkg on Linux, the next installer on Windows, and the
-          # bundle swapped out of the archive on macOS. Missing one degrades the
-          # release silently instead of failing it — it strands that platform on
-          # the version it is running.
-          # Each macOS architecture by name, not darwin-*: a glob passes on
-          # whichever one shipped, and the missing one is a platform left on
-          # the version it is running with nothing saying so.
-          # Each Windows architecture by name for the same reason: a glob passes
-          # on whichever installer shipped.
-          # Each Linux architecture by name for the same reason.
-          for required in 'ReasonixStudio-linux-amd64.deb' 'ReasonixStudio-linux-amd64.rpm' \
-            'ReasonixStudio-linux-arm64.deb' 'ReasonixStudio-linux-arm64.rpm' \
-            'ReasonixStudio-windows-amd64-installer.exe' 'ReasonixStudio-windows-arm64-installer.exe' \
-            'ReasonixStudio-windows-amd64.zip' 'ReasonixStudio-windows-arm64.zip' \
-            'ReasonixStudio-darwin-amd64.zip' 'ReasonixStudio-darwin-arm64.zip'; do
-            find dist -type f -name "$required" | grep -q . || {
-              echo "::error::no $required in the release; its packager did not run"
-              exit 1
-            }
-          done
+          bash scripts/verify-studio-artifacts.sh dist
 
       # The same minisign key the desktop line uses, because the public key that
       # verifies it is compiled into the client (update.PublicKey).
