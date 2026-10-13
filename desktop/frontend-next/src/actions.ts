@@ -437,6 +437,7 @@ export const ACTIONS: UIAction[] = [
   { id: "versions.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "versions.restart", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "versions.later", kind: "view", target: "none", proof: "interaction" },
+  { id: "versions.more", kind: "view", target: "none", proof: "interaction" },
   { id: "versions.notes", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "versions.notes-retry", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "versions.notes-close", kind: "view", target: "none", proof: "interaction" },
