@@ -25,7 +25,7 @@ const { stripPackageGrants, unpaintedWindowCause } = require("./packagegrants");
 const { BrowserProtocol } = require("./browserprotocol");
 const { BrowserViews } = require("./browserviews");
 const { startBrowserRelay } = require("./browserrelay");
-const { groundFor } = require("./ground");
+const { groundFor, themeSourceFor } = require("./ground");
 const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
 const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
@@ -183,6 +183,7 @@ async function boot() {
   session.defaultSession.webRequest.onCompleted({ urls: [`${ready.origin}/*submit`] }, (details) => {
     if (details.method === "POST" && details.statusCode < 300) void powerGuard?.refresh();
   });
+  followTheme();
   win = createWindow();
   closeStarting();
   guard(win.webContents);
@@ -307,7 +308,11 @@ function fitted() {
   };
 }
 
-const ground = () => groundFor(loadPrefs(prefsFile(app.getPath("userData"))), nativeTheme.shouldUseDarkColors);
+const storedPrefs = () => loadPrefs(prefsFile(app.getPath("userData")));
+const ground = () => groundFor(storedPrefs(), nativeTheme.shouldUseDarkColors);
+const followTheme = () => {
+  nativeTheme.themeSource = themeSourceFor(storedPrefs());
+};
 
 function createWindow() {
   const mac = process.platform === "darwin";
@@ -366,6 +371,7 @@ function fromWindow(event) {
 const uiLang = () => uiLanguage(loadPrefs(prefsFile(app.getPath("userData"))), app.getPreferredSystemLanguages()[0] ?? app.getLocale());
 registerPrefs(ipcMain, () => prefsFile(app.getPath("userData")), fromWindow, () => {
   installApplicationMenu(uiLang);
+  followTheme();
   if (win && !win.isDestroyed()) win.setBackgroundColor(ground());
   void powerGuard?.refresh();
 });

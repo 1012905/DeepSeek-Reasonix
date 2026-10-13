@@ -12,7 +12,7 @@ const { uiLanguage } = require("../src/uilang.js");
 const { externalTarget } = require("../src/links.js");
 const { offerCleanup, ownBundle } = require("../src/legacy.js");
 const { stripPackageGrants, readReport, unpaintedWindowCause } = require("../src/packagegrants.js");
-const { groundFor, GROUND } = require("../src/ground.js");
+const { groundFor, themeSourceFor, GROUND } = require("../src/ground.js");
 const { pick, loadPrefs, savePrefs, registerPrefs } = require("../src/prefs.js");
 
 const TOKEN = "a".repeat(64);
@@ -1781,6 +1781,16 @@ test("the window ground follows the stored theme and, for auto, the system", () 
   assert.equal(groundFor({ "rx-theme": "auto" }, true), GROUND.dark);
   assert.equal(groundFor({}, false), GROUND.light);
   assert.equal(groundFor(undefined, true), GROUND.dark);
+});
+
+// Windows draws a frameless window's border from the frame's scheme, so a dark
+// page on a light system must set it, or the border is a light line.
+test("the window frame takes the stored theme, and auto follows the system", () => {
+  assert.equal(themeSourceFor({ "rx-theme": "dark" }), "dark");
+  assert.equal(themeSourceFor({ "rx-theme": "light" }), "light");
+  assert.equal(themeSourceFor({ "rx-theme": "auto" }), "system");
+  assert.equal(themeSourceFor({ "rx-theme": "midnight" }), "system");
+  assert.equal(themeSourceFor(undefined), "system");
 });
 
 const { accelerationOff, shouldDisableGpu, graphicsReport, graphicsHandler, PREF_KEY: GPU_PREF } = require("../src/graphics.js");
