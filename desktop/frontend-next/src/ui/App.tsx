@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import { Chrome } from "./Chrome";
+import { RailToggle } from "./RailToggle";
 import { useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
 import { useTreeWindow, type TreePaging } from "./treewindow";
@@ -575,9 +576,7 @@ export function App({ hub }: { hub: HubPort }) {
         }}
         browser={browser}
         account={account}
-        rail={rail}
         theme={scheme}
-        onRail={() => setRail((v) => !v)}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
         onFind={openFind}
         hub={hub} onError={fail}
@@ -774,6 +773,7 @@ export function App({ hub }: { hub: HubPort }) {
         </Suspense>
         </Boundary>
       )}
+      <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
     </div>
   );
 }
