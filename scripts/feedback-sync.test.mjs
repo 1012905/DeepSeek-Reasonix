@@ -151,7 +151,7 @@ test("only issues the bot filed with the source label are ours", () => {
   assert.equal(isOurs({ ...ok, labels: [] }), false);
 });
 
-function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = (n) => ({ ...BOT, number: n, comments: 1 }), comments = [], commentFails = false, recent = [], recordedFails = false, pendingFails = null, open = [], pending = [item()], issues = {}, changed = [], timeline = [], pulls = {}, tags = [], stable = null, releaseAt = null } = {}) {
+function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = (n) => ({ ...BOT, number: n, comments: 1 }), comments = [], commentFails = false, reopenFails = false, recent = [], recordedFails = false, pendingFails = null, open = [], pending = [item()], issues = {}, changed = [], timeline = [], pulls = {}, tags = [], stable = null, releaseAt = null } = {}) {
   const calls = [];
   return {
     calls,
@@ -172,6 +172,7 @@ function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = 
       getIssue: async (n) => { calls.push(["getIssue", n]); return issues[n] ?? issueOf(n); },
       recentComments: async (n) => { calls.push(["comments", n]); return comments; },
       comment: async (n, body) => { calls.push(["comment", n, body]); if (commentFails) throw new Error("gh boom"); },
+      reopen: async (n) => { calls.push(["reopen", n]); if (reopenFails) throw new Error("gh reopen boom"); },
       timeline: async (n) => { calls.push(["timeline", n]); return timeline; },
       getPull: async (n) => pulls[n],
     },
@@ -366,6 +367,34 @@ test("a user reply becomes one bot comment on its issue, then is acked", async (
   assert.deepEqual(writes(d), ["getIssue", "comments", "comment", "ack"]);
   assert.equal(postedBodies(d)[0], renderReply(reply()));
   assert.deepEqual(d.calls.find((c) => c[0] === "ack"), ["ack", "r1"]);
+});
+
+// A reply to a fixed report means the fix did not hold. The converter has
+// already moved the ticket back to recorded; the issue follows it.
+test("a reply to an issue closed as completed reopens it after commenting, then acks", async () => {
+  const closed = (n) => ({ ...BOT, number: n, comments: 1, state: "closed", state_reason: "completed" });
+  const d = fakes({ pending: [], replies: [reply()], issueOf: closed });
+  assert.deepEqual((await run(d)).failures, []);
+  assert.deepEqual(writes(d), ["getIssue", "comments", "comment", "reopen", "ack"]);
+});
+
+test("an open issue, or one closed by a maintainer's decision, is never reopened by a reply", async () => {
+  for (const [state, state_reason] of [["open", null], ["closed", "not_planned"], ["closed", "duplicate"]]) {
+    const d = fakes({ pending: [], replies: [reply()], issueOf: (n) => ({ ...BOT, number: n, comments: 1, state, state_reason }) });
+    await run(d);
+    assert.ok(!writes(d).includes("reopen"), `${state}/${state_reason}`);
+  }
+});
+
+test("a failed reopen is a warning, keeps the reply unacked and does not post twice on retry", async () => {
+  const closed = (n) => ({ ...BOT, number: n, comments: 1, state: "closed", state_reason: "completed" });
+  const a = fakes({ pending: [], replies: [reply()], issueOf: closed, reopenFails: true });
+  assert.equal((await run(a)).failures.length, 1);
+  assert.ok(!writes(a).includes("ack"));
+  const mine = { user: { login: "github-actions[bot]" }, body: renderReply(reply()) };
+  const b = fakes({ pending: [], replies: [reply()], issueOf: closed, comments: [mine] });
+  await run(b);
+  assert.deepEqual(writes(b), ["getIssue", "comments", "reopen", "ack"]);
 });
 
 test("replies are idempotent: a comment carrying the marker is adopted, a forged one is not", async () => {

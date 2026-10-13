@@ -106,6 +106,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
   const field = useRef<HTMLTextAreaElement>(null);
   const replyable = !item.statusUnavailable && FEEDBACK_REPLYABLE.includes(item.status);
   if (!replyable) return null;
+  const reopens = item.status === "fixed";
   if (offline) return <p className="fbk-hint">{t("离线时暂时不能回复。")}</p>;
 
   const expanded = open || item.needsInput;
@@ -136,7 +137,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
     return (
       <button type="button" className="btn sm fbk-reply-open" ref={opener} data-action="feedback.reply.open" onClick={() => { setOpen(true); requestAnimationFrame(() => field.current?.focus()); }}>
         <StudioIcon name="edit" />
-        {t("回复")}
+        {t(reopens ? "仍未解决，回复" : "回复")}
       </button>
     );
   }
@@ -151,7 +152,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
       data-action-submit="feedback.reply.send"
       onSubmit={(e) => { e.preventDefault(); void send(); }}
     >
-      <label htmlFor={id} className="fbk-label">{item.needsInput ? t("你的回复") : t("回复维护者")}</label>
+      <label htmlFor={id} className="fbk-label">{item.needsInput ? t("你的回复") : t(reopens ? "说明还有什么问题" : "回复维护者")}</label>
       <textarea
         id={id}
         ref={field}
@@ -165,6 +166,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
       />
       <div className="fbk-reply-foot">
         <span id={`${id}-hint`} className="fbk-hint">
+          {reopens && t("发送后这份反馈会重新打开，维护者会再次处理。")}{" "}
           {item.issueNumber
             ? t("这份反馈已有公开议题 #{n}：你的回复会被公开转发到那个议题里。请不要写入密钥、密码或私有内容。", { n: item.issueNumber })
             : t("只发给维护者，不会公开。请不要写入密钥、密码或私有代码。")}
