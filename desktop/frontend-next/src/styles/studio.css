@@ -2909,6 +2909,7 @@ body { font-size: 14px; line-height: 1.75; }
 /* Product wordmark: the interface face remains neutral; the brand gets its
    own tighter optical rhythm and one restrained accent instead of effects. */
 .studio-brand { gap: 10px; }
+.studio-brand-lockup { display: grid; grid-template-rows: 24px 9px; row-gap: 1px; align-content: center; }
 .studio-brand-logo {
   flex: none; display: block; width: 118px; height: 24px;
   object-fit: contain; object-position: left center;

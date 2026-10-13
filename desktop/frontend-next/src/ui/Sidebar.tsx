@@ -195,8 +195,10 @@ export function Sidebar({
       <div className="railscroll">
       <div className="studio-rail-head">
         <div className="studio-brand" aria-label="Reasonix Studio">
-          <img className="studio-brand-logo" src={logoWordmark} alt="" aria-hidden="true" draggable={false} />
-          <small className="studio-brand-sub" aria-hidden="true">studio</small>
+          <span className="studio-brand-lockup" aria-hidden="true">
+            <img className="studio-brand-logo" src={logoWordmark} alt="" draggable={false} />
+            <small className="studio-brand-sub">studio</small>
+          </span>
           <button className="studio-collapse" data-action="chrome.rail" onClick={() => onCollapse()} aria-label={t("收起工作区栏")} title={t("收起侧栏")}><StudioIcon name="panel" /></button>
         </div>
         <button
