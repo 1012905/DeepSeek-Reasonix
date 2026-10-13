@@ -150,6 +150,10 @@ func (c *Client) Answer(ctx context.Context, id string, answers []AskAnswer) err
 	return c.do(ctx, http.MethodPost, "/answer", map[string]any{"id": id, "answers": answers}, nil)
 }
 
+func (c *Client) EngageQuestion(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodPost, "/answer", map[string]any{"id": id, "engage": true}, nil)
+}
+
 func (c *Client) SetApprovalMode(ctx context.Context, mode string) error {
 	return c.do(ctx, http.MethodPost, "/tool-approval-mode", map[string]string{"mode": mode}, nil)
 }

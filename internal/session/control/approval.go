@@ -310,6 +310,7 @@ func (p *promptIDs) issue() string {
 // event (see ReplayPendingPrompts).
 type pendingAsk struct {
 	questions []event.AskQuestion
+	engaged   chan struct{}
 	reply     chan []event.AskAnswer
 	queued    bool // registered but not yet shown; replay must skip it
 	origin    *event.AskOrigin
@@ -323,7 +324,7 @@ func (a *approvalManager) registerAsk(id string, questions []event.AskQuestion, 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	reply := make(chan []event.AskAnswer, 1)
-	a.asks[id] = pendingAsk{questions: questions, reply: reply, queued: true, origin: origin}
+	a.asks[id] = pendingAsk{questions: questions, engaged: make(chan struct{}), reply: reply, queued: true, origin: origin}
 	return reply
 }
 
