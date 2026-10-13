@@ -310,43 +310,37 @@ func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, ori
 	// A question blocks the run on the user exactly like an approval prompt.
 	go c.hooks.Notification(ctx, askNotificationText(questions, origin), "question_prompt")
 
-	waitCtx, cancelWait := c.askWaitContext(ctx, origin)
-	defer cancelWait()
-
-	select {
-	case ans := <-reply:
-		c.closeBarrier(id, barrierResolved)
-		return ans, nil
-	case <-waitCtx.Done():
-		return c.endUnansweredAsk(waitCtx, id, reply)
-	}
+	return c.waitForAsk(ctx, id, reply, origin)
 }
 
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.
-// Unknown/expired IDs are ignored.
-func (c *Controller) AnswerQuestion(id string, answers []event.AskAnswer) {
-	c.AnswerQuestionFrom(id, answers, nil)
+// Invalid answers retain the pending prompt; expired identities are refused.
+func (c *Controller) AnswerQuestion(id string, answers []event.AskAnswer) error {
+	return c.AnswerQuestionFrom(id, answers, nil)
 }
 
 // AnswerQuestionFrom is AnswerQuestion for answers given on a paired device,
 // which the answer's receipt names and nothing else reads.
-func (c *Controller) AnswerQuestionFrom(id string, answers []event.AskAnswer, via *provider.Via) {
-	if pending, ok := c.approval.resolveAsk(id); ok {
-		// No selections is the explicit "skip" path: it ends the turn rather than
-		// feeding a prose dismissal back to the model (#6869). An external
-		// party's form is refused to that party instead, and the turn goes on.
-		if !askAnswersHaveSelection(answers) && pending.origin == nil {
-			c.mu.Lock()
-			activeTurn := c.gate.cancel != nil
-			c.mu.Unlock()
-			if activeTurn {
-				c.cancelTurn(causeAskSkipped)
-				return
-			}
-		}
-		c.recordAskDecisionReceipt(id, pending, answers, "answered", via)
-		pending.reply <- answers // buffered, never blocks
+func (c *Controller) AnswerQuestionFrom(id string, answers []event.AskAnswer, via *provider.Via) error {
+	pending, err := c.approval.resolveAskAnswer(id, answers)
+	if err != nil {
+		return err
 	}
+	// No selections is the explicit "skip" path: it ends the turn rather than
+	// feeding a prose dismissal back to the model (#6869). An external
+	// party's form is refused to that party instead, and the turn goes on.
+	if !askAnswersHaveSelection(answers) && pending.origin == nil {
+		c.mu.Lock()
+		activeTurn := c.gate.cancel != nil
+		c.mu.Unlock()
+		if activeTurn {
+			c.cancelTurn(causeAskSkipped)
+			return nil
+		}
+	}
+	c.recordAskDecisionReceipt(id, pending, answers, "answered", via)
+	pending.reply <- answers // buffered, never blocks
+	return nil
 }
 
 func (c *Controller) recordAskDecisionReceipt(id string, pending pendingAsk, answers []event.AskAnswer, outcome string, via *provider.Via) {

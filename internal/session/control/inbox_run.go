@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"reasonix/internal/contract/surfacespec"
 	"reasonix/internal/state/sessioninbox"
 )
 
@@ -58,6 +59,9 @@ func (c *Controller) prepareInboxRun(env sessioninbox.PromptEnvelope, origin ses
 	}
 	display := firstNonEmptyStr(env.DisplayText, submit)
 	raw := firstNonEmptyStr(env.RawText, submit)
+	if env.Extra[surfacespec.ActionMessageName] != "" {
+		raw = submit
+	}
 	requests := controlInvocationsFromInbox(env)
 	if len(requests) == 0 {
 		return func(ctx context.Context) error {

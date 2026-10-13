@@ -15,6 +15,7 @@ import { useShown } from "../shown";
 import { ReplyMenu } from "./ReplyMenu";
 import { useDismiss } from "../dismiss";
 import { pinToViewport } from "../place";
+import type { LocalRefs } from "../Markdown";
 
 // Folded, the only thing left of a thought is how much of the turn it was. The
 // spec puts both halves there — how long, and how much — because either alone
@@ -61,6 +62,7 @@ export interface Quote {
 /** What a finished reply can be acted on with. Regeneration belongs to the
  *  individual reply and requires a paired checkpoint. */
 export interface ReplyActions {
+  files?: LocalRefs;
   onQuote: (text: string, id: string) => void;
   canRegenerate: (id: string) => boolean;
   hasLaterTurns: (id: string) => boolean;
@@ -163,7 +165,7 @@ export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Ite
                 e.stopPropagation();
               }}>
               <Boundary retryKey={item.text} fallback={<div className="md" style={{ whiteSpace: "pre-wrap" }}>{item.text}</div>}>
-                <LazyMarkdown text={item.text} streaming={!item.done} />
+                <LazyMarkdown text={item.text} streaming={!item.done} local={reply?.files} />
               </Boundary>
             </div>
           )}

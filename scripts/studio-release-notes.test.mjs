@@ -62,7 +62,7 @@ test("an unresolved ref stays plain and is reported by code", async () => {
 
 test("committed notes render unchanged when nothing is credited", async () => {
   const dir = new URL("../release-notes/studio/", import.meta.url);
-  for (const name of await readdir(dir)) {
+  for (const name of (await readdir(dir, { recursive: true })).filter((entry) => entry.endsWith(".md"))) {
     const source = await readFile(new URL(name, dir), "utf8");
     assert.equal(renderStudioNotes(source, new Map()), `${source.trimEnd()}\n`, name);
   }

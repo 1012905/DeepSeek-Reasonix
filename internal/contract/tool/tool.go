@@ -591,7 +591,7 @@ func (r *Registry) MCPBindings() []MCPBinding {
 
 	out := make([]MCPBinding, 0, len(r.tools))
 	for _, t := range r.tools {
-		if b, ok := mcpBinding(t); ok {
+		if b, ok := MCPBindingFor(t); ok {
 			out = append(out, b)
 		}
 	}
@@ -611,7 +611,7 @@ func (r *Registry) ResolveCall(name string) (resolved Tool, canonical string, ca
 	}
 	matches := map[string]Tool{}
 	for canonicalName, t := range r.tools {
-		b, ok := mcpBinding(t)
+		b, ok := MCPBindingFor(t)
 		if !ok {
 			continue
 		}

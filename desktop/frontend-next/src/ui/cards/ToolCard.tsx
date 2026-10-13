@@ -1,3 +1,4 @@
+import { JsonText } from "./JsonText";
 import { useEffect, useRef, useState } from "react";
 import { useStartsOpen } from "../../state/foldpref";
 import { t } from "../../i18n";
@@ -167,7 +168,7 @@ export function ToolCard({
           {activityArgs && (
             <section className="activity-call-input">
               <header><b>{t("输入")}</b><span>JSON</span></header>
-              <pre>{activityArgs}</pre>
+              <pre><JsonText text={activityArgs} /></pre>
             </section>
           )}
           {running && !tool.output && !tool.err && children.length === 0 && <WaitNote args={tool.args} />}

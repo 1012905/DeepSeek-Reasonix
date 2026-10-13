@@ -3,11 +3,28 @@ import { t } from "../i18n";
 import type { AgentPort, SkillEntry } from "../port/port";
 import { Exception } from "./CapabilityScope";
 import { Switch } from "./Switch";
+import { SkillDeclarations } from "./SkillDeclarations";
 import { reason } from "../i18n/kernel";
+import { CopyButton } from "./CopyButton";
 
 // One skill, and the two things a reader wants from it: whether the model can
 // reach it at all, and which of the layers it was switched at.
-const SCOPE: Record<string, string> = { project: "项目", custom: "自定义", global: "我的", builtin: "内置" };
+const SCOPE: Record<string, string> = { global: "我的", project: "项目", custom: "自定义", builtin: "内置" };
+
+export function SkillGroups({ skills, ...rowProps }: { skills: SkillEntry[] } & Omit<Parameters<typeof SkillRow>[0], "sk">) {
+  const groups = new Map(Object.keys(SCOPE).map((scope) => [scope, [] as SkillEntry[]]));
+  for (const sk of skills) {
+    const scope = sk.scope ?? "";
+    if (!groups.has(scope)) groups.set(scope, []);
+    groups.get(scope)!.push(sk);
+  }
+  return <>{Array.from(groups, ([scope, rows]) => rows.length > 0 && (
+    <section className="skgroup" key={scope} aria-label={t(SCOPE[scope] ?? scope) || t("其他")}>
+      <h4>{t(SCOPE[scope] ?? scope) || t("其他")}</h4>
+      {rows.map((sk) => <SkillRow key={sk.name} sk={sk} {...rowProps} />)}
+    </section>
+  ))}</>;
+}
 
 // Which way the model can reach this skill, and whether it can reach it at all.
 // The second was being read back off the first by comparing the sentence — a
@@ -42,6 +59,7 @@ export function SkillRow({
   }, [owner]);
   const note = triggerNote(sk, implicit);
   const local = sk.switchScope === "project";
+  const command = sk.slashName ? "/" + sk.slashName : "";
   const act = async (fn: () => Promise<void>) => {
     setBusy(true);
     onFailed("");
@@ -59,7 +77,10 @@ export function SkillRow({
   const toggle = () => act(() => port.setSkillEnabled(sk.name, !sk.enabled, "project", root || undefined));
   return (
     <div className="skrow" data-off={sk.enabled ? undefined : ""} data-local={local ? "" : undefined}>
-      <span className="nm">{sk.slashName ? "/" + sk.slashName : sk.name}</span>
+      <span className="nm">
+        {command || sk.name}
+        {command && <CopyButton key={command} text={command} iconOnly label={t("复制调用命令 {command}", { command })} />}
+      </span>
       <span className="ds" title={sk.description || undefined}>{sk.description || t("未提供说明")}</span>
       <span className="how">{note.text && <i className={note.reachable ? "w" : "w none"}>{t(note.text)}</i>}</span>
       <span className="face">
@@ -71,6 +92,7 @@ export function SkillRow({
       </span>
       {local && <Exception onClear={() => act(() => port.clearSkillOverride(sk.name, root || undefined))} busy={busy} />}
       <Switch data-action="skill.enabled" data-target={sk.name} on={sk.enabled} busy={busy} label={t(sk.enabled ? "关闭 {name}" : "启用 {name}", { name: sk.name })} onClick={toggle} />
+      <SkillDeclarations sk={sk} />
     </div>
   );
 }

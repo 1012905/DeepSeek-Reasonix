@@ -1331,7 +1331,7 @@ func (c *Client) relistToolsLocked(ctx context.Context) ([]tool.Tool, error) {
 	}
 	listed := out
 	out = slices.DeleteFunc(slices.Clone(listed), func(t mcpTool) bool { return !c.spec.ToolEnabled(t.Name) })
-	if err := validateMCPToolNames(out); err != nil {
+	if err := validateMCPToolNames(c.name, c.spec.StripRawPrefix, out); err != nil {
 		return nil, fmt.Errorf("plugin %q: %w", c.name, err)
 	}
 	held := judgeToolPins(c.spec, listed)
@@ -1438,17 +1438,17 @@ func (c *Client) listToolsRawSettled(ctx context.Context) ([]mcpTool, error) {
 	return out, nil
 }
 
-func validateMCPToolNames(tools []mcpTool) error {
-	seen := make(map[string]bool, len(tools))
+func validateMCPToolNames(server, stripRawPrefix string, tools []mcpTool) error {
+	seen := make(map[string]string, len(tools))
 	for _, candidate := range tools {
-		name := strings.TrimSpace(candidate.Name)
-		if name == "" {
-			return fmt.Errorf("tools/list returned an empty tool name")
+		if strings.TrimSpace(candidate.Name) == "" {
+			return fmt.Errorf("%w: tools/list returned an empty tool name", ErrAmbiguousToolCatalog)
 		}
-		if seen[candidate.Name] {
-			return fmt.Errorf("tools/list returned duplicate tool name %q", candidate.Name)
+		name := toolName(server, strings.TrimPrefix(candidate.Name, stripRawPrefix))
+		if previous, ok := seen[name]; ok {
+			return fmt.Errorf("%w: tools/list names %q and %q share model-visible name %q", ErrAmbiguousToolCatalog, previous, candidate.Name, name)
 		}
-		seen[candidate.Name] = true
+		seen[name] = candidate.Name
 	}
 	return nil
 }

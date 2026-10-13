@@ -18,8 +18,9 @@ export const FEEDBACK_STATUSES: readonly FeedbackStatus[] = [
 export const isUnderReview = (item: Pick<FeedbackItem, "status" | "underReview" | "statusUnavailable">): boolean =>
   item.status === "received" && item.underReview === true && !item.statusUnavailable;
 
-// Only these take a reply from the reporter; the service has the last word.
-export const FEEDBACK_REPLYABLE: readonly FeedbackStatus[] = ["needs_info", "answered", "recorded", "in_progress"];
+// Only these take a reply from the reporter; the service has the last word. A
+// reply to a fixed report says the fix did not hold and reopens it.
+export const FEEDBACK_REPLYABLE: readonly FeedbackStatus[] = ["needs_info", "answered", "recorded", "in_progress", "fixed"];
 
 export interface FeedbackEnvInfo {
   version: string;

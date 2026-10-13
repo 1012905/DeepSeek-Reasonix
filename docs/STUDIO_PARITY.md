@@ -32,6 +32,8 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Feature | Status | Studio location or tracking |
 | --- | --- | --- |
 | Pin a session | Have | `ui/Workspaces.tsx` (`session.pin`) |
+| Compact session rows / 紧凑会话列表 | Have | `styles/studio.css`: single-line ellipsis, 34px rows and full titles on hover. 单行省略、34px 行高，悬浮查看完整标题。 |
+| Batch selection of local sessions / 本机会话批量选择 | Have differently | `ui/LocalMachine.tsx`: “Select local sessions” is in this machine's More actions menu; `ui/SessionBatch.tsx` shows the batch toolbar only during selection. “选择本机会话”移至“这台机器”的更多菜单，仅在选择模式显示批量工具栏；保留批量归档与删除。 Refs #10651. |
 | Archive and restore a session | Have | `ui/Sidebar.tsx`, `ui/Workspaces.tsx`; the quick row action is #12318 (open PR) |
 | Recycle bin page for deleted sessions | Unverified | Studio has "delete session" in `ui/Workspaces.tsx`; no recycle-bin page was found, recovery not checked |
 | Manual rename | Have | `renameSession` in `ui/App.tsx` |
@@ -43,6 +45,7 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Session recovery versions dialog | Unverified | Not searched by name; see #12365 for the delete behaviour |
 | Remote (SSH) workspaces | Have | `ui/Remotes.tsx`, `ui/RemoteHosts.tsx` |
 | Session takeover when another window holds it | Have | `ui/App.tsx`, `ui/Pane.tsx` |
+| Workspace sidebar expansion, collapse and resizing | Have differently | Desktop uses the divider in `ui/Gutter.tsx`, including after collapse; the top button in `ui/RailToggle.tsx` is reserved for the narrow `scene` drawer layout (#12917) |
 
 ## Reference: composer and transcript
 

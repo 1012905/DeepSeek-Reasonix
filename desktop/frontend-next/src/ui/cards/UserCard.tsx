@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentPort, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../../port/port";
 import type { Item } from "../../state/session";
 import { RewindControl } from "./RewindControl";
+import { SkillPinView } from "./SkillPinView";
+import { parseSkillPin } from "./skillpin";
 import { CopyButton } from "../CopyButton";
 import { reason } from "../../i18n/kernel";
 import { t } from "../../i18n";
@@ -48,6 +50,7 @@ export function UserCard({
   const source = messageSource(item.via, useViewer());
   const reopen = editable && draft === null;
   const rewind = !!(cp && onPrepareRewind && onCommitRewind);
+  const pin = useMemo(() => parseSkillPin(item.text), [item.text]);
   const images = useMemo(() => [...new Set((item.attachments ?? []).map((a) => a.path))], [item.attachments]);
 
   useEffect(() => {
@@ -90,12 +93,13 @@ export function UserCard({
                 const src = port.workspaceImageURL(path);
                 return <SavedImage key={src} path={path} src={src} />;
               })}</div>}
-              <div className="txt">{item.text}</div>
+              {pin ? <SkillPinView pin={pin} /> : <div className="txt" dir="auto">{item.text}</div>}
             </>
           ) : (
             <div className="reask">
               <textarea
                 ref={box}
+                dir="auto"
                 data-action-change="turn.edit"
                 data-action-keydown="turn.resend"
                 data-target={item.id}

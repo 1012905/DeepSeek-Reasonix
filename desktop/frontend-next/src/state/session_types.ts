@@ -40,7 +40,7 @@ export type Item =
   // kernel recorded they said, since this screen never saw the selection.
   // recorded is the call's result when the card is rebuilt from history: the
   // record keeps what the model was told, not which options were pressed.
-  | { t: "ask"; id: string; ask: Ask; answered?: string[][]; answeredElsewhere?: boolean; timedOut?: boolean; by?: Via | "window"; said?: string; recorded?: string }
+  | { t: "ask"; id: string; ask: Ask; answered?: string[][]; answeredElsewhere?: boolean; timedOut?: boolean; by?: Via | "window"; said?: string; recorded?: string; surfaceValues?: Record<string, unknown>; surfaceExpired?: boolean }
   | { t: "compaction"; id: string; c: Compaction; done: boolean }
   | { t: "remember"; id: string; m: RememberedFact; forgotten?: boolean }
   | { t: "receipt"; id: string; r: Receipt }
@@ -207,6 +207,10 @@ export interface SessionState {
   // second model wrote it; the rest are this one, recorded when the turn began
   // rather than read off the composer, which moves on.
   turnModel?: string;
+  // The session-log index of the message the live turn is about, taken from
+  // its turn_started. A second start naming the same one is the same open
+  // delivered twice — a duplicate, not a turn that ended without saying so.
+  turnMsgIndex?: number;
   entranceOwed: string[];
   enteredThrough: number;
   // Bumped when the transcript's composition changes — a card added, settled,
@@ -226,6 +230,8 @@ export interface SessionState {
   // event, which replaces the estimate with what was billed — a reading that is
   // still an estimate says so rather than passing for the measured one.
   outLive: number;
+  interactionIDs: { asked:string[]; answered:string[] };
+  interactions: { requests:number; questions:number; options:number; answers:number; customAnswers:number };
   metrics: Metrics;
   waiting: Waiting;
   running: boolean;

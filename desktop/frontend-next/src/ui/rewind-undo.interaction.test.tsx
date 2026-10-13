@@ -108,7 +108,7 @@ it.each([true, false])("keeps undo through the real Pane reload with conversatio
   await restore(conversation ? "代码和对话" : "只还原代码");
   await waitFor(() => expect(reads.mock.calls.length).toBeGreaterThan(before));
   await waitFor(() => expect(!!screen.queryByRole("button", { name: "回到这里" })).toBe(!conversation));
-  expect(screen.getByText("已还原 1 个文件")).toBeTruthy();
+  await screen.findByText("已还原 1 个文件");
   fireEvent.click(screen.getByRole("button", { name: "撤销这次回退" }));
   await waitFor(() => expect(undo).toHaveBeenCalledExactlyOnceWith("tx-1"));
   await screen.findByRole("button", { name: "回到这里" });

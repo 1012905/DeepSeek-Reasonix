@@ -17,6 +17,7 @@ export interface PaneReport {
   context: ContextBreakdown | null;
   mcp: McpEntry[];
   wallet: string;
+  interactions?: import("../state/session_types").SessionState["interactions"];
 }
 
 export interface PaneProps {

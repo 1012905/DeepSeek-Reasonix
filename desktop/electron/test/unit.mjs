@@ -6,13 +6,14 @@ import os from "node:os";
 import fs from "node:fs";
 
 const require = createRequire(import.meta.url);
+const cuaContract = require("../../../internal/platform/computer/cua-driver.lock.json");
 const { parse, readActs, start } = require("../src/host.js");
 const { contextTemplate, editMenuTemplate, applicationMenuTemplate, menuInstaller } = require("../src/editmenu.js");
 const { uiLanguage } = require("../src/uilang.js");
 const { externalTarget } = require("../src/links.js");
 const { offerCleanup, ownBundle } = require("../src/legacy.js");
 const { stripPackageGrants, readReport, unpaintedWindowCause } = require("../src/packagegrants.js");
-const { groundFor, GROUND } = require("../src/ground.js");
+const { groundFor, themeSourceFor, GROUND } = require("../src/ground.js");
 const { pick, loadPrefs, savePrefs, registerPrefs } = require("../src/prefs.js");
 
 const TOKEN = "a".repeat(64);
@@ -242,24 +243,29 @@ const folderFs = (over = {}) => ({
   ...over,
 });
 
-test("openWorkspace enters the folder the kernel named", async () => {
-  const rig = await revealRig(() => [200, { path: ROOT, dir: true }]);
-  try {
-    assert.equal(await rig.open("/w", folderFs()), null);
-    assert.deepEqual(rig.opened, [["open", ROOT]]);
-    assert.equal(rig.asked[0], "/host/workspaces/locate?root=%2Fw");
-  } finally {
-    rig.close();
+test("openWorkspace enters the folder the kernel named", async (t) => {
+  for (const [platform, target] of [[process.platform, ROOT], ["darwin", "/Users/studio/workspace"], ["linux", "/home/studio/workspace"], ["win32", "C:\\Studio\\workspace"]]) {
+    await t.test(`${platform}: ${target}`, async () => {
+      const rig = await revealRig(() => [200, { path: target, dir: true }], platform);
+      try {
+        assert.equal(await rig.open("/w", folderFs()), null);
+        assert.deepEqual(rig.opened, [["open", target]]);
+        assert.equal(rig.asked[0], "/host/workspaces/locate?root=%2Fw");
+      } finally {
+        rig.close();
+      }
+    });
   }
 });
 
 // openPath launches an application bundle instead of showing it, so a root
 // that is one is only selected, and so is anything that is not a directory.
 test("openWorkspace only selects an application bundle", async () => {
-  const rig = await revealRig(() => [200, { path: ROOT, dir: true }], "darwin");
+  const bundle = "/Applications/Workspace.app";
+  const rig = await revealRig(() => [200, { path: bundle, dir: true }], "darwin");
   try {
     assert.equal(await rig.open("/w", folderFs({ access: async () => {} })), null);
-    assert.deepEqual(rig.opened, [["select", ROOT]]);
+    assert.deepEqual(rig.opened, [["select", bundle]]);
   } finally {
     rig.close();
   }
@@ -289,6 +295,50 @@ test("openWorkspace refuses a folder the hub does not list", async () => {
 });
 
 const ROOT = path.resolve(os.tmpdir(), "rx-workspace");
+
+test("file opening refuses scripts, executables and unknown types on every platform", async () => {
+  const { openFile } = require("../src/reveal.js");
+  const opened = [];
+  const shell = { openPath: async (target) => { opened.push(target); return ""; } };
+  for (const platform of ["darwin", "win32", "linux"]) {
+    for (const name of ["task.command", "task.sh", "task.bat", "task.cmd", "task.ps1", "task.lnk", "task.jar", "task.desktop", "task.scpt", "task.exe", "task.EXE", "report.pdf.exe", "task", "task.unknown", "page.html", "image.svg"]) {
+      const target = platform === "win32" ? `C:\\work\\${name}` : `/work/${name}`;
+      const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: target }) }) };
+      const why = await openFile(client, shell, "/rt/r1", "report.pdf", platform, { stat: async () => ({ isFile: () => true }) });
+      assert.ok(why?.error, `${platform}: ${name} must be refused`);
+    }
+  }
+  assert.deepEqual(opened, []);
+});
+
+test("file opening accepts kernel-located documents and media on every platform", async () => {
+  const { openFile } = require("../src/reveal.js");
+  for (const platform of ["darwin", "win32", "linux"]) {
+    for (const name of ["report.pdf", "notes.TXT", "report.docx", "table.xlsx", "slides.pptx", "data.csv", "notes.md", "image.PNG", "photo.jpg", "video.mp4", "audio.mp3"]) {
+      const target = platform === "win32" ? `C:\\work\\${name}` : `/work/${name}`;
+      const opened = [];
+      const shell = { openPath: async (p) => { opened.push(p); return ""; } };
+      const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: target }) }) };
+      assert.equal(await openFile(client, shell, "/rt/r1", name, platform, { stat: async () => ({ isFile: () => true }) }), null);
+      assert.deepEqual(opened, [target]);
+    }
+  }
+});
+
+test("file opening uses only a kernel-located regular file and reports shell failures", async () => {
+  const { openFile } = require("../src/reveal.js");
+  const opened = [];
+  const shell = { openPath: async (target) => { opened.push(target); return "no application"; } };
+  const client = { request: async () => ({ status: 200, body: JSON.stringify({ path: path.join(ROOT, "report.pdf") }) }) };
+  assert.deepEqual(await openFile(client, shell, "/rt/r1", "report.pdf", process.platform, { stat: async () => ({ isFile: () => true }) }), { error: "no application", code: "" });
+  assert.deepEqual(opened, [path.join(ROOT, "report.pdf")]);
+  opened.length = 0;
+  assert.ok(await openFile(client, shell, "/rt/r1", "folder", process.platform, { stat: async () => ({ isFile: () => false }) }));
+  assert.ok(await openFile(client, shell, "https://attacker.test", "report.pdf"));
+  const refused = { request: async () => ({ status: 400, body: JSON.stringify({ code: "workspace.path_outside_tree", error: "outside" }) }) };
+  assert.equal((await openFile(refused, shell, "/rt/r1", "../secret.pdf")).code, "workspace.path_outside_tree");
+  assert.deepEqual(opened, []);
+});
 
 test("reveal opens only what the kernel located inside the pane's workspace", async () => {
   const rig = await revealRig((url) => {
@@ -385,7 +435,7 @@ test("on Windows a share or device path from the kernel is refused", async () =>
   }
 });
 
-const { hostBinary, computerHelper, pageDir } = require("../src/layout.js");
+const { hostBinary, computerDriver, pageDir } = require("../src/layout.js");
 
 // Packaged, both live in resources/ beside app.asar. Reading them from inside
 // it is the failure this pins: a child process cannot be spawned out of an
@@ -403,13 +453,13 @@ test("the kernel and the page are found in both layouts", () => {
   }
 });
 
-test("the computer-use helper is found beside the kernel on macOS and Windows, and nowhere else", () => {
+test("the CUA Driver is found beside the kernel on all supported platforms", () => {
   const mac = { packaged: true, resourcesPath: "/res", dirname: "/d/src", platform: "darwin" };
-  assert.equal(computerHelper(mac), path.join("/res", "bin", "reasonix-computer-helper"));
-  assert.equal(computerHelper({ ...mac, packaged: false, dirname: path.join("/repo", "electron", "src") }), path.join("/repo", "electron", "bin", "reasonix-computer-helper"));
-  assert.equal(computerHelper({ ...mac, platform: "win32" }), path.join("/res", "bin", "reasonix-computer-helper.exe"));
-  assert.equal(computerHelper({ ...mac, platform: "linux" }), "");
-  assert.equal(computerHelper({ ...mac, platform: "linux", env: { REASONIX_COMPUTER_HELPER: "/custom/helper" } }), "/custom/helper");
+  assert.equal(computerDriver(mac), path.join("/res", "bin", "cua-driver"));
+  assert.equal(computerDriver({ ...mac, packaged: false, dirname: path.join("/repo", "electron", "src") }), path.join("/repo", "electron", "bin", "cua-driver"));
+  assert.equal(computerDriver({ ...mac, platform: "win32" }), path.join("/res", "bin", "cua-driver.exe"));
+  assert.equal(computerDriver({ ...mac, platform: "linux" }), path.join("/res", "bin", "cua-driver"));
+  assert.equal(computerDriver({ ...mac, platform: "linux", env: { REASONIX_CUA_DRIVER: "/custom/cua-driver" } }), "/custom/cua-driver");
 });
 
 test("Windows gets the suffix spawn needs, and an override wins over both", () => {
@@ -969,7 +1019,7 @@ test("only the Studio window reads or writes the preferences", () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function elf64(interpreter) {
+function elf64(interpreter, machine = 62) {
   const phoff = 64, phentsize = 56, phnum = interpreter ? 2 : 1;
   const dataOffset = phoff + phnum * phentsize;
   const path = Buffer.from(interpreter ? `${interpreter}\0` : "", "latin1");
@@ -979,7 +1029,7 @@ function elf64(interpreter) {
   bytes[5] = 1;
   bytes[6] = 1;
   bytes.writeUInt16LE(2, 16);
-  bytes.writeUInt16LE(62, 18);
+  bytes.writeUInt16LE(machine, 18);
   bytes.writeBigUInt64LE(BigInt(phoff), 32);
   bytes.writeUInt16LE(64, 52);
   bytes.writeUInt16LE(phentsize, 54);
@@ -1010,6 +1060,26 @@ test("a Linux Go binary that needs the build host's dynamic loader is refused", 
     fs.writeFileSync(helper, elf64(null));
     assert.deepEqual(dynamicallyLinked([host, helper]), [{ file: host, interpreter: "/lib64/ld-linux-x86-64.so.2" }]);
     assert.deepEqual(dynamicallyLinked([helper]), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a Linux package's Go binaries must be built for the architecture the package is named for", () => {
+  const { elfArchitecture, assertArchitecture } = require("../packaging/elf.js");
+  assert.equal(elfArchitecture(elf64(null, 62)), "amd64");
+  assert.equal(elfArchitecture(elf64(null, 183)), "arm64");
+  assert.throws(() => elfArchitecture(elf64(null, 40)), /unsupported ELF machine/);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reasonix-elf-"));
+  try {
+    const host = path.join(dir, "reasonix-studio-host");
+    const helper = path.join(dir, "reasonix-studio-update-helper");
+    fs.writeFileSync(host, elf64(null, 62));
+    fs.writeFileSync(helper, elf64(null, 183));
+    assert.throws(() => assertArchitecture([host, helper], "arm64"), /is amd64, expected arm64/);
+    assert.throws(() => assertArchitecture([host, helper], "amd64"), /is arm64, expected amd64/);
+    assert.doesNotThrow(() => assertArchitecture([host], "amd64"));
+    assert.throws(() => assertArchitecture([host], "riscv64"), /unsupported release architecture/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -1783,6 +1853,16 @@ test("the window ground follows the stored theme and, for auto, the system", () 
   assert.equal(groundFor(undefined, true), GROUND.dark);
 });
 
+// Windows draws a frameless window's border from the frame's scheme, so a dark
+// page on a light system must set it, or the border is a light line.
+test("the window frame takes the stored theme, and auto follows the system", () => {
+  assert.equal(themeSourceFor({ "rx-theme": "dark" }), "dark");
+  assert.equal(themeSourceFor({ "rx-theme": "light" }), "light");
+  assert.equal(themeSourceFor({ "rx-theme": "auto" }), "system");
+  assert.equal(themeSourceFor({ "rx-theme": "midnight" }), "system");
+  assert.equal(themeSourceFor(undefined), "system");
+});
+
 const { accelerationOff, shouldDisableGpu, graphicsReport, graphicsHandler, PREF_KEY: GPU_PREF } = require("../src/graphics.js");
 
 test("hardware acceleration is off only when the saved preference says exactly that", () => {
@@ -2048,6 +2128,44 @@ test("kernel acts: show brings the window forward, relaunch arms the restart, qu
   assert.deepEqual(calls, ["show", "relaunch", "quit"]);
 });
 
+test("kernel acts: a click that reaches the shell is written to its log, an unknown act is not", () => {
+  const { actHandler } = require("../src/acts.js");
+  const lines = [];
+  const handle = actHandler({ app: { relaunch() {}, quit() {} }, showWindow() {}, log: (line) => lines.push(line) });
+  for (const act of ["show", "unknown"]) handle(act);
+  assert.deepEqual(lines, ["kernel act: show"]);
+});
+
+test("raise: answers whether the window is focused once it has tried", () => {
+  const { raise } = require("../src/raise.js");
+  const make = (grants) => {
+    let focused = false;
+    return { show() {}, focus: () => { if (grants()) focused = true; }, isFocused: () => focused, setAlwaysOnTop() {} };
+  };
+  assert.equal(raise(make(() => true), "win32"), true);
+  assert.equal(raise(make(() => false), "win32"), false);
+});
+
+test("raise: a window the platform would not focus is lifted once and returned to normal stacking", () => {
+  const { raise } = require("../src/raise.js");
+  const run = (platform, focusedAfterFocus) => {
+    const calls = [];
+    let focused = false;
+    const win = {
+      show: () => calls.push("show"),
+      focus: () => { calls.push("focus"); if (focusedAfterFocus) focused = true; },
+      isFocused: () => focused,
+      setAlwaysOnTop: (on) => calls.push(on ? "top" : "untop"),
+    };
+    raise(win, platform);
+    return calls;
+  };
+  assert.deepEqual(run("win32", true), ["show", "focus"]);
+  assert.deepEqual(run("win32", false), ["show", "focus", "top", "focus", "untop"]);
+  assert.deepEqual(run("darwin", false), ["show", "focus"]);
+  assert.deepEqual(run("linux", false), ["show", "focus"]);
+});
+
 test("tray: the menu is replaced only when what it says changes, so an open menu is not torn down by the poll", async () => {
   const { installTray } = require("../src/tray.js");
   const menus = [];
@@ -2167,4 +2285,127 @@ test("rewind notice dismissal survives the desktop preference disk round trip", 
   const record = { "rx-rewind-notice-dismissed:tx-saved": "1" };
   savePrefs(file, record);
   assert.deepEqual(loadPrefs(file), record);
+});
+
+const { setUnreadBadge } = require("../src/badge.js");
+
+test("macOS marks and clears the application Dock badge", () => {
+  const badges = [];
+  const app = { dock: { setBadge: (text) => badges.push(text) } };
+  setUnreadBadge(true, {}, { app }, "darwin");
+  setUnreadBadge(false, {}, { app }, "darwin");
+  assert.deepEqual(badges, ["•", ""]);
+});
+
+test("Windows uses a red dot overlay and removes it when all sessions are read", () => {
+  const calls = [];
+  const win = { setOverlayIcon: (...args) => calls.push(args) };
+  let pixels;
+  const nativeImage = { createFromBitmap: (buffer, size) => { pixels = buffer; assert.deepEqual(size, { width: 16, height: 16 }); return "dot"; } };
+  setUnreadBadge(true, win, { nativeImage }, "win32");
+  setUnreadBadge(false, win, { nativeImage }, "win32");
+  assert.equal(pixels[3], 0);
+  assert.equal(pixels[(8 * 16 + 8) * 4 + 3], 255);
+  assert.deepEqual(calls, [["dot", "Reasonix Studio"], [null, ""]]);
+});
+
+test("Linux clears its launcher badge without requiring Dock APIs", () => {
+  const counts = [];
+  const app = { setBadgeCount: (count) => counts.push(count) };
+  setUnreadBadge(true, {}, { app }, "linux");
+  setUnreadBadge(false, {}, { app }, "linux");
+  assert.deepEqual(counts, [1, 0]);
+});
+
+test("CUA readiness refuses a different process, host or driver version", () => {
+  const { accepts } = require("../src/cua");
+  const result = { pid: 123, embedded: true, host_bundle_id: "io.reasonix.studio", driver_version: "0.34.1", contract_version: "0.8.0", tools_list_schema_version: "1", capability_version: "1", mcp_protocol_version: "2025-06-18" };
+  assert.equal(accepts({ ok: true, result }, 123, cuaContract), true);
+  for (const [key, value] of Object.entries({ pid: 124, embedded: false, host_bundle_id: "other", driver_version: "0.35.0", contract_version: "0.9.0", mcp_protocol_version: "2026-07-28" })) {
+    assert.equal(accepts({ ok: true, result: { ...result, [key]: value } }, 123, cuaContract), false);
+  }
+  assert.equal(accepts({ ok: false, result }, 123), false);
+});
+
+
+test("CUA interruption waits for the owned service to stop", async () => {
+  const { spawn } = require("node:child_process");
+  const { stopProcess } = require("../src/cua");
+  const child = spawn(process.execPath, ["-e", "process.stdin.resume();setInterval(()=>{},1000);process.stdin.on('end',()=>setTimeout(()=>process.exit(0),80))"], { stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
+  await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+  await stopProcess(child, true);
+  assert.ok(child.exitCode !== null || child.signalCode !== null);
+});
+
+test("CUA embedded control stops the old service before admitting a fresh one", { skip: process.platform === "win32" }, async () => {
+  const { spawn } = require("node:child_process");
+  const net = require("node:net");
+  const { startEmbedded, metadata } = require("../src/cua");
+  const fake = path.join(path.dirname(require("node:url").fileURLToPath(import.meta.url)), "cua-service-fixture.js");
+  const owned = await startEmbedded(process.execPath, cuaContract, () => {}, (_exe, args, options) => spawn(process.execPath, [fake, ...args], options));
+  try {
+    const before = await metadata(owned.socket);
+    const reply = await new Promise((resolve, reject) => {
+      const peer = net.createConnection(owned.abortSocket);
+      let text = "";
+      peer.once("error", reject);
+      peer.on("connect", () => peer.write('{"op":"abort"}\n'));
+      peer.on("data", bytes => { text += bytes; if (text.includes("\n")) { peer.destroy(); resolve(JSON.parse(text)); } });
+    });
+    assert.equal(reply.ok, true);
+    const after = await metadata(owned.socket);
+    assert.notEqual(after.result.pid, before.result.pid);
+    assert.throws(() => process.kill(before.result.pid, 0));
+  } finally { await owned.stop(); }
+  assert.equal(fs.existsSync(owned.socket), false);
+  assert.equal(fs.existsSync(owned.abortSocket), false);
+});
+
+
+test("CUA repeated quit waits for owned driver cleanup", async () => {
+  const { createQuitGate } = require("../src/cua");
+  let resolveStop;
+  const stopped = new Promise(resolve => { resolveStop = resolve; });
+  let stops = 0, quits = 0, prevented = 0;
+  const gate = createQuitGate(() => ({ stop: () => { stops++; return stopped; } }), () => { quits++; }, assert.fail);
+  const event = { preventDefault: () => { prevented++; } };
+  gate(event);
+  gate(event);
+  await Promise.resolve();
+  assert.equal(stops, 1);
+  assert.equal(prevented, 2);
+  assert.equal(quits, 0);
+  resolveStop();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(quits, 1);
+  gate(event);
+  assert.equal(prevented, 2);
+});
+
+
+test("CUA extraction handles ZIP archives when GNU tar precedes the Windows reader", { skip: process.platform !== "win32" || !fs.existsSync("C:/Program Files/Git/usr/bin/tar.exe") }, () => {
+  const { spawnSync } = require("node:child_process");
+  const tar = "C:/Program Files/Git/usr/bin/tar.exe";
+  const stage = fs.mkdtempSync(path.join(os.tmpdir(), "reasonix-cua-extract-"));
+  try {
+    fs.writeFileSync(path.join(stage, "driver.zip"), Buffer.from("UEsDBBQAAAAIANomTV3uQOUFCQAAAAcAAAAOAAAAY3VhLWRyaXZlci5leGVLy6woKS1KBQBQSwECFAAUAAAACADaJk1d7kDlBQkAAAAHAAAADgAAAAAAAAAAAAAAgAEAAAAAY3VhLWRyaXZlci5leGVQSwUGAAAAAAEAAQA8AAAANQAAAAAA", "base64"));
+    const target = path.join(stage, "extracted");
+    fs.mkdirSync(target);
+    const script = `require(${JSON.stringify(require.resolve("../packaging/install-cua-driver"))}).extract(process.argv[1], process.argv[2])`;
+    const unpacked = spawnSync(process.execPath, ["-e", script, path.join(stage, "driver.zip"), target], { env: { ...process.env, PATH: path.dirname(tar) + path.delimiter + process.env.PATH } });
+    assert.equal(unpacked.status, 0, unpacked.stderr.toString());
+    assert.equal(fs.readFileSync(path.join(target, "cua-driver.exe"), "utf8"), "fixture");
+  } finally {
+    assert.ok(path.resolve(stage).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    fs.rmSync(stage, { recursive: true, force: true });
+  }
+});
+
+
+test("CUA layout resolves one canonical contract in development and packaging", () => {
+ const { computerDriverContract } = require("../src/layout");
+ const dirname = path.dirname(require("node:url").fileURLToPath(import.meta.url));
+ const source = computerDriverContract({ packaged: false, dirname: path.join(dirname, "../src") });
+ assert.deepEqual(JSON.parse(fs.readFileSync(source, "utf8")), cuaContract);
+ assert.equal(computerDriverContract({ packaged: true, resourcesPath: "/res" }), path.join("/res", "bin", "cua-driver.lock.json"));
 });

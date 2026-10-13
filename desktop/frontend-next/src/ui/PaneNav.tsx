@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { stepDone, type PlanStep } from "../state/session";
 import { arrowTabs } from "./tablist";
@@ -26,6 +26,24 @@ export function PaneNav({ view, onPick, rows, surfaces, plan, goal }: {
   goal?: string;
 }) {
   const bar = useRef<HTMLDivElement>(null);
+  const thumb = useRef<HTMLSpanElement>(null);
+  // One highlight that moves to the chosen tab, so a switch reads as one motion
+  // rather than one box fading out while another fades in.
+  useLayoutEffect(() => {
+    const host = bar.current;
+    if (!host) return;
+    const place = () => {
+      const on = host.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      const el = thumb.current;
+      if (!el) return;
+      el.hidden = !on;
+      if (on) el.style.cssText = `left:${on.offsetLeft}px;top:${on.offsetTop}px;width:${on.offsetWidth}px;height:${on.offsetHeight}px`;
+    };
+    place();
+    const watch = new ResizeObserver(place);
+    watch.observe(host);
+    return () => watch.disconnect();
+  }, [view, rows, surfaces]);
   // Read at render: t() answers out of a dictionary boot() installs, and a
   // table built in the module body freezes the labels in the source language.
   const name: Record<PaneView, string> = {
@@ -35,6 +53,7 @@ export function PaneNav({ view, onPick, rows, surfaces, plan, goal }: {
   return (
     <div className="tabs">
       <div className="vtabs" role="tablist" ref={bar} onKeyDown={arrowTabs}>
+        <span className="vthumb" ref={thumb} aria-hidden="true" />
         {/* No item count. How many rows a transcript holds does not change what
             anyone does next, and it was the largest number on the bar. */}
         <button

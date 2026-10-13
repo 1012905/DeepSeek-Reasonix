@@ -104,7 +104,7 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	defer func() { out.todoEcho = a.todoWriteEchoes(call, todosBefore, out.errMsg) }()
 	defer func() {
 		if plan.mutationObserved && !plan.mutationAfterDone {
-			a.observeAfterMutation(plan)
+			out.checkpointErr = a.observeAfterMutation(plan)
 		}
 		if plan.releaseMutationWrite != nil {
 			plan.releaseMutationWrite()
@@ -141,7 +141,9 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	}
 	// Read after tool.before: an extension may have substituted the call, and the
 	// batch scan judged the one the model wrote.
-	defer func() { out.endsRound = out.endsRound || tool.IsDecisionBarrier(plan.tool) }()
+	defer func() {
+		out.endsRound = out.endsRound || tool.IsDecisionBarrierCall(plan.tool, json.RawMessage(plan.call.Arguments)) || tool.IsDecisionBarrier(plan.execTool)
+	}()
 	if blocked, early := a.refuseNetworkToolPaths(plan); early {
 		return blocked
 	}
@@ -384,7 +386,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 			// A connected mcp-server call completes during resolution by listing
 			// its live tools, so account for that successful call here too.
 			if rc.ProxyAction == "call" && !rc.Unavailable {
-				a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), nil)
+				a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), nil, nil)
 			}
 			result := rc.Result
 			if a.task.ledger != nil {
@@ -589,12 +591,12 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Acquire the checkpoint barrier before preimage capture and any hook. It is
 	// held through post hooks and AfterMutation so rewind cannot interleave with
 	// writer-side user code.
-	if !plan.readOnly && a.svc.mutationObserver != nil && a.svc.mutationObserver.Store() != nil {
-		barrier := a.svc.mutationObserver.Store().Barrier()
-		if err := barrier.EnterWrite(); err != nil {
-			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: mutation barrier unavailable"}, true
+	if !plan.readOnly && a.svc.mutationObserver != nil {
+		release, err := a.svc.mutationObserver.BeginWrite()
+		if err != nil {
+			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: checkpoint write preparation failed"}, true
 		}
-		plan.releaseMutationWrite = barrier.ExitWrite
+		plan.releaseMutationWrite = release
 	}
 	if blocked, early := a.preToolUse(ctx, plan); early {
 		return blocked, true
@@ -717,11 +719,11 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	a.recordToolReceipts(ctx, plan, result, execution, err)
 	result = a.withObligationNotice(result, owedBefore, execution, readOnly)
 	// Track skill/capability outcomes for Delivery gates.
-	a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), err)
+	a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), runTool, err)
 	a.notifyToolHooks(ctx, permName, permArgs, result, err)
 	// Always re-read after post hooks — partial writes and hook side effects can
 	// change the previewed path even when the concrete tool returned an error.
-	a.observeAfterMutation(plan)
+	checkpointErr := a.observeAfterMutation(plan)
 	plan.mutationAfterDone = true
 	if a.svc.recoveryGate != nil {
 		a.observeRecoveryResult(ctx, evidenceName, evidenceArgs, readOnly, mutates, result, err, false, false, recoveryGen)
@@ -740,7 +742,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
 			output: body, images: images, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
-			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err),
+			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
 		if truncMsg != "" {
 			out.rawOutput = rawErr
@@ -752,7 +754,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
 		output: body, images: images, bound: bound, truncMsg: truncMsg,
-		execution: execution, provenance: plan.provenanceOf(runTool, runArgs),
+		execution: execution, provenance: plan.provenanceOf(runTool, runArgs), checkpointErr: checkpointErr,
 	}
 	if truncMsg != "" {
 		out.rawOutput = result
