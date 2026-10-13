@@ -284,6 +284,10 @@ rules are written in.
   was already on the list; the workbench body's implicit row is `auto`, sized to
   its content, so the column grew past the panel and was clipped instead.
   `grid-template-rows: minmax(0, 1fr)` is the half that makes the overflow real.
+- The docked workbench is a card inset from the pane, and its tab strip ends on
+  the pane's tab-row line so the two rows read as one: the strip is
+  `--pane-bar-h` less the card's top inset and border. `perf/dock.mjs` holds
+  the two lines together.
 - The workbench is hidden, not unmounted. It holds the open files and a browser
   per tab, each with its own history, and a glance at the conversation must not
   cost them. `.scroll[data-pane="browser"][hidden]` was already written for it.

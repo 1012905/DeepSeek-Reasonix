@@ -234,8 +234,9 @@ body { background: var(--page); }
 /* Conversation surface */
 .main,
 .panes,
+.app { --pane-bar-h: 41px; }
 .tabs { background: var(--surface); }
-.tabs { padding-block: 7px; border-bottom-color: var(--hair); }
+.tabs { height: var(--pane-bar-h); padding-block: 7px; border-bottom-color: var(--hair); }
 .flow {
   width: min(840px, calc(100% - var(--srail-w) - 28px));
   max-width: none;
@@ -1340,6 +1341,7 @@ body { background: var(--page) !important; }
 .studio-browser-error { border-top: 0; border-bottom: 1px solid var(--border); color: #c78a82; }
 .workbench { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--surface); color: var(--text); }
 .pane:has(> .pbody[data-dock]) > .scroll[data-pane="browser"] { padding: 8px 8px 8px 2px; border-left: 0; background: transparent; }
+.pane:has(> .pbody[data-dock]) > .scroll[data-pane="browser"] .workbench-tabs { height: calc(var(--pane-bar-h) - 9px); }
 .pane:has(> .pbody[data-dock]) > .scroll[data-pane="browser"] > .workbench {
   border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent), 0 12px 30px -20px color-mix(in srgb, var(--text) 32%, transparent);
