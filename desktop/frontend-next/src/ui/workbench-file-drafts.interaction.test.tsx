@@ -20,7 +20,7 @@ function deferred<T>() {
 }
 const file = (path: string, content = `saved ${path}`, revision = "r1") => ({ path, content, revision });
 const button = (action: string, target?: string) => document.querySelector<HTMLButtonElement>(
-  `[data-action="workbench.${action}"]${target ? `[data-target="${target}"]` : ""}`,
+  `[data-action="workbench.${action}"]${target ? `[data-target="${target}"]` : ""}, [data-action-click="workbench.${action}"]${target ? `[data-target="${target}"]` : ""}`,
 )!;
 async function editor(value?: string) {
   return waitFor(() => {

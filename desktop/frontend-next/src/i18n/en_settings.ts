@@ -2,6 +2,11 @@
 // alone — one catalogue is still the model, and this file is read as its
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
+  "浏览器标签": "Browser tabs",
+  "关闭其他浏览器标签": "Close other browser tabs",
+  "关闭右侧浏览器标签": "Close browser tabs to the right",
+  "关闭全部浏览器标签": "Close all browser tabs",
+  "无法关闭 {name}：{why}": "Could not close {name}: {why}",
   "搜索已安装包": "Search installed packages",
   "搜索包名、技能、命令或服务": "Search package names, skills, commands or servers",
   "插件包：{shown} / {total}": "Packages: {shown} / {total}",
@@ -18,10 +23,6 @@ export const EN_SETTINGS: Record<string, string> = {
   "{name} 的显示别名": "Display alias for {name}",
   "显示别名（留空使用模型 ID）": "Display alias (empty uses model ID)",
   "仅用于显示，不改变请求中的模型 ID": "Display only; the model ID sent in requests is unchanged",
-  "浏览器标签": "Browser tabs",
-  "关闭其他浏览器标签": "Close other browser tabs",
-  "关闭全部浏览器标签": "Close all browser tabs",
-  "无法关闭 {name}：{why}": "Could not close {name}: {why}",
   "Esc 停止任务": "Esc stops a task",
   "任务运行时按 Esc 的处理方式。点击停止按钮始终立即停止。": "What Escape does while a task is running. The stop button always stops at once.",
   "按两次 Esc 停止": "Press Esc twice to stop",

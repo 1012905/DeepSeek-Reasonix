@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import { host } from "../port/host";
@@ -436,6 +436,28 @@ export function WorkbenchPanel({
   const close = (targets: Surface[]) => { supersede(); return closeTabs(targets); };
   const dismissTabMenu = useCallback(() => setTabMenu(null), []);
   const [tabMenu, setTabMenu] = useState<{ surface: Surface; x: number; y: number; anchor: HTMLElement } | null>(null);
+  const pages = surfaces.filter((s) => s.kind !== "file");
+  const tabAt = tabMenu ? surfaces.findIndex((s) => keyOf(s) === keyOf(tabMenu.surface)) : -1;
+  const tabOthers = tabMenu ? pages.filter((s) => keyOf(s) !== keyOf(tabMenu.surface)) : [];
+  const tabRight = tabAt < 0 ? [] : surfaces.slice(tabAt + 1).filter((s) => s.kind !== "file");
+  const returning = useRef("");
+  useEffect(() => {
+    if (tabMenu && tabAt < 0) setTabMenu(null);
+    if (tabMenu || closing || !returning.current) return;
+    const picks = [...document.querySelectorAll<HTMLButtonElement>(".workbench-tab-pick")];
+    const back = picks.find((b) => b.dataset.target === returning.current) ?? picks.find((b) => b.closest('[aria-selected="true"]'));
+    returning.current = "";
+    (back ?? newTab.current)?.focus();
+  }, [tabMenu, tabAt, surfaces, closing]);
+  const offerTabMenu = (e: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, surface: Surface) => {
+    if (surface.kind === "file" || closing || document.getSelection()?.isCollapsed === false) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const anchor = e.currentTarget.matches("button") ? e.currentTarget : e.currentTarget.querySelector<HTMLElement>(".workbench-tab-pick")!;
+    const rect = anchor.getBoundingClientRect();
+    const pointed = "clientX" in e && (e.clientX !== 0 || e.clientY !== 0);
+    setTabMenu({ surface, x: pointed ? e.clientX : rect.left, y: pointed ? e.clientY : rect.bottom, anchor });
+  };
   return (
     <section className="workbench" aria-label={t("工作台")} data-action-keydown="layer.dismiss" onKeyDown={(e) => {
       if (launcher && e.key === "Escape") { e.stopPropagation(); toggleLauncher(); newTab.current?.focus(); }
@@ -457,17 +479,12 @@ export function WorkbenchPanel({
             aria-selected={!launcher && surface === active}
             data-live={surface.kind === "browser" && surface.tab.active ? "" : undefined}
             data-action-contextmenu="workbench.browser-menu" data-target={keyOf(surface)}
-            onContextMenu={(e) => {
-              if (surface.kind === "file" || closing) return;
-              e.preventDefault();
-              const anchor = e.currentTarget.querySelector<HTMLElement>(".workbench-tab-pick")!;
-              const rect = anchor.getBoundingClientRect();
-              setTabMenu({ surface, x: e.clientX || rect.left, y: e.clientY || rect.bottom, anchor });
-            }}
+            onContextMenu={(e) => offerTabMenu(e, surface)}
           >
             <button
               className="workbench-tab-pick"
-              data-action="workbench.tab"
+              data-action-click="workbench.tab"
+              data-action-keydown="workbench.browser-menu"
               data-target={keyOf(surface)}
               title={
                 surface.kind === "browser"
@@ -475,7 +492,10 @@ export function WorkbenchPanel({
 ` : ""}${surface.tab.url}`
                   : labelOf(surface, hosts)
               }
+              aria-haspopup={surface.kind === "file" ? undefined : "menu"}
+              aria-expanded={surface.kind === "file" ? undefined : tabMenu !== null && keyOf(tabMenu.surface) === keyOf(surface)}
               onClick={() => pick(keyOf(surface))}
+              onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) offerTabMenu(e, surface); }}
             >
               <StudioIcon name={surface.kind === "file" ? "file" : "globe"} />
               <span>{labelOf(surface, hosts)}</span>
@@ -707,10 +727,11 @@ export function WorkbenchPanel({
           )}
         </aside>
       </div>
-      {tabMenu && <BrowserTabMenu menu={tabMenu} others={surfaces.some((s) => s.kind !== "file" && keyOf(s) !== keyOf(tabMenu.surface))} onDismiss={dismissTabMenu} onClose={(mode) => {
+      {tabMenu && <BrowserTabMenu menu={tabMenu} others={tabOthers.length > 0} right={tabRight.length > 0} onDismiss={dismissTabMenu} onClose={(mode) => {
         const target = tabMenu.surface;
+        returning.current = keyOf(target);
         setTabMenu(null);
-        void close(mode === "one" ? [target] : surfaces.filter((s) => s.kind !== "file" && (mode === "all" || keyOf(s) !== keyOf(target))));
+        void close(mode === "one" ? [target] : mode === "others" ? tabOthers : mode === "right" ? tabRight : pages);
       }} />}
     </section>
   );
