@@ -505,6 +505,11 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                         data-just-done={session.runtimeId && justDone.has(session.runtimeId) ? "" : undefined}
                         data-busy={opening === session.path ? "" : undefined}
                         onClick={() => selection ? toggleSelection(session.path) : void pick(ws, session)}
+                        data-action-dblclick={selection ? undefined : "session.rename"}
+                        onDoubleClick={(ev) => {
+                          if (selection || (ev.target as HTMLElement).closest("input, button, [role='menu']")) return;
+                          setEditing(session.path);
+                        }}
                         onContextMenu={(ev) => {
                           if ((ev.target as HTMLElement).closest("input, textarea, [role='menu']")) return;
                           if (selection) { ev.preventDefault(); return; }

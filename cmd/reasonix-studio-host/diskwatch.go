@@ -37,3 +37,11 @@ func watchDisk(ctx context.Context, set *notify.Settings, sender notify.Sender, 
 		}
 	}
 }
+
+// startDiskWatch begins the watch and returns the sender it speaks through, so
+// the hub's notices and the disk warning leave by the same door.
+func startDiskWatch(ctx context.Context, set *notify.Settings, dirs []string) notify.Sender {
+	sender := notify.NewPlatformSender()
+	go watchDisk(ctx, set, sender, dirs, diskWatchEvery, diskhealth.Read)
+	return sender
+}
