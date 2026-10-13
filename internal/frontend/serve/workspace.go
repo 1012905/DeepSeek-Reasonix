@@ -184,13 +184,14 @@ func (s *Server) statsSurface() surface.Surface { return s.surface.Or(surface.Se
 // process working directory and sessions fall back to the global dir, so the
 // switch would quietly serve another project's conversations.
 func (s *Server) rebuildOptions(cur control.SessionAPI, ref string) boot.Options {
-	opts := boot.Options{Model: ref, Sink: s.rebuildSink(), Stderr: os.Stderr, StatsSource: s.statsSurface(), FeedbackSurface: feedbackSurface(s.statsSurface()), ProviderResolver: s.resolver, CleanupPendingReconciler: BackgroundCleanupReconciler}
+	opts := boot.Options{Model: ref, Sink: s.rebuildSink(), NativeSurfaces: true, Stderr: os.Stderr, StatsSource: s.statsSurface(), FeedbackSurface: feedbackSurface(s.statsSurface()), ProviderResolver: s.resolver, CleanupPendingReconciler: BackgroundCleanupReconciler}
 	if s.lastBuild != nil {
 		opts.ComputerDriver = s.lastBuild.ComputerDriver
 	}
 	if cur == nil {
 		return opts
 	}
+	opts.NativeSurfaces = cur.NativeSurfaces()
 	opts.WorkspaceRoot, opts.SessionDir = cur.WorkspaceRoot(), cur.SessionDir()
 	// Keep the logical session's private temporary directory across the rebuild.
 	if ctrl, ok := cur.(*control.Controller); ok && ctrl != nil {
@@ -300,5 +301,8 @@ func (s *Server) buildForWorkspace(ctx context.Context, dir, ref string) (*contr
 func (s *Server) workspaceOptions(dir, ref string) boot.Options {
 	opts := s.rebuildOptions(nil, ref)
 	opts.WorkspaceRoot, opts.SessionDir = dir, SessionDirFor(dir)
+	if ctl := s.ctl(); ctl != nil {
+		opts.NativeSurfaces = ctl.NativeSurfaces()
+	}
 	return opts
 }

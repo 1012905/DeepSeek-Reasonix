@@ -122,6 +122,7 @@ type Runtime struct {
 // HubOptions carries what the embedding host decides for every runtime.
 type HubOptions struct {
 	ComputerDriver *computer.Driver
+	NativeSurfaces bool
 	// LogsDir is where the shell keeps its logs, when there is a shell. Empty
 	// means this kernel has no such place to report.
 	LogsDir string
@@ -332,6 +333,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 		WorkspaceRoot:   root,
 		SessionDir:      SessionDirFor(root),
 		Sink:            paneSink,
+		NativeSurfaces:  h.opts.NativeSurfaces,
 		Stderr:          os.Stderr,
 		StatsSource:     h.surface(),
 		FeedbackSurface: feedbackSurface(h.surface()),

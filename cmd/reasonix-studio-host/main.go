@@ -361,21 +361,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	phases.mark(startupSinks)
 	root := launchWorkspace(shell.exe)
 	phases.mark(startupWorkspace)
-	built, err := boot.BuildRuntime(ctx, boot.Options{
-		ComputerDriver:  driver,
-		Version:         version,
-		WorkspaceRoot:   root,
-		SessionDir:      serve.SessionDirFor(root),
-		Sink:            paneSink,
-		Stderr:          logs,
-		OnPhase:         phases.boot,
-		StatsSource:     surface.Desktop,
-		FeedbackSurface: feedback.SurfaceStudio,
-		// A stale default_model must not keep the window from opening to fix it.
-		OpenOnFallbackModel: true,
-
-		CleanupPendingReconciler: serve.BackgroundCleanupReconciler,
-	})
+	built, err := boot.BuildRuntime(ctx, runtimeOptions(root, paneSink, logs, phases, driver))
 	phases.mark(startupRuntime)
 	if err != nil {
 		return nil, err
@@ -404,6 +390,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// reason belongs in the log the shell keeps.
 	notify.OnSendFailure(func(err error) { fmt.Fprintf(logs, "notify: %v\n", err) })
 	hub := serve.NewHub(serve.HubOptions{
+		NativeSurfaces: true,
 		ComputerDriver: driver,
 		Serve:          hubCfg,
 		Surface:        surface.Desktop,
@@ -446,6 +433,26 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	startCloudRemote(ctx, cfg, logs, hub)
 	phases.mark(startupBackground)
 	return hub, nil
+}
+
+// runtimeOptions is what the one pane this host launches with is built from.
+func runtimeOptions(root string, sink event.Sink, logs io.Writer, phases *startupPhases, driver *computer.Driver) boot.Options {
+	return boot.Options{
+		ComputerDriver:  driver,
+		Version:         version,
+		WorkspaceRoot:   root,
+		SessionDir:      serve.SessionDirFor(root),
+		Sink:            sink,
+		NativeSurfaces:  true,
+		Stderr:          logs,
+		OnPhase:         phases.boot,
+		StatsSource:     surface.Desktop,
+		FeedbackSurface: feedback.SurfaceStudio,
+		// A stale default_model must not keep the window from opening to fix it.
+		OpenOnFallbackModel: true,
+
+		CleanupPendingReconciler: serve.BackgroundCleanupReconciler,
+	}
 }
 
 func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, tasks remotecloud.TaskService) {
