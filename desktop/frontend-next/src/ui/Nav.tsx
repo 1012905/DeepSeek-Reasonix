@@ -33,12 +33,14 @@ interface Props {
    *  does what the rail beside it can: open or close the workspace column. */
   onRail: () => void;
   onFeedback: () => void;
+  /** A new session in the window's folder, the same action as the sidebar's. */
+  onNew: () => void;
   feedbackUnread: number;
   /** False keeps the column mounted but out of the way and out of reach. */
   shown: boolean;
 }
 
-export function Nav({ at, onGo, onFiles, onHome, onRail, onFeedback, feedbackUnread, shown }: Props) {
+export function Nav({ at, onGo, onFiles, onHome, onRail, onFeedback, onNew, feedbackUnread, shown }: Props) {
   const btn = ([key, label, sec, action]: [Mark, string, string | null, string?]) => (
     <button
       key={key}
@@ -56,7 +58,13 @@ export function Nav({ at, onGo, onFiles, onHome, onRail, onFeedback, feedbackUnr
   );
   return (
     <nav className="nav" aria-label={t("主导航")} aria-hidden={shown ? undefined : true} inert={!shown}>
-      <div className="navgrp">{TO.map(btn)}</div>
+      <div className="navgrp">
+        <button className="navbtn" data-action="session.new" aria-label={t("新建会话")} onClick={onNew}>
+          <StudioIcon name="plus" aria-hidden="true" />
+          <span className="navhint" role="tooltip">{t("新建会话")}</span>
+        </button>
+        {TO.map(btn)}
+      </div>
       <div className="navgrp foot">
         <button className="navbtn" data-action="feedback.open" onClick={onFeedback}>
           <StudioIcon name="feedback" aria-hidden="true" />
