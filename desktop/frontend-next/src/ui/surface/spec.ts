@@ -1,3 +1,4 @@
+import { richOption, richDataset } from "./rich-spec";
 import type { ExtensionViewNode, SurfaceField } from "../../port/wire";
 
 export interface SurfaceSpec {
@@ -36,7 +37,8 @@ function field(raw: unknown): raw is SurfaceField {
   if (options && options.length > 16) return false;
   const seen = new Set<string>();
   for (const o of options ?? []) {
-    if (!object(o) || !keys(o, ["value", "label", "description", "preview"]) || !id(o.value) || seen.has(o.value) || !text(o.label, 200, true) || !text(o.description, 4000) || !text(o.preview, 4000)) return false;
+    if (!object(o) || !keys(o, ["value", "label", "description", "preview", "location", "group", "facts", "price", "currency", "image"]) || !id(o.value) || seen.has(o.value) || !text(o.label, 200, true) || !text(o.description, 4000) || !text(o.preview, 4000)) return false;
+    if (!richOption(o)) return false;
     seen.add(o.value);
   }
   return raw.default === undefined || validSurfaceValue(raw as unknown as SurfaceField, raw.default);
@@ -66,10 +68,14 @@ export function parseSurface(raw: unknown): SurfaceSpec | null {
       case "diff_preview":
         if (!object(v.diff) || !keys(v.diff, ["before", "after"]) || typeof v.diff.before !== "string" || typeof v.diff.after !== "string" || !text(v.diff.before, 4000) || !text(v.diff.after, 4000)) return false;
         allowed = ["label", "diff"]; break;
-      case "field": case "choice_card": case "editable_text":
+      case "dashboard":
+        if (!richDataset(v.dataset)) return false; allowed = ["label", "dataset"]; break;
+      case "field": case "choice_card": case "editable_text": case "map": case "comparison":
         if (!id(v.key) || fields.has(v.key) || fields.size >= 16 || !text(v.label, 200, true) || !field(v.field)) return false;
         if (v.kind === "choice_card" && v.field.type !== "choice" && v.field.type !== "multichoice") return false;
         if (v.kind === "editable_text" && v.field.type !== "string") return false;
+        if (v.kind === "map" && (v.field.type !== "multichoice" || !v.field.options?.every(o => o.location))) return false;
+        if (v.kind === "comparison" && v.field.type !== "choice" && v.field.type !== "multichoice") return false;
         fields.add(v.key); allowed = ["key", "label", "field"]; break;
       default: return false;
     }
