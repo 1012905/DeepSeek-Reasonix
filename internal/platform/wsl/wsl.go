@@ -139,7 +139,11 @@ func List(ctx context.Context, run Runner) ([]Distro, error) {
 		if errors.Is(err, ErrUnavailable) {
 			return nil, err
 		}
-		// With nothing installed wsl.exe exits non-zero and says so in prose.
+		// With nothing installed wsl.exe exits non-zero and says so in prose; an
+		// ended context is the caller's deadline, not an empty machine.
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, nil
 	}
 	return ParseList(Decode(out))

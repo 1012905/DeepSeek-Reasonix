@@ -102,6 +102,15 @@ func TestNothingInstalledIsAnEmptyListButNoWslIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestAnEndedContextIsNotAnEmptyMachine(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	killed := func(context.Context, ...string) ([]byte, error) { return nil, errors.New("signal: killed") }
+	if l, err := List(ctx, killed); !errors.Is(err, context.Canceled) || len(l) != 0 {
+		t.Fatalf("List = %v, %v", l, err)
+	}
+}
+
 func TestSystemIsUnavailableOffWindows(t *testing.T) {
 	if _, err := List(context.Background(), System()); err != nil && !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("List = %v", err)
