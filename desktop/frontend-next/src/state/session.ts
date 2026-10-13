@@ -1,3 +1,5 @@
+import { measureInteractions } from "./interactions";
+import { foldExtension } from "./extension";
 import type { CostCoverage, Receipt, Tool, WireEvent } from "../port/wire";
 import { noteTool, type Executions } from "./executions";
 import { estimateTokens, sample } from "../port/tokens";
@@ -35,6 +37,8 @@ const WAITING_WORKSPACE = "等待工作区";
 const WAITING_MODEL = "等待模型回复";
 
 export const initialState: SessionState = {
+  interactionIDs: { asked: [], answered: [] },
+  interactions: { requests: 0, questions: 0, options: 0, answers: 0, customAnswers: 0 },
   error: "",
   executions: {},
   terminal: null,
@@ -161,7 +165,7 @@ const holdsWait = new Set<string>([
 // bumps it. Wrapping the switch keeps that rule in one place instead of on each
 // of its two dozen returns.
 export function reduce(s: SessionState, ev: SessionEvent): SessionState {
-  const next = foldStall(apply(s, ev), ev);
+  const next = foldStall(apply(measureInteractions(s, ev), ev), ev);
   if (next.items === s.items) return next;
   const streamed = ev.kind === "text" || ev.kind === "reasoning";
   const bumped = streamed ? next : { ...next, revision: next.revision + 1 };
@@ -185,6 +189,10 @@ const highest = (items: Item[]) => items.reduce((n, i) => Math.max(n, seqOf(i.id
  *  renders and the one that was never drawn still owes its entrance. */
 function entering(prev: SessionState, next: SessionState, ev: SessionEvent): Partial<SessionState> {
   if (ev.kind === "__restore") return { entranceOwed: [], enteredThrough: highest(next.items) };
+  if (ev.kind === "__extension_snapshot" || ("extension" in ev && ev.extension?.code)) return {
+    entranceOwed: prev.entranceOwed.filter(id => next.items.some(i => i.id === id && !(i.t === "extension" && i.ext.code))),
+    enteredThrough: Math.max(prev.enteredThrough, highest(next.items)),
+  };
   const fresh = next.items.filter((i) => seqOf(i.id) > prev.enteredThrough).map((i) => i.id);
   if (fresh.length === 0) return {};
   return {
@@ -198,6 +206,7 @@ function entering(prev: SessionState, next: SessionState, ev: SessionEvent): Par
 export type SessionEvent =
   | WireEvent
   | { kind: "__restore"; items: Item[]; plan?: PlanStep[]; executions: Executions }
+  | { kind: "__extension_snapshot"; surfaces: import("../port/wire").ExtensionSurface[] }
   | { kind: "__todos"; plan: PlanStep[] }
   | { kind: "__totals"; hit: number; miss: number; cost?: number; currency?: string; coverage?: CostCoverage; incompleteReason?: string }
   | { kind: "__error"; text: string }
@@ -213,6 +222,7 @@ export type SessionEvent =
   | { kind: "__entered"; ids: string[] };
 
 function apply(s: SessionState, ev: SessionEvent): SessionState {
+  if (ev.kind === "__extension_snapshot") return ev.surfaces.reduce(foldExtension, s);
   // A line the kernel holds for a retry waits in the queue panel, not here.
   if (ev.kind === "notice" && ev.code === "unapplied_steer" && ev.itemId) s = withoutPendingRow(s, ev.itemId);
   if (ev.kind === "__error") return { ...s, error: ev.text };
@@ -423,39 +433,15 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     // tick instead of moving in place.
     case "extension_surface":
     case "extension_status": {
-      const ext = ev.extension;
-      if (!ext) return s;
-      if (ext.kind === "panel") {
-        const at = s.panels.findIndex((p) => p.pluginId === ext.pluginId && p.surfaceId === ext.surfaceId);
-        if (at < 0) return { ...s, panels: [...s.panels, ext] };
-        const panels = s.panels.slice();
-        panels[at] = ext;
-        return { ...s, panels };
-      }
-      if (ext.kind === "view" && ext.view?.anchor) {
-        return { ...s, takeovers: { ...s.takeovers, [ext.view.anchor]: ext } };
-      }
-      if (ext.kind === "view") {
-        const at = s.views.findIndex((v) => v.pluginId === ext.pluginId && v.surfaceId === ext.surfaceId);
-        if (at < 0) return { ...s, views: [...s.views, ext] };
-        const views = s.views.slice();
-        views[at] = ext;
-        return { ...s, views };
-      }
-      const at = s.items.findIndex(
-        (it) => it.t === "extension" && it.ext.pluginId === ext.pluginId && it.ext.surfaceId === ext.surfaceId,
-      );
-      if (at < 0) return { ...s, items: [...s.items, { t: "extension", id: nextId(), ext }] };
-      const items = s.items.slice();
-      items[at] = { t: "extension", id: items[at].id, ext };
-      return { ...s, items };
+      return ev.extension ? foldExtension(s, ev.extension) : s;
     }
 
     case "approval_request":
       return ev.approval ? prompted(s, "等待批准", { t: "approval", id: nextId(), a: ev.approval }) : s;
 
     case "ask_request":
-      return ev.ask ? prompted(s, "等待你回答", { t: "ask", id: nextId(), ask: ev.ask }) : s;
+      if (!ev.ask || s.items.some(i => i.t === "ask" && i.ask.id === ev.ask!.id)) return s;
+      return prompted(s, "等待你回答", { t: "ask", id: nextId(), ask: ev.ask });
 
     case "compaction_started":
       return { ...s, items: [...s.items, { t: "compaction", id: nextId(), c: ev.compaction ?? {}, done: false }] };
