@@ -61,7 +61,10 @@ export function SkillRow({
   const toggle = () => act(() => port.setSkillEnabled(sk.name, !sk.enabled, "project", root || undefined));
   return (
     <div className="skrow" data-off={sk.enabled ? undefined : ""} data-local={local ? "" : undefined}>
-      <span className="nm">{command || sk.name}</span>
+      <span className="nm">
+        {command || sk.name}
+        {command && <CopyButton key={command} text={command} iconOnly label={t("复制调用命令 {command}", { command })} />}
+      </span>
       <span className="ds" title={sk.description || undefined}>{sk.description || t("未提供说明")}</span>
       <span className="how">{note.text && <i className={note.reachable ? "w" : "w none"}>{t(note.text)}</i>}</span>
       <span className="face">
@@ -71,7 +74,6 @@ export function SkillRow({
       <span className="sc" title={sk.path}>
         {sk.plugin || t(SCOPE[sk.scope ?? ""] ?? "") || sk.scope}
       </span>
-      {command && <CopyButton key={command} text={command} iconOnly label={t("复制调用命令 {command}", { command })} />}
       {local && <Exception onClear={() => act(() => port.clearSkillOverride(sk.name, root || undefined))} busy={busy} />}
       <Switch data-action="skill.enabled" data-target={sk.name} on={sk.enabled} busy={busy} label={t(sk.enabled ? "关闭 {name}" : "启用 {name}", { name: sk.name })} onClick={toggle} />
     </div>
