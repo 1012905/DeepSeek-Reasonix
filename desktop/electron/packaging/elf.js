@@ -40,17 +40,47 @@ function dynamicallyLinked(files) {
   return found;
 }
 
-module.exports = { elfInterpreter, dynamicallyLinked };
+// e_machine, by the GOARCH it answers to. A Go binary of the other
+// architecture still starts under emulation or a compat layer on some systems, so
+// "it runs" says nothing about which one a package carries.
+const MACHINES = { amd64: 62, arm64: 183 };
+
+function elfMachine(bytes) {
+  if (bytes.length < 20 || bytes.readUInt32BE(0) !== 0x7f454c46) throw new Error("not an ELF file");
+  const code = bytes[5] === 1 ? bytes.readUInt16LE(18) : bytes.readUInt16BE(18);
+  return Object.keys(MACHINES).find((arch) => MACHINES[arch] === code) ?? `machine ${code}`;
+}
+
+function wrongArchitecture(files, arch) {
+  if (!MACHINES[arch]) throw new Error(`no ELF machine is known for ${arch}`);
+  const found = [];
+  for (const file of files) {
+    const machine = elfMachine(fs.readFileSync(file));
+    if (machine !== arch) found.push({ file, machine });
+  }
+  return found;
+}
+
+module.exports = { elfInterpreter, dynamicallyLinked, elfMachine, wrongArchitecture };
 
 if (require.main === module) {
-  const files = process.argv.slice(2);
-  if (files.length === 0) {
-    console.error("usage: node packaging/elf.js <go-binary>...");
+  const args = process.argv.slice(2);
+  let arch = "";
+  if (args[0] === "--arch") {
+    arch = args[1] ?? "";
+    args.splice(0, 2);
+  }
+  if (args.length === 0) {
+    console.error("usage: node packaging/elf.js [--arch <goarch>] <go-binary>...");
     process.exit(2);
   }
-  const found = dynamicallyLinked(files);
+  const found = dynamicallyLinked(args);
   for (const { file, interpreter } of found) {
     console.error(`${file} is dynamically linked (interpreter ${interpreter}); build it with CGO_ENABLED=0`);
   }
-  process.exit(found.length === 0 ? 0 : 1);
+  const wrong = arch ? wrongArchitecture(args, arch) : [];
+  for (const { file, machine } of wrong) {
+    console.error(`${file} is built for ${machine}, but the package is named for ${arch}`);
+  }
+  process.exit(found.length === 0 && wrong.length === 0 ? 0 : 1);
 }

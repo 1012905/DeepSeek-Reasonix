@@ -15,6 +15,8 @@ import (
 	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/safety/endpointclient"
+	"reasonix/internal/safety/redirectguard"
 )
 
 // hostGrants are the surfaces a host opens on behalf of its one local client.
@@ -38,6 +40,8 @@ func (s *Server) AllowProviderEdit() { s.grants.providerEdit = true }
 func (s *Server) registerProviderRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /providers", s.providers)
 	mux.HandleFunc("GET /providers/protocols", s.providerProtocols)
+	mux.HandleFunc("GET /providers/presets", s.providerPresets)
+	mux.HandleFunc("POST /providers/presets/install", s.installProviderPreset)
 	mux.HandleFunc("POST /providers", s.saveProvider)
 	mux.HandleFunc("POST /providers/probe", s.probeProvider)
 	mux.HandleFunc("POST /providers/remove", s.removeProvider)
@@ -59,10 +63,11 @@ var providerNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 type providerView struct {
 	Name string `json:"name"`
 	// DisplayName is the label a person gave this entry; empty is none set.
-	DisplayName string   `json:"displayName,omitempty"`
-	Kind        string   `json:"kind"`
-	BaseURL     string   `json:"baseUrl"`
-	Models      []string `json:"models"`
+	DisplayName  string            `json:"displayName,omitempty"`
+	Kind         string            `json:"kind"`
+	BaseURL      string            `json:"baseUrl"`
+	Models       []string          `json:"models"`
+	ModelAliases map[string]string `json:"modelAliases,omitempty"`
 	// VisionModels is which of them read images, so the form shows the current
 	// answer instead of asking the user to remember it.
 	VisionModels []string `json:"visionModels"`
@@ -151,6 +156,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			Kind:               strings.ToLower(strings.TrimSpace(p.Kind)),
 			BaseURL:            p.BaseURL,
 			Models:             nonNilStrings(p.ChatModelList()),
+			ModelAliases:       p.ModelAliases,
 			VisionModels:       nonNilStrings(visionModelsOf(cfg, p)),
 			CanSetVision:       len(settable) > 0 || config.CanConfigureVision(p),
 			VisionSettable:     nonNilStrings(settable),
@@ -342,33 +348,7 @@ func (s *Server) saveProvider(w http.ResponseWriter, r *http.Request) {
 	if taken {
 		entry.DisplayName = prev.DisplayName
 	}
-	entry.APIKeyEnv, err = keyEnvForNewSource(known, entry.Name, entry.BaseURL, body.APIKey, body.Replace)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	if key := strings.TrimSpace(body.APIKey); key != "" {
-		if _, err := config.SetCredential(entry.APIKeyEnv, key); err != nil {
-			// The slot is derived from the name, so this is the person's to
-			// fix and the name is the field to point them at — not the key,
-			// which is what an unclassified failure here reads as.
-			if errors.Is(err, config.ErrInvalidCredentialKey) {
-				refuse(w, http.StatusBadRequest, "provider.bad_key_slot",
-					"the name does not make a usable credential slot",
-					map[string]any{"name": entry.Name, "slot": entry.APIKeyEnv})
-				return
-			}
-			writeErr(w, http.StatusInternalServerError, err)
-			return
-		}
-	}
-	cfg := config.LoadForEdit(config.UserConfigPath())
-	if err := cfg.UpsertProvider(entry); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+	if !storeProviderEntries(w, known, []config.ProviderEntry{entry}, body.APIKey, body.Replace) {
 		return
 	}
 	// No rebuild: the model list and every switch read config from disk, so the
@@ -402,7 +382,8 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := config.LoadForEdit(config.UserConfigPath())
-	if err := cfg.RemoveProvider(name); err != nil {
+	removal, err := cfg.RemoveProvider(name)
+	if err != nil {
 		switch {
 		case errors.Is(err, config.ErrProviderNotFound):
 			// Already gone is the state the caller asked for: a second click, or
@@ -425,7 +406,24 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	w.WriteHeader(http.StatusNoContent)
+	if len(removal.Moved) == 0 && len(removal.Cleared) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, providerRemovalView{
+		MovedTo: removal.MovedTo,
+		Moved:   nonNilStrings(removal.Moved),
+		Cleared: nonNilStrings(removal.Cleared),
+	})
+}
+
+// providerRemovalView is what a removal changed besides the provider: role ids
+// ("default", "planner", "vision", "subagent:<skill>", ...) handed to MovedTo or
+// emptied.
+type providerRemovalView struct {
+	MovedTo string   `json:"movedTo"`
+	Moved   []string `json:"moved"`
+	Cleared []string `json:"cleared"`
 }
 
 // removalSuccessor is where a conversation on a removed provider goes: the saved
@@ -493,8 +491,8 @@ func probeClients() (proxied, direct *http.Client) {
 	if cfg, err := config.Load(); err == nil && cfg != nil {
 		spec = cfg.NetworkProxySpec()
 	}
-	proxied, _ = netclient.NewHTTPClient(spec, netclient.TransportOptions{})
-	direct, _ = netclient.NewHTTPClient(netclient.ProxySpec{Mode: netclient.ModeOff}, netclient.TransportOptions{})
+	proxied, _ = endpointclient.New(spec, netclient.TransportOptions{})
+	direct, _ = endpointclient.New(netclient.ProxySpec{Mode: netclient.ModeOff}, netclient.TransportOptions{})
 	return proxied, direct
 }
 
@@ -523,6 +521,7 @@ const (
 	codeProbeNoChatModels    = "provider.probe.no_chat_models"
 	codeProbeUpstreamError   = "provider.probe.upstream_error"
 	codeProbeTimeout         = "provider.probe.timeout"
+	codeProbeRedirectRefused = "provider.probe.redirect_refused"
 	codeProbeUnreachable     = "provider.probe.unreachable"
 	codeProbeNotCompatible   = "provider.probe.not_compatible"
 	codeProbeFailed          = "provider.probe.failed"
@@ -555,6 +554,8 @@ func probeReasonRefusal(reason catalog.ProbeReason) (status int, code string) {
 		return http.StatusGatewayTimeout, codeProbeTimeout
 	case catalog.ProbeUnreachable:
 		return http.StatusBadGateway, codeProbeUnreachable
+	case catalog.ProbeRedirectRefused:
+		return http.StatusBadGateway, codeProbeRedirectRefused
 	default:
 		return http.StatusBadGateway, codeProbeNotCompatible
 	}
@@ -573,6 +574,11 @@ func writeProbeFailure(w http.ResponseWriter, err error, apiKey string) {
 	message := "probe: " + string(probe.Reason)
 	if detail := endpointDetail(probe.Body, func() string { return apiKey }); detail != "" {
 		message += ": " + detail
+	}
+	var left *redirectguard.OriginLeft
+	if errors.As(err, &left) {
+		message = left.Error()
+		probe.Params = map[string]any{"from": left.From, "target": left.To}
 	}
 	refuse(w, status, code, message, probe.Params)
 }

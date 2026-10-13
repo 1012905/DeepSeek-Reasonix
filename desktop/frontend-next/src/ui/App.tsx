@@ -1,14 +1,16 @@
 import { watchTreeWake } from "./treewake";
 import { usePinnedSessions } from "./usePinnedSessions";
 import { AutoArchiveNotice } from "./AutoArchiveNotice";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import { Chrome } from "./Chrome";
+import { RailToggle } from "./RailToggle";
 import { useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
+import { useTreeWindow, type TreePaging } from "./treewindow";
 import { useNavRail } from "./navrail";
 import { feedbackEntryTab } from "./feedbackentry";
 import { useLinkRouting } from "./links";
@@ -16,6 +18,8 @@ import { Pane, type PaneReport } from "./Pane";
 import { clearDraftForSession } from "./drafts";
 import { DOCK, Gutter, RAIL, dockMax, keepWidth, widthOf } from "./Gutter";
 import { useWindowKeys, type Shortcut } from "./windowkeys";
+import { useEscStop } from "../state/escstop";
+import { StopHint } from "./StopHint";
 import { folded as roomGaveUp, onRoomWidth } from "./viewport";
 import { useFoldAway } from "./foldaway";
 import { useDrawerCloses } from "./drawer";
@@ -35,7 +39,8 @@ import { Sidebar } from "./Sidebar";
 import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
-import { isUnread, useViewed } from "./unread";
+import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
+import { isUnread, useViewed, useUnreadBadge } from "./unread";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
@@ -74,6 +79,7 @@ const NO_REPORT: PaneReport = {
 // conversation — its transcript, metrics and event stream — lives in the Pane
 // that owns it. That split is what lets two sessions run side by side.
 export function App({ hub }: { hub: HubPort }) {
+  const sessionTabs = useSyncExternalStore(onShowsSessionTabsChange, showsSessionTabs, showsSessionTabs);
   const [runtimes, setRuntimes] = useState<RuntimeView[]>([]);
   const [panesRead, setPanesRead] = useState(false);
   const [active, setActive] = useState(savedActivePane);
@@ -101,12 +107,14 @@ export function App({ hub }: { hub: HubPort }) {
   const [dockLimit, setDockLimit] = useState(() => dockMax(document.body.clientWidth));
   const [report, setReport] = useState<PaneReport>(NO_REPORT);
   const [findPulse, setFindPulse] = useState(0);
+  const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
   // false = closed, true = open at its last section, a string = open there.
   const [settings, setSettings] = useState<string | boolean>(false);
   const [feedback, setFeedback] = useState<FeedbackTab | null>(null);
   const [feedbackUnread, setFeedbackUnread] = useState(0);
   const [browser, setBrowser] = useState(false);
+  const [browserAsk, setBrowserAsk] = useState(0);
   const [setup, setSetup] = useState<ProviderSetup | null | undefined>(undefined);
   // undefined until asked; false means the opening sequence is still owed.
   const [welcomed, setWelcomed] = useState<boolean | undefined>(undefined);
@@ -155,14 +163,22 @@ export function App({ hub }: { hub: HubPort }) {
     setReport(reportsRef.current[active] ?? NO_REPORT);
   }, [active]);
 
-  const reloadTree = useMemo(
+  const treeWindow = useTreeWindow();
+  const readTree = useMemo(
     () => singleFlight(() =>
       hub
-        .tree()
+        .tree(treeWindow.current())
         .then(setTree)
-        .catch(() => {})
         .finally(() => setTreeRead(true))),
-    [hub],
+    [hub, treeWindow],
+  );
+  const reloadTree = useCallback(() => readTree().catch(() => {}), [readTree]);
+  const paging = useMemo<TreePaging>(
+    () => ({
+      more: (root) => treeWindow.grow(root, readTree),
+      view: (v) => { if (treeWindow.view(v)) void reloadTree(); },
+    }),
+    [treeWindow, readTree, reloadTree],
   );
 
   // Held beside this machine's tree, and re-read on the same beat: see
@@ -257,18 +273,16 @@ export function App({ hub }: { hub: HubPort }) {
     return map;
   }, [hub, runtimes]);
   const activePort = panePorts.get(active) ?? panePorts.values().next().value ?? null;
-  // Model requests from a remote pane leave through this machine's broker, so
-  // this machine's network is the one a person configures; a remote pane is
-  // used only when no local one is open, and is named as such.
-  const localRt = runtimes.find((rt) => rt.id === active && !rt.host) ?? runtimes.find((rt) => !rt.host);
-  const networkPort = localRt ? panePorts.get(localRt.id) ?? null : activePort;
-  const networkHost = localRt ? "" : runtimes.find((rt) => rt.id === active)?.host ?? "";
+  const machinePort = useMemo(() => hub.machinePort(), [hub]);
+  const machineRt = runtimes.find((rt) => !rt.host);
+  const localRt = runtimes.find((rt) => rt.id === active && !rt.host) ?? machineRt;
+  const localWorkspacePort = useMemo(() => hub.machinePort(localRt?.id), [hub, localRt?.id]);
 
   useLaunchHealth(activePort, setup, welcomed);
 
   // Asked on open, on focus (at most every 30 s) and every 10 min while a report
   // is unsettled, never otherwise; a failed refresh stays silent and backs off.
-  useFeedbackUnread(networkPort ?? activePort, networkHost, feedbackUnread, setFeedbackUnread, feedback !== null);
+  useFeedbackUnread(machineRt ? machinePort : null, machineRt?.id ?? "", feedbackUnread, setFeedbackUnread, feedback !== null);
 
   useEffect(() => {
     if (!activePort) return;
@@ -313,7 +327,8 @@ export function App({ hub }: { hub: HubPort }) {
   // Transition made a simple sidebar click pay for a full-page texture before
   // the active id changed. Selection feedback should be immediate.
   const reloadBooks = useCallback(() => Promise.all([reloadTree(), reloadRemoteTrees()]), [reloadTree, reloadRemoteTrees]);
-  const viewed = useViewed({ runtimes, ports: panePorts, active, tree, remote: remoteTrees, reload: reloadBooks });
+  const viewed = useViewed({ runtimes, ports: panePorts, active: settings || feedback ? "" : active, tree, remote: remoteTrees, reload: reloadBooks });
+  useUnreadBadge(viewed.tree, viewed.remote);
   const focusPane = useCallback(
     (id: string) => {
       sw.cancel();
@@ -333,6 +348,16 @@ export function App({ hub }: { hub: HubPort }) {
     setSettings(false);
     void reloadRemotes();
   }, [reloadRemotes]);
+
+  const openFiles = useCallback(() => {
+    if (!panePorts.has(active)) {
+      setError(t("请先打开一个会话，再查看它的文件。"));
+      return;
+    }
+    hidePrefs();
+    if (roomGaveUp("scene")) setRail(false);
+    setFilesRequests((requests) => ({ ...requests, [active]: (requests[active] ?? 0) + 1 }));
+  }, [active, panePorts, hidePrefs]);
 
   const openPane = useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes: refreshPanes, sw });
 
@@ -389,7 +414,9 @@ export function App({ hub }: { hub: HubPort }) {
   );
   const closeBrowser = useCallback(() => setBrowser(false), []);
   const stopTurn = useCallback(() => activePort?.cancel(), [activePort]);
-  useWindowKeys(shortcuts, { browser, settings: !!settings, running, closeBrowser, stop: stopTurn });
+  const escMode = useEscStop();
+  const [stopArmed, setStopArmed] = useState(false);
+  useWindowKeys(shortcuts, { browser, settings: !!settings, running, confirm: escMode === "confirm", closeBrowser, stop: stopTurn, onArm: setStopArmed });
 
   // A setting changed in the pane is a fact about the session behind it, and
   // the pane is what holds that fact. Without a nudge it keeps polling only
@@ -548,12 +575,13 @@ export function App({ hub }: { hub: HubPort }) {
         title={tabs.find((tab) => tab.rt.id === active)?.title ?? report.title}
         steer={report.steer}
         onSettings={showPrefs}
-        onBrowser={() => setBrowser((value) => !value)}
+        onBrowser={() => {
+          if (!browser) setBrowserAsk((n) => n + 1);
+          setBrowser((value) => !value);
+        }}
         browser={browser}
         account={account}
-        rail={rail}
         theme={scheme}
-        onRail={() => setRail((v) => !v)}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
         onFind={openFind}
         hub={hub} onError={fail}
@@ -566,8 +594,14 @@ export function App({ hub }: { hub: HubPort }) {
           <Nav
             at={settings === false ? null : settings === true ? "" : settings}
             onGo={showPrefs}
+            onFiles={openFiles}
             onHome={hidePrefs}
+            onRail={() => setRail((v) => !v)}
             onFeedback={() => setFeedback(feedbackEntryTab(feedbackUnread))}
+            onNew={() => {
+              hidePrefs();
+              void openPane({ root: newSessionRoot }).catch(fail);
+            }}
             feedbackUnread={feedbackUnread}
             shown={navRail.shown}
           />
@@ -591,6 +625,7 @@ export function App({ hub }: { hub: HubPort }) {
           reloadRemoteTrees={reloadRemoteTrees}
           readRemoteTree={readRemoteTree}
           reloadTree={reloadTree}
+          paging={paging}
           adder={adder}
           opening={sw.path}
           onOpen={openPane}
@@ -605,6 +640,7 @@ export function App({ hub }: { hub: HubPort }) {
           accountUnread={accountUnread}
           wallet={report.wallet}
           onSettings={showPrefs}
+          onFiles={openFiles}
           onFeedback={(tab) => setFeedback(tab ?? "send")}
           feedbackUnread={feedbackUnread}
           onFind={openFind}
@@ -624,7 +660,7 @@ export function App({ hub }: { hub: HubPort }) {
           {/* One conversation on screen at a time. Side by side, two panes
               squeezed each other and a glance could not tell which composer
               belonged to which run; the ones behind keep streaming either way. */}
-          {tabs.length > 1 && (
+          {sessionTabs && tabs.length > 1 && (
             <PaneTabs
               tabs={tabs}
               active={active}
@@ -657,6 +693,7 @@ export function App({ hub }: { hub: HubPort }) {
                   onSessionChanged={refreshPanes}
                   pulse={settingsPulse}
                   findPulse={findPulse}
+                  filesPulse={filesRequests[rt.id] ?? 0}
                   alert={rt.id === active ? bar : undefined}
                   needsProject={needsProject}
                   onOpenProject={() => {
@@ -668,11 +705,13 @@ export function App({ hub }: { hub: HubPort }) {
                     setClaimed(true);
                   }}
                   onSettings={(section) => section ? showPrefs(section) : showPrefs()}
+                  onOpenSession={(path) => void openPane({ root: rt.root, sessionPath: path }).catch(fail)}
                   theme={scheme}
                   dockW={shownDockW}
                   dockMax={dockLimit}
                   onDockW={onDockW}
                   manualBrowser={rt.id === active && browser}
+                  browserAsk={browserAsk}
                   onManualBrowser={setBrowser}
                 />
               ) : null;
@@ -707,8 +746,8 @@ export function App({ hub }: { hub: HubPort }) {
 
       {adder.pathOpen && <AddWorkspacePrompt busy={adder.busy} onSubmit={adder.addPath} onClose={adder.closePath} />}
 
-      {feedback && (networkPort ?? activePort) && (
-        <Feedback port={(networkPort ?? activePort)!} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />
+      {feedback && activePort && (
+        <Feedback port={machinePort} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />
       )}
 
       {settings && activePort && (
@@ -718,8 +757,9 @@ export function App({ hub }: { hub: HubPort }) {
             hub={hub}
             onError={fail}
             port={activePort}
-            networkPort={networkPort ?? activePort}
-            networkHost={networkHost}
+            networkPort={machinePort}
+            localWorkspacePort={localWorkspacePort}
+            networkHost=""
             status={report.status}
             theme={theme}
             onTheme={setTheme}
@@ -737,11 +777,13 @@ export function App({ hub }: { hub: HubPort }) {
             account={account}
             accountUnread={accountUnread}
             reloadAccount={reloadAccount}
-            workspaceRoot={activeWorkspace?.root ?? ""}
+            workspaceRoot={localRt?.root ?? ""}
           />
         </Suspense>
         </Boundary>
       )}
+      <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
+      <StopHint armed={stopArmed} />
     </div>
   );
 }

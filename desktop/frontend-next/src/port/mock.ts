@@ -1,6 +1,6 @@
 import type { PlanAction } from "./session";
 import { HttpError } from "./port";
-import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
+import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import { MockWorkspace } from "./mock_workspace";
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
@@ -17,7 +17,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   private log: WireEvent[] = [];
   // What the user has sent, so checkpoints() can mirror one per turn.
   private prompts: string[] = [];
-  private undone: string[] | null = null;
+  private undone: { prompts: string[]; offer: RewindUndo } | null = null;
   private at = 0;
   // The kernel numbers every frame a client cannot afford to miss, and a
   // bootstrap cut is read against those numbers.
@@ -67,6 +67,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   // The subagent runs somewhere cheaper; everything else rides the main model.
   private assigned: RoleAssignments = {
+    web_search: "",
     planner: "",
     subagent: "deepseek/deepseek-flash",
     guardian: "",
@@ -185,6 +186,14 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async pinVersion(): Promise<void> {}
   async versionNotes(version: string): Promise<VersionNotes> {
     return { version, markdown: "", cached: false };
+  }
+  async studioLogs(): Promise<StudioLogs> {
+    return {
+      dir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs",
+      crashDir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs\\crash",
+      crashes: [{ name: "host-20261010T230806Z-2.31.0-4412.log", at: "2026-10-10T23:08:06Z", bytes: 8421 }],
+      truncated: false,
+    };
   }
   async acknowledgeLaunchHealth(): Promise<void> {} // booted from no update
   async goToVersion(): Promise<void> {
@@ -327,6 +336,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   }
 
   async newSession() {
+    this.clearUndo();
     this.log = [];
     this.at = 0;
     this.state.goal = "";
@@ -396,6 +406,10 @@ export class MockPort extends MockWorkspace implements AgentPort {
     return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: this.prompts.length > 1 ? 3 : 0, msgIndex: mockMsgIndex(i + 1) }));
   }
 
+  async branchAt(turn: number): Promise<string> {
+    return `/mock/branch-${turn}.jsonl`;
+  }
+
   // The second prompt onwards is scripted to have run bash, so mock mode can
   // show the consent stage the real kernel demands on partial coverage.
   async prepareRewind(turn: number, scope: RewindScope): Promise<RewindPlan> {
@@ -417,13 +431,26 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   async commitRewind(planId: string): Promise<RewindResult> {
     const turn = Number(planId.split("-")[2] ?? 0), files = !planId.endsWith("conversation") && this.prompts.length > 1;
-    this.undone = this.prompts.slice();
-    this.prompts = this.prompts.slice(0, turn);
-    return { ok: true, transactionId: `mock-tx-${turn}`, undoAvailable: true, written: files ? ["main.ts", "style.css"] : [], deleted: files ? ["note.txt"] : [] };
+    const scope = planId.split("-")[3];
+    const offer = { transactionId: `mock-tx-${turn}-${crypto.randomUUID()}`, turn, files: files ? 3 : 0 };
+    this.undone = { prompts: this.prompts.slice(), offer };
+    this.emit({ kind: "rewind_changed" });
+    if (scope !== "code") this.prompts = this.prompts.slice(0, turn);
+    return { ok: true, transactionId: offer.transactionId, undoAvailable: true, conversationOk: scope !== "code",
+      written: files ? ["main.ts", "style.css"] : [], deleted: files ? ["note.txt"] : [] };
   }
 
+  private clearUndo() {
+    if (!this.undone) return;
+    this.undone = null;
+    this.emit({ kind: "rewind_changed" });
+  }
+
+  async availableUndo(): Promise<RewindUndo | null> { return this.state.running ? null : this.undone?.offer ?? null; }
+
   async undoRewind(_transactionId: string): Promise<void> {
-    if (this.undone) this.prompts = this.undone;
+    if (this.undone) this.prompts = this.undone.prompts;
+    this.clearUndo();
   }
 
   subscribe(onEvent: (ev: WireEvent) => void, _onGap?: () => void, bootstrap?: () => Promise<number>) {
@@ -537,7 +564,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   // The fixture has a window with an icon, because the state worth designing
   // is the one where both switches mean something.
-  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true };
+  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, sound: false };
 
   async notifyPrefs(): Promise<NotifyPrefs | null> {
     return { ...this.notifications };
@@ -576,6 +603,8 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async browserOpen(url: string): Promise<BrowserTab> {
     return { id: "mock", target: "mock", url, title: url, active: true };
   }
+
+  async browserClose(_tab: string): Promise<void> {}
 
   async queue(): Promise<Queue> {
     return {
@@ -652,6 +681,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
       this.emit({ kind: "steer", text });
       return;
     }
+    this.clearUndo();
     this.prompts.push(text);
     // The first turn is what puts the session on disk. serve answers with a
     // truncated first message straight away and swaps in the generated title
@@ -677,6 +707,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   }
 
   async resume(_path: string) {
+    this.clearUndo();
     this.log = [];
     this.at = 0;
   }

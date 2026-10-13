@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "official-neutral-blue",
+  "name": "Neutral Blue",
+  "author": "Reasonix Contributors",
+  "description": "Clean neutral white and cool gray with one calm blue accent: no warm tint and no wallpaper, for long sessions.",
+  "license": "MIT",
+  "baseStyle": "glacier",
+  "tokens": {
+    "light": {
+      "bg": "#F4F6F8",
+      "bgSoft": "#FAFBFC",
+      "bgElev": "#FFFFFF",
+      "panel": "#FFFFFF",
+      "border": "#C9D0D9",
+      "borderSoft": "#DFE4EA",
+      "fg": "#16191D",
+      "fgDim": "#4A525C",
+      "fgFaint": "#5A626E",
+      "accent": "#2D5BCB",
+      "accentFg": "#FFFFFF",
+      "float": "#FFFFFF",
+      "floatHi": "#FFFFFF",
+      "codeBg": "#EDF0F4",
+      "sunkBg": "#F4F6F8",
+      "synKeyword": "#2A55B5",
+      "synString": "#1C7452",
+      "synNumber": "#954A0C",
+      "synFunction": "#7A3DB0"
+    },
+    "dark": {
+      "bg": "#0D1014",
+      "bgSoft": "#14181E",
+      "bgElev": "#1A1F26",
+      "panel": "#1E242C",
+      "border": "#333B46",
+      "borderSoft": "#262D36",
+      "fg": "#E6EAF0",
+      "fgDim": "#A0A9B5",
+      "fgFaint": "#8792A1",
+      "accent": "#7FA6FF",
+      "accentFg": "#0C1530",
+      "float": "#1E242C",
+      "floatHi": "#1A1F26",
+      "codeBg": "#0A0D11",
+      "sunkBg": "#0D1014",
+      "synKeyword": "#7FA6FF",
+      "synString": "#8FD9B8",
+      "synNumber": "#E6B07A",
+      "synFunction": "#C79BF0"
+    }
+  }
+}

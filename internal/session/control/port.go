@@ -155,10 +155,12 @@ type SessionHistory interface {
 	Rewind(turn int, scope RewindScope) error
 	PrepareRewind(turn int, scope RewindScope) (checkpoint.RewindPlan, error)
 	CommitRewind(planID string) (checkpoint.RewindResult, error)
+	AvailableUndo() (*checkpoint.RewindUndo, error)
 	UndoRewind(transactionID string) (checkpoint.RewindResult, error)
 	PrepareFileRevert(path string) (checkpoint.RewindPlan, error)
 	CommitFileRevert(planID string, resolution checkpoint.ConflictResolution) (checkpoint.RewindResult, error)
 	Branch(name string) (string, error)
+	BranchAt(turn int, name string) (string, error)
 	Branches() ([]sessionstore.BranchInfo, error)
 	BranchTreeText() string
 	SwitchBranch(ref string) (sessionstore.BranchInfo, error)
@@ -257,6 +259,8 @@ type MCPControl interface {
 // file that failed to parse. None of it is a capability listing, so a pane that lists
 // skills or MCP servers cannot reach a permission rule from the same port.
 type RuntimeSettings interface {
+	WebSearchModel() (WebSearchModelSetting, error)
+	SaveWebSearchModel(ref string) error
 	NetworkSettings() NetworkSettings
 	SaveNetworkSettings(in NetworkSettings, password string, clearPassword bool) error
 	DiagnoseNetwork(ctx context.Context) []NetworkProbe
@@ -279,6 +283,8 @@ type RuntimeSettings interface {
 	SaveDisplayCurrency(mode string) error
 	ChangedFilesSettings() ChangedFilesSettings
 	SaveChangedFilesSettings(show bool) error
+	FoldWorkSettings() FoldWorkSettings
+	SaveFoldWorkSettings(fold bool) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
@@ -286,6 +292,8 @@ type RuntimeSettings interface {
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int
+	ReceiptSettings() ReceiptSettings
+	SaveReceiptSettings(show bool) error
 	ConfigProblem() *ConfigProblem
 	RepairConfigFile() (string, error)
 }
@@ -338,6 +346,7 @@ type Status interface {
 	// One browser, one list of tabs: what the window opens the agent can drive,
 	// and what the agent opens the window can show.
 	BrowserOpen(ctx context.Context, rawURL, tabID string, newTab bool) (browser.TabInfo, error)
+	BrowserClose(ctx context.Context, tabID string) error
 }
 
 // BackgroundJobs stops work a session left running outside any turn.
@@ -413,12 +422,13 @@ type LocalShell interface {
 }
 
 // Commits proposes a commit message for the staged changes and records a local
-// commit once the person has confirmed the text. It never stages, pushes or
-// rewrites history. It also moves the workspace between local git branches —
+// commit once the person has confirmed the text. It stages or unstages only what
+// the person names, and never pushes or rewrites history. It also moves the workspace between local git branches —
 // a workspace write like a commit, refused typed while a turn runs.
 type Commits interface {
 	ProposeCommit(ctx context.Context) (CommitProposal, error)
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
+	StageChanges(ctx context.Context, req StageRequest) error
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 

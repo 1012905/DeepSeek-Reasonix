@@ -22,7 +22,6 @@ type Messages struct {
 	// welcome / status screen
 	WelcomeTitleFmt string // first-run box title — %s = product name (styled)
 	NoConfigYet     string // first-run cue under the welcome box
-
 	// `reasonix init` — points to the in-session /init skill + setup
 	InitHint string
 
@@ -450,6 +449,7 @@ type Messages struct {
 	GoalEmpty                    string
 	GoalCurrentFmt               string
 	GoalSetFmt                   string
+	GoalResumedFmt               string // %s = goal
 	GoalCleared                  string
 	GoalNotRunning               string
 	GoalNotPaused                string
@@ -705,7 +705,6 @@ type Messages struct {
 	ProviderModelsFmt    string // description row under a provider in the /provider panel
 	ProviderNoModelsFmt  string // provider has no models
 
-	// `reasonix upgrade` / `reasonix update` — self-update
 	UpgradeChecking            string // "Checking for updates…"
 	UpgradeChannelDeprecated   string // legacy channel selection is ignored
 	UpgradeDevBuild            string // dev builds cannot self-update
@@ -725,6 +724,7 @@ type Messages struct {
 	UpgradeApplying            string // "Replacing binary…"
 	UpgradeApplyFailed         string // "failed to apply update: %v"
 	UpgradeSuccessFmt          string // "Updated %s → %s"
+	UpgradeManagedFmt          string // package-manager-owned install: %s is the command to run
 
 	// `reasonix report` — local CLI crash review and explicit upload
 	ReportNoPending           string

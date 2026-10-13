@@ -59,6 +59,9 @@ const (
 	NoticeCodeApprovalModeUnrecognized = "approval_mode_unrecognized"
 	// Saved permission rules name no tool, so they match nothing; Detail is a PermissionRulesDormant.
 	NoticeCodePermissionRulesDormant = "permission_rules_dormant"
+	// A submission was refused while the session, workspace or runtime was changing.
+	// Its text says to resend, which is right for a frontend that keeps no queue; one that queues on the typed refusal says so itself.
+	NoticeCodeInputRefused = "input_refused"
 	// A turn handed its open list back to the user; Detail is the model's `need`, as it wrote it.
 	NoticeCodeAwaitUser = "await_user"
 	// A slash command nothing resolves, refused rather than sent as prose.
@@ -89,4 +92,10 @@ const (
 	NoticeCodeJobKilled = "job_killed"
 	// A background job failed; Detail is the JobNotice payload, its text the English fallback.
 	NoticeCodeJobFailed = "job_failed"
+	// The selected web search model cannot serve, so search is off; Detail is the provider/model, the code names why.
+	NoticeCodeWebSearchModelBadRef        = "web_search_model_bad_ref"
+	NoticeCodeWebSearchModelNotAdded      = "web_search_model_not_added"
+	NoticeCodeWebSearchModelRemoved       = "web_search_model_removed"
+	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
+	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
 )

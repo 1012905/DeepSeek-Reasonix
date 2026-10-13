@@ -138,6 +138,14 @@ describe("rebuilding a reopened transcript", () => {
     expect(got[0].text).toBe("你好");
   });
 
+  it("strips a refused-calls block from a replayed turn", () => {
+    const got = users([
+      { role: "user", content: "<refused-calls>\nThe host refused these tool calls\n- bash {\"command\":\"git push\"} (permission.deny_rule)\n</refused-calls>\n继续" },
+    ]);
+    expect(got).toHaveLength(1);
+    expect(got[0].text).toBe("继续");
+  });
+
   it("leaves an ordinary turn as its text", () => {
     const got = users([{ role: "user", content: "第一句话" }]);
     expect(got).toHaveLength(1);
@@ -383,18 +391,15 @@ describe("the turn's verification receipt", () => {
   const card = { saysSomething: true, verdict: "unproven", gaps: [{ kind: "unverified_change" }] };
   const receipts = (s: SessionState) => s.items.filter((i) => i.t === "receipt");
 
-  // A turn that changed files and verified none of them ends on the one card
-  // that says so, so it is there unless this machine turned it off.
-  it("closes the turn by default", () => {
-    expect(receipts(run([done(card)]))).toHaveLength(1);
-  });
-
-  it("stays out when this machine turned it off", () => {
-    expect(receipts(hidingReceipts(() => run([done(card)])))).toEqual([]);
-  });
+  // The record is the transcript's; whether a card is drawn is decided at
+  // render time, so the preference never changes what the session holds.
+  it.each([["off", () => hidingReceipts(() => run([done(card)]))], ["default", () => run([done(card)])]])(
+    "closes the turn with the record when the preference is %s",
+    (_, go) => expect(receipts(go())).toHaveLength(1),
+  );
 
   // The kernel still decides whether a receipt has content at all; the
-  // preference only decides whether a reader sees one that does.
+  // preference decides nothing about that.
   it("still respects the kernel's own answer", () => {
     expect(receipts(showingReceipts(() => run([done({ ...card, saysSomething: false })])))).toEqual([]);
   });
@@ -753,5 +758,24 @@ describe("an ask the host skipped on timeout", () => {
     const ask = sealed.items.find((i) => i.t === "ask") as Extract<Item, { t: "ask" }>;
     expect(ask.timedOut).toBe(true);
     expect(ask.answered).toEqual([]);
+  });
+});
+
+// The kernel's progress frame carries the call id and the newest chunk only, so
+// folding it like a dispatch would blank the call's name and keep one chunk.
+describe("a running call's live output", () => {
+  const chunk = (output: string) => ({ kind: "tool_progress", tool: { id: "c1", name: "", output } }) as SessionEvent;
+
+  it("keeps the call's name and adds each chunk to what came before", () => {
+    const s = run([full("c1"), chunk("step 1\n"), chunk("step 2\n")]);
+    expect(tools(s)).toHaveLength(1);
+    expect(tools(s)[0].tool.name).toBe("write_file");
+    expect(tools(s)[0].tool.output).toBe("step 1\nstep 2\n");
+    expect(tools(s)[0].running).toBe(true);
+  });
+
+  it("gives way to the final result", () => {
+    const s = run([full("c1"), chunk("step 1\n"), { kind: "tool_result", tool: { id: "c1", name: "bash", output: "all done" } } as SessionEvent]);
+    expect(tools(s)[0].tool.output).toBe("all done");
   });
 });

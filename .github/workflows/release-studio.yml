@@ -175,6 +175,9 @@ jobs:
           - platform: linux/amd64
             runner: ubuntu-22.04
             artifact: studio-build-linux-amd64
+          - platform: linux/arm64
+            runner: ubuntu-22.04-arm
+            artifact: studio-build-linux-arm64
     steps:
       # Real-time scanning inspects every file the job writes, and packaging
       # writes a quarter of a gigabyte twice. The runner is thrown away after
@@ -217,6 +220,15 @@ jobs:
       - name: Install Linux packaging deps
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y fakeroot rpm
+
+      # The fpm electron-builder carries is an x86_64 program, so on an ARM64
+      # runner the .deb and .rpm are built with one installed from RubyGems.
+      - name: Use a native fpm on ARM64 Linux
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: |
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install --no-document fpm -v 1.16.0
+          echo "USE_SYSTEM_FPM=true" >> "$GITHUB_ENV"
 
       # The same Developer ID and notary credentials the desktop line uses: one
       # certificate signs any bundle identifier its team owns, so Studio does not
@@ -987,6 +999,11 @@ jobs:
           path: staging/studio-build-linux-amd64
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: studio-build-linux-arm64
+          path: staging/studio-build-linux-arm64
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.windows-sign-installer.result == 'success'
         with:
           name: studio-windows-signed-amd64
@@ -1069,12 +1086,13 @@ jobs:
             find staging/cli-archives -type f -print0)
           ls -la dist
           # Two Windows artifacts (installer, portable zip) per architecture,
-          # two per macOS architecture (dmg, zip) and the Linux .deb and .rpm. Fewer
+          # two per macOS architecture (dmg, zip) and a Linux .deb and .rpm per
+          # architecture. Fewer
           # means an artifact was lost between jobs, and a partial release is
           # worse than a failed one.
           count=$(find dist -type f -name 'ReasonixStudio-*' | wc -l)
-          if [ "$count" -lt 10 ]; then
-            echo "::error::expected 10 artifacts (Windows installer + zip per architecture, macOS dmg + zip per architecture, Linux .deb and .rpm), found $count"
+          if [ "$count" -lt 12 ]; then
+            echo "::error::expected 12 artifacts (Windows installer + zip per architecture, macOS dmg + zip per architecture, Linux .deb and .rpm per architecture), found $count"
             exit 1
           fi
           # Each platform's update channel, and there is exactly one per
@@ -1087,7 +1105,9 @@ jobs:
           # the version it is running with nothing saying so.
           # Each Windows architecture by name for the same reason: a glob passes
           # on whichever installer shipped.
-          for required in 'ReasonixStudio-linux-*.deb' 'ReasonixStudio-linux-*.rpm' \
+          # Each Linux architecture by name for the same reason.
+          for required in 'ReasonixStudio-linux-amd64.deb' 'ReasonixStudio-linux-amd64.rpm' \
+            'ReasonixStudio-linux-arm64.deb' 'ReasonixStudio-linux-arm64.rpm' \
             'ReasonixStudio-windows-amd64-installer.exe' 'ReasonixStudio-windows-arm64-installer.exe' \
             'ReasonixStudio-windows-amd64.zip' 'ReasonixStudio-windows-arm64.zip' \
             'ReasonixStudio-darwin-amd64.zip' 'ReasonixStudio-darwin-arm64.zip'; do
@@ -1183,7 +1203,7 @@ jobs:
           fi
           {
             printf '%s\n\n' '---'
-            printf "**macOS** 已用 Developer ID 签名并公证，打开时不需要清除隔离属性。%s**Linux** Debian 系从 \`.deb\` 安装，Fedora、RHEL、openSUSE 等从 \`.rpm\` 安装（\`sudo dnf install ./ReasonixStudio-linux-amd64.rpm\`）。\n\n" "$windows"
+            printf "**macOS** 已用 Developer ID 签名并公证，打开时不需要清除隔离属性。%s**Linux** Debian 系从 \`.deb\` 安装，Fedora、RHEL、openSUSE 等从 \`.rpm\` 安装（\`sudo dnf install ./ReasonixStudio-linux-amd64.rpm\`）。x86_64 用文件名带 amd64 的包，aarch64（统信 UOS、麒麟等）用带 arm64 的包。\n\n" "$windows"
             printf "%s\n" "三个平台都能自更新：Linux 的 \`.deb\` 走自己的包（\`.rpm\` 的自更新尚未提供，请手动下载新包），Windows 运行下一个安装器，macOS 替换自身 bundle。"
           } >> "$notes"
           assets=()

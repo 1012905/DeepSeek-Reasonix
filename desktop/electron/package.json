@@ -20,9 +20,9 @@
     "computer-live": "electron test/computer_live.js"
   },
   "devDependencies": {
-    "electron": "44.5.1",
+    "electron": "44.7.0",
     "electron-builder": "^26.15.3",
-    "playwright": "1.63.0"
+    "playwright": "1.64.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

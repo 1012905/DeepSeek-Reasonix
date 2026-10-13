@@ -100,6 +100,14 @@ func TestVerifyReadsBytesEvenWhenSizeAndTimeAreRestored(t *testing.T) {
 func TestARecentlyWrittenObjectIsNotTrustedByItsTimestamp(t *testing.T) {
 	s, reads := countingStore(t)
 	d, _ := s.PutObject([]byte("payload"))
+	// The clock and the file's time are both pinned: a file system stamps from
+	// its own clock, which can lag the process clock by more than the window.
+	path, _ := s.objectPath(d)
+	mod := time.Now().Truncate(time.Second).Add(123 * time.Millisecond)
+	if err := os.Chtimes(path, mod, mod); err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return mod.Add(time.Millisecond) }
 	for range 3 {
 		if _, err := s.Object(d); err != nil {
 			t.Fatal(err)

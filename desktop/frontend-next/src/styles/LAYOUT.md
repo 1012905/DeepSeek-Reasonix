@@ -96,6 +96,14 @@ rules are written in.
 - The separator between crumbs is a written character, not the 1px hairline
   `.sep`. Sharing that name puts the glyph in a 1px-wide box with a background,
   and the strokes spill out of it.
+- The sidebar has one toggle, and it does not move.
+  - `.studio-menu` is fixed to the window at `--lights-w + 10px`, above the rail column whatever the rail and the icon
+    column are doing; the sidebar header carries no second button.
+  - The bar's content and the sidebar's brand row reserve room for it (`--nav-w` is what the icon column already gives).
+  - The icon rail's conversation item toggles the sidebar when the conversation is showing, and returns to it from
+    settings; the sidebar's quick entries are drawn only while the rail is not.
+  - A run of replies from one model is headed once (`data-quiet`); a change of model, or a user message, brings the
+    header back.
 - Only identity is left on the top bar — which project, which session. The goal
   and the measurements moved to the run header.
 - A card the bar opens is a `[role="dialog"]`, and a dialog opts out whole:
@@ -248,9 +256,27 @@ rules are written in.
   the global icon navigation is not visible. It follows the window's existing
   navigation visibility state, including collapsed-only mode and narrow-window
   folds, so both columns never offer the same footer actions together.
+- Browser wide mode changes the existing pane's grid tracks, keeping the
+  workbench, pages, transcript and composer in place. The conversation takes
+  34% of the pane up to 380px; the browser takes the remaining width.
+- The saved split width is untouched, and its divider is absent while wide so dragging
+  cannot silently overwrite a width that is not being drawn.
+- The compact composer's metrics row wraps inside the composer. Absolute
+  positioning below the box lets balance and task controls cross the browser seam.
+- Under the side fold, wide mode stacks the browser above the conversation and
+  composer. Two columns at phone width cannot keep either surface usable.
+- The workbench toggle and Ctrl/Cmd+Shift+B share `browser.wide`. Escape returns
+  to split before the window can close the browser or stop the run. Closing the
+  dock or leaving the conversation resets wide mode; mounting never expands it.
+
 - Column widths change on `.app`, so the tween belongs there and `.cols` only
   reads the result into a track. The tween must be cut during a drag: a .34s
   tween makes the column chase the pointer.
+- The workbench width is the exception: `--dock-w` does not inherit and lives
+  on the pane that reads it.
+- A tweened inherited property on `.app` restyles every node under it on every
+  frame, which made opening the workbench stutter with a long transcript.
+- The gutter writes the width on the pane for the same reason (`DOCK.owner`).
 - The side track is closed unless a panel mounts in it. It was written open and
   closed by `[data-side="off"]`, and the attribute stayed wired to the built-in
   browser after that browser moved onto the workbench. Nothing rendered there
@@ -263,6 +289,10 @@ rules are written in.
   was already on the list; the workbench body's implicit row is `auto`, sized to
   its content, so the column grew past the panel and was clipped instead.
   `grid-template-rows: minmax(0, 1fr)` is the half that makes the overflow real.
+- The docked workbench is a card inset from the pane, and its tab strip ends on
+  the pane's tab-row line so the two rows read as one: the strip is
+  `--pane-bar-h` less the card's top inset and border. `perf/dock.mjs` holds
+  the two lines together.
 - The workbench is hidden, not unmounted. It holds the open files and a browser
   per tab, each with its own history, and a glance at the conversation must not
   cost them. `.scroll[data-pane="browser"][hidden]` was already written for it.
@@ -639,6 +669,13 @@ told apart by the colour of a symbol.
   - Under it the rail is a drawer, not a column (see *Phones*). No seam is left
     to drag and the chrome's rail button is the entrance, so the grip goes; so
     does the workbench grip, whose entrance is the 「工作台」 tab.
+- The title bar folds the same way: it gathers its controls under one button, it does not drop them.
+  - Below 300px of room (`bar`, in `viewport.ts`) the phone, find, theme, sandbox and browser buttons move into one
+    popover under a "more" button, every one still a press away.
+  - 300 is derived, not chosen: unfolded, the controls leave the title `room - 196` px, and 4em is its floor.
+  - `perf/narrow.mjs` sweeps the room from 190 to 460 and asserts the title keeps that floor, and that each control is
+    on screen with nothing over it, folded or not.
+  - Below `bar` the page tabs shrink and ellipsise rather than clip, and the meter row drops its cache figure first.
 - When both side columns have yielded, the transcript rail yields too; its ticks
   and viewport remain separately reachable.
 - A short window divides its height proportionally, and what is left over is the
@@ -1177,6 +1214,11 @@ what exists.
 
 ## Panes
 
+- The sidebar is the default session switcher. Settings > Appearance offers
+  session tabs as an opt-in, off by default and saved on this machine. The strip
+  only mounts when the choice is on and more than one pane is open; changing the
+  choice does not close or stop any session.
+
 - Panes are stacked, one visible at a time. Side by side they squeeze each other
   and a glance cannot tell which composer belongs to which run; as tabs the
   background one keeps running.
@@ -1446,6 +1488,19 @@ what exists.
 - `perf/tooltip.mjs` measures both in Chromium; `controltip.test.ts` pins the
   rules statically.
 
+## Dialogs centre on the window
+
+- A veil (settings, feedback, a full screenshot, a checkpoint preview, a
+  sub-agent transcript) starts below the title bar so the bar stays usable.
+- Centred in that box alone, a dialog would sit half a bar below the window's
+  middle, which reads as off balance against the whole window.
+- `dialogcenter.css` gives each veil a transparent bottom border as tall as the
+  bar, so the box it centres in is symmetric about the window's middle. A border
+  rather than padding because padding on these veils is set per breakpoint, and
+  percentage heights inside then leave room for it on their own.
+- The phone layout (`data-fold~="scene"`) shows settings full screen, so it is
+  excluded.
+
 ## The feedback veil
 
 - `.fbk-veil` is a flat scrim, not a blurred backdrop.
@@ -1455,3 +1510,11 @@ what exists.
   the job the blur did.
 - `feedback-veil.test.ts` scans every stylesheet: no rule on `.fbk-veil` may
   carry a backdrop filter or an endless animation.
+
+## Session tree levels
+
+- Machine and remote-group rows are section headers: 11px, 640 weight, tracked, muted; their count is words ("2 个项目", "3 台机器"), never a bare number.
+- A project or remote folder row is the strongest line in the tree; its session count is a numeric pill (`data-pill`), so the two levels never share a count style.
+- A scope filter shows its count only when it is above zero; the label stays at 12px.
+- The row actions (`+`, `…`, refresh) are revealed on hover or focus, 22px, outlined, and share one hover, press, expanded and busy state, whichever row they sit on. Remote host actions are always drawn and outline only on those states.
+- Every row's last action ends on the same edge: the machine row keeps a 15px right margin like a project row, so a machine's `+` sits over a project's `…`.

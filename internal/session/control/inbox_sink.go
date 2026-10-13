@@ -27,6 +27,8 @@ func (s *inboxEventSink) Emit(e event.Event) {
 		return
 	}
 	switch e.Kind {
+	case event.ToolResult:
+		s.c.noteRefusedCall(e.Tool)
 	case event.Steer:
 		if e.ItemID != "" {
 			s.c.onInboxSteerConsumed(e.ItemID)
@@ -39,6 +41,7 @@ func (s *inboxEventSink) Emit(e event.Event) {
 		// The listing rode a user turn the fold may have just summarised away.
 		// Standing state that is delivered once has to be re-owed when the turn
 		// carrying it stops being verbatim.
+		s.c.date.debt.forget()
 		s.c.skills.forgetDeliveredCatalog()
 		s.c.memory.forgetDeliveredInstructions()
 	}

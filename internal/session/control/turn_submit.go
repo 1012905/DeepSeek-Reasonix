@@ -171,6 +171,9 @@ func (c *Controller) runPreparedInvocationTurn(
 	frozenImages []string,
 ) error {
 	ctx = withInvokedSkills(ctx, prepared.inlineSkillNames)
+	if strings.TrimSpace(raw) == "" {
+		raw = display
+	}
 	if len(prepared.subagents) == 0 {
 		return c.runTurnLoop(ctx, orchestratedTurn{
 			input: prepared.composed, raw: raw, display: display, images: c.frozenTurnImages(frozenImages),
@@ -456,7 +459,9 @@ func (c *Controller) applyGoalCommand(input, display string) bool {
 	case GoalCommandResume:
 		if !c.ResumeGoal() {
 			c.notice(i18n.M.GoalNotPaused)
+			break
 		}
+		c.startGoalResumeTurn(display)
 	default:
 		goal := c.Goal()
 		if strings.TrimSpace(goal) == "" {

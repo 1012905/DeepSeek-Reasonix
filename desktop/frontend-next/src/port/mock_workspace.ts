@@ -1,5 +1,5 @@
 import { HttpError } from "./http_error";
-import type { ChangeDiff, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
+import type { ChangeDiff, StageRequest, WorkspaceChange, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
 import { MockFeedback } from "./mock_feedback";
 
 export class MockWorkspace extends MockFeedback {
@@ -28,15 +28,25 @@ export class MockWorkspace extends MockFeedback {
   }
 
   // The scripted transcript's tree facts, without a repository behind the fixture.
+  // Held in a field so staging is visible to the next read, as the index is.
+  changeList: WorkspaceChange[] = [
+    { path: "internal/provider/retry.go", status: "M", unstaged: true },
+    { path: "internal/config/credentials.go", status: "M", staged: true },
+    { path: "internal/provider/openai/streaming/chunk_decoder.go", status: "A", staged: true, unstaged: true },
+    { path: "docs/notes.md", status: "??", unstaged: true },
+  ];
+
   async changes(): Promise<WorkspaceChanges> {
-    return {
-      repo: true,
-      changes: [
-        { path: "internal/provider/retry.go", status: "M" },
-        { path: "internal/config/credentials.go", status: "M" },
-        { path: "internal/provider/openai/streaming/chunk_decoder.go", status: "A" },
-      ],
-    };
+    return { repo: true, changes: this.changeList.map((c) => ({ ...c })) };
+  }
+
+  async stageChanges(req: StageRequest): Promise<void> {
+    const named = new Set(req.paths ?? []);
+    this.changeList = this.changeList.map((c) =>
+      req.all || named.has(c.path)
+        ? { ...c, staged: !req.unstage, unstaged: !!req.unstage }
+        : c,
+    );
   }
 
   // Scripted, because there is no tree to read: enough of a diff for the

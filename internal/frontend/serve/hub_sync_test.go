@@ -14,6 +14,7 @@ import (
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessionstore"
 	"reasonix/internal/state/store"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -232,7 +233,13 @@ func TestTreeInvalidationFollowsAutomaticArchiveOnlyWhenRowsChange(t *testing.T)
 
 func TestTreeWriteKeepsJSONContentTypeAndEscaping(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
-	root := filepath.Join(testenv.TempDir(t), `<svg onload=alert(1)>`)
+	// Windows refuses < and > in a file name; & is the other character the JSON
+	// encoder escapes, so the same check still holds there.
+	name, raw := `<svg onload=alert(1)>`, "<svg"
+	if runtime.GOOS == "windows" {
+		name, raw = `&svg onload=alert(1)`, "&svg"
+	}
+	root := filepath.Join(testenv.TempDir(t), name)
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -245,16 +252,16 @@ func TestTreeWriteKeepsJSONContentTypeAndEscaping(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	raw, err := io.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "application/json" || bytes.Contains(raw, []byte("<svg")) {
-		t.Fatalf("unsafe JSON response: %d %s %s", response.StatusCode, response.Header.Get("Content-Type"), raw)
+	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "application/json" || bytes.Contains(body, []byte(raw)) {
+		t.Fatalf("unsafe JSON response: %d %s %s", response.StatusCode, response.Header.Get("Content-Type"), body)
 	}
 	var workspace treeWorkspace
-	if err := json.Unmarshal(raw, &workspace); err != nil || workspace.Root != root {
-		t.Fatalf("JSON lost input: %s, %v", raw, err)
+	if err := json.Unmarshal(body, &workspace); err != nil || workspace.Root != root {
+		t.Fatalf("JSON lost input: %s, %v", body, err)
 	}
 	if h.changes.Watermark() == 0 {
 		t.Fatal("implicit 200 write did not invalidate")

@@ -32,9 +32,13 @@ func startSessionRuntime(opts Options, cfg *config.Config, root string, sink eve
 	lease := opts.WorkspaceLease
 	if lease == nil {
 		var err error
+		var leaseOptions []workspacelease.Option
+		if cfg.WriteLeaseOptimistic() {
+			leaseOptions = append(leaseOptions, workspacelease.WithoutWholeWorkspaceHold())
+		}
 		lease, err = workspacelease.New(root, config.WorkspaceLeaseDir(), func(w workspacelease.Wait) {
 			sink.Emit(workspaceLeaseNotice(w))
-		})
+		}, leaseOptions...)
 		if err != nil {
 			return sessionRuntime{}, fmt.Errorf("initialize workspace write lease: %w", err)
 		}

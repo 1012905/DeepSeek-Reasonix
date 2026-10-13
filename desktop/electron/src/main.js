@@ -17,20 +17,22 @@ const { uiLanguage } = require("./uilang");
 const { installFullScreenKey } = require("./fullscreen");
 const { installReload } = require("./reload");
 const { externalTarget } = require("./links");
-const { reveal, revealWorkspace } = require("./reveal");
+const { reveal, revealWorkspace, revealLogs, openWorkspace } = require("./reveal");
 const { appIcon } = require("./appicon");
+const { setUnreadBadge } = require("./badge");
 const layout = require("./layout");
 const { offerCleanup } = require("./legacy");
 const { stripPackageGrants, unpaintedWindowCause } = require("./packagegrants");
 const { BrowserProtocol } = require("./browserprotocol");
 const { BrowserViews } = require("./browserviews");
 const { startBrowserRelay } = require("./browserrelay");
-const { groundFor } = require("./ground");
+const { groundFor, themeSourceFor } = require("./ground");
 const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
 const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
+const { raise } = require("./raise");
 const { actHandler } = require("./acts");
 const { crashDir, recordHostExit, pendingHostExit, clearHostExit, hostExitNotice } = require("./hostexit");
 
@@ -183,6 +185,7 @@ async function boot() {
   session.defaultSession.webRequest.onCompleted({ urls: [`${ready.origin}/*submit`] }, (details) => {
     if (details.method === "POST" && details.statusCode < 300) void powerGuard?.refresh();
   });
+  followTheme();
   win = createWindow();
   closeStarting();
   guard(win.webContents);
@@ -293,8 +296,7 @@ function showWindow() {
   if (quitting || !win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   reload?.revive();
-  win.show();
-  win.focus();
+  raise(win);
 }
 
 // A window larger than the display it opens on puts its own title bar off
@@ -307,7 +309,11 @@ function fitted() {
   };
 }
 
-const ground = () => groundFor(loadPrefs(prefsFile(app.getPath("userData"))), nativeTheme.shouldUseDarkColors);
+const storedPrefs = () => loadPrefs(prefsFile(app.getPath("userData")));
+const ground = () => groundFor(storedPrefs(), nativeTheme.shouldUseDarkColors);
+const followTheme = () => {
+  nativeTheme.themeSource = themeSourceFor(storedPrefs());
+};
 
 function createWindow() {
   const mac = process.platform === "darwin";
@@ -366,6 +372,7 @@ function fromWindow(event) {
 const uiLang = () => uiLanguage(loadPrefs(prefsFile(app.getPath("userData"))), app.getPreferredSystemLanguages()[0] ?? app.getLocale());
 registerPrefs(ipcMain, () => prefsFile(app.getPath("userData")), fromWindow, () => {
   installApplicationMenu(uiLang);
+  followTheme();
   if (win && !win.isDestroyed()) win.setBackgroundColor(ground());
   void powerGuard?.refresh();
 });
@@ -374,6 +381,11 @@ nativeTheme.on("updated", () => {
 });
 
 ipcMain.handle("shell:graphics", (event) => graphicsHandler(app, fromWindow, gpuLaunch)(event));
+
+ipcMain.handle("window:unread-badge", (event, unread) => {
+  const target = fromWindow(event);
+  if (target && typeof unread === "boolean") setUnreadBadge(unread, target);
+});
 
 ipcMain.handle("window:minimise", (event) => {
   fromWindow(event)?.minimize();
@@ -415,6 +427,12 @@ ipcMain.handle("shell:open-external", (event, raw) => {
 ipcMain.handle("shell:reveal-workspace", (event, root) =>
   fromWindow(event) && client ? revealWorkspace(client, shell, String(root)) : { code: "", error: "no window" },
 );
+ipcMain.handle("shell:reveal-logs", (event) =>
+  fromWindow(event) ? revealLogs(shell, logs?.dir) : { error: "no window" },
+);
+ipcMain.handle("shell:open-workspace", (event, root) =>
+  fromWindow(event) && client ? openWorkspace(client, shell, String(root)) : { code: "", error: "no window" },
+);
 ipcMain.handle("shell:reveal", (event, base, rel) =>
   fromWindow(event) && client ? reveal(client, shell, String(base), String(rel)) : { code: "", error: "no window" },
 );
@@ -446,7 +464,8 @@ ipcMain.handle("dialog:pick-folder", async (event, startIn) => {
   if (!target) return "";
   const picked = await dialog.showOpenDialog(target, {
     defaultPath: startIn || undefined,
-    properties: ["openDirectory", "createDirectory"],
+    // Tools keep their working folders behind a leading dot, so those are listed too.
+    properties: ["openDirectory", "createDirectory", "showHiddenFiles"],
   });
   if (picked.canceled || !picked.filePaths.length) return "";
   return picked.filePaths[0];

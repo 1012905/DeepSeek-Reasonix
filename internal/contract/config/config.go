@@ -260,6 +260,9 @@ type NotificationsConfig struct {
 	ApprovalRequest bool `toml:"approval_request"`
 	AskRequest      bool `toml:"ask_request"`
 	FeedbackReply   bool `toml:"feedback_reply"`
+	// Sound plays a short system chime for the events switched on above, whether
+	// or not system notifications are; off unless asked for.
+	Sound bool `toml:"sound"`
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the
@@ -789,13 +792,6 @@ type SkillsConfig struct {
 	MaxDepth                  int      `toml:"max_depth"`
 }
 
-// ImplicitSkillInvocationEnabled reports whether the model may discover and
-// invoke skills without an explicit user slash command. The zero value keeps
-// the historical default enabled for old configs.
-func (c *Config) ImplicitSkillInvocationEnabled() bool {
-	return c == nil || !c.Skills.DisableImplicitInvocation
-}
-
 // SkillCustomPaths returns the configured custom skill roots with ${VAR}
 // expanded; empty entries are dropped.
 func (c *Config) SkillCustomPaths() []string {
@@ -1032,11 +1028,11 @@ type AgentConfig struct {
 	RecoveryTemperature float64           `toml:"recovery_temperature"`
 	SubagentModel       string            `toml:"subagent_model"`
 	SubagentModels      map[string]string `toml:"subagent_models"`
-	// VisionModel reads the images a text-only main model cannot. Empty leaves
-	// them with whatever model the receiving sub-agent already runs, which is
-	// chosen for other reasons — a cheap worker is usually text-only, and the
-	// attachment is then dropped during serialization with nothing to show why.
-	VisionModel string `toml:"vision_model"`
+	// A text-only worker can drop images during serialization. A dedicated
+	// reader keeps those attachments available independently of the main model.
+	// Empty retains the receiving sub-agent's model.
+	VisionModel    string `toml:"vision_model"`
+	WebSearchModel string `toml:"web_search_model"`
 	// TriageModel answers the small classifications the static tables come up
 	// short on (is this unrecognized command read-only?). Empty falls back to
 	// subagent_model, then the main model — set it to point them somewhere cheap.
@@ -1079,7 +1075,9 @@ type AgentConfig struct {
 	// MaxParallelWriters bounds concurrent writer-capable sub-agents that
 	// declare non-overlapping write_paths. 0 means the default (3). Must not
 	// exceed MaxSubagentConcurrency after normalization.
-	MaxParallelWriters int `toml:"max_parallel_writers"`
+	MaxParallelWriters int    `toml:"max_parallel_writers"`
+	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
+	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
 	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
@@ -1403,6 +1401,8 @@ func Default() *Config {
 			MaxSubagentDepth:       2,
 			MaxSubagentConcurrency: 6,
 			MaxParallelWriters:     3,
+			WriteLease:             "strict",
+			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask
 		// resolves to allow) while `reasonix` prompts before writers. Users add
@@ -1467,23 +1467,11 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 		ref = retargetDesktopOfficialRef(ref, access)
 	}
 	ref = c.refForFoldedDeepSeek(ref)
-	// "provider/model"
-	if prov, model, ok := strings.Cut(ref, "/"); ok {
-		if e, found := c.Provider(prov); found && e.HasModel(model) {
-			return e.forModel(model), true
-		}
+	e, ok := c.lookupModel(ref)
+	if ok {
+		e.searchAssigned = c.explicitWebSearchRef() != ""
 	}
-	// a provider name → its default model
-	if e, found := c.Provider(ref); found {
-		return e.forModel(e.DefaultModel()), true
-	}
-	// a bare model name → the provider that lists it
-	for i := range c.Providers {
-		if c.Providers[i].HasModel(ref) {
-			return c.Providers[i].forModel(ref), true
-		}
-	}
-	return nil, false
+	return e, ok
 }
 
 // ResolveModelWithFallback resolves a model reference to the canonical

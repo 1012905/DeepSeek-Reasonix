@@ -191,6 +191,13 @@ type RewindPlan struct {
 	ConflictResolution string `json:"conflictResolution,omitempty"`
 }
 
+// RewindUndo describes the currently retained undo offer.
+type RewindUndo struct {
+	TransactionID string `json:"transactionId"`
+	Turn          int    `json:"turn"`
+	Files         int    `json:"files"`
+}
+
 // RewindResult is returned after commit or undo.
 type RewindResult struct {
 	OK             bool             `json:"ok"`

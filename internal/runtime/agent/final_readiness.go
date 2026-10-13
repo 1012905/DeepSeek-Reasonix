@@ -10,6 +10,7 @@ import (
 
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/ext/extension"
 	"reasonix/internal/runtime/taskpolicy"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/instruction"
@@ -206,7 +207,7 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 		}
 	}
 	missing = a.appendPlanDeliverableGap(&out, missing, checkpointApplies && (checkpoint.PendingMutation || checkpoint.MutationObserved))
-	if !hasWriter {
+	if a.owesNothingForChanges(hasWriter) {
 		if len(missing) > 0 {
 			out.reason = strings.Join(missing, "; ")
 		}
@@ -244,6 +245,12 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	}
 	out.reason = strings.Join(missing, "; ")
 	return out
+}
+
+// owesNothingForChanges is true when no write put a check on the turn, or the
+// user waived the checks a write owes.
+func (a *Agent) owesNothingForChanges(hasWriter bool) bool {
+	return !hasWriter || a.role.waiveOwedChecks
 }
 
 // appendDeliveryGaps is what a Delivery turn owes on top of any turn: criteria,
@@ -398,7 +405,24 @@ func (a *Agent) mutationEpoch() uint64 {
 // requirement it replaced.
 func (a *Agent) checkContract() evidence.CheckContract {
 	return evidence.CaptureCheckContract(a.task.checkpoint.BaselineChecks, a.declaredChecks()).
-		WithCapturedTests(len(a.task.baselineCriteria)).WithDelivery(a.deliveryProfile).WithObserveRoot(a.observeRoot)
+		WithCapturedTests(len(a.task.baselineCriteria)).WithDelivery(a.deliveryProfile).WithObserveRoot(a.observeRoot).
+		WithUnseenWriter(a.unseenToolWriter() || a.runningJobWriter())
+}
+
+// unseenToolWriter reports a writer that runs around tool calls and names no
+// paths: a tool hook, or an extension sidecar on a point every call passes
+// (tool.before, permission.decision, tool.after), outside the bash sandbox.
+func (a *Agent) unseenToolWriter() bool {
+	d := a.svc.extensions
+	return toolHooksMayMutateWorkspace(a.svc.hooks) || d.Intercepts(extension.PointToolBefore) ||
+		d.Intercepts(extension.PointPermissionDecision) || d.Intercepts(extension.PointToolAfter)
+}
+
+// runningJobWriter reports a background job of this session that has not
+// exited: its writes reach the ledger only when the turn collects it, so until
+// then no receipt bounds what it changes.
+func (a *Agent) runningJobWriter() bool {
+	return a.svc.jobs != nil && len(a.svc.jobs.RunningForSession(a.turn.jobSession)) > 0
 }
 
 // DeclaredProjectChecks is the declaration this process loaded, for a host that
@@ -485,8 +509,9 @@ func (a *Agent) appendUnseenRenderGap(out *finalReadinessCheck, missing []string
 // ran, it declines to judge rather than guessing.
 func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string, writer int, blockedWithCheck, verified bool) []string {
 	if a.deliveryProfile || !a.turn.policySet || a.turn.policy.Verification < taskpolicy.VerifyTargeted ||
-		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.checkEstablished(writer, verified) ||
-		a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) {
+		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.task.ledger.HandedBackAfter(writer) || a.checkEstablished(writer, verified) ||
+		a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) ||
+		a.task.ledger.VerifiedBeneathProse(a.checkContract(), writer, a.writerBaselineThrough) {
 		return missing
 	}
 	gap, owed := a.verificationGap(writer)
@@ -521,12 +546,12 @@ func (a *Agent) verificationGap(writer int) (string, bool) {
 			"or, if it cannot pass as specified, call conclude_blocked with the evidence for why", named), true
 	}
 	// Commands ran and the table read none as a check. The host cannot tell a
-	// runner from a deploy, so it owes nothing and says nothing: it has no
-	// honest sentence, and failing on the guess is the gate over-reaching.
-	if len(a.projectChecks) == 0 {
-		if _, ok := a.task.ledger.LatestUnrecognizedCommandAfter(writer); ok {
-			return "", false
-		}
+	// runner from a deploy, so it owes nothing and says nothing — but only while
+	// it can say they all left the tree as they found it.
+	if len(a.projectChecks) == 0 &&
+		a.task.ledger.HasUnrecognizedCommandAfter(writer) &&
+		!a.task.ledger.HasUnrecognizedMutationAfter(writer) {
+		return "", false
 	}
 	return ask, true
 }
@@ -550,6 +575,11 @@ func (a *Agent) verificationCause() string {
 		return " (a change ran whose extent the host could not establish)"
 	case contract.DeclaresChecks():
 		return " (checks are declared for this task or project)"
+	case contract.UnseenWriter():
+		if a.runningJobWriter() && !a.unseenToolWriter() {
+			return " (a background job is still running and may change files no receipt reports)"
+		}
+		return " (a tool hook or extension runs around tool calls and may change files no tool reports)"
 	}
 	return ""
 }

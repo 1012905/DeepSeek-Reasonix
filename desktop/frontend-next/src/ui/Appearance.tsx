@@ -14,7 +14,11 @@ import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
+import { SendShortcut } from "./SendShortcut";
+import { SessionTabsSetting } from "./SessionTabsSetting";
+import { EscStopSetting } from "./EscStopSetting";
 import { ThemeImport } from "./ThemeImport";
+import { ThemeRemove } from "./ThemeRemove";
 import { useThemeInventory } from "./useThemeInventory";
 
 // "" follows the machine; the rest are explicit, the same shape the light/dark
@@ -136,23 +140,43 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
     [port, load, reloadThemes],
   );
 
+  const remove = useCallback(
+    (id: string) => {
+      setFailed("");
+      return port
+        .removeTheme(id)
+        .then(() => {
+          load();
+          reloadThemes();
+        })
+        .catch((e) => setFailed(reason(e)));
+    },
+    [port, load, reloadThemes],
+  );
+  const cell = (p: ThemePack) => (
+    <div className="pal-cell" key={p.id}>
+      <Swatch pack={p} theme={theme} name={t(p.name)} on={!!p.active} onPick={() => pick(p.id)} />
+      {p.removable && <ThemeRemove name={p.name} onRemove={() => remove(p.id)} />}
+    </div>
+  );
+
   const custom = packs.some((p) => p.active);
   // Calm, workbench-like themes stay in the first shelf. Illustrated packs
   // are still first-class installed themes, but they no longer dominate the
   // page a user opens merely to switch between light and dark. If one of them
   // is active it remains visible beside the foundations, so the current state
   // never disappears into a closed disclosure.
-  const foundations = packs.filter((p) => !p.background?.image);
-  const activeIllustrated = packs.find((p) => p.active && p.background?.image);
+  const foundations = packs.filter((p) => !p.background?.image && !p.sky);
+  const activeIllustrated = packs.find((p) => p.active && (p.background?.image || p.sky));
   const featured = activeIllustrated ? [...foundations, activeIllustrated] : foundations;
-  const illustrated = packs.filter((p) => p.background?.image && p.id !== activeIllustrated?.id);
+  const illustrated = packs.filter((p) => (p.background?.image || p.sky) && p.id !== activeIllustrated?.id);
 
   // A change lands on screen through App's own effect; this only sends it on
   // so the next launch opens the same way.
   const set = useCallback((patch: Partial<Look>) => onLook({ ...look, ...patch }), [look, onLook]);
   // Until the kernel has announced its range there is nothing to draw the
   // slider from; it is held inert rather than given a range of its own.
-  const zoomRange = look.zoomRange ?? { min: 0, max: 1, step: 1 };
+  const zoomRange = look.zoomRange ?? { min: 0, max: 2, step: 1 };
   const setPaper = useCallback(
     (patch: Partial<NonNullable<Look["wallpaper"]>>) =>
       look.wallpaper && onLook({ ...look, wallpaper: { ...look.wallpaper, ...patch } }),
@@ -249,9 +273,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="palettes" role="group" aria-label={t("界面主题")}>
             <Swatch name={t("默认")} on={!custom} onPick={() => pick("")} />
-            {featured.map((p) => (
-              <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-            ))}
+            {featured.map(cell)}
           </div>
           {illustrated.length > 0 && (
             <details className="theme-more">
@@ -263,9 +285,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 <span className="now">{t("{n} 个", { n: illustrated.length })}</span>
               </summary>
               <div className="palettes" role="group" aria-label={t("更多已安装主题")}>
-                {illustrated.map((p) => (
-                  <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-                ))}
+                {illustrated.map(cell)}
               </div>
             </details>
           )}
@@ -528,6 +548,9 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <WindowSection port={port} />
       <NavRailSection />
       <GraphicsSection />
+      <SendShortcut />
+      <EscStopSetting />
+      <SessionTabsSetting />
       <Folding />
       <Notifications port={port} />
 
@@ -697,7 +720,7 @@ function Swatch({
     : undefined;
 
   return (
-    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description || name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
+    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description ? t(pack.description) : name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
       <span className="pal-art" style={style}>
         <span className="pal-rail" />
         <span className="pal-body">

@@ -74,6 +74,7 @@ type controllerDeps struct {
 	// the reloadable stores) — the skills slice of the Capabilities concern. See
 	// skill.go.
 	skills              skillSet
+	date                dateAnchor
 	skillRunner         skill.SubagentRunner
 	readOnlySkillRunner skill.SubagentRunner
 	skillProfile        skill.ProfileResolver
@@ -127,6 +128,8 @@ type controllerDeps struct {
 	// workspaceRepo is workspaceRoot's git identity, resolved before any turn ran.
 	workspaceRepo gitcmd.Repo
 	posture       PostureEvidence
+	// refused owes the model the calls the host refused, once.
+	refused promptFailureDebt
 
 	// approval owns prompt bookkeeping and the runtime posture (ask/auto/yolo,
 	// session grants, the just-approved-plan window) behind its own locks, off
@@ -158,6 +161,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		modelModes:             opts.ModelModes,
 		modelFace:              faceOfEntry(opts.ModelEntry),
 		sessionDir:             opts.SessionDir,
+		date:                   newDateAnchor(opts.Clock),
 		skills:                 newSkillSet(opts.Skills, opts.AllSkills, opts.SkillStore, opts.AllSkillStore, opts.DisableImplicitSkillInvocation, opts.WorkspaceRoot),
 		skillRunner:            opts.SkillRunner,
 		readOnlySkillRunner:    opts.ReadOnlySkillRunner,
