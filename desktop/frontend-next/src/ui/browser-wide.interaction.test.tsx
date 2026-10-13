@@ -16,7 +16,7 @@ function open(active = true) {
   const close = vi.fn();
   function Fixture() {
     const [browser, setBrowser] = useState(true);
-    useWindowKeys([], { browser, settings: false, running: false, closeBrowser: () => { close(); setBrowser(false); }, stop: vi.fn() });
+    useWindowKeys([], { browser, settings: false, running: false, confirm: false, closeBrowser: () => { close(); setBrowser(false); }, stop: vi.fn(), onArm: vi.fn() });
     return <Pane port={port} rt={{ id: "wide", root: "/fixture", name: "Fixture" } as RuntimeView}
       title="Fixture" active={active} visible={active} sideHost={null} side={false}
       onFocus={() => {}} onReport={() => {}} onSessionChanged={() => {}} pulse={0} findPulse={0}

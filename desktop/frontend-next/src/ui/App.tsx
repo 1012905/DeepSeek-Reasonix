@@ -18,6 +18,8 @@ import { Pane, type PaneReport } from "./Pane";
 import { clearDraftForSession } from "./drafts";
 import { DOCK, Gutter, RAIL, dockMax, keepWidth, widthOf } from "./Gutter";
 import { useWindowKeys, type Shortcut } from "./windowkeys";
+import { useEscStop } from "../state/escstop";
+import { StopHint } from "./StopHint";
 import { folded as roomGaveUp, onRoomWidth } from "./viewport";
 import { useFoldAway } from "./foldaway";
 import { useDrawerCloses } from "./drawer";
@@ -411,7 +413,9 @@ export function App({ hub }: { hub: HubPort }) {
   );
   const closeBrowser = useCallback(() => setBrowser(false), []);
   const stopTurn = useCallback(() => activePort?.cancel(), [activePort]);
-  useWindowKeys(shortcuts, { browser, settings: !!settings, running, closeBrowser, stop: stopTurn });
+  const escMode = useEscStop();
+  const [stopArmed, setStopArmed] = useState(false);
+  useWindowKeys(shortcuts, { browser, settings: !!settings, running, confirm: escMode === "confirm", closeBrowser, stop: stopTurn, onArm: setStopArmed });
 
   // A setting changed in the pane is a fact about the session behind it, and
   // the pane is what holds that fact. Without a nudge it keeps polling only
@@ -774,6 +778,7 @@ export function App({ hub }: { hub: HubPort }) {
         </Boundary>
       )}
       <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
+      <StopHint armed={stopArmed} />
     </div>
   );
 }
