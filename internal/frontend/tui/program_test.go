@@ -605,8 +605,8 @@ func TestAskAutoSubmitArrowStopsAtLastQuestion(t *testing.T) {
 	if m.ask == nil || m.ask.tab != 1 {
 		t.Fatalf("right must stop at the last question, got tab %d", m.ask.tab)
 	}
-	if calls := strings.Join(k.seen(), "\n"); strings.Contains(calls, "POST /answer") {
-		t.Fatalf("an arrow must make no /answer call:\n%s", calls)
+	if calls := strings.Join(k.seen(), "\n"); strings.Contains(calls, `"answers"`) {
+		t.Fatalf("an arrow must not submit an answer:\n%s", calls)
 	}
 }
 

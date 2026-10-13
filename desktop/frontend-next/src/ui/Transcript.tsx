@@ -34,7 +34,7 @@ import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL">;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "engageQuestion">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -744,7 +744,7 @@ const Row = memo(function Row({
     case "approval":
       return <ApprovalCard item={it} onApprove={onApprove} onFullAccess={onFullAccess} onPlan={onPlan} />;
     case "ask":
-      return it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} />;
+      return it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} onEngage={port?.engageQuestion?.bind(port)} />;
     case "compaction":
       return <CompactionCard c={it.c} done={it.done} />;
 
