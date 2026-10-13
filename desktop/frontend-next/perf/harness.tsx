@@ -77,6 +77,15 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  async versions() {
+    if (!query.has("versions")) return super.versions();
+    const names = ["2.38.0", "2.37.0", "2.36.0", "2.35.0", "2.34.0", "2.33.0", "2.32.0", "2.31.0", "2.30.0", "2.29.0"];
+    return {
+      current: "2.37.0", pinned: "", stalePin: false, latest: "2.38.0", newer: true,
+      versions: names.map((version) => ({ version, tag: `studio-v${version}`, publishedAt: new Date(Date.now() - (38 - Number(version.split(".")[1])) * 864e5).toISOString(), current: version === "2.37.0", older: Number(version.split(".")[1]) < 37, hasNotes: false })),
+    };
+  }
+
   private readonly subs = new Set<(e: WireEvent) => void>();
 
   async themes(): Promise<ThemePack[]> {
