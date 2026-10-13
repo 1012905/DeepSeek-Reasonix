@@ -1,6 +1,8 @@
-import { HttpError, KernelBusyError } from "./http_error";
+import { DeliveryError, HttpError } from "./http_error";
+import type { DeliveryFault } from "./http_error";
 import type { Attachment, DroppedRef } from "./attachment";
-export { HttpError, KernelBusyError };
+export { DeliveryError, HttpError };
+export type { DeliveryFault };
 export type { Attachment, DroppedRef };
 
 import type { AccountState, AccountUser, DeviceGrant } from "./account";
@@ -15,13 +17,13 @@ import type { UsageQuery, UsageReport } from "./usage";
 export { DEFAULT_USAGE_DAYS } from "./usage";
 export type { MemoryEdit } from "./memory";
 export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
-import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments } from "./model";
+import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
-import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
+import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry } from "./skill";
-import type { UpdateProgress, VersionEntry, VersionHub } from "./version";
-import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceInfo } from "./workspace";
+import type { StudioCrash, StudioLogs, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
+import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
 // The port is one contract; its subjects each keep their own file, the way the
 // wire and the layers below already do. This is where a reader still finds
@@ -31,17 +33,17 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource, JobEntry, McpCatalog, McpDraft,
   McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, MemoryCatalog,
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
-  RewindResult, RewindScope, RoleAssignments, ScopeLayer, SessionEntry, SessionStatus,
+  RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, UpdateProgress, VersionEntry,
-  VersionHub, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceInfo };
+  StudioCrash, StudioLogs, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings } from "./boundary";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
-export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
+export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { FeedbackEnv, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 
@@ -144,6 +146,9 @@ export interface NotifyPrefs {
   turnDone: boolean;
   approval: boolean;
   ask: boolean;
+  feedbackReply: boolean;
+  diskLow: boolean;
+  sound: boolean;
 }
 
 export interface TrayPrefs {
@@ -158,7 +163,8 @@ export interface TrayPrefs {
 export interface AgentPort {
   providerSetup(): Promise<ProviderSetup | null>;
   saveProviderKey(apiKey: string): Promise<void>;
-  models(): Promise<ModelEntry[]>;
+  // The models that answer the job asked about; "chat" when none is named.
+  models(answers?: "chat" | "decision" | "all"): Promise<ModelEntry[]>;
   // What the line being typed can still become, asked once per keystroke. The
   // answer depends on the caret, so it cannot be cached into a static list the
   // way slash() is.
@@ -246,23 +252,41 @@ export interface AgentPort {
   permissions(): Promise<PermissionRules>;
   // Replaces all three lists at once, then rebuilds — the gate is assembled
   // with the runtime, so a rule cannot reach one that is already up. Every rule
-  // is validated by the parser the gate itself uses, so a typo comes back as an
-  // error here rather than as a rule that silently never matches.
+  // is validated by the parser the gate itself uses, and a rule added here that
+  // names no tool is refused with permissions.rule_unknown_tool; one already in
+  // the file is kept and listed in PermissionRules.dormant.
   savePermissions(lists: PermissionLists): Promise<PermissionRules>;
   /** Take back what a prompt allowed for this session — one rule, or all of them when rule is "". */
   revokeSessionGrant(rule: string): Promise<PermissionRules>;
   revokeRememberedProjectRule(rule: string): Promise<PermissionRules>;
   sandbox(): Promise<SandboxSettings>;
   saveSandbox(s: SandboxSettings): Promise<SandboxSettings>;
+  // Per-project grants kept in the user's home, never in the checkout. Adding
+  // or removing one rebuilds the runtime, so both are refused with
+  // workspace_roots.busy while work is running.
+  workspaceRoots(): Promise<WorkspaceRoots>;
+  addWorkspaceRoot(path: string): Promise<WorkspaceRoots>;
+  removeWorkspaceRoot(path: string): Promise<WorkspaceRoots>;
   browserTools(): Promise<BrowserToolsSettings>;
   // Writes the user file, then rebuilds: the tools are bound while assembling.
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
   displayCurrency(): Promise<DisplayCurrencySettings>;
   // Applies live: the kernel announces it and every ledger rebinds; no rebuild.
   saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
+  changedFilesSettings(): Promise<ChangedFilesSettings>;
+  saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings>;
+  foldWorkSettings(): Promise<FoldWorkSettings>;
+  saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
+  askTimeout(): Promise<AskTimeoutSettings>;
+  saveAskTimeout(seconds: number): Promise<AskTimeoutSettings>;
+  autoArchive(): Promise<AutoArchiveSettings>;
+  // Read by the kernel's background sweep on each pass; no rebuild.
+  saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
+  receiptSettings(): Promise<ReceiptSettings>;
+  saveReceiptSettings(show: boolean): Promise<ReceiptSettings>;
   // null in a browser tab: there is no window to keep running.
   trayPrefs(): Promise<TrayPrefs | null>;
   setTrayPrefs(icon: boolean, closeToTray: boolean): Promise<TrayPrefs | null>;
@@ -277,6 +301,9 @@ export interface AgentPort {
   // Retries a failed or disconnected server and answers with its new state, so
   // the caller never has to race a follow-up GET against the connect.
   reconnectMcp(name: string): Promise<{ state: string; tools?: number; error?: string }>;
+  // Approves the withheld definitions the digest names, then reconnects. The
+  // kernel refuses a digest that no longer matches what it withholds.
+  trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;
   setMcpLoad(name: string, load: McpLoad): Promise<void>;
@@ -301,6 +328,11 @@ export interface AgentPort {
   // Persisted, then the runtime is rebuilt: boot reads every role model while
   // assembling, so an assignment cannot reach a runtime that is already up.
   setRole(role: string, ref: string): Promise<void>;
+  // Entries that win over a role's global model, per role. The global value
+  // roles() reports is not what runs while one of these exists.
+  roleOverrides(): Promise<Record<string, RoleOverride[]>>;
+  // Removes one user-config entry and rebuilds, so the global model takes over.
+  clearRoleOverride(role: string, key: string): Promise<void>;
   storage(query?: StorageQuery): Promise<StorageState>;
   planStorageMove(root: string, dir: string): Promise<StoragePlan>;
   moveStorage(root: string, dir: string): Promise<StoragePlan>;
@@ -308,6 +340,8 @@ export interface AgentPort {
   // The wire formats a source may be saved as. Read from the kernel so a
   // protocol added there reaches this panel without a frontend release.
   protocols(): Promise<Protocol[]>;
+  providerPresets(): Promise<ProviderPreset[]>;
+  installProviderPreset(req: ProviderPresetInstall): Promise<{ names: string[] }>;
   // Asks an endpoint what it is. Writes nothing — the answer is shown for
   // confirmation, because only the person holding the key knows what they
   // bought.
@@ -330,9 +364,13 @@ export interface AgentPort {
   // acknowledgement that closes it out.
   welcomeSeen(): Promise<boolean>;
   markWelcomed(): Promise<void>;
-  removeProvider(name: string): Promise<void>;
+  removeProvider(name: string): Promise<ProviderRemoval>;
   versions(): Promise<VersionHub>;
   pinVersion(version: string): Promise<void>;
+  // A published release's notes. retry asks past the kernel's short memory of a failed fetch.
+  versionNotes(version: string, retry?: boolean): Promise<VersionNotes>;
+  // Where this install keeps its logs, and the crash files waiting there.
+  studioLogs(): Promise<StudioLogs>;
   // Installs a published version, forward or back — the same call either way,
   // because a rollback that took a second code path would be the less-tested
   // one. Resolves only on failure: a success ends with the process handing over
@@ -370,6 +408,9 @@ export interface AgentPort {
   replyFeedback(receipt: string, body: string): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
+  // Asks the window to raise the neutral "new reply" notification; the kernel
+  // answers for the switches. Rejects where there is no window to raise it.
+  announceFeedbackReply(): Promise<void>;
   workspaces(): Promise<WorkspaceInfo>;
   // Rebuilds the whole runtime against another folder. The conversation does
   // not come along, so the caller has to reload the transcript afterwards.
@@ -398,6 +439,9 @@ export interface AgentPort {
   sessions(): Promise<SessionEntry[]>;
   resume(path: string): Promise<void>;
   newSession(): Promise<void>;
+  // Clears the unread mark on the conversation this pane has open. Unmarked
+  // sessions are a no-op on the kernel, and an older kernel answers 404.
+  markSessionViewed(): Promise<void>;
   deleteSession(name: string): Promise<void>;
   status(): Promise<SessionStatus>;
   /** The provider's wallet, or null when this provider has no wallet endpoint —
@@ -416,6 +460,10 @@ export interface AgentPort {
   // the user agreed to.
   prepareRewind(turn: number, scope: RewindScope): Promise<RewindPlan>;
   commitRewind(planId: string): Promise<RewindResult>;
+  // Copies the conversation up to the end of a turn into a new session and
+  // answers with its path; this session stays where it is.
+  branchAt(turn: number, name: string): Promise<string>;
+  availableUndo(): Promise<RewindUndo | null>;
   // Reverses a committed rewind. Only reachable while the caller still holds the
   // transaction id the commit returned.
   undoRewind(transactionId: string): Promise<void>;
@@ -433,6 +481,18 @@ export interface AgentPort {
   // file created and then removed by a shell command leaves both events behind
   // and nothing on disk.
   changes(): Promise<WorkspaceChanges>;
+  // The work tree's identity as git itself reports it: which branch, or which
+  // commit when HEAD is detached. This is the composer's branch reading — the
+  // capability scope's file-derived answer is for the picker's project name.
+  workspaceGit(): Promise<WorkspaceGit>;
+  // The repository's local branches, the current one marked, for the composer's
+  // branch menu. Re-read on open: a terminal or another window may have moved
+  // HEAD since this pane last looked.
+  branches(): Promise<WorkspaceBranches>;
+  // Checks out the named local branch and answers with the work tree's
+  // identity as it now stands. Refusals carry a code (branch.*) — uncommitted
+  // work and branches held by another worktree are named reasons, not failures.
+  switchBranch(name: string): Promise<WorkspaceGit>;
   // What one of those paths actually differs by. The list says a file moved;
   // only this says how, and asking per path is what keeps a session that
   // touched two hundred files from shipping two hundred diffs nobody opened.
@@ -441,6 +501,9 @@ export interface AgentPort {
   // the text, and commitStaged records it locally once they confirm.
   proposeCommit(signal?: AbortSignal): Promise<CommitProposal>;
   commitStaged(req: CommitRequest): Promise<CommitResult>;
+  // Moves changes the workspace lists into or out of the index, so a commit has
+  // something to record without a terminal.
+  stageChanges(req: StageRequest): Promise<void>;
   // Dot entries are left out unless hidden is set; VCS stores never appear.
   workspaceFiles(path?: string, query?: string, hidden?: boolean): Promise<WorkspaceFiles>;
   workspaceFile(path: string): Promise<WorkspaceFile>;
@@ -490,6 +553,7 @@ export interface AgentPort {
   // the agent can read and drive; the window keeping its own would be a page
   // neither could hand to the other.
   browserOpen(url: string, newTab: boolean): Promise<BrowserTab>;
+  browserClose(tab: string): Promise<void>;
   // The entry's full text. preview is cut to a manifest-sized line, so editing
   // against it would silently shorten what the user actually said.
   readQueued(itemId: string): Promise<string>;
@@ -515,6 +579,7 @@ export interface AgentPort {
   // sends it back untouched rather than describing the state it thinks it is in.
   planDecision(id: string, action: PlanAction): Promise<void>;
   answer(id: string, answers: { questionId: string; selected: string[] }[]): Promise<void>;
+  engageQuestion(id: string): Promise<void>;
   // Installed theme packs and which one is active. The list carries every
   // pack's tokens so a picker can preview without a second request.
   context(): Promise<ContextBreakdown>;
@@ -541,6 +606,8 @@ export interface AgentPort {
   surfaceSlots(): Promise<Record<string, string>>;
   assignSurface(surface: string, slot: string): Promise<void>;
   activateTheme(id: string): Promise<void>;
+  // Only a pack in the user's own library; the kernel refuses any other.
+  removeTheme(id: string): Promise<void>;
   // A zip, or a pack's loose files; the kernel keeps what a pack can hold.
   importTheme(files: File[]): Promise<ThemeImport>;
   // Shows where installed packs live and answers that directory.
@@ -555,8 +622,12 @@ export interface AgentPort {
   // The person's answer to "trust this folder?" for the session's workspace.
   decideWorkspaceTrust(trust: "trusted" | "declined"): Promise<void>;
   setPreset(preset: Preset): Promise<void>;
-  // Switches this session only; asDefault also records it as the model new sessions start on.
-  setModel(ref: string, asDefault?: boolean): Promise<void>;
+  // Switches this session only.
+  setModel(ref: string): Promise<void>;
+  // Records the model new sessions start on in the config of the machine this
+  // port answers for. A brokered pane's default lives on the machine its models
+  // come from, so its refusal is typed: settings.default_model_brokered.
+  setDefaultModel(ref: string): Promise<void>;
   setEffort(effort: string): Promise<void>;
   // "" turns the session's model mode off.
   setModelMode(mode: string): Promise<void>;

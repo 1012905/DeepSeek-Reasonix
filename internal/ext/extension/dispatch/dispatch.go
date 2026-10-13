@@ -46,6 +46,9 @@ type Options struct {
 	// Warn receives human-readable warnings about optional-extension failures
 	// and dropped event notifications. Nil means warnings are discarded.
 	Warn func(msg string)
+	// SidecarDown receives, once per extension, an optional extension skipped
+	// because its sidecar is not running. Nil routes that case through Warn.
+	SidecarDown func(pluginID string, point extension.InterceptorPoint)
 }
 
 func (o Options) warnFunc() func(string) {
@@ -87,6 +90,10 @@ type ViolationError struct {
 func (e *ViolationError) Error() string {
 	return fmt.Sprintf("extension %s violated the intercept contract at %s: %s", e.Plugin, e.Point, e.Detail)
 }
+
+// ErrNoLiveSidecar is the cause of a failure when the extension's sidecar
+// process is not running, as opposed to a call that reached it and failed.
+var ErrNoLiveSidecar = errors.New("no live sidecar client")
 
 // FailureError reports a required extension's call failure (timeout, crash,
 // transport). The message is credential-redacted; Unwrap returns the original
@@ -130,6 +137,7 @@ type Dispatcher struct {
 	required     map[string]bool
 	slotOwners   map[string]bool
 	warn         func(string)
+	sidecarDown  func(string, extension.InterceptorPoint)
 
 	warnedMu sync.Mutex
 	warned   map[string]struct{}
@@ -162,8 +170,24 @@ func New(chain map[extension.InterceptorPoint][]extension.Contribution, replacem
 		required:     frozenRequired,
 		slotOwners:   slotOwners,
 		warn:         opts.warnFunc(),
+		sidecarDown:  opts.SidecarDown,
 		warned:       map[string]struct{}{},
 	}
+}
+
+// Options returns the reporting this dispatcher was built with, so a successor
+// built after a rebuild reports through the same channels.
+func (d *Dispatcher) Options() Options {
+	return Options{Warn: d.warn, SidecarDown: d.sidecarDown}
+}
+
+// Intercepts reports whether a sidecar sits on point: a plugin-backed
+// contribution the walk would call. Nil-safe.
+func (d *Dispatcher) Intercepts(point extension.InterceptorPoint) bool {
+	if d == nil {
+		return false
+	}
+	return slices.ContainsFunc(d.chain[point], func(c extension.Contribution) bool { return c.Source.PluginID != "" })
 }
 
 // Intercept walks the chain for point in frozen order, calling each
@@ -201,7 +225,7 @@ func (d *Dispatcher) Intercept(ctx context.Context, point extension.InterceptorP
 		}
 		client := d.clients(pluginID)
 		if client == nil {
-			if err := d.failure(pluginID, point, errors.New("no live sidecar client")); err != nil {
+			if err := d.failure(pluginID, point, ErrNoLiveSidecar); err != nil {
 				return nil, err
 			}
 			continue
@@ -290,7 +314,7 @@ func (d *Dispatcher) RunStrategy(ctx context.Context, slot extension.Slot, point
 	}
 	client := d.clients(owner.PluginID)
 	if client == nil {
-		return &FailureError{Plugin: owner.PluginID, Point: point, Err: errors.New("no live sidecar client")}
+		return &FailureError{Plugin: owner.PluginID, Point: point, Err: ErrNoLiveSidecar}
 	}
 	raw, err := json.Marshal(payloadPtr)
 	if err != nil {
@@ -394,7 +418,15 @@ func (d *Dispatcher) failure(pluginID string, point extension.InterceptorPoint, 
 	if d.isRequired(pluginID) {
 		return &FailureError{Plugin: pluginID, Point: point, Err: err}
 	}
-	d.warnOnce("error|"+pluginID, fmt.Sprintf(
+	key := "error|" + pluginID
+	if errors.Is(err, ErrNoLiveSidecar) {
+		key = "sidecar|" + pluginID
+		if d.sidecarDown != nil {
+			d.once(key, func() { d.sidecarDown(pluginID, point) })
+			return nil
+		}
+	}
+	d.warnOnce(key, fmt.Sprintf(
 		"extension %s failed at %s; skipping this optional extension: %s",
 		pluginID, point, secrets.RedactCredentials(err.Error())))
 	return nil
@@ -415,6 +447,10 @@ func (d *Dispatcher) violation(pluginID string, point extension.InterceptorPoint
 // warnOnce delivers msg through Options.Warn at most once per key for the
 // life of the process.
 func (d *Dispatcher) warnOnce(key, msg string) {
+	d.once(key, func() { d.warn(msg) })
+}
+
+func (d *Dispatcher) once(key string, deliver func()) {
 	d.warnedMu.Lock()
 	if _, dup := d.warned[key]; dup {
 		d.warnedMu.Unlock()
@@ -422,7 +458,7 @@ func (d *Dispatcher) warnOnce(key, msg string) {
 	}
 	d.warned[key] = struct{}{}
 	d.warnedMu.Unlock()
-	d.warn(msg)
+	deliver()
 }
 
 // checkPayloadType verifies payloadPtr is a pointer to exactly the DTO

@@ -1,3 +1,4 @@
+import "../../styles/compaction-live.css";
 import { useState } from "react";
 import type { Compaction } from "../../port/wire";
 import { useStartsOpen } from "../../state/foldpref";
@@ -107,7 +108,7 @@ export function CompactionCard({ c, done }: { c: Compaction; done: boolean }) {
                   )}
                 </div>
               )}
-              {c.summary && <div className="comp-n">{lastLine(c.summary)}</div>}
+              <div className="comp-n comp-live">{c.summary ? lastLine(c.summary) : " "}</div>
             </div>
           </div>
         )}

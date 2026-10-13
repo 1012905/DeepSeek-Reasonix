@@ -42,12 +42,16 @@ function Bar({ value }: { value: number }) {
 // an extension built against a newer surface kind degrades to something the
 // user can read instead of vanishing.
 export function ExtensionCard({ ext, onInvoke, onSubmit }: Props) {
-  const [values, setValues] = useState<Record<string, unknown>>(() => seed(ext.form?.fields));
+  const [draft, setDraft] = useState<Record<string, unknown>>(() => seed(ext.form?.fields));
+  const values = seed(ext.form?.fields);
+  for (const field of ext.form?.fields ?? []) {
+    if (Object.hasOwn(draft, field.key)) values[field.key] = draft[field.key];
+  }
   const [submission, setSubmission] = useState<"idle" | "pending" | "sent">("idle");
   const sent = submission === "sent";
   const pending = submission === "pending";
 
-  const set = (key: string, v: unknown) => setValues((prev) => ({ ...prev, [key]: v }));
+  const set = (key: string, v: unknown) => setDraft((prev) => ({ ...prev, [key]: v }));
   const missing = (ext.form?.fields ?? []).filter((f) => f.required && empty(values[f.key]));
 
   const submit = async () => {

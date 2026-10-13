@@ -688,7 +688,7 @@ func TestSkillInvocationUnavailableIsAudited(t *testing.T) {
 		CapabilityLedger: capability.NewLedger(),
 		CapabilityAudit:  audit,
 	}, event.Discard)
-	a.noteCapabilityInvocation("run_skill", json.RawMessage(`{"name":"delivery-only"}`), fmt.Errorf("run_skill: %w", skill.ErrInvocationUnavailable))
+	a.noteCapabilityInvocation("run_skill", json.RawMessage(`{"name":"delivery-only"}`), nil, fmt.Errorf("run_skill: %w", skill.ErrInvocationUnavailable))
 	snap := audit.Snapshot()
 	if snap.SkillInvocations != 1 || snap.SkillFailures != 1 || snap.SkillUnavailable != 1 {
 		t.Fatalf("skill unavailable audit: invocations=%d failures=%d unavailable=%d",
@@ -1785,5 +1785,46 @@ func TestAuthorizedMCPConnectUsesExplicitDenyOnlyGate(t *testing.T) {
 	})
 	if !out2.blocked || host.HasClient("other-reader") {
 		t.Fatalf("explicit connect deny must block: outcome=%+v connected=%v", out2, host.HasClient("other-reader"))
+	}
+}
+
+func TestReadOnlyExecutionAllowsEveryCatalogReadAction(t *testing.T) {
+	for _, action := range usecap.CatalogReadActions {
+		out := executeReadOnlyBoundaryCall(t, tool.ResolvedCall{
+			ProxyAction: action, SkipExecute: true, ReadOnly: true, Result: "ranked",
+		})
+		if out.blocked || out.output != "ranked" {
+			t.Errorf("%s outcome = %+v, want the host result", action, out)
+		}
+		for name, rc := range map[string]tool.ResolvedCall{
+			"without SkipExecute": {ProxyAction: action, ReadOnly: true},
+			"with a Commit":       {ProxyAction: action, SkipExecute: true, ReadOnly: true, Commit: func() error { return nil }},
+		} {
+			if out := executeReadOnlyBoundaryCall(t, rc); !out.blocked {
+				t.Errorf("%s resolved %s must stay blocked", action, name)
+			}
+		}
+	}
+}
+
+func TestReadOnlyExecutionNamesAllowedActionsForUnknownAction(t *testing.T) {
+	out := executeReadOnlyBoundaryCall(t, tool.ResolvedCall{ProxyAction: "frobnicate", SkipExecute: true, ReadOnly: true})
+	if !out.blocked {
+		t.Fatalf("unknown action outcome = %+v, want block", out)
+	}
+	for _, want := range append([]string{`"frobnicate"`}, usecap.CatalogReadActions...) {
+		if !strings.Contains(out.output, want) {
+			t.Errorf("block reason %q does not name %s", out.output, want)
+		}
+	}
+}
+
+func TestPlannerMCPExecutionAllowsCatalogSearch(t *testing.T) {
+	reg := tool.NewRegistry()
+	reg.Add(readOnlyBoundaryProxy{resolved: tool.ResolvedCall{ProxyAction: usecap.ActionSearch, SkipExecute: true, ReadOnly: true, Result: "ranked"}})
+	a := New(nil, reg, sessionstore.NewSession("sys"), Options{ReadOnlyExecution: true, PlannerMCPExecution: true}, event.Discard)
+	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{ID: "p-1", Name: "use_capability", Arguments: `{"action":"search","query":"x"}`})
+	if out.blocked || out.output != "ranked" {
+		t.Fatalf("planner search outcome = %+v", out)
 	}
 }

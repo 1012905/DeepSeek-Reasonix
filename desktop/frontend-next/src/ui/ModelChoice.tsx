@@ -37,6 +37,8 @@ export function clearModelCheckFacts(facts: Record<string, ModelFact>): Record<s
 interface Props {
   // Everything on offer: what the endpoint reported, plus anything added here.
   models: string[];
+  aliases?: Record<string, string>;
+  onAlias?: (m: string, value: string) => void;
   picked: string[];
   vision: string[];
   // Absent where the flow has no default to set — adding a source takes the
@@ -54,13 +56,20 @@ interface Props {
   checkDisabled?: boolean;
   onToggle: (m: string) => void;
   onAdd: (m: string) => void;
+  // The same read the section header offers, placed where a missing model is noticed.
+  onFetch?: () => void;
+  fetching?: boolean;
+  fetchDisabled?: boolean;
+  fetchFail?: string;
 }
 
 export function ModelChoice({
-  models, picked, vision, def, onDefault, onVision, visionLocked, facts, onCheck, checkDisabled, onToggle, onAdd,
+  models, aliases, onAlias, picked, vision, def, onDefault, onVision, visionLocked, facts, onCheck, checkDisabled, onToggle, onAdd,
+  onFetch, fetching, fetchDisabled, fetchFail,
 }: Props) {
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
+  const aliasFor = (m: string) => aliases && Object.hasOwn(aliases, m) ? aliases[m] : "";
   const on = useMemo(() => new Set(picked), [picked]);
 
   // Enabled first, and deliberately keyed on the list alone: re-sorting on every
@@ -71,10 +80,9 @@ export function ModelChoice({
     [models],
   );
 
-  const hits = query ? order.filter((m) => m.toLowerCase().includes(query)) : order;
+  const hits = query ? order.filter((m) => `${m} ${aliasFor(m)}`.toLowerCase().includes(query)) : order;
   const [shown, hidden] = cap(hits, on);
-  // Only when nothing already carries the name: offering to add a model that is
-  // sitting three rows down is how a list grows two of everything.
+  // Display aliases aid search but cannot reserve another model's wire ID.
   const naming = q.trim() !== "" && !models.some((m) => m.toLowerCase() === query);
 
   const add = () => {
@@ -101,7 +109,19 @@ export function ModelChoice({
           }}
         />
         {query && <span className="cnt">{hits.length} / {models.length}</span>}
+        {onFetch && (
+          <button className="mfetch" data-action="provider.probe" onClick={onFetch} disabled={fetchDisabled}>
+            {t(fetching ? "正在从服务商读取…" : "没找到？从服务商读取可用模型")}
+          </button>
+        )}
       </div>
+      {fetchFail && (
+        <div className="find" data-lvl="err" role="alert">
+          <span className="t">{t("读取模型列表失败")}</span>
+          <span className="why">{fetchFail}</span>
+          <span className="why">{t("可以直接输入完整模型 ID 添加。")}</span>
+        </div>
+      )}
 
       <div className="mrows">
         {shown.map((m) => (
@@ -113,6 +133,12 @@ export function ModelChoice({
             </button>
             <span className="mid">
               <span className="nm">{m}</span>
+              {onAlias && <input className="malias" value={aliasFor(m)} spellCheck={false}
+                data-action="provider.draft" data-value="model-alias" data-target={m}
+                aria-label={t("{name} 的显示别名", { name: m })}
+                placeholder={t("显示别名（留空使用模型 ID）")}
+                title={t("仅用于显示，不改变请求中的模型 ID")}
+                disabled={!on.has(m)} onChange={(e) => onAlias(m, e.target.value)} />}
               {facts?.[m] && <ModelEvidence fact={facts[m]} />}
             </span>
             <span className="mops">
@@ -205,6 +231,8 @@ function checkReason(reason?: ProviderModelCheckReason): string {
     case "rate_limited": return "遇到限流，尚未确认";
     case "network": return "网络异常，尚未确认";
     case "timeout": return "验证超时，尚未确认";
+    case "local_timeout": return "本机服务没有在时限内回答，尚未确认；模型若刚启动可能还在加载，稍后再验证一次";
+    case "redirect_refused": return "地址跳转到了另一个主机，已拒绝，尚未确认";
     case "rejected": return "请求被拒绝，尚未确认";
     default: return "尚未确认";
   }

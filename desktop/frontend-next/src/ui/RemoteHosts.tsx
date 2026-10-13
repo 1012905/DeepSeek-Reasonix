@@ -7,13 +7,14 @@ import { RemoteDirs } from "./RemoteDirs";
 import { workspacesOf } from "./Remotes";
 import { Cross } from "./glyphs";
 import { StudioIcon } from "./StudioIcon";
-import { Confirm } from "./Workspaces";
+import { Confirm } from "./WorkspaceConfirm";
+import { UnreadCount, UnreadDot } from "./UnreadMark";
+import { RowCount } from "./RowCount";
 import { clearDraftForSession } from "./drafts";
 
 // The same ceiling the local column uses. A machine worked on for months holds
 // thousands of conversations, and drawing them all is what put 98k nodes in a
 // sidebar — the reader is looking at the recent end either way.
-const SHOWN = 30;
 
 interface Props {
   hub: HubPort;
@@ -138,10 +139,9 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
   // Folded rows. A host's key is its name; a workspace's carries the host, so
   // one machine collapsing never takes a folder on another with it.
   const [shut, setShut] = useState<Set<string>>(new Set());
+  const [groupShut, setGroupShut] = useState(false);
   const needle = useRailQuery();
   const hit = makeHit(needle);
-  // Workspaces the reader asked to see in full.
-  const [whole, setWhole] = useState<Set<string>>(new Set());
 
   const dropSession = async (host: RemoteHost, sessionPath: string, held?: RuntimeView) => {
     setConfirm("");
@@ -228,7 +228,27 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
           }}
         />
       ) : null}
-      {hosts.map((host) => {
+      <div
+        className="machrow"
+        data-group=""
+        data-action="remote.group"
+        role="treeitem"
+        aria-level={1}
+        aria-expanded={!!needle || !groupShut}
+        onClick={() => setGroupShut((v) => !v)}
+      >
+        <button className="twist" tabIndex={-1} aria-hidden="true">
+          <svg viewBox="0 0 10 10">
+            <path d="M3.4 1.6 6.8 5 3.4 8.4" />
+          </svg>
+        </button>
+        <i className="rmtpip" aria-hidden="true" />
+        <span className="rmtname">{t("远程机器")}</span>
+        <span className="rowswap">
+          <span className="rowcount" data-words="">{t("{n} 台机器", { n: hosts.length })}</span>
+        </span>
+      </div>
+      {!needle && groupShut ? null : hosts.map((host) => {
         // Panes on this machine, which is also what makes the connection worth
         // holding: the link goes down with the last of them.
         const panes = runtimes.filter((rt) => rt.host === host.name);
@@ -250,7 +270,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
               className="machrow"
               title={host.target}
               role="treeitem"
-              aria-level={1}
+              aria-level={2}
               aria-expanded={!folded}
               onClick={() => fold(host.name)}
             >
@@ -321,7 +341,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                       <div
                         className="wsrow rmtwsrow"
                         role="treeitem"
-                        aria-level={2}
+                        aria-level={3}
                         aria-expanded={!folded}
                         onClick={() => fold(key)}
                       >
@@ -337,10 +357,13 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                         {/* Only the far kernel knows what it holds. Cold, "0
                             会话" would be this window guessing, and guessing
                             zero about a project worked in for months. */}
-                        {tree && ws.sessions.length > 0 ? (
-                          <span className="wsmeta">{t("{n} 会话", { n: ws.sessions.length })}</span>
-                        ) : null}
                         <span className="wsacts">
+                          {folded && <UnreadCount n={ws.sessions.filter((x) => x.unread).length} />}
+                          <span className="rowswap">
+                          {tree && ws.sessions.length > 0 ? (
+                            <RowCount c={ws.total !== undefined && ws.total > ws.sessions.length ? { shown: ws.sessions.length, of: ws.total } : { shown: ws.sessions.length }} />
+                          ) : null}
+                          <span className="rowbtns">
                           <button
                             className="wsadd"
                             data-action="session.new"
@@ -375,11 +398,13 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                               <Cross />
                             </button>
                           ) : null}
+                          </span>
+                          </span>
                         </span>
                       </div>
                       {!folded && (
                         <div className="kids">
-                          {(whole.has(key) ? ws.sessions : ws.sessions.slice(0, SHOWN)).map((session) => {
+                          {ws.sessions.map((session) => {
                             // A conversation this window already drives is a
                             // pane to focus, never a second writer for one file.
                             const held = panes.find((rt) => rt.sessionPath === session.path);
@@ -401,17 +426,19 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                               <div
                                 data-action="session.open"
                                 key={session.path}
-                                className="sessrow"
+                                className="sessrow sessrow-remote"
                                 role="treeitem"
-                                aria-level={3}
+                                aria-level={4}
                                 aria-selected={held?.id === active}
                                 data-on={held?.id === active ? "" : undefined}
                                 data-live={held ? "" : undefined}
+                                data-unread={session.unread ? "" : undefined}
                                 data-busy={busy === host.name + session.path ? "" : undefined}
                                 onClick={() => (held ? onFocus(held.id) : void open(host, ws.root, session.path))}
                               >
                                 <i className="pip" />
-                                <span className="sesstitle">{name}</span>
+                                <span className="sesstitle" title={name}><span>{name}</span></span>
+                                {session.unread && <UnreadDot kind="row" />}
                                 <span className="sessmeta">{session.turns ? t("{n} 轮", { n: session.turns }) : t("空会话")}</span>
                                 <button
                                   className="session-more sessdel"
@@ -430,19 +457,8 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                               </div>
                             );
                           })}
-                          {ws.sessions.length > SHOWN && !whole.has(key) && (
-                            <button
-                              className="rmtmore"
-                              onClick={() =>
-                                setWhole((held) => {
-                                  const next = new Set(held);
-                                  next.add(key);
-                                  return next;
-                                })
-                              }
-                            >
-                              {t("还有 {n} 个 · 全部显示", { n: ws.sessions.length - SHOWN })}
-                            </button>
+                          {ws.total !== undefined && ws.total > ws.sessions.length && (
+                            <small className="rmtolder">{t("还有 {n} 个较早的会话，在那台机器上查看", { n: ws.total - ws.sessions.length })}</small>
                           )}
                         </div>
                       )}
@@ -455,14 +471,14 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                     key={rt.id}
                     className="sessrow"
                     role="treeitem"
-                    aria-level={3}
+                    aria-level={4}
                     aria-selected={rt.id === active}
                     data-on={rt.id === active ? "" : undefined}
                     data-live=""
                     onClick={() => onFocus(rt.id)}
                   >
                     <i className="pip" />
-                    <span className="sesstitle">{rt.name}</span>
+                    <span className="sesstitle" title={rt.name}><span>{rt.name}</span></span>
                   </div>
                 ))}
 

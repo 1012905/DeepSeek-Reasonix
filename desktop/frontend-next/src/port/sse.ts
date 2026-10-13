@@ -1,7 +1,7 @@
 import { PLAN_ACTIONS, type PlanAction } from "./session";
-import type { AccountState, AgentPort, Appearance, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, VersionHub, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
-import { HttpError, type Attachment, type ChangeDiff, type CommitProposal, type CommitRequest, type CommitResult, type DroppedRef, type WorkspaceFile, type WorkspaceFiles, type WorkspaceChanges } from "./port";
-import { SseFeedback } from "./sse_feedback";
+import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
+import { HttpError, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles } from "./port";
+import { SseWorkspace } from "./sse_workspace";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import { host } from "./host";
@@ -16,7 +16,7 @@ import { openLiveStream } from "./livestream";
 // a load. The read is one small JSON body and answers from memory.
 const UPDATE_POLL_MS = 500;
 
-export class SsePort extends SseFeedback implements AgentPort {
+export class SsePort extends SseWorkspace implements AgentPort {
   status() {
     return this.get<SessionStatus>("/status");
   }
@@ -41,8 +41,8 @@ export class SsePort extends SseFeedback implements AgentPort {
     return this.post("/provider-setup", { apiKey });
   }
 
-  async models() {
-    const r = await this.get<{ models?: ModelEntry[] }>("/models");
+  async models(answers?: "chat" | "decision" | "all") {
+    const r = await this.get<{ models?: ModelEntry[] }>(answers ? `/models?answers=${answers}` : "/models");
     return r.models ?? [];
   }
 
@@ -138,6 +138,17 @@ export class SsePort extends SseFeedback implements AgentPort {
     return this.post("/memory/restore", { name, revision });
   }
 
+  async trustMcp(name: string, digest: string) {
+    const res = await fetch(this.base + "/mcp/trust", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ name, digest }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { state?: string; tools?: number | unknown[]; error?: string };
+    if (!res.ok && !body.error) throw new Error(`/mcp/trust: ${res.status}`);
+    return { state: body.state ?? (res.ok ? "ready" : "failed"), tools: typeof body.tools === "number" ? body.tools : body.tools?.length, error: body.error };
+  }
   async reconnectMcp(name: string) {
     const res = await fetch(this.base + "/mcp/reconnect", {
       method: "POST",
@@ -191,6 +202,14 @@ export class SsePort extends SseFeedback implements AgentPort {
     return this.post("/roles", { role, ref });
   }
 
+  roleOverrides() {
+    return this.get<Record<string, RoleOverride[]>>("/roles/overrides");
+  }
+
+  clearRoleOverride(role: string, key: string) {
+    return this.post("/roles/overrides/clear", { role, key });
+  }
+
   storage(query?: StorageQuery) {
     const q = query?.layout ? "?layout=1" : query?.root ? "?root=" + encodeURIComponent(query.root) : "";
     return this.get<StorageState>("/storage" + q);
@@ -231,6 +250,19 @@ export class SsePort extends SseFeedback implements AgentPort {
         body: JSON.stringify({ icon, closeToTray }),
       }),
     );
+  }
+
+  async versionNotes(version: string, retry = false): Promise<VersionNotes> {
+    const path = `/studio/versions/${encodeURIComponent(version)}/notes${retry ? "?retry=1" : ""}`;
+    const res = await fetch(path, { credentials: "same-origin" });
+    if (!res.ok) await SsePort.fail(path, res);
+    return (await res.json()) as VersionNotes;
+  }
+
+  async studioLogs(): Promise<StudioLogs> {
+    const res = await fetch("/studio/logs", { credentials: "same-origin" });
+    if (!res.ok) await SsePort.fail("/studio/logs", res);
+    return (await res.json()) as StudioLogs;
   }
 
   async pinVersion(version: string): Promise<void> {
@@ -407,40 +439,14 @@ export class SsePort extends SseFeedback implements AgentPort {
     return this.post("/resume", { path });
   }
 
+  markSessionViewed() { return this.post("/sessions/viewed"); }
+
   newSession() {
     return this.post("/new");
   }
 
   deleteSession(name: string) {
     return this.post("/delete-session", { name });
-  }
-
-  // JSON, not raw bytes: csrfGuard admits nothing else, and that guard is what
-  // stops a cross-site form posting here at all.
-  async attach(blob: Blob, name?: string) {
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    const res = await fetch(this.base + "/attachments", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ mime: blob.type, name: name ?? "", data: btoa(bin) }),
-    });
-    if (!res.ok) throw new HttpError(res.status, `/attachments: ${res.status} ${await res.text()}`);
-    return (await res.json()) as Attachment;
-  }
-
-  dropRefs(paths: string[]) {
-    return this.post0<DroppedRef[]>("/drop", { paths });
-  }
-
-  changes() {
-    return this.get<WorkspaceChanges>("/changes");
-  }
-
-  changeDiff(path: string) {
-    return this.get<ChangeDiff>(`/changes/diff?path=${encodeURIComponent(path)}`);
   }
 
   async proposeCommit(signal?: AbortSignal) {
@@ -501,6 +507,11 @@ export class SsePort extends SseFeedback implements AgentPort {
   commitRewind(planId: string) {
     return this.post0<RewindResult>("/rewind/commit", { planId });
   }
+
+  async branchAt(turn: number, name: string) {
+    return (await this.post0<{ path: string }>("/branch/at", { turn, name })).path;
+  }
+  availableUndo() { return this.get<RewindUndo | null>("/rewind/undo"); }
 
   undoRewind(transactionId: string) {
     return this.post("/rewind/undo", { transactionId });
@@ -689,6 +700,9 @@ export class SsePort extends SseFeedback implements AgentPort {
   browserOpen(url: string, newTab: boolean) {
     return this.post0<BrowserTab>("/browser/open", { url, newTab });
   }
+  browserClose(tab: string) {
+    return this.post("/browser/close", { tab });
+  }
   async readQueued(itemId: string) {
     const r = await this.get<{ envelope?: { displayText?: string } }>("/inbox/items/" + encodeURIComponent(itemId));
     // Every stored entry has a body — the kernel refuses an empty one at
@@ -718,16 +732,16 @@ export class SsePort extends SseFeedback implements AgentPort {
     return this.post(paused ? "/inbox/pause" : "/inbox/resume");
   }
   cancel() {
-    return this.post("/cancel");
+    return this.postAcked("/cancel");
   }
   // Approve(id, allow, session, persist) — "always" is a session grant, not a
   // persisted config change.
   planDecision(id: string, action: PlanAction) {
-    return this.postDecision("/plan-decision", { id, action: PLAN_ACTIONS[action] });
+    return this.postAcked("/plan-decision", { id, action: PLAN_ACTIONS[action] });
   }
 
   approve(id: string, verdict: ApprovalVerdict) {
-    return this.postDecision("/approve", {
+    return this.postAcked("/approve", {
       id,
       allow: verdict !== "deny",
       // A rule written down also covers the rest of this session, so the answer
@@ -737,26 +751,12 @@ export class SsePort extends SseFeedback implements AgentPort {
     });
   }
   answer(id: string, answers: { questionId: string; selected: string[] }[]) {
-    return this.postDecision("/answer", {
+    return this.postAcked("/answer", {
       id,
       answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected })),
     });
   }
-  async uploadWallpaper(blob: Blob) {
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    const res = await fetch(this.base + "/appearance/wallpaper", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ mime: blob.type, data: btoa(bin) }),
-    });
-    const body = (await res.json().catch(() => ({}))) as Appearance & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/appearance/wallpaper: ${res.status}`);
-    return body;
-  }
-
+  engageQuestion(id: string) { return this.postAcked("/answer", { id, engage: true }); }
   async invokeExtensionAction(name: string) {
     const out = await this.post0<{ message?: string }>("/extensions/action", { name });
     return out.message ?? "";
@@ -776,8 +776,11 @@ export class SsePort extends SseFeedback implements AgentPort {
   setPreset(preset: Preset) {
     return this.post("/preset", { preset });
   }
-  setModel(ref: string, asDefault = false) {
-    return this.post("/model", asDefault ? { ref, default: true } : { ref });
+  setModel(ref: string) {
+    return this.post("/model", { ref });
+  }
+  setDefaultModel(ref: string) {
+    return this.post("/default-model", { ref });
   }
   setEffort(effort: string) {
     return this.post("/effort", { effort });

@@ -97,6 +97,8 @@ type guardedTurnCheckpoint struct {
 
 type guardedTurnCompletion struct {
 	checkpoint *guardedTurnCheckpoint
+	// workMs sums what each run of the turn reports up to its final answer.
+	workMs atomic.Int64
 }
 
 type guardedTurnCompletionKey struct{}
@@ -202,6 +204,24 @@ func (m *checkpointManager) boundary(turn int) (int, bool) {
 	return b, ok
 }
 
+// endOfTurn returns where turn's messages stop: the start of the next recorded
+// turn, or tip when turn is the latest. ok is false for a turn with no boundary.
+func (m *checkpointManager) endOfTurn(turn, tip int) (int, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	start, ok := m.bound[turn]
+	if !ok {
+		return 0, false
+	}
+	end := tip
+	for _, b := range m.bound {
+		if b > start && b < end {
+			end = b
+		}
+	}
+	return end, true
+}
+
 // list returns the checkpoint metadata (nil when disabled).
 func (m *checkpointManager) list() []checkpoint.Meta {
 	m.mu.Lock()
@@ -276,6 +296,9 @@ func ckptDir(sessionPath string) string {
 func (c *Controller) rebindCheckpoints(sessionPath string) {
 	c.goals.setStatePath(goalStatePath(sessionPath))
 	c.checkpoints.rebind(ckptDir(sessionPath), c.workspaceRoot)
+	c.checkpoints.storeRef().OnUndoChange(func() {
+		c.sink.Emit(event.Event{Kind: event.RewindChanged})
+	})
 	if c.executor != nil {
 		c.wireMutationObserver()
 	}

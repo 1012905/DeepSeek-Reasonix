@@ -12,6 +12,8 @@ export interface Span {
   // zero, the remembered width must not.
   css: string;
   col: string;
+  // The element the column variable lives on, when it is not the app.
+  owner?: string;
 }
 
 // 拖出来的宽度是读者对自己这块屏幕的判断，不是布局的默认值 —— 所以它归本地
@@ -20,7 +22,7 @@ export const RAIL: Span = { min: 232, max: 440, def: 264, key: "rx-rail-w", css:
 export const SIDE: Span = { min: 244, max: 540, def: 316, key: "rx-side-w", css: "--side-open", col: "--side-w" };
 // The workbench beside the conversation. Wider than the rail because what sits
 // in it is a page someone is reading, not a list of names.
-export const DOCK: Span = { min: 320, max: 1600, def: 560, key: "rx-dock-w", css: "--dock-open", col: "--dock-w" };
+export const DOCK: Span = { min: 320, max: 1600, def: 560, key: "rx-dock-w", css: "--dock-open", col: "--dock-w", owner: ".pane" };
 
 const STANDARD_DOCK_MAX = 880;
 export const dockMax = (room: number) => Math.min(DOCK.max, Math.max(STANDARD_DOCK_MAX, room / 2));
@@ -63,20 +65,19 @@ interface Props {
 export function Gutter({ edge, span, width, max = span.max, label, open, onWidth, onOpen }: Props) {
   const held = useRef(0);
 
-  const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    const bar = e.currentTarget;
-    const app = bar.closest(".app") as HTMLElement | null;
-    if (!app) return;
-    e.preventDefault();
+  const rail = edge === "l";
 
-    const x0 = e.clientX;
+  const begin = (bar: HTMLDivElement, pointerId: number, x0: number) => {
+    const app = bar.closest(".app") as HTMLElement | null;
+    const host = (span.owner ? bar.closest(span.owner) : app) as HTMLElement | null;
+    if (!app || !host) return;
+
     const wasShut = !open;
     let now = open ? width : span.min;
     let shut = wasShut;
     let over = 0;
     let raf = 0;
-    bar.setPointerCapture(e.pointerId);
+    bar.setPointerCapture(pointerId);
     bar.dataset.on = "";
     app.dataset.drag = "pointer";
 
@@ -84,7 +85,7 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
     // 东西，而这棵树上还挂着一条正在流的转录。写的是列宽那个变量而不是记住的
     // 那个 —— 关到一半时两者必须能分开。
     const paint = () => {
-      app.style.setProperty(span.col, `${shut ? 0 : now}px`);
+      host.style.setProperty(span.col, `${shut ? 0 : now}px`);
       bar.style.setProperty("--over", `${over}px`);
       raf = requestAnimationFrame(paint);
     };
@@ -122,13 +123,13 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
       // 最后一次 move 之后未必还有一帧，栏会停在比松手位置差几像素的地方。这
       // 几像素得在补间恢复之前就落定，否则它们会被慢慢走完 —— 松手时的一记回
       // 弹。读一次布局，就是让这个值先以「不补间」的身份定下来。
-      app.style.setProperty(span.col, `${shut ? 0 : now}px`);
-      void app.offsetWidth;
+      host.style.setProperty(span.col, `${shut ? 0 : now}px`);
+      void host.offsetWidth;
       delete app.dataset.drag;
       // Held one frame longer than the release: the stylesheet only produces
       // this same width once React has landed the open/closed attribute, and
       // clearing early flashes the column it had before the drag.
-      requestAnimationFrame(() => app.style.removeProperty(span.col));
+      requestAnimationFrame(() => host.style.removeProperty(span.col));
       if (shut === open) onOpen(!shut);
       if (!shut) onWidth(now);
     };
@@ -138,8 +139,32 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
     paint();
   };
 
+  const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    begin(e.currentTarget, e.pointerId, e.clientX);
+  };
+
+  // A shut handle is only as tall as its grip, so the grip has to start the drag
+  // too; a press that never travels stays the click it always was.
+  const press = useRef<{ id: number; x0: number } | null>(null);
+  const grab = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    press.current = { id: e.pointerId, x0: e.clientX };
+  };
+  const travel = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const p = press.current;
+    if (!p || Math.abs(e.clientX - p.x0) <= 4) return;
+    press.current = null;
+    begin(e.currentTarget.parentElement as HTMLDivElement, p.id, p.x0);
+  };
+  const release = () => {
+    press.current = null;
+  };
+
   const toggle = () => onOpen(!open);
-  const rail = edge === "l";
 
   const key = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     // The pointer commits by pushing through; the keyboard says it outright.
@@ -204,9 +229,16 @@ export function Gutter({ edge, span, width, max = span.max, label, open, onWidth
         tabIndex={-1}
         aria-hidden="true"
         title={open ? t("收起") : t("展开")}
-        onPointerDown={(e) => e.stopPropagation()}
+        onPointerDown={grab}
+        onPointerMove={travel}
+        onPointerUp={release}
+        onPointerCancel={release}
         onClick={toggle}
         data-action-click={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointerdown={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointermove={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointerup={rail ? "chrome.rail" : "browser.open"}
+        data-action-pointercancel={rail ? "chrome.rail" : "browser.open"}
       >
         <i className="knurl" aria-hidden="true" />
         <span className="dir" aria-hidden="true">{(edge === "l") === open ? "‹" : "›"}</span>

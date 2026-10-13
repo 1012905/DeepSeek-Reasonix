@@ -126,9 +126,9 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	switch k := msg.String(); k {
 	case "esc":
 		m.picker = nil
-	case "up":
+	case "up", "ctrl+p":
 		p.sel = max(p.sel-1, 0)
-	case "down", "tab":
+	case "down", "tab", "ctrl+n":
 		p.sel = min(p.sel+1, max(len(items)-1, 0))
 	case "enter":
 		if p.sel < len(items) {
@@ -176,7 +176,7 @@ func (m *model) onResumed(msg resumedMsg) tea.Cmd {
 // resetScreen drops the transcript this screen drew, for a conversation that
 // is about to be drawn again from its record.
 func (m *model) resetScreen() {
-	m.tr = Transcript{next: m.tr.next}
+	m.tr = Transcript{next: m.tr.next, ReceiptLine: m.tr.ReceiptLine}
 	m.committed, m.sayShown = map[int]bool{}, map[int]int{}
 	m.todos, m.ask, m.menu = nil, nil, nil
 	if m.scr != nil {

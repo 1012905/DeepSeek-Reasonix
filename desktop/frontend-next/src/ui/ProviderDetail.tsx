@@ -8,6 +8,7 @@ import { PROVIDER_EDIT_DISABLED, reason } from "../i18n/kernel";
 import { HttpError } from "../port/http_error";
 import { checkFailure } from "./provider_check";
 import { StudioIcon } from "./StudioIcon";
+import { EffortShape } from "./EffortShape";
 
 // How a turn's context reaches the next one. Auto is vendor detection, which is
 // the only honest answer for an endpoint nobody has characterised; the other two
@@ -28,10 +29,10 @@ const CONTINUATION_WHY: Record<string, string> = {
 // than a fact on a row, because both entries are the same key at the same host;
 // 测试连接 is what turns "which protocol did we record" back into a finding.
 export function ProviderDetail({
-  a, port, busy, setBusy, kind, onProtocol, onRemove, onRename, onEdited, onFailed, onDirty, declare,
+  a, port, busy, setBusy, kind, onProtocol, onRemove, removeFailed, onRename, onEdited, onFailed, onDirty, declare,
 }: {
   a: Account; port: Port; busy: string; setBusy: (b: string) => void;
-  kind: string; onProtocol: (kind: string) => void; onRemove: (name: string) => void; onRename: () => void;
+  kind: string; onProtocol: (kind: string) => void; onRemove: (name: string) => void; removeFailed: string; onRename: () => void;
   onEdited: () => void | Promise<void>; onFailed: (why: string) => void; onDirty: (dirty: boolean) => void; declare?: string;
 }) {
   const [found, setFound] = useState<ProviderCheck | null>(null);
@@ -103,6 +104,12 @@ export function ProviderDetail({
           {t("删除")}
         </button>
       </header>
+      {removeFailed && (
+        <div className="find" data-lvl="warn" role="alert">
+          <span className="t">{t("操作未完成")}</span>
+          <span className="why">{removeFailed}</span>
+        </div>
+      )}
       {refused && (
         <div className="find" data-lvl="warn" role="status">
           <span className="t">{refused}</span>
@@ -127,10 +134,10 @@ export function ProviderDetail({
             {found.ok && found.matches === false &&
               t("记的是 {had}，但它答的是 {got}。", { had: t(KIND_LABEL[entry.kind] ?? entry.kind), got: t(KIND_LABEL[found.kind ?? ""] ?? found.kind ?? "") })}
             {found.ok && found.matches !== false && t("key 有效，协议也对得上。")}
-            {found.ok && found.baseUrl && " " + t("刷新模型目录时，模型列表只在 {url} 下响应。聊天若能正常使用就不用改；可选：把接口地址改成它。", { url: found.baseUrl })}
+            {found.ok && found.baseUrl && " " + t("读取可用模型时，模型列表只在 {url} 下响应。聊天若能正常使用就不用改；可选：把接口地址改成它。", { url: found.baseUrl })}
             {found.ok && found.noProxy && " " + t("走代理连不上、直连可以。")}
             {found.ok && unlisted.length > 0 &&
-              " " + t("这个端点还有 {n} 个模型不在列表里：{names}。点「刷新模型目录」把它们加进来。", {
+              " " + t("这个端点还有 {n} 个模型不在列表里：{names}。点「从服务商读取可用模型」把它们加进来。", {
                 n: unlisted.length,
                 names: unlisted.slice(0, 3).join("、") + (unlisted.length > 3 ? "…" : ""),
               })}
@@ -185,8 +192,9 @@ export function ProviderDetail({
                 ))}
               </div>
               <span className="why">
-                {t(entry.sendsThinking === false ? "只发送常规聊天参数，不再指定思考深度；模型自身的推理行为不受影响。" : "部分中转站不支持 thinking 字段，会拒绝整个请求。遇到这种情况请切换为「不发送」。")}
+                {t(entry.sendsThinking === false ? "只发送常规聊天参数，不再指定思考深度；模型自身的推理行为不受影响。" : "部分中转站不支持思考控制字段，会拒绝整个请求。遇到这种情况请切换为「不发送」。")}
               </span>
+              {entry.sendsThinking !== false && <EffortShape field={entry.effortField} level={entry.supportedEfforts?.[0]} className="why" />}
             </div>
           )}
           {entry.canSetContinuation && (
@@ -209,6 +217,7 @@ export function ProviderDetail({
       <EditConn
         key={`${entry.name}:${revision}`}
         entry={entry}
+        wireFixed={a.kinds.length > 1}
         initialCheck={found?.ok ? found : undefined}
         port={port}
         busy={busy}

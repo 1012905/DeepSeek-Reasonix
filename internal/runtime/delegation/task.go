@@ -78,11 +78,12 @@ type TaskTool struct {
 	sysPrompt                     string
 	gate                          agent.Gate
 	subagentModel, subagentEffort string
+	inheritedEffort               func(modelRef string) string
 	resolveProvider               func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error)
 	transcripts                   *SubagentStore
 	workspaceRoot                 string
-	baseModel                     string
-	baseEffort                    string
+	extraRoots                    []string
+	baseModel, baseEffort         string
 	identityProfile               func(modelRef, effort string) (string, string)
 	maxSubagentDepth              int
 	deliveryProfile               bool
@@ -132,6 +133,7 @@ type TaskToolOptions struct {
 	KeepPolicy                            agent.KeepPolicy
 	SubagentModel                         string
 	SubagentEffort                        string
+	InheritedEffort                       func(modelRef string) string
 	ResolveProvider                       func(string, string) (provider.Provider, *provider.Pricing, int, error)
 	// HooksForRole gives each child the session's hooks under a role of its own.
 	HooksForRole func(role string) agent.ToolHooks
@@ -163,6 +165,7 @@ func NewTaskToolWithOptions(opts TaskToolOptions) *TaskTool {
 		hooksForRole:     opts.HooksForRole,
 		subagentModel:    opts.SubagentModel,
 		subagentEffort:   opts.SubagentEffort,
+		inheritedEffort:  opts.InheritedEffort,
 		resolveProvider:  opts.ResolveProvider,
 		maxSubagentDepth: agent.DefaultMaxSubagentDepth,
 	}
@@ -361,18 +364,6 @@ func (r *ReadOnlyTaskTool) Execute(ctx context.Context, args json.RawMessage) (s
 	return r.task.RunProfileSpec(ctx, spec)
 }
 
-func (t *TaskTool) effectiveProfile(model, effort string) (string, string) {
-	model = strings.TrimSpace(model)
-	effort = strings.TrimSpace(effort)
-	if model == "" {
-		model = strings.TrimSpace(t.subagentModel)
-	}
-	if effort == "" {
-		effort = strings.TrimSpace(t.subagentEffort)
-	}
-	return model, effort
-}
-
 func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	var p struct {
 		Prompt          string   `json:"prompt"`
@@ -453,11 +444,10 @@ func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profi
 			configEffort = t.profileConfigEffort(profile)
 		}
 	}
-	spec.Worker.Model, spec.Worker.Effort = ResolveModelEffort(
+	spec.Worker.Model, spec.Worker.Effort = t.resolveModelEffort(
 		configModel, configEffort,
 		model, effort,
 		profileModel, profileEffort,
-		t.subagentModel, t.subagentEffort,
 	)
 
 	if !readOnly {
@@ -715,7 +705,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	}
 	answer, err := runSession(ctx, trk.wrap(), false)
 	if err != nil {
-		return "", errors.Join(err, t.saveRunTerminal(run, err))
+		return "", t.endedRunError(run, err)
 	}
 	if t.transcripts != nil && run.Ref != "" {
 		if err := t.transcripts.SaveCompleted(run); err != nil {
@@ -724,6 +714,16 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		return FormatSubagentRunResult(answer, run, false), nil
 	}
 	return GuardSubagentHostDecisionText(answer), nil
+}
+
+// endedRunError records how a run that executed ended and returns its error. A
+// cancellation carries the transcript's reference only once its terminal state
+// is saved: an unsaved run cannot be read back, so naming it would mislead.
+func (t *TaskTool) endedRunError(run *SubagentRun, err error) error {
+	if saveErr := t.saveRunTerminal(run, err); saveErr != nil {
+		return errors.Join(err, saveErr)
+	}
+	return withStoppedRunRef(err, run)
 }
 
 // saveRunTerminal records what happened to a child that actually ran. It is the
@@ -927,7 +927,7 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 	if t.hooksForRole != nil {
 		opts.Hooks = t.hooksForRole(recoveryTaskID)
 	}
-	return opts
+	return t.withExtraRoots(opts)
 }
 
 func subagentRecoveryTaskID(ctx context.Context, ref string) string {

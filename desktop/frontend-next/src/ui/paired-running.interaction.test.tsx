@@ -4,16 +4,17 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { MockPort } from "../port/mock";
+import type { Decision } from "../port/session";
 import type { WireEvent } from "../port/wire";
 import { Pane, type PaneReport } from "./Pane";
 
 afterEach(cleanup);
 
-async function mount(initiallyRunning: boolean, visible: boolean) {
+async function mount(initiallyRunning: boolean, visible: boolean, decisions: Decision[] = []) {
   const port = new MockPort();
   const snapshot = await port.status();
   let kernelRunning = initiallyRunning;
-  vi.spyOn(port, "status").mockImplementation(async () => ({ ...snapshot, running: kernelRunning }));
+  vi.spyOn(port, "status").mockImplementation(async () => ({ ...snapshot, decisions, running: kernelRunning }));
   let deliver: ((event: WireEvent) => void) | undefined;
   vi.spyOn(port, "subscribe").mockImplementation((onEvent) => {
     deliver = onEvent;
@@ -85,7 +86,7 @@ for (const route of ["local", "receipt"] as const) {
     pane.sendEvent({ kind: "ask_request", ask: {
       id: "greeting", questions: [{ id: "name", header: "Your name", prompt: "Your name", multi: false, options: [{ label: "Native SDK" }] }],
     } });
-    await screen.findByText("等待确认");
+    await screen.findByText("等待你回答");
     if (route === "local") {
       await userEvent.click(screen.getByRole("button", { name: "Native SDK" }));
       await userEvent.click(screen.getByRole("button", { name: "确认" }));
@@ -96,6 +97,27 @@ for (const route of ["local", "receipt"] as const) {
     }
     await waitFor(() => expect(pane.container.querySelector('[data-k="ask"]')?.getAttribute("data-prompt")).toBe("settled"));
     await screen.findByText(running ? "运行中" : "空闲");
-    expect(screen.queryByText("等待确认")).toBeNull();
+    expect(screen.queryByText("等待你回答")).toBeNull();
   });
 }
+it("marks live work above the composer and removes its emphasis when done", async () => {
+  const pane = await mount(false, true);
+  await reported(pane.onReport, false, "idle");
+  expect(document.querySelector(".studio-runstate[data-idle]")).not.toBeNull();
+  pane.setRunning(true);
+  pane.send("turn_started");
+  await waitFor(() => expect(document.querySelector(".studio-runstate[data-running] .studio-runlabel")?.textContent).toContain("运行中"));
+  expect(document.querySelector(".studio-runstate[data-idle]")).toBeNull();
+  pane.setRunning(false);
+  pane.send("turn_done");
+  await waitFor(() => expect(document.querySelector(".studio-runstate[data-running]")).toBeNull());
+  expect(document.querySelector(".studio-runstate[data-idle]")).not.toBeNull();
+});
+
+it("keeps waiting on a person distinct from active progress", async () => {
+  const pane = await mount(true, true, [{ id: "approval-1", kind: "tool_approval" }]);
+  await reported(pane.onReport, true, "halt");
+  expect(document.querySelector(".studio-runstate[data-waiting] .studio-runlabel")).not.toBeNull();
+  expect(document.querySelector(".studio-runstate[data-running]")).toBeNull();
+  expect(document.querySelector(".studio-runstate[data-idle]")).toBeNull();
+});
