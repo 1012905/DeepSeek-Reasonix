@@ -4,7 +4,6 @@
   ::-webkit-scrollbar { width: 10px; height: 10px }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9px; border: 3px solid transparent; background-clip: content-box }
   ::-webkit-scrollbar-track { background: transparent }
-
   body {
     margin: 0; padding: 0; background: var(--page); color: var(--text);
     font: var(--w-reg) var(--fs-lead)/1.6 var(--ui);
@@ -12,7 +11,6 @@
   }
 
   [data-platform="darwin"] body { -webkit-font-smoothing: antialiased }
-
   body { font-synthesis-weight: none }
 
   :lang(zh) :is(.lbl, .dgrp-h, .side .lbl) {
@@ -1269,6 +1267,8 @@
   .fold:hover { color: var(--text) }
 
   .peek { margin-top: 7px; display: flex; flex-direction: column; gap: 3px }
+  .peek .contributions { display: flex; flex-direction: column; gap: 3px; margin-top: 7px }
+  .peek .contributions > .kind { margin: 0; font: var(--w-med) var(--fs-ui) var(--ui); color: var(--muted) }
   .peek .row { display: flex; gap: 9px; font: var(--w-reg) var(--fs-ui) var(--mono); color: var(--faint) }
   .peek .row .d { color: var(--ghost) }
   .peek .row .n { margin-left: auto; color: var(--ghost); font-variant-numeric: tabular-nums }
