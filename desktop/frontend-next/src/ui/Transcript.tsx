@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import type { Item, Waiting } from "../state/session";
 import type { ExtensionSurface } from "../port/wire";
 import type { AgentPort, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../port/port";
-import { RMark } from "./RMark";
+import { SymbolMark } from "./RMark";
 import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
 import { Boundary } from "./Boundary";
@@ -742,7 +742,7 @@ interface HeroProps {
 function Hero({ needsProject, onOpen, onKeep }: HeroProps) {
   return (
     <div className="hero">
-      <RMark />
+      <SymbolMark />
       <div className="t">{needsProject ? t("先打开一个项目") : t("描述任务，其余交给 Reasonix")}</div>
       <div className="s">
         {needsProject
