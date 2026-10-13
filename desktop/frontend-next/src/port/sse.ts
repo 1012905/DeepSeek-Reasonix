@@ -756,17 +756,7 @@ export class SsePort extends SseWorkspace implements AgentPort {
       answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected })),
     });
   }
-  extensionSurfaces() {
-    return this.get<import("./wire").ExtensionSurface[]>("/extensions/surfaces");
-  }
   engageQuestion(id: string) { return this.postAcked("/answer", { id, engage: true }); }
-  async invokeExtensionAction(name: string) {
-    const out = await this.post0<{ message?: string }>("/extensions/action", { name });
-    return out.message ?? "";
-  }
-  submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>) {
-    return this.post("/extensions/submit", { pluginId, surfaceId, values });
-  }
   setPlanMode(on: boolean) {
     return this.post("/plan", { on });
   }
