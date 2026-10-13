@@ -25,12 +25,15 @@ var TransientUserBlockTags = []string{
 	"autoresearch-runtime",
 	"hook-context",
 	"available-skills",
+	"current-date",
 	"project-instructions",
 	"capability-route",
 	"interrupted-turn-recovery",
 	"execution-policy",
 	"workspace",
 	"scheduled-run",
+	"mcp-prompt-failure",
+	"refused-calls",
 }
 
 // SupersededUserBlockTags names the transient blocks carrying standing state
@@ -45,6 +48,7 @@ var SupersededUserBlockTags = []string{
 	"workspace",
 	"project-instructions",
 	"scheduled-run",
+	"current-date",
 }
 
 // SupersededUserBlock indexes SupersededUserBlockTags so the two cannot drift.

@@ -5,7 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MockPort } from "../port/mock";
 import { HttpError } from "../port/port";
+import * as hostModule from "../port/host";
+import { SsePort } from "../port/sse";
 import { WorkbenchPanel } from "./WorkbenchPanel";
+import { unseenPageOpenings } from "./browser_open";
 
 afterEach(cleanup);
 
@@ -76,12 +79,309 @@ describe("WorkbenchPanel", () => {
     }
   });
 
-  it("shows the start page only while the agent has none, and gives way to the agent's", () => {
+  describe("a browser that cannot open", () => {
+    const drawsViews = () => {
+      vi.spyOn(hostModule.host(), "drawsBrowserViews").mockReturnValue(true);
+    };
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    const KERNEL_WORDS: [string, string, string][] = [
+      ["browser.engine_missing", "no Chrome, Edge or Chromium is installed", "没有找到可用的浏览器。请安装 Chrome、Edge 或 Chromium，或在配置里用 [browser] executable 指定路径，新会话才会读到"],
+      ["browser.engine_failed", "start chrome: exec failed", "内置浏览器没能启动，稍后再试一次"],
+      ["browser.profile_busy", "another browser is already running", "内置浏览器的资料目录正被另一个浏览器占用。关掉其他 Studio 窗口或用同一资料目录的浏览器后再试"],
+      ["browser.open_failed", "this session has no browser", "打不开这个网页：this session has no browser"],
+    ];
+    const refusedLikeTheKernel = (port: MockPort, code: string, detail: string) => {
+      vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ code, error: detail, params: { url: "about:blank", error: detail } }), { status: 400 }));
+      const wire = new SsePort("", "r1");
+      vi.spyOn(port, "browserOpen").mockImplementation((url: string) => wire.browserOpen(url, true));
+    };
+
+    for (const [code, detail, words] of KERNEL_WORDS) {
+      it(`says why when the browser is chosen on the launcher and the kernel refuses with ${code}`, async () => {
+        drawsViews();
+        const user = userEvent.setup();
+        const port = new MockPort();
+        refusedLikeTheKernel(port, code, detail);
+        render(<WorkbenchPanel port={port} tabs={[]} manual shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+        expect(screen.queryByRole("alert")).toBeNull();
+        await user.click(screen.getByRole("button", { name: "浏览器" }));
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toBe(words);
+        expect(alert.textContent).not.toContain("{");
+        expect(unseenPageOpenings(port)).toHaveLength(0);
+      });
+
+      it(`says why when the browser chosen after + is refused with ${code}`, async () => {
+        drawsViews();
+        const user = userEvent.setup();
+        const port = new MockPort();
+        refusedLikeTheKernel(port, code, detail);
+        render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+        await user.click(screen.getByRole("button", { name: "新建标签" }));
+        await user.click(screen.getByRole("button", { name: "浏览器" }));
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toBe(words);
+        expect(alert.textContent).not.toContain("{");
+        expect(unseenPageOpenings(port)).toHaveLength(0);
+      });
+    }
+
+    it("clears the reason once a file is picked", async () => {
+      drawsViews();
+      const user = userEvent.setup();
+      const port = new MockPort();
+      vi.spyOn(port, "browserOpen").mockRejectedValue(new Error("profile is in use"));
+      render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
+      await screen.findByRole("alert");
+      await user.click(await screen.findByRole("button", { name: "README.md" }));
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    });
+
+    it("clears the reason when a later open succeeds", async () => {
+      drawsViews();
+      const user = userEvent.setup();
+      const port = new MockPort();
+      const open = vi.spyOn(port, "browserOpen");
+      open.mockRejectedValueOnce(new Error("profile is in use"));
+      render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
+      await screen.findByRole("alert");
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+      expect(open).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps a file's own read error on the file tab and drops it with the tab", async () => {
+      const user = userEvent.setup();
+      const port = new MockPort();
+      vi.spyOn(port, "workspaceFile").mockRejectedValue(new Error("file is gone"));
+      render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+      await user.click(await screen.findByRole("button", { name: "README.md" }));
+      expect((await screen.findAllByRole("alert")).length).toBe(1);
+      await user.click(screen.getByRole("button", { name: "关闭 README.md" }));
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    });
+  });
+
+  it("offers a new-tab choice without replacing the current file or its draft", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    const open = vi.spyOn(port, "browserOpen");
+    const { container } = render(<WorkbenchPanel port={port} tabs={[]} manual shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+    await user.click(screen.getByRole("button", { name: "编辑" }));
+    const editor = await waitFor(() => {
+      const element = container.querySelector(".cm-content");
+      if (!element) throw new Error("editor not mounted");
+      return EditorView.findFromDOM(element as HTMLElement)!;
+    });
+    act(() => editor.dispatch({ changes: { from: editor.state.doc.length, insert: "local draft" } }));
+    const plus = container.querySelector<HTMLButtonElement>(".workbench-new")!;
+    await user.click(plus);
+    expect(screen.getByRole("group", { name: "开始" })).toBeTruthy();
+    expect(document.activeElement?.getAttribute("data-action")).toBe("workbench.launch-files");
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(open).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: /^改动/ }) as HTMLButtonElement).disabled).toBe(true);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
+    expect(document.activeElement).toBe(plus);
+    expect(EditorView.findFromDOM(container.querySelector(".cm-content")!)).toBe(editor);
+    expect(editor.state.doc.toString()).toContain("local draft");
+    await user.click(plus);
+    await user.click(plus);
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(open).not.toHaveBeenCalled();
+    await user.click(plus);
+    await user.click(screen.getByRole("button", { name: "浏览器" }));
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    await user.click(screen.getByRole("tab", { name: "README.md" }).querySelector("button")!);
+    expect(editor.state.doc.toString()).toContain("local draft");
+  });
+
+  it("leaves new-tab choice through Files, Changes or an existing browser", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    const open = vi.spyOn(port, "browserOpen");
+    const page = { id: "b1", target: "t1", url: "https://example.com", title: "Existing page", active: true };
+    const { container } = render(<WorkbenchPanel port={port} tabs={[page]} manual shown scheme="light" changes={[{ path: "README.md", status: "M" }]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+    const plus = container.querySelector<HTMLButtonElement>(".workbench-new")!;
+    await user.click(plus);
+    await user.click(container.querySelector('[data-action="workbench.launch-files"]')!);
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+    await user.click(plus);
+    await user.click(container.querySelector('[data-action="workbench.launch-changes"]')!);
+    expect(screen.getByRole("tab", { name: "README.md" }).getAttribute("aria-selected")).toBe("true");
+    await user.click(plus);
+    await user.click(screen.getByRole("tab", { name: "Existing page" }).querySelector("button")!);
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("opens one native browser only after an explicit choice, including repeated clicks", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    const views = vi.spyOn(hostModule.host(), "drawsBrowserViews").mockReturnValue(true);
+    let finish!: (value: Awaited<ReturnType<MockPort["browserOpen"]>>) => void;
+    const open = vi.spyOn(port, "browserOpen").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    try {
+      render(<WorkbenchPanel port={port} tabs={[]} manual shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      expect(open).not.toHaveBeenCalled();
+      await user.dblClick(screen.getByRole("button", { name: "浏览器" }));
+      expect(open).toHaveBeenCalledTimes(1);
+      await act(async () => finish({ id: "b1", target: "t1", title: "", url: "about:blank", active: false }));
+    } finally { views.mockRestore(); }
+  });
+
+  it("hides native browser views while choosing and keeps the launcher when its last tab closes", async () => {
+    const user = userEvent.setup();
+    const views = vi.spyOn(hostModule.host(), "drawsBrowserViews").mockReturnValue(true);
+    const hide = vi.spyOn(hostModule.host(), "hideBrowserView");
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    const close = vi.fn();
+    try {
+      render(<WorkbenchPanel port={new MockPort()} tabs={[{ id: "b1", target: "t1", url: "about:blank", title: "Existing page", active: true }]} manual shown scheme="light" changes={[]} onCloseManual={close} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+      hide.mockClear();
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      expect(hide).toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "关闭 Existing page" }));
+      expect(close).not.toHaveBeenCalled();
+      expect(screen.getByRole("group", { name: "开始" })).toBeTruthy();
+    } finally { views.mockRestore(); hide.mockRestore(); vi.unstubAllGlobals(); }
+  });
+
+  it("dismisses the launcher when the title-bar Browser is reopened on an iframe host", async () => {
+    const user = userEvent.setup();
+    const props = { port: new MockPort(), tabs: [], manual: true, shown: true, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    const { rerender } = render(<WorkbenchPanel {...props} browserAsk={0} />);
+    await user.click(screen.getByRole("button", { name: "新建标签" }));
+    rerender(<WorkbenchPanel {...props} manual={false} browserAsk={1} />);
+    rerender(<WorkbenchPanel {...props} browserAsk={2} />);
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "浏览器" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("region", { name: "内置 Browser" })).toBeTruthy();
+  });
+
+  it.each(["escape", "plus"])("restores the explorer when new-tab choice is cancelled with %s", async (cancel) => {
+    const user = userEvent.setup();
+    const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={[]} manual shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+    await user.click(container.querySelector('[data-action="workbench.files"]')!);
+    await user.click(screen.getByRole("button", { name: "新建标签" }));
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
+    if (cancel === "escape") await user.keyboard("{Escape}");
+    else await user.click(screen.getByRole("button", { name: "新建标签" }));
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+  });
+
+  it.each([[false, false], [true, false], [false, true]])("respects newer Files choices (reopen: %s, title bar: %s)", async (reopen, titleBar) => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    const views = vi.spyOn(hostModule.host(), "drawsBrowserViews").mockReturnValue(true);
+    let finish!: (value: Awaited<ReturnType<MockPort["browserOpen"]>>) => void;
+    vi.spyOn(port, "browserOpen").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    try {
+      const props = { port, tabs: [], manual: true, shown: true, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+      const { container, rerender } = render(<WorkbenchPanel {...props} browserAsk={0} />);
+      if (titleBar) rerender(<WorkbenchPanel {...props} browserAsk={1} />);
+      else {
+        await user.click(screen.getByRole("button", { name: "新建标签" }));
+        await user.click(screen.getByRole("button", { name: "浏览器" }));
+      }
+      await user.click(container.querySelector('[data-action="workbench.launch-files"]')!);
+      if (reopen) {
+        await user.click(screen.getByRole("button", { name: "新建标签" }));
+        await user.click(screen.getByRole("button", { name: "浏览器" }));
+      }
+      await act(async () => finish({ id: "b1", target: "t1", title: "", url: "about:blank", active: false }));
+      expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(!reopen);
+      expect(screen.getByRole("button", { name: "新建标签" }).getAttribute("aria-expanded")).toBe("false");
+      expect(port.browserOpen).toHaveBeenCalledTimes(1);
+    } finally { views.mockRestore(); }
+  });
+
+  it.each([
+    ["event-first", false, false], ["reply-first", false, false], ["event-first", true, false], ["reply-first", true, false],
+    ["event-first", false, true], ["reply-first", false, true], ["event-first", true, true], ["reply-first", true, true],
+  ])("filters superseded native tab events (%s, mixed agent batch: %s, rejected: %s)", async (order, mixed, rejected) => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    const views = vi.spyOn(hostModule.host(), "drawsBrowserViews").mockReturnValue(true);
+    let finish!: (value: Awaited<ReturnType<MockPort["browserOpen"]>>) => void;
+    let fail!: (error: unknown) => void;
+    vi.spyOn(port, "browserOpen").mockImplementation(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+    const agent = { id: "a", target: "ta", url: "https://example.com", title: "Agent page", active: true };
+    const opened = { id: "b", target: "tb", url: "about:blank", title: "New browser", active: false };
+    const settle = () => rejected ? fail(new HttpError(400, "failed", { code: "browser.open_failed", params: { tab: opened.id } })) : finish(opened);
+    const props = { port, manual: true, shown: false, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    try {
+      const { container, rerender } = render(<WorkbenchPanel {...props} tabs={[agent]} />);
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
+      await user.click(container.querySelector('[data-action="workbench.launch-files"]')!);
+      if (order === "reply-first") await act(async () => settle());
+      const fresh = { ...agent, id: "c", target: "tc", title: "New agent page", active: false };
+      rerender(<WorkbenchPanel {...props} tabs={mixed ? [agent, fresh, opened] : [agent, opened]} />);
+      if (order === "event-first") {
+        expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+        await act(async () => settle());
+      }
+      await waitFor(() => expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(!mixed));
+      expect(unseenPageOpenings(port)).toHaveLength(0);
+      if (!mixed) rerender(<WorkbenchPanel {...props} tabs={[agent, opened, fresh]} />);
+      await waitFor(() => expect(screen.getByRole("tab", { name: "New agent page" }).getAttribute("aria-selected")).toBe("true"));
+      rerender(<WorkbenchPanel {...props} tabs={[{ ...agent, active: false }, { ...opened, active: true, url: "https://reused.example" }, fresh]} />);
+      await waitFor(() => expect(screen.getByRole("tab", { name: "New browser" }).getAttribute("aria-selected")).toBe("true"));
+    } finally { views.mockRestore(); }
+  });
+
+  it("still follows a newly discovered agent page while the launcher is open", async () => {
+    const user = userEvent.setup();
+    const props = { port: new MockPort(), manual: true, shown: false, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    const { rerender } = render(<WorkbenchPanel {...props} tabs={[]} />);
+    await user.click(screen.getByRole("button", { name: "新建标签" }));
+    rerender(<WorkbenchPanel {...props} tabs={[{ id: "b1", target: "t1", url: "https://example.com", title: "Agent page", active: true }]} />);
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Agent page" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("opens on a launcher that offers a choice, and no browser until one is chosen", async () => {
+    const user = userEvent.setup();
+    const props = { port: new MockPort(), manual: true, shown: false, scheme: "dark" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    render(<WorkbenchPanel {...props} tabs={[]} />);
+    expect(screen.getByRole("group", { name: "开始" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "浏览器" })).toBeNull();
+    expect((screen.getByRole("button", { name: /^改动/ }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "浏览器" }));
+    expect(screen.getByRole("tab", { name: "浏览器" })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
+  });
+
+  it("opens the file explorer from the launcher and the first change from the changes entry", async () => {
+    const user = userEvent.setup();
+    const changes = [{ path: "a.txt", status: "M" }] as never;
+    const props = { port: new MockPort(), manual: true, shown: false, scheme: "dark" as const, changes, onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    render(<WorkbenchPanel {...props} tabs={[]} />);
+    await user.click(screen.getByRole("button", { name: /^改动/ }));
+    expect(await screen.findByRole("tab", { name: /a\.txt/ })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
+  });
+
+  it("gives way to the agent's page, with no launcher over it", () => {
     const props = { port: new MockPort(), manual: true, shown: false, scheme: "dark" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
     const { rerender } = render(<WorkbenchPanel {...props} tabs={[]} />);
-    expect(screen.getByRole("tab", { name: "浏览器" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "开始" })).toBeTruthy();
     rerender(<WorkbenchPanel {...props} tabs={[{ id: "b1", target: "t1", url: "https://top.baidu.com", title: "百度热搜", active: true }]} />);
-    expect(screen.queryByRole("tab", { name: "浏览器" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
     expect(screen.getByRole("tab", { name: "百度热搜" }).getAttribute("aria-selected")).toBe("true");
   });
 
@@ -119,6 +419,21 @@ describe("WorkbenchPanel", () => {
     expect(screen.getByRole("tab", { name: "Link" }).getAttribute("aria-selected")).toBe("true");
   });
 
+  it("selects a link's page again after the previous one was closed, with the agent's tab still active", async () => {
+    const user = userEvent.setup();
+    const props = { port: new MockPort(), manual: true, shown: false, scheme: "dark" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    const agent = { id: "b1", target: "t1", url: "https://top.baidu.com", title: "Agent page", active: true };
+    const first = { id: "b2", target: "t2", url: "https://example.com", title: "First", active: false };
+    const second = { id: "b3", target: "t3", url: "https://example.org", title: "Second", active: false };
+    const { rerender } = render(<WorkbenchPanel {...props} tabs={[agent]} />);
+    rerender(<WorkbenchPanel {...props} tabs={[agent, first]} />);
+    expect(screen.getByRole("tab", { name: "First" }).getAttribute("aria-selected")).toBe("true");
+    await user.click(screen.getByRole("button", { name: "关闭 First" }));
+    rerender(<WorkbenchPanel {...props} tabs={[agent]} />);
+    rerender(<WorkbenchPanel {...props} tabs={[agent, second]} />);
+    expect(screen.getByRole("tab", { name: "Second" }).getAttribute("aria-selected")).toBe("true");
+  });
+
   it("lists dot folders only once hidden files are asked for, and remembers the choice", async () => {
     const user = userEvent.setup();
     localStorage.removeItem("rx-show-hidden-files");
@@ -144,7 +459,7 @@ describe("WorkbenchPanel", () => {
   it("shows the file that was picked from the list rather than leaving the list over it", async () => {
     const user = userEvent.setup();
     const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "文件" }));
+    await user.click(screen.getAllByRole("button", { name: "文件" })[0]);
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
     await user.click(await screen.findByRole("button", { name: "README.md" }));
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
@@ -158,7 +473,7 @@ describe("WorkbenchPanel", () => {
       { id: "b2", target: "t2", url: "https://example.com", title: "My page", active: false },
     ];
     const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={pages} manual shown={false} scheme="dark" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "文件" }));
+    await user.click(screen.getAllByRole("button", { name: "文件" })[0]);
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
     await user.click(screen.getByRole("tab", { name: "Agent page" }).querySelector("button") ?? screen.getByRole("tab", { name: "Agent page" }));
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
@@ -168,9 +483,9 @@ describe("WorkbenchPanel", () => {
   it("steps the file list aside when a new browser tab is opened", async () => {
     const user = userEvent.setup();
     const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "文件" }));
+    await user.click(screen.getAllByRole("button", { name: "文件" })[0]);
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+    await user.click(screen.getByRole("button", { name: "新建标签" }));
     await waitFor(() => expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false));
   });
 
@@ -253,9 +568,9 @@ describe("WorkbenchPanel", () => {
     const row = await screen.findByRole("button", { name: "README.md" });
 
     expect(screen.queryByRole("button", { name: "在系统文件管理器中显示工作区" })).toBeNull();
-    // Not prevented: the system menu is left to the shell.
-    expect(fireEvent.contextMenu(row)).toBe(true);
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(fireEvent.contextMenu(row)).toBe(false);
+    expect(screen.queryByRole("menuitem", { name: /文件管理器/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "复制引用" })).toBeTruthy();
     expect(reveal).not.toHaveBeenCalled();
   });
 

@@ -26,6 +26,7 @@ type askState struct {
 	notes         []string
 	entry         askEntry
 	urlSubmission urlSubmission
+	engagement    askEngagement
 }
 
 // askEntry is what the composer is taking while the panel is open.
@@ -70,6 +71,18 @@ func (st *askState) firstUnanswered(n int) int {
 
 // answerAsk takes a key while a question panel is open.
 func (m *model) answerAsk(it *Item, k string) (tea.Cmd, bool) {
+	cmd, handled := m.editAsk(it, k)
+	if !handled || it.Ask.Origin != nil || m.ask == nil || m.ask.item != it.ID || m.ask.engagement != askIdle {
+		return cmd, handled
+	}
+	m.ask.engagement = askEngaging
+	id, item := it.Ask.ID, it.ID
+	return tea.Batch(cmd, func() tea.Msg {
+		return askEngagementMsg{item: item, err: m.client.EngageQuestion(m.ctx, id)}
+	}), handled
+}
+
+func (m *model) editAsk(it *Item, k string) (tea.Cmd, bool) {
 	if it.Ask.Origin != nil && it.Ask.Origin.URL != "" {
 		return m.answerURLAsk(it, k)
 	}
@@ -91,10 +104,10 @@ func (m *model) answerAsk(it *Item, k string) (tea.Cmd, bool) {
 		tabs++
 	}
 	switch k {
-	case "left":
+	case "left", "h":
 		st.tab, st.cursor = max(st.tab-1, 0), 0
 		return nil, true
-	case "right":
+	case "right", "l":
 		// With auto-submit on the Submit tab is not drawn, so right stops at
 		// the last question instead of landing on a hidden tab that commits.
 		last := tabs - 1
@@ -115,9 +128,9 @@ func (m *model) answerAsk(it *Item, k string) (tea.Cmd, bool) {
 	switch {
 	case k == "tab" && st.cursor < len(q.Options) && !q.Multi:
 		m.openNote(q.Options[st.cursor].Label)
-	case k == "up":
+	case k == "up" || k == "k":
 		st.cursor = (st.cursor + rows - 1) % rows
-	case k == "down" || k == "tab":
+	case k == "down" || k == "j" || k == "tab":
 		st.cursor = (st.cursor + 1) % rows
 	case k == "space" && st.cursor < len(q.Options) && q.Multi:
 		st.toggle(q.Options[st.cursor].Label)

@@ -13,6 +13,7 @@ export interface ThemeBackground {
   homeOpacity: number;
   taskOpacity: number;
   overlayStrength: number;
+  textGlow?: "default" | "none";
 }
 
 // A live backdrop the window draws, rather than a picture it places. Absent on
@@ -25,6 +26,13 @@ export interface ThemeSky {
   cloudAlpha: number;
 }
 
+// What a pack says about shape and rhythm rather than colour. The stylesheet
+// owns what a radius or a gutter measures; a recipe only says how far it steps.
+export interface ThemeRecipes {
+  density?: "compact" | "comfortable";
+  corners?: "square" | "soft" | "round";
+}
+
 export interface ThemePack {
   id: string;
   name: string;
@@ -32,10 +40,12 @@ export interface ThemePack {
   description?: string;
   active?: boolean;
   tokens: { light?: Record<string, string>; dark?: Record<string, string> };
+  recipes?: ThemeRecipes;
   background?: ThemeBackground;
   sky?: ThemeSky;
   hasPreview?: boolean;
-  // Tokens the kernel dropped and why: an unknown name, or a value that could
+  removable?: boolean;
+  // Values the kernel dropped and why: an unknown name, or a value that could
   // not be let into a stylesheet. The pack still loads without them.
   warnings?: string[];
 }
@@ -50,11 +60,20 @@ export interface ThemeImport {
 // What the user set for themselves, over whatever pack is active. Zero and ""
 // mean "unset" rather than a value, so an untouched install draws from the
 // stylesheet instead of from numbers written into a config.
+export interface ZoomRange {
+  min: number;
+  max: number;
+  step: number;
+}
+
 export interface Appearance {
   // "zh" | "en" | "" to follow the machine. The interface's language only —
   // what the model answers in follows each message you write.
   language?: string;
   zoom?: number;
+  // What the kernel holds zoom to; the slider and the keyboard steps read it
+  // rather than carrying a copy.
+  zoomRange?: ZoomRange;
   readSize?: number;
   fontUi?: string;
   fontMono?: string;

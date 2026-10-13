@@ -150,19 +150,14 @@ func (s *Server) switchWorkspaceLocked(ctx context.Context, dir string) error {
 	newCtrl.EnableInteractiveApproval()
 	newCtrl.SetOnSessionRecovered(sessionLeaseRecoveryHandler(s.leases))
 
-	s.mu.Lock()
-	if s.ctrl != cur {
-		s.mu.Unlock()
-		newCtrl.Close()
-		return fmt.Errorf("session changed during the workspace switch")
-	}
 	if err := addRememberedWorkspace(ctx, dir); err != nil {
-		s.mu.Unlock()
 		newCtrl.Close()
 		return err
 	}
-	s.ctrl = newCtrl
-	s.mu.Unlock()
+	if err := s.publishController(cur, newCtrl); err != nil {
+		newCtrl.Close()
+		return err
+	}
 	s.nameWorkspaceHolder(newCtrl)
 
 	// Session file names are timestamps, unique per project but not across
@@ -173,7 +168,7 @@ func (s *Server) switchWorkspaceLocked(ctx context.Context, dir string) error {
 	if err := s.rebindSessionLeaseFor(newCtrl.SessionPath(), newCtrl); err != nil {
 		slog.Warn("serve: rebind session lease after workspace switch", "err", err)
 	}
-	s.bc.ResetSession()
+	s.resetSessionView()
 
 	cur.Close()
 	return nil
@@ -189,10 +184,14 @@ func (s *Server) statsSurface() surface.Surface { return s.surface.Or(surface.Se
 // process working directory and sessions fall back to the global dir, so the
 // switch would quietly serve another project's conversations.
 func (s *Server) rebuildOptions(cur control.SessionAPI, ref string) boot.Options {
-	opts := boot.Options{Model: ref, Sink: s.rebuildSink(), Stderr: os.Stderr, StatsSource: s.statsSurface(), FeedbackSurface: feedbackSurface(s.statsSurface()), ProviderResolver: s.resolver, CleanupPendingReconciler: BackgroundCleanupReconciler}
+	opts := boot.Options{Model: ref, Sink: s.rebuildSink(), NativeSurfaces: true, Stderr: os.Stderr, StatsSource: s.statsSurface(), FeedbackSurface: feedbackSurface(s.statsSurface()), ProviderResolver: s.resolver, CleanupPendingReconciler: BackgroundCleanupReconciler}
+	if s.lastBuild != nil {
+		opts.ComputerDriver = s.lastBuild.ComputerDriver
+	}
 	if cur == nil {
 		return opts
 	}
+	opts.NativeSurfaces = cur.NativeSurfaces()
 	opts.WorkspaceRoot, opts.SessionDir = cur.WorkspaceRoot(), cur.SessionDir()
 	// Keep the logical session's private temporary directory across the rebuild.
 	if ctrl, ok := cur.(*control.Controller); ok && ctrl != nil {
@@ -259,7 +258,11 @@ func (s *Server) build(ctx context.Context, ref string) (*control.Controller, er
 	if s.buildController != nil {
 		return s.buildController(ctx, ref)
 	}
-	res, err := boot.BuildRuntime(ctx, s.rebuildOptions(s.ctl(), ref))
+	opts := s.rebuildOptions(s.ctl(), ref)
+	if cur, ok := s.ctl().(*control.Controller); ok && cur != nil {
+		opts.Jobs, opts.WorkspaceLease = cur.JobManager(), cur.WorkspaceLeaseOwner()
+	}
+	res, err := boot.BuildRuntime(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -293,19 +296,13 @@ func (s *Server) buildForWorkspace(ctx context.Context, dir, ref string) (*contr
 }
 
 // workspaceOptions builds the runtime that moves this pane to another root.
-// Nothing is inherited — the outgoing conversation stays in its own project —
-// so the pane's sink is the only thing that has to survive the move.
+// The outgoing conversation stays in its project; host capabilities and the
+// pane sink survive the move.
 func (s *Server) workspaceOptions(dir, ref string) boot.Options {
-	return boot.Options{
-		Model:           ref,
-		WorkspaceRoot:   dir,
-		SessionDir:      SessionDirFor(dir),
-		Sink:            s.rebuildSink(),
-		Stderr:          os.Stderr,
-		StatsSource:     s.statsSurface(),
-		FeedbackSurface: feedbackSurface(s.statsSurface()),
-
-		ProviderResolver:         s.resolver,
-		CleanupPendingReconciler: BackgroundCleanupReconciler,
+	opts := s.rebuildOptions(nil, ref)
+	opts.WorkspaceRoot, opts.SessionDir = dir, SessionDirFor(dir)
+	if ctl := s.ctl(); ctl != nil {
+		opts.NativeSurfaces = ctl.NativeSurfaces()
 	}
+	return opts
 }

@@ -16,6 +16,22 @@
 }
 
 @font-face {
+  font-family: "Noto Studio";
+  src: url("/fonts/noto-studio-core.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+20-24F, U+2000-206F, U+2190-23FF, U+2500-257F, U+25A0-25FF, U+2600-27BF, U+2E80-9FFF, U+3000-303F, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "Noto Studio Full";
+  src: url("/fonts/noto-studio.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+2E80-9FFF, U+F900-FAFF, U+FE30-FE4F, U+3000-303F, U+FF00-FFEF, U+20000-2FFFF;
+}
+@font-face {
   font-family: "IBM Plex Mono var";
   src: url("/fonts/IBMPlexMonoVariable.woff2") format("woff2");
   font-weight: 100 700;
@@ -23,17 +39,19 @@
   font-display: swap;
 }
 
+@property --nav-w { syntax: "<length>"; inherits: true; initial-value: 0px }
 @property --rail-w { syntax: "<length>"; inherits: true; initial-value: 264px }
 @property --side-w { syntax: "<length>"; inherits: true; initial-value: 316px }
-@property --dock-w { syntax: "<length>"; inherits: true; initial-value: 560px }
+@property --dock-w { syntax: "<length>"; inherits: false; initial-value: 560px }
 
 @property --win-ar { syntax: "<number>"; inherits: true; initial-value: 1.6 }
 
 :root {
     interpolate-size: allow-keywords;
+    --nav-open: 48px;
 
-    --call-sym: 28px; --call-gap: 14px;
-    --rail-open: 264px; --side-open: 316px; --dock-open: 560px; --pane-gutter: 12px;
+    --call-sym: calc(28px * var(--d-scale, 1)); --call-gap: calc(14px * var(--d-scale, 1));
+    --rail-open: 264px; --side-open: 316px; --dock-open: 560px; --dock-left-min: 236px; --pane-gutter: calc(12px * var(--d-scale, 1));
     --page: oklch(95.8% .0092 85); --surface: oklch(98.9% .0046 85);
     --raised: oklch(100% 0 85); --overlay: oklch(93.1% .0138 85);
     --border: oklch(87.6% .0184 85); --hair: oklch(91.7% .0126 85);
@@ -80,6 +98,7 @@
     --t-line: .14s; --t-card: .22s; --t-panel: .34s;
 
     --t-live: .6s;
+    --tip-delay: .3s;
 
     --m-line: var(--t-line) var(--ease-out);
     --m-card: var(--t-card) var(--ease-out);
@@ -95,12 +114,16 @@
 
     --y-say: 21px;
 
-    --y-close: 4px; --close-h: 26px;
+    --y-close: 4px; --close-h: calc(26px * var(--d-scale, 1));
 
     --track-display: -.018em;
     --track-tight: -.02em; --track-lead: .06em; --track-cap: .12em;
 
-    --r-xs: 4px; --r-sm: 6px; --r-md: 9px; --r-lg: 12px; --r-pill: 999px;
+    --r-xs: calc(4px * var(--r-scale, 1)); --r-sm: calc(6px * var(--r-scale, 1));
+    --r-md: calc(9px * var(--r-scale, 1)); --r-lg: calc(12px * var(--r-scale, 1)); --r-pill: 999px;
+
+    --sp-1: 2px; --sp-2: 4px; --sp-3: 6px; --sp-4: 8px;
+    --sp-5: 10px; --sp-6: 12px; --sp-7: 16px; --sp-8: 24px;
 
     --fs-micro: 11px; --fs-meta: 12px; --fs-ui: 13px;
     --fs-lead: 15px; --fs-title: 17px; --fs-display: 22px;
@@ -190,7 +213,8 @@
   :root[data-weight="light"], :root[data-weight="light"]:lang(zh) {
   --w-reg: 400; --w-med: 500; --w-semi: 600;
   }
-  :root[data-measure="full"] { --doc: 100%; --wide: 100% }
+  :root[data-measure="full"], :root[data-measure="full-all"] { --doc: 100%; --wide: 100% }
+  :root[data-measure="full-all"] { --column: 100% }
 
   :root[data-weight="heavy"] { --w-reg: 500; --w-med: 600; --w-semi: 700 }
 

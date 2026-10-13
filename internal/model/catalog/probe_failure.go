@@ -2,11 +2,14 @@
 package catalog
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 
 	"reasonix/internal/model/openai"
+	"reasonix/internal/safety/redirectguard"
 )
 
 // ProbeReason names why probing failed. Each one sends the user to a different
@@ -22,8 +25,10 @@ const (
 	ProbePathNotFound    ProbeReason = "path_not_found"
 	ProbeNoChatModels    ProbeReason = "no_chat_models"
 	ProbeUpstreamError   ProbeReason = "upstream_error"
+	ProbeTimeout         ProbeReason = "timeout"
 	ProbeUnreachable     ProbeReason = "unreachable"
 	ProbeNotCompatible   ProbeReason = "not_compatible"
+	ProbeRedirectRefused ProbeReason = "redirect_refused"
 )
 
 // ProbeError carries that identity out. Params hold the facts a sentence needs
@@ -31,6 +36,10 @@ const (
 type ProbeError struct {
 	Reason ProbeReason
 	Params map[string]any
+	// Status and Body are what the endpoint answered with; zero and empty when
+	// it never answered.
+	Status int
+	Body   string
 	detail string
 	err    error
 }
@@ -49,14 +58,16 @@ func (e *ProbeError) Unwrap() error { return e.err }
 // listing that answered with no chat models settles the question, a 401 says
 // more than a 404, and "not compatible" is what is left when nothing spoke.
 var probeReasonRank = map[ProbeReason]int{
+	ProbeRedirectRefused: -1,
 	ProbeNoChatModels:    0,
 	ProbePaymentRequired: 1,
 	ProbeUnauthorized:    2,
 	ProbeRateLimited:     3,
 	ProbeUpstreamError:   4,
 	ProbePathNotFound:    5,
-	ProbeUnreachable:     6,
-	ProbeNotCompatible:   7,
+	ProbeTimeout:         6,
+	ProbeUnreachable:     7,
+	ProbeNotCompatible:   8,
 }
 
 // classifyProbe reads one failed listing attempt as an identity. The status is
@@ -66,10 +77,18 @@ func classifyProbe(err error) *ProbeError {
 	if errors.As(err, &known) {
 		return known
 	}
+	if errors.Is(err, redirectguard.ErrRefused) {
+		return &ProbeError{Reason: ProbeRedirectRefused, err: err}
+	}
 	status, ok := openai.ModelFetchStatus(err)
 	if !ok {
+		var netErr net.Error
+		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
+			return &ProbeError{Reason: ProbeTimeout, err: err}
+		}
 		return &ProbeError{Reason: ProbeUnreachable, err: err}
 	}
+	body, _ := openai.ModelFetchBody(err)
 	reason := ProbeNotCompatible
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
@@ -83,7 +102,7 @@ func classifyProbe(err error) *ProbeError {
 	case status >= 500:
 		reason = ProbeUpstreamError
 	}
-	return &ProbeError{Reason: reason, Params: map[string]any{"status": status}, err: err}
+	return &ProbeError{Reason: reason, Params: map[string]any{"status": status}, Status: status, Body: body, err: err}
 }
 
 // keepWorseDiagnosis keeps whichever of the two narrows the fix further.

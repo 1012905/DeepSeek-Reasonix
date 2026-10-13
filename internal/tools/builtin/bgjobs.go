@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -20,6 +21,10 @@ import (
 // onto every tool call — and degrade to a clear error when it isn't available
 // (a headless context with no manager). Together they poll a job's new output,
 // terminate a job, and block until jobs finish.
+
+// errJobFailed marks a read that found a job ended as failed, so the call is
+// classed as failed while the job's output still reaches the model.
+var errJobFailed = errors.New("background job failed")
 
 func init() {
 	tool.RegisterBuiltin(bashOutput{})
@@ -46,11 +51,11 @@ type bashOutput struct{ noJobs }
 func (bashOutput) Name() string { return "bash_output" }
 
 func (bashOutput) Description() string {
-	return "Read new output from a background job started with bash(run_in_background=true) or task(run_in_background=true). Returns the output produced since the last bash_output call for that job, plus its status (running/done/failed/killed). Does not block."
+	return "Read new output from a background job started with bash(run_in_background=true) or task(run_in_background=true). Returns the output produced since the last bash_output call for that job, plus its status (running/done/failed/killed). Does not block. Omit job_id to list the jobs still running, with their kind, label and elapsed time."
 }
 
 func (bashOutput) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"job_id":{"type":"string","description":"The background job id (e.g. \"bash-1\") returned when it was started."},"filter":{"type":"string","description":"Optional regular expression; only matching lines of the new output are returned."}},"required":["job_id"]}`)
+	return json.RawMessage(`{"type":"object","properties":{"job_id":{"type":"string","description":"The background job id (e.g. \"bash-1\") returned when it was started."},"filter":{"type":"string","description":"Optional regular expression; only matching lines of the new output are returned."}}}`)
 }
 
 func (bashOutput) ReadOnly() bool { return true }
@@ -72,12 +77,12 @@ func (bashOutput) Execute(ctx context.Context, args json.RawMessage) (string, er
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("invalid args: %w", err)
 	}
-	if p.JobID == "" {
-		return "", fmt.Errorf("job_id is required")
-	}
 	jm, ok := jobs.FromContext(ctx)
 	if !ok {
 		return "", fmt.Errorf("background jobs are not available in this context")
+	}
+	if p.JobID == "" {
+		return listRunningJobs(jm, jobs.SessionFromContext(ctx), time.Now()), nil
 	}
 	text, status, found := jm.OutputForSession(jobs.SessionFromContext(ctx), p.JobID)
 	if !found {
@@ -95,9 +100,62 @@ func (bashOutput) Execute(ctx context.Context, args json.RawMessage) (string, er
 	}
 	header := fmt.Sprintf("[%s] %s%s", p.JobID, status, status.Cause())
 	if strings.TrimSpace(text) == "" {
-		return header + "\n(no new output)", nil
+		text = "(no new output)"
 	}
-	return header + "\n" + text, nil
+	return header + "\n" + text, jobsFailed([]jobs.Result{{ID: p.JobID, Status: status}})
+}
+
+// maxListedJobs bounds one listing; the rest are counted, not shown.
+const maxListedJobs = 50
+
+// listRunningJobs answers "what is still running" from the manager that owns
+// the jobs. Without a session it lists nothing, never every session's jobs.
+func listRunningJobs(jm *jobs.Manager, session string, now time.Time) string {
+	var running []jobs.View
+	if session != "" {
+		running = jm.RunningForSession(session)
+	}
+	if len(running) == 0 {
+		return "No background jobs are running."
+	}
+	hidden := max(0, len(running)-maxListedJobs)
+	running = running[:len(running)-hidden]
+	var b strings.Builder
+	fmt.Fprintf(&b, "Running background jobs (%d):", len(running)+hidden)
+	for _, v := range running {
+		elapsed := now.Sub(time.UnixMilli(v.StartedAt)).Round(time.Second)
+		fmt.Fprintf(&b, "\n- %s  kind=%s  elapsed=%s", v.ID, v.Kind, elapsed)
+		if label := oneLine(v.Label, 80); label != "" {
+			fmt.Fprintf(&b, "  %s", label)
+		}
+	}
+	if hidden > 0 {
+		fmt.Fprintf(&b, "\n%d more running job(s) not listed.", hidden)
+	}
+	return b.String()
+}
+
+func oneLine(s string, limit int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > limit {
+		return string(r[:limit]) + "..."
+	}
+	return s
+}
+
+// jobsFailed is the call's error when any of the jobs it reports ended as
+// failed, naming those jobs; nil otherwise.
+func jobsFailed(results []jobs.Result) error {
+	var failed []string
+	for _, r := range results {
+		if r.Status == jobs.Failed {
+			failed = append(failed, r.ID)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: %s", errJobFailed, strings.Join(failed, ", "))
 }
 
 // filterLines keeps only the lines of s matching the regular expression re.
@@ -197,6 +255,9 @@ func (waitJob) Execute(ctx context.Context, args json.RawMessage) (string, error
 		return "", fmt.Errorf("background jobs are not available in this context")
 	}
 	opts := jobs.WaitOptions{Timeout: time.Duration(p.TimeoutSeconds) * time.Second}
+	if emit, ok := tool.ProgressFrom(ctx); ok {
+		opts.Echo = emit
+	}
 	if pattern := strings.TrimSpace(p.UntilMatches); pattern != "" {
 		re, err := regexp.Compile(pattern)
 		if err != nil {
@@ -229,7 +290,7 @@ func (waitJob) Execute(ctx context.Context, args json.RawMessage) (string, error
 			b.WriteString("\n" + r.Output)
 		}
 	}
-	return b.String(), nil
+	return b.String(), jobsFailed(results)
 }
 
 // stillRunning states what happened while the caller waited. No thresholds and

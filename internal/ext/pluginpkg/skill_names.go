@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+
+	"reasonix/internal/base/textutil"
 )
 
 func (p Package) skillNameWarnings() []string {
@@ -11,11 +13,33 @@ func (p Package) skillNameWarnings() []string {
 	return warnings
 }
 
+type skillScan struct {
+	refs     []SkillRef
+	warnings []string
+}
+
 func (p Package) skillRefsWithWarnings() ([]SkillRef, []string) {
+	if p.skills != nil {
+		return p.skills.refs, p.skills.warnings
+	}
+	s := p.scanSkills()
+	return s.refs, s.warnings
+}
+
+func (p Package) scanSkills() *skillScan {
+	refs, warnings := p.walkSkills()
+	return &skillScan{refs: refs, warnings: warnings}
+}
+
+func (p Package) walkSkills() ([]SkillRef, []string) {
 	var out []SkillRef
 	for _, root := range p.SkillRoots() {
 		p.scanSkillPath(root, 1, map[string]bool{}, &out)
 	}
+	return p.selectSkillRefs(out)
+}
+
+func (p Package) selectSkillRefs(out []SkillRef) ([]SkillRef, []string) {
 	byName := map[string]string{}
 	seenPaths := map[string]bool{}
 	var warnings []string
@@ -30,7 +54,7 @@ func (p Package) skillRefsWithWarnings() ([]SkillRef, []string) {
 		}
 		seenPaths[key] = true
 		if previous, exists := byName[sk.Name]; exists {
-			warnings = append(warnings, fmt.Sprintf("skill name %q uses %s; %s is shadowed", sk.Name, RelativeRoot(p.Root, previous), RelativeRoot(p.Root, sk.Path)))
+			warnings = append(warnings, fmt.Sprintf("skill name %q uses %s; %s is shadowed", sk.Name, textutil.ShownLocator(RelativeRoot(p.Root, previous)), textutil.ShownLocator(RelativeRoot(p.Root, sk.Path))))
 			continue
 		}
 		byName[sk.Name] = sk.Path

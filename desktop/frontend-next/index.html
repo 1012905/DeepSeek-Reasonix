@@ -7,6 +7,13 @@
     <link rel="preconnect" href="https://remote.reasonix.io" crossorigin />
     <link rel="dns-prefetch" href="//id.reasonix.io" />
     <link rel="dns-prefetch" href="//remote.reasonix.io" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#07080c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Reasonix" />
     <title>Reasonix Studio</title>
     <script>
       // The boot screen below is painted by this file, before the bundle that
@@ -41,7 +48,9 @@
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(pair ? { code: pair } : { token: token }),
-          }).then(function () {});
+          }).then(function (response) {
+            if (response.ok) window.location.reload();
+          });
         } catch (e) {
           return Promise.resolve();
         }

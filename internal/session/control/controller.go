@@ -83,6 +83,7 @@ var errNoSessionPath = errors.New("session has content but no session path; conv
 // Controller drives one chat session. Construct with New; drive with the command
 // methods; observe through the Sink passed in Options.
 type Controller struct {
+	surfacePublications liveSurfacePublications
 	controllerDeps
 
 	guardianPath string // persisted guardian session file ("" when disabled)
@@ -294,15 +295,18 @@ type Options struct {
 	PromptRefiner   *promptrefine.Refiner // rewrites a draft before it is sent; nil refuses the ask
 	CommitMessenger CommitDrafter         // drafts commit messages; nil refuses the ask
 	Sink            event.Sink
-	Policy          permission.Policy
+	// QuoteContext is the same live pricing projection used by the assembled sink.
+	QuoteContext *event.QuoteContext
+	Policy       permission.Policy
 	// SubagentGate is the shared gate every headless-only sub-agent surface
 	// reads; nil disables gating there. The approval-mode setters Update it so
 	// a runtime switch reaches sub-agents, not only the executor's own gate.
 	SubagentGate *SharedHeadlessGate
 	Label        string
 	ModelRef     string
-	Effort       string             // resolved effective provider effort; not a request-scoped override
-	ModelModes   []config.ModelMode // optional modes the session's model declares
+	Effort       string                // resolved effective provider effort; not a request-scoped override
+	ModelModes   []config.ModelMode    // optional modes the session's model declares
+	ModelEntry   *config.ProviderEntry // the resolved entry the session was built on; nil leaves ModelFace unanswered
 	// ProviderFingerprint identifies resolved provider build inputs; empty fails closed.
 	ProviderFingerprint string
 	SystemPrompt        string
@@ -314,6 +318,9 @@ type Options struct {
 	AllSkills           []skill.Skill
 	SkillStore          *skill.Store
 	AllSkillStore       *skill.Store
+	// Clock is the host's wall clock for the date the model is told; nil means
+	// the model is told none.
+	Clock func() time.Time
 	// DisableImplicitSkillInvocation controls model-facing discovery only;
 	// explicit /skill commands and management remain host-side capabilities.
 	DisableImplicitSkillInvocation bool
@@ -485,6 +492,7 @@ func New(opts Options) *Controller {
 	if c.executor != nil {
 		c.wireMutationObserver()
 		c.executor.SetMemoryQueue(c)
+		c.executor.SetPathObserver(c.skills.pathHits)
 	}
 	// Auto Guard is built into Auto. Ask and YOLO bypass it through the mode
 	// provider, so no separate enablement state is needed.
@@ -1074,6 +1082,7 @@ func (c *Controller) ReloadCommands(ctx context.Context) error {
 			Description: sk.Description,
 			ArgHint:     sk.ArgumentHint,
 			Skill:       true,
+			Unlisted:    func() bool { return !c.skills.pathHits.Eligible(sk) },
 			Render: func(args []string) string {
 				cur, err := c.skills.forModel(sk)
 				if err != nil {
@@ -1099,14 +1108,6 @@ func (c *Controller) ReloadCommands(ctx context.Context) error {
 	cmdSlice := cmds
 	c.commands.Store(&cmdSlice)
 	return loadErr
-}
-
-// Executor returns the underlying agent when present (nil for pure runners).
-func (c *Controller) Executor() *agent.Agent {
-	if c == nil {
-		return nil
-	}
-	return c.executor
 }
 
 // HookRunner returns the session's hook runner (nil-safe; may hold zero hooks),
@@ -1147,9 +1148,12 @@ func (c *Controller) ModelRef() string { return c.modelRef }
 // Empty means no scoping is in effect.
 func (c *Controller) WorkspaceRoot() string { return c.workspaceRoot }
 
+// loadConfigForRoot is the turn-time config read; tests count it.
+var loadConfigForRoot = config.LoadForRoot
+
 func (c *Controller) imageInputEnabled() bool {
 	ref := c.modelRef
-	cfg, err := config.LoadForRoot(c.workspaceRoot)
+	cfg, err := loadConfigForRoot(c.workspaceRoot)
 	if err == nil && ref == "" {
 		ref = cfg.DefaultModel
 	}
@@ -1204,6 +1208,12 @@ type closeJobsMode int
 const (
 	closeJobsWithGrace closeJobsMode = iota
 	closeJobsAsync
+	// closeJobsHandedOff leaves the manager to a replacement controller, so
+	// the jobs run on; cleanup waits for those jobs, which still use what it
+	// would release.
+	closeJobsHandedOff
+	// closeJobsShared closes a controller that only borrowed the manager.
+	closeJobsShared
 )
 
 // SetBypass is the legacy name for SetAutoApproveTools. Keep it for existing

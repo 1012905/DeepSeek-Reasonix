@@ -1,7 +1,8 @@
 // Package workspacelease excludes overlapping write extents across sessions.
 // Readers remain concurrent; unknown extents claim the whole workspace.
 // Claims remain held until every participating run ends so another session
-// cannot overwrite a turn's earlier mutations during its verification.
+// cannot overwrite a turn's earlier mutations during its verification, except
+// while the session waits on a person (Yield).
 package workspacelease
 
 import (
@@ -60,6 +61,18 @@ type Wait struct {
 // must not call back into Owner.
 type WaitNotice func(Wait)
 
+// Option configures an Owner when it is built.
+type Option func(*Owner)
+
+// WithoutWholeWorkspaceHold makes a writer that declared no extent (bash, MCP,
+// a sub-agent given no write_paths) claim nothing, instead of the whole
+// workspace. A writer that did declare paths, including paths that cannot be
+// resolved, still claims them. The choice belongs to the session, so another
+// Owner on the same workspace keeps its own.
+func WithoutWholeWorkspaceHold() Option {
+	return func(o *Owner) { o.undeclaredFree = true }
+}
+
 // Owner is one Delivery session's re-entrant workspace lease. One Owner may be
 // shared by the root agent and all of its subagents. Different sessions must
 // use different Owners, even when they share a workspace.
@@ -70,6 +83,8 @@ type Owner struct {
 	// holder names this session to a session waiting on it. Read when the
 	// lease is taken, so a rename mid-hold shows on the next hold.
 	holder func() string
+	// undeclaredFree is set at construction and never changes.
+	undeclaredFree bool
 
 	mu            sync.Mutex
 	activeRuns    int
@@ -83,6 +98,7 @@ type Owner struct {
 	acquiredAt    time.Time
 	lastAsk       time.Time
 	scope         pathLeaseState
+	holds         holdState
 }
 
 // State is a sanitized process-local snapshot used by Desktop to explain a
@@ -114,7 +130,7 @@ var localRegistry = struct {
 // New returns a Delivery-session lease owner for workspaceRoot. lockDir must be
 // shared by Reasonix processes for cross-process protection; it is kept outside
 // the workspace so acquiring a lease never dirties user files.
-func New(workspaceRoot, lockDir string, onWait WaitNotice) (*Owner, error) {
+func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Owner, error) {
 	canonical, err := CanonicalWorkspace(workspaceRoot)
 	if err != nil {
 		return nil, err
@@ -138,12 +154,16 @@ func New(workspaceRoot, lockDir string, onWait WaitNotice) (*Owner, error) {
 	}
 	localRegistry.Unlock()
 
-	return &Owner{
+	o := &Owner{
 		lockPath: filepath.Join(lockDir, key+".lock"),
 		onWait:   onWait,
 		local:    local,
 		scope:    pathLeaseState{root: canonical, identity: rand.Text()},
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o, nil
 }
 
 // CanonicalWorkspace returns the stable identity used to key a workspace. It
@@ -253,19 +273,28 @@ func (o *Owner) AcquireWrite(ctx context.Context) error {
 // AcquirePaths retains the complete write extent until the last run ends.
 // Missing or unresolvable extents conservatively claim the whole workspace.
 func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
+	_, err := o.acquire(ctx, paths, false)
+	return err
+}
+
+func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(), error) {
 	if o == nil {
-		return nil
+		return func() {}, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if o.undeclaredFree && len(paths) == 0 {
+		return func() {}, nil
 	}
 	claim := o.normalizePaths(paths)
 	for {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
 		if o.acquired && coversPaths(o.scope.paths, claim) {
+			end := o.holdLocked(hold)
 			o.mu.Unlock()
-			return nil
+			return end, nil
 		}
 		if o.acquiring {
 			done := o.acquireDone
@@ -274,7 +303,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 			case <-done:
 				continue
 			case <-ctx.Done():
-				return ctx.Err()
+				return nil, ctx.Err()
 			}
 		}
 		o.acquiring = true
@@ -290,6 +319,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 		o.mu.Lock()
 		o.acquiring = false
 		o.waiting = false
+		end := func() {}
 		if err == nil {
 			o.acquired = true
 			o.scope.paths = claim
@@ -297,6 +327,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 				o.acquiredAt = time.Now()
 				o.releaseSystem = release
 			}
+			end = o.holdLocked(hold)
 		}
 		close(done)
 		releaseIfIdle := o.releaseIfIdleLocked()
@@ -304,7 +335,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 		if releaseIfIdle != nil {
 			releaseIfIdle()
 		}
-		return err
+		return end, err
 	}
 }
 
@@ -312,10 +343,20 @@ func (o *Owner) releaseIfIdleLocked() func() {
 	if !o.acquired || o.acquiring || o.activeRuns != 0 {
 		return nil
 	}
+	return o.releaseLocked(true)
+}
+
+// releaseLocked drops the claim. A yield (final false) is a pause inside one
+// account: the held time so far is banked and no account is closed.
+func (o *Owner) releaseLocked(final bool) func() {
 	release := o.releaseSystem
 	o.acquired = false
 	o.releaseSystem = nil
 	o.scope.paths = nil
+	if !final {
+		o.stats.Held += time.Since(o.acquiredAt)
+		return release
+	}
 	closed, report := o.closeStatsLocked(time.Now())
 	notice := o.onRelease
 	return func() {

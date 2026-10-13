@@ -1,15 +1,26 @@
 import { ApplyNote } from "./Group";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { TrayPrefs, AgentPort, Appearance as Look, ThemePack } from "../port/port";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { effectsMode, onEffectsChange, setEffectsMode, type EffectsMode } from "../state/prefs";
+import type { AgentPort, Appearance as Look, ThemePack } from "../port/port";
+import { ZOOM_PRESETS } from "./zoom";
+import { chord } from "./keys";
+import { host } from "../port/host";
 import { MONO_FAMILIES, UI_FAMILIES, installed, readSizeOf, readSteps } from "./look";
 import { STORAGE as LANG_KEY, t } from "../i18n";
 import { pct } from "../i18n/format";
 import { reason } from "../i18n/kernel";
 import { Notifications } from "./Notifications";
 import { Folding } from "./Folding";
-import { Switch } from "./Switch";
+import { WindowSection } from "./WindowSection";
+import { LiveGraceSection } from "./LiveGraceSection";
+import { NavRailSection } from "./NavRailSection";
+import { GraphicsSection } from "./GraphicsSection";
+import { SendShortcut } from "./SendShortcut";
+import { SessionTabsSetting } from "./SessionTabsSetting";
+import { EscStopSetting } from "./EscStopSetting";
 import { ThemeImport } from "./ThemeImport";
-import { setShowsReceipt, showsReceipt } from "../state/session";
+import { ThemeRemove } from "./ThemeRemove";
+import { useThemeInventory } from "./useThemeInventory";
 
 // "" follows the machine; the rest are explicit, the same shape the light/dark
 // control uses.
@@ -39,22 +50,6 @@ interface Props {
   onLook: (look: Look) => void;
 }
 
-// Whole-interface scale. Named by what it does to reading rather than by its
-// number: nobody wants "115%", they want it bigger.
-const ZOOMS: [number, string][] = [
-  [0.9, "紧凑"],
-  [1, "标准"],
-  [1.15, "宽松"],
-  [1.3, "更大"],
-];
-
-// The named steps stop where a 1080p window does. Past that there is no step
-// anyone could have named in advance — a 2560 display wants something a 3840 one
-// does not — so the range takes over rather than the list growing a tail of
-// numbers. It reaches this far safely because the layout now folds on the room
-// it actually has (see viewport.ts) instead of on the unscaled window.
-const ZOOM_RANGE = { min: 0.8, max: 2.5, step: 0.05 };
-
 // Body size in the transcript alone, so the frame stays where the layout put it.
 // The steps live in look.ts next to the default they have to agree with.
 
@@ -73,6 +68,12 @@ const WEIGHTS: [string, string, string][] = [
 const MEASURES: [string, string, string][] = [
   ["standard", "适宜阅读", "每行长度控制在一眼能回到行首的范围"],
   ["full", "铺满窗口", "正文跟随窗口宽度，宽屏上不留两侧空白"],
+  ["full-all", "连输入框一起铺满", "正文和输入框都跟随窗口宽度；输入框很宽时一行不易回到行首"],
+];
+
+const EFFECTS: [EffectsMode, string, string][] = [
+  ["full", "完整", "背景模糊、动态天空与颗粒质感全部开启"],
+  ["reduced", "节能", "关闭背景模糊、动态天空与颗粒质感，集成显卡或老旧电脑上更省电"],
 ];
 
 const CONTRASTS: [string, string, string][] = [
@@ -121,41 +122,8 @@ function useCrop(url: string | undefined, box: HTMLElement | null) {
 }
 
 export function Appearance({ port, theme, onTheme, contrast, onContrast, weight, onWeight, reloadThemes, look, onLook }: Props) {
-  const [{ packs, unread }, setThemes] = useState<{ packs: ThemePack[]; unread: string }>({ packs: [], unread: "" });
-  // null in a browser tab, where there is no window to keep running and no
-  // icon to bring one back. The whole section goes with it.
-  const [tray, setTray] = useState<TrayPrefs | null>(null);
-  const [receipt, setReceipt] = useState(showsReceipt);
-
-  useEffect(() => {
-    let live = true;
-    port.trayPrefs().then((p) => live && setTray(p)).catch(() => live && setTray(null));
-    return () => {
-      live = false;
-    };
-  }, [port]);
-
-  // The window answers with what is true afterwards rather than what was
-  // asked: turning the icon off turns backgrounding off with it, and the
-  // switch has to show that rather than the request.
-  const flipTray = useCallback(
-    (patch: Partial<TrayPrefs>) => {
-      if (!tray) return;
-      const next = { ...tray, ...patch };
-      port
-        .setTrayPrefs(next.icon, next.closeToTray)
-        .then((got) => got && setTray(got))
-        .catch(() => {});
-    },
-    [port, tray],
-  );
-
-  const load = useCallback(() => {
-    port.themes()
-      .then((packs) => setThemes({ packs, unread: "" }))
-      .catch((e) => setThemes((prev) => ({ ...prev, unread: reason(e) })));
-  }, [port]);
-  useEffect(load, [load]);
+  const { packs, unread, load } = useThemeInventory(port);
+  const effects = useSyncExternalStore(onEffectsChange, effectsMode);
 
   // Activating repaints through App's own theme effect, so this only refreshes
   // the list and asks App to re-read which pack is active.
@@ -173,20 +141,43 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
     [port, load, reloadThemes],
   );
 
+  const remove = useCallback(
+    (id: string) => {
+      setFailed("");
+      return port
+        .removeTheme(id)
+        .then(() => {
+          load();
+          reloadThemes();
+        })
+        .catch((e) => setFailed(reason(e)));
+    },
+    [port, load, reloadThemes],
+  );
+  const cell = (p: ThemePack) => (
+    <div className="pal-cell" key={p.id}>
+      <Swatch pack={p} theme={theme} name={t(p.name)} on={!!p.active} onPick={() => pick(p.id)} />
+      {p.removable && <ThemeRemove name={p.name} onRemove={() => remove(p.id)} />}
+    </div>
+  );
+
   const custom = packs.some((p) => p.active);
   // Calm, workbench-like themes stay in the first shelf. Illustrated packs
   // are still first-class installed themes, but they no longer dominate the
   // page a user opens merely to switch between light and dark. If one of them
   // is active it remains visible beside the foundations, so the current state
   // never disappears into a closed disclosure.
-  const foundations = packs.filter((p) => !p.background?.image);
-  const activeIllustrated = packs.find((p) => p.active && p.background?.image);
+  const foundations = packs.filter((p) => !p.background?.image && !p.sky);
+  const activeIllustrated = packs.find((p) => p.active && (p.background?.image || p.sky));
   const featured = activeIllustrated ? [...foundations, activeIllustrated] : foundations;
-  const illustrated = packs.filter((p) => p.background?.image && p.id !== activeIllustrated?.id);
+  const illustrated = packs.filter((p) => (p.background?.image || p.sky) && p.id !== activeIllustrated?.id);
 
   // A change lands on screen through App's own effect; this only sends it on
   // so the next launch opens the same way.
   const set = useCallback((patch: Partial<Look>) => onLook({ ...look, ...patch }), [look, onLook]);
+  // Until the kernel has announced its range there is nothing to draw the
+  // slider from; it is held inert rather than given a range of its own.
+  const zoomRange = look.zoomRange ?? { min: 0, max: 2, step: 1 };
   const setPaper = useCallback(
     (patch: Partial<NonNullable<Look["wallpaper"]>>) =>
       look.wallpaper && onLook({ ...look, wallpaper: { ...look.wallpaper, ...patch } }),
@@ -247,6 +238,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
     look.fontUi ? t("字体") : "",
     weight ? t("文字粗细") : "",
     contrast ? t("文字对比度") : "",
+    effects === "reduced" ? t("视觉效果") : "",
   ].filter(Boolean);
 
   return (
@@ -282,9 +274,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="palettes" role="group" aria-label={t("界面主题")}>
             <Swatch name={t("默认")} on={!custom} onPick={() => pick("")} />
-            {featured.map((p) => (
-              <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-            ))}
+            {featured.map(cell)}
           </div>
           {illustrated.length > 0 && (
             <details className="theme-more">
@@ -296,9 +286,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 <span className="now">{t("{n} 个", { n: illustrated.length })}</span>
               </summary>
               <div className="palettes" role="group" aria-label={t("更多已安装主题")}>
-                {illustrated.map((p) => (
-                  <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-                ))}
+                {illustrated.map(cell)}
               </div>
             </details>
           )}
@@ -343,11 +331,12 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           <h3>{t("大小")}</h3>
         </div>
         <p className="hint">{t("「界面」会同时缩放边距与控件，「正文」仅调整对话中的文字大小，两者独立设置。")}</p>
+        {host().inShell() && <p className="hint">{t("键盘：{up} 放大，{down} 缩小，{reset} 恢复标准，同样调整「界面」大小。", { up: chord("+"), down: chord("-"), reset: chord("0") })}</p>}
         <div className="grp-items">
           <div className="prow">
             <span className="tx">{t("界面")}</span>
             <div className="seg" data-text role="group" aria-label={t("界面大小")}>
-              {ZOOMS.map(([v, name]) => (
+              {ZOOM_PRESETS.map(([v, name]) => (
                 <button key={v} data-action="appearance.zoom" aria-pressed={(look.zoom || 1) === v} onClick={() => set({ zoom: v })}>
                   {t(name)}
                 </button>
@@ -358,11 +347,12 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             <span className="tx">{t("微调")}</span>
             <input
               className="slider"
-              style={at(look.zoom || 1, ZOOM_RANGE.min, ZOOM_RANGE.max)}
+              style={at(look.zoom || 1, zoomRange.min, zoomRange.max)}
               type="range"
-              min={ZOOM_RANGE.min}
-              max={ZOOM_RANGE.max}
-              step={ZOOM_RANGE.step}
+              min={zoomRange.min}
+              max={zoomRange.max}
+              step={zoomRange.step}
+              disabled={!look.zoomRange}
               value={look.zoom || 1}
               aria-label={t("界面大小微调")}
               data-action="appearance.zoom"
@@ -555,64 +545,14 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <ApplyNote id="language" />
       </section>
 
-      {tray && (
-        <section className="grp" id="set-window" data-setting="window">
-          <div className="grp-hd">
-            <h3>{t("窗口")}</h3>
-          </div>
-          <p className="hint">
-            {t("关闭窗口后需通过托盘图标重新打开主界面，下方选项依赖该图标。")}
-          </p>
-          <div className="grp-items">
-            <div className="lrow">
-              <span className="tx">
-                <span className="lb">{t("回合结束时给出回执")}</span>
-                <span className="ds">{t("列出这一轮改了什么、验了什么、哪些没有验；无话可说时不出现。下一轮起生效")}</span>
-              </span>
-              <Switch
-                data-action="chrome.receipt"
-                on={receipt}
-                label={t("回合结束时给出回执")}
-                onClick={() => {
-                  setShowsReceipt(!receipt);
-                  setReceipt(!receipt);
-                }}
-              />
-            </div>
-            <div className="lrow">
-              <span className="tx">
-                <span className="lb">{t("在托盘显示图标")}</span>
-                <span className="ds">
-                  {tray.icon === tray.live
-                    ? t("通过图标即可判断正在运行还是等待批准")
-                    : tray.icon
-                      ? t("下次启动时出现")
-                      : t("下次启动时不再显示，本次仍保留")}
-                </span>
-              </span>
-              <Switch data-action="tray.icon" on={tray.icon} label={t("在托盘显示图标")} onClick={() => flipTray({ icon: !tray.icon })} />
-            </div>
-            {/* The second switch only means anything while there is an icon,
-                so it is drawn as a branch of the first rather than as a rule
-                you have to discover by watching it grey out. */}
-            <div className="lrow subrow" data-off={tray.icon && tray.live ? undefined : ""}>
-              <span className="tx">
-                <span className="lb">{t("关闭窗口后在托盘中继续运行")}</span>
-                <span className="ds">{t("关闭窗口不会中断会话和后台任务；从托盘菜单退出才会完全关闭程序")}</span>
-              </span>
-              <Switch
-                data-action="tray.close-to-tray"
-                on={tray.closeToTray}
-                busy={!tray.icon || !tray.live}
-                label={t("关闭窗口后在托盘中继续运行")}
-                onClick={() => flipTray({ closeToTray: !tray.closeToTray })}
-              />
-            </div>
-          </div>
-          <ApplyNote id="window" />
-        </section>
-      )}
 
+      <WindowSection port={port} />
+      <NavRailSection />
+      <LiveGraceSection />
+      <GraphicsSection />
+      <SendShortcut />
+      <EscStopSetting />
+      <SessionTabsSetting />
       <Folding />
       <Notifications port={port} />
 
@@ -620,12 +560,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           once, not that any one control is obscure. The summary says what is
           folded and whether it has been changed — a disclosure hiding a value
           somebody set is a screen disagreeing with the window itself. */}
-      <details className="advset">
-        <summary>
-          <span className="tx">
-            <span className="lb">{t("高级外观")}</span>
-            <span className="ds">{changed.length ? t("已修改：{list}", { list: changed.join(" · ") }) : t("字体、文字粗细、文字对比度")}</span>
-          </span>
+      <details className="advset appearance-advanced">
+        <summary className="grp" id="set-advanced-appearance" data-setting="advanced-appearance">
+          <h3 className="grp-hd"><span>{t("高级外观")}</span></h3>
+          <span className="hint">{changed.length ? t("已修改：{list}", { list: changed.join(" · ") }) : t("字体、文字粗细、文字对比度、视觉效果")}</span>
         </summary>
         <section className="grp" id="set-font" data-setting="font">
           <div className="grp-hd">
@@ -660,6 +598,23 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             </div>
           </div>
           <ApplyNote id="weight" />
+        </section>
+
+        <section className="grp" id="set-effects" data-setting="effects">
+          <div className="grp-hd">
+            <h3>{t("视觉效果")}</h3>
+          </div>
+          <p className="hint">{t("窗口持续占用显卡时，改为「节能」：界面不变，只去掉磨砂玻璃、动态天空和颗粒这几层。")}</p>
+          <div className="grp-items">
+            <div className="seg" data-text role="group" aria-label={t("视觉效果")}>
+              {EFFECTS.map(([id, name, why]) => (
+                <button key={id} data-action="appearance.effects" data-value={id} aria-pressed={effects === id} title={t(why)} onClick={() => setEffectsMode(id)}>
+                  {t(name)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ApplyNote id="effects" />
         </section>
 
         <section className="grp" id="set-contrast" data-setting="contrast">
@@ -765,7 +720,7 @@ function Swatch({
     : undefined;
 
   return (
-    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description || name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
+    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description ? t(pack.description) : name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
       <span className="pal-art" style={style}>
         <span className="pal-rail" />
         <span className="pal-body">

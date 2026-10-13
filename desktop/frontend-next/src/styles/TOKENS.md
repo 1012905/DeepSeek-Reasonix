@@ -82,6 +82,9 @@ grid to break.
 
 ## Surfaces
 
+- Studio's default light palette separates the frame (`#F0F0ED`), reading
+  surface (`#FAFAF8`) and composer (`--raised`). Its composer uses a short
+  `--compose-shadow`; installed packs retain their existing surface recipe.
 - `--float` / `--float-hi` exist apart from `--raised`. In dark, `--raised` and
   what it covers are nearly the same lightness, and a black shadow on a
   near-black ground paints nothing, so a menu read as transparent. A floating
@@ -103,6 +106,14 @@ grid to break.
   itself now, with dark ink on it. `--err` carries its own ink for the same
   reason: a danger button borrowed `--accent-fg`, which held only while the two
   hues happened to share a lightness.
+- Text takes the ink, never the base.
+  - Light `--warn` reads 4.58:1 on white and 3.86:1 on the floating layer, under
+    the 4.5 line.
+  - A label, count or note coloured `--warn`, `--ok` or `--err` uses
+    `--warn-ink`, `--ok-ink` or `--err-ink`.
+  - Borders, washes and glyph marks (status symbols, check ticks, hover icons)
+    stay on the base: a graphic needs 3:1, which the base clears.
+  - `ink-text.test.ts` fails a bare hue as `color` outside its glyph list.
 - An ink is read on every tint it lands on, not only the lightest one. The
   light `--accent-ink` cleared the popover's own surface at 6.4:1 and the
   selected row inside it — that same surface with 7% text mixed in — at 4.40,
@@ -127,6 +138,11 @@ grid to break.
     lightness band, chroma floor, adjacent-pair colour-vision separation
     (ΔE ≥ 8), normal-vision floor (≥ 15), and contrast with the ground.
   - In light, four segments fall below 3:1 and rely on the legend's text labels.
+  - Chart series take `--cat-1` … `--cat-5` by index. A sixth series onward
+    repeats the ramp with a second channel (dash for lines, hatch for bars,
+    lower opacity for slices) because five distinguishable hues is the ceiling,
+    and every chart carries a legend or a data table so colour is never the only
+    way to read a series.
 - `--lights-w` / `--lights-h` are the window corner macOS draws its controls
   over, and they are zero everywhere the shell does not hand that corner to the
   page. Whichever element occupies the corner reserves them, so a layout change
@@ -150,6 +166,10 @@ Radii were 1/2/3/4 — near square, and every container in the window is stroked
 so square read as table cells rather than operable surfaces. The whole tier was
 raised with its ratios kept.
 
+A pack's `recipes.corners` is a factor on that tier rather than a radius of its
+own: `square` is 0, `soft` leaves the four radii as written, `round` is 1.5. A
+pack states a shape, never a number the layout has to agree with.
+
 ## Motion
 
 - Three durations for three weights: `--t-line` a line, `--t-card` a card,
@@ -159,6 +179,10 @@ raised with its ratios kept.
 - `--t-live` (.6s) is not a weight. A meter or a fill reports work that is
   running, and reports it by growing, so this tier drives a fill's own geometry
   and never answers a click — at .6s it would answer late.
+- `--tip-delay` (.3s) is how long a pointer rests before a hint is drawn: VS Code
+  waits 250ms by default, and an instant hint flashes on every pass across a
+  column of icons. Keyboard focus is not hovering and is never delayed. It is a
+  wait, not motion, so reduced motion keeps it: dropping it would bring the flash back.
 - `--t-press` (.06s) is contact itself; anything slower reads as the interface
   thinking it over. What a press looks like is a token, so reduced motion
   answers for every control by changing one value.
@@ -176,6 +200,23 @@ raised with its ratios kept.
 
 ## Space
 
+- Layout spacing is eight steps, 2 / 4 / 6 / 8 / 10 / 12 / 16 / 24px. The floor
+  is 2px, below which a gap stops reading as a gap, and 24px is the ceiling:
+  past it the distance is layout rather than spacing.
+- Which step a surface takes belongs to that surface: 2px between a mark and
+  its label, 4px between a control's own parts, 6px inside a chip, 8px between
+  rows, 10px inside a dense card, 12px inside a card, 16px between blocks, 24px
+  between sections.
+- A distance off the scale takes the nearer step; a tie takes the lower one,
+  because an off-scale distance is a step with air added by hand, and the tie
+  returns the air and nothing else.
+
+| Written | 3 | 5 | 7 | 9 | 11 | 14 | 20 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Takes | 2 | 4 | 6 | 8 | 10 | 12 | 16 |
+
+- A surface that still writes a distance has not been migrated yet; it is not
+  an exception the scale allows.
 - `--y-line` / `--y-card` / `--y-panel` are the same three weights in space.
   With only the durations tiered, a one-file read and a call carrying twenty
   lines of output weighed the same, and a long turn had no readable sections.
@@ -191,6 +232,11 @@ raised with its ratios kept.
 - That action is present for the whole life of the card. A control that appears
   only under a pointer is one nobody finds, and on touch it does not appear at
   all; it rests at `--muted` and comes forward on hover.
+- A pack's `recipes.density` scales `--pane-gutter`, `--call-gap`, `--call-sym`
+  and `--close-h`: `compact` is 0.85, `comfortable` leaves them as written.
+- Density moves a distance or a control's own height, never a type size and
+  never a panel's width. How large the interface reads is the reader's setting,
+  and a panel's width is layout rather than rhythm.
 
 ## Type
 
@@ -220,6 +266,19 @@ raised with its ratios kept.
   letters.
 
 ## Weight and contrast
+
+- Default and plain-palette light Studio replies use `--w-read: 400` for prose only. Headings,
+  emphasis and small UI text keep their existing weights. A chosen weight,
+  illustrated/sky pack or dark scheme falls back to `--w-reg`.
+- `--default-*` holds the canonical Studio preview palette independently of
+  the active pack. Default surfaces and the default picker card share it.
+- `--accent-ink` is text on ordinary or tinted surfaces, distinct from
+  `--accent-fg` on filled controls. Packs may set `accentInk`; legacy packs
+  derive it by mixing their accent towards their body text colour.
+- `background.textGlow: none` paints `--flow-text-shadow: none` through the
+  pack sheet. The backdrop transcript rule defaults to its 2px shadow and 7px
+  halo when this variable is absent. The choice affects text only; the frosted
+  backing remains. Reduced effects overrides the text shadow.
 
 - Stroke weight is an axis beside contrast, not part of it: however bright the
   colour, 400 Han at 11px is thin. Han strokes are dense and blur at a size

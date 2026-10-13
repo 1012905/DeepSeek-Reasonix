@@ -176,3 +176,26 @@ func TestDiffCapsWhatItReturns(t *testing.T) {
 		t.Fatalf("want a truncated %d-byte answer, got %d truncated=%v err=%v", MaxDiffBytes, len(text), truncated, err)
 	}
 }
+
+// A change is staged when the index differs from HEAD for it and unstaged when
+// the work tree differs from the index; one path can be both.
+func TestChangesSayWhetherTheyAreStagedOrNot(t *testing.T) {
+	raw := "M  staged.txt\x00 M edited.txt\x00MM both.txt\x00A  new.txt\x00?? loose.txt\x00 D gone.txt\x00D  removed.txt\x00R  new-name.txt\x00old-name.txt\x00"
+	got := map[string]Change{}
+	for _, c := range ParsePorcelainZ([]byte(raw)) {
+		got[c.Path] = c
+	}
+	for path, want := range map[string][2]bool{
+		"staged.txt": {true, false}, "edited.txt": {false, true}, "both.txt": {true, true},
+		"new.txt": {true, false}, "loose.txt": {false, true}, "gone.txt": {false, true},
+		"removed.txt": {true, false}, "new-name.txt": {true, false},
+	} {
+		c, ok := got[path]
+		if !ok {
+			t.Fatalf("%s is missing from %v", path, got)
+		}
+		if c.Staged != want[0] || c.Unstaged != want[1] {
+			t.Errorf("%s: staged=%v unstaged=%v, want %v", path, c.Staged, c.Unstaged, want)
+		}
+	}
+}

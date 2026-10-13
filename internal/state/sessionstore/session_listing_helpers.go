@@ -22,6 +22,8 @@ type SessionInfo struct {
 	TopicTitle     string
 	CustomTitle    string
 	Archived       bool
+	Pinned         bool
+	Unread         bool
 	Recovered      bool
 	RecoveryReason string
 	RecoveryDigest string
@@ -43,6 +45,8 @@ type SessionOrderInfo struct {
 	TopicTitle     string
 	CustomTitle    string
 	Archived       bool
+	Pinned         bool
+	Unread         bool
 	Recovered      bool
 	RecoveryReason string
 	RecoveryDigest string
@@ -76,6 +80,8 @@ func sessionInfoFromOrder(session SessionOrderInfo, preview string, turns int, c
 		TopicTitle:     session.TopicTitle,
 		CustomTitle:    session.CustomTitle,
 		Archived:       session.Archived,
+		Pinned:         session.Pinned,
+		Unread:         session.Unread,
 		Recovered:      session.Recovered,
 		RecoveryReason: session.RecoveryReason,
 		RecoveryDigest: session.RecoveryDigest,

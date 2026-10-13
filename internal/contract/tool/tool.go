@@ -304,10 +304,9 @@ type Paged interface {
 }
 
 // ReadTargeter is an optional capability a Tool implements when a call names the
-// one filesystem path it reads. It is how a fetch of an already-spilled result is
-// recognised, and such a fetch must never spill again — it is how the pointer
-// gets redeemed. The tool resolves the path itself because only it knows its own
-// argument shape; "" means the call names no single path, as a shell cannot.
+// one filesystem path it reads, or "" when it names none. It recognises a fetch
+// of an already-spilled result, which must never spill again, and session path
+// tracking reuses it: a completed call that names a file counts as touching it.
 type ReadTargeter interface {
 	ReadTarget(args json.RawMessage) string
 }
@@ -325,6 +324,16 @@ func RegisterBuiltin(t Tool) {
 	}
 	builtins[name] = t
 }
+
+var conditionals = map[string]Tool{}
+
+// RegisterConditional declares a tool that exists only where assembly adds it
+// (a sub-registry, a configured backend), so a name that is not in the registry
+// at one moment is still a real tool. Intended for init().
+func RegisterConditional(t Tool) { conditionals[t.Name()] = t }
+
+// ConditionalNames returns the names declared by RegisterConditional, sorted.
+func ConditionalNames() []string { return slices.Sorted(maps.Keys(conditionals)) }
 
 // Builtins returns all registered built-in tools, sorted by name.
 func Builtins() []Tool {
@@ -354,6 +363,9 @@ type Registry struct {
 	disabledMCP map[string]bool
 	// disabledMCPByServer keeps per-server policy so aliases can be replaced or cleared.
 	disabledMCPByServer map[string]map[string]bool
+	// heldMCP is the per-server set of tools withheld until their changed
+	// definition is re-approved, keyed by callable alias.
+	heldMCP map[string]map[string]HeldMCP
 	// providerVisible, when non-nil, restricts Schemas/ContractEntries to the
 	// listed tool names. Get/Execute still resolve every registered tool so
 	// use_capability can dispatch tool:<name> without changing the provider
@@ -466,6 +478,16 @@ func (r *Registry) Add(t Tool) {
 // model-visible name is "mcp__<server>__<tool>".
 const MCPNamePrefix = "mcp__"
 
+// ExtensionNamePrefix marks a tool a plugin runtime serves, the way
+// MCPNamePrefix marks one an MCP server does.
+const ExtensionNamePrefix = "ext__"
+
+// IsConnectionName reports a name in a namespace a connection supplies once it
+// is up, which a catalog read before then does not list.
+func IsConnectionName(name string) bool {
+	return strings.HasPrefix(name, MCPNamePrefix) || strings.HasPrefix(name, ExtensionNamePrefix)
+}
+
 // SplitMCPName splits a model-visible MCP tool name "mcp__<server>__<tool>" into
 // its server and tool parts. ok is false for non-MCP (built-in) names and for
 // malformed names missing either part.
@@ -556,7 +578,7 @@ func (r *Registry) MCPBindings() []MCPBinding {
 
 	out := make([]MCPBinding, 0, len(r.tools))
 	for _, t := range r.tools {
-		if b, ok := mcpBinding(t); ok {
+		if b, ok := MCPBindingFor(t); ok {
 			out = append(out, b)
 		}
 	}
@@ -576,7 +598,7 @@ func (r *Registry) ResolveCall(name string) (resolved Tool, canonical string, ca
 	}
 	matches := map[string]Tool{}
 	for canonicalName, t := range r.tools {
-		b, ok := mcpBinding(t)
+		b, ok := MCPBindingFor(t)
 		if !ok {
 			continue
 		}

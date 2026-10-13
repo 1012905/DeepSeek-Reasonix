@@ -125,6 +125,10 @@ type Options struct {
 	// the workspace before and after it. Set it only for an agent no other
 	// foreground writer runs beside; empty falls back to WriteWorkspaceRoot.
 	ObserveRoot string
+	// ExtraWorkspaceRoots are granted folders that count as the workspace beside
+	// WriteWorkspaceRoot: observed for changes and part of the work product, so
+	// a write there owes verification like one at the root.
+	ExtraWorkspaceRoots []string
 	// WorkspaceScanLimit is a test seam: it can only lower the walk bound.
 	// Zero is the production limit.
 	WorkspaceScanLimit int
@@ -154,6 +158,11 @@ type Options struct {
 	// Deprecated: prefer AgentPreset + turn TaskPolicy. Still honored when
 	// AgentPreset is empty for one compatibility version of direct constructors.
 	DeliveryProfile bool
+
+	// WaiveOwedChecks is the user's choice to drop the check, review and
+	// sign-off a turn that changed files owes before it may finish. It never
+	// comes from a project file.
+	WaiveOwedChecks bool
 
 	// AgentPreset is the session role setting (balanced|delivery). Empty
 	// falls back to balanced unless DeliveryProfile is true (then delivery).

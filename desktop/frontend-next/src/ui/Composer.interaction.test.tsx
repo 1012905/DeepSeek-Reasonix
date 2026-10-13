@@ -4,10 +4,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "./testkit";
 import { Composer } from "./Composer";
 import { MockPort } from "../port/mock";
-import type { AgentPort, ApprovalMode, Attachment, Completion, ModelEntry, Preset, SessionStatus } from "../port/port";
+import { DeliveryError, HttpError } from "../port/port";
+import type { AgentPort, ApprovalMode, Attachment, Completion, ModelEntry, Preset, SessionStatus, WorkspaceGit } from "../port/port";
 import { draftKey } from "./drafts";
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+
+it("labels the active model with its alias while keeping the raw reference in details", async () => {
+  const port = new MockPort();
+  vi.spyOn(port, "models").mockResolvedValue([
+    { ref: "relay/vendor/long-v1", provider: "relay", model: "vendor/long-v1", modelAlias: "Short" },
+  ]);
+  draw({ port, st: status({ modelRef: "relay/vendor/long-v1" }) });
+  const trigger = await screen.findByRole("button", { name: /Short/ });
+  expect(trigger.title).toBe("relay/vendor/long-v1");
+});
+
+// The workspace's git answer, the way /workspace/git words it. Tests that name
+// an override get it; the rest get a plain repository on main.
+const git = (over: Partial<WorkspaceGit> = {}): WorkspaceGit =>
+  ({ repo: true, name: "reasonix", branch: "main", detached: false, added: 0, removed: 0, untracked: 0, ...over });
 
 const status = (over: Partial<SessionStatus> = {}) =>
   ({
@@ -41,7 +57,7 @@ function touchPointer() {
 }
 
 function draw(
-  over: { running?: boolean; onSubmit?: (text: string) => Promise<boolean>; port?: MockPort; st?: SessionStatus; changeCount?: number; host?: string } = {},
+  over: { running?: boolean; onSubmit?: (text: string) => Promise<boolean>; port?: MockPort; st?: SessionStatus; changeCount?: number; host?: string; git?: WorkspaceGit | null; onTreeChanged?: () => void } = {},
 ) {
   const port = over.port ?? new MockPort();
   const onSubmit = over.onSubmit ?? vi.fn(async () => true);
@@ -56,6 +72,8 @@ function draw(
       onChanged={vi.fn()}
       onError={vi.fn()}
       changeCount={over.changeCount}
+      git={"git" in over ? over.git : git()}
+      onTreeChanged={over.onTreeChanged}
       draftKey={draftKey(over.host ?? "", st.workspaceRoot ?? "/workspace", st.sessionPath ?? "")}
     />,
   );
@@ -278,7 +296,91 @@ describe("composer run controls", () => {
   });
 });
 
+describe("composer stop under a starved window", () => {
+  const props = (port: MockPort, over: Partial<{ onError: (e: unknown) => void; onChanged: () => void }> = {}) => ({
+    port: port as unknown as AgentPort,
+    focus: 0,
+    onSubmit: vi.fn(async () => true),
+    onChanged: over.onChanged ?? vi.fn(),
+    onError: over.onError ?? vi.fn(),
+  });
+
+  it("ends a stop the kernel confirmed when the turn-done event never arrives", async () => {
+    const port = new MockPort();
+    vi.spyOn(port, "cancel").mockResolvedValue();
+    const p = props(port);
+    const view = render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await screen.findByRole("button", { name: "正在停止…" });
+    await waitFor(() => expect(p.onChanged).toHaveBeenCalled());
+    view.rerender(<Composer {...p} status={status({ running: false })} running />);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "正在停止…" })).toBeNull());
+    expect((screen.getByRole("button", { name: "停下" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not end a stop while the kernel still reports the turn live", async () => {
+    const port = new MockPort();
+    vi.spyOn(port, "cancel").mockResolvedValue();
+    const p = props(port);
+    const view = render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await screen.findByRole("button", { name: "正在停止…" });
+    view.rerender(<Composer {...p} status={status({ running: true, plan: true })} running />);
+    expect(screen.getByRole("button", { name: "正在停止…" })).toBeTruthy();
+  });
+
+  it.each(["kernel_busy", "unreachable", "ui_stalled"] as const)("hands back an unconfirmed stop as a %s fault instead of staying pending", async (fault) => {
+    const port = new MockPort();
+    const err = new DeliveryError(fault);
+    vi.spyOn(port, "cancel").mockRejectedValue(err);
+    const p = props(port);
+    render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await waitFor(() => expect(p.onError).toHaveBeenCalledWith(err));
+    expect((screen.getByRole("button", { name: "停下" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(p.onChanged).not.toHaveBeenCalled();
+  });
+
+  it("lets a stop be asked again after it was left unconfirmed", async () => {
+    const port = new MockPort();
+    const cancel = vi.spyOn(port, "cancel").mockRejectedValueOnce(new DeliveryError("ui_stalled")).mockResolvedValue();
+    const p = props(port);
+    render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await waitFor(() => expect(p.onError).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(2));
+  });
+});
+
 describe("composer menus", () => {
+  it("shows the session's current model first and refreshes that position with canonical status", async () => {
+    const port = new MockPort();
+    const models: ModelEntry[] = [
+      { ref: "alpha/first", provider: "alpha", model: "first", vendor: "alpha.example" },
+      { ref: "alpha/second", provider: "alpha", model: "second", vendor: "alpha.example" },
+      { ref: "beta/third", provider: "beta", model: "third", vendor: "beta.example" },
+    ];
+    vi.spyOn(port, "models").mockResolvedValue(models);
+    const setModel = vi.spyOn(port, "setModel").mockResolvedValue(undefined);
+    const onChanged = vi.fn();
+    const props = { port, status: status({ modelRef: "beta/third" }), running: false,
+      onSubmit: async () => true, onChanged, onError: vi.fn() };
+    const view = render(<Composer {...props} />);
+    fireEvent.click(view.container.querySelector('button.model-picker')!);
+    await waitFor(() => expect(screen.getAllByRole("menuitem")).toHaveLength(4));
+    expect(screen.getAllByRole("menuitem")[0].getAttribute("data-value")).toBe("beta/third");
+    expect(screen.getAllByRole("menuitem")[0].hasAttribute("data-on")).toBe(true);
+    fireEvent.click(screen.getAllByRole("menuitem").find((el) => el.getAttribute("data-value") === "alpha/second")!);
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+    expect(setModel).toHaveBeenCalledExactlyOnceWith("alpha/second");
+    view.rerender(<Composer {...props} status={status({ modelRef: "alpha/second" })} />);
+    fireEvent.click(view.container.querySelector('button.model-picker')!);
+    expect(screen.getAllByRole("menuitem")[0].getAttribute("data-value")).toBe("alpha/second");
+    expect(screen.getAllByRole("menuitem")[0].hasAttribute("data-on")).toBe(true);
+    expect(screen.getAllByRole("menuitem").filter((el) => el.getAttribute("data-value") === "alpha/second")).toHaveLength(1);
+  });
+
   it("shows that slash skills are loading until the catalog answers", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -379,6 +481,66 @@ describe("composer menus", () => {
   it("shows real workspace changes beside the current branch", async () => {
     draw({ changeCount: 3 });
     expect(await screen.findByText("3 个变更")).toBeTruthy();
+    expect(await screen.findByText("main")).toBeTruthy();
+  });
+
+  // The reading is the tree's, not the capability scope's project identity: a
+  // detached HEAD names its commit, and the menu marks nothing as current.
+  it("names a detached HEAD by its commit and marks no menu row", async () => {
+    draw({ git: git({ branch: "4f2c1ab", detached: true }) });
+    const chip = await screen.findByText("4f2c1ab");
+    fireEvent.click(chip.closest("button")!);
+    expect(await screen.findByText("本地分支")).toBeTruthy();
+    // The menu rows carry the trigger's action id, so the assertion reads the
+    // branch menu and not whichever other menu is mounted.
+    expect(document.querySelector('[data-action="git.branch"][data-on]')).toBeNull();
+  });
+
+  it("says when the workspace has no repository instead of vanishing", () => {
+    draw({ git: git({ repo: false }) });
+    expect(screen.getByRole("img", { name: "非 Git 仓库" })).toBeTruthy();
+  });
+
+  // Not answered yet is not the same fact as not a repository, and the two
+  // must not render as one word.
+  it("renders nothing before git has answered", () => {
+    draw({ git: null });
+    expect(document.querySelector(".studio-branch")).toBeNull();
+  });
+
+  it("keeps the branch trigger named and its refresh tooltip reachable by keyboard", async () => {
+    draw();
+    const chip = await screen.findByRole("button", { name: "当前 Git 分支：main" });
+    chip.focus();
+    expect(document.activeElement).toBe(chip);
+    const tooltip = document.getElementById(chip.getAttribute("aria-describedby") ?? "");
+    expect(tooltip?.textContent).toContain("非实时");
+  });
+
+  it("lists local branches, marks the current one, and refreshes the tree on a switch", async () => {
+    const onTreeChanged = vi.fn();
+    const { port } = draw({ changeCount: 2, onTreeChanged });
+    const chip = await screen.findByText("main");
+    fireEvent.click(chip.closest("button")!);
+    const menu = await screen.findByRole("menu");
+    const marked = menu.querySelector("[data-on]");
+    expect(marked?.getAttribute("data-value")).toBe("main");
+    expect(screen.getByRole("menuitem", { name: "studio" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "studio" }));
+    await waitFor(() => expect(onTreeChanged).toHaveBeenCalled());
+    expect(port.branchState.branch).toBe("studio");
+  });
+
+  it("re-reads the branch list each time the menu opens", async () => {
+    const { port } = draw({});
+    const chip = await screen.findByText("main");
+    const spy = vi.spyOn(port, "branches");
+    fireEvent.click(chip.closest("button")!);
+    await screen.findByRole("menu");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.click(chip.closest("button")!);
+    await screen.findByRole("menu");
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it("dismisses completion when focus moves to a toolbar control", async () => {
@@ -417,8 +579,32 @@ describe("composer attachments", () => {
     });
     expect(await screen.findByText("good.txt")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "添加失败 · 重试" })).toBeTruthy();
+    expect(screen.getByText("too large")).toBeTruthy();
     expect(screen.getByRole("button", { name: "移除 bad.txt" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows why an attachment failed on the chip, in the window's language, and retries it", async () => {
+    const port = new MockPort();
+    const attach = vi
+      .fn<(blob: Blob, name: string) => Promise<Attachment>>()
+      .mockRejectedValueOnce(
+        new HttpError(415, "pasted data is not a supported image", {
+          code: "attachment.unsupported_image",
+          params: { format: ".ico", supported: "PNG, JPEG, GIF, WebP" },
+        }),
+      )
+      .mockResolvedValue({ path: ".reasonix/attachments/a.png", ref: "@.reasonix/attachments/a.png", image: true });
+    (port as unknown as { attach: typeof attach }).attach = attach;
+    const { container } = draw({ port });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "favicon.ico", { type: "image/x-icon" })] } });
+    const why = await screen.findByText("这个文件的格式暂不支持（.ico）。支持的图片格式：PNG, JPEG, GIF, WebP。可以先转换格式再添加。");
+    expect(why.closest("li")?.querySelector("button.retry")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "添加失败 · 重试" }));
+    await waitFor(() => expect(screen.queryByText(/格式暂不支持/)).toBeNull());
+    expect(attach).toHaveBeenCalledTimes(2);
   });
 
   it("keeps image routing guidance outside the horizontal attachment rail", async () => {
@@ -540,5 +726,71 @@ describe("a line taken back from the queue", () => {
     fireEvent.change(box, { target: { value: "", selectionStart: 0 } });
     view.rerender(<Composer {...p} restore={{ n: 2, text: "甲" }} />);
     expect(box.value).toBe("甲");
+  });
+});
+
+
+describe("send shortcut preference", () => {
+  it("keeps Enter for multiline drafting and sends with Control+Enter", async () => {
+    localStorage.setItem("rx-send-shortcut", "modifier_enter");
+    const { box, onSubmit } = draw();
+    fireEvent.change(box, { target: { value: "第一行\n第二行", selectionStart: 7 } });
+    expect(fireEvent.keyDown(box, { key: "Enter" })).toBe(true);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(box.getAttribute("aria-keyshortcuts")).toBe("Control+Enter");
+    expect(screen.getByText("Ctrl Enter 发送 · Enter 换行")).toBeTruthy();
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("第一行\n第二行"));
+  });
+
+  it("never sends an IME confirmation in modifier mode", async () => {
+    localStorage.setItem("rx-send-shortcut", "modifier_enter");
+    const { box, onSubmit } = draw();
+    fireEvent.change(box, { target: { value: "中文候选", selectionStart: 4 } });
+    fireEvent.compositionStart(box);
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true, isComposing: true });
+    fireEvent.compositionEnd(box);
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true });
+    expect(onSubmit).not.toHaveBeenCalled();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 120)); });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("中文候选"));
+  });
+
+  it("preserves Alt+Enter submission in Enter mode", async () => {
+    const { box, onSubmit } = draw();
+    fireEvent.change(box, { target: { value: "兼容已有快捷键", selectionStart: 7 } });
+    fireEvent.keyDown(box, { key: "Enter", altKey: true });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("兼容已有快捷键"));
+  });
+
+  it.each([false, true])("uses tap hints on touch screens in modifier mode (running=%s)", (running) => {
+    localStorage.setItem("rx-send-shortcut", "modifier_enter");
+    touchPointer();
+    draw({ running });
+    expect(screen.getByText(running ? "点按插话 · 回车换行" : "点按发送 · 回车换行")).toBeTruthy();
+  });
+
+  it.each(["Enter", "Tab", "Control+Enter"])("routes %s correctly while a slash completion owns Enter", async (key) => {
+    localStorage.setItem("rx-send-shortcut", "modifier_enter");
+    const port = new MockPort();
+    vi.spyOn(port, "complete").mockResolvedValue({ kind: "slash", from: 0, to: 4, query: "/rev", items: [{ label: "/review", insert: "/review ", kind: "skill" }] });
+    const { box, onSubmit } = draw({ port });
+    fireEvent.change(box, { target: { value: "/rev", selectionStart: 4 } });
+    await screen.findByRole("option", { name: /review/ });
+    fireEvent.keyDown(box, { key: key === "Tab" ? "Tab" : "Enter", ctrlKey: key === "Control+Enter" });
+    if (key === "Control+Enter") await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("/rev"));
+    else { expect(box.value).toBe("/review "); expect(onSubmit).not.toHaveBeenCalled(); }
+  });
+
+  it("keeps the modifier-to-steer hint while a turn runs", () => {
+    localStorage.setItem("rx-send-shortcut", "modifier_enter");
+    const { box, onSubmit } = draw({ running: true });
+    fireEvent.change(box, { target: { value: "补充一句", selectionStart: 4 } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("Ctrl Enter 插话 · Enter 换行")).toBeTruthy();
   });
 });

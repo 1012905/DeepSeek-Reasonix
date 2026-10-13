@@ -39,6 +39,7 @@ var Tokens = map[string]TokenKind{
 	"fgStrong":    TokenColour,
 	"accent":      TokenColour,
 	"accentFg":    TokenColour,
+	"accentInk":   TokenColour,
 	"link":        TokenColour,
 	"brand":       TokenColour,
 	"halo":        TokenColour,

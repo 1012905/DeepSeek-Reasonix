@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { t } from "../i18n";
 import type { AgentPort, PluginExport, PluginItem, PluginPackage } from "../port/port";
 import { Switch } from "./Switch";
+import { CopyButton } from "./CopyButton";
 import { reason } from "../i18n/kernel";
 
 interface Props {
@@ -183,7 +184,10 @@ function Package({
           void run("remove", async () => {
             const out = await port.removePlugin(p.name);
             setConfirming(false);
-            if (out.applied && out.reloadError) onReloadError(out.reloadError);
+            if (out.applied) {
+              if (out.reloadError) onReloadError(out.reloadError);
+              else onReloaded();
+            }
             if (!out.ok) setFailed(out.error || out.next || t("没能删掉"));
           })
         }
@@ -224,6 +228,11 @@ function Package({
             : t("该包不需要填写任何密钥。")}
         </div>
       )}
+      {exported?.savedTo && (
+        <div className="acts">
+          <CopyButton text={exported.savedTo} label={t("复制路径")} />
+        </div>
+      )}
     </>
   );
 
@@ -249,8 +258,8 @@ function Package({
             <span className="sc">{name}</span>
           </div>
         ))}
-        {p.hooks?.map((h) => (
-          <div className="row" data-run key={h.event + h.command}>
+        {p.hooks?.map((h, index) => (
+          <div className="row" data-run key={index}>
             <span className="d">▸</span>
             <span>{h.event}</span>
             <span className="sc">{h.description || h.command || h.contextFile}</span>
@@ -263,11 +272,11 @@ function Package({
             <span className="sc">{s.description || s.command || s.url || s.transport}</span>
           </div>
         ))}
-        <Contributions items={p.skills} />
-        <Contributions items={p.commands} />
-        <Contributions items={p.agents} />
-        <Contributions items={p.prompts} />
-        <Contributions items={p.themes} />
+        <Contributions label={t("技能贡献")} items={p.skills} />
+        <Contributions label={t("命令贡献")} items={p.commands} />
+        <Contributions label={t("子代理贡献")} items={p.agents} />
+        <Contributions label={t("提示词贡献")} items={p.prompts} />
+        <Contributions label={t("主题贡献")} items={p.themes} />
         {p.skipped?.map((s, index) => (
           <div className="row" key={index}>
             <span className="d">·</span>
@@ -280,17 +289,19 @@ function Package({
   );
 }
 
-function Contributions({ items }: { items?: PluginItem[] }) {
+function Contributions({ label, items }: { label: string; items?: PluginItem[] }) {
   if (!items?.length) return null;
   return (
-    <>
+    <div className="contributions" role="group" aria-label={label}>
+      <h4 className="kind">{label}</h4>
       {items.map((it, index) => (
         <div className="row" key={index}>
           <span className="d">·</span>
           <span>{it.invocation || it.name}</span>
           <span className="sc">{it.description}</span>
+          {it.invocation && <CopyButton key={it.invocation} text={it.invocation} iconOnly label={t("复制调用命令 {command}", { command: it.invocation })} />}
         </div>
       ))}
-    </>
+    </div>
   );
 }

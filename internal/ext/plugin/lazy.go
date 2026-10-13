@@ -141,6 +141,7 @@ func (s *lazySpawn) run() {
 		s.real[t.Name()] = t
 	}
 	s.state = spawnReady
+	ApplyHeldMCPPolicy(s.reg, s.host, s.spec)
 	s.trySwap()
 	cacheTools = real
 	s.broadcastReady()
@@ -276,9 +277,15 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 				return fmt.Sprintf("MCP server %q is connected; its real tools are now available on the next turn", sp.spec.Name), nil
 			}
 			real := sp.real[lt.name]
+			if meta, ok := real.(tool.MCPMetadata); !ok || meta.MCPServerName() != sp.spec.Name || meta.MCPRawToolName() != lt.rawName {
+				real = nil
+			}
 			safetyErr := lt.reconcileLiveSafety(real)
 			sp.mu.Unlock()
 			if real == nil {
+				if refusal, ok := lt.heldRefusal(); ok {
+					return "", refusal
+				}
 				return "", fmt.Errorf("MCP server %q did not expose tool %q (the cached schema may be stale)", sp.spec.Name, lt.name)
 			}
 			if safetyErr != nil {
@@ -346,6 +353,18 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 		sp.mu.Unlock()
 		return "", fmt.Errorf("deferred plugin %q in unexpected state", sp.spec.Name)
 	}
+}
+
+// heldRefusal reports whether the live server withheld this placeholder's tool
+// because its definition is not the approved one.
+func (lt *lazyTool) heldRefusal() (tool.Refusal, bool) {
+	held, _ := lt.shared.host.HeldTools(lt.shared.spec.Name)
+	for _, h := range held {
+		if h.RawName == lt.rawName {
+			return tool.HeldMCPRefusalFor(tool.HeldMCP{Binding: h.Binding(lt.shared.spec), Class: h.Class}), true
+		}
+	}
+	return tool.Refusal{}, false
 }
 
 func waitForLazyStartup(ctx, sessionCtx context.Context, ready <-chan struct{}, waitBudget time.Duration, server string, startupLimit time.Duration) error {
@@ -416,6 +435,9 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 	}
 	shared.generation = host.registerDeferredCancel(spec.Name, cancel)
 
+	if cs != nil && !cachedToolNamesUsable(spec, cs.Tools) {
+		cs = nil
+	}
 	var out []tool.Tool
 	// A snapshot with zero tools presents nothing the model could call, so it
 	// gets the same connect stub as a cache miss — otherwise the live tools

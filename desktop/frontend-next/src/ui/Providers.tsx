@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Clip } from "./Clip";
 import { useEscape } from "./dismiss";
 import { t } from "../i18n";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe } from "../port/port";
+import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "../port/port";
 import { AddProvider } from "./AddProvider";
 import { ProviderDetail } from "./ProviderDetail";
 import { accountKey, accountLabel, disambiguate, hostOf } from "./vendors";
 import { reason } from "../i18n/kernel";
 import { moveAccount, orderAccounts, useProviderOrder, writeProviderOrder } from "../state/providerorder";
 import { StudioIcon } from "./StudioIcon";
+import { RemovalNotice, removalChangedRoles, type Removal } from "./ProviderRemoval";
 
 // A connection is an account, not a config row. One endpoint answering two
 // protocols is two rows in the file and one service to the person paying for it,
@@ -20,9 +21,11 @@ import { StudioIcon } from "./StudioIcon";
 export type Port = {
   providers(): Promise<ProviderEntry[]>;
   protocols(): Promise<Protocol[]>;
+  providerPresets(): Promise<ProviderPreset[]>;
+  installProviderPreset(req: ProviderPresetInstall): Promise<{ names: string[] }>;
   probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe>;
   saveProvider(draft: ProviderDraft): Promise<void>;
-  removeProvider(name: string): Promise<void>;
+  removeProvider(name: string): Promise<ProviderRemoval>;
   checkProvider(name: string): Promise<ProviderCheck>;
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   editProvider(edit: ProviderEdit): Promise<void>;
@@ -101,19 +104,25 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
   const [adding, setAdding] = useState(false);
   useEscape(adding, () => setAdding(false));
   const [busy, setBusy] = useState("");
-  const [picked, setPicked] = useState("");
+  const [removal, setRemoval] = useState<Removal | null>(null);
+  const [picked, setPickedRaw] = useState("");
+  const setPicked = useCallback((key: string) => { setRemoval(null); setPickedRaw(key); }, []);
   const [q, setQ] = useState("");
   const [renaming, setRenaming] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [asked, setAsked] = useState<{ go: () => void; from: HTMLElement | null } | null>(null);
+  const pmain = useRef<HTMLDivElement>(null);
   const order = useProviderOrder();
   const rows = useRef(new Map<string, HTMLButtonElement>());
   // The accounts that existed when an add began: the one that is new afterwards
   // is the one just added, and it is what the detail should show.
   const before = useRef<Set<string> | null>(null);
 
-  const reload = useCallback(() => {
-    port.providers().then(setList).catch(() => setList([]));
-  }, [port]);
-  useEffect(reload, [reload]);
+  const reload = useCallback(
+    () => port.providers().then(setList).catch(() => setList([])),
+    [port],
+  );
+  useEffect(() => { void reload(); }, [reload]);
 
   const accounts = list ? orderAccounts(groupAccounts(list), order) : [];
   useEffect(() => {
@@ -133,13 +142,16 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
   const remove = async (name: string) => {
     setBusy(name);
     onFailed("");
+    setRemoval(null);
+    const key = selected;
     try {
-      await port.removeProvider(name);
+      const report = await port.removeProvider(name);
+      if (removalChangedRoles(report)) setRemoval({ key, name, why: "", report });
+    } catch (e) {
+      setRemoval({ key, name, why: reason(e), report: null });
+    } finally {
       reload();
       onChanged();
-    } catch (e) {
-      onFailed(reason(e));
-    } finally {
       setBusy("");
     }
   };
@@ -165,11 +177,32 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
     }
   };
 
-  const startRename = (key: string) => {
+  // A form with pending edits is replaced only after the person says so. A save
+  // in flight is not interrupted: it lands on its own and the form is clean after.
+  const leave = (go: () => void, leaving = true) => {
+    if (!leaving || !dirty) go();
+    else if (!busy.startsWith("edit:")) {
+      const from = document.activeElement;
+      setAsked({ go, from: from instanceof HTMLElement && from !== document.body ? from : null });
+    }
+  };
+  useEffect(() => {
+    if (!dirty) setAsked(null);
+  }, [dirty]);
+
+  // Focus goes back to the control that asked to leave, or to the form's first
+  // field when that control is gone.
+  const keepEditing = () => {
+    const back = asked?.from?.isConnected ? asked.from : pmain.current?.querySelector<HTMLElement>("input:not(:disabled)");
+    setAsked(null);
+    back?.focus();
+  };
+
+  const startRename = (key: string) => leave(() => {
     setAdding(false);
     setPicked(key);
     setRenaming(key);
-  };
+  }, key !== selected);
 
   const move = (key: string, direction: -1 | 1) => {
     const next = moveAccount(order, accounts.map((a) => a.key), key, direction);
@@ -239,7 +272,7 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
                       move(a.key, event.key === "ArrowUp" ? -1 : 1);
                     }
                   }}
-                  onClick={() => { setAdding(false); setPicked(a.key); }}>
+                  onClick={() => leave(() => { setAdding(false); setPicked(a.key); }, a.key !== selected)}>
                   <span className="tx">
                     <span className="nm">{a.label}</span>
                     <Clip className="ds">{a.host}</Clip>
@@ -267,11 +300,35 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
           {accounts.length === 0 && <div className="empty">{t("尚未配置任何模型来源。")}</div>}
           {accounts.length > 0 && shown.length === 0 && <div className="empty">{t("没有匹配的服务。")}</div>}
         </div>
-        <button className="act padd" data-action="provider.add-start" aria-pressed={adding} onClick={() => setAdding(true)}>
+        <button className="act padd" data-action="provider.add-start" aria-pressed={adding} onClick={() => leave(() => setAdding(true))}>
           <b aria-hidden="true">＋</b>{t("添加模型服务")}
         </button>
       </div>
-      <div className="pmain">
+      <div className="pmain" ref={pmain}>
+        {removal && (removal.report || !accounts.some((a) => a.key === removal.key)) && (
+          <RemovalNotice removal={removal} />
+        )}
+        {asked && (
+          <div className="wsconfirm" role="alertdialog" aria-labelledby="provider-leave-q" aria-describedby="provider-leave-q"
+            data-action-keydown="layer.dismiss"
+            onKeyDown={(ev) => {
+              if (ev.key !== "Escape") return;
+              ev.stopPropagation();
+              keepEditing();
+            }}>
+            <div className="wsconfirm-t">
+              <span className="q" id="provider-leave-q">{t("这个服务有未保存的更改")}</span>
+              <span className="h">{t("离开后这些更改会丢失。")}</span>
+            </div>
+            <div className="wsconfirm-a">
+              <button autoFocus data-primary data-action="layer.dismiss" onClick={keepEditing}>{t("保留编辑")}</button>
+              <button data-action="provider.discard-edits" data-danger
+                onClick={() => { const { go } = asked; setAsked(null); setDirty(false); go(); }}>
+                {t("放弃更改并离开")}
+              </button>
+            </div>
+          </div>
+        )}
         {adding ? (
           <AddProvider
             port={port}
@@ -280,7 +337,7 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
             onDone={() => {
               before.current = new Set(accounts.map((a) => a.key));
               setAdding(false);
-              reload();
+              void reload();
               onChanged();
             }}
             onCancel={() => setAdding(false)}
@@ -288,11 +345,12 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
         ) : current ? (
           <ProviderDetail key={current.key} a={current} port={port} busy={busy} setBusy={setBusy}
             kind={protocol[current.key] ?? activeKindFor(current)}
-            onProtocol={(k) => onProtocol(current, k)}
-            onRemove={remove}
+            onProtocol={(k) => leave(() => onProtocol(current, k))}
+            onRemove={remove} removeFailed={removal?.key === current.key ? removal.why : ""}
             onRename={() => startRename(current.key)}
             declare={declare}
-            onEdited={() => { reload(); onChanged(); }}
+            onEdited={() => { const fresh = reload(); onChanged(); return fresh; }}
+            onDirty={setDirty}
             onFailed={onFailed} />
         ) : (
           <div className="empty">{t("添加一个模型服务后，在这里查看和修改它。")}</div>

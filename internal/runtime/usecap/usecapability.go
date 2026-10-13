@@ -583,7 +583,7 @@ func (t *UseCapabilityTool) ResolveCall(ctx context.Context, args json.RawMessag
 		return resolved, nil
 	}
 	switch action {
-	case "search":
+	case ActionSearch:
 		out, err := t.searchCapabilities(p.Query, p.Limit)
 		if err != nil {
 			if t.audit != nil {
@@ -598,7 +598,7 @@ func (t *UseCapabilityTool) ResolveCall(ctx context.Context, args json.RawMessag
 		base.Result = out
 		base.ReadOnly = true
 		return base, nil
-	case "list":
+	case ActionList:
 		out, err := t.listCapabilities()
 		if err != nil {
 			if t.audit != nil {
@@ -613,7 +613,7 @@ func (t *UseCapabilityTool) ResolveCall(ctx context.Context, args json.RawMessag
 		base.Result = out
 		base.ReadOnly = true
 		return base, nil
-	case "inspect":
+	case ActionInspect:
 		if id == "" {
 			return tool.ResolvedCall{}, fmt.Errorf("capability_id is required for action=inspect%s", misplacedArgumentHint(p.Arguments, "capability_id"))
 		}
@@ -631,7 +631,7 @@ func (t *UseCapabilityTool) ResolveCall(ctx context.Context, args json.RawMessag
 		base.Result = out
 		base.ReadOnly = true
 		return base, nil
-	case "decline":
+	case ActionDecline:
 		if id == "" {
 			return tool.ResolvedCall{}, fmt.Errorf("capability_id is required for action=decline%s", misplacedArgumentHint(p.Arguments, "capability_id"))
 		}
@@ -661,7 +661,7 @@ func (t *UseCapabilityTool) ResolveCall(ctx context.Context, args json.RawMessag
 			return nil
 		}
 		return base, nil
-	case "call":
+	case ActionCall:
 		if id == "" {
 			return tool.ResolvedCall{}, fmt.Errorf("capability_id is required for action=call%s", misplacedArgumentHint(p.Arguments, "capability_id"))
 		}
@@ -669,6 +669,19 @@ func (t *UseCapabilityTool) ResolveCall(ctx context.Context, args json.RawMessag
 	default:
 		return tool.ResolvedCall{}, fmt.Errorf("unknown action %q; use search, list, inspect, call, or decline", p.Action)
 	}
+}
+
+// TargetArgs is what a call action forwards to its target, read without
+// resolving it; every other action forwards nothing.
+func (*UseCapabilityTool) TargetArgs(args json.RawMessage) json.RawMessage {
+	var p struct {
+		Action    string          `json:"action"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+	if json.Unmarshal(args, &p) != nil || strings.ToLower(strings.TrimSpace(p.Action)) != "call" {
+		return nil
+	}
+	return p.Arguments
 }
 
 func (t *UseCapabilityTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
@@ -1478,8 +1491,9 @@ func parseMCPCapabilityID(id string) (server, raw string, err error) {
 
 // Ensure UseCapabilityTool satisfies the tool contracts used by the agent.
 var (
-	_ tool.Tool         = (*UseCapabilityTool)(nil)
-	_ tool.CallResolver = (*UseCapabilityTool)(nil)
+	_ tool.Tool             = (*UseCapabilityTool)(nil)
+	_ tool.CallResolver     = (*UseCapabilityTool)(nil)
+	_ tool.TargetArgsReader = (*UseCapabilityTool)(nil)
 )
 
 // EmitProxyAudit is a helper for frontends: returns a notice describing the

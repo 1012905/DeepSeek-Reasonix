@@ -91,8 +91,8 @@ func (s *updateSink) bindApprove(fn func(id string, allow, session, persist bool
 
 // bindAnswer installs the controller's AnswerQuestion callback for AskRequest
 // events.
-func (s *updateSink) bindAnswer(fn func(id string, answers []event.AskAnswer)) {
-	s.answer = fn
+func (s *updateSink) bindAnswer(fn func(id string, answers []event.AskAnswer) error) {
+	s.answer = func(id string, answers []event.AskAnswer) { _ = fn(id, answers) }
 }
 
 // bindStatus installs the vendor-status observer. It receives typed events,
@@ -216,10 +216,7 @@ func (s *updateSink) Emit(e event.Event) {
 		// Surface warnings to the host as a message chunk so they're not lost;
 		// info-level notices stay out of band.
 		if e.Level == event.LevelWarn && e.Text != "" {
-			s.send(messageChunk{
-				SessionUpdate: "agent_message_chunk",
-				Content:       textBlock("\n\n[warning] " + e.Text),
-			})
+			s.send(warningChunk(e))
 		}
 
 	case event.CompactionDone:
