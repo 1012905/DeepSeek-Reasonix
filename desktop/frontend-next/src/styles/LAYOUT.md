@@ -272,6 +272,11 @@ rules are written in.
 - Column widths change on `.app`, so the tween belongs there and `.cols` only
   reads the result into a track. The tween must be cut during a drag: a .34s
   tween makes the column chase the pointer.
+- The workbench width is the exception: `--dock-w` does not inherit and lives
+  on the pane that reads it.
+- A tweened inherited property on `.app` restyles every node under it on every
+  frame, which made opening the workbench stutter with a long transcript.
+- The gutter writes the width on the pane for the same reason (`DOCK.owner`).
 - The side track is closed unless a panel mounts in it. It was written open and
   closed by `[data-side="off"]`, and the attribute stayed wired to the built-in
   browser after that browser moved onto the workbench. Nothing rendered there
