@@ -4016,7 +4016,6 @@
     display: grid; margin-top: 3px; column-gap: 10px;
     grid-template-columns: minmax(104px, max-content) minmax(0, 1fr) max-content minmax(0, max-content);
   }
-
   .vrow {
     grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: baseline;
     padding: 9px 12px; border-top: 1px solid var(--hair);
