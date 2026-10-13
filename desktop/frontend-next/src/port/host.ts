@@ -34,6 +34,7 @@ export interface HostPort {
   /** How the shell draws this launch; null where it has no say, as in a tab. */
   graphics(): Promise<GraphicsInfo | null>;
   openExternal(url: string): void | Promise<void>;
+  setUnreadBadge(unread: boolean): Promise<void>;
   /** Where dropped files live. Empty where the shell cannot say — a browser
    *  tab never learns a path. */
   pathsForFiles(files: File[]): string[];
@@ -154,6 +155,7 @@ interface ElectronBridge {
   closeWindow(): Promise<void>;
   graphics?(): Promise<GraphicsInfo | null>;
   openExternal(url: string): Promise<void>;
+  setUnreadBadge?(unread: boolean): Promise<void>;
   pathForFile(file: File): string;
   saveText(name: string, content: string): Promise<string>;
   saveBytes(name: string, bytes: Uint8Array): Promise<string>;
@@ -211,6 +213,9 @@ class ElectronHost implements HostPort {
   }
   openExternal(url: string) {
     return this.api.openExternal(url);
+  }
+  setUnreadBadge(unread: boolean) {
+    return this.api.setUnreadBadge?.(unread) ?? Promise.resolve();
   }
   pathsForFiles(files: File[]) {
     // Resolved one at a time because that is the shape the platform offers;
@@ -300,6 +305,9 @@ class BrowserHost implements HostPort {
   }
   openExternal(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+  setUnreadBadge() {
+    return Promise.resolve();
   }
   pathsForFiles() {
     return [];
