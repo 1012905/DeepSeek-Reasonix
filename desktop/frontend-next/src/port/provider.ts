@@ -291,6 +291,8 @@ export interface ProviderDraft {
 // /provider-setup 404s once one exists, so null means "ready".
 export interface ProviderSetup {
   required: boolean;
+  // The runtime started with no provider at all: there is no model whose key could be missing.
+  noProvider?: boolean;
   provider?: string;
   model?: string;
   modelRef?: string;

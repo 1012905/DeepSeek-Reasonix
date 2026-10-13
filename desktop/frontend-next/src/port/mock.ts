@@ -564,7 +564,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   // The fixture has a window with an icon, because the state worth designing
   // is the one where both switches mean something.
-  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, sound: false };
+  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, diskLow: true, sound: false };
 
   async notifyPrefs(): Promise<NotifyPrefs | null> {
     return { ...this.notifications };
@@ -733,6 +733,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async answer(_id: string, _answers: { questionId: string; selected: string[] }[]) {
     this.ungate();
   }
+  async engageQuestion(_id: string) {}
 
   async invokeExtensionAction(name: string) {
     return `${name} 在 mock 里没有真实扩展可执行`;

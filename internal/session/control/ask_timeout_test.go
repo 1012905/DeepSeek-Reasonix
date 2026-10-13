@@ -110,12 +110,12 @@ func TestAskWithNoTimeoutSettingKeepsWaiting(t *testing.T) {
 // its wait carries no ask deadline, the agent's own question does.
 func TestExternalFormIsNeverSkippedByTheAskTimeout(t *testing.T) {
 	c, _ := askTimeoutController(t, 10)
-	own, cancelOwn := c.askWaitContext(context.Background(), nil)
+	_, own, cancelOwn := c.askWaitContext(context.Background(), nil)
 	defer cancelOwn()
 	if _, ok := own.Deadline(); !ok {
 		t.Fatal("the agent's own question carries no ask deadline")
 	}
-	form, cancelForm := c.askWaitContext(context.Background(), &event.AskOrigin{Kind: event.AskOriginMCP})
+	_, form, cancelForm := c.askWaitContext(context.Background(), &event.AskOrigin{Kind: event.AskOriginMCP})
 	defer cancelForm()
 	if _, ok := form.Deadline(); ok {
 		t.Fatal("an MCP form was given the ask timeout")

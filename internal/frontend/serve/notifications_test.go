@@ -120,3 +120,29 @@ func TestSoundIsOffByDefaultAndRoundTripsIndependentlyOfTheToast(t *testing.T) {
 		t.Fatalf("durable read: %+v", again)
 	}
 }
+
+// Saving the switches rewrites the whole notifications table, so a switch the
+// prefs do not carry would be reset to off by the first save from any window.
+func TestDiskLowPrefsRoundTripAndDefaultOn(t *testing.T) {
+	srv, h := notifyServer(t, &sentLog{})
+	if !h.NotifyPrefs().DiskLow {
+		t.Error("an install that never wrote the key should default to on")
+	}
+	got, err := h.SetNotifyPrefs(NotifyPrefs{Enabled: true, TurnDone: true, DiskLow: true})
+	if err != nil || !got.DiskLow {
+		t.Fatalf("keep on across a save that changed something else: %+v %v", got, err)
+	}
+	got, err = h.SetNotifyPrefs(NotifyPrefs{Enabled: true})
+	if err != nil || got.DiskLow {
+		t.Fatalf("set off: %+v %v", got, err)
+	}
+	resp, err := http.Get(srv.URL + "/notifications")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var read NotifyPrefs
+	if err := json.NewDecoder(resp.Body).Decode(&read); err != nil || read.DiskLow || !read.Enabled {
+		t.Errorf("read %+v %v", read, err)
+	}
+}

@@ -147,6 +147,7 @@ export interface NotifyPrefs {
   approval: boolean;
   ask: boolean;
   feedbackReply: boolean;
+  diskLow: boolean;
   sound: boolean;
 }
 
@@ -578,6 +579,7 @@ export interface AgentPort {
   // sends it back untouched rather than describing the state it thinks it is in.
   planDecision(id: string, action: PlanAction): Promise<void>;
   answer(id: string, answers: { questionId: string; selected: string[] }[]): Promise<void>;
+  engageQuestion(id: string): Promise<void>;
   // Installed theme packs and which one is active. The list carries every
   // pack's tokens so a picker can preview without a second request.
   context(): Promise<ContextBreakdown>;
