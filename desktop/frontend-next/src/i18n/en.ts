@@ -445,6 +445,10 @@ export const EN: Record<string, string> = {
   "深色": "Dark",
   "配色": "Palette",
   "界面主题": "Interface theme",
+  "清白蓝": "Clear Blue",
+  "茶绿": "Tea Green",
+  "清透白底与克制蓝色，适合专注阅读和日常工作。": "Clean white surfaces and restrained blue accents for focused reading and everyday work.",
+  "柔和暖白与低饱和茶绿，营造安静舒展的工作台。": "Soft warm whites and muted tea greens for a calm, comfortable workbench.",
   "选择工作台的表面色与强调色。成功、警告和失败等状态色保持一致，代码字体在下方单独设置。":
     "Choose the workbench surfaces and accent. Success, warning and failure keep their meaning, while the code font is configured separately below.",
   "更多已安装主题": "More installed themes",
