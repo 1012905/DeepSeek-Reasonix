@@ -20,3 +20,13 @@ func boundedToolName(prefix, tail string) string {
 	}
 	return prefix + tail[:keep] + "_" + hash
 }
+
+func validateCachedToolNames(spec Spec, tools []CachedTool) error {
+	names := make([]mcpTool, 0, len(tools))
+	for _, ct := range tools {
+		if spec.ToolEnabled(ct.Name) {
+			names = append(names, mcpTool{Name: ct.Name})
+		}
+	}
+	return validateMCPToolNames(spec.Name, spec.StripRawPrefix, names)
+}

@@ -48,9 +48,12 @@ func TestToolCatalogRejectsModelNameCollisions(t *testing.T) {
 			if err := SaveCachedSchema(spec.Name, CachedSchema{CacheKey: SchemaCacheKey(spec), Tools: cached}); err != nil {
 				t.Fatal(err)
 			}
-			cs, ok := LoadCachedSchemaForSpec(spec)
+			cs, ok := LoadCachedSchema(spec.Name, SchemaCacheKey(spec))
 			if !ok {
 				t.Fatal("schema cache did not survive reload")
+			}
+			if usable, ok := LoadCachedSchemaForSpec(spec); usable != nil || ok {
+				t.Error("spec-aware loader accepted an unusable catalog")
 			}
 			tools = LazyToolset(spec, cs, host, tool.NewRegistry(), context.Background(), false)
 			if len(tools) != 1 || tools[0].Name() != "mcp__srv__connect" || tools[0].(*lazyTool).hasCache {
@@ -61,6 +64,7 @@ func TestToolCatalogRejectsModelNameCollisions(t *testing.T) {
 }
 
 func TestToolCatalogPreservesDistinctNamesAndAliases(t *testing.T) {
+	redirectCache(t)
 	for _, disabled := range []bool{false, true} {
 		spec := Spec{Name: "srv", StripRawPrefix: "srv_"}
 		listed := []mcpTool{pinTool("srv_read", ""), pinTool("Read", ""), pinTool("a.b", ""), pinTool("a_b", ""), pinTool("connect", "")}
@@ -82,6 +86,12 @@ func TestToolCatalogPreservesDistinctNamesAndAliases(t *testing.T) {
 		cached := cacheableToolsOf(live)
 		if disabled {
 			cached = append(cached, CachedTool{Name: "read", Schema: listed[0].InputSchema})
+		}
+		if err := SaveCachedSchema(spec.Name, CachedSchema{CacheKey: SchemaCacheKey(spec), Tools: cached}); err != nil {
+			t.Fatal(err)
+		}
+		if loaded, ok := LoadCachedSchemaForSpec(spec); !ok || len(loaded.Tools) != 5 {
+			t.Fatal("distinct enabled names were not a usable cache hit")
 		}
 		lazy := LazyToolset(spec, &CachedSchema{Tools: cached}, host, tool.NewRegistry(), context.Background(), false)
 		for _, tools := range [][]tool.Tool{live, lazy} {
@@ -163,5 +173,24 @@ func TestHostRejectsCollidingCatalogAndRecovers(t *testing.T) {
 	}
 	if output, err := resolved.Execute(ctx, json.RawMessage(`{}`)); err != nil || output != "a.b" {
 		t.Fatalf("raw dispatch = (%q, %v), want a.b", output, err)
+	}
+}
+
+func TestLegacySchemaCacheRejectsCollidingNames(t *testing.T) {
+	redirectCache(t)
+	spec := Spec{Name: "legacy", Type: "http", URL: "https://example.invalid/mcp?token=fixture"}
+	key, ok := legacySchemaCacheKey(spec)
+	if !ok {
+		t.Fatal("fixture does not require migration")
+	}
+	cs := CachedSchema{CacheKey: key}
+	for _, raw := range []string{"a.b", normalizeName("a.b")} {
+		cs.Tools = append(cs.Tools, CachedTool{Name: raw, Schema: json.RawMessage(`{"type":"object"}`)})
+	}
+	if err := SaveCachedSchema(spec.Name, cs); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, ok := LoadCachedSchemaForSpec(spec); loaded != nil || ok {
+		t.Fatal("legacy collision was migrated as a usable catalog")
 	}
 }

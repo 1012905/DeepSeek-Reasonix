@@ -137,15 +137,16 @@ func LoadCachedSchema(name, expectedKey string) (*CachedSchema, bool) {
 	return cs, true
 }
 
-// LoadCachedSchemaForSpec returns the cached schema matching the spec's
-// current key, transparently rewriting an entry still saved under the legacy
-// URL key. Without the in-place upgrade, credential rotation or
-// the credential-aware normalization rollout would force a pointless
-// re-handshake even though nothing observable changed.
+// LoadCachedSchemaForSpec returns a usable enabled-tool snapshot matching the
+// current spec. Invalid model-visible names are a cache miss. A matching legacy
+// URL key is upgraded in place without changing the tool definitions.
 func LoadCachedSchemaForSpec(s Spec) (*CachedSchema, bool) {
 	current := SchemaCacheKey(s)
 	if cs, ok := LoadCachedSchema(s.Name, current); ok {
 		cs.Tools = s.EnabledCachedTools(cs.Tools)
+		if validateCachedToolNames(s, cs.Tools) != nil {
+			return nil, false
+		}
 		return cs, true
 	}
 	legacy, ok := legacySchemaCacheKey(s)
@@ -158,6 +159,9 @@ func LoadCachedSchemaForSpec(s Spec) (*CachedSchema, bool) {
 	}
 	cs.CacheKey = current
 	cs.Tools = s.EnabledCachedTools(cs.Tools)
+	if validateCachedToolNames(s, cs.Tools) != nil {
+		return nil, false
+	}
 	_ = SaveCachedSchema(s.Name, *cs)
 	return cs, true
 }
