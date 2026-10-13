@@ -55,7 +55,7 @@ async function open() {
 const nav = () => screen.queryByRole("navigation", { name: "主导航" });
 const navEl = () => document.querySelector<HTMLElement>("nav.nav");
 const app = () => document.querySelector<HTMLElement>(".app")!;
-const toggleSidebar = () => userEvent.click(screen.getAllByRole("button", { name: /收起工作区栏|展开工作区栏/ })[0]);
+const toggleSidebar = () => userEvent.click(document.querySelector<HTMLElement>(".studio-menu")!);
 
 async function openAppearance() {
   await userEvent.click(screen.getByRole("button", { name: "沙盒" }));
@@ -232,6 +232,16 @@ it("keeps the sidebar toggle working while the settings sheet is over the window
   expect(app().dataset.rail).toBe("on");
   await userEvent.click(within(navEl()!).getByRole("button", { name: /^会话/ }));
   expect(toggle().disabled).toBe(false);
+});
+
+it("declares the sidebar toggle after every region the shell lets the window be dragged by", async () => {
+  await open();
+  const toggle = document.querySelector<HTMLElement>(".studio-menu")!;
+  for (const sel of [".chrome", ".nav", ".rail"]) {
+    const region = document.querySelector<HTMLElement>(sel)!;
+    expect(region, sel).not.toBeNull();
+    expect(region.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING, `${sel} must come before the toggle`).toBeTruthy();
+  }
 });
 
 it("keeps one sidebar toggle, and the sidebar does not repeat what the rail already holds", async () => {

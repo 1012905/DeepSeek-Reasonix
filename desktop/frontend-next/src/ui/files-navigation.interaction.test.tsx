@@ -82,7 +82,7 @@ it("closes the phone-width sidebar drawer after choosing files", async () => {
   vi.mocked(Object.getOwnPropertyDescriptor(document.body, "clientWidth")!.get!).mockReturnValue(390);
   refresh();
   await mount();
-  fireEvent.click(document.querySelector('[data-action="chrome.rail"]')!);
+  fireEvent.click(document.querySelector(".studio-menu")!);
   expect(document.querySelector(".app")!.getAttribute("data-rail")).toBe("on");
   fireEvent.click(document.querySelector(".studio-quicknav button")!);
   await waitFor(() => expect(filesShown()).toBe(true));
