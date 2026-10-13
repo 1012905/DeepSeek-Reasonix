@@ -115,6 +115,7 @@ export function WorkbenchPanel({
   onCloseManual,
   onSurfaces,
   onExternal,
+  onAddToChat,
   wideMode,
 }: {
   port: AgentPort;
@@ -140,6 +141,7 @@ export function WorkbenchPanel({
   // How many surfaces the strip holds, for the pane's own tab to count.
   onSurfaces: (n: number) => void;
   onExternal: (url: string) => void;
+  onAddToChat?: (reference: string) => void;
   wideMode?: { wide: boolean; onToggle: () => void };
 }) {
   const preview = useHtmlPreview(port, allTabs, remote);
@@ -772,7 +774,7 @@ export function WorkbenchPanel({
           </div>
           {menu?.scope === scope && shown && (
             <WorkbenchFileMenu key={menu.id} menu={menu} root={workspaceRoot}
-              revealable={revealable} platform={platform} onReveal={reveal} onClose={closeMenu} />
+              revealable={revealable} platform={platform} onReveal={reveal} onAddToChat={onAddToChat} onClose={closeMenu} />
           )}
         </aside>
       </div>
