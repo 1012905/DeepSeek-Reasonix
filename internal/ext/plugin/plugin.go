@@ -1480,7 +1480,7 @@ func (c *Client) cachedTools() ([]tool.Tool, bool) {
 // "mcp__<server>__<tool>". The registry separately resolves unique portable
 // and Claude plugin-qualified references without exposing duplicate schemas.
 func toolName(server, raw string) string {
-	return ToolPrefix(server) + normalizeName(raw)
+	return boundedToolName(ToolPrefix(server), normalizeName(raw))
 }
 
 // ToolPrefix is the model-visible namespace prefix for every tool from server.
