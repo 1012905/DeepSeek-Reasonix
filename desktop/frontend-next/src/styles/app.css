@@ -4247,30 +4247,32 @@
     text-align: center; padding: 0 40px; width: 100%;
   }
 
-  .oobe-mark { width: 54px; height: 54px; display: block; margin: 0 auto }
-  .oobe-mark path { fill: none; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round }
-  .oobe-mark .base { stroke: rgba(255,255,255,.92) }
-  .oobe-mark .lume { stroke: #FFE9B8; filter: drop-shadow(0 0 4px rgba(255,215,130,.9)); opacity: 0 }
-  .oobe[data-play] .oobe-mark .base {
-    stroke-dasharray: 100; stroke-dashoffset: 100;
-    animation: oobedraw 1s var(--ease-out) .25s forwards;
+  /* The real wordmark in its own blue — this is the one moment in the product
+     that should show the brand at full strength rather than borrow the scene's
+     warm face. The ground here is near-black, where #0153e5 sits at roughly
+     2.5:1, under the 3:1 a graphic is held to, so a steady glow carries it. */
+  .oobe-lockup { display: grid; justify-items: center; }
+  .oobe-mark {
+    display: block; margin: 0 auto; width: 200px; aspect-ratio: 1692.66 / 392.25;
+    filter: drop-shadow(0 0 18px rgb(1 83 229 / .45));
   }
-  .oobe[data-play] .oobe-mark .base:nth-of-type(2) { animation-delay: .45s }
-  .oobe[data-play] .oobe-mark .base:nth-of-type(3) { animation-delay: .65s }
-  .oobe[data-play] .oobe-mark .lume {
-    stroke-dasharray: 14 86; stroke-dashoffset: 100;
-    animation: oobetrace 1.5s ease-in-out 1.25s forwards;
+  /* The warm trace that used to run along the R's stroke becomes the moment the
+     mark lights up, on the same beat the old lume ran. */
+  .oobe[data-play] .oobe-mark {
+    opacity: 0;
+    animation: oobebrand .9s var(--ease-out) .25s forwards,
+               oobelume 1.6s ease-in-out 1.25s forwards;
   }
-  @keyframes oobedraw { to { stroke-dashoffset: 0 } }
-  @keyframes oobetrace { 0% { opacity: 0; stroke-dashoffset: 100 } 15%,85% { opacity: 1 }
-                         100% { opacity: 0; stroke-dashoffset: -20 } }
+  @keyframes oobelume {
+    0% { filter: drop-shadow(0 0 5px rgb(255 215 130 / .9)) brightness(1.45) }
+    32% { filter: drop-shadow(0 0 26px rgb(255 233 184 / .85)) brightness(1.25) }
+    100% { filter: drop-shadow(0 0 18px rgb(1 83 229 / .45)) brightness(1) }
+  }
 
   .oobe-brand {
-    margin: 26px 0 0; font: 300 40px/1.15 var(--mono); letter-spacing: -.02em; white-space: nowrap;
-    background: linear-gradient(100deg,
-      #7C766A 0%, #7C766A 34%, #FFEFCB 45%, #FFFFFF 50%, #FFEFCB 55%, #7C766A 66%, #7C766A 100%);
-    background-size: 260% 100%; background-position: 130% 0;
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin: 16px 0 0; font: 650 20px/1 var(--mono); letter-spacing: .21em;
+    text-transform: uppercase; white-space: nowrap;
+    color: rgb(255 255 255 / .72);
   }
 
   .oobe-sub {
@@ -4279,13 +4281,11 @@
   }
   .oobe[data-play] .oobe-brand {
     opacity: 0;
-    animation: oobebrand .9s var(--ease-out) 1.5s forwards,
-               oobesweep 2.2s cubic-bezier(.4,0,.2,1) 2s forwards;
+    animation: oobebrand .9s var(--ease-out) 1.5s forwards;
   }
   .oobe[data-play] .oobe-sub { opacity: 0; animation: ooberise .8s var(--ease-out) 2.1s forwards }
   @keyframes oobebrand { from { opacity: 0; transform: translateY(10px); filter: blur(6px) }
                          to { opacity: 1; transform: none; filter: none } }
-  @keyframes oobesweep { from { background-position: 130% 0 } to { background-position: -40% 0 } }
   @keyframes ooberise  { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 
   .oobe-lines { position: relative; height: 96px; width: 100%; margin-top: 4px }
@@ -4324,14 +4324,16 @@
 
   @media (prefers-reduced-motion: reduce) {
     .oobe[data-play] * { animation: none !important }
+    .oobe[data-play] .oobe-mark,
     .oobe[data-play] .oobe-brand,
     .oobe[data-play] .oobe-sub { opacity: 1 }
+    .oobe[data-play] .oobe-mark { filter: drop-shadow(0 0 18px rgb(1 83 229 / .45)) }
     .oobe[data-play][data-held] .oobe-scene { transform: translateY(calc(-14vh / var(--zoom, 1))) scale(.62) }
     .oobe[data-play][data-held] .oobe-lines { height: 0; opacity: 0 }
     .oobe[data-play][data-held] .onb { opacity: 1 }
-    .oobe[data-play] .oobe-brand { background-position: -40% 0 }
   }
-  [data-fold~="scene"] .oobe-brand { font-size: 32px }
+  [data-fold~="scene"] .oobe-mark { width: 168px }
+  [data-fold~="scene"] .oobe-brand { font-size: 16px }
   [data-fold~="scene"] .oobe-line b { font-size: var(--fs-display) }
 
   .onb-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100% }

@@ -17,16 +17,17 @@ const SOURCES = import.meta.glob(["../**/*.tsx", "!../**/*.test.*"], {
 }) as Record<string, string>;
 
 // Monospace earns these: they are marks and identifiers, not sentences. The
-// welcome screen is the one deliberate exception — the wordmark and its eyebrow
+// welcome screen is the one deliberate exception — its STUDIO line and tagline
 // are set in the terminal's own face because that is the product's vernacular.
+// The wordmark above them is the brand asset and says nothing itself.
 const MARKS: Record<string, string> = {
   x: "× — the close mark, sized to hold its cell beside ✓",
   "ptab-x": "× — same mark on a pane tab",
   ah: "› — the affordance arrow",
   prompt: "› — the composer's own prompt character",
   esc: "Esc — a keycap, which is lettering on a key rather than prose",
-  "oobe-brand": "the wordmark, deliberately set in the terminal's face",
-  "oobe-sub": "the wordmark's eyebrow, set with it",
+  "oobe-brand": "the lockup's STUDIO line, deliberately set in the terminal's face",
+  "oobe-sub": "the lockup's tagline, set with it",
   "oobe-skip": "the third line of that same screen",
 };
 
