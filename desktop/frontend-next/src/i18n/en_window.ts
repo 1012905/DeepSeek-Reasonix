@@ -3,6 +3,7 @@
 // en_settings and en_kernel were — one screen's worth of wording, read together.
 
 export const EN_WINDOW: Record<string, string> = {
+  "这台机器的更多操作": "More actions for this machine",
   "选择本机会话": "Select local sessions",
   "选择会话：{name}": "Select session: {name}",
   "已选 {n} 个会话": "{n} sessions selected",
