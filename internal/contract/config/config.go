@@ -1076,7 +1076,8 @@ type AgentConfig struct {
 	// declare non-overlapping write_paths. 0 means the default (3). Must not
 	// exceed MaxSubagentConcurrency after normalization.
 	MaxParallelWriters int    `toml:"max_parallel_writers"`
-	WriteLease         string `toml:"write_lease"` // "strict" (default) or "optimistic"; the user file only
+	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
+	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
 	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
@@ -1401,6 +1402,7 @@ func Default() *Config {
 			MaxSubagentConcurrency: 6,
 			MaxParallelWriters:     3,
 			WriteLease:             "strict",
+			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask
 		// resolves to allow) while `reasonix` prompts before writers. Users add

@@ -207,7 +207,7 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 		}
 	}
 	missing = a.appendPlanDeliverableGap(&out, missing, checkpointApplies && (checkpoint.PendingMutation || checkpoint.MutationObserved))
-	if !hasWriter {
+	if a.owesNothingForChanges(hasWriter) {
 		if len(missing) > 0 {
 			out.reason = strings.Join(missing, "; ")
 		}
@@ -245,6 +245,12 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	}
 	out.reason = strings.Join(missing, "; ")
 	return out
+}
+
+// owesNothingForChanges is true when no write put a check on the turn, or the
+// user waived the checks a write owes.
+func (a *Agent) owesNothingForChanges(hasWriter bool) bool {
+	return !hasWriter || a.role.waiveOwedChecks
 }
 
 // appendDeliveryGaps is what a Delivery turn owes on top of any turn: criteria,
