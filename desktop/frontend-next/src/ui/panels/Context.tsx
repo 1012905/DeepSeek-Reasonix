@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { t } from "../../i18n";
-import { reason, SAVED_NOT_APPLIED } from "../../i18n/kernel";
-import { HttpError } from "../../port/http_error";
+import { reason, savedNotApplied } from "../../i18n/kernel";
+import { SaveNote } from "../SaveNote";
 import type { AgentPort, ContextBreakdown } from "../../port/port";
 import { pct as percent, tokens } from "../../i18n/format";
 import { pinToViewport } from "../place";
@@ -372,7 +372,7 @@ function DeclareWindow({ port, onSet, was, onDone }: {
       onSet(await port.setContextWindow(window));
       onDone();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy(false);
     }
@@ -399,12 +399,7 @@ function DeclareWindow({ port, onSet, was, onDone }: {
           {t("保存")}
         </button>
       </div>
-      {note && (
-        <div className="find" data-lvl={note.unapplied ? "warn" : "err"} role={note.unapplied ? "status" : "alert"}>
-          <span className="t">{t(note.unapplied ? "已保存，尚未生效" : "操作未完成")}</span>
-          <span className="why">{note.text}</span>
-        </div>
-      )}
+      <SaveNote note={note} />
       <p className="ctxnote">
         {t(was > 0
           ? "只改当前这个模型，同一个来源下的其它模型不动。填模型文档写的上下文上限，不是最大输出。"

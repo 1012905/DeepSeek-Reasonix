@@ -3,8 +3,8 @@ import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { AgentPort, PermissionLists, PermissionRules } from "../port/port";
 import { Switch } from "./Switch";
-import { reason, SAVED_NOT_APPLIED } from "../i18n/kernel";
-import { HttpError } from "../port/http_error";
+import { reason, savedNotApplied } from "../i18n/kernel";
+import { SaveNote } from "./SaveNote";
 
 type List = "deny" | "ask" | "allow";
 
@@ -186,7 +186,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
       setRules(await port.savePermissions(next));
       onChanged();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -198,7 +198,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
     try {
       setRules(await port.revokeSessionGrant(rule));
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -211,7 +211,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
       setRules(await port.revokeRememberedProjectRule(rule));
       onChanged();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -379,12 +379,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
       </div>
 
       {total > 0 && <p className="path">{rules.path}</p>}
-      {note && (
-        <div className="find" data-lvl={note.unapplied ? "warn" : "err"} role={note.unapplied ? "status" : "alert"}>
-          <span className="t">{t(note.unapplied ? "已保存，尚未生效" : "操作未完成")}</span>
-          <span className="why">{note.text}</span>
-        </div>
-      )}
+      <SaveNote note={note} />
     </div>
   );
 }

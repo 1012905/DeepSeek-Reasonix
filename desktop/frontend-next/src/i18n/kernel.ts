@@ -21,6 +21,9 @@ export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 // The write landed and only applying it to the open conversation did not.
 export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running", "context.window_after_this_turn"];
 
+/** Whether a refused save had already written the setting: it holds, but the running session has not taken it. */
+export const savedNotApplied = (e: unknown): boolean => e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
+
 const SAID: Record<string, string> = {
   "surface.value_invalid": "填写内容不符合字段要求，请检查后重试",
   "surface.expired": "界面已失效，请等待新的请求",
