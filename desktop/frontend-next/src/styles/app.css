@@ -2981,11 +2981,11 @@
   .skrow[data-local] { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent) }
 
   .msearch { display: flex; align-items: center; gap: 10px; margin-bottom: 12px }
-  .msearch input {
+  .msearch input, .mline .malias {
     flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--border);
     border-radius: var(--r-sm); background: var(--raised); color: var(--text); font: var(--w-reg) var(--fs-ui) var(--ui);
   }
-  .msearch input:focus { outline: 2px solid var(--focus); outline-offset: 1px }
+  .msearch input:focus, .mline .malias:focus { outline: 2px solid var(--focus); outline-offset: 1px }
   .msearch .cnt { flex: none; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint) }
 
   .vway { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 2px 12px 10px;
@@ -3084,7 +3084,6 @@
 
   .mline .vtag[data-flat] { color: var(--deleg); background: var(--deleg-wash); border-color: transparent; cursor: default }
 
-  .mlist .mrows { max-height: 292px; overflow-y: auto; overscroll-behavior: contain }
   .mlist .mmore { margin-top: 7px; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
   .mlist .empty { margin-top: 9px }
 
@@ -4017,6 +4016,7 @@
     animation: card var(--t-card) var(--ease-out) both;
   }
   .vrow:last-of-type { border-bottom: 1px solid var(--hair) }
+  .vlist .vmore { margin: 10px 0 0 12px }
   .vrow[data-on] { box-shadow: inset 2px 0 0 var(--accent); background: var(--accent-wash) }
   .vrow .nm { grid-column: 1; font: var(--w-reg) var(--fs-ui) var(--mono); color: var(--muted) }
 
