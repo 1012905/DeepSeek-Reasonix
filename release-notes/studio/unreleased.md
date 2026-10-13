@@ -31,3 +31,7 @@
   之后添加的第一个服务会自动成为当前模型。关联 #12915。
 - Studio now starts and opens the connection guide after the last provider is removed, instead of
   bringing the built-in DeepSeek back; the first provider added becomes current. Fixes #12915.
+- 调用本机 stdio 类 MCP 服务端时，`_meta` 现在带上工作目录和「是否只读（计划模式）」，方便它们自行做权限控制；
+  远程服务端不会收到。关联 #12965。
+- Tool calls to local stdio MCP servers now carry the workspace root and whether the host is read-only (plan
+  mode) in `_meta`; remote servers get neither. Fixes #12965.
