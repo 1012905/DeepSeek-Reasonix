@@ -339,6 +339,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   const submit = useSubmit({ port, running, dispatch, trajDispatch, refreshStatus, fail });
 
+  const [inserted, setInserted] = useState({ n: 0, text: "" });
   const { queue, restored, onRestoreText, onQueueEdit, onQueueMove, onQueueRetry, onQueueRefresh, onQueuePause, onQueueRead, onQueueSendNow, onQueueCancel } = useQueueActions({
     port,
     dispatch,
@@ -495,6 +496,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             workspaceRoot={status?.workspaceRoot}
             onCloseManual={() => onManualBrowser?.(false)}
             onExternal={(url) => void port.openExternal(url).catch(fail)}
+            onAddToChat={(reference) => setInserted((was) => ({ n: was.n + 1, text: reference }))}
           />
       </div>
 
@@ -545,7 +547,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         </div>
         {alert && <div className="cmpalert">{alert}</div>}
         {pill && <ChangedFilesPill changes={tree?.changes ?? []} onOpen={openChanges} />}
-        <Composer port={port} status={status} running={running} quote={quote} restore={restored} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={fail} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
+        <Composer port={port} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={fail} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
         <MeterRail
           tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} compact={compact} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}

@@ -13,9 +13,9 @@ function absoluteWorkspacePath(root: string, path: string): string {
   return base + separator + (separator === "\\" ? path.replaceAll("/", "\\") : path);
 }
 
-export function WorkbenchFileMenu({ menu, root, revealable, platform, onReveal, onClose }: {
+export function WorkbenchFileMenu({ menu, root, revealable, platform, onReveal, onAddToChat, onClose }: {
   menu: FileMenu; root: string; revealable: boolean; platform: string;
-  onReveal: (path: string) => void; onClose: () => void;
+  onReveal: (path: string) => void; onAddToChat?: (reference: string) => void; onClose: () => void;
 }) {
   const [state, setState] = useState<"idle" | "copying" | "failed">("idle");
   const live = useRef(false);
@@ -90,6 +90,16 @@ export function WorkbenchFileMenu({ menu, root, revealable, platform, onReveal, 
         data-target={menu.path}
         onClick={() => void copy(reference)}
       >{t("复制引用")}</button>
+      {onAddToChat && (
+        <button
+          role="menuitem"
+          disabled={!reference}
+          title={reference ? undefined : ambiguous ? t("此名称可能被识别为 MCP 资源") : t("此名称不能表示为 @ 引用")}
+          data-action="workbench.add-to-chat"
+          data-target={menu.path}
+          onClick={() => { close(); onAddToChat(reference); }}
+        >{t("加入对话")}</button>
+      )}
       {state === "failed" && <div role="alert">{t("复制失败，请重试")}</div>}
     </div>, document.body,
   );

@@ -36,6 +36,9 @@ interface Props {
   // A line taken back from the queue. The counter makes the same text twice
   // two requests, as it does for a quote.
   restore?: { n: number; text: string };
+  // Text another surface hands the composer, such as a file reference; it goes
+  // in at the caret with a space on either side.
+  inject?: { n: number; text: string };
   // Resolves false when the line never left, so what was typed comes back
   // rather than being lost to a refusal the user could not have prevented.
   // Bumped when something outside asks for the cursor — answering a plan card
@@ -104,7 +107,7 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const [submitting, setSubmitting] = useState(false);
@@ -170,6 +173,21 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     });
     queueMicrotask(() => box.current?.focus());
   }, [restore?.n]);
+
+  const injectedAt = useRef(inject?.n ?? 0);
+  useEffect(() => {
+    if (!inject?.n || inject.n === injectedAt.current) return;
+    injectedAt.current = inject.n;
+    const where = caret;
+    setText((prev) => {
+      const at = Math.min(where, prev.length);
+      const lead = at > 0 && !/\s$/.test(prev.slice(0, at)) ? " " : "";
+      const piece = lead + inject.text + " ";
+      pending.current = at + piece.length;
+      return prev.slice(0, at) + piece + prev.slice(at).replace(/^ /, "");
+    });
+    queueMicrotask(() => box.current?.focus());
+  }, [inject?.n]);
 
   const moveTo = useCallback((next: string, at: number) => {
     pending.current = at;

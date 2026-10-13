@@ -511,6 +511,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workbench.hidden", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.reveal", kind: "shell-native", target: "optional", proof: "interaction" },
   { id: "workbench.copy-path", kind: "shell-native", target: "entity", proof: "interaction" },
+  { id: "workbench.add-to-chat", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.copy-ref", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.menu", kind: "view", target: "entity", proof: "interaction" },
   { id: "palette.pick", kind: "view", target: "entity", proof: "interaction" },
