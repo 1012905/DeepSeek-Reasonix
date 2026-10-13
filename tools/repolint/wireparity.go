@@ -47,6 +47,12 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/contract/surfacespec/spec.go", "Field", tsWireFile, "SurfaceField"},
 	{"internal/contract/surfacespec/spec.go", "Diff", tsWireFile, "SurfaceDiff"},
 	{"internal/contract/surfacespec/spec.go", "Option", tsWireFile, "SurfaceOption"},
+	{"internal/contract/surfacespec/image.go", "Image", "desktop/frontend-next/src/port/surface-rich.ts", "SurfaceImage"},
+	{"internal/contract/surfacespec/rich.go", "Location", "desktop/frontend-next/src/port/surface-rich.ts", "SurfaceLocation"},
+	{"internal/contract/surfacespec/rich.go", "Fact", "desktop/frontend-next/src/port/surface-rich.ts", "SurfaceFact"},
+	{"internal/contract/surfacespec/rich.go", "Dataset", "desktop/frontend-next/src/port/surface-rich.ts", "SurfaceDataset"},
+	{"internal/contract/surfacespec/rich.go", "Series", "desktop/frontend-next/src/port/surface-rich.ts", "SurfaceSeries"},
+
 	{"internal/contract/eventwire/extension.go", "ExtensionViewNode", tsWireFile, "ExtensionViewNode"},
 	{"internal/contract/eventwire/extension.go", "ExtensionSurface", tsWireFile, "ExtensionSurface"},
 	{"internal/contract/event/notice_payload.go", "DormantPermissionRule", tsBoundaryFile, "DormantPermissionRule"},

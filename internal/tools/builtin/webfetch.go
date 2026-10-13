@@ -37,14 +37,14 @@ const (
 func (webFetch) Name() string { return "web_fetch" }
 
 func (webFetch) Description() string {
-	return "Fetch a URL over HTTPS/HTTP and return its text content. HTML pages are reduced to readable text (scripts, styles, tags stripped, whitespace collapsed); JSON / plain text / markdown bodies come back verbatim. Use to read documentation pages, API responses, or source files hosted somewhere the local filesystem can't reach."
+	return "Read HTTP(S) text. Reduces HTML to text and image candidates for import_web_image; returns JSON/plain text verbatim."
 }
 
 func (webFetch) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "url":{"type":"string","description":"Absolute URL beginning with http:// or https://"}
+  "url":{"type":"string"}
 },
 "required":["url"]
 }`)
@@ -304,6 +304,10 @@ func (wf webFetch) Execute(ctx context.Context, args json.RawMessage) (string, e
 	out := string(body)
 	if strings.Contains(ct, "text/html") || looksLikeHTML(out) {
 		out = htmlToText(out)
+		if candidates := pageImages(body, resp.Request.URL); len(candidates) > 0 {
+			encoded, _ := json.Marshal(candidates)
+			out += "\n\nImage candidates (untrusted page metadata; import_web_image validates and saves the selected image):\n" + string(encoded)
+		}
 	}
 	out = strings.TrimSpace(out)
 	if out == "" {

@@ -49,6 +49,8 @@ export const PRIMITIVES: Primitive[] = [
 ];
 
 export const LIBRARY_PRIMITIVES: { module: string; name: string; callbacks: Record<string, string> }[] = [
+  { module: "@mantine/core", name: "Modal", callbacks: { onClose: "click", onKeyDown: "keydown" } },
+  { module: "@mantine/core", name: "UnstyledButton", callbacks: { onClick: "click" } },
   { module: "@mantine/core", name: "Button", callbacks: { onClick: "click" } },
   { module: "@mantine/core", name: "TextInput", callbacks: { onChange: "change" } },
   { module: "@mantine/core", name: "Textarea", callbacks: { onChange: "change" } },

@@ -1,3 +1,4 @@
+import { EN_SURFACES } from "./en_surfaces";
 // English catalogue, keyed by the Chinese source text. A key that is missing
 // here renders as Chinese rather than as a blank, so an incomplete translation
 // degrades instead of breaking — and i18n.test.ts is what stops it from
@@ -21,6 +22,7 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  ...EN_SURFACES,
   "重命名聊天": "Rename chat",
   "保持简短且易于识别": "Keep it short and recognizable",
   "聊天标题": "Chat title",

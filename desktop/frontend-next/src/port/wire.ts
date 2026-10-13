@@ -1,3 +1,5 @@
+import type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset } from "./surface-rich";
+export type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset, SurfaceSeries } from "./surface-rich";
 // Mirrors internal/contract/eventwire. Field names and kind strings must match exactly;
 // this file is the contract, not a convenience shape.
 
@@ -381,7 +383,7 @@ export interface ExtensionNotification {
 export type ExtensionViewTone = "dim" | "strong" | "ok" | "warn" | "err" | "accent";
 
 export interface ExtensionViewNode {
-  kind: "text" | "markdown" | "row" | "stack" | "kv" | "meter" | "pip" | "button" | "divider" | "field" | "choice_card" | "editable_text" | "diff_preview";
+  kind: "text" | "markdown" | "row" | "stack" | "kv" | "meter" | "pip" | "button" | "divider" | "field" | "choice_card" | "editable_text" | "diff_preview" | "map" | "comparison" | "dashboard";
   value?: string;
   key?: string;
   label?: string;
@@ -391,6 +393,7 @@ export interface ExtensionViewNode {
   children?: ExtensionViewNode[];
   field?: SurfaceField;
   diff?: SurfaceDiff;
+  dataset?: SurfaceDataset;
 }
 
 export interface SurfaceDiff {
@@ -413,6 +416,12 @@ export interface SurfaceOption {
   label: string;
   description?: string;
   preview?: string;
+  group?: string;
+  location?: SurfaceLocation;
+  price?: number;
+  currency?: string;
+  facts?: SurfaceFact[];
+  image?: SurfaceImage;
 }
 
 export interface ExtensionView {
