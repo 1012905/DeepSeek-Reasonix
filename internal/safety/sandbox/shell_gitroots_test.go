@@ -207,6 +207,11 @@ func TestFallbackWarningPrintsThePathAsWritten(t *testing.T) {
 	if !strings.Contains(warn.String(), `at "C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe".`) || strings.Contains(warn.String(), `\\`) {
 		t.Fatalf("path is escaped in the warning: %q", warn.String())
 	}
+	warn.Reset()
+	warnBashFallback(&warn, Shell{Kind: ShellPowerShell, Path: "C:\\x\x1b[31m\npwsh.exe", Fallback: FallbackProbeTimeout})
+	if strings.ContainsAny(warn.String()[:len(warn.String())-1], "\x1b\n") {
+		t.Fatalf("a control character in the path reaches the notice: %q", warn.String())
+	}
 }
 
 func TestProbeRetriesOnlyAnAttemptThatTimedOut(t *testing.T) {

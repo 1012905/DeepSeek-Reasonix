@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -184,7 +185,7 @@ func warnBashFallback(warn io.Writer, sh Shell) {
 	if sh.SupportsChaining() {
 		keep = "pwsh"
 	}
-	fmt.Fprintf(warn, "warning: [tools.shell] %s; using PowerShell at \"%s\". Commands written for bash that need POSIX tools such as head or grep will fail there. Install Git for Windows or set [tools.shell] path to its bash.exe; set prefer=%q to keep this interpreter and silence this.\n", why, sh.Path, keep)
+	fmt.Fprintf(warn, "warning: [tools.shell] %s; using PowerShell at %s. Commands written for bash that need POSIX tools such as head or grep will fail there. Install Git for Windows or set [tools.shell] path to its bash.exe; set prefer=%q to keep this interpreter and silence this.\n", why, quotedPath(sh.Path), keep)
 }
 
 // available lists the interpreters this host really has, in the order auto
@@ -722,4 +723,10 @@ func (s Shell) SupportsChaining() bool {
 	}
 	base := strings.ToLower(pathBase(s.Path))
 	return base == "pwsh" || base == "pwsh.exe"
+}
+
+// quotedPath quotes a path for a one-line notice: control characters stay
+// escaped, while Windows separators read as the path is written.
+func quotedPath(p string) string {
+	return strings.ReplaceAll(strconv.Quote(p), `\\`, `\`)
 }
