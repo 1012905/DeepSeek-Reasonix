@@ -458,7 +458,8 @@ ipcMain.handle("dialog:pick-folder", async (event, startIn) => {
   if (!target) return "";
   const picked = await dialog.showOpenDialog(target, {
     defaultPath: startIn || undefined,
-    properties: ["openDirectory", "createDirectory"],
+    // Tools keep their working folders behind a leading dot, so those are listed too.
+    properties: ["openDirectory", "createDirectory", "showHiddenFiles"],
   });
   if (picked.canceled || !picked.filePaths.length) return "";
   return picked.filePaths[0];
