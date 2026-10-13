@@ -27,13 +27,16 @@ type turnOrchestrator struct {
 }
 
 type orchestratedTurn struct {
-	input            string
-	raw              string
-	imageRefs        string
-	images           *turnImages
-	display          string
-	editedOriginal   string
-	synthetic        bool
+	input          string
+	raw            string
+	imageRefs      string
+	images         *turnImages
+	display        string
+	editedOriginal string
+	synthetic      bool
+	// opensTurn marks a synthetic turn that is a whole turn of its own, such as
+	// a queued host item: nothing before it announced a start.
+	opensTurn        bool
 	goalContinuation *goalContinuationSnapshot
 }
 
@@ -129,7 +132,9 @@ func (o *turnOrchestrator) runSubagentSkillTurns(ctx context.Context, skills []s
 	// prefilled into the composer after a conversation rewind), so it must be
 	// the user's own text — never the composed provider input with its
 	// transient <response-language>/<reasoning-language>/memory/hook blocks.
-	c.beginCheckpoint(ctx, firstNonEmpty(raw, task))
+	if err := c.beginCheckpoint(ctx, firstNonEmpty(raw, task)); err != nil {
+		return err
+	}
 	if c.hooks.Enabled() {
 		c.mu.Lock()
 		c.turn++
@@ -225,16 +230,8 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 	if turn.editedOriginal != "" {
 		defer c.markEditedForNewUser(startMessages, turn.editedOriginal)
 	}
-	// Open a checkpoint only for visible user turns before the user message is
-	// appended, so the recorded message boundary precedes it and pre-edit
-	// snapshots land here. Synthetic continuations stay attached to the visible
-	// turn that spawned them; otherwise hidden user-role messages would advance
-	// backend checkpoint turns without a matching frontend turn. The label is
-	// the user's own text (raw, falling back to the expanded input) — the
-	// composed provider input carries transient prefab blocks that must never
-	// surface in the rewind picker or be prefilled into the composer.
-	if !turn.synthetic {
-		c.beginCheckpoint(ctx, firstNonEmpty(turn.raw, turn.input))
+	if err := c.beginOrchestratedCheckpoint(ctx, turn); err != nil {
+		return err
 	}
 	// UserPromptSubmit / Stop hooks bracket the whole turn (incl. the plan
 	// research + approved-execution sub-turns below): a gating UserPromptSubmit
@@ -334,6 +331,7 @@ func (c *Controller) announceAuthoredTurn(ctx context.Context, raw string, msgIn
 		// the way history reads it, so a reload draws the same line.
 		started.Text = sessionstore.UserMessageText(provider.Message{Role: provider.RoleUser, RawContent: raw})
 		started.Via = via
+		started.Attachments = c.StoredAttachments(started.Text)
 	}
 	c.sink.Emit(started)
 	return agent.WithHostTurnBoundary(ctx, boundary)
@@ -345,6 +343,9 @@ func (c *Controller) announceAuthoredTurn(ctx context.Context, raw string, msgIn
 func (c *Controller) openTurnBoundary(ctx context.Context, turn orchestratedTurn, msgIndex int) (context.Context, sessionstore.InFlightTurnMeta) {
 	ctx, marker := c.beginTurn(ctx, msgIndex, !turn.synthetic && !IsSyntheticUserMessage(turn.raw))
 	if turn.synthetic {
+		if turn.opensTurn {
+			c.sink.Emit(event.Event{Kind: event.TurnStarted, ModelRef: c.modelRef})
+		}
 		return c.continueAnnouncedTurn(ctx), marker
 	}
 	return c.announceAuthoredTurn(ctx, firstNonEmpty(turn.raw, turn.input), msgIndex), marker
@@ -472,9 +473,9 @@ func (o *turnOrchestrator) runTurnLoop(ctx context.Context, turn orchestratedTur
 // FSM. Without an active goal advanceGoalAfterTurn returns immediately and this
 // is one turn; with one it is the loop that keeps pursuing it.
 func (o *turnOrchestrator) runTurnLoopWithPreparedTurn(ctx context.Context, turn orchestratedTurn) error {
+	o.c.liftUserGatedGoal(turn.synthetic)
 	expectedContinuationEpoch := o.c.goals.continuationToken()
 	ctx = o.c.withVisionRouting(agent.WithSubagentImageCandidates(ctx, turn.images.candidates))
-	o.c.liftUserGatedGoal(turn.synthetic)
 	err := o.runOrchestratedTurn(ctx, turn)
 	o.c.noticeUserGate()
 	if err != nil {

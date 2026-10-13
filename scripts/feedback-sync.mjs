@@ -220,6 +220,15 @@ async function mirrorOne(reply, deps, dry) {
     await deps.gh.comment(number, renderReply(reply));
     deps.log(`commented on #${number} for reply ${reply.id}`);
   }
+  // A reply to a fix means it did not hold. A maintainer's decision (not planned,
+  // duplicate) is not undone by a comment; the converter refuses those replies.
+  if (issue.state === "closed" && issue.state_reason === "completed") {
+    if (dry) deps.log(`[dry-run] would reopen #${number}`);
+    else {
+      await deps.gh.reopen(number);
+      deps.log(`reopened #${number} for reply ${reply.id}`);
+    }
+  }
   if (dry) return deps.log(`[dry-run] would ack reply ${reply.id}`);
   await deps.worker.ackReply(reply.id);
 }
@@ -351,6 +360,7 @@ export function liveDeps(env) {
         return pages.flatMap((p) => gh(["api", `repos/${REPO}/issues/${n}/comments?per_page=100&page=${p}`]) ?? []);
       },
       comment: async (n, body) => gh(["api", "-X", "POST", `repos/${REPO}/issues/${n}/comments`, "--input", "-"], JSON.stringify({ body })),
+      reopen: async (n) => gh(["api", "-X", "PATCH", `repos/${REPO}/issues/${n}`, "--input", "-"], JSON.stringify({ state: "open", state_reason: "reopened" })),
       getPull: async (n) => gh(["api", `repos/${REPO}/pulls/${n}`]),
     },
     async newestReleaseAt() {

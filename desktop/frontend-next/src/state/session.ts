@@ -1,3 +1,6 @@
+import { measureInteractions } from "./interactions";
+import { foldExtension } from "./extension";
+import { surfaceHistory } from "../ui/surface/call";
 import type { CostCoverage, Receipt, Tool, WireEvent } from "../port/wire";
 import { noteTool, type Executions } from "./executions";
 import { estimateTokens, sample } from "../port/tokens";
@@ -6,7 +9,6 @@ import { plural, t } from "../i18n";
 import { currentStep, stepDone, stepLabel } from "./session_types";
 import type { Item, Metrics, PlanStep, RememberedFact, RuntimeNotice, SessionState, TodoStatus, TurnTerminal, Waiting } from "./session_types";
 import { foldUsage, quoteAmount } from "./usage";
-import { setShowsReceipt, showsReceipt } from "./prefs";
 
 // The types live next door; this stays their way in, so no reader of a
 // session has to know they were split off.
@@ -14,17 +16,17 @@ import { splitProviderSearch } from "./providersearch";
 
 export type { Item, Metrics, PlanStep, RememberedFact, RuntimeNotice, SessionState, TodoStatus, TurnTerminal, Waiting };
 export { currentStep, stepDone, stepLabel };
-import { askFromCall, promptOpen, prompted, sealByReceipt } from "./prompts";
+import { askFromCall, promptOpen, prompted, sealByReceipt, restoredPrompts } from "./prompts";
 import { nameTurnStart, othersSteer } from "./turn_start";
 import { appendText, foldMessage, sealSay } from "./say";
 import { nextId } from "./ids";
+import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
-import { nameQueued } from "./queued";
-import { dropTool, foldLastRead, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
+import { nameQueued, withoutPendingRow } from "./queued";
+import { dropTool, foldLastRead, foldProgress, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
 export { chipLabel };
 export { quoteAmount };
-export { setShowsReceipt, showsReceipt };
 
 // doing is what the status chip prints. These two values are also read back by
 // the reducer, so they get a name: a comparison against a sentence is one copy
@@ -36,6 +38,8 @@ const WAITING_WORKSPACE = "等待工作区";
 const WAITING_MODEL = "等待模型回复";
 
 export const initialState: SessionState = {
+  interactionIDs: { asked: [], answered: [] },
+  interactions: { requests: 0, questions: 0, options: 0, answers: 0, customAnswers: 0 },
   error: "",
   executions: {},
   terminal: null,
@@ -56,6 +60,7 @@ export const initialState: SessionState = {
   steerQueue: [], takenBack: [], subagentPhase: {},
   awaitingTurnStart: [],
   queueMoved: 0,
+  rewindMoved: 0,
   browserTabsMoved: 0,
   panels: [],
   views: [],
@@ -161,7 +166,7 @@ const holdsWait = new Set<string>([
 // bumps it. Wrapping the switch keeps that rule in one place instead of on each
 // of its two dozen returns.
 export function reduce(s: SessionState, ev: SessionEvent): SessionState {
-  const next = foldStall(apply(s, ev), ev);
+  const next = foldStall(apply(measureInteractions(s, ev), ev), ev);
   if (next.items === s.items) return next;
   const streamed = ev.kind === "text" || ev.kind === "reasoning";
   const bumped = streamed ? next : { ...next, revision: next.revision + 1 };
@@ -185,6 +190,10 @@ const highest = (items: Item[]) => items.reduce((n, i) => Math.max(n, seqOf(i.id
  *  renders and the one that was never drawn still owes its entrance. */
 function entering(prev: SessionState, next: SessionState, ev: SessionEvent): Partial<SessionState> {
   if (ev.kind === "__restore") return { entranceOwed: [], enteredThrough: highest(next.items) };
+  if (ev.kind === "__extension_snapshot" || ("extension" in ev && ev.extension?.code)) return {
+    entranceOwed: prev.entranceOwed.filter(id => next.items.some(i => i.id === id && !(i.t === "extension" && i.ext.code))),
+    enteredThrough: Math.max(prev.enteredThrough, highest(next.items)),
+  };
   const fresh = next.items.filter((i) => seqOf(i.id) > prev.enteredThrough).map((i) => i.id);
   if (fresh.length === 0) return {};
   return {
@@ -198,13 +207,14 @@ function entering(prev: SessionState, next: SessionState, ev: SessionEvent): Par
 export type SessionEvent =
   | WireEvent
   | { kind: "__restore"; items: Item[]; plan?: PlanStep[]; executions: Executions }
+  | { kind: "__extension_snapshot"; surfaces: import("../port/wire").ExtensionSurface[] }
   | { kind: "__todos"; plan: PlanStep[] }
   | { kind: "__totals"; hit: number; miss: number; cost?: number; currency?: string; coverage?: CostCoverage; incompleteReason?: string }
   | { kind: "__error"; text: string }
   | { kind: "__user"; text: string; pending: boolean; id?: string }
   | { kind: "__unsent"; id: string }
   | { kind: "__queued"; id: string; itemId: string; queued: "steer" | "followup"; paused?: boolean }
-  | { kind: "__decided"; id: string; verdict?: string; answers?: string[][] }
+  | { kind: "__decided"; id: string; verdict?: string; answers?: string[][]; values?: Record<string, unknown> }
   | { kind: "__forgot"; id: string }
   | { kind: "__runtime_seen"; id: string }
   // The transcript has drawn these cards, so their one entrance is spent.
@@ -213,6 +223,9 @@ export type SessionEvent =
   | { kind: "__entered"; ids: string[] };
 
 function apply(s: SessionState, ev: SessionEvent): SessionState {
+  if (ev.kind === "__extension_snapshot") return ev.surfaces.reduce(foldExtension, s);
+  // A line the kernel holds for a retry waits in the queue panel, not here.
+  if (ev.kind === "notice" && ev.code === "unapplied_steer" && ev.itemId) s = withoutPendingRow(s, ev.itemId);
   if (ev.kind === "__error") return { ...s, error: ev.text };
   if (ev.kind === "__entered") {
     const spent = new Set(ev.ids);
@@ -220,6 +233,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     return left.length === s.entranceOwed.length ? s : { ...s, entranceOwed: left };
   }
   if (ev.kind === "__runtime_seen") return { ...s, runtime: s.runtime.filter((n) => n.id !== ev.id) };
+  if (ev.kind === "rewind_changed") return { ...s, rewindMoved: s.rewindMoved + 1 };
   if (ev.kind === "inbox_changed") return { ...s, queueMoved: s.queueMoved + 1 };
   if (ev.kind === "browser_tabs_changed") return { ...s, browserTabsMoved: s.browserTabsMoved + 1 };
   // Both event.Message emitters carry assistant text, so nothing on the wire
@@ -278,7 +292,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
               // This window's own answer, landed. The receipt it caused rides the
               // event stream and can arrive first, sealing the card as answered
               // elsewhere; the answer this window sent is the truer account.
-              ? { ...i, answered: ev.answers ?? [], answeredElsewhere: false, by: undefined, said: undefined }
+              ? { ...i, answered: ev.answers ?? [], surfaceValues: ev.values, answeredElsewhere: false, by: undefined, said: undefined }
               : i,
       ),
     };
@@ -289,7 +303,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     // How the restored turns ended is not in the record; a live turn that
     // vanished mid-flight leaves null, which is a different answer.
     const terminal: TurnTerminal = ev.items.length ? { kind: "unread" } : s.terminal;
-    return { ...s, executions: ev.executions, terminal, items: [...ev.items, ...s.items.filter((i) => i.t === "extension" || promptOpen(i))], plan: ev.plan ? livePlan(ev.plan) : s.plan };
+    return { ...s, executions: ev.executions, terminal, items: restoredPrompts(ev.items, s.items), plan: ev.plan ? livePlan(ev.plan) : s.plan };
   }
   // The kernel's canonical task list, asked for rather than re-derived: the
   // advances are not todo_write calls, and the refused writes are.
@@ -370,7 +384,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     case "tool_progress":
       if (ev.tool && isSubagentProgress(ev.tool.name)) return { ...s, subagentPhase: notePhase(s.subagentPhase, ev.tool) };
       return ev.tool
-        ? { ...s, executions: noteTool(s.executions, ev.tool, false), items: foldTool(s.items, ev.tool, true) }
+        ? { ...s, executions: noteTool(s.executions, ev.tool, false), items: foldProgress(s.items, ev.tool) }
         : s;
 
     case "tool_result": {
@@ -420,53 +434,27 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     // tick instead of moving in place.
     case "extension_surface":
     case "extension_status": {
-      const ext = ev.extension;
-      if (!ext) return s;
-      if (ext.kind === "panel") {
-        const at = s.panels.findIndex((p) => p.pluginId === ext.pluginId && p.surfaceId === ext.surfaceId);
-        if (at < 0) return { ...s, panels: [...s.panels, ext] };
-        const panels = s.panels.slice();
-        panels[at] = ext;
-        return { ...s, panels };
-      }
-      if (ext.kind === "view" && ext.view?.anchor) {
-        return { ...s, takeovers: { ...s.takeovers, [ext.view.anchor]: ext } };
-      }
-      if (ext.kind === "view") {
-        const at = s.views.findIndex((v) => v.pluginId === ext.pluginId && v.surfaceId === ext.surfaceId);
-        if (at < 0) return { ...s, views: [...s.views, ext] };
-        const views = s.views.slice();
-        views[at] = ext;
-        return { ...s, views };
-      }
-      const at = s.items.findIndex(
-        (it) => it.t === "extension" && it.ext.pluginId === ext.pluginId && it.ext.surfaceId === ext.surfaceId,
-      );
-      if (at < 0) return { ...s, items: [...s.items, { t: "extension", id: nextId(), ext }] };
-      const items = s.items.slice();
-      items[at] = { t: "extension", id: items[at].id, ext };
-      return { ...s, items };
+      return ev.extension ? foldExtension(s, ev.extension) : s;
     }
 
     case "approval_request":
       return ev.approval ? prompted(s, "等待批准", { t: "approval", id: nextId(), a: ev.approval }) : s;
 
     case "ask_request":
-      return ev.ask ? prompted(s, "等待确认", { t: "ask", id: nextId(), ask: ev.ask }) : s;
+      if (!ev.ask || s.items.some(i => i.t === "ask" && i.ask.id === ev.ask!.id && !i.surfaceExpired)) return s;
+      return prompted(s, "等待你回答", { t: "ask", id: nextId(), ask: ev.ask });
 
     case "compaction_started":
       return { ...s, items: [...s.items, { t: "compaction", id: nextId(), c: ev.compaction ?? {}, done: false }] };
 
-    // The digest streams in while the fold runs. It accumulates on the card's
-    // own summary so the finished event simply replaces it — a fold that dies
-    // mid-write leaves what it had written rather than an empty placeholder.
+    // The digest streams in while the fold runs, accumulating on the card's own
+    // summary. A frame with no text restarts it: the attempt so far was discarded.
     case "compaction_progress": {
-      if (!ev.text) return s;
       const items = s.items.slice();
       for (let i = items.length - 1; i >= 0; i--) {
         const it = items[i];
         if (it.t === "compaction" && !it.done) {
-          items[i] = { ...it, c: { ...it.c, summary: (it.c.summary ?? "") + ev.text } };
+          items[i] = { ...it, c: { ...it.c, summary: ev.text ? (it.c.summary ?? "") + ev.text : "" } };
           break;
         }
       }
@@ -520,7 +508,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         (i) => i.t === "user" && i.pending && (ev.itemId ? i.itemId === ev.itemId : i.text === ev.text),
       );
       if (at < 0) return { ...s, steerQueue: q, items: othersSteer(s.items, ev) };
-      const row = { ...(s.items[at] as Extract<Item, { t: "user" }>), pending: false, steer: true, via: ev.via };
+      const row = { ...(s.items[at] as Extract<Item, { t: "user" }>), pending: false, steer: true, via: ev.via, attachments: ev.attachments };
       return { ...s, steerQueue: q, items: [...s.items.slice(0, at), ...s.items.slice(at + 1), row] };
     }
 
@@ -608,7 +596,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         doing: ev.outcome === "no_progress" ? "已暂停" : ev.cancelled ? "已取消" : ev.err ? "已中断" : "已完成",
         waiting: {},
         plan: livePlan(s.plan),
-        items: withReceipt(sealTurn(sealSay(s.items, true), ev.outcome === "no_progress" || ev.cancelled ? undefined : ev.err), ev.receipt),
+        items: withReceipt([...sealTurn(sealSay(s.items, true), ev.outcome === "no_progress" || ev.cancelled ? undefined : ev.err), ...worked(ev.workDurationMs)], ev.receipt),
       };
 
     default:
@@ -630,15 +618,10 @@ function turnTerminal(ev: WireEvent): TurnTerminal {
 }
 
 // withReceipt appends the turn's completion record when the kernel says it has
-// something to say — and when this reader wants to read it. Whether a receipt
-// has content is the kernel's answer and is not restated here; whether it is
-// wanted on this screen is the reader's, and belongs where the panel widths
-// already live rather than in a config the whole install shares.
-//
-// The check itself is untouched either way: it still runs, still decides
-// readiness, and still reaches the trajectory. Only the card is withheld.
+// something to say. Whether the card is drawn is the reader's choice, made at
+// render time, so the record stays in the transcript either way.
 function withReceipt(items: Item[], r?: Receipt): Item[] {
-  if (!r?.saysSomething || !showsReceipt()) return items;
+  if (!r?.saysSomething) return items;
   return [...items, { t: "receipt", id: nextId(), r }];
 }
 
@@ -650,7 +633,7 @@ function withReceipt(items: Item[], r?: Receipt): Item[] {
 // eleven. The server strips these before /history now — this is what covers
 // sessions already on disk.
 const CONTROL =
-  /<(reasoning-language|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|project-instructions|capability-route|interrupted-turn-recovery|workspace|scheduled-run|mcp-prompt-failure)[\s\S]*?<\/\1>\s*/g;
+  /<(reasoning-language|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|current-date|project-instructions|capability-route|interrupted-turn-recovery|workspace|scheduled-run|mcp-prompt-failure|refused-calls)[\s\S]*?<\/\1>\s*/g;
 const stripControl = (s: string) => s.replace(CONTROL, "").trim();
 
 // A plan that ran to the end is spent: struck through in the rail it reads as
@@ -707,7 +690,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
       // after an upgrade as well as for newly written history.
       const legacyHostRepair = m.content.startsWith("The following tools are unavailable in the current workflow phase:");
       const text = m.hostAuthored || legacyHostRepair ? "" : stripControl(m.content);
-      if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex, steer: m.steer, via: m.via });
+      if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex, steer: m.steer, via: m.via, attachments: m.attachments });
       continue;
     }
     if (m.role === "assistant") {
@@ -739,6 +722,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
           out.push({ t: "say", id: nextId(), text: part.text, reasoning, done: true, model: m.modelRef, thoughtMs: reasoning ? m.thoughtMs : undefined });
           reasoning = undefined;
         }
+        out.push(...worked(m.workDurationMs));
       }
       for (const c of m.toolCalls ?? []) {
         if (c.id) {
@@ -789,7 +773,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
   // conversation reads differently before and after a reopen.
   const merged: Item[] = [];
   for (const it of out) {
-    merged.push(it);
+    merged.push(surfaceHistory(it));
     foldLastRead(merged);
   }
   return { items: merged, executions };

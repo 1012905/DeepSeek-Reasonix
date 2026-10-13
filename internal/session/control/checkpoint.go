@@ -68,23 +68,31 @@ func (m *checkpointManager) enabled() bool {
 
 // beginWithObserver opens a checkpoint and updates the mutation observer's
 // ownership turn for subsequent captures.
-func (m *checkpointManager) beginWithObserver(input string, msgIndex int, obs *checkpoint.MutationObserver) (int, *checkpoint.Store, bool) {
+func (m *checkpointManager) beginWithObserver(input string, msgIndex int, obs *checkpoint.MutationObserver) (int, *checkpoint.Store, bool, error) {
 	m.mu.Lock()
 	store := m.store
 	if store == nil {
 		m.mu.Unlock()
-		return 0, nil, false
+		return 0, nil, false, nil
 	}
 	turn := m.turn
 	m.turn++
 	m.bound[turn] = msgIndex
 	m.mu.Unlock()
+	if err := store.Begin(turn, input, msgIndex); err != nil {
+		m.mu.Lock()
+		if m.turn == turn+1 {
+			m.turn = turn
+			delete(m.bound, turn)
+		}
+		m.mu.Unlock()
+		return 0, nil, false, err
+	}
 	if obs != nil {
 		obs.NoteCrossTurnBackgroundWriter(turn)
 		obs.SetOwnershipTurn(turn)
 	}
-	store.Begin(turn, input, msgIndex)
-	return turn, store, true
+	return turn, store, true, nil
 }
 
 type guardedTurnCheckpoint struct {
@@ -97,6 +105,8 @@ type guardedTurnCheckpoint struct {
 
 type guardedTurnCompletion struct {
 	checkpoint *guardedTurnCheckpoint
+	// workMs sums what each run of the turn reports up to its final answer.
+	workMs atomic.Int64
 }
 
 type guardedTurnCompletionKey struct{}
@@ -109,15 +119,18 @@ func withGuardedTurnCompletion(ctx context.Context) (context.Context, *guardedTu
 // beginCheckpoint opens a rewind checkpoint before the visible user message is
 // appended. Guarded turns retain the exact boundary so TurnDone can identify
 // the corresponding optimistic frontend item without positional guessing.
-func (c *Controller) beginCheckpoint(ctx context.Context, input string) {
+func (c *Controller) beginCheckpoint(ctx context.Context, input string) error {
 	if c.executor == nil || c.executor.Session() == nil {
-		return
+		return nil
 	}
 	session := c.executor.Session()
 	messageIndex := session.Len()
 	openedAt := time.Now().UnixMilli()
+	turn, store, ok, err := c.checkpoints.beginWithObserver(input, messageIndex, c.mutationObserver)
+	if err != nil {
+		return err
+	}
 	atomic.AddInt64(&c.sessionRevision, 1)
-	turn, store, ok := c.checkpoints.beginWithObserver(input, messageIndex, c.mutationObserver)
 	if ok {
 		if completion, _ := ctx.Value(guardedTurnCompletionKey{}).(*guardedTurnCompletion); completion != nil {
 			completion.checkpoint = &guardedTurnCheckpoint{
@@ -140,6 +153,17 @@ func (c *Controller) beginCheckpoint(ctx context.Context, input string) {
 	c.mu.Lock()
 	c.lastResumeDecision = d
 	c.mu.Unlock()
+	return nil
+}
+
+// Synthetic continuations share the visible turn's checkpoint. The boundary
+// precedes its user message, and the label uses raw text rather than transient
+// provider composition because rewind exposes it in the picker and composer.
+func (c *Controller) beginOrchestratedCheckpoint(ctx context.Context, turn orchestratedTurn) error {
+	if turn.synthetic {
+		return nil
+	}
+	return c.beginCheckpoint(ctx, firstNonEmpty(turn.raw, turn.input))
 }
 
 // validatedCheckpointTurn returns the checkpoint only while its original
@@ -200,6 +224,24 @@ func (m *checkpointManager) boundary(turn int) (int, bool) {
 	defer m.mu.Unlock()
 	b, ok := m.bound[turn]
 	return b, ok
+}
+
+// endOfTurn returns where turn's messages stop: the start of the next recorded
+// turn, or tip when turn is the latest. ok is false for a turn with no boundary.
+func (m *checkpointManager) endOfTurn(turn, tip int) (int, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	start, ok := m.bound[turn]
+	if !ok {
+		return 0, false
+	}
+	end := tip
+	for _, b := range m.bound {
+		if b > start && b < end {
+			end = b
+		}
+	}
+	return end, true
 }
 
 // list returns the checkpoint metadata (nil when disabled).
@@ -276,6 +318,9 @@ func ckptDir(sessionPath string) string {
 func (c *Controller) rebindCheckpoints(sessionPath string) {
 	c.goals.setStatePath(goalStatePath(sessionPath))
 	c.checkpoints.rebind(ckptDir(sessionPath), c.workspaceRoot)
+	c.checkpoints.storeRef().OnUndoChange(func() {
+		c.sink.Emit(event.Event{Kind: event.RewindChanged})
+	})
 	if c.executor != nil {
 		c.wireMutationObserver()
 	}

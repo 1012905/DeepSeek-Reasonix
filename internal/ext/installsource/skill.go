@@ -7,12 +7,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"golang.org/x/text/unicode/norm"
 
-	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/frontmatter"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/skill"
@@ -50,11 +50,7 @@ func (t *Tool) skillAction(req request, cand skillCandidate, mode string) action
 		skill:         cand,
 	}
 	a.RiskLevel, a.RiskReasons = skillActionRisk(mode, cand)
-	if mode == "link" && !isLinkTargetSafe(cand.SourcePath, t.home, t.root) {
-		a.RiskLevel = RiskHigh
-		a.RiskReasons = append(a.RiskReasons, "link target is an absolute path outside the project or home root")
-	}
-	return a
+	return t.localSourceRisk(a)
 }
 
 // skillActionRisk explains the risk budget for a skill install. The model
@@ -79,9 +75,20 @@ func skillActionRisk(mode string, cand skillCandidate) (RiskLevel, []string) {
 }
 
 // skillRootAction builds the DTO for registering a whole skill directory.
-func (t *Tool) skillRootAction(req request, path string, names []string) action {
+func (t *Tool) skillRootAction(req request, path string, candidates []skillCandidate) action {
 	scope := t.installScope(req, "skill", path)
-	return action{
+	names := make([]string, 0, len(candidates))
+	files := make(map[string][]string)
+	for _, cand := range candidates {
+		names = append(names, cand.Name)
+		file := cand.SourcePath
+		if cand.IsDir {
+			file = filepath.Join(file, skill.SkillFile)
+		}
+		files[cand.Name] = append(files[cand.Name], file)
+	}
+	slices.Sort(names)
+	return t.localSourceRisk(action{
 		Kind:        "skill",
 		Action:      "register_skill_root",
 		Name:        "",
@@ -96,7 +103,33 @@ func (t *Tool) skillRootAction(req request, path string, names []string) action 
 		InstallRoot: path,
 		RiskLevel:   RiskMedium,
 		RiskReasons: []string{"adds a new skill root to the active config"},
+		skillFiles:  files,
+	})
+}
+
+func (t *Tool) localSourceRisk(a action) action {
+	if resolved, err := filepath.EvalSymlinks(a.Source); err == nil {
+		a.resolvedSource = resolved
+		if resolved != a.Source {
+			a.RiskReasons = append(a.RiskReasons, "source resolves to "+hostLiteral(resolved))
+		}
 	}
+	if !isLinkTargetSafe(a.Source, t.home, t.root) {
+		a.RiskLevel = RiskHigh
+		a.RiskReasons = append(a.RiskReasons, a.Kind+" source is an absolute path outside the project or home root")
+	}
+	return a
+}
+
+func (a action) copySource(source string) (string, error) {
+	if a.resolvedSource == "" {
+		return source, nil
+	}
+	resolved, err := filepath.EvalSymlinks(source)
+	if err != nil || resolved != a.resolvedSource {
+		return "", newErr(ErrApprovalDenied, "source resolution changed since the approved plan; re-plan and re-approve")
+	}
+	return a.resolvedSource, nil
 }
 
 func (t *Tool) skillInstallRoot(scope string) (string, error) {
@@ -141,16 +174,20 @@ func (t *Tool) verifySkill(scope, name string, act *action) error {
 	if !ok {
 		return newErr(ErrSourceUnreadable, "skill %q is installed but not discoverable", name)
 	}
-	act.Discoverable = true
-	act.CanonicalPath = sk.Path
-	for _, listed := range store.List() {
-		if listed.Name == name {
-			act.Indexed = true
-			break
+	installedPath := config.CanonicalSkillPath(act.CanonicalPath)
+	if config.CanonicalSkillPath(sk.Path) != installedPath {
+		act.Warnings = append(act.Warnings, shadowedSkillWarning(name, act.CanonicalPath, sk.Path))
+	} else {
+		act.Discoverable = true
+		for _, listed := range store.List() {
+			if listed.Name == name && config.CanonicalSkillPath(listed.Path) == installedPath {
+				act.Indexed = true
+				break
+			}
 		}
-	}
-	if strings.TrimSpace(sk.Description) == "" {
-		act.Warnings = append(act.Warnings, fmt.Sprintf("skill %q has no description frontmatter; it is installed but the skills index will use a placeholder", name))
+		if strings.TrimSpace(sk.Description) == "" {
+			act.Warnings = append(act.Warnings, fmt.Sprintf("skill %q has no description frontmatter; it is installed but the skills index will use a placeholder", name))
+		}
 	}
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {
 		act.Warnings = append(act.Warnings, msg)
@@ -174,7 +211,7 @@ func (t *Tool) skillConflictTargets(name, scope string) ([]string, error) {
 // readSkillFile reads and validates a single skill file. The fallback name
 // is used when the frontmatter does not declare one.
 func readSkillFile(path, fallbackName string, strict bool) (skillCandidate, error) {
-	b, err := fileencoding.ReadFileUTF8(path)
+	b, err := readBoundedUTF8(path)
 	if err != nil {
 		return skillCandidate{}, err
 	}
@@ -232,18 +269,23 @@ func parseSkillContent(content, fallbackName, source string, strict bool) (skill
 // flat compatibility skill. RootPath records the containing directory that must
 // be registered for the runtime Store to discover that candidate.
 func scanSkillRoot(root string, strict bool) ([]skillCandidate, error) {
+	walkRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
 	var out []skillCandidate
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if path == root {
+		if path == walkRoot {
 			return nil
 		}
-		rel, err := filepath.Rel(root, path)
+		rel, err := filepath.Rel(walkRoot, path)
 		if err != nil {
 			return err
 		}
+		path = filepath.Join(root, rel)
 		depth := pathDepth(rel)
 		if d.IsDir() {
 			if depth > maxSkillScanDepth {
@@ -321,17 +363,23 @@ func mustRel(base, path string) string {
 // escaping the tree, broken, or a directory — is skipped, never followed:
 // the plugin-package apply path verifies capability counts after the copy,
 // so a skipped link fails the install closed instead of silently shrinking it.
-func copyDir(src, dst string, byteLimit int64) error {
+func copyDir(src, dst string, byteLimit int64, approvedRoot string) error {
 	var copied int64
 	srcRoot := src
-	if resolved, err := filepath.EvalSymlinks(src); err == nil {
+	resolved, err := filepath.EvalSymlinks(src)
+	if approvedRoot != "" {
+		if err != nil || resolved != approvedRoot {
+			return newErr(ErrApprovalDenied, "source resolution changed since the approved plan; re-plan and re-approve")
+		}
+		srcRoot = approvedRoot
+	} else if err == nil {
 		srcRoot = resolved
 	}
-	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+	return filepath.WalkDir(srcRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, path)
+		rel, err := filepath.Rel(srcRoot, path)
 		if err != nil {
 			return err
 		}

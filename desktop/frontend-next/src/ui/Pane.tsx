@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { loadReceiptPref, receiptPrefOf } from "../state/receiptpref";
+import { ReceiptPrefContext } from "../state/foldpref";
 import { money } from "../i18n/format";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import { hasPendingDecision, posture, runState } from "./decisions";
 import { createPortal } from "react-dom";
-import type { Checkpoint, ContextBreakdown, JobEntry, McpEntry, SessionStatus, WorkspaceChanges } from "../port/port";
+import type { Checkpoint, ContextBreakdown, JobEntry, McpEntry, SessionStatus, WorkspaceChanges, WorkspaceGit } from "../port/port";
 import type { TrajectoryRead } from "../port/wire";
 import { chipLabel, fromHistory, initialState, quoteAmount, reduce } from "../state/session";
 import { pairCheckpoints } from "../state/checkpoints";
@@ -12,6 +14,8 @@ import { useReplyActions } from "./reply";
 import { useGateActions } from "./gates";
 import { useQueueActions } from "./queueactions";
 import { useRewindActions } from "./rewind";
+import { ReloadNotice } from "./RestoreNotice";
+import { RewindNotice } from "./RewindNotice";
 import { initialTraj, reduceTraj } from "../state/trajectory";
 import { Transcript } from "./Transcript";
 import { useBackgroundDeltas } from "./deltas";
@@ -25,14 +29,17 @@ import { Metrics } from "./Metrics";
 import { railOf } from "./panels/derive";
 import { accountOf, useHidesAmounts, useWallet } from "./wallet";
 import { PaneNav } from "./PaneNav";
+import { useOnBump } from "./useOnBump";
 import { useShowView } from "./showview";
 import { useSubmit } from "./usesubmit";
 import { useSurfaceSlots } from "./usesurfaceslots";
+import { useSurfaceReplay } from "./surface-replay";
 import { MeterRail } from "./MeterRail";
 import { PlanFold } from "./PlanFold";
 import { RunLine } from "./RunLine";
 import type { PaneProps, PaneReport } from "./panetypes";
 import { useRate, useTrail } from "./num";
+import { useCompactNow } from "./CompactNow";
 import { DOCK, Gutter } from "./Gutter";
 import { Find } from "./Find";
 import { useFind } from "./usefind";
@@ -40,6 +47,7 @@ import { RunAnalysis } from "./RunAnalysis";
 import { useBrowserTabs } from "./BrowserPanel";
 import { useRevealAgentPages, useRevealBrowserOpen } from "./browserreveal";
 import { WorkbenchPanel } from "./WorkbenchPanel";
+import { useBrowserWide } from "./browserwide";
 import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
@@ -47,6 +55,10 @@ import { PostureNote } from "./PostureNote";
 import { useStatusPoll } from "./useStatusPoll";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
 import { LiveWork, useLiveWork } from "../state/foldpref";
+import { loadChangedFilesPref, useShowsChangedFiles } from "../state/changedfiles";
+import { loadFoldWorkPref, useFoldsTurnWork } from "../state/foldwork";
+import { ChangedFilesPill } from "./ChangedFilesPill";
+import { useConversationFiles } from "./useConversationFiles";
 
 export type { PaneReport };
 
@@ -66,7 +78,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, onSettings, needsProject, onOpenProject, onKeepHere, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onOpenSession, needsProject, onOpenProject, onKeepHere, theme, dockW, dockMax, onDockW, manualBrowser = false, browserAsk = 0, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -78,6 +90,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const [mcp, setMcp] = useState<McpEntry[]>([]);
   const [askFocus, setAskFocus] = useState(0);
   const [tree, setTree] = useState<WorkspaceChanges | null>(null);
+  const [git, setGit] = useState<WorkspaceGit | null>(null);
   const [ctx, setCtx] = useState<ContextBreakdown | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const pages = useBrowserTabs(port, s.browserTabsMoved);
@@ -89,9 +102,15 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // are useful while talking to the agent, but both compete with the timeline
   // for exactly the horizontal/vertical space the analysis view explains.
   const docked = manualBrowser && tab === "flow";
+  const browserSize = useBrowserWide(docked, active && visible);
   const workbench = docked || tab === "browser";
   const flow = useRef<HTMLDivElement>(null);
   const running = s.running || !!status?.running; // A paired device can join after turn_started.
+  const fail = useCallback((e: unknown) => {
+    dispatch({ kind: "__error", text: reason(e) } as never);
+  }, []);
+  const conversationFiles = useConversationFiles(port, status?.workspaceRoot ?? rt.root, !!rt.host, visible && tab === "flow", revealBrowser, fail);
+  const compact = useCompactNow(port, running || s.items.some((item) => item.t === "compaction" && !item.done), fail);
   // Elapsed is a clock reading and belongs on the tick. Throughput is not: it
   // follows the deltas themselves, and expires rather than being re-derived.
   const tps = useRate(s.outWindow, running);
@@ -108,6 +127,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   const { pacer, shown } = useBackgroundDeltas(visible, dispatch, trajDispatch);
 
+  const surfaceReplay = useSurfaceReplay(port, dispatch);
+
   const reloadMcp = useCallback(() => {
     void port.mcp().then((c) => setMcp(c.servers)).catch(() => setMcp([]));
   }, [port]);
@@ -116,6 +137,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // stream could not close: the transcript is the record, so rebuilding from it
   // is how a hole gets filled rather than rendered as a quiet turn.
   const rebuild = useCallback(() => {
+    void surfaceReplay.refresh();
     port
       .history()
       .then((msgs) => {
@@ -123,7 +145,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         dispatch({ kind: "__restore", ...restored });
       })
       .catch(() => {});
-  }, [port]);
+  }, [port, surfaceReplay.refresh]);
 
   // /status is polled four times a second while a turn runs, and most of those
   // answers are word-for-word the previous one. Swapping in an equal object
@@ -138,6 +160,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const [wallet, refreshWallet] = useWallet(port, accountOf(status?.modelRef));
   const hideAmounts = useHidesAmounts();
 
+  useEffect(() => { void loadReceiptPref(port, !rt.host); }, [port, rt.host]);
+
   const revalue = useCallback(() => {
     port.status().then((st) => { applyStatus(st); dispatch(totalsOf(st) as never); }).catch(() => {});
     refreshWallet();
@@ -150,6 +174,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     () =>
       port.subscribe(
         (ev) => {
+          surfaceReplay.observe(ev);
+          compact.onEvent(ev);
           pacer.push(ev); if (ev.kind === "turn_done") onTurnDone?.(rt.id);
           // A server finishing its handshake changes what /mcp answers, and this
           // is the only precise signal for it — the turn boundary below is the
@@ -168,12 +194,13 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           if (ev.kind === "notice" && ev.code === "display_currency") revalue();
         },
         () => {
+          compact.release();
           pacer.drop();
           rebuild();
           refreshStatus();
         },
       ),
-    [port, pacer, rt.id, onTurnDone, reloadMcp, rebuild, refreshStatus, revalue],
+    [port, pacer, rt.id, onTurnDone, reloadMcp, rebuild, refreshStatus, revalue, compact.onEvent, compact.release, surfaceReplay.observe],
   );
 
   // What the rows cover is dispatched before the rows themselves, so the table
@@ -218,36 +245,36 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   }, [running, refreshWallet, port]);
 
   useEffect(() => {
-    if (pulse) refreshStatus();
-  }, [pulse, refreshStatus]);
-
-  const fail = useCallback((e: unknown) => {
-    // A refusal carries a code; say() turns it into this window's language.
-    // Anything else is an ordinary failure and prints as itself.
-    dispatch({ kind: "__error", text: reason(e) } as never);
-  }, []);
+    if (pulse) {
+      refreshStatus();
+      void surfaceReplay.refresh();
+    }
+  }, [pulse, refreshStatus, surfaceReplay.refresh]);
 
   // Everything on screen belongs to one session; when the kernel moves this
   // pane to another one — a switch, a new session, a rewind — all of it has to
   // be re-read rather than patched.
-  const reloadSession = useCallback(() => {
+  const reloadSession = useCallback((current: () => boolean = () => true) => {
+    void surfaceReplay.refresh(current);
     trajDispatch({ kind: "__clear" } as never);
-    port.trajectory().then(replayTrajectory).catch(() => {});
-    port.checkpoints().then(setCheckpoints).catch(() => setCheckpoints([]));
+    port.trajectory().then((r) => { if (current()) replayTrajectory(r); }).catch(() => {});
+    port.checkpoints().then((cps) => { if (current()) setCheckpoints(cps); }).catch(() => { if (current()) setCheckpoints([]); });
     // Two reads, the same way the first mount takes them: the record does not
     // wait behind the numbers over it.
     const history = port.history().then((msgs) => {
+      if (!current()) return;
       const r = fromHistory(msgs);
       dispatch({ kind: "__restore", ...r });
     });
     port.status().then((st) => {
+      if (!current()) return;
       applyStatus(st);
       dispatch(totalsOf(st) as never);
-    });
+    }).catch((e) => { if (current()) fail(e); });
     refreshWallet();
     onSessionChanged();
     return history;
-  }, [port, applyStatus, refreshWallet, onSessionChanged, replayTrajectory]);
+  }, [port, applyStatus, refreshWallet, onSessionChanged, replayTrajectory, fail, surfaceReplay.refresh]);
 
   // Both of these read only the user and tool cards, so they key off the
   // revision rather than the items array: a streamed answer leaves every card
@@ -276,7 +303,19 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   }, [ready, reloadMcp, status?.sessionPath, running]);
   useCheckpointRefresh(port, status?.sessionPath, running, setCheckpoints);
   // A call that may write can have moved the tree before the turn ends.
-  const refreshTree = useCallback(() => void port.changes().then(setTree).catch(() => setTree(null)), [port]);
+  const pillOn = useShowsChangedFiles(port);
+  const changeCount = tree?.repo ? tree.changes.length : 0;
+  const pill = pillOn && !!tree?.repo;
+  const [revealChanges, setRevealChanges] = useState(0);
+  const openChanges = useCallback(() => {
+    setRevealChanges((n) => n + 1);
+    showView("browser");
+  }, [showView]);
+  useOnBump(filesPulse, openChanges);
+  useEffect(() => { void loadChangedFilesPref(port); }, [port]);
+  useEffect(() => { void loadFoldWorkPref(port); }, [port]);
+  const foldWork = useFoldsTurnWork(port);
+  const refreshTree = useCallback(() => { void port.changes().then(setTree).catch(() => setTree(null)); void port.workspaceGit().then(setGit).catch(() => setGit(null)); }, [port]);
   useEffect(() => { if (ready || counts.wrote) refreshTree(); }, [ready, refreshTree, status?.sessionPath, running, counts.wrote]);
 
   // One turn can be dozens of model round trips — the session this was measured
@@ -293,7 +332,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   useEffect(() => {
     if (!ready && !roundTrips && !folds) return;
     port.context().then(setCtx).catch(() => setCtx(null));
-  }, [ready, port, roundTrips, folds, status?.sessionPath, running]);
+  }, [ready, port, roundTrips, folds, status?.sessionPath, running, pulse]);
 
   // The sidebar has to hear about this pane's session twice: when the first
   // turn mints the file (before that there is no row to show) and when the turn
@@ -311,6 +350,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   const submit = useSubmit({ port, running, dispatch, trajDispatch, refreshStatus, fail });
 
+  const [inserted, setInserted] = useState({ n: 0, text: "" });
   const { queue, restored, onRestoreText, onQueueEdit, onQueueMove, onQueueRetry, onQueueRefresh, onQueuePause, onQueueRead, onQueueSendNow, onQueueCancel } = useQueueActions({
     port,
     dispatch,
@@ -319,7 +359,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     sessionState: sessionRead.kind,
     sessionPath: status?.sessionPath,
   });
-  const { onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert } = useRewindActions(port, reloadSession, onRestoreText);
+  const { reloadFailure, onReloadSession, restoreNotice, onUndoAvailable, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert } = useRewindActions(port, reloadSession, onRestoreText, JSON.stringify([rt.id, rt.root, status?.sessionPath ?? rt.sessionPath]), running);
+  const onReadUndo = useCallback(() => port.availableUndo(), [port]);
 
   const { onApprove, onFullAccess, onPlan, onForget, onExtInvoke, onExtSubmit, onAnswer } = useGateActions({
     port,
@@ -329,10 +370,12 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     onRevise: () => setAskFocus((n) => n + 1),
   });
 
-  const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]));
+  const receiptPref = receiptPrefOf(port);
+  const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref);
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
-  const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail });
+  const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
+  const fileReply = useMemo(() => ({ ...reply, files: conversationFiles.refs }), [reply, conversationFiles.refs]);
 
   // Where the bottom is moves as blocks mount under it, so this only asks the
   // transcript to follow again and lets it scroll itself into place.
@@ -362,12 +405,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       context: ctx,
       mcp,
       wallet: walletDisplay,
+      interactions:s.interactions,
     });
-  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay]);
+  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions]);
 
   return (
     <section
       className="pane"
+      data-browser-size={browserSize.size}
       data-run={run}
       data-off={visible ? undefined : ""}
       aria-hidden={visible ? undefined : true}
@@ -379,19 +424,23 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       <PaneNav
         view={docked ? "browser" : tab}
         onPick={showView}
-        rows={traj.rows.length}
+        rows={traj.rows.length} plan={s.plan} goal={status?.goal}
         surfaces={surfaces}
       />
 
       <Find find={find} />
 
-      <div className="pbody" data-dock={tab === "flow" ? "" : undefined} data-full={tab === "browser" ? "" : undefined}>
+      <div className="pbody rewind-notice-host" data-dock={tab === "flow" ? "" : undefined} data-full={tab === "browser" ? "" : undefined}>
+      <RewindNotice key={JSON.stringify([rt.id, rt.root, status?.sessionPath ?? rt.sessionPath])} readUndo={onReadUndo} onUndo={onUndoAvailable} busy={!!restoreNotice?.working || !!reloadFailure?.working} refreshKey={checkpoints} moved={s.rewindMoved} running={running} shown={visible && tab === "flow" && !rt.readOnly} />
       <div className="pviews">
 
+      <ReceiptPrefContext.Provider value={receiptPref}>
       <PaneShown.Provider value={shown}>
       <LiveWork.Provider value={live}>
       <Transcript port={port}
-        reply={reply}
+        foldWork={foldWork}
+        turnRunning={running}
+        reply={fileReply}
         onResend={onResend}
         items={s.items}
         entering={s.entranceOwed}
@@ -416,7 +465,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         checkpoints={paired}
         onPrepareRewind={onPrepareRewind}
         onCommitRewind={onCommitRewind}
-        onUndoRewind={onUndoRewind}
         onPrepareFileRevert={onPrepareFileRevert}
         onCommitFileRevert={onCommitFileRevert}
         needsProject={needsProject}
@@ -425,6 +473,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       />
       </LiveWork.Provider>
       </PaneShown.Provider>
+      </ReceiptPrefContext.Provider>
+      {conversationFiles.menuView}
 
       <div className="scroll" data-pane="analysis" hidden={tab !== "analysis"}>
         {tab === "analysis" && (
@@ -437,30 +487,31 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       </div>
       </div>
       </div>
-      {/* Kept mounted rather than switched on: the open files, the browsers and
-          where each had got to are what a glance at the conversation must not
-          cost. */}
-      {/* Mounted shut as well as open: shut is where it becomes the tab that
-          brings the browser back, which is the only affordance left once the
-          column has no width. */}
-      {tab === "flow" && (
+      {/* The workbench keeps pages and open files mounted across view changes;
+          the divider remains reachable when the split column is closed. */}
+      {tab === "flow" && browserSize.size === "split" && (
         <Gutter edge="r" span={DOCK} width={dockW} max={dockMax} label={t("调整浏览器宽度")} open={docked}
           onWidth={onDockW} onOpen={(on) => onManualBrowser?.(on)} />
       )}
       <div className="scroll" data-pane="browser" hidden={tab === "analysis"} inert={!workbench}>
           <WorkbenchPanel
             port={port}
+            fileRequest={conversationFiles.request}
             tabs={pages}
+            wideMode={docked ? { wide: browserSize.size === "wide", onToggle: browserSize.toggle } : undefined}
             manual={manualBrowser}
+            browserAsk={browserAsk}
             shown={visible && workbench}
             onSurfaces={setSurfaces}
             scheme={theme === "light" ? "light" : "dark"}
-            changes={tree?.changes ?? []} onTreeChanged={refreshTree}
+            changes={tree?.changes ?? []} onTreeChanged={refreshTree} revealChanges={revealChanges}
             running={running}
             wrote={counts.wrote}
             remote={!!rt.host}
+            workspaceRoot={status?.workspaceRoot ?? rt.root}
             onCloseManual={() => onManualBrowser?.(false)}
             onExternal={(url) => void port.openExternal(url).catch(fail)}
+            onAddToChat={(reference) => setInserted((was) => ({ n: was.n + 1, text: reference }))}
           />
       </div>
 
@@ -476,7 +527,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         </span>
         {/* Everything stacked above the input box shares one ceiling, so no
             child of this region may grow without bound. */}
-        <PlanFold plan={s.plan} shown={tab === "flow"} />
+        <PlanFold plan={s.plan} shown={tab === "flow"} paused={blocked} />
         {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} sent={sent} received={received} estimated={s.outLive > 0} />}
         <div className="composeaux">
           <Queue
@@ -510,12 +561,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           )}
         </div>
         {alert && <div className="cmpalert">{alert}</div>}
-        <Composer port={port} status={status} running={running} quote={quote} restore={restored} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={fail} onSettings={onSettings} changeCount={tree?.repo ? tree.changes.length : 0} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
+        {pill && <ChangedFilesPill changes={tree?.changes ?? []} onOpen={openChanges} />}
+        <Composer port={port} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={fail} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
         <MeterRail
-          tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} cost={cost}
+          tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} compact={compact} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}
           onCancelJob={(id) => port.cancelJob(id).then(refreshStatus, fail)}
         />
+        {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}
         {/* Below the box, under a ceiling of their own. Both arrive unbidden and
             both are dismissed one at a time, so nothing else bounds how many can
             be on screen at once. */}
@@ -546,12 +599,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             done={!running}
             posture={posture(run, blocked)}
             plan={s.plan}
+            blocked={blocked}
             wallet={wallet}
             account={status?.providerDisplayName || accountOf(status?.modelRef)}
             onRefreshWallet={refreshWallet}
             tree={tree}
             ctx={ctx}
             onCtx={setCtx}
+            compact={compact}
             yolo={status?.toolApprovalMode === "yolo"}
             onSettings={onSettings}
             panels={s.panels}

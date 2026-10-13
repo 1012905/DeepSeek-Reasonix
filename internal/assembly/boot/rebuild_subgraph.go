@@ -60,20 +60,7 @@ func tryRebuildSubgraph(ctx context.Context, old *control.Controller, previous *
 	prevUISession := controllerSessionID(previous.Controller)
 	prevUIGen := previous.Snapshot.Generation()
 
-	res = &BuildResult{
-		Controller:           previous.Controller,
-		Snapshot:             previous.Snapshot.WithGeneration(gen),
-		Runtime:              extension.NewRuntimeSet(gen),
-		Owner:                opts.Owner,
-		Extensions:           previous.Extensions,
-		Dispatcher:           previous.Dispatcher,
-		ExtensionUI:          previous.ExtensionUI,
-		ProviderResolver:     previous.ProviderResolver,
-		BaseProviderResolver: previous.BaseProviderResolver,
-		Assembly:             previous.Assembly,
-		Plan:                 plan,
-		ReusedController:     true,
-	}
+	res = reusedBuildResult(previous, opts.Owner, gen, plan)
 	session := protocol.SessionContext{
 		SessionID:     controllerSessionID(previous.Controller),
 		WorkspaceRoot: previous.Controller.WorkspaceRoot(),
@@ -243,7 +230,11 @@ func stageDispatcher(res *BuildResult) error {
 	}
 	clients := sidecarClientResolver(res.Extensions)
 	required := requiredRuntimeSet(res.Extensions)
-	res.Dispatcher = dispatch.New(res.Snapshot.InterceptorChain(), res.Snapshot.Replacements(), clients, required, dispatch.Options{})
+	var opts dispatch.Options
+	if res.Dispatcher != nil {
+		opts = res.Dispatcher.Options()
+	}
+	res.Dispatcher = dispatch.New(res.Snapshot.InterceptorChain(), res.Snapshot.Replacements(), clients, required, opts)
 	return nil
 }
 
@@ -324,4 +315,22 @@ func finishRebuildPublish(res *BuildResult, drainMgr *sidecar.Manager, start tim
 		})
 	}
 	extension.DefaultLifecycleMetrics.ObserveActivate(time.Since(start))
+}
+
+func reusedBuildResult(previous *BuildResult, owner *extension.RuntimeOwner, gen uint64, plan *extension.RuntimePlan) *BuildResult {
+	return &BuildResult{
+		ComputerDriver:       previous.ComputerDriver,
+		Controller:           previous.Controller,
+		Snapshot:             previous.Snapshot.WithGeneration(gen),
+		Runtime:              extension.NewRuntimeSet(gen),
+		Owner:                owner,
+		Extensions:           previous.Extensions,
+		Dispatcher:           previous.Dispatcher,
+		ExtensionUI:          previous.ExtensionUI,
+		ProviderResolver:     previous.ProviderResolver,
+		BaseProviderResolver: previous.BaseProviderResolver,
+		Assembly:             previous.Assembly,
+		Plan:                 plan,
+		ReusedController:     true,
+	}
 }

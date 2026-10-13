@@ -33,7 +33,6 @@ func (s *Server) preset(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) registerModelRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /model", s.model)
-	mux.HandleFunc("POST /default-model", s.setDefaultModel)
 }
 
 func (s *Server) model(w http.ResponseWriter, r *http.Request) {
@@ -69,8 +68,13 @@ func (s *Server) setDefaultModel(w http.ResponseWriter, r *http.Request) {
 	}
 	ref := strings.TrimSpace(body.Ref)
 	catalog := s.ctl().ProviderCatalog()
-	if !config.LoadForEdit(config.UserConfigPath()).ModelRefSelectable(ref, catalog) {
+	edit := config.LoadForEdit(config.UserConfigPath())
+	if !edit.ModelRefSelectable(ref, catalog) {
 		refuse(w, http.StatusBadRequest, "settings.unknown_model", "no configured model matches that reference", map[string]any{"model": ref})
+		return
+	}
+	if err := edit.RequireAnswers(ref, config.AnswersChat); err != nil {
+		writeErr(w, http.StatusConflict, err)
 		return
 	}
 	if err := persistDefaultModel(ref, catalog); err != nil {
@@ -252,6 +256,7 @@ type modelEntry struct {
 	// DisplayName labels Provider on screen; Ref and Provider stay the identity.
 	DisplayName string `json:"displayName,omitempty"`
 	Model       string `json:"model"`
+	ModelAlias  string `json:"modelAlias,omitempty"`
 	Kind        string `json:"kind,omitempty"`
 	// What this model produces, projected from the protocol table so a chooser
 	// filters on a declaration rather than on a kind's spelling.
@@ -270,6 +275,7 @@ type modelEntry struct {
 	// The capability face; see describeModel. Omitted fields mean "nothing
 	// declares this", never "no".
 	Vision        bool        `json:"vision,omitempty"`
+	WebSearch     bool        `json:"webSearch,omitempty"`
 	Efforts       []string    `json:"efforts,omitempty"`
 	Effort        string      `json:"effort,omitempty"`
 	ContextWindow int         `json:"contextWindow,omitempty"`

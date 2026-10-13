@@ -7,6 +7,8 @@ package event
 // wording edits in Go no longer silently break localization. Values are
 // wire-stable: never rename or reuse one once shipped.
 const (
+	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
+	NoticeCodeCheckpointRecordingFailed                         = "checkpoint_recording_failed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
@@ -32,6 +34,7 @@ const (
 	NoticeCodeSessionRecoveryDepthCap                           = "session_recovery_depth_cap"
 	NoticeCodeSessionShutdownRecoveryForked                     = "session_shutdown_recovery_forked"
 	NoticeCodeVerificationStalled                               = "verification_stalled"
+	NoticeCodeAskTimeoutInvalid                                 = "ask_timeout_invalid"
 	NoticeCodeDecisionReceipt, NoticeCodeContextEditingFallback = "decision_receipt", "context_editing_fallback"
 	// A reported lease wait always arrives as a pair: one of the two below
 	// closes the one above, so no surface is left holding an open wait.
@@ -49,10 +52,17 @@ const (
 	// A project-declared MCP server held off until the user approves what it runs:
 	// never approved, or changed since it was. Detail is the launch line.
 	NoticeCodeProjectMCPAwaitingApproval, NoticeCodeProjectMCPChanged = "project_mcp_awaiting_approval", "project_mcp_changed"
+	// MCP tools whose definitions are new or changed since approval, withheld from the model; Detail lists them.
+	NoticeCodeMCPToolsHeld = "mcp_tools_held"
 	// A conversation opened from a 1.x log went on in a new session of its own.
 	NoticeCodeSessionContinuedFrom1x = "session_continued_from_1x"
 	// The user config names a default approval mode this build does not know; it loads as ask.
 	NoticeCodeApprovalModeUnrecognized = "approval_mode_unrecognized"
+	// Saved permission rules name no tool, so they match nothing; Detail is a PermissionRulesDormant.
+	NoticeCodePermissionRulesDormant = "permission_rules_dormant"
+	// A submission was refused while the session, workspace or runtime was changing.
+	// Its text says to resend, which is right for a frontend that keeps no queue; one that queues on the typed refusal says so itself.
+	NoticeCodeInputRefused = "input_refused"
 	// A turn handed its open list back to the user; Detail is the model's `need`, as it wrote it.
 	NoticeCodeAwaitUser = "await_user"
 	// A slash command nothing resolves, refused rather than sent as prose.
@@ -71,8 +81,22 @@ const (
 	NoticeCodeCompactDeclined = "compact_declined"
 	// /compact failed; Detail is the failure code, its text the English fallback.
 	NoticeCodeCompactFailed = "compact_failed"
+	// Automatic compaction is due but an earlier attempt's failure still holds the retry; Detail is that failure's code.
+	NoticeCodeCompactHeld = "compact_held"
 	// An optional extension was left out of an operation; Detail is the ExtensionSkipped payload.
 	NoticeCodeExtensionSkipped = "extension_skipped"
 	// A reopened session's inbox held unfinished instructions and came up paused; Detail is the InboxRecovered payload.
 	NoticeCodeInboxRecovered = "inbox_recovered"
+	// A background job ended; Detail is the JobNotice payload, its text the English fallback.
+	NoticeCodeJobFinished = "job_finished"
+	// A background job was killed; Detail is the JobNotice payload, its text the English fallback.
+	NoticeCodeJobKilled = "job_killed"
+	// A background job failed; Detail is the JobNotice payload, its text the English fallback.
+	NoticeCodeJobFailed = "job_failed"
+	// The selected web search model cannot serve, so search is off; Detail is the provider/model, the code names why.
+	NoticeCodeWebSearchModelBadRef        = "web_search_model_bad_ref"
+	NoticeCodeWebSearchModelNotAdded      = "web_search_model_not_added"
+	NoticeCodeWebSearchModelRemoved       = "web_search_model_removed"
+	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
+	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
 )

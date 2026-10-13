@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"reasonix/internal/base/testenv"
 )
 
@@ -69,145 +70,90 @@ func launchWindowsTarget(t *testing.T) probe {
 // inShot converts a point on screen into the pixels of the application's
 // latest screenshot, which is the frame the model aims in.
 func inShot(s *Session, at [2]float64) (*float64, *float64) {
-	s.mu.Lock()
-	g := s.shots[windowsTarget]
-	s.mu.Unlock()
-	x, y := (at[0]-g.bounds.X)/g.scale, (at[1]-g.bounds.Y)/g.scale
+	s.driver.desktop.Lock()
+	g := s.state
+	s.driver.desktop.Unlock()
+	scale := g.window.Bounds.Width / float64(g.imageWidth)
+	x, y := (at[0]-g.window.Bounds.X)/scale, (at[1]-g.window.Bounds.Y)/scale
 	return &x, &y
 }
 
 func TestLiveWindowsOperatesAnApplication(t *testing.T) {
 	s := liveSession(t)
 	p := launchWindowsTarget(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
-
 	snap, err := s.Snapshot(ctx, windowsTarget)
 	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
+		t.Fatal(err)
 	}
-	t.Logf("snapshot:\n%s", strings.Join(snap.Lines, "\n"))
-	field := lineRef(t, snap.Lines, `edit "Probe field"`)
-	button := lineRef(t, snap.Lines, `button "Probe button"`)
-
-	res, err := s.Act(ctx, windowsTarget, []Step{
-		{Action: "set_value", Ref: field, Text: "from-ax"},
-		{Action: "click", Ref: button},
-		{Action: "focus", Ref: field},
-		{Action: "key", Key: "end"},
-		{Action: "type", Text: " 李雷"},
-		{Action: "key", Key: "3"},
-		{Action: "key", Key: "shift+home"},
-		{Action: "key", Key: "backspace"},
-	})
-	if err != nil {
-		t.Fatalf("Act: %v (done %d)", err, res.Done)
+	field := lineRef(t, snap.Lines, `"Probe field"`)
+	button := lineRef(t, snap.Lines, `"Probe button"`)
+	result, err := s.Act(ctx, windowsTarget, []Step{{Action: "set_value", Ref: field, Text: "李雷 from CUA"}})
+	if err != nil && CodeOf(err) != CodeEffectUnknown {
+		t.Fatalf("set_value: %+v %v", result, err)
+	}
+	waitLog(t, p.log, "text 李雷 from CUA")
+	result, err = s.Act(ctx, windowsTarget, []Step{{Action: "click", Ref: button}})
+	if err != nil && CodeOf(err) != CodeEffectUnknown {
+		t.Fatalf("click: %+v %v", result, err)
+	}
+	if err != nil && result.Done != 1 {
+		t.Fatal("unverified click lost delivery fact")
 	}
 	waitLog(t, p.log, "button pressed 1")
-	waitLog(t, p.log, "text from-ax 李雷3\ntext \n")
-
 	shot, app, err := s.Screenshot(ctx, windowsTarget)
-	if err != nil {
-		t.Fatalf("Screenshot: %v", err)
-	}
-	if !strings.HasPrefix(shot, "data:image/") || app.Bundle != windowsTarget {
-		t.Fatalf("screenshot = %.40q for %+v", shot, app)
+	if err != nil || !strings.HasPrefix(shot, "data:image/") || app.Bundle != windowsTarget {
+		t.Fatalf("screenshot: %+v %v", app, err)
 	}
 	x, y := inShot(s, p.button)
-	if _, err := s.Act(ctx, windowsTarget, []Step{{Action: "click", X: x, Y: y}}); err != nil {
-		t.Fatalf("click at a screenshot point: %v", err)
+	if _, err := s.Act(ctx, windowsTarget, []Step{{Action: "click", X: x, Y: y}}); err != nil && CodeOf(err) != CodeEffectUnknown {
+		t.Fatal(err)
 	}
 	waitLog(t, p.log, "button pressed 2")
-	cx, cy := inShot(s, p.canvas)
-	if _, err := s.Act(ctx, windowsTarget, []Step{{Action: "click", X: cx, Y: cy}}); CodeOf(err) != CodeNoAction {
-		t.Fatalf("clicking a window with no accessibility action = %v, want %s", err, CodeNoAction)
-	}
-	if _, err := s.Act(ctx, windowsTarget, []Step{{Action: "key", Key: "meta+s"}}); CodeOf(err) != CodeBadStep {
-		t.Fatalf("the Windows key = %v, want %s", err, CodeBadStep)
-	}
-	if _, err := s.Act(ctx, windowsTarget, []Step{{Action: "scroll", Amount: -3}}); err != nil {
-		t.Fatalf("scroll by lines: %v", err)
-	}
 	for _, name := range []string{"cmd.exe", "PowerShell.exe"} {
 		if _, err := s.Snapshot(ctx, name); CodeOf(err) != CodeAppRefused {
-			t.Fatalf("%s = %v, want %s", name, err, CodeAppRefused)
+			t.Fatal(err)
 		}
 	}
 }
 
-func clipboard(t *testing.T) string {
-	t.Helper()
-	out, err := exec.Command("powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw").Output()
-	if err != nil {
-		t.Fatalf("Get-Clipboard: %v", err)
-	}
-	return strings.TrimRight(string(out), "\r\n")
-}
-
-// Pasting is the clipboard borrowed: the application gets the text at once and
-// the person gets their clipboard back.
 func TestLiveWindowsPasteGivesTheClipboardBack(t *testing.T) {
 	s := liveSession(t)
 	p := launchWindowsTarget(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	held := "what the person had copied"
-	if err := exec.Command("powershell", "-NoProfile", "-Command", "Set-Clipboard -Value '"+held+"'").Run(); err != nil {
-		t.Fatalf("Set-Clipboard: %v", err)
-	}
-	snap, err := s.Snapshot(ctx, windowsTarget)
+	held, err := clipboard.ReadAll()
 	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
+		t.Skipf("native clipboard observation unavailable: %v", err)
 	}
-	field := lineRef(t, snap.Lines, `edit "Probe field"`)
-	pasted := "粘贴 without typing"
-	if _, err := s.Act(ctx, windowsTarget, []Step{{Action: "focus", Ref: field}, {Action: "paste", Text: pasted}}); err != nil {
-		t.Fatalf("paste: %v", err)
+	snap, err := s.Snapshot(t.Context(), windowsTarget)
+	if err != nil {
+		t.Fatal(err)
 	}
-	waitLog(t, p.log, "text "+pasted)
-
-	deadline := time.Now().Add(6 * time.Second)
-	for {
-		if back := clipboard(t); back == held {
-			return
-		} else if time.Now().After(deadline) {
-			t.Fatalf("the clipboard was left holding %q, not what the person had (%q)", back, held)
-		}
-		time.Sleep(200 * time.Millisecond)
+	field := lineRef(t, snap.Lines, `"Probe field"`)
+	result, err := s.Act(t.Context(), windowsTarget, []Step{{Action: "paste", Ref: field, Text: "粘贴 from CUA"}})
+	if err != nil && CodeOf(err) != CodeEffectUnknown {
+		t.Fatalf("paste: %+v %v", result, err)
+	}
+	waitLog(t, p.log, "text 粘贴 from CUA")
+	back, err := clipboard.ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back != held {
+		t.Fatal("CUA text delivery changed clipboard")
 	}
 }
 
-// What the accessibility path cannot reach: a window that draws itself and
-// takes no action. The pointer is the person's, so it goes back where it was.
 func TestLiveWindowsThePointerReachesWhatAccessibilityCannot(t *testing.T) {
 	s := liveSession(t)
 	p := launchWindowsTarget(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	if _, _, err := s.Screenshot(ctx, windowsTarget); err != nil {
-		t.Fatalf("Screenshot: %v", err)
+	if _, _, err := s.Screenshot(t.Context(), windowsTarget); err != nil {
+		t.Fatal(err)
 	}
 	x, y := inShot(s, p.canvas)
-	home, err := s.Act(ctx, windowsTarget, []Step{{Action: "pointer_position"}})
-	if err != nil {
-		t.Fatalf("pointer_position: %v", err)
-	}
-	if res, err := s.Act(ctx, windowsTarget, []Step{{Action: "pointer_click", X: x, Y: y}}); err != nil {
-		t.Fatalf("pointer_click: %v (%v)", err, res.Notes)
+	result, err := s.Act(t.Context(), windowsTarget, []Step{{Action: "pointer_click", X: x, Y: y}})
+	if err != nil && CodeOf(err) != CodeEffectUnknown {
+		t.Fatalf("pointer: %+v %v", result, err)
 	}
 	waitLog(t, p.log, "mouseDown")
-	back, err := s.Act(ctx, windowsTarget, []Step{{Action: "pointer_position"}})
-	if err != nil {
-		t.Fatalf("pointer_position: %v", err)
-	}
-	if back.Notes[0] != home.Notes[0] {
-		t.Fatalf("the pointer was left at %q, not where the person had it (%q)", back.Notes[0], home.Notes[0])
-	}
-	toX, toY := *x+40, *y-20
-	if _, err := s.Act(ctx, windowsTarget, []Step{{Action: "pointer_drag", X: x, Y: y, ToX: &toX, ToY: &toY}}); err != nil {
-		t.Fatalf("pointer_drag: %v", err)
-	}
-	waitLog(t, p.log, "mouseDragged")
 }

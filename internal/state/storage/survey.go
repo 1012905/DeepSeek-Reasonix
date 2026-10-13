@@ -286,3 +286,8 @@ func isDirAt(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
 }
+
+// VolumeOf answers what the volume holding dir has left, for a caller that
+// wants one answer rather than a survey; a volume that cannot be read comes
+// back with a zero Total.
+func VolumeOf(dir string) Volume { return readVolume(dir) }

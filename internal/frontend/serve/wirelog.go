@@ -47,7 +47,8 @@ var wireLogKinds = map[string]bool{
 	// What serialising writers across sessions actually cost this one. Nothing
 	// else in the log carries it: the notice only fires past the grace, and it
 	// carries a sentence rather than a number.
-	"workspace_lease": true,
+	"workspace_lease":   true,
+	"extension_surface": true, "extension_status": true,
 }
 
 // wireLogSkipped names the kinds deliberately left out, so every kind is
@@ -60,11 +61,14 @@ var wireLogSkipped = map[string]bool{
 	"reasoning": true, "text": true, "phase": true,
 	"tool_progress": true, "compaction_progress": true,
 	// Live surfaces a reopened window re-reads from the host rather than replays.
-	"mcp_surface_ready": true, "extension_surface": true, "extension_status": true,
+	"mcp_surface_ready": true,
 	"workspace_changed": true, "turn_phase": true, "inbox_changed": true,
 	// Content-free invalidation: a reopened window reads /adjudications, and
 	// replaying the notice would tell it to re-read something it just read.
 	"adjudications_changed": true,
+	// Content-free invalidation: a reopened pane reads the undo offer from
+	// /rewind/undo, so replaying the notice would only repeat that read.
+	"rewind_changed": true,
 	// The agent's tabs are read from the session that owns them.
 	"browser_tabs_changed": true,
 }
@@ -160,6 +164,13 @@ func (w *wireLog) write(sessionPath string, frame []byte) {
 	}
 	if head.NonPersistable {
 		return
+	}
+	if head.Kind == "extension_surface" || head.Kind == "extension_status" {
+		var ok bool
+		frame, ok = surfaceMarker(frame)
+		if !ok {
+			return
+		}
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()

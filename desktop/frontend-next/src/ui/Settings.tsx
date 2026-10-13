@@ -1,12 +1,12 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
-import { HttpError } from "../port/port";
 import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
+import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV, SECTION_NAME, SETTINGS, settingMatches } from "./prefsnav";
+import { ICON, NAV, SECTION_NAME } from "./prefsnav";
 import { Group, SCOPE_SAID } from "./Group";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -29,7 +29,10 @@ import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
+import { AskTimeout } from "./AskTimeout";
 import { ProgressWatch } from "./ProgressWatch";
+import { DisplaySettings } from "./DisplaySettings";
+import { AutoArchive } from "./AutoArchive";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
 import { Providers } from "./Providers";
@@ -48,17 +51,12 @@ import { UsageSettings } from "./UsageSettings";
 import { Storage } from "./Storage";
 import { Appearance, SCHEMES } from "./Appearance";
 import { ScopeBar } from "./CapabilityScope";
-import { SAVED_NOT_APPLIED, reason } from "../i18n/kernel";
+import { savedNotApplied, reason } from "../i18n/kernel";
 import { SettingsHeading } from "./SettingsHeading";
 import { APPROVALS, approvalName, approvalNote } from "./approvals";
 
-// What still lives in the old desktop app. Bots are not on the roadmap, so
-// they are not a promise to keep here either. Signing in and reading
-// versions landed here; downloading and applying an update did not, and naming
-// only that half keeps this list a fact rather than a promise.
-// Everything that used to live here has a home now, so the 「高级」 tab filters
-// itself out below. Keep the list rather than the tab: the next thing that is
-// real but not built yet belongs in one line here, not in a half-made panel.
+// An empty list hides Advanced. Only features available in the legacy app
+// without a settings page here belong in this list.
 const ELSEWHERE: string[] = [];
 
 // The user's question is "is it there and does it work", so the state is the
@@ -71,9 +69,10 @@ interface Props {
   hub: HubPort;
   onError: (e: unknown) => void;
   port: AgentPort;
-  // Network belongs to a machine rather than a pane; host names it when that
-  // machine is not this one.
+  // Machine-scoped pages use the window owner; session and project controls
+  // continue to use the active pane.
   networkPort?: AgentPort;
+  localWorkspacePort?: AgentPort;
   networkHost?: string;
   status: SessionStatus | null;
   theme: string;
@@ -94,7 +93,9 @@ interface Props {
   reloadAccount: () => void;
   workspaceRoot?: string;
 }
-export function Settings({ hub, onError, port, networkPort, networkHost, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, onSessionsRecovered, reloadThemes, at: opened, account: acct, accountUnread, reloadAccount, workspaceRoot }: Props) {
+export function Settings({ hub, onError, port, networkPort, localWorkspacePort, networkHost, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, onSessionsRecovered, reloadThemes, at: opened, account: acct, accountUnread, reloadAccount, workspaceRoot }: Props) {
+  const homePort = networkPort ?? port;
+  const localPort = localWorkspacePort ?? homePort;
   const [openedSection, openedAnchor = ""] = (opened ?? "").split(":", 2);
   const [at, setAt] = useState<Section>((openedSection as Section) || "session");
   // 搜索的语料是这张表，不是屏幕上的 DOM：分区是按需挂载的，读 DOM 就只搜得到
@@ -128,8 +129,11 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
   const [extRefreshing, setExtRefreshing] = useState(false);
   const [extErrors, setExtErrors] = useState<Partial<Record<"mcp" | "packages" | "skills", string>>>({});
   const extRefresh = useRef(0);
-  const [updatingPkg, setUpdatingPkg] = useState({ name: "", applying: false });
-  const applyingChanged = useCallback((applying: boolean) => setUpdatingPkg((p) => ({ ...p, applying })), []);
+  const [updatingPkg, setUpdatingPkg] = useState({ connection: { port }, name: "", applying: false });
+  if (updatingPkg.connection.port !== port) setUpdatingPkg({ connection: { port }, name: "", applying: false });
+  const applyingChanged = useCallback((applying: boolean) => {
+    setUpdatingPkg((p) => p.connection === updatingPkg.connection ? { ...p, applying } : p);
+  }, [updatingPkg.connection]);
   const [hookCount, setHookCount] = useState(0);
   const [netMode, setNetMode] = useState("");
   const [memCount, setMemCount] = useState(0);
@@ -151,8 +155,8 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
     }).catch((e) => { if (current()) { setMcp([]); setExtErrors((errors) => ({ ...errors, mcp: reason(e) })); } });
     const packageRead = port.plugins().then((c) => { if (current()) setPackages(c); }).catch((e) => { if (current()) { setPackages([]); setExtErrors((errors) => ({ ...errors, packages: reason(e) })); } });
     port.hooks().then((c) => { if (current()) setHookCount(c.hooks.length); }).catch(() => { if (current()) setHookCount(0); });
-    port.network().then((n) => { if (current()) setNetMode(t(NET_MODE[n.mode] ?? n.mode)); }).catch(() => { if (current()) setNetMode(""); });
-    port.memories().then((c) => { if (current()) setMemCount(c.memories.length); }).catch(() => { if (current()) setMemCount(0); });
+    homePort.network().then((n) => { if (current()) setNetMode(t(NET_MODE[n.mode] ?? n.mode)); }).catch(() => { if (current()) setNetMode(""); });
+    localPort.memories().then((c) => { if (current()) setMemCount(c.memories.length); }).catch(() => { if (current()) setMemCount(0); });
     port.permissions().then((p) => { if (current()) setRuleCount(p.deny.length + p.ask.length + p.allow.length); }).catch(() => { if (current()) setRuleCount(0); });
     const skillRead = port.skills(where).then((c) => {
       if (!current()) return;
@@ -161,11 +165,10 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
     })
       .catch((e) => { if (current()) { setSkills([]); setExtErrors((errors) => ({ ...errors, skills: reason(e) })); } });
     void Promise.allSettled([mcpRead, packageRead, skillRead]).then(() => { if (current()) setExtRefreshing(false); });
-  }, [port, scopeAt]);
+  }, [port, homePort, localPort, scopeAt]);
   // Adding or removing a source changes what the picker above can offer, so
   // the list is reloadable rather than read once at mount.
-  const homePort = networkPort ?? port;
-  const loadModels = useModelCatalog(port, homePort, setModels);
+  const loadModels = useModelCatalog(port, localPort, setModels);
 
   const currentExt = useRef({ port, reloadExt, loadModels, onChanged });
   currentExt.current = { port, reloadExt, loadModels, onChanged };
@@ -183,13 +186,16 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
   // number failed to arrive has invented a fact about the section.
   const [tally, setTally] = useState<Partial<Record<Section, string>>>({});
   useEffect(() => {
-    const put = (k: Section, v: string) => setTally((prev) => ({ ...prev, [k]: v }));
-    port.storage().then((st) => put("storage", bytes(st.roots.reduce((n, r) => n + (r.bytes || 0), 0)))).catch(() => {});
+    let alive = true;
+    setTally({});
+    const put = (k: Section, v: string) => { if (alive) setTally((prev) => ({ ...prev, [k]: v })); };
+    homePort.storage().then((st) => put("storage", bytes(st.roots.reduce((n, r) => n + (r.bytes || 0), 0)))).catch(() => {});
     // The same window Usage itself opens on, or the list and the page it opens
     // would report two different totals for one word.
-    port.usage(DEFAULT_DAYS).then((u) => put("usage", fmtTokens(u.tokens))).catch(() => {});
-    port.versions().then((v) => put("versions", v.current || "dev")).catch(() => {});
-  }, [port]);
+    homePort.usage(DEFAULT_DAYS).then((u) => put("usage", fmtTokens(u.tokens))).catch(() => {});
+    homePort.versions().then((v) => put("versions", v.current || "dev")).catch(() => {});
+    return () => { alive = false; };
+  }, [homePort]);
 
   // Focus lands once, when the pane opens, and goes back where it came from on
   // the way out. onClose is a fresh arrow on every parent render, so re-running
@@ -235,7 +241,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
       await fn();
       onChanged();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -306,12 +312,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
 
   // 搜索命中的是这张表里的条目，包括当前没有挂载的那些分区；能不能显示由 shown
   // 决定，和它有没有被渲染过无关。
-  const found = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return null;
-    return SETTINGS.filter((e) => shown(e.section) && settingMatches(e, q));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, remoteBook]);
+  const found = useSettingsSearch(query, shown, remoteBook);
   // 落点：跳过去之后短暂标一下「就是这里」。这是导航反馈，不是状态变化。
   const go = (section: Section, anchor: string) => {
     setAt(section);
@@ -418,9 +419,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
           </div>
         )}
       </div>
-
       <ConfigTrouble port={port} onRepaired={onChanged} />
-
       <div className="prefs-body">
         <nav className="prefs-nav" role="tablist" aria-label={t("设置分类")} onKeyDown={arrowTabs}>
           {NAV.map(([group, items]) => {
@@ -498,7 +497,10 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                   />
                 </div>
               </Group>
+              <DisplaySettings port={port} />
+              <AskTimeout port={port} />
               <ProgressWatch port={port} />
+              <AutoArchive port={port} />
               <Group id="session-dir" title={t("会话写入位置")}>
                 <div className="kv">
                   <span className="k">{t("工作目录")}</span>
@@ -536,11 +538,11 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
           {at === "model" && (
             <>
               <Group id="model" title={t("按用途选择模型")} now={nav.model}
-                hint={t("默认模型用于当前对话和大多数任务，其他用途默认跟随它；只有要为某件事换一个模型时才改。切换会保留对话并重建运行时，任务执行期间无法修改。")}>
+                hint={t("默认模型用于当前对话和大多数任务，其他用途默认跟随它；只有要为某件事换一个模型时才改。网页搜索默认用对话模型自带的搜索；指定独立搜索模型后，每次搜索多一次计费，且不带对话上下文。切换会保留对话并重建运行时，任务执行期间无法修改。")}>
                 <ModelUsage models={models} roles={roles} main={status?.modelRef} busy={busy} protocol={protocol}
                   onMain={(ref) => run(ref, async () => {
                     await port.setModel(ref);
-                    await homePort.setDefaultModel(ref);
+                    await localPort.setDefaultModel(ref);
                     // The row reads the catalogue's default, so the list has to
                     // be re-read or the controlled select snaps back.
                     loadModels();
@@ -661,7 +663,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                       port={port}
                       updating={packages.find((p) => p.name === updatingPkg.name)}
                       onApplying={applyingChanged}
-                      onClose={() => setUpdatingPkg({ name: "", applying: false })} onInstalled={afterExtChange}
+                      onClose={() => setUpdatingPkg((p) => ({ ...p, name: "", applying: false }))} onInstalled={afterExtChange}
                     />
                   )}
                   <Packages
@@ -669,7 +671,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                     packages={packages}
                     onChanged={afterExtChange} onReloadError={reload.report} onReloaded={reload.applied}
                     updating={updatingPkg.name}
-                    onUpdate={(name) => setUpdatingPkg({ name, applying: false })}
+                    onUpdate={(name) => setUpdatingPkg((p) => ({ ...p, name, applying: false }))}
                   />
                   {extErrors.packages && <div className="rnote" data-s="bad" role="alert">{extErrors.packages} <button className="act" data-action="extensions.refresh" disabled={extRefreshing} onClick={reloadExt}>{t("重试")}</button></div>}
                   {packages.length === 0 && !addingPkg && !extRefreshing && !extErrors.packages && <div className="empty">{t("尚未安装插件包。")}</div>}
@@ -755,25 +757,25 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
             </Group>
           )}
 
-          {at === "versions" && <About port={port} />}
+          {at === "versions" && <About port={homePort} />}
 
           {at === "memory" && (
             <Group id="memory"
               title={t("记忆")}
               hint={t("agent 自动记录的内容：未经配置，但会据此执行。此处按触发时机分组，并标出上一轮实际使用的条目。")}
             >
-              <Memory port={port} />
+              <Memory port={localPort} />
             </Group>
           )}
 
-          {at === "usage" && <UsageSettings port={port} onChanged={onChanged} />}
+          {at === "usage" && <UsageSettings port={homePort} onChanged={onChanged} />}
 
           {at === "storage" && (
-            <Group id="storage" title={t("存储")} hint={t("数据的存储位置与占用空间。会话和索引会持续增长，配置和凭据不会，因此只有前者可以迁移。迁移在重启后生效。")}><Storage port={port} hub={hub} workspace={workspaceRoot ?? status?.workspaceRoot ?? ""} onRecovered={() => { onChanged(); onSessionsRecovered?.(); }} /></Group>
+            <Group id="storage" title={t("存储")} hint={t("数据的存储位置与占用空间。会话和索引会持续增长，配置和凭据不会，因此只有前者可以迁移。迁移在重启后生效。")}><Storage port={homePort} hub={hub} workspace={workspaceRoot ?? (homePort === port ? status?.workspaceRoot ?? "" : "")} onRecovered={() => { onChanged(); onSessionsRecovered?.(); }} /></Group>
           )}
 
           {at === "appearance" && (
-            <Appearance port={port} theme={theme} onTheme={onTheme} contrast={contrast} onContrast={onContrast} weight={weight} onWeight={onWeight} reloadThemes={reloadThemes} look={look} onLook={onLook} />
+            <Appearance port={homePort} theme={theme} onTheme={onTheme} contrast={contrast} onContrast={onContrast} weight={weight} onWeight={onWeight} reloadThemes={reloadThemes} look={look} onLook={onLook} />
           )}
 
           {at === "advanced" && (
