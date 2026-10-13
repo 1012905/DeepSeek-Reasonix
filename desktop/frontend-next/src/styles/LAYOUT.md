@@ -96,10 +96,12 @@ rules are written in.
 - The separator between crumbs is a written character, not the 1px hairline
   `.sep`. Sharing that name puts the glyph in a 1px-wide box with a background,
   and the strokes spill out of it.
-- The sidebar has one toggle, and it does not move.
-  - `.studio-menu` is fixed to the window at `--lights-w + 10px`, above the rail column whatever the rail and the icon
-    column are doing; the sidebar header carries no second button.
-  - The bar's content and the sidebar's brand row reserve room for it (`--nav-w` is what the icon column already gives).
+- The desktop sidebar's divider owns collapse, expansion and width adjustment.
+  - Its grip remains visible when collapsed; the separator supports Enter/Space for toggling, arrow keys for sizing,
+    and Home or a double click for restoring the default width. The open width survives collapse and reload.
+  - Under the `scene` fold the divider is hidden and the sidebar becomes a drawer. Only this layout mounts
+    `.studio-menu`, fixed at `--lights-w + 10px` after the shell's drag regions; the sidebar header has no second button.
+  - `--rail-toggle-gap` reserves title-bar space only for the drawer entry; desktop chrome reserves the native lights alone.
   - The icon rail's conversation item toggles the sidebar when the conversation is showing, and returns to it from
     settings; the sidebar's quick entries are drawn only while the rail is not.
   - A run of replies from one model is headed once (`data-quiet`); a change of model, or a user message, brings the

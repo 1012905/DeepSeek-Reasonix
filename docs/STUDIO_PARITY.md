@@ -45,6 +45,7 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Session recovery versions dialog | Unverified | Not searched by name; see #12365 for the delete behaviour |
 | Remote (SSH) workspaces | Have | `ui/Remotes.tsx`, `ui/RemoteHosts.tsx` |
 | Session takeover when another window holds it | Have | `ui/App.tsx`, `ui/Pane.tsx` |
+| Workspace sidebar expansion, collapse and resizing | Have differently | Desktop uses the divider in `ui/Gutter.tsx`, including after collapse; the top button in `ui/RailToggle.tsx` is reserved for the narrow `scene` drawer layout (#12917) |
 
 ## Reference: composer and transcript
 

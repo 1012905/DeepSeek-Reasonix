@@ -454,7 +454,7 @@ body { background: var(--page) !important; }
 .chrome {
   width: auto;
   margin-left: calc(var(--nav-w) + var(--rail-w));
-  padding: 0 18px 0 max(20px, calc(var(--lights-w) + 50px - var(--nav-w) - var(--rail-w)));
+  padding: 0 18px 0 max(20px, calc(var(--lights-w) + var(--rail-toggle-gap) - var(--nav-w) - var(--rail-w)));
   gap: 11px;
   background: var(--surface) !important;
   border-bottom: 1px solid var(--hair);
@@ -464,7 +464,8 @@ body { background: var(--page) !important; }
 .panes { background: var(--surface) !important; }
 .tabs { display: flex !important; }
 .railhost { display: block; }
-.app { --srail-w: 36px; }
+.app { --srail-w: 36px; --rail-toggle-gap: 0px; }
+[data-fold~="scene"] .app { --rail-toggle-gap: 50px; }
 
 /* Prototype header */
 .studio-menu { position: fixed; z-index: 39; left: calc(var(--lights-w) + 10px); top: calc((var(--chrome-h) - 30px) / 2); width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; }
