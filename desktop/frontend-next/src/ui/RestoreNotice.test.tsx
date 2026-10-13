@@ -45,7 +45,7 @@ it("resets native paint with a resting click cue, themed focus and disabled stat
   expect(style(".restore-notice button:disabled").getPropertyValue("cursor")).toBe("default");
 });
 
-it.each(["RestoreNotice", "ReloadNotice"])("reserves composer space for %s outside the runtime-notes ceiling", (component) => {
+it.each([{ component: "RewindNotice", parent: "pbody rewind-notice-host" }, { component: "ReloadNotice", parent: "compose" }])("places $component outside the runtime-notes ceiling", ({ component, parent: expectedParent }) => {
   const parents: string[] = [];
   walkStack(parse(pane, { sourceType: "module", plugins: ["typescript", "jsx"] }), (node, stack) => {
     if (node.type !== "JSXElement" || ((node.openingElement as Node).name as Node).name !== component) return;
@@ -53,7 +53,7 @@ it.each(["RestoreNotice", "ReloadNotice"])("reserves composer space for %s outsi
     const attrs = (parent?.openingElement as Node).attributes as Node[];
     parents.push((attrs.find((a) => (a.name as Node)?.name === "className")?.value as Node)?.value as string);
   });
-  expect(parents).toEqual(["compose"]);
+  expect(parents).toEqual([expectedParent]);
 });
 
 it("bounds only the error, with zoom-aware scrolling and a keyboard target", () => {

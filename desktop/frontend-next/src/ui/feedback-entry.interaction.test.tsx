@@ -13,6 +13,7 @@ import type { FeedbackMine } from "../port/feedback";
 afterEach(() => {
   cleanup();
   dropDraft();
+  localStorage.removeItem("rx-show-session-tabs");
   vi.restoreAllMocks();
 });
 
@@ -153,6 +154,7 @@ describe("the mock keeps what the badge reads", () => {
 
 
 it("starts and rebinds feedback polling when the first local owner becomes available", async () => {
+  localStorage.setItem("rx-show-session-tabs", "on");
   const h = hub();
   await h.close("r1");
   const remote = await h.openRemote({ host: "gpu", workspace: "/remote", sessionPath: "/remote/session.jsonl" });

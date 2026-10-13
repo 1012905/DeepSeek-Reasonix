@@ -207,7 +207,7 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 		}
 	}
 	missing = a.appendPlanDeliverableGap(&out, missing, checkpointApplies && (checkpoint.PendingMutation || checkpoint.MutationObserved))
-	if !hasWriter {
+	if a.owesNothingForChanges(hasWriter) {
 		if len(missing) > 0 {
 			out.reason = strings.Join(missing, "; ")
 		}
@@ -245,6 +245,12 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	}
 	out.reason = strings.Join(missing, "; ")
 	return out
+}
+
+// owesNothingForChanges is true when no write put a check on the turn, or the
+// user waived the checks a write owes.
+func (a *Agent) owesNothingForChanges(hasWriter bool) bool {
+	return !hasWriter || a.role.waiveOwedChecks
 }
 
 // appendDeliveryGaps is what a Delivery turn owes on top of any turn: criteria,
@@ -540,12 +546,12 @@ func (a *Agent) verificationGap(writer int) (string, bool) {
 			"or, if it cannot pass as specified, call conclude_blocked with the evidence for why", named), true
 	}
 	// Commands ran and the table read none as a check. The host cannot tell a
-	// runner from a deploy, so it owes nothing and says nothing: it has no
-	// honest sentence, and failing on the guess is the gate over-reaching.
-	if len(a.projectChecks) == 0 {
-		if _, ok := a.task.ledger.LatestUnrecognizedCommandAfter(writer); ok {
-			return "", false
-		}
+	// runner from a deploy, so it owes nothing and says nothing — but only while
+	// it can say they all left the tree as they found it.
+	if len(a.projectChecks) == 0 &&
+		a.task.ledger.HasUnrecognizedCommandAfter(writer) &&
+		!a.task.ledger.HasUnrecognizedMutationAfter(writer) {
+		return "", false
 	}
 	return ask, true
 }

@@ -160,6 +160,8 @@ describe("a link followed while the session has no browser tab", () => {
     await waitFor(() => expect(pending).toHaveLength(1));
     await act(async () => pending[0].settle());
     await user.click(await screen.findByRole("button", { name: /新建|新标签|新增|添加/ }));
+    expect(open).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "浏览器" }));
     await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
     expect(open.mock.calls[1][0]).toBe("about:blank");
   });

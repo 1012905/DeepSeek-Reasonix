@@ -21,6 +21,8 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  "加宽浏览器": "Widen browser",
+  "恢复浏览器分栏": "Restore browser split",
   "工作台": "Workbench",
   "从右侧选择文件，或打开浏览器": "Choose a file on the right, or open a browser",
   ...EN_SETTINGS,
@@ -93,6 +95,10 @@ export const EN: Record<string, string> = {
   "复制这段回答": "Copy this answer",
   "复制这段代码": "Copy this code",
   "复制路径": "Copy path",
+  "复制引用": "Copy reference",
+  "加入对话": "Add to conversation",
+  "此名称不能表示为 @ 引用": "This name cannot be represented as an @ reference",
+  "此名称可能被识别为 MCP 资源": "This name could resolve to an MCP resource",
   "思考 {chars}": "Thought · {chars}",
   "耗时 {t}": "Worked for {t}",
   "思考 {secs} 秒 · {chars}": "Thought for {secs}s · {chars}",
@@ -293,6 +299,7 @@ export const EN: Record<string, string> = {
 
   // ── 会话树 ───────────────────────────────────────────────────────
   "新会话": "New session",
+  "打开项目文件夹": "Open project folder",
   "新会话 {n}": "New session {n}",
   "从左栏选择，或在当前文件夹新建": "Pick one on the left, or start a new one in this folder",
   "新建会话": "Start a new session",
@@ -438,6 +445,10 @@ export const EN: Record<string, string> = {
   "深色": "Dark",
   "配色": "Palette",
   "界面主题": "Interface theme",
+  "清白蓝": "Clear Blue",
+  "茶绿": "Tea Green",
+  "清透白底与克制蓝色，适合专注阅读和日常工作。": "Clean white surfaces and restrained blue accents for focused reading and everyday work.",
+  "柔和暖白与低饱和茶绿，营造安静舒展的工作台。": "Soft warm whites and muted tea greens for a calm, comfortable workbench.",
   "选择工作台的表面色与强调色。成功、警告和失败等状态色保持一致，代码字体在下方单独设置。":
     "Choose the workbench surfaces and accent. Success, warning and failure keep their meaning, while the code font is configured separately below.",
   "更多已安装主题": "More installed themes",
@@ -547,6 +558,13 @@ export const EN: Record<string, string> = {
   "忘记": "Forget",
   "重连": "Reconnect",
   "立即连接": "Connect now",
+  "定义有改动": "Definition changed",
+  "无法核对": "Cannot be checked",
+  "等待你批准的工具": "Tools waiting for your approval",
+  "这个服务有 {n} 个工具的定义与你批准过的不一致，已暂时不交给模型：": "{n} of this service's tools differ from what you approved and are withheld from the model for now:",
+  "还有 {n} 个没有列出，批准时会一并生效。": "{n} more are not listed; approving covers them too.",
+  "批准并重新连接": "Approve and reconnect",
+  "批准中…": "Approving…",
   "记的是 {had}，但它答的是 {got}。": "Recorded as {had}, but it answers as {got}.",
   // 收工回执
   "没有未经验证的部分": "nothing left unverified",
@@ -566,7 +584,7 @@ export const EN: Record<string, string> = {
   "在系统文件管理器中显示": "Show in file manager",
   "已在 {app} 中打开": "Opened in {app}",
   "通知": "Notifications",
-  "只在你没盯着窗口的时候有用：一轮跑完、停下来等批准、模型反过来问你、反馈有了回复，都可以让系统提醒一次。": "Only useful while you are not watching: a turn finishing, a stop for approval, the model asking you something, or a reply to your feedback can each raise one system alert.",
+  "一轮结束、等待批准、模型提问或反馈收到回复时，可以发送系统通知。完成后未读的会话会在应用图标上显示标记，查看对应会话后清除。": "Send system notifications when a turn ends, approval is needed, the model asks a question, or feedback receives a reply. Unread completed conversations mark the application icon until you view them.",
   "发送系统通知": "Send system notifications",
   "默认关闭。开启后，无论窗口是否在前台都会由系统弹出提醒；声音由系统决定。立即生效，正在跑的会话下一次事件就按新设置来": "Off by default. When on, the system raises the alert whether or not this window is in front; the sound is whatever the system decides. Immediate: a running session follows the new setting from its next event.",
   "播放提示音": "Play a sound",
@@ -578,6 +596,9 @@ export const EN: Record<string, string> = {
   "模型提问时": "When the model asks you something",
   "模型停下来问你一个问题，没有答案它就不会往下走": "The model stopped to ask a question and will not go on without an answer",
   "反馈有新回复时": "When feedback gets a reply",
+  "技能说明": "Skill text",
+  "磁盘空间不足时": "When disk space is low",
+  "项目或会话所在的磁盘剩余空间很少时提醒（不足 5 GB 或不足 3%），同一块盘长时间不重复提醒；只提醒，不会清理任何文件": "Warns when the drive holding your project or sessions runs short (under 5 GB or 3%), and does not repeat for the same drive for hours. It only warns; it never deletes anything.",
   "你提交的反馈收到回复、或需要你补充信息时提醒一次，不带回复内容": "One alert when a report you sent gets a reply or needs more from you, without its text",
   "引用回复": "quoting a reply",
   "引用第 {n} 轮回复": "quoting turn {n}",
@@ -759,6 +780,11 @@ export const EN: Record<string, string> = {
   "正在还原…": "Restoring…",
   "会话已切换，请重新选择还原位置": "The conversation changed. Choose a restore point again.",
   "撤销这次还原": "Undo this restore",
+  "回退已完成": "Rewind completed",
+  "关闭回退提示": "Dismiss rewind notice",
+  "无法保存关闭状态：{error}": "Could not save dismissal: {error}",
+  "撤销这次回退": "Undo this rewind",
+  "正在撤销…": "Undoing…",
   "仍还原其余部分": "Restore the rest anyway",
   "还原失败": "Could not restore",
   "回退范围内未修改任何文件": "No files changed in this rewind range",
@@ -1303,6 +1329,9 @@ export const EN: Record<string, string> = {
   "未开始": "Not started",
   "任务清单": "Task list",
   "引用到输入框": "Quote into the composer",
+  "引用选中内容": "Quote selected text",
+  "复制选中内容": "Copy selected text",
+  "选中内容": "Selected text",
   "重新生成": "Regenerate",
   "分支为新会话": "Branch into a new conversation",
   "分支": "branch",
@@ -1323,8 +1352,8 @@ export const EN: Record<string, string> = {
   "没有匹配的文件": "No matching files",
   "优化提示词":
     "Refine prompt",
-  "用当前模型改写得更清楚，采用前不会替换原文 · Ctrl+Shift+E":
-    "Rewrite it more clearly with the current model; your text stays until you adopt it · Ctrl+Shift+E",
+  "用当前模型改写得更清楚，采用前不会替换原文":
+    "Rewrite it more clearly with the current model; your text stays until you adopt it",
   "优化后的提示词":
     "Refined prompt",
   "输入框已修改，采用会覆盖当前内容":
@@ -1386,8 +1415,14 @@ export const EN: Record<string, string> = {
   "回合运行中，等它结束后再分支": "A turn is running; branch after it ends",
   "这个位置无法分支（重启后恢复的会话，或已被压缩的历史）": "This point cannot be branched (a session restored after a restart, or history that was compacted)",
   "分支失败，请重试": "Branching failed; try again",
-  "暂存区是空的，先用 git add 暂存要提交的文件":
-    "Nothing is staged; stage the files to commit with git add first",
+  "暂存区是空的：先在改动列表里勾选要提交的文件，或点「暂存全部」":
+    "Nothing is staged: tick the files to commit in the changes list, or press Stage all",
+  "这个文件已经不在改动列表里了，请刷新后再试": "That file is no longer in the changes list; refresh and try again",
+  "暂存请求无法识别": "The stage request was not understood",
+  "暂存 {path}": "Stage {path}",
+  "暂存全部": "Stage all",
+  "取消全部暂存": "Unstage all",
+  "暂存失败，请重试": "Staging failed; try again",
   "暂存区在你确认之后又变了，请重新起草":
     "The staged changes changed after you reviewed them; draft again",
   "暂存的内容里有疑似密钥的文件，需要你确认后才能提交":

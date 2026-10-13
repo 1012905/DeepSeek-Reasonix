@@ -323,12 +323,13 @@ func (b *builder) wireTools() error {
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
 	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
+	addWebSearch(t.reg, cfg, b.proxy, b.sink)
 	b.addBestOf()
 	if cfg.Agent.CodeMode {
 		t.reg.Add(script.New())
 	}
 	b.wireMCP()
-	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession)
+	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession, opts.ComputerDriver)
 	b.timer.mark("mcp")
 
 	t.maxSteps = max(opts.MaxSteps, 0)
@@ -484,6 +485,7 @@ func (b *builder) executor() *agent.Agent {
 		EvidenceSeal:                 t.env.evidenceSeal,
 		AgentPreset:                  b.model.preset,
 		DeliveryProfile:              b.model.delivery,
+		WaiveOwedChecks:              cfg.HostVerificationOff(),
 		Ablation:                     b.opts.Ablation,
 		WorkspaceLease:               b.session.lease,
 		CapabilityLedger:             t.caps.ledger,
@@ -675,7 +677,7 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		Memory:                  b.prompt.memory,
 		ProjectChecks:           b.prompt.projectChecks, ProjectSensitivePaths: b.prompt.sensitivePaths,
 	}
-	return finalizeBuildResult(b.roots, &BuildResult{Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
+	return finalizeBuildResult(b.roots, &BuildResult{ComputerDriver: b.opts.ComputerDriver, Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
 }
 
 // clock is the one place the system clock enters the assembly: a host supplies

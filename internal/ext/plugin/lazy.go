@@ -277,6 +277,9 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 				return fmt.Sprintf("MCP server %q is connected; its real tools are now available on the next turn", sp.spec.Name), nil
 			}
 			real := sp.real[lt.name]
+			if meta, ok := real.(tool.MCPMetadata); !ok || meta.MCPServerName() != sp.spec.Name || meta.MCPRawToolName() != lt.rawName {
+				real = nil
+			}
 			safetyErr := lt.reconcileLiveSafety(real)
 			sp.mu.Unlock()
 			if real == nil {
@@ -432,6 +435,9 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 	}
 	shared.generation = host.registerDeferredCancel(spec.Name, cancel)
 
+	if cs != nil && !cachedToolNamesUsable(spec, cs.Tools) {
+		cs = nil
+	}
 	var out []tool.Tool
 	// A snapshot with zero tools presents nothing the model could call, so it
 	// gets the same connect stub as a cache miss — otherwise the live tools

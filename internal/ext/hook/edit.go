@@ -79,16 +79,26 @@ func normalizedHooks(settings Settings) (map[Event][]HookConfig, error) {
 					return nil, fmt.Errorf("hooks.%s[%d] match %q: %w", event, i, strings.TrimSpace(cfg.Match), err)
 				}
 			}
+			cfg = NormalizeConfig(cfg)
 			hooks[event] = append(hooks[event], HookConfig{
-				Match:       strings.TrimSpace(cfg.Match),
-				Command:     NormalizeCommand(cmd),
-				Description: strings.TrimSpace(cfg.Description),
+				Match:       cfg.Match,
+				Command:     cfg.Command,
+				Description: cfg.Description,
 				Timeout:     cfg.Timeout,
-				Cwd:         strings.TrimSpace(cfg.Cwd),
+				Cwd:         cfg.Cwd,
 			})
 		}
 	}
 	return hooks, nil
+}
+
+// NormalizeConfig applies settings-file normalization without dropping metadata.
+func NormalizeConfig(cfg HookConfig) HookConfig {
+	cfg.Match = strings.TrimSpace(cfg.Match)
+	cfg.Command = NormalizeCommand(strings.TrimSpace(cfg.Command))
+	cfg.Description = strings.TrimSpace(cfg.Description)
+	cfg.Cwd = strings.TrimSpace(cfg.Cwd)
+	return cfg
 }
 
 // DryRunResult is one trial invocation, in the terms the user asked the question

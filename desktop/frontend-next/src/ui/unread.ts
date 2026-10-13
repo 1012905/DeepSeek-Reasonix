@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { host } from "../port/host";
 import type { AgentPort } from "../port/port";
 import type { RuntimeView, TreeWorkspace } from "../port/hub";
 
@@ -89,11 +90,17 @@ export function useViewed({ runtimes, ports, active, tree, remote, reload }: Inp
     [mark],
   );
 
+  useEffect(() => {
+    const focus = () => { if (document.hasFocus()) view(now.current.active); };
+    window.addEventListener("focus", focus);
+    return () => window.removeEventListener("focus", focus);
+  }, [view]);
+
   const front = useRef(active);
   useEffect(() => {
-    if (front.current === active || !ports.has(active)) return;
+    if (front.current === active || (active && !ports.has(active))) return;
     front.current = active;
-    view(active);
+    if (active) view(active);
   }, [active, ports, view]);
 
   useEffect(() => {
@@ -114,4 +121,9 @@ export function useViewed({ runtimes, ports, active, tree, remote, reload }: Inp
   }, [remote, cleared]);
 
   return { view, turnDone, tree: local, remote: far };
+}
+
+export function useUnreadBadge(tree: TreeWorkspace[], remote: Trees) {
+  const unread = useMemo(() => [tree, ...Object.values(remote)].some((book) => book?.some((ws) => ws.sessions.some((s) => s.unread && !s.archived))), [tree, remote]);
+  useEffect(() => { void host().setUnreadBadge(unread).catch(() => {}); }, [unread]);
 }

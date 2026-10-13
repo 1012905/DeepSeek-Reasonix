@@ -1,9 +1,10 @@
-import { isValidElement, memo, useEffect, useState, type ReactNode } from "react";
+import { isValidElement, memo, useEffect, useState, type ReactNode, type MouseEvent, type KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import { CodeBlock } from "./CodeBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { remarkCodeSpanLink, remarkTrimAutolink } from "./autolink";
+import { remarkFileLinks } from "./filelinks";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { useRevealed } from "./reveal";
@@ -155,13 +156,15 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
-/** How a document shown from the workspace reads its own references: a link to
- *  another file there, and an image stored beside it. Absent for a reply. */
+/** File navigation for a workspace document or a conversation. */
 export interface LocalRefs {
   /** An action for href, or null when it is not a file in the workspace. */
   link(href: string): (() => void) | null;
   /** Where to load src from, or null to leave it as written. */
   image(src: string): string | null;
+  path?(href: string): string | null;
+  title?(href: string): string;
+  menu?(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, href: string): void;
 }
 
 // live is the tail of a message still arriving; tail alone is only the last
@@ -171,7 +174,7 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local, i
   const body = normalizeMath(tail ? balanceFences(src) : src);
   return (
     <ReactMarkdown
-      remarkPlugins={(emoji ? [...BASE_REMARK, emoji] : BASE_REMARK) as never}
+      remarkPlugins={([...BASE_REMARK, [remarkFileLinks, local?.path], ...(emoji ? [emoji] : [])]) as never}
       rehypePlugins={([...BASE_REHYPE, math, code].filter(Boolean)) as never}
       components={{
         // Every link here comes from model output; a webview navigating away
@@ -182,6 +185,15 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local, i
             return (
               <a
                 href={href}
+                title={local?.title?.(href!)}
+                data-action-click="workbench.file" data-target={local?.path?.(href!) ?? href}
+                data-action-contextmenu={local?.menu ? "workbench.menu" : undefined}
+                data-action-keydown={local?.menu ? "workbench.menu" : undefined}
+                onContextMenu={(e) => local?.menu?.(e, href!)}
+                onKeyDown={(e) => {
+                  if (e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey)) return;
+                  local?.menu?.(e, href!);
+                }}
                 onClick={(e) => {
                   e.preventDefault();
                   open();

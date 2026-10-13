@@ -58,7 +58,7 @@ func TestSealedBundleDoesNotCopyTheContractEachTurn(t *testing.T) {
 	seal("second")
 	added := storeBytes(t, root) - first
 
-	rec, err := store.Record(trustedstate.Digest(sink.last(t).Record))
+	rec, err := store.Record(trustedstate.Digest(sealedRecord(t, sink.last(t))))
 	if err != nil {
 		t.Fatal(err)
 	}

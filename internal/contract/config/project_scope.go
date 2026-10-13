@@ -23,6 +23,7 @@ type heldScope struct {
 	approvalMode string
 	autoSubmit   bool
 	writeLease   string
+	hostVerif    string
 	shell        ShellConfig
 	rgPath       string
 	lsp          map[string]LSPServer
@@ -31,6 +32,10 @@ type heldScope struct {
 	endpoints    heldEndpoints
 	layaPython   string
 	layaLocal    bool
+	// rememberDevices is the user's [serve] remember_paired_devices. A project
+	// may not set it: a cloned repo must not be able to make a phone the person
+	// paired with stay trusted longer than they chose.
+	rememberDevices bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -41,19 +46,21 @@ func holdUserScope(c *Config) heldScope {
 	shell := c.Tools.Shell
 	shell.Env = maps.Clone(shell.Env)
 	return heldScope{
-		sandbox:      s,
-		permissions:  p,
-		approvalMode: c.Desktop.DefaultToolApprovalMode,
-		autoSubmit:   c.AutoSubmit,
-		writeLease:   c.Agent.WriteLease,
-		shell:        shell,
-		rgPath:       c.Tools.Search.RgPath,
-		lsp:          maps.Clone(c.LSP.Servers),
-		browser:      c.Browser,
-		network:      c.Network,
-		endpoints:    holdUserEndpoints(c),
-		layaPython:   c.Tools.SystemOne.Laya.Python,
-		layaLocal:    c.Tools.SystemOne.Laya.Local,
+		sandbox:         s,
+		permissions:     p,
+		approvalMode:    c.Desktop.DefaultToolApprovalMode,
+		autoSubmit:      c.AutoSubmit,
+		writeLease:      c.Agent.WriteLease,
+		hostVerif:       c.Agent.HostVerification,
+		shell:           shell,
+		rgPath:          c.Tools.Search.RgPath,
+		lsp:             maps.Clone(c.LSP.Servers),
+		browser:         c.Browser,
+		network:         c.Network,
+		endpoints:       holdUserEndpoints(c),
+		layaPython:      c.Tools.SystemOne.Laya.Python,
+		layaLocal:       c.Tools.SystemOne.Laya.Local,
+		rememberDevices: c.Serve.RememberPairedDevices,
 	}
 }
 
@@ -144,6 +151,18 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
 		c.Agent.WriteLease = h.writeLease
 	}
+	// What the host asks of a turn before it may finish is the user's own call,
+	// so a cloned repo can neither switch it off nor undo the user's choice.
+	if c.Agent.HostVerification != h.hostVerif {
+		c.ignoreProject("agent.host_verification", c.Agent.HostVerification, ProjectUserOnly)
+		c.Agent.HostVerification = h.hostVerif
+	}
+	// Keeping paired phones across restarts is the user's alone: it widens how
+	// long a device stays trusted, which is not a clone's to give away.
+	if c.Serve.RememberPairedDevices != h.rememberDevices {
+		c.ignoreProject("serve.remember_paired_devices", fmt.Sprintf("%t", c.Serve.RememberPairedDevices), ProjectUserOnly)
+	}
+	c.Serve.RememberPairedDevices = h.rememberDevices
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
 	if NormalizeToolApprovalMode(c.Desktop.DefaultToolApprovalMode) != NormalizeToolApprovalMode(h.approvalMode) {

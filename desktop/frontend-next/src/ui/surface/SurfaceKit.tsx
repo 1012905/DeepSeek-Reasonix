@@ -3,7 +3,7 @@ import { MantineProvider, createTheme, type MantineColorSchemeManager, type CSSV
 import "@mantine/core/styles.layer.css";
 
 const theme = createTheme({ primaryColor: "gray", fontFamily: "var(--ui)", fontFamilyMonospace: "var(--mono)", defaultRadius: "md" });
-const variables: CSSVariablesResolver = () => ({ variables: {}, light: { "--mantine-color-body": "var(--surface)", "--mantine-color-text": "var(--text)", "--mantine-color-dimmed": "var(--muted)" }, dark: { "--mantine-color-body": "var(--surface)", "--mantine-color-text": "var(--text)", "--mantine-color-dimmed": "var(--muted)" } });
+const variables: CSSVariablesResolver = () => ({ variables: {}, light: { "--mantine-color-body": "var(--surface)", "--mantine-color-text": "var(--text)", "--mantine-color-dimmed": "var(--muted)", "--mantine-primary-color-filled": "var(--text)", "--mantine-primary-color-filled-hover": "color-mix(in srgb, var(--text) 85%, var(--surface))" }, dark: { "--mantine-color-body": "var(--surface)", "--mantine-color-text": "var(--text)", "--mantine-color-dimmed": "var(--muted)" } });
 const root = () => undefined;
 const manager: MantineColorSchemeManager = { get: fallback => fallback, set() {}, subscribe() {}, unsubscribe() {}, clear() {} };
 function subscribe(change: () => void) {

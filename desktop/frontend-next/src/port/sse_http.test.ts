@@ -242,3 +242,12 @@ describe("a failed call", () => {
     expect(err.message).toBe("/providers/edit: 502");
   });
 });
+
+// The kernel answers a closed browser tab with 204 and no body, so closing is
+// settled by the status alone.
+describe("closing a browser tab", () => {
+  it("succeeds on an empty 204 answer", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+    await expect(new SsePort("").browserClose("tab-1")).resolves.toBeUndefined();
+  });
+});

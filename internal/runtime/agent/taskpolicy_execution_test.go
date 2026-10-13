@@ -81,8 +81,13 @@ func TestTaskPolicyRequiresPostMutationVerification(t *testing.T) {
 func TestDeclaredProjectChecksSatisfyVerificationFloor(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Add(fakeTool{name: "bash", readOnly: true})
-	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Mutation: true}
-	unrecognized := evidence.Receipt{ToolName: "bash", Success: true, Command: "python3 test_stats.py"}
+	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Mutation: true, MutationEvidence: evidence.MutationProven}
+	// What the classifier makes of this command: a script it cannot read, whose
+	// extent the host would have to establish by watching the workspace.
+	unrecognized := evidence.Receipt{
+		ToolName: "bash", Success: true, Command: "python3 test_stats.py",
+		Mutation: true, MutationEvidence: evidence.MutationUnknown,
+	}
 	newAgent := func(checks []instruction.VerifyCheck, receipts ...evidence.Receipt) *Agent {
 		return &Agent{
 			task:          taskRuntime{ledger: readinessLedger(receipts...)},
@@ -96,11 +101,11 @@ func TestDeclaredProjectChecksSatisfyVerificationFloor(t *testing.T) {
 	}
 	declared := []instruction.VerifyCheck{{Command: "python3 test_stats.py", SourcePath: "REASONIX.md"}}
 
-	// A command the table cannot read is the host's blind spot, not the turn's
-	// omission: never charged. The floor itself still stands — it is the case
-	// below, where nothing ran at all.
-	if got := newAgent(nil, writer, unrecognized).finalReadinessCheckFor(); got.reason != "" {
-		t.Fatalf("undeclared project: readiness = %+v, want the unreadable command not charged", got)
+	// Declaring the check is what lifts this: without a declaration the host has
+	// neither read the command as a check nor established what it changed, so
+	// the change stands unverified.
+	if got := newAgent(nil, writer, unrecognized).finalReadinessCheckFor(); !strings.Contains(got.reason, "verification command") {
+		t.Fatalf("undeclared project: readiness = %+v, want the unproven change still charged", got)
 	}
 	if got := newAgent(nil, writer).finalReadinessCheckFor(); !strings.Contains(got.reason, "verification command") {
 		t.Fatalf("nothing ran: readiness = %+v, want the classifier floor to still apply", got)

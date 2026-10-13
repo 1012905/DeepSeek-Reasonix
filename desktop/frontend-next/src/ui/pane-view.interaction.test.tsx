@@ -40,6 +40,20 @@ const flowHidden = () => document.querySelector(".compose")!.hasAttribute("hidde
 const box = () => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="任务输入"]')!;
 
 describe("a pane's view", () => {
+  it("refreshes the open conversation's context after model settings change", async () => {
+    const port = new MockPort();
+    const context = port.context.bind(port);
+    let window = 160_000;
+    vi.spyOn(port, "context").mockImplementation(async () => ({ ...await context(), window }));
+    const all = { ...props, rt: rtOf("p1"), port: port as AgentPort };
+    const view = render(<Pane {...all} />);
+    await waitFor(() => expect(document.querySelector(".chrome-context-total")?.textContent).toContain("160k"));
+
+    window = 1_000_000;
+    view.rerender(<Pane {...all} pulse={1} />);
+    await waitFor(() => expect(document.querySelector(".chrome-context-total")?.textContent).toContain("1.0M"));
+  });
+
   it("opens on the conversation with the composer showing", () => {
     mount();
     expect(selected()).toBe("flow");
@@ -142,4 +156,20 @@ describe("a pane's view", () => {
     probe.unmount();
     expect(all.rt.id).toBe("p1");
   });
+
+  it("leaves analysis for an external files request and does not replay it after a takeover", async () => {
+    const onManualBrowser = vi.fn();
+    const { send, view, all } = mount("p1", { onManualBrowser });
+    send({ kind: "turn_started" });
+    fireEvent.click(await screen.findByRole("tab", { name: /运行分析/ }));
+    view.rerender(<Pane {...all} filesPulse={1} />);
+    expect(selected()).toBe("flow");
+    expect(onManualBrowser).toHaveBeenLastCalledWith(true);
+    expect(document.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+    onManualBrowser.mockClear();
+    view.rerender(<Pane key="p1:1" {...all} filesPulse={1} />);
+    expect(onManualBrowser).not.toHaveBeenCalled();
+    expect(document.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
+  });
+
 });
