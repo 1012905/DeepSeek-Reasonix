@@ -23,6 +23,7 @@ type heldScope struct {
 	approvalMode string
 	autoSubmit   bool
 	writeLease   string
+	hostVerif    string
 	shell        ShellConfig
 	rgPath       string
 	lsp          map[string]LSPServer
@@ -46,6 +47,7 @@ func holdUserScope(c *Config) heldScope {
 		approvalMode: c.Desktop.DefaultToolApprovalMode,
 		autoSubmit:   c.AutoSubmit,
 		writeLease:   c.Agent.WriteLease,
+		hostVerif:    c.Agent.HostVerification,
 		shell:        shell,
 		rgPath:       c.Tools.Search.RgPath,
 		lsp:          maps.Clone(c.LSP.Servers),
@@ -143,6 +145,12 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Agent.WriteLease != h.writeLease {
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
 		c.Agent.WriteLease = h.writeLease
+	}
+	// What the host asks of a turn before it may finish is the user's own call,
+	// so a cloned repo can neither switch it off nor undo the user's choice.
+	if c.Agent.HostVerification != h.hostVerif {
+		c.ignoreProject("agent.host_verification", c.Agent.HostVerification, ProjectUserOnly)
+		c.Agent.HostVerification = h.hostVerif
 	}
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)

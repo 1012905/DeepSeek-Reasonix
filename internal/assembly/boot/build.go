@@ -482,6 +482,7 @@ func (b *builder) executor() *agent.Agent {
 		EvidenceSeal:                 t.env.evidenceSeal,
 		AgentPreset:                  b.model.preset,
 		DeliveryProfile:              b.model.delivery,
+		WaiveOwedChecks:              cfg.HostVerificationOff(),
 		Ablation:                     b.opts.Ablation,
 		WorkspaceLease:               b.session.lease,
 		CapabilityLedger:             t.caps.ledger,
