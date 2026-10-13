@@ -30,6 +30,7 @@ type Node struct {
 	Children []Node   `json:"children,omitempty"`
 	Field    *Field   `json:"field,omitempty"`
 	Diff     *Diff    `json:"diff,omitempty"`
+	Dataset  *Dataset `json:"dataset,omitempty"`
 }
 
 type Diff struct {
@@ -48,10 +49,16 @@ type Field struct {
 }
 
 type Option struct {
-	Value       string `json:"value"`
-	Label       string `json:"label"`
-	Description string `json:"description,omitempty"`
-	Preview     string `json:"preview,omitempty"`
+	Value       string    `json:"value"`
+	Label       string    `json:"label"`
+	Description string    `json:"description,omitempty"`
+	Preview     string    `json:"preview,omitempty"`
+	Group       string    `json:"group,omitempty"`
+	Location    *Location `json:"location,omitempty"`
+	Price       *float64  `json:"price,omitempty"`
+	Currency    string    `json:"currency,omitempty"`
+	Facts       []Fact    `json:"facts,omitempty"`
+	Image       *Image    `json:"image,omitempty"`
 }
 
 func (s *Spec) Canonical() ([]byte, error) { return json.Marshal(s) }

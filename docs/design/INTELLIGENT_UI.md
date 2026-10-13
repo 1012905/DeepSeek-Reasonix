@@ -126,3 +126,112 @@ The input boundary review covers the pending-ask map, legacy answer wrappers, HT
 The security review covers closed component kinds, bounded decoding, duplicate keys, field ids, required values and choice membership. Display strings and string defaults are redacted before native rendering. Approval policy, permission grants, device authentication and session storage ownership are unchanged.
 
 Real boot effect tests prove hidden discovery, typed refusal/retry, pending replay and persisted resume. Adjacent tests cover ordinary asks, extension actions, recovery, frontend acknowledgment, local drafts and the proxy decision barrier. Full-suite baseline failures are reported separately from these targeted checks.
+
+
+## Rich desktop workspaces
+
+The product scope includes all three task workspaces below, following the owner's
+request to deliver rich task interfaces. This extends the initial form-oriented
+scope without waiting for the input-count study. It does not establish a measured
+benefit, implement arbitrary generated pages, or add a TUI renderer.
+
+- `map`: linked place markers and an ordered itinerary, group filtering, focus,
+  add/remove and reorder. Answers contain option ids in visit order. Groups are
+  authored labels; dashed connections show visit order, not road navigation.
+- `comparison`: searchable and grouped candidate cards, a property comparison
+  table with differing-property emphasis, optional prices, sorting and a retained
+  shortlist. Answers use the
+  existing choice/multichoice contract. Optional images reference existing workspace-relative raster files.
+- `dashboard`: bounded category/series data, metric and range selection, summaries,
+  area/bar charts and a detail table. Exploration is local and sends no answer.
+  Successful display-only dashboards remain visible in the conversation.
+
+Mantine supplies controls and charts; MapLibre with react-map-gl supplies the map.
+These renderers load lazily. MapLibre's worker is bundled through Vite's worker
+URL import.
+
+The host fixes the OpenStreetMap tile URL and attribution; the model
+cannot supply resource URLs or executable markup. A tile failure leaves the list
+usable and offers a retry. Network availability still governs the basemap.
+
+The component container determines card columns. Workspaces use one heading and
+content hierarchy, borderless map rows and a shared metric strip rather than
+repeated framed panels. Expansion preserves the component and selection state;
+settled replay disables answer changes while retaining local exploration.
+
+Run `pnpm exec vite --host 127.0.0.1` from `desktop/frontend-next`, then open
+`/perf/rich-ui.html?scenario=map&theme=light`. The `comparison` and `dashboard`
+scenarios and `theme=dark` use the production renderer with clearly labelled
+sample data and a local acknowledgment.
+
+They are development acceptance fixtures,
+not provider evaluations.
+
+Validate both conversation-sized and expanded layouts.
+
+
+### Workspace media
+
+Map and comparison options accept `image: {path, alt, source?}`. Paths are bounded,
+workspace-relative raster references; URLs, traversal, absolute paths, SVG and
+query strings are refused by both contract validators. The hidden schema names
+this vocabulary without changing the provider prefix.
+
+The owning transcript passes its image port to both blocking and nonblocking
+surfaces. Images use the existing workspace image endpoint, including its rooted
+file access, size cap and content restrictions. No new frontend file or network endpoint
+is introduced.
+
+Descriptions and source links are redacted with other display text.
+
+Product images use a fixed aspect ratio with contain fit; the focused place uses
+cover fit. Failed images retain the card and its selection. Changing workspace
+endpoints resets a failed image. Missing images keep the text layout usable.
+
+
+### Acquiring real photos
+
+After researching a product or place through the configured search capability,
+`web_fetch` exposes up to 32 image candidates from static page metadata (`og:image`,
+`twitter:image`) and image tags (`src` and lazy `data-src`, independently).
+
+Candidate URLs
+resolve against the first declared HTTP(S) base URL, or the final page URL.
+
+This is page extraction, not a separate
+image-search service; it does not execute scripts or bypass login or anti-hotlinking.
+
+The hidden `import_web_image` tool accepts the researched page `url`, selected
+`image_url`, a new relative `path`, and `alt`.
+
+It fetches the page again and requires
+the chosen URL to occur among its candidates. Both requests reuse the existing
+proxy-aware SSRF-guarded transport.
+
+Page bodies are limited to 1 MiB; image bodies
+to 8 MiB and decoded dimensions to 40 million pixels. PNG, JPEG, GIF and WebP
+are decoded and must match the destination extension.
+
+AVIF can still be displayed
+from an existing workspace file but is not imported by this decoder.
+
+Import is a declared write with named-path confinement, session-store protection,
+rooted file access, exclusive creation and a recovery receipt. Existing files are
+not overwritten.
+
+It retains the normal approval and post-write verification gates.
+
+The result supplies the renderable image object, final source and image URLs,
+dimensions and SHA-256; the tool trajectory preserves this retrieval evidence.
+
+Cards display the optional HTTP(S) source-page link without loading remote media
+in the renderer. Source links are attribution supplied with the spec, not a
+host-certified identity or licensing badge.
+
+Page membership alone cannot prove
+that a photo depicts the requested entity: the agent must inspect the candidates
+and respect the source's reuse terms.
+
+Missing, unsupported or failed acquisition
+leaves text cards usable; generated fixture illustrations must never substitute
+for photos of real entities.

@@ -1,3 +1,4 @@
+import { EN_SURFACES } from "./en_surfaces";
 // English catalogue, keyed by the Chinese source text. A key that is missing
 // here renders as Chinese rather than as a blank, so an incomplete translation
 // degrades instead of breaking — and i18n.test.ts is what stops it from
@@ -21,6 +22,7 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  ...EN_SURFACES,
   "工作台": "Workbench",
   "从右侧选择文件，或打开浏览器": "Choose a file on the right, or open a browser",
   ...EN_SETTINGS,

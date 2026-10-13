@@ -81,3 +81,7 @@ Report model/configuration differences and missing evidence as limitations.
 The RFC's benefit remains unproven until observed trajectories show fewer input
 exchanges to the same verified outcome. These results alone do not justify P3;
 adaptive layout or MCP Apps needs a measured problem in addition to this result.
+
+The owner-requested map, comparison and dashboard workspaces extend the delivery
+scope independently of this study. Their scripted acceptance fixtures verify
+rendering and interaction only; they do not count as observed benefit evidence.

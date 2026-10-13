@@ -236,6 +236,7 @@ export const ACTIONS: UIAction[] = [
   { id: "surface.refresh", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "surface.action", kind: "interaction", target: "entity", proof: "authority-effect" },
   { id: "surface.delivery", kind: "view", target: "none", proof: "interaction" },
+  { id: "surface.explore", kind: "view", target: "none", proof: "interaction" },
   { id: "surface.edit", kind: "view", target: "entity", proof: "interaction" },
   { id: "ask.answer", kind: "interaction", target: "none", proof: "authority-effect" },
   { id: "ask.step", kind: "view", target: "none", proof: "interaction" },

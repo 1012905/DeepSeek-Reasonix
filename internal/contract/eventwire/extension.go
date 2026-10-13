@@ -36,16 +36,17 @@ type ExtensionView struct {
 
 // ExtensionViewNode is one primitive of a view.
 type ExtensionViewNode struct {
-	Kind     string              `json:"kind"`
-	Value    string              `json:"value,omitempty" externalizable:"true"`
-	Key      string              `json:"key,omitempty"`
-	Label    string              `json:"label,omitempty"`
-	Tone     string              `json:"tone,omitempty"`
-	Progress *float64            `json:"progress,omitempty"`
-	ActionID string              `json:"actionId,omitempty"`
-	Children []ExtensionViewNode `json:"children,omitempty"`
-	Field    *surfacespec.Field  `json:"field,omitempty"`
-	Diff     *surfacespec.Diff   `json:"diff,omitempty"`
+	Kind     string               `json:"kind"`
+	Value    string               `json:"value,omitempty" externalizable:"true"`
+	Key      string               `json:"key,omitempty"`
+	Label    string               `json:"label,omitempty"`
+	Tone     string               `json:"tone,omitempty"`
+	Progress *float64             `json:"progress,omitempty"`
+	ActionID string               `json:"actionId,omitempty"`
+	Children []ExtensionViewNode  `json:"children,omitempty"`
+	Field    *surfacespec.Field   `json:"field,omitempty"`
+	Diff     *surfacespec.Diff    `json:"diff,omitempty"`
+	Dataset  *surfacespec.Dataset `json:"dataset,omitempty"`
 }
 
 // ExtensionPanel is the JSON form of an event.ExtensionPanelView.

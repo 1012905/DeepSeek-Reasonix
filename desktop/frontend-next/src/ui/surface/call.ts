@@ -33,6 +33,15 @@ export function actionSurfaceOfTool(tool: Tool) {
   try {return JSON.parse(tool.output ?? "{}").nonblocking===true ? spec : null;} catch {return null;}
 }
 
+export function visibleSurfaceOfTool(tool: Tool) {
+  const action = actionSurfaceOfTool(tool);
+  if (action) return action;
+  const spec = surfaceOfTool(tool);
+  if (!spec || tool.output === undefined || surfaceFields(spec).length || surfaceActions(spec).length) return null;
+  const dashboard = (nodes: SurfaceSpec["body"]): boolean => nodes.some(n => n.kind === "dashboard" || !!n.children && dashboard(n.children));
+  return dashboard(spec.body) ? spec : null;
+}
+
 function recordedValues(spec: SurfaceSpec, output?: string): Record<string, unknown> | undefined {
   try {
     const raw = JSON.parse(output ?? "");
