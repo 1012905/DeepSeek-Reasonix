@@ -271,15 +271,22 @@ func (c *collector) automation() error {
 	if err != nil {
 		return err
 	}
+	seen := map[string]bool{}
 	for _, event := range sortedEvents(settings) {
 		for _, h := range settings.Hooks[event] {
 			if strings.TrimSpace(h.Command) == "" {
 				continue
 			}
 			if !c.withSecrets {
-				h.Env, _ = stripSecrets(hookName(string(event), h), h.Env, nil)
+				h.Env, _ = stripSecrets(hookSecretScope(string(event), h), h.Env, nil)
 			}
-			if err := c.add(KindHook, hookName(string(event), h), hookData{Event: string(event), Hook: h}); err != nil {
+			h = hook.NormalizeConfig(h)
+			name := hookName(string(event), h)
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			if err := c.add(KindHook, name, hookData{Event: string(event), Hook: h}); err != nil {
 				return err
 			}
 		}

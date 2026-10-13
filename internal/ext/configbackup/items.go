@@ -194,6 +194,13 @@ func holdsLocal(restored, have config.PluginEntry) bool {
 }
 
 func hookName(event string, h hook.HookConfig) string {
+	raw, _ := json.Marshal(h)
+	sum := sha256.Sum256(append([]byte(event+"\x00"), raw...))
+	return event + "#" + hex.EncodeToString(sum[:6])
+}
+
+// Secret placeholders keep the scope used by existing backups.
+func hookSecretScope(event string, h hook.HookConfig) string {
 	sum := sha256.Sum256([]byte(event + "\x00" + h.Match + "\x00" + h.Command))
 	return event + "#" + hex.EncodeToString(sum[:6])
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/ext/hook"
 )
 
 // Item status against this machine.
@@ -196,6 +197,14 @@ func planItem(it Item, s *Snapshot, local *localState, same bool) PlanItem {
 		}
 	}
 	have, exists := local.items[it.ID]
+	if it.Kind == KindHook {
+		var d hookData
+		if json.Unmarshal(it.Data, &d) == nil {
+			d.Hook = hook.NormalizeConfig(d.Hook)
+			it.Data, _ = json.Marshal(d)
+			have, exists = local.items[itemID(KindHook, hookName(d.Event, d.Hook))]
+		}
+	}
 	switch {
 	case it.Kind == KindPlugin:
 		row.Status = StatusInstall
