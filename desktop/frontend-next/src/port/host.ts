@@ -60,6 +60,11 @@ export interface HostPort {
   /** Open that folder in the platform's file manager; null once shown,
    *  otherwise why it was not. */
   revealLogs(): Promise<Refusal | null>;
+  /** Whether this shell can enter a folder in the platform's file manager. */
+  opensFolders(): boolean;
+  /** Enter a project the sidebar lists: the same kernel answer revealWorkspace
+   *  asks for, opened rather than selected in its parent folder. */
+  openWorkspace(root: string): Promise<Refusal | null>;
   /** Whether this shell draws the agent's browser pages inside the window. */
   drawsBrowserViews(): boolean;
   /** Draw one of the agent's pages over rect, in on-screen coordinates, and
@@ -156,6 +161,7 @@ interface ElectronBridge {
   revealPath?(base: string, path: string): Promise<Refusal | null>;
   revealWorkspace?(root: string): Promise<Refusal | null>;
   revealLogs?(): Promise<Refusal | null>;
+  openWorkspace?(root: string): Promise<Refusal | null>;
   showBrowserView?(target: string, rect: ViewRect): Promise<void>;
   hideBrowserView?(): Promise<void>;
   freezeBrowserView?(): Promise<string>;
@@ -234,6 +240,12 @@ class ElectronHost implements HostPort {
   }
   revealLogs() {
     return this.api.revealLogs?.() ?? Promise.resolve({ error: "this shell cannot show files" });
+  }
+  opensFolders() {
+    return typeof this.api.openWorkspace === "function";
+  }
+  openWorkspace(root: string) {
+    return this.api.openWorkspace?.(root) ?? Promise.resolve({ error: "this shell cannot open folders" });
   }
   // A shell older than the verbs has no views to draw, and says so by lacking them.
   drawsBrowserViews() {
@@ -315,6 +327,12 @@ class BrowserHost implements HostPort {
   }
   revealLogs() {
     return Promise.resolve({ error: "a browser tab cannot show files" });
+  }
+  opensFolders() {
+    return false;
+  }
+  openWorkspace() {
+    return Promise.resolve({ error: "a browser tab cannot open folders" });
   }
   drawsBrowserViews() {
     return false;

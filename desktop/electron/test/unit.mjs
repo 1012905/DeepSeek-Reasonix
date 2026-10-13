@@ -205,7 +205,7 @@ test("an unreachable kernel is an answer, not a crash", async () => {
   assert.equal(await dead.trayState(), null);
 });
 
-const { reveal, revealWorkspace, revealLogs } = require("../src/reveal.js");
+const { reveal, revealWorkspace, revealLogs, openWorkspace } = require("../src/reveal.js");
 
 // A kernel that answers /workspace/locate as the test says, and a shell that
 // only records what it was asked to open.
@@ -224,8 +224,69 @@ async function revealRig(answer, platform = process.platform) {
     openPath: async (p) => (opened.push(["open", p]), ""),
     showItemInFolder: (p) => opened.push(["select", p]),
   };
-  return { asked, opened, run: (base, rel) => reveal(client, shell, base, rel, platform), workspace: (root) => revealWorkspace(client, shell, root, platform), close: () => server.close() };
+  return {
+    asked, opened, close: () => server.close(),
+    run: (base, rel) => reveal(client, shell, base, rel, platform),
+    workspace: (root) => revealWorkspace(client, shell, root, platform),
+    open: (root, fsApi) => openWorkspace(client, shell, root, platform, fsApi),
+  };
 }
+
+// The sidebar's project entered rather than selected in its parent: the same
+// kernel answer revealWorkspace asks for, through the folder-opening verb.
+const folderFs = (over = {}) => ({
+  stat: async () => ({ isDirectory: () => true }),
+  access: async () => {
+    throw new Error("ENOENT");
+  },
+  ...over,
+});
+
+test("openWorkspace enters the folder the kernel named", async () => {
+  const rig = await revealRig(() => [200, { path: ROOT, dir: true }]);
+  try {
+    assert.equal(await rig.open("/w", folderFs()), null);
+    assert.deepEqual(rig.opened, [["open", ROOT]]);
+    assert.equal(rig.asked[0], "/host/workspaces/locate?root=%2Fw");
+  } finally {
+    rig.close();
+  }
+});
+
+// openPath launches an application bundle instead of showing it, so a root
+// that is one is only selected, and so is anything that is not a directory.
+test("openWorkspace only selects an application bundle", async () => {
+  const rig = await revealRig(() => [200, { path: ROOT, dir: true }], "darwin");
+  try {
+    assert.equal(await rig.open("/w", folderFs({ access: async () => {} })), null);
+    assert.deepEqual(rig.opened, [["select", ROOT]]);
+  } finally {
+    rig.close();
+  }
+});
+
+test("openWorkspace only selects what is not a directory or cannot be read", async () => {
+  for (const fsApi of [folderFs({ stat: async () => ({ isDirectory: () => false }) }), folderFs({ stat: async () => { throw new Error("EACCES"); } })]) {
+    const rig = await revealRig(() => [200, { path: ROOT, dir: true }]);
+    try {
+      assert.equal(await rig.open("/w", fsApi), null);
+      assert.deepEqual(rig.opened, [["select", ROOT]]);
+    } finally {
+      rig.close();
+    }
+  }
+});
+
+test("openWorkspace refuses a folder the hub does not list", async () => {
+  const rig = await revealRig(() => [404, { code: "host.unknown_workspace", error: "not listed" }]);
+  try {
+    const why = await rig.open("/nope");
+    assert.equal(why.code, "host.unknown_workspace");
+    assert.deepEqual(rig.opened, []);
+  } finally {
+    rig.close();
+  }
+});
 
 const ROOT = path.resolve(os.tmpdir(), "rx-workspace");
 
