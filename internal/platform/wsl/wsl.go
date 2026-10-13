@@ -51,11 +51,11 @@ type Runner func(ctx context.Context, args ...string) ([]byte, error)
 // System runs the wsl.exe in System32, so a PATH entry cannot stand in for it.
 func System() Runner {
 	return func(ctx context.Context, args ...string) ([]byte, error) {
-		root := os.Getenv("SystemRoot")
-		if runtime.GOOS != "windows" || root == "" {
+		dir := systemDirectory()
+		if runtime.GOOS != "windows" || dir == "" {
 			return nil, ErrUnavailable
 		}
-		exe := filepath.Join(root, "System32", "wsl.exe")
+		exe := filepath.Join(dir, "wsl.exe")
 		if _, err := os.Stat(exe); err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
