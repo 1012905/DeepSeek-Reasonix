@@ -3,6 +3,7 @@ package sessionstore
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -262,6 +263,12 @@ func TestSessionViewedToleratesASidecarCaughtMidReplace(t *testing.T) {
 	if err := os.WriteFile(BranchMetaPath(path), good[:len(good)/2], 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The heal is a goroutine a loaded runner can start after the product's
+	// retries are spent; a long last retry keeps that from reading as a view
+	// that gave up. What is under test is the waiting, not its schedule.
+	old := branchMetaReadBackoffs
+	branchMetaReadBackoffs = append(slices.Clone(old), 5*time.Second)
+	t.Cleanup(func() { branchMetaReadBackoffs = old })
 	healed := make(chan struct{})
 	go func() {
 		defer close(healed)

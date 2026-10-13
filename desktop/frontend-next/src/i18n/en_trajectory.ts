@@ -24,8 +24,10 @@ export const EN_TRAJECTORY: Record<string, string> = {
   "系统": "System",
   "信号轨": "Signal rail",
   "与下方共用时间轴": "Shares the timeline below",
-  "没有时长、也不是工具调用的运行记录（最多前 8 条），按发生的时刻摆在时间轴上，所以位置就是时间，无法拖动；点一个看它的记录。":
-    "Records of the run that have no duration and are not tool calls (the first 8 at most), placed on the timeline at the moment they happened. Their position is their time, so they cannot be dragged; click one to see its record.",
+  "时间轴缩放": "Timeline zoom",
+  "重置缩放": "Reset zoom",
+  "没有时长、也不是工具调用的运行记录，位置就是时间，无法拖动；缩放后可横向滚动，重叠信号分行显示。点一个看它的记录。":
+    "Records with no duration that are not tool calls. Their position is their time, so they cannot be dragged. Zoom and scroll horizontally; overlapping signals use separate lanes. Select one to inspect its record.",
   "活动回合": "Activity rounds",
   "点击一行查看记录": "Select a row to inspect it",
   "模型回合": "Model round",

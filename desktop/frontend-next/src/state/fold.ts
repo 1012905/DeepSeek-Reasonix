@@ -57,6 +57,17 @@ export function foldTool(items: Item[], tool: Tool, running: boolean): Item[] {
   return [...items, { t: "tool", id: nextId(), tool: { ...tool, partial: tool.partial ?? false }, running, children: [] }];
 }
 
+// A progress frame is the call's id and its newest chunk of output; nothing else
+// on it describes the call, so it lands on the card as more output.
+export function foldProgress(items: Item[], tool: Tool): Item[] {
+  const at = tool.id ? items.findIndex((i) => i.t === "tool" && i.tool.id === tool.id) : -1;
+  if (at < 0) return foldTool(items, tool, true);
+  const prev = items[at] as Extract<Item, { t: "tool" }>;
+  const next = items.slice();
+  next[at] = { ...prev, tool: { ...prev.tool, output: (prev.tool.output ?? "") + (tool.output ?? "") }, running: true };
+  return next;
+}
+
 // dropTool removes the dispatch row a specialised card replaces, so the same
 // call is not shown twice once its result arrives.
 export function dropTool(items: Item[], id?: string): Item[] {

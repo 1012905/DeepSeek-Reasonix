@@ -155,6 +155,8 @@ const (
 	// ProgressWatchEvent reports whether the run is still producing effects the
 	// host can observe (ProgressWatch). Said to the person, never to the model.
 	ProgressWatchEvent
+	// RewindChanged signals that the undo offer must be read again.
+	RewindChanged
 	// KindCount is a sentinel one past the last real Kind. New event kinds must
 	// be inserted above it so completeness tests cover them automatically.
 	KindCount

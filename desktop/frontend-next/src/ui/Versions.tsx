@@ -231,6 +231,15 @@ export function Versions({ port }: { port: Port }) {
 
       {/* Severity language is the transcript's: a coloured left rule, no icons.
           Pinned is not a problem, so it is ok-coloured; a stale pin is. */}
+      {hub.withdrawn && (
+        <div className="find" data-lvl="warn" role="alert">
+          <span className="t">{t("当前版本 {v} 已被撤回", { v: hub.withdrawn.version })}</span>
+          <span className="why">
+            {hub.withdrawn.reason && t("撤回原因：{reason}。", { reason: hub.withdrawn.reason })}
+            {hub.newer ? t("请更新到 {v}，可在下方对应行安装。", { v: hub.latest }) : t("请在下方选择一个版本。")}
+          </span>
+        </div>
+      )}
       {hub.err && (
         <div className="find" data-lvl="warn">
           <span className="t">{t("无法连接版本目录")}</span>
@@ -265,7 +274,7 @@ export function Versions({ port }: { port: Port }) {
           </span>
         </div>
       )}
-      {!hub.err && hub.newer && !hub.pinned && !ready && !moving && !failure && (
+      {!hub.err && hub.newer && !hub.pinned && !hub.withdrawn && !ready && !moving && !failure && (
         <div className="find" data-lvl="ok">
           <span className="t">{t("有新版本 {v}", { v: hub.latest })}</span>
           <span className="why">{t("可在下方对应行安装。下载完成后会先问你，再重启。")}</span>

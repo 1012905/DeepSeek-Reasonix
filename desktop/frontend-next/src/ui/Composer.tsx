@@ -12,6 +12,8 @@ import { ChipMirror, useSkillChips } from "./ChipMirror";
 import { useIme } from "./ime";
 import { usePlaceholderFit } from "./placeholderfit";
 import { useFitHeight } from "./fitHeight";
+import { useSendShortcut } from "../state/prefs";
+import { sendAria, sendHint, sendsOnKey } from "./sendkey";
 import { countLines, pasteIsLong, planTone, planVerb } from "./intake";
 import { kindOf, nameOf, previewURL } from "./chipfile";
 import { useIntake } from "./useIntake";
@@ -34,6 +36,9 @@ interface Props {
   // A line taken back from the queue. The counter makes the same text twice
   // two requests, as it does for a quote.
   restore?: { n: number; text: string };
+  // Text another surface hands the composer, such as a file reference; it goes
+  // in at the caret with a space on either side.
+  inject?: { n: number; text: string };
   // Resolves false when the line never left, so what was typed comes back
   // rather than being lost to a refusal the user could not have prevented.
   // Bumped when something outside asks for the cursor — answering a plan card
@@ -102,7 +107,7 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const [submitting, setSubmitting] = useState(false);
@@ -169,6 +174,21 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     queueMicrotask(() => box.current?.focus());
   }, [restore?.n]);
 
+  const injectedAt = useRef(inject?.n ?? 0);
+  useEffect(() => {
+    if (!inject?.n || inject.n === injectedAt.current) return;
+    injectedAt.current = inject.n;
+    const where = caret;
+    setText((prev) => {
+      const at = Math.min(where, prev.length);
+      const lead = at > 0 && !/\s$/.test(prev.slice(0, at)) ? " " : "";
+      const piece = lead + inject.text + " ";
+      pending.current = at + piece.length;
+      return prev.slice(0, at) + piece + prev.slice(at).replace(/^ /, "");
+    });
+    queueMicrotask(() => box.current?.focus());
+  }, [inject?.n]);
+
   const moveTo = useCallback((next: string, at: number) => {
     pending.current = at;
     type(next, at);
@@ -179,6 +199,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     box.current?.focus();
   }, chips);
   const ime = useIme();
+  const sendShortcut = useSendShortcut();
 
   // A counter, not a boolean: asking twice in a row has to move the cursor twice.
   useEffect(() => {
@@ -355,7 +376,8 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
   // composer answering for an endpoint that never spoke.
   const declared = efforts.length > 0;
   const forcedThinking = forcesThinkingFor(models, status?.modelRef);
-  const modelLb = status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—";
+  const modelLb = models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
+    || (status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—");
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole
   // shelf says nothing can change while only one control waits on the kernel.
@@ -500,7 +522,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
           role="combobox"
           aria-label={t("任务输入")}
           aria-describedby={guide}
-          aria-keyshortcuts={touch ? undefined : "Enter Shift+Enter"}
+          aria-keyshortcuts={sendAria(sendShortcut, touch)}
           aria-busy={submitting}
           readOnly={submitting}
           aria-expanded={menu.open}
@@ -552,15 +574,15 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
               if (e.key === "Enter") e.preventDefault();
               return;
             }
+            const sendKey = sendsOnKey(e, sendShortcut, touch);
             if (menu.open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
               e.preventDefault();
               menu.move(e.key === "ArrowDown" ? 1 : -1);
               return;
             }
-            // Tab completes, always. Enter belongs to the menu only where the
-            // line is not yet a message — a half-typed command — or where the
-            // user went looking through the list themselves.
-            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && menu.ownsEnter)) && !e.shiftKey) {
+            // Tab completes; Enter completes a partial command or an explicitly selected item.
+            // The configured modifier chord sends the draft even with a menu open.
+            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && menu.ownsEnter && !(sendShortcut === "modifier_enter" && sendKey))) && !e.shiftKey) {
               e.preventDefault();
               menu.accept();
               return;
@@ -573,7 +595,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
               menu.dismiss();
               return;
             }
-            if (e.key === "Enter" && !e.shiftKey && !touch) {
+            if (sendKey) {
               e.preventDefault();
               send();
             }
@@ -595,9 +617,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
               ? t("正在添加附件…")
               : failed
                 ? t("有附件添加失败，请重试或移除")
-                : t(touch
-                  ? running ? "点按插话 · 回车换行" : "点按发送 · 回车换行"
-                  : running ? "Enter 插话 · Shift+Enter 换行" : "Enter 发送 · Shift+Enter 换行")}
+                : sendHint(sendShortcut, running, touch)}
         </span>
         {showCount && <span className="fcount">{t("{n} 字 · {lines} 行", { n: text.length, lines })}</span>}
       </div>
@@ -668,7 +688,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
             place="bottom"
             title={status?.modelRef ?? modelLb}
             current={status?.modelRef}
-            items={modelMenu(models, providerOrder)}
+            items={modelMenu(models, providerOrder, status?.modelRef)}
             menuClassName="studio-model-menu"
             searchAlways
             searchPlaceholder={t("搜索模型或服务商…")}

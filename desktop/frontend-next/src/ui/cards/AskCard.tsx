@@ -2,6 +2,7 @@ import type { AskReason } from "../../port/session";
 import { Sym } from "../Sym";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { reason } from "../../i18n/kernel";
 import type { Item } from "../../state/session";
 import { answerSource } from "../source";
 import { useViewer } from "../../state/viewer";
@@ -13,9 +14,10 @@ const ADVANCE_MS = 220;
 interface Props {
   item: Extract<Item, { t: "ask" }>;
   onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
+  onEngage?: (id: string) => Promise<void>;
 }
 
-export function AskCard({ item, onAnswer }: Props) {
+export function AskCard({ item, onAnswer, onEngage }: Props) {
   const qs = item.ask.questions;
   const answeredBy = answerSource(item.by, useViewer(), item.said);
   const [tab, setTab] = useState(0);
@@ -37,6 +39,19 @@ export function AskCard({ item, onAnswer }: Props) {
   // see what was chosen for each question, and the options stay on screen with
   // the unchosen ones dimmed by the sealed styling.
   const sealed = item.answered !== undefined;
+  const engagement = useRef<"idle" | "pending" | "engaged">("idle");
+  const [engagementError, setEngagementError] = useState("");
+  const engage = () => {
+    if (sealed || !onEngage || engagement.current !== "idle") return;
+    engagement.current = "pending";
+    void onEngage(item.ask.id).then(() => {
+      engagement.current = "engaged";
+      setEngagementError("");
+    }).catch((err: unknown) => {
+      engagement.current = "idle";
+      setEngagementError(reason(err));
+    });
+  };
   const chosen = item.answered ?? picks;
 
   // A single-choice pick keeps the box open as a note that rides with it, so an
@@ -158,7 +173,10 @@ export function AskCard({ item, onAnswer }: Props) {
           <span className="tag">{t("{n} 个问题", { n: qs.length })}</span>
         </div>
         <div className="out">
-          <div className="ask" data-sealed={sealed ? "" : undefined} aria-busy={submitting}>
+          <div className="ask" data-sealed={sealed ? "" : undefined} aria-busy={submitting}
+            onPointerDownCapture={engage} onKeyDownCapture={engage} onInputCapture={engage}
+            onWheelCapture={engage} onTouchMoveCapture={engage}>
+            {!sealed && engagementError && <div className="err" role="alert">{engagementError}</div>}
             {qs.length > 1 && (
               <div className="ask-tabs" role="tablist">
                 {qs.map((q, i) => (

@@ -22,7 +22,7 @@ const noop = async () => undefined as never;
 const same = { entering: [] as string[], onEntered: () => {}, waiting: {}, scroll: { current: null }, onPinned: () => {}, onExtInvoke: () => {}, checkpoints: new Map(), onOpenProject: () => {}, onKeepHere: () => {}, takeovers: {} };
 const view = (items: Item[]) => (
   <Transcript items={items} {...same} revision={1} hidden={false} jump={0} focus={null} onApprove={noop} onFullAccess={noop} onPlan={noop} onAnswer={noop} onForget={noop}
-    onExtSubmit={noop} onPrepareRewind={noop} onCommitRewind={noop} onUndoRewind={noop} onPrepareFileRevert={noop} onCommitFileRevert={noop} needsProject={false} />
+    onExtSubmit={noop} onPrepareRewind={noop} onCommitRewind={noop} onPrepareFileRevert={noop} onCommitFileRevert={noop} needsProject={false} />
 );
 
 describe("streaming into a transcript", () => {

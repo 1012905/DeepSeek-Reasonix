@@ -13,6 +13,18 @@ describe("the Studio shell closes over the active theme", () => {
     expect(css.slice(at + MARKER.length)).not.toContain(MARKER);
   });
 
+  it("shares plain reading surfaces and weight with foundation palettes", () => {
+    expect(css).toContain(':root[data-theme="light"]:not([data-bg]) {');
+    expect(css).toContain(':root[data-theme="light"]:not([data-bg]):not([data-weight]) {');
+  });
+
+  it("previews the default from its own palette even while a pack is active", () => {
+    const preview = css.match(/\.pal\[data-value=""\] \.pal-art\s*\{([^}]*)\}/s)?.[1] ?? "";
+    for (const name of ["page", "surface", "panel", "border", "text", "dim", "accent"]) {
+      expect(preview).toContain(`--pal-${name}: var(--default-${name})`);
+    }
+  });
+
   it("covers every persistent product surface", () => {
     for (const selector of [
       ".chrome", ".rail", ".compose", ".activity-group", ".studio-browser", ".btn.send",

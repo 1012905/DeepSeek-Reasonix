@@ -22,7 +22,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 	dir := SessionDirFor(root)
 	listed, err := sessionstore.ListSessions(dir)
 	if err != nil {
-		return sessionPage{}
+		return sessionPage{Sessions: []treeSession{}}
 	}
 	titles := h.titleCacheFor(dir)
 	byID := make(map[string]sessionstore.SessionInfo, len(listed))
@@ -81,13 +81,15 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 			lead[recoveryLineageRoot(si, byID)] = len(out)
 		}
 		out = append(out, treeSession{
-			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread,
+			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread, Legacy: sessionstore.IsForeignSessionLog(si.Path),
 		})
 		decorateArchiveState(&out[len(out)-1], si.Path)
 	}
 	attachVersions(dir, out, h.openSessionsIn(root))
 	unlisted := h.unlistedOpenSessions(root, out)
-	return sessionPage{Sessions: append(unlisted, out...), Total: total + len(unlisted), Archived: archived, Remaining: remaining}
+	// Never nil: the frontend iterates rows, and a null blanks the window.
+	rows := append(append([]treeSession{}, unlisted...), out...)
+	return sessionPage{Sessions: rows, Total: total + len(unlisted), Archived: archived, Remaining: remaining}
 }
 
 // rowTitle reads a row's title once, on first use: a name the user typed

@@ -25,7 +25,7 @@ export function asksDelete(ev: { key: string; metaKey: boolean; ctrlKey: boolean
 
 // ariaChord is chord for aria-keyshortcuts, which names modifiers in words.
 export function ariaChord(key: string): string {
-  return `${mac ? "Meta" : "Control"}+${key.toUpperCase()}`;
+  return `${mac ? "Meta" : "Control"}+${key.length === 1 ? key.toUpperCase() : key}`;
 }
 
 /** Whether the platform's own modifier is held alone: Cmd on macOS, Ctrl
