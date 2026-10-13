@@ -4253,7 +4253,7 @@
      2.5:1, under the 3:1 a graphic is held to, so a steady glow carries it. */
   .oobe-lockup { display: grid; justify-items: center; }
   .oobe-mark {
-    display: block; margin: 0 auto; width: 200px; aspect-ratio: 1692.66 / 392.25;
+    display: block; margin: 0 auto; width: 300px; aspect-ratio: 1692.66 / 392.25;
     filter: drop-shadow(0 0 18px rgb(1 83 229 / .45));
   }
   /* The warm trace that used to run along the R's stroke becomes the moment the
@@ -4332,7 +4332,7 @@
     .oobe[data-play][data-held] .oobe-lines { height: 0; opacity: 0 }
     .oobe[data-play][data-held] .onb { opacity: 1 }
   }
-  [data-fold~="scene"] .oobe-mark { width: 168px }
+  [data-fold~="scene"] .oobe-mark { width: 240px }
   [data-fold~="scene"] .oobe-brand { font-size: 16px }
   [data-fold~="scene"] .oobe-line b { font-size: var(--fs-display) }
 
