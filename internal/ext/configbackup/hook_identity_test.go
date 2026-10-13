@@ -3,6 +3,7 @@ package configbackup
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"slices"
 	"testing"
 
@@ -113,5 +114,100 @@ func TestLegacyHookBackupPreviewAndImport(t *testing.T) {
 		if len(got.Hooks[hook.PostToolUse]) != 1 {
 			t.Fatalf("legacy restore duplicated hook: %+v", got)
 		}
+	}
+}
+
+func TestHookBackupEnvironmentIdentity(t *testing.T) {
+	machine(t, "")
+	settings := hook.Settings{Hooks: map[hook.Event][]hook.HookConfig{hook.PostToolUse: {
+		{Command: "echo check", Env: map[string]string{"TOKEN": "one"}},
+		{Command: "echo check", Env: map[string]string{"TOKEN": "two"}},
+		{Command: "echo check", Env: map[string]string{"OTHER": "one"}},
+		{Command: "echo check", ContextFile: "/tmp/context.md"},
+	}}}
+	raw, err := json.Marshal(settings)
+	must(t, err)
+	for _, secrets := range []bool{false, true} {
+		must(t, os.WriteFile(hook.GlobalSettingsPath(""), raw, 0o600))
+		cats := []Category{CategoryAutomation}
+		want := 3
+		if secrets {
+			cats = append(cats, CategorySecrets)
+			want = 4
+		}
+		s := collectAll(t, cats...)
+		must(t, s.validate())
+		if len(s.Items) != want {
+			t.Fatalf("secrets=%v: got %d hook identities, want %d", secrets, len(s.Items), want)
+		}
+		plan, err := NewPlanner().Preview(s)
+		must(t, err)
+		for _, row := range plan.Items {
+			if row.Status != StatusSame {
+				t.Fatalf("secrets=%v: unchanged hook differs: %+v", secrets, row)
+			}
+		}
+		machine(t, "")
+		for range 2 {
+			p := NewPlanner()
+			plan, err := p.Preview(s)
+			must(t, err)
+			var ids []string
+			for _, it := range plan.Items {
+				ids = append(ids, it.ID)
+			}
+			result, err := p.Apply(ApplyRequest{PlanID: plan.ID, Items: ids, Consented: ids})
+			must(t, err)
+			if len(result.Failed) != 0 {
+				t.Fatalf("restore failed: %+v", result)
+			}
+			got, err := globalHooks()
+			must(t, err)
+			if len(got.Hooks[hook.PostToolUse]) != 1 {
+				t.Fatalf("unsupported env/context fields duplicated native hook: %+v", got)
+			}
+		}
+	}
+}
+
+func TestHookBackupNormalizedFieldsStayIdempotent(t *testing.T) {
+	for _, field := range []string{"cwd", "description"} {
+		t.Run(field, func(t *testing.T) {
+			machine(t, "")
+			h := hook.HookConfig{Command: "echo check"}
+			if field == "cwd" {
+				h.Cwd = " /tmp/project-a "
+			} else {
+				h.Description = " check files "
+			}
+			raw, err := json.Marshal(hook.Settings{Hooks: map[hook.Event][]hook.HookConfig{hook.PostToolUse: {h}}})
+			must(t, err)
+			must(t, os.WriteFile(hook.GlobalSettingsPath(""), raw, 0600))
+			s := collectAll(t, CategoryAutomation)
+			sealed, err := Seal(s, passphrase)
+			must(t, err)
+			s, err = Open(sealed, passphrase)
+			must(t, err)
+			machine(t, "")
+			for attempt := range 2 {
+				p := NewPlanner()
+				plan, err := p.Preview(s)
+				must(t, err)
+				if attempt > 0 && plan.Items[0].Status != StatusSame {
+					t.Fatalf("normalized hook not recognized after import: %+v", plan.Items[0])
+				}
+				ids := []string{plan.Items[0].ID}
+				result, err := p.Apply(ApplyRequest{PlanID: plan.ID, Items: ids, Consented: ids})
+				must(t, err)
+				if len(result.Failed) != 0 {
+					t.Fatalf("import failed: %+v", result)
+				}
+			}
+			got, err := globalHooks()
+			must(t, err)
+			if len(got.Hooks[hook.PostToolUse]) != 1 {
+				t.Fatalf("repeat-import grew normalized hooks: %+v", got.Hooks[hook.PostToolUse])
+			}
+		})
 	}
 }
