@@ -4,6 +4,7 @@ import type { AgentPort, SkillEntry } from "../port/port";
 import { Exception } from "./CapabilityScope";
 import { Switch } from "./Switch";
 import { reason } from "../i18n/kernel";
+import { CopyButton } from "./CopyButton";
 
 // One skill, and the two things a reader wants from it: whether the model can
 // reach it at all, and which of the layers it was switched at.
@@ -42,6 +43,7 @@ export function SkillRow({
   }, [owner]);
   const note = triggerNote(sk, implicit);
   const local = sk.switchScope === "project";
+  const command = sk.slashName ? "/" + sk.slashName : "";
   const act = async (fn: () => Promise<void>) => {
     setBusy(true);
     onFailed("");
@@ -59,7 +61,10 @@ export function SkillRow({
   const toggle = () => act(() => port.setSkillEnabled(sk.name, !sk.enabled, "project", root || undefined));
   return (
     <div className="skrow" data-off={sk.enabled ? undefined : ""} data-local={local ? "" : undefined}>
-      <span className="nm">{sk.slashName ? "/" + sk.slashName : sk.name}</span>
+      <span className="nm">
+        {command || sk.name}
+        {command && <CopyButton key={command} text={command} iconOnly label={t("复制调用命令 {command}", { command })} />}
+      </span>
       <span className="ds" title={sk.description || undefined}>{sk.description || t("未提供说明")}</span>
       <span className="how">{note.text && <i className={note.reachable ? "w" : "w none"}>{t(note.text)}</i>}</span>
       <span className="face">
