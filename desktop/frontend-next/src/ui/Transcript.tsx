@@ -30,6 +30,7 @@ import { Rail, type RailMark } from "./Rail";
 import { StudioIcon } from "./StudioIcon";
 import { LiveWork, useStartsOpen } from "../state/foldpref";
 import { landingBox, useFindLanding, useFindPaint } from "./findland";
+import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
@@ -89,8 +90,10 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
   // A block the selection touches must not leave the DOM. Unmounting the node a
   // selection is anchored to makes the browser remap that selection onto
   // whatever is still mounted — which reads as "I selected up there and the
-  // bottom got selected too".
-  const [held, setHeld] = useState<Set<number>>(new Set());
+  // bottom got selected too". A block the selection merely passes through, with
+  // neither end inside it, is held as plain text from the data: mounting its
+  // cards in one synchronous render is what made a long drag freeze.
+  const [held, setHeld] = useState<Map<number, Held>>(new Map());
 
   // Stick to the bottom only while the reader is already there; scrolling up
   // must not be yanked back by incoming frames.
@@ -144,16 +147,13 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
       const sel = document.getSelection();
       const root = scroll.current;
       if (!root || !sel || sel.isCollapsed || sel.rangeCount === 0) {
-        setHeld((prev) => (prev.size ? new Set() : prev));
+        setHeld((prev) => (prev.size ? new Map() : prev));
         return;
       }
       const range = sel.getRangeAt(0);
       if (!root.contains(range.commonAncestorContainer)) return;
-      const next = new Set<number>();
-      root.querySelectorAll(".chunk").forEach((el, i) => {
-        if (range.intersectsNode(el)) next.add(i);
-      });
-      setHeld((prev) => (prev.size === next.size && [...next].every((i) => prev.has(i)) ? prev : next));
+      const next = heldBlocks(range, root.querySelectorAll(".chunk"));
+      setHeld((prev) => (prev.size === next.size && [...next].every(([i, how]) => prev.get(i) === how) ? prev : next));
     };
     document.addEventListener("selectionchange", onSelect);
     return () => document.removeEventListener("selectionchange", onSelect);
@@ -492,7 +492,7 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
             // The block a new card lands in has no measured height yet, so it
             // mounts without waiting for the observer's first callback.
             eager={i === blocks.length - 1}
-            keep={held.has(i)}
+            keep={held.get(i)}
             foldWork={foldWork}
             tail={turnRunning && i === blocks.length - 1}
             {...rowProps}
@@ -524,9 +524,10 @@ const Block = memo(function Block({
   checkpoints: Map<string, Checkpoint>;
   watch: (el: Element, cb: (near: boolean) => void) => () => void;
   eager: boolean;
-  // The selection reaches into this block, so it stays mounted however far
-  // off-screen it scrolls.
-  keep: boolean;
+  // The selection reaches into this block, so it stays in the DOM however far
+  // off-screen it scrolls: whole when a selection end is inside it, as plain
+  // text when the selection only passes through.
+  keep: Held | undefined;
   // Whether a settled turn's work is folded under one line (the kernel's [ui] fold_turn_work).
   foldWork: boolean;
   // This block holds the end of a turn that is still being worked on, which stays open.
@@ -579,9 +580,9 @@ const Block = memo(function Block({
     <div
       className="chunk"
       ref={box}
-      style={near || keep ? undefined : { height: `${tall.current || items.length * 96}px` }}
+      style={near || keep === "full" ? undefined : { height: `${tall.current || items.length * 96}px`, overflow: keep ? "hidden" : undefined }}
     >
-      {(near || keep) && drawRows(rows)}
+      {near || keep === "full" ? drawRows(rows) : keep === "text" && chunkText(items)}
     </div>
   );
 });
