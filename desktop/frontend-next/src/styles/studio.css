@@ -1852,8 +1852,9 @@ body { font-size: 14px; line-height: 1.75; }
 .rail .wsnode { padding-left: 0; }
 .rail .kids { margin-left: 19px; padding-left: 0; border-left: 1px solid var(--hair); }
 .rail .sessrow {
-  min-height: 42px;
-  margin: 1px 16px 1px 22px;
+  min-height: 34px;
+  height: 34px;
+  margin: 0 16px 0 22px;
   padding: 0;
   gap: 0;
   border-radius: 6px;
@@ -1868,15 +1869,15 @@ body { font-size: 14px; line-height: 1.75; }
 }
 .rail .sesstitle {
   flex: 1; min-width: 0; align-self: stretch; box-sizing: border-box;
-  min-height: 42px; padding: 5px 34px 5px 9px;
+  min-height: 34px; height: 34px; padding: 0 34px 0 9px;
   display: flex; align-items: center; overflow: hidden;
   font: 400 11px/1.45 var(--ui); letter-spacing: -.01em;
 }
 .rail .sessrow-context > .sesstitle { padding-inline-end: 9px; }
 .rail .sessrow-context > .sesscopies { margin-inline-end: 8px; }
 .rail .sesstitle > span {
-  min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+  flex: 1; min-width: 0; display: block;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .rail .sessrow[aria-selected="true"] .sesstitle { font-weight: 590; }
 .rail .sessrow:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }

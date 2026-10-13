@@ -437,7 +437,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                                 onClick={() => (held ? onFocus(held.id) : void open(host, ws.root, session.path))}
                               >
                                 <i className="pip" />
-                                <span className="sesstitle">{name}</span>
+                                <span className="sesstitle" title={name}><span>{name}</span></span>
                                 {session.unread && <UnreadDot kind="row" />}
                                 <span className="sessmeta">{session.turns ? t("{n} 轮", { n: session.turns }) : t("空会话")}</span>
                                 <button
@@ -478,7 +478,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                     onClick={() => onFocus(rt.id)}
                   >
                     <i className="pip" />
-                    <span className="sesstitle">{rt.name}</span>
+                    <span className="sesstitle" title={rt.name}><span>{rt.name}</span></span>
                   </div>
                 ))}
 
