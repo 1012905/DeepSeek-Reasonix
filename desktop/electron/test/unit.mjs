@@ -2058,6 +2058,26 @@ test("kernel acts: show brings the window forward, relaunch arms the restart, qu
   assert.deepEqual(calls, ["show", "relaunch", "quit"]);
 });
 
+test("raise: a window the platform would not focus is lifted once and returned to normal stacking", () => {
+  const { raise } = require("../src/raise.js");
+  const run = (platform, focusedAfterFocus) => {
+    const calls = [];
+    let focused = false;
+    const win = {
+      show: () => calls.push("show"),
+      focus: () => { calls.push("focus"); if (focusedAfterFocus) focused = true; },
+      isFocused: () => focused,
+      setAlwaysOnTop: (on) => calls.push(on ? "top" : "untop"),
+    };
+    raise(win, platform);
+    return calls;
+  };
+  assert.deepEqual(run("win32", true), ["show", "focus"]);
+  assert.deepEqual(run("win32", false), ["show", "focus", "top", "focus", "untop"]);
+  assert.deepEqual(run("darwin", false), ["show", "focus"]);
+  assert.deepEqual(run("linux", false), ["show", "focus"]);
+});
+
 test("tray: the menu is replaced only when what it says changes, so an open menu is not torn down by the poll", async () => {
   const { installTray } = require("../src/tray.js");
   const menus = [];

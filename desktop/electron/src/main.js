@@ -31,6 +31,7 @@ const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
+const { raise } = require("./raise");
 const { actHandler } = require("./acts");
 const { crashDir, recordHostExit, pendingHostExit, clearHostExit, hostExitNotice } = require("./hostexit");
 
@@ -294,8 +295,7 @@ function showWindow() {
   if (quitting || !win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   reload?.revive();
-  win.show();
-  win.focus();
+  raise(win);
 }
 
 // A window larger than the display it opens on puts its own title bar off

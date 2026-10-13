@@ -385,6 +385,9 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// A toast the user clicks is answered here, in the process that sent it, and
 	// the shell is the one that can bring its window forward.
 	notify.OnActivate(showOnToastClick(owner))
+	// A toast that did not go out is invisible to the person it was for, so the
+	// reason belongs in the log the shell keeps.
+	notify.OnSendFailure(func(err error) { fmt.Fprintf(logs, "notify: %v\n", err) })
 	hub := serve.NewHub(serve.HubOptions{
 		Serve:         hubCfg,
 		Surface:       surface.Desktop,
