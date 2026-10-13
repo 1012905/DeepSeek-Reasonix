@@ -38,7 +38,6 @@ import (
 	"reasonix/internal/platform/appupdate"
 	"reasonix/internal/platform/computer"
 	"reasonix/internal/platform/crashreport"
-	"reasonix/internal/platform/diskhealth"
 	"reasonix/internal/platform/feedback"
 	"reasonix/internal/platform/instanceid"
 	"reasonix/internal/platform/notify"
@@ -389,13 +388,13 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	browserHost := serve.NewBrowserHost()
 	boot.SetBrowserHost(browserHost.Dial)
 	hubCfg := hostServeConfig(cfg.Serve)
-	// Shut until the person at the window opens it; the context ending closes
-	// it with the rest of the kernel, unpairing every device.
+	// Shut until the person at the window opens it; the context ending stops it
+	// with the rest of the kernel, keeping the phones this machine already adopted.
 	share := serve.NewDeviceShare(page)
 	share.RestorePort(cfg.SharePort())
 	go func() {
 		<-ctx.Done()
-		share.Close()
+		share.Shutdown()
 	}()
 	owner := &shellOwner{to: handshakeTo}
 	// A toast the user clicks is answered here, in the process that sent it, and
@@ -404,8 +403,6 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// A toast that did not go out is invisible to the person it was for, so the
 	// reason belongs in the log the shell keeps.
 	notify.OnSendFailure(func(err error) { fmt.Fprintf(logs, "notify: %v\n", err) })
-	sender := notify.NewPlatformSender()
-	go watchDisk(ctx, notifySet, sender, []string{root, serve.SessionDirFor(root)}, diskWatchEvery, diskhealth.Read)
 	hub := serve.NewHub(serve.HubOptions{
 		ComputerDriver: driver,
 		Serve:          hubCfg,
@@ -415,7 +412,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		DecorateSink:   decorate,
 		Tray:           &studioTray{tracker: tracker},
 		Notifications:  notifySet,
-		NotifySender:   sender,
+		NotifySender:   startDiskWatch(ctx, notifySet, []string{root, serve.SessionDirFor(root)}),
 		BrowserHost:    browserHost,
 		Asks:           asks,
 		Remote:         remotehost.New(ctx, version, asks),
@@ -426,6 +423,15 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		LogsDir:        shell.logsDir,
 	})
 	share.Attach(hub.Handler())
+	// A share the person had open reopens where it was: the phone that paired
+	// against that address keeps its cookie. An address that is gone falls back
+	// to one this machine now offers, at the cost of one fresh scan.
+	state := share.RestoreState()
+	if state.Open {
+		if _, err := share.Reopen(state.Address); err != nil {
+			fmt.Fprintln(logs, "reasonix-studio-host: could not reopen phone access:", err)
+		}
+	}
 	srv := serve.New(built.Controller, bc, hubCfg)
 	srv.SetPaneSink(paneSink)
 	srv.AdoptRuntime(built)

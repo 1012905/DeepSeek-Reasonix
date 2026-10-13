@@ -1,3 +1,4 @@
+import "../RestoreNotice.css";
 import { useState } from "react";
 import { ExtensionView } from "./ExtensionView";
 import type { ExtensionSurface, ExtensionFormField } from "../../port/wire";
@@ -8,7 +9,7 @@ import { t } from "../../i18n";
 interface Props {
   ext: ExtensionSurface;
   onInvoke?: (name: string) => void;
-  onSubmit?: (pluginId: string, surfaceId: string, values: Record<string, unknown>) => void;
+  onSubmit?: (pluginId: string, surfaceId: string, values: Record<string, unknown>) => void | Promise<void>;
 }
 
 // An extension publishes data, not markup — so severity arrives as its own
@@ -47,10 +48,29 @@ export function ExtensionCard({ ext, onInvoke, onSubmit }: Props) {
   for (const field of ext.form?.fields ?? []) {
     if (Object.hasOwn(draft, field.key)) values[field.key] = draft[field.key];
   }
-  const [sent, setSent] = useState(false);
+  const [submission, setSubmission] = useState<"idle" | "pending" | "sent">("idle");
+  const sent = submission === "sent";
+  const pending = submission === "pending";
 
   const set = (key: string, v: unknown) => setDraft((prev) => ({ ...prev, [key]: v }));
   const missing = (ext.form?.fields ?? []).filter((f) => f.required && empty(values[f.key]));
+  if (ext.code) return (
+    <div className="restore-notice" role="status" data-code={ext.code}>
+      <span>{t("扩展界面已失效")}</span>
+      <span className="why">{ext.pluginId}/{ext.surfaceId}</span>
+    </div>
+  );
+
+  const submit = async () => {
+    if (submission !== "idle" || missing.length || !onSubmit) return;
+    setSubmission("pending");
+    try {
+      await onSubmit(ext.pluginId, ext.surfaceId, values);
+      setSubmission("sent");
+    } catch {
+      setSubmission("idle");
+    }
+  };
 
   return (
     <div className="call" data-k="extension">
@@ -124,10 +144,10 @@ export function ExtensionCard({ ext, onInvoke, onSubmit }: Props) {
           )}
 
           {ext.form && (
-            <div className="extform" data-sealed={sent ? "" : undefined}>
+            <div className="extform" data-sealed={sent ? "" : undefined} aria-busy={pending}>
               {ext.form.message && <div className="exttext">{ext.form.message}</div>}
               {ext.form.fields.map((f) => (
-                <Field key={f.key} f={f} value={values[f.key]} sealed={sent} onChange={(v) => set(f.key, v)} />
+                <Field key={f.key} f={f} value={values[f.key]} sealed={sent || pending} onChange={(v) => set(f.key, v)} />
               ))}
               {!sent && (
                 <div className="extfoot">
@@ -135,13 +155,10 @@ export function ExtensionCard({ ext, onInvoke, onSubmit }: Props) {
                     data-action="extensions.submit"
                     className="btn"
                     data-primary
-                    disabled={missing.length > 0}
-                    onClick={() => {
-                      setSent(true);
-                      onSubmit?.(ext.pluginId, ext.surfaceId, values);
-                    }}
+                    disabled={missing.length > 0 || pending || !onSubmit}
+                    onClick={() => void submit()}
                   >
-                    {missing.length ? t("提交（还差 {n} 项）", { n: missing.length }) : t("提交")}
+                    {pending ? t("正在提交…") : missing.length ? t("提交（还差 {n} 项）", { n: missing.length }) : t("提交")}
                   </button>
                 </div>
               )}

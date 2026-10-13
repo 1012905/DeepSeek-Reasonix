@@ -177,6 +177,8 @@ export const ACTIONS: UIAction[] = [
   { id: "mcp.trust", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.remove", kind: "destructive", target: "entity", proof: "interaction" },
   { id: "mcp.load", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.tool-search", kind: "view", target: "entity", proof: "interaction" },
+  { id: "mcp.tool-search-clear", kind: "view", target: "entity", proof: "interaction" },
 
   // ── The window itself ────────────────────────────────────────────────────
   // A mock that records the call proves the wiring and nothing about the
@@ -429,6 +431,7 @@ export const ACTIONS: UIAction[] = [
   { id: "share.ask-revoke", kind: "view", target: "entity", proof: "interaction" },
   { id: "share.keep", kind: "view", target: "entity", proof: "interaction" },
   { id: "share.revoke", kind: "destructive", target: "entity", proof: "authority-effect" },
+  { id: "share.remember", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "versions.reload", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "versions.pin", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "versions.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
@@ -515,6 +518,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workbench.files", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.hidden", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.reveal", kind: "shell-native", target: "optional", proof: "interaction" },
+  { id: "workbench.open-file", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.copy-path", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.add-to-chat", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.copy-ref", kind: "shell-native", target: "entity", proof: "interaction" },

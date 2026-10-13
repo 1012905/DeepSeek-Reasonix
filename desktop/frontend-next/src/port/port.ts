@@ -436,6 +436,8 @@ export interface AgentPort {
   /** Show a workspace entry, "" being the root, in the system file manager.
    *  Refuses with the kernel's code for anything outside the workspace. */
   revealInFileManager(path: string): Promise<void>;
+  opensFiles(): boolean;
+  openFile(path: string): Promise<void>;
   sessions(): Promise<SessionEntry[]>;
   resume(path: string): Promise<void>;
   newSession(): Promise<void>;
@@ -614,6 +616,7 @@ export interface AgentPort {
   openThemeFolder(): Promise<string>;
   // Extension surfaces arrive on the event stream; these carry the user's half
   // back — an action the card offered, or a published form's values.
+  extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]>;
   invokeExtensionAction(name: string): Promise<string>;
   submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>): Promise<void>;
 

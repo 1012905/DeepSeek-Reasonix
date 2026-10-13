@@ -22,6 +22,7 @@ export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running"];
 
 const SAID: Record<string, string> = {
+  "surface.replay_incomplete": "扩展界面恢复失败",
   "shell.destructive_target": "递归删除目标受保护或超出授权范围；请使用工作区或授权目录内的字面路径",
   "shell.analysis_unknown": "无法确定递归删除范围；请使用字面命令名、路径和解释器内容",
   "shell.delete_sequence": "请拆分命令；递归删除前只能使用字面路径切换目录，不能依赖变量赋值",
@@ -193,6 +194,7 @@ const SAID: Record<string, string> = {
   "share.port_in_use": "端口 {port} 已被其他程序占用，请换一个端口，或清空后让系统自动选择。",
   "share.port_out_of_range": "端口需要在 {min}–{max} 之间，或清空后让系统自动选择。",
   "share.port_save_failed": "无法保存端口设置：{error}",
+  "share.remember_save_failed": "无法保存配对记忆设置：{error}",
   "share.device_unknown": "没有这台已配对的设备，可能已被移除。",
   "picker.unsupported": "这个系统没有可用的文件夹选择框，请直接填写路径。",
   "picker.failed": "打不开文件夹选择框：{error}",
