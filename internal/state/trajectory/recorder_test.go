@@ -214,3 +214,48 @@ func TestRecordRunHeaderPersistsRequestSidePrefix(t *testing.T) {
 		t.Errorf("second record should be the event, got %+v", got[1])
 	}
 }
+
+func TestMemoryRecallRecordsExplicitZeroBudgetCounts(t *testing.T) {
+	path := filepath.Join(testenv.TempDir(t), "recall.jsonl")
+	recorder, err := New(event.Discard, path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = recorder.Close() })
+	recorder.RecordMemoryRecall(event.MemoryRecallAudit{Suppressed: "memory store is empty"})
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record struct {
+		MemoryRecall map[string]json.RawMessage `json:"memory_recall"`
+	}
+	if err := json.Unmarshal(data, &record); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"char_budget", "omitted_by_limit", "omitted_by_budget"} {
+		if raw := record.MemoryRecall[key]; string(raw) != "0" {
+			t.Errorf("%s = %s, want explicit zero", key, raw)
+		}
+	}
+	if len(readRecords(t, path)) != 1 || readRecords(t, path)[0].MemoryRecall.Suppressed != "memory store is empty" {
+		t.Fatal("suppressed recall lost its explanation")
+	}
+}
+
+func TestLegacyMemoryRecallRecordPreservesOmittedTotal(t *testing.T) {
+	var record Record
+	if err := json.Unmarshal([]byte(`{"schema_version":1,"memory_recall":{"used_chars":1327,"omitted":3}}`), &record); err != nil {
+		t.Fatal(err)
+	}
+	recall := record.MemoryRecall
+	if record.SchemaVersion != SchemaVersion || recall == nil || recall.UsedChars != 1327 || recall.Omitted != 3 {
+		t.Fatalf("legacy recall was not preserved: %+v", record)
+	}
+	if recall.CharBudget != 0 || recall.OmittedByLimit != 0 || recall.OmittedByBudget != 0 {
+		t.Fatalf("legacy recall invented an omission cause: %+v", recall)
+	}
+}

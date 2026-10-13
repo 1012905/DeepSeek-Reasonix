@@ -17,6 +17,7 @@
 - [环境变量](#环境变量)
 - [Web 前端](#web-前端)
 - [配置路径](./CONFIG_PATHS.md)
+- [日志与崩溃文件](#日志与崩溃文件)
 - [思考语言](./REASONING_LANGUAGE.md)
 - [任务合约与暂停策略](./TASK_CONTRACT.md)
 - [自定义 OpenAI-compatible provider](#自定义-openai-compatible-provider)
@@ -78,6 +79,8 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_subagent_depth = 2              # 子代理嵌套委派深度；设为 1 可恢复旧的单层边界
 # max_subagent_concurrency = 6        # 会话级子代理总并发（task/fleet/skills）
 # max_parallel_writers = 3            # 互不重叠 write_paths 时的并行写入上限
+# write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
+# host_verification = "off"          # 仅用户配置文件；改过文件的回合不再被要求先做检查、复核和签收；交付回执仍如实写明检查了什么，默认 on
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
 # max_output_tokens = 0            # 推荐：自动（DeepSeek 默认 high → 约 64K；不是无限）
 # max_output_tokens = 32768        # 普通编码 / 控制费用
@@ -200,10 +203,13 @@ telemetry 请求之前只询问一次。提示为 `[Y/n]`：直接回车、输�
 数量和时效上限的本地队列中，等待后续启动重试。
 
 ping 包含一个 CLI 专用的随机 128-bit 安装 ID、CLI 版本、OS、架构和 `cli` surface
-标记。计数批次使用同一个 ID 做每日活跃安装去重，只包含固定 bucket，例如 CLI 模式、
+标记。这个 ID 与桌面端安装 ID 分离，不是账号、硬件、仓库或 session 标识。
+
+计数批次使用同一个 ID 做每日活跃安装去重，只包含固定 bucket，例如 CLI 模式、
 运行配置档、权限/会话模式、turn 延迟、finish reason、cache hit 区间、通用
-Provider/工具错误分类、compaction、恢复计数和归一化界面语言。这个 ID 与桌面端安装
-ID 分离，不是账号、硬件、仓库或 session 标识。
+Provider/工具错误分类、compaction、恢复计数、每轮 token 量级区间、工作区写锁争用区间和归一化界面语言。
+
+不回答就关闭提示（输入结束、Ctrl+D）不会保存任何选择，也不会上传；下次启动会再问。
 
 Reasonix 绝不会上传 prompt、回答、reasoning、工具名/参数/输出、路径、仓库/分支、
 session ID、精确 token/费用、Provider/model 名称、base URL 或环境变量。
@@ -662,7 +668,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | `Cmd+B` / `Ctrl+B` | 显示或隐藏左侧边栏 | 和点击侧边栏开关是同一个动作。 |
 | `Cmd+Shift+B` / `Ctrl+Shift+B` | 展开或收起最近的 shell 输出 | 和点击折叠 shell 输出提示是同一个动作。 |
 | macOS `Cmd+1`-`Cmd+9`，其它平台 `Ctrl+1`-`Ctrl+9` | 跳转到侧边栏中对应编号的可见对话 | 短暂按住 `Cmd`/`Ctrl` 会显示编号标记；已有自定义快捷键占用相同按键时，自定义动作优先生效。 |
-| macOS `Cmd++`、`Cmd+-`、`Cmd+0`；其它平台 `Ctrl++`、`Ctrl+-`、`Ctrl+0` | 放大、缩小或重置文字大小 | 对把加号上报为 `=` 的键盘也兼容。 |
+| macOS `Cmd++`、`Cmd+-`、`Cmd+0`；其它平台 `Ctrl++`、`Ctrl+-`、`Ctrl+0` | 放大、缩小或重置界面大小 | 与 **设置 → 外观 → 大小 → 界面** 使用同一组档位（80% 到 180%）并保存同一项设置。对把加号上报为 `=` 的键盘也兼容。 |
 | `?` | 打开键盘快捷键帮助表 | 帮助表显示当前实际生效的桌面端绑定。 |
 
 输入框快捷键：
@@ -710,7 +716,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 
 | 按键或命令 | 作用 | 说明 |
 | --- | --- | --- |
-| `Enter` | 发送当前消息 | turn 运行中输入非空内容时，会排队作为后续反馈。 |
+| `Enter` | 发送当前消息 | turn 运行中输入非空内容时，会排队作为后续反馈。输入框为空时，跳回最新输出并继续跟随。 |
 | `Shift+Enter`、`Alt+Enter` 或 `Ctrl+J` | 插入换行 | 普通 `Enter` 保留给发送/确认。 |
 | 空闲时普通 `Up` / `Down` | 回放更旧或更新的已提交提示词 | turn 运行中同一组按键用于导航排队反馈。 |
 | `PageUp` / `PageDown` | 滚动 transcript | 不受当前聊天状态影响。 |
@@ -724,6 +730,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | `/mouse` | 切换应用内鼠标接管 | 关闭后由终端处理原生拖选和右键菜单，但会失去应用内选区、滚动条和滚轮。可用 `REASONIX_DISABLE_MOUSE=1` 让每次会话默认关闭。远程（SSH）会话默认关闭，开箱即可原生选择；`REASONIX_DISABLE_MOUSE=0` 强制在任何环境下接管。 |
 | `Ctrl+C` | 复制、取消、清空或退出 | 有 transcript 或输入框活动选区时优先复制；否则取消运行中的 turn、清空非空输入，或在空输入下连按两次退出；已取消的 turn 仍在停止时再按一次也会退出。 |
 | `Ctrl+D` | 退出 TUI | 空输入且空闲时立即退出。 |
+| `Ctrl+Z` | 把 TUI 挂起到 shell | 仅 macOS 和 Linux，用 `fg` 恢复。Windows 没有作业控制，按下无效果。 |
 | `/quit` 或 `/exit` | 退出 TUI | 立即执行，运行中的 turn 也一样。直接输入 `exit`、`quit` 或 `:q` 只会作为普通消息发给模型。 |
 | 终端的文本粘贴快捷键 | 粘贴文本 | 文本保持终端原生 bracketed-paste 路径：macOS 通常是 `Cmd+V`，Linux 通常是 `Ctrl+Shift+V`，其它环境使用终端自身配置。Reasonix 只消费收到的文本粘贴事件，不会先探测图片。 |
 | macOS/Linux `Ctrl+V`；Windows `Alt+V` | 粘贴剪贴板图片 | 图片粘贴是独立的应用动作。读取期间底栏显示“正在粘贴图片…”，完成后在光标处插入可编辑的 `[image #N]` 标记。 |
@@ -750,7 +757,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 
 | 上下文 | 按键 | 作用 |
 | --- | --- | --- |
-| 斜杠或 `@` 补全 | `Up` / `Down`、`Ctrl+P` / `Ctrl+N`、`Tab` / `Enter`、`Esc` | 移动、接受或关闭补全菜单。 |
+| 斜杠或 `@` 补全 | `Up` / `Down`、`Ctrl+P` / `Ctrl+N`、`Tab` / `Enter`、`Esc` | 移动、接受或关闭补全菜单。回合运行中按 `Esc` 还会同时停止该回合（vi 模式除外）。 |
 | 工具审批提示 | `y`/`1`、`a`/`2`、`p`/`3`、`n`/`4`、`Enter`、`Esc`、`Ctrl+C` | 允许一次、本会话允许、持久允许、拒绝、默认允许一次、拒绝，或取消当前 turn。 |
 | Ask 问题卡 | `Up`/`Down` 或 `j`/`k`、`Left`/`Right` 或 `h`/`l`、`Space`、`Enter`、`1`-`9`、`Esc`、`Ctrl+C` | 导航答案/问题标签、切换多选、提交/激活、选择编号选项、关闭，或取消当前 turn。 |
 | Rewind 选择器 | `Up`/`Down` 或 `j`/`k`、`Enter`、`b`、`c`、`d`、`f`、`s`、`u`、`Esc` | 选择 turn，应用 both/conversation/code/fork/summarize 动作，或返回/关闭。 |
@@ -937,8 +944,8 @@ Reasonix 是一个 MCP 客户端。`[[plugins]]` 的 `type` 选择传输：`stdi
 headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 ```
 
-远程 HTTP server 未配置静态 `Authorization` header 时，认证要求会显示为 **登录**。
-CLI 可运行 `reasonix mcp auth <name>`，桌面端则在 MCP 面板点击该 server 的 **登录**。
+远程 HTTP server 未配置静态 `Authorization` header 时，认证要求（HTTP 401 且带 `Bearer` 质询）会被识别为需要登录。
+CLI 可运行 `reasonix mcp auth <name>`；Studio 暂时还没有登录入口。
 Reasonix 会执行 OAuth 元数据发现、动态客户端注册、PKCE S256 授权与
 refresh token 轮换；发现和 token 请求与 MCP 连接使用相同的 Reasonix 网络代理设置。
 
@@ -1060,6 +1067,8 @@ RPC 调用。两者都可按服务器覆盖。
 `review.md` 即 `/review`，子目录构成命名空间（`git/commit.md` → `/git:commit`）。文件正文
 是 prompt 模板，调用即作为一轮对话发出。
 
+在 Studio 里，每条已完成的回复下有「分支为新会话」按钮：把对话复制到这条回复为止，生成标题为「原标题 · 分支」的新会话，原会话保持不变。它依赖运行中产生的回合边界，所以重启后恢复的会话不提供。
+
 ### 子智能体 Profile
 
 子智能体 profile 是带有 `runAs: subagent` 和 `invocation: manual` 的手动 Skill。
@@ -1106,8 +1115,12 @@ Context Engine v2 把上下文分成两个用途不同的层：
 在写入之后跑过且通过。agent 能决定的只有"我跑过的哪条是检查"，至于它跑没跑、退出码是否为零、
 是否在写入之后，全部由 receipts 说了算，不由它声称。
 
-如果跑过的命令宿主读不懂，它会以警告说明，并放行这一轮——读不懂是宿主自己的盲区，
-不等于这轮没验证。改了文件却**一条命令都没跑**是另一回事，仍然判失败。
+如果跑过的命令宿主读不懂，而宿主看到它没有动过工作区，这一轮会带着警告收尾——读不懂是
+宿主自己的盲区，不等于这轮没验证。
+
+仍然判失败的有两种：改了文件却**一条命令都没跑**；以及读不懂的那条命令改了东西——无论
+宿主看着它写，还是连改动范围都确定不了。后者的出路是上面那条署名引用、一条宿主认得的
+检查，或者 `conclude_blocked`。
 
 声明检查是更强的**可选**形式。在任意常驻指令文件中用这个标题声明（标题必须一字不差）：
 
@@ -1176,6 +1189,26 @@ Review the staged diff. Focus on $ARGUMENTS, list bugs with file:line.
 `$ARGUMENTS` 展开为全部空格分隔参数，`$1`…`$N` 为位置参数。MCP prompts 也以
 `/mcp__<server>__<prompt>` 形式出现在这里。
 
+## 日志与崩溃文件
+
+Studio 的日志放在窗口配置目录下，不在 Reasonix home 里：
+
+| 平台 | 日志目录 |
+| --- | --- |
+| macOS | `~/Library/Application Support/Reasonix Studio/io.reasonix.studio.<实例>/logs` |
+| Windows | `%APPDATA%\Reasonix Studio\io.reasonix.studio.<实例>\logs` |
+| Linux | `~/.config/Reasonix Studio/io.reasonix.studio.<实例>/logs` |
+
+| 文件 | 内容 |
+| --- | --- |
+| `shell.log` | 窗口进程：启动、内核启动与握手，以及内核如何退出（`host: died code=… signal=…`），并附崩溃文件末尾几行。 |
+| `host.log` | 内核自己的输出。成功的轮询请求不再按 INFO 记录，错误能保留更久。 |
+| `crash/host-<时间>-<版本>-<pid>.log` | 内核被致命错误或 panic 终止时 Go 运行时打印的内容，例如 `fatal error: out of memory`。保留最新 5 个，每个只留最后 256 KiB；正常退出不留文件。 |
+
+除崩溃文件外，每个日志达 1 MiB 就轮转（保留 3 份）。内核意外退出后，下次启动会提示一次。
+
+反馈问题时请附上 `shell.log`、`host.log` 和 `crash/` 里较新的文件。`shell.log` 和 `host.log` 已抹去启动凭据；崩溃文件是运行时的原始输出，可能含堆栈、路径和 panic 文本，分享前请先自行检查。
+
 ## 内置文档检索
 
 Reasonix 会把 `docs/` 中的 Markdown 文档随 CLI 和桌面端一起编译发布。只读 `docs` 工具
@@ -1242,6 +1275,13 @@ evaluator 判定。旧 `.reasonix/autoresearch/<task-id>/` 目录保持只读：
 `@dir`）注入本地文件内容（或目录清单），`@<server>:<uri>` 注入 MCP 资源。本地路径**只有
 真实存在**时才当作引用，普通 `@mention` 保持原文。敲 `/` 或 `@` 会弹出补全菜单——斜杠
 命令，或**逐层**的文件导航（一次只列当前一层目录、可下钻进子目录）外加 MCP 资源。
+
+Studio 文件面板里，右键文件或文件夹可选择「复制路径」（工作区中的绝对路径）或
+「复制引用」（可粘贴到输入框的 `@` 引用）。空格和制表符会被转义，目录引用以 `/`
+结尾。引用语法无法表示的名称会禁用「复制引用」；工作区提供绝对根路径后才可
+「复制路径」，远程工作区同样支持。每次复制一个条目，不打开文件，也不发送消息。
+
+含 `:` 的路径可能被识别为 MCP 资源，因此会禁用「复制引用」，但仍可复制路径。
 
 ## 双模型协同
 

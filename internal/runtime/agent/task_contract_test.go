@@ -11,6 +11,7 @@ import (
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/runtime/contract"
 	"reasonix/internal/runtime/plancontract"
+	"reasonix/internal/runtime/verdict"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/instruction"
 	"reasonix/internal/state/sessionstore"
@@ -69,7 +70,7 @@ func TestContractOwesTheCheckTheTaskBeganUnder(t *testing.T) {
 	if got.ContractRevision != 1 || got.ContractDecision != string(contract.Accepted) || got.Outcome == "completed" {
 		t.Fatalf("audit = %+v, want revision 1 accepted and the turn not completed", got)
 	}
-	if v := sealedVerdict(t, store, got.Record, "contract@command@"+evidence.VerificationIdentity(began)); v != "owed" {
+	if v := sealedVerdict(t, store, sealedRecord(t, got), "contract@command@"+evidence.VerificationIdentity(began)); v != "owed" {
 		t.Fatalf("frozen criterion verdict = %q, want owed", v)
 	}
 	c, err := contract.Load(store, a.DeliveryCheckpoint().Contract)
@@ -87,9 +88,19 @@ func TestContractCriterionIsSatisfiedByItsOwnCheck(t *testing.T) {
 	store := trustedstate.Open(t.TempDir(), nil)
 	a, sink := contractAgent(t, writeThenRun(began), began, store)
 	_ = a.Run(deliveryGoalContext("goal-1", "edit"), "edit")
-	if v := sealedVerdict(t, store, sink.last(t).Record, "contract@command@"+evidence.VerificationIdentity(began)); v != "satisfied" {
+	if v := sealedVerdict(t, store, sealedRecord(t, sink.last(t)), "contract@command@"+evidence.VerificationIdentity(began)); v != "satisfied" {
 		t.Fatalf("frozen criterion verdict = %q, want satisfied by the check it names", v)
 	}
+}
+
+// sealedRecord is the record a turn's audit names, and fails with the store's
+// cause when the bundle was not sealed instead of reading an empty digest.
+func sealedRecord(t *testing.T, a event.EvidenceBundleAudit) string {
+	t.Helper()
+	if !a.Sealed {
+		t.Fatalf("bundle not sealed: failure %q, contract failure %q", a.FailureCode, a.ContractFailure)
+	}
+	return a.Record
 }
 
 // sealedVerdict reads one obligation's verdict out of a sealed bundle.
@@ -103,20 +114,9 @@ func sealedVerdict(t *testing.T, store *trustedstate.Store, record, id string) s
 	if err != nil {
 		t.Fatal(err)
 	}
-	var b struct {
-		Verdict struct {
-			Obligations []struct {
-				ID      string `json:"id"`
-				Verdict string `json:"verdict"`
-			} `json:"obligations"`
-		} `json:"verdict"`
-	}
-	if err := json.Unmarshal(payload, &b); err != nil {
-		t.Fatal(err)
-	}
-	for _, o := range b.Verdict.Obligations {
+	for _, o := range sealedObligations(t, store, payload) {
 		if o.ID == id {
-			return o.Verdict
+			return string(o.Verdict)
 		}
 	}
 	t.Fatalf("bundle has no obligation %q: %s", id, payload)
@@ -194,7 +194,7 @@ func TestPlanCriterionIsVerifiedByItsStepsCommands(t *testing.T) {
 		a, sink := contractAgent(t, writeThenRun(tc.ran), "", store)
 		a.SetPlanContract(&plan)
 		_ = a.Run(deliveryGoalContext("goal-1", "fix"), "fix")
-		record := sink.last(t).Record
+		record := sealedRecord(t, sink.last(t))
 		if v := sealedVerdict(t, store, record, "contract@command@"+evidence.VerificationIdentity("go test ./parser/")); v != tc.want {
 			t.Fatalf("after %q the plan check is %q, want %q", tc.ran, v, tc.want)
 		}
@@ -253,21 +253,34 @@ func hasObligation(t *testing.T, store *trustedstate.Store, record, id string) b
 	if err != nil {
 		t.Fatal(err)
 	}
+	return slices.ContainsFunc(sealedObligations(t, store, payload), func(o verdict.Obligation) bool {
+		return o.ID == id
+	})
+}
+
+// sealedObligations resolves the obligation object a bundle's verdict names.
+func sealedObligations(t *testing.T, store *trustedstate.Store, payload []byte) []verdict.Obligation {
+	t.Helper()
 	var b struct {
 		Verdict struct {
-			Obligations []struct {
-				ID string `json:"id"`
-			} `json:"obligations"`
+			Obligations trustedstate.Digest `json:"obligations"`
 		} `json:"verdict"`
 	}
 	if err := json.Unmarshal(payload, &b); err != nil {
 		t.Fatal(err)
 	}
-	return slices.ContainsFunc(b.Verdict.Obligations, func(o struct {
-		ID string `json:"id"`
-	}) bool {
-		return o.ID == id
-	})
+	if b.Verdict.Obligations == "" {
+		return nil
+	}
+	body, err := store.Object(b.Verdict.Obligations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var obs []verdict.Obligation
+	if err := json.Unmarshal(body, &obs); err != nil {
+		t.Fatal(err)
+	}
+	return obs
 }
 
 func deliverablePlan() plancontract.Plan {
@@ -301,7 +314,7 @@ func TestAPlanNamingFilesIsOwedAProvenChange(t *testing.T) {
 		a.SetPlanContract(&plan)
 		_ = a.Run(deliveryGoalContext("goal-1", "fix"), "fix")
 		got := sink.last(t)
-		v := sealedVerdict(t, store, got.Record, "contract@"+contract.PlanDeliverable)
+		v := sealedVerdict(t, store, sealedRecord(t, got), "contract@"+contract.PlanDeliverable)
 		listed := slices.ContainsFunc(unprovenDetails(a.CompletionReceipt()), func(d string) bool { return strings.Contains(d, "no change was proven") })
 		if tc.owed && (v != "owed" || got.Outcome == "completed" || !listed) {
 			t.Fatalf("%s: deliverable %q, outcome %q, receipt lists it %v; want owed, not completed, listed", tc.name, v, got.Outcome, listed)

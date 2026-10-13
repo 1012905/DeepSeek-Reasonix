@@ -46,6 +46,7 @@ node perf/pick.mjs       # 补全菜单：/ 和 @ 的选中态，深浅两色下
 node perf/models.mjs     # 连接面板：网关报出一百多个模型时，这一屏还能不能用
 node perf/side.mjs       # 右栏：端点自己写的一句话有多长，都不该改变栏宽
 node perf/queue.mjs      # 待送达：正文读不回来时，「改」不许开出一个空编辑器
+node perf/reask.mjs      # 改写框：没有换行的长段落，框要长到让人读得到全文，宽屏和手机宽度各一遍
 node perf/onboarding.mjs # First-run setup: zoom-aware card bounds, resize, scrolling, focus and completion
 node perf/running.mjs    # 执行过程：在跑的步骤自己在动、收起后由标题接着动，步骤行没有空栏
 node perf/lang.mjs       # 双语验证：英文启动、界面译文到位、切回中文
@@ -56,14 +57,29 @@ node perf/codes.mjs      # 码的守卫：内核发的每个拒绝码，前端�
 node perf/tokens.mjs     # 变量的守卫：样式里不带兜底的 var(--x)，都得真有人赋过值
 node perf/tiers.mjs      # 墨色分档的守卫：每档的正文/次要/淡/幽灵色不低于首次绘制的那一步，且都过 AA
 node perf/contrast.mjs   # 对比度的守卫：每一段正文对它真正落在的那块底够不够 AA
-node perf/concurrent.mjs # 多会话并发的守卫：9 个会话同时流式，后台窗格不许以流式速率重绘，帧率不许掉
+node perf/concurrent.mjs # 多会话并发的守卫：9 个会话同时流式，后台窗格不许以流式速率重绘，帧率不许掉（手跑，不进自动检查：帧率比值阈值在 2 核机器上随硬件抖动，CI 上实测 0.68/0.69 < 0.7）
+node perf/wheel.mjs      # 滚轮轨迹（只报告、不判红）：向上滚时 scrollTop 不倒走、单步不超滚轮、scrollHeight 不缩水；WHEEL_STRICT=1 判红
 node perf/idle.mjs       # 闲置的守卫：看不见的东西不许动，闲着的窗口不许烧 CPU
+node perf/effects.mjs    # Effects guard: a sky pack idles quietly, a hidden window draws no sky, Reduced removes blur, sky and grain
+node perf/text-glow.mjs  # Transcript glow, pack switching and prose contrast across schemes, wallpapers, widths, effects and motion
 node perf/shipped.mjs    # 产物的守卫：dist 里的东西必须比源码新（构建可以成功而编的是别的树）
 node perf/reason.mjs     # 内核拒绝的双语落地：同一个码，中英各说各的
 node perf/budget.mjs     # 预算的守卫：输入框上下堆满东西时，转录还剩多少
 node perf/find.mjs       # 对话内查找：快捷键穿过输入框、跳到没挂载的那条、同一行里的第 n 处落在眼前
 node perf/focus.mjs      # 专注的守卫：拿走外围之后，退出时世界是否原样
 node perf/tooltip.mjs    # 控件提示的守卫：文字不溢出提示框、不在半透明祖先之下、对比度达 AA（深浅×中英×宽窄）
+node perf/navhint.mjs   # Icon-rail hover hints: drawn, inside the window, clipped by no ancestor, painted over by nothing (light/dark × on/collapsed)
+node perf/runningtool.mjs # 还没输出的运行中调用：行能展开、写明仍在运行与已运行多久、写出命令自带的超时
+node perf/gutterhit.mjs # 分栏拖拽手柄不压在相邻滚动条上：滚动条拇指处按下命中的不是手柄，握把仍可拖开收起的栏
+node perf/dock.mjs      # 停靠的浏览器列从 pane 顶部起、与导航行并排，取消停靠后行归还（浅/深 × 宽/窄 × 首开/重载）
+node perf/signals.mjs   # 运行分析的信号轨说明：它是什么、为什么标记不能拖（浅/深 × 宽/手机）
+node perf/narrow.mjs    # 窄窗口 + 1.8 倍缩放：标题栏与输入区的行互不重叠、不越出窗口（浅/深 × 390/320 × 1.8/1.3，另加宽窗口对照）
+node perf/sidebar.mjs   # 侧栏开关只有一个且位置不变（图标栏 开/仅收起时/关 × 浅/深）；同一模型连续回复只在首条带头
+node perf/stickyfold.mjs # 展开的长执行过程：滚动时头部吸在顶部、有自己的底（浅/深）
+node perf/crumb.mjs # 标题栏里会话标题紧跟项目名，长名字也不溢出（宽/窄）
+node perf/hoverradius.mjs # 输入框底行的按钮悬停时圆角和底色一致（浅/深）
+node perf/sessionrows.mjs # 会话行样式：34px、无额外行间距、单行省略；本机/远程、悬浮/焦点、浅/深、窄/宽
+node perf/start.mjs     # 经工作台标签/边缘把手打开工作台先出入口页（文件/改动/浏览器），不替人开浏览器；标题栏 Browser 按钮仍直达浏览器（浅/深 × 宽/窄）
 ```
 
 `lang.mjs` 从仓库外跑时用 `PERF_SRC` 指向 `src/`（它要读固件源码来决定

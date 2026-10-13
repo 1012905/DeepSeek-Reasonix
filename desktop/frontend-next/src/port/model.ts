@@ -14,6 +14,16 @@ export interface CompletionItem {
   // builtin | command | skill | subagent | prompt | file | dir | resource.
   // Empty on argument values, which are not things.
   kind?: string;
+  // The arguments an MCP prompt declares, in order.
+  args?: CompletionArg[];
+  // Declarations the kernel left out of args to keep the row short.
+  moreArgs?: number;
+}
+
+export interface CompletionArg {
+  name: string;
+  description?: string;
+  required?: boolean;
 }
 
 export interface Completion {
@@ -39,6 +49,7 @@ export interface ModelEntry {
   // What the user renamed provider to; provider stays the identity.
   displayName?: string;
   model: string;
+  modelAlias?: string;
   kind?: string;
   active?: boolean;
   default?: boolean;
@@ -49,6 +60,7 @@ export interface ModelEntry {
   // nothing declares it — never "no". Rendering a guess here sends the user to
   // a rejected request they cannot explain.
   vision?: boolean;
+  webSearch?: boolean;
   // What this model produces. Absent means chat: it is what every model was
   // before decision backends, so a kernel predating the field still answers.
   answers?: "chat" | "decision";
@@ -81,6 +93,10 @@ export interface ModelMode {
 // kernel appear here; image routing joins once it can name its own model
 // instead of borrowing whatever the subagent runs.
 export interface RoleAssignments {
+  web_search: string;
+  web_search_effective?: string;
+  web_search_reason?: string;
+  web_search_source?: string;
   planner: string;
   subagent: string;
   guardian: string;
@@ -89,6 +105,14 @@ export interface RoleAssignments {
   // others it never falls back to the main model: a chat model cannot answer a
   // question set, and a silent fallback would make a missing backend a wrong one.
   decision: string;
+}
+
+// A per-profile entry that outranks a role's global model. `scope` names the
+// file holding it: only a "user" entry can be cleared from the settings page.
+export interface RoleOverride {
+  key: string;
+  model: string;
+  scope: "user" | "project";
 }
 
 // The two fold bounds and which of them is in force. They are configured

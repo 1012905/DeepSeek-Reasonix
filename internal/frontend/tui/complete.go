@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -85,13 +87,16 @@ func (m *model) refreshMenu() tea.Cmd {
 		m.menu = nil
 		return nil
 	}
+	m.onCompletion(completionMsg{line: line})
 	return m.fetchCompletion()
 }
 
 func (m *model) onCompletion(msg completionMsg) {
-	if msg.err != nil || msg.line != m.composer.Value() {
-		m.menu = nil
+	if msg.line != m.composer.Value() {
 		return
+	}
+	if msg.err != nil {
+		msg.c = Completion{}
 	}
 	c := msg.c
 	c.Items = append(m.localCommands(msg.line), c.Items...)
@@ -105,7 +110,14 @@ func (m *model) onCompletion(msg completionMsg) {
 	if len(msg.c.Items) == 0 {
 		c.From, c.To = 0, utf16At(msg.line, len(msg.line))
 	}
-	m.menu = &menu{line: msg.line, c: c}
+	sel := 0
+	if m.menu != nil && m.menu.line == msg.line {
+		kept := m.menu.c.Items[m.menu.sel]
+		sel = max(0, slices.IndexFunc(c.Items, func(it CompletionItem) bool {
+			return it.Label == kept.Label && it.Insert == kept.Insert && it.Kind == kept.Kind
+		}))
+	}
+	m.menu = &menu{line: msg.line, c: c, sel: sel}
 }
 
 // localCommands are the slash commands this screen answers itself, offered
@@ -145,7 +157,8 @@ func (m *model) localCommands(line string) []CompletionItem {
 
 // menuKey takes the keys an open menu owns.
 func (m *model) menuKey(k string) (tea.Cmd, bool) {
-	if m.menu == nil {
+	if m.menu == nil || m.menu.line != m.composer.Value() {
+		m.menu = nil
 		return nil, false
 	}
 	n := len(m.menu.c.Items)
@@ -156,6 +169,9 @@ func (m *model) menuKey(k string) (tea.Cmd, bool) {
 		m.menu.sel = (m.menu.sel + n - 1) % n
 	case "esc":
 		m.menu = nil
+		if m.tr.Running && !m.viActive() {
+			return m.cancelTurn(), true
+		}
 	case "tab":
 		return m.acceptCompletion(), true
 	case "enter":
@@ -201,7 +217,7 @@ func (m *model) acceptCompletion() tea.Cmd {
 }
 
 func (m *model) menuLines() []string {
-	if m.menu == nil {
+	if m.menu == nil || m.menu.line != m.composer.Value() {
 		return nil
 	}
 	items := m.menu.c.Items
@@ -219,10 +235,34 @@ func (m *model) menuLines() []string {
 			row += termrender.Dim("  " + oneLine(it.Hint, max(m.width-8-termrender.VisibleWidth(label), 10)))
 		}
 		lines = append(lines, row)
+		if i == m.menu.sel {
+			lines = append(lines, argumentLines(it, m.width)...)
+		}
 	}
 	hint := i18n.M.CompHintSlash
 	if m.menu.c.Kind == "ref" {
 		hint = i18n.M.CompHintFile
 	}
 	return append(lines, termrender.Dim("    "+hint))
+}
+
+// argumentLines lists a prompt's declared arguments under its row: the name,
+// whether it is required, and its description. The kernel already bounded the
+// list and says how many it left out.
+func argumentLines(it CompletionItem, width int) []string {
+	lines := make([]string, 0, len(it.Args)+1)
+	for _, a := range it.Args {
+		text := a.Name
+		if a.Required {
+			text += " *"
+		}
+		if a.Description != "" {
+			text += "  " + a.Description
+		}
+		lines = append(lines, termrender.Dim("      "+oneLine(text, max(width-8, 10))))
+	}
+	if it.MoreArgs > 0 {
+		lines = append(lines, termrender.Dim(fmt.Sprintf("      … +%d", it.MoreArgs)))
+	}
+	return lines
 }

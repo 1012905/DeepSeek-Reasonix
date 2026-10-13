@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
-import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment } from "../port/port";
+import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
 import { Picker } from "./Menu";
+import { BranchChip } from "./BranchChip";
 import { Policy } from "./Policy";
 import { modelMenu } from "./modelmenu";
 import { effortMenu, effortReading, effortsFor, forcesThinkingFor, routeEffortPick } from "./effort";
 import { CompletionMenu, useCompletion } from "./Completion";
 import { ChipMirror, useSkillChips } from "./ChipMirror";
 import { useIme } from "./ime";
+import { usePlaceholderFit } from "./placeholderfit";
+import { useFitHeight } from "./fitHeight";
+import { useSendShortcut } from "../state/prefs";
+import { sendAria, sendHint, sendsOnKey } from "./sendkey";
 import { countLines, pasteIsLong, planTone, planVerb } from "./intake";
 import { kindOf, nameOf, previewURL } from "./chipfile";
 import { useIntake } from "./useIntake";
@@ -31,6 +36,9 @@ interface Props {
   // A line taken back from the queue. The counter makes the same text twice
   // two requests, as it does for a quote.
   restore?: { n: number; text: string };
+  // Text another surface hands the composer, such as a file reference; it goes
+  // in at the caret with a space on either side.
+  inject?: { n: number; text: string };
   // Resolves false when the line never left, so what was typed comes back
   // rather than being lost to a refusal the user could not have prevented.
   // Bumped when something outside asks for the cursor — answering a plan card
@@ -41,6 +49,14 @@ interface Props {
   onError: (e: unknown) => void;
   onSettings?: (section?: string) => void;
   changeCount?: number;
+  countElsewhere?: boolean;
+  // The work tree's Git state as git itself reports it, refreshed on the same
+  // path as changeCount (turn boundaries, writes). null is "not answered yet";
+  // repo:false is a workspace with no repository, and the two render apart.
+  git?: WorkspaceGit | null;
+  // Called after a branch switch landed, so the change list, the branch reading
+  // and the session's workspace view re-read what the checkout moved.
+  onTreeChanged?: () => void;
   // Bumped when settings change; a source edited there can change the ladder.
   pulse?: number;
   draftKey?: string;
@@ -91,17 +107,9 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, pulse = 0, draftKey = "" }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
-  const [branch, setBranch] = useState("");
-  useEffect(() => {
-    let alive = true;
-    port.capabilityScope()
-      .then((scope) => alive && setBranch(scope.repo ? (scope.branch || t("分离状态")) : ""))
-      .catch(() => alive && setBranch(""));
-    return () => { alive = false; };
-  }, [port, status?.workspaceRoot]);
   const [submitting, setSubmitting] = useState(false);
   const { text, setText, beginSubmit, finishSubmit } = useDraft(draftKey, submitting);
   // The caret decides which token is being completed, so it is state here
@@ -123,7 +131,6 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
   const guide = useId();
   const completionId = useId();
   const attachTipId = useId();
-  const branchTipId = useId();
   // Set only when a completion moved the caret: the browser puts it at the end
   // of a programmatic value, which is wrong for anything accepted mid-line.
   const pending = useRef<number | null>(null);
@@ -167,6 +174,21 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     queueMicrotask(() => box.current?.focus());
   }, [restore?.n]);
 
+  const injectedAt = useRef(inject?.n ?? 0);
+  useEffect(() => {
+    if (!inject?.n || inject.n === injectedAt.current) return;
+    injectedAt.current = inject.n;
+    const where = caret;
+    setText((prev) => {
+      const at = Math.min(where, prev.length);
+      const lead = at > 0 && !/\s$/.test(prev.slice(0, at)) ? " " : "";
+      const piece = lead + inject.text + " ";
+      pending.current = at + piece.length;
+      return prev.slice(0, at) + piece + prev.slice(at).replace(/^ /, "");
+    });
+    queueMicrotask(() => box.current?.focus());
+  }, [inject?.n]);
+
   const moveTo = useCallback((next: string, at: number) => {
     pending.current = at;
     type(next, at);
@@ -177,6 +199,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     box.current?.focus();
   }, chips);
   const ime = useIme();
+  const sendShortcut = useSendShortcut();
 
   // A counter, not a boolean: asking twice in a row has to move the cursor twice.
   useEffect(() => {
@@ -192,42 +215,13 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     setStopping(false);
   }, [running, kernelIdle]);
 
-  const sizeBox = useCallback(() => {
-    const el = box.current;
-    if (!el) return;
-    if (pending.current !== null) {
-      el.setSelectionRange(pending.current, pending.current);
-      pending.current = null;
-    }
-    // CSS caps the top by the available room; the element still has to be told to grow.
-    // The floor is not decoration: under an interface zoom, scrollHeight is not
-    // in the same units the height we write back is, and the two engines do not
-    // round it the same way. Writing a smaller number than one line squeezes the
-    // box shut — an empty composer with both scrollbars showing and nowhere to
-    // type. One line is the least it can ever legitimately be.
-    const line = parseFloat(getComputedStyle(el).lineHeight) || 22;
-    el.style.height = "auto";
-    // A placeholder is not content. On first paint the sidebars may still own
-    // most of a narrow viewport, and its wrapped scrollHeight must not become
-    // the empty editor's remembered height.
-    el.style.height = `${text ? Math.max(line, el.scrollHeight) : line}px`;
-  }, [text]);
-
-  useLayoutEffect(sizeBox, [sizeBox]);
-
-  useEffect(() => {
-    const el = box.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    let width = el.getBoundingClientRect().width;
-    const observer = new ResizeObserver(([entry]) => {
-      const next = entry?.contentRect.width ?? width;
-      if (Math.abs(next - width) < 0.5) return;
-      width = next;
-      sizeBox();
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [sizeBox]);
+  const placeCaret = useCallback((el: HTMLTextAreaElement) => {
+    if (pending.current === null) return;
+    el.setSelectionRange(pending.current, pending.current);
+    pending.current = null;
+  }, []);
+  useFitHeight(box, text, placeCaret);
+  const placeholder = usePlaceholderFit(box, [t("描述任务、问题或要改的内容…"), t("描述任务…"), "…"]);
 
   // Attachments ride into the turn as path references, exactly as they do from
   // the CLI — the host saved the bytes, the turn parser resolves the token. A
@@ -382,7 +376,8 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
   // composer answering for an endpoint that never spoke.
   const declared = efforts.length > 0;
   const forcedThinking = forcesThinkingFor(models, status?.modelRef);
-  const modelLb = status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—";
+  const modelLb = models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
+    || (status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—");
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole
   // shelf says nothing can change while only one control waits on the kernel.
@@ -523,11 +518,11 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
           rows={1}
           value={text}
           data-chips={chips.list.length > 0 ? "" : undefined}
-          placeholder={t("描述任务、问题或要改的内容…")}
+          placeholder={placeholder}
           role="combobox"
           aria-label={t("任务输入")}
           aria-describedby={guide}
-          aria-keyshortcuts={touch ? undefined : "Enter Shift+Enter"}
+          aria-keyshortcuts={sendAria(sendShortcut, touch)}
           aria-busy={submitting}
           readOnly={submitting}
           aria-expanded={menu.open}
@@ -579,15 +574,15 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
               if (e.key === "Enter") e.preventDefault();
               return;
             }
+            const sendKey = sendsOnKey(e, sendShortcut, touch);
             if (menu.open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
               e.preventDefault();
               menu.move(e.key === "ArrowDown" ? 1 : -1);
               return;
             }
-            // Tab completes, always. Enter belongs to the menu only where the
-            // line is not yet a message — a half-typed command — or where the
-            // user went looking through the list themselves.
-            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && menu.ownsEnter)) && !e.shiftKey) {
+            // Tab completes; Enter completes a partial command or an explicitly selected item.
+            // The configured modifier chord sends the draft even with a menu open.
+            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && menu.ownsEnter && !(sendShortcut === "modifier_enter" && sendKey))) && !e.shiftKey) {
               e.preventDefault();
               menu.accept();
               return;
@@ -600,7 +595,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
               menu.dismiss();
               return;
             }
-            if (e.key === "Enter" && !e.shiftKey && !touch) {
+            if (sendKey) {
               e.preventDefault();
               send();
             }
@@ -622,9 +617,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
               ? t("正在添加附件…")
               : failed
                 ? t("有附件添加失败，请重试或移除")
-                : t(touch
-                  ? running ? "点按插话 · 回车换行" : "点按发送 · 回车换行"
-                  : running ? "Enter 插话 · Shift+Enter 换行" : "Enter 发送 · Shift+Enter 换行")}
+                : sendHint(sendShortcut, running, touch)}
         </span>
         {showCount && <span className="fcount">{t("{n} 字 · {lines} 行", { n: text.length, lines })}</span>}
       </div>
@@ -676,25 +669,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
             label={<><StudioIcon name="agent" /><span className="studio-sr-label">{t("计划")}</span><span>{status?.plan ? "Plan" : "Agent"}</span><StudioIcon name="down" /></>}
           />
         </div>
-        {branch && (
-          <div className="studio-branch-pop">
-            <div
-              className="mode plain studio-branch"
-              tabIndex={0}
-              aria-label={t("当前 Git 分支：{branch}", { branch })}
-              aria-describedby={branchTipId}
-            >
-              <span className="ic" aria-hidden="true"><StudioIcon name="branch" /></span>
-              <span className="lb">{branch}</span>
-              {changeCount > 0 && <small>{t("{n} 个变更", { n: changeCount })}</small>}
-            </div>
-            <div className="studio-branch-card" id={branchTipId} role="tooltip">
-              <b>{t("当前分支 · {branch}", { branch })}</b>
-              <span>{changeCount > 0 ? t("当前工作区 · {n} 个本地变更", { n: changeCount }) : t("当前工作区 · 后续任务继续使用此分支")}</span>
-              <small>{t("仅作状态提示，无需点击")}</small>
-            </div>
-          </div>
-        )}
+        <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />
         {/* The toggle keeps its legacy meaning: it follows `plan`, which the
             kernel turns off the moment a plan is approved. The lifecycle is a
             separate reading — an approved plan is still running, and saying so
@@ -713,8 +688,10 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
             place="bottom"
             title={status?.modelRef ?? modelLb}
             current={status?.modelRef}
-            items={modelMenu(models, providerOrder)}
+            items={modelMenu(models, providerOrder, status?.modelRef)}
             menuClassName="studio-model-menu"
+            searchAlways
+            searchPlaceholder={t("搜索模型或服务商…")}
             menuTitle={<><b>{t("选择模型")}</b><small>{t("用于后续任务")}</small></>}
             onOpen={loadModels}
             pending={busy["model"]}

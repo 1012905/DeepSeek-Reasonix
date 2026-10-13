@@ -1,9 +1,10 @@
-import { isValidElement, memo, useEffect, useState, type ReactNode } from "react";
+import { isValidElement, memo, useEffect, useState, type ReactNode, type MouseEvent, type KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import { CodeBlock } from "./CodeBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { remarkCodeSpanLink, remarkTrimAutolink } from "./autolink";
+import { remarkFileLinks } from "./filelinks";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { useRevealed } from "./reveal";
@@ -155,23 +156,25 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
-/** How a document shown from the workspace reads its own references: a link to
- *  another file there, and an image stored beside it. Absent for a reply. */
+/** File navigation for a workspace document or a conversation. */
 export interface LocalRefs {
   /** An action for href, or null when it is not a file in the workspace. */
   link(href: string): (() => void) | null;
   /** Where to load src from, or null to leave it as written. */
   image(src: string): string | null;
+  path?(href: string): string | null;
+  title?(href: string): string;
+  menu?(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, href: string): void;
 }
 
 // live is the tail of a message still arriving; tail alone is only the last
 // block, which a settled message has too.
-const Block = memo(function Block({ src, math, emoji, code, tail, live, local }: { src: string; math: Plugin | null; emoji: Plugin | null; code: Plugin | null; tail?: boolean; live?: boolean; local?: LocalRefs }) {
+const Block = memo(function Block({ src, math, emoji, code, tail, live, local, images }: { src: string; math: Plugin | null; emoji: Plugin | null; code: Plugin | null; tail?: boolean; live?: boolean; local?: LocalRefs; images: boolean }) {
   // Inside the memo, so a settled block normalises once instead of per chunk.
   const body = normalizeMath(tail ? balanceFences(src) : src);
   return (
     <ReactMarkdown
-      remarkPlugins={(emoji ? [...BASE_REMARK, emoji] : BASE_REMARK) as never}
+      remarkPlugins={([...BASE_REMARK, [remarkFileLinks, local?.path], ...(emoji ? [emoji] : [])]) as never}
       rehypePlugins={([...BASE_REHYPE, math, code].filter(Boolean)) as never}
       components={{
         // Every link here comes from model output; a webview navigating away
@@ -182,6 +185,15 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local }:
             return (
               <a
                 href={href}
+                title={local?.title?.(href!)}
+                data-action-click="workbench.file" data-target={local?.path?.(href!) ?? href}
+                data-action-contextmenu={local?.menu ? "workbench.menu" : undefined}
+                data-action-keydown={local?.menu ? "workbench.menu" : undefined}
+                onContextMenu={(e) => local?.menu?.(e, href!)}
+                onKeyDown={(e) => {
+                  if (e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey)) return;
+                  local?.menu?.(e, href!);
+                }}
                 onClick={(e) => {
                   e.preventDefault();
                   open();
@@ -200,9 +212,12 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local }:
             </a>
           );
         },
-        img: ({ src, alt, title }) => (
-          <img src={(local && typeof src === "string" && local.image(src)) || (src as string | undefined)} alt={alt} title={title} />
-        ),
+        img: ({ src, alt, title }) =>
+          images ? (
+            <img src={(local && typeof src === "string" && local.image(src)) || (src as string | undefined)} alt={alt} title={title} />
+          ) : (
+            <span className="md-noimg">{alt}</span>
+          ),
         pre: ({ children }) => (
           <CodeBlock lang={langOf(children)} source={textOf(children)} live={live}>{children}</CodeBlock>
         ),
@@ -218,7 +233,9 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local }:
   );
 });
 
-export function Markdown({ text, streaming, local }: { text: string; streaming?: boolean; local?: LocalRefs }) {
+/** images=false is for text nobody in the conversation wrote: a picture
+ *  address in it is a request the reader never chose to make. */
+export function Markdown({ text, streaming, local, images = true }: { text: string; streaming?: boolean; local?: LocalRefs; images?: boolean }) {
   const shown = useRevealed(text, streaming);
   const math = usePlugin(MATH.test(text), KATEX);
   const emoji = usePlugin(EMOJI.test(text), EMOJIS);
@@ -237,9 +254,9 @@ export function Markdown({ text, streaming, local }: { text: string; streaming?:
     // handing a listing over would hand over something that was never said.
     <div className="md" data-live={streaming ? "" : undefined}>
       {parts.map((p, i) => (
-        <Block key={i} src={p} math={math} emoji={emoji} code={code} local={local} />
+        <Block key={i} src={p} math={math} emoji={emoji} code={code} local={local} images={images} />
       ))}
-      <Block src={shown.slice(at)} math={math} emoji={emoji} code={code} local={local} tail live={streaming} />
+      <Block src={shown.slice(at)} math={math} emoji={emoji} code={code} local={local} images={images} tail live={streaming} />
       {streaming && <span className="caret" />}
     </div>
   );

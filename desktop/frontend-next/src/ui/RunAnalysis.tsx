@@ -71,9 +71,31 @@ export function RunAnalysis({ rows, availability, onSave }: {
   const rounds = activities.filter((r) => r.kind === "model_round" && r.dur);
   const tools = activities.filter((r) => r.tool);
   const recoveries = rows.filter(isRecovery);
-  const signals = rows.filter((r) => !r.dur && !r.tool && r.kind !== "event").slice(0, 8);
+  const signals = rows.filter((r) => !r.dur && !r.tool && r.kind !== "event");
   const first = activities.length ? Math.min(...activities.map((r) => r.at)) : 0;
   const [pick, setPick] = useState<{ seq: number; from: "row" | "signal" } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [signalWidth, setSignalWidth] = useState(0);
+  const timeline = useRef<HTMLDivElement>(null);
+  const signalLine = useRef<HTMLDivElement>(null);
+  const lanes: number[] = [];
+  const placedSignals = [...signals].sort((a, b) => a.at - b.at).map((row) => {
+    const left = row.at / Math.max(span, 1);
+    const x = left * signalWidth;
+    const free = lanes.findIndex((end) => x - end >= 22);
+    const lane = free < 0 ? lanes.length : free;
+    lanes[lane] = x;
+    return { row, left, lane };
+  });
+  useLayoutEffect(() => {
+    const line = signalLine.current;
+    if (!line) return;
+    const measure = () => setSignalWidth(line.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(line);
+    return () => observer.disconnect();
+  }, [signals.length > 0]);
   const [saved, setSaved] = useState<string | null>(null);
   const picked = rows.find((r) => r.seq === pick?.seq) ?? null;
   const selected = pick?.from === "row" ? pick.seq : null;
@@ -151,16 +173,26 @@ export function RunAnalysis({ rows, availability, onSave }: {
         </div>
       </section>
 
+      <div className="run-timeline-controls">
+        <label>{t("时间轴缩放")}<input type="range" min="1" max="16" step="1" value={zoom}
+          aria-label={t("时间轴缩放")} aria-valuetext={`${zoom}×`} onChange={(e) => setZoom(Number(e.target.value))} /></label>
+        <output>{zoom}×</output>
+        <button className="run-export" onClick={() => { setZoom(1); if (timeline.current) timeline.current.scrollLeft = 0; }}>{t("重置缩放")}</button>
+      </div>
+      <div className="run-timeline-scroll" ref={timeline} role="region" aria-label={t("时间轴")} tabIndex={0}>
+        <div className="run-timeline-canvas" style={{ width: `${zoom * 100}%` }}>
       {signals.length > 0 && (
         <section className="run-signals">
           <div className="run-section-head"><b>{t("信号轨")}</b><span>{t("与下方共用时间轴")}</span></div>
-          <div className="run-signal-line">
-            {signals.map((row) => (
-              <button data-action="analysis.signal" data-target={String(row.seq)} key={row.seq} style={{ left: `${(row.at / Math.max(span, 1)) * 100}%` }} onClick={(e) => toggle(row.seq, "signal", e.currentTarget)} title={spanText(row.payload)}>
+          <p className="run-section-note">{t("没有时长、也不是工具调用的运行记录，位置就是时间，无法拖动；缩放后可横向滚动，重叠信号分行显示。点一个看它的记录。")}</p>
+          <div className="run-signal-track"><div className="run-signal-line" ref={signalLine} style={{ height: `${lanes.length * 30 + 4}px` }}>
+            {placedSignals.map(({ row, left, lane }) => (
+              <button data-action="analysis.signal" data-target={String(row.seq)} key={row.seq} style={{ left: `${left * 100}%`, top: `${lane * 30 + 17}px` }} onClick={(e) => toggle(row.seq, "signal", e.currentTarget)} title={spanText(row.payload)}
+                aria-label={`${labelOf(row)} · +${decimals(row.at, 2)}s`} aria-expanded={pick?.from === "signal" && picked?.seq === row.seq}>
                 <i data-c={bucketOf(row)} />
               </button>
             ))}
-          </div>
+          </div></div>
           {picked && pick?.from === "signal" && <Inspect row={picked} index={activities.findIndex((r) => r.seq === picked.seq)} />}
         </section>
       )}
@@ -170,7 +202,7 @@ export function RunAnalysis({ rows, availability, onSave }: {
         <ol>
           {activities.map((row, index) => {
             const start = (row.at / Math.max(span, 1)) * 100;
-            const width = Math.max(1.2, ((row.dur ?? 0) / Math.max(span, 1)) * 100);
+            const width = ((row.dur ?? 0) / Math.max(span, 1)) * 100;
             const bucket = bucketOf(row);
             const cat = row.tool ? categoryOf(row.tool) : bucket;
             return (
@@ -187,6 +219,8 @@ export function RunAnalysis({ rows, availability, onSave }: {
           })}
         </ol>
       </section>
+        </div>
+      </div>
     </div>
   );
 }

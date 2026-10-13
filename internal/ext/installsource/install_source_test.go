@@ -56,6 +56,19 @@ func execInstall(t *testing.T, tl tool.Tool, args map[string]any) response {
 	return resp
 }
 
+func execInstallRefused(t *testing.T, tl tool.Tool, args map[string]any) error {
+	t.Helper()
+	raw, err := json.Marshal(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tl.Execute(context.Background(), raw); err != nil {
+		return err
+	}
+	t.Fatal("install was not refused")
+	return nil
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -348,7 +361,7 @@ func TestPlanClaudePluginWithNoMappedCapabilitiesIsBlocked(t *testing.T) {
 func TestApplyLocalSkillFileCopiesToProject(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
-	src := filepath.Join(testenv.TempDir(t), "beta.md")
+	src := filepath.Join(project, "author", "beta.md")
 	writeFile(t, src, "---\nname: beta\ndescription: Beta helper\n---\nDo beta work.")
 
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
@@ -401,7 +414,7 @@ func TestApplyLocalSkillFileDoesNotShadowFlatCompatInstall(t *testing.T) {
 func TestApplyLocalSKILLFileCopiesSiblingResources(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
-	srcDir := filepath.Join(testenv.TempDir(t), "frontend-design")
+	srcDir := filepath.Join(project, "author", "frontend-design")
 	writeFile(t, filepath.Join(srcDir, "SKILL.md"), "---\nname: frontend-design\ndescription: Frontend helper\n---\nSee references/style.md")
 	writeFile(t, filepath.Join(srcDir, "references", "style.md"), "# Style\n\nUse crisp layouts.")
 	writeFile(t, filepath.Join(srcDir, "scripts", "lint.sh"), "#!/bin/sh\nexit 0\n")
@@ -829,6 +842,115 @@ func TestPlanMCPJSONRejectsInvalid(t *testing.T) {
 				t.Fatalf("expected error for %s", tc.name)
 			}
 		})
+	}
+}
+
+// Every eager entry is a high-risk row the preview never hides, so a .mcp.json
+// declaring more servers than the limit is refused while planning, local or
+// fetched, with the invalid-manifest identity and the counts; one at the limit
+// still parses.
+func eagerMCPJSON(n int) string {
+	servers := make([]string, n)
+	for i := range servers {
+		servers[i] = fmt.Sprintf(`"s%d":{"command":"c","tier":"eager"}`, i)
+	}
+	return `{"mcpServers":{` + strings.Join(servers, ",") + `}}`
+}
+
+func TestPlanMCPJSONRefusesMoreServersThanTheLimit(t *testing.T) {
+	if entries, _, err := parseMCPJSON([]byte(eagerMCPJSON(maxMCPJSONServers))); err != nil || len(entries) != maxMCPJSONServers {
+		t.Fatalf("at the limit: %d entries, err %v", len(entries), err)
+	}
+	over := eagerMCPJSON(maxMCPJSONServers + 1)
+	mcpPath := filepath.Join(testenv.TempDir(t), ".mcp.json")
+	writeFile(t, mcpPath, over)
+	var served atomic.Value
+	served.Store(over)
+	srv := skillServer(t, &served)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t), HTTPClient: srv.Client()})
+	want := fmt.Sprintf(".mcp.json declares %d servers; limit is %d", maxMCPJSONServers+1, maxMCPJSONServers)
+	for _, source := range []string{mcpPath, srv.URL + "/.mcp.json"} {
+		_, err := execRaw(t, tl, map[string]any{"source": source, "kind": "mcp"})
+		if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("planning %s over the limit: err = %v; want the invalid-manifest identity saying %q", source, err, want)
+		}
+	}
+}
+
+// With kind=auto a refused .mcp.json still answers with its cause. A source that
+// is the file itself is refused rather than re-planned as a skill; a folder that
+// carries one warns with the cause, or is refused with it when nothing else plans.
+func TestPlanAutoKeepsTheCauseOfARefusedMCPJSON(t *testing.T) {
+	over := eagerMCPJSON(maxMCPJSONServers + 1)
+	want := fmt.Sprintf(".mcp.json declares %d servers; limit is %d", maxMCPJSONServers+1, maxMCPJSONServers)
+	var served atomic.Value
+	served.Store(over)
+	srv := skillServer(t, &served)
+	file := filepath.Join(testenv.TempDir(t), ".mcp.json")
+	writeFile(t, file, over)
+	bare := testenv.TempDir(t)
+	writeFile(t, filepath.Join(bare, ".mcp.json"), over)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t), HTTPClient: srv.Client()})
+	for _, source := range []string{srv.URL + "/.mcp.json", file, bare} {
+		resp, err := execRaw(t, tl, map[string]any{"source": source, "kind": "auto", "strict": false})
+		if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("auto plan of %s: err = %v, plan = %+v; want the refusal saying %q", source, err, resp.Actions, want)
+		}
+	}
+	mixed := testenv.TempDir(t)
+	writeFile(t, filepath.Join(mixed, ".mcp.json"), over)
+	writeFile(t, filepath.Join(mixed, "SKILL.md"), "---\nname: helper\ndescription: A helper\n---\nBody")
+	resp, err := execRaw(t, tl, map[string]any{"source": mixed, "kind": "auto"})
+	if err != nil || len(resp.Actions) != 1 || resp.Actions[0].Kind != "skill" {
+		t.Fatalf("auto plan of a folder with a skill and a refused .mcp.json: err = %v, plan = %+v", err, resp.Actions)
+	}
+	if !slices.ContainsFunc(resp.Warnings, func(w string) bool { return strings.Contains(w, want) }) {
+		t.Fatalf("warnings = %q, want the .mcp.json refusal saying %q", resp.Warnings, want)
+	}
+}
+
+// A folder's .mcp.json that cannot be read is a refusal with an identity rather
+// than a bare filesystem error; one that declares nothing says nothing under
+// kind=auto, and a folder without one is ErrManifestMissing under kind=mcp.
+func TestPlanLocalMCPJSONReadFailuresCarryAnIdentity(t *testing.T) {
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
+	const helper = "---\nname: helper\ndescription: A helper\n---\nBody"
+	unreadable := testenv.TempDir(t)
+	if err := os.Mkdir(filepath.Join(unreadable, ".mcp.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execRaw(t, tl, map[string]any{"source": unreadable, "kind": "auto"}); !errors.Is(err, ErrSourceUnreadable) {
+		t.Fatalf("auto plan of a folder whose .mcp.json is a directory: err = %v, want ErrSourceUnreadable", err)
+	}
+	writeFile(t, filepath.Join(unreadable, "SKILL.md"), helper)
+	prefix := hostLiteral(filepath.Join(unreadable, ".mcp.json")) + ": "
+	resp, err := execRaw(t, tl, map[string]any{"source": unreadable, "kind": "auto"})
+	if err != nil || len(resp.Actions) != 1 || !slices.ContainsFunc(resp.Warnings, func(w string) bool {
+		return strings.HasPrefix(w, prefix) && strings.Contains(w, ErrSourceUnreadable.Error())
+	}) {
+		t.Fatalf("auto plan with a skill and an unreadable .mcp.json: err = %v, warnings = %q", err, resp.Warnings)
+	}
+	declaresNothing := testenv.TempDir(t)
+	writeFile(t, filepath.Join(declaresNothing, ".mcp.json"), `{}`)
+	writeFile(t, filepath.Join(declaresNothing, "SKILL.md"), helper)
+	empty := hostLiteral(filepath.Join(declaresNothing, ".mcp.json"))
+	if resp, err := execRaw(t, tl, map[string]any{"source": declaresNothing, "kind": "auto"}); err != nil || len(resp.Actions) != 1 || slices.ContainsFunc(resp.Warnings, func(w string) bool { return strings.HasPrefix(w, empty) }) {
+		t.Fatalf("auto plan with a skill and an empty .mcp.json: err = %v, actions = %d, warnings = %q", err, len(resp.Actions), resp.Warnings)
+	}
+	if _, err := execRaw(t, tl, map[string]any{"source": testenv.TempDir(t), "kind": "mcp"}); !errors.Is(err, ErrManifestMissing) {
+		t.Fatalf("mcp plan of a folder without .mcp.json: err = %v, want ErrManifestMissing", err)
+	}
+}
+
+// A fetched document that is not a .mcp.json is the wrong kind for kind=mcp,
+// not an invalid manifest: its parse error is not the cause to report.
+func TestPlanSkillURLWithKindMCPIsTheWrongKind(t *testing.T) {
+	var served atomic.Value
+	served.Store("---\nname: demo\ndescription: A demo skill\n---\nBody")
+	srv := skillServer(t, &served)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t), HTTPClient: srv.Client()})
+	if _, err := execRaw(t, tl, map[string]any{"source": srv.URL + "/SKILL.md", "kind": "mcp"}); !errors.Is(err, ErrUnsupportedKind) {
+		t.Fatalf("SKILL.md with kind=mcp: err = %v, want ErrUnsupportedKind", err)
 	}
 }
 
@@ -2412,16 +2534,13 @@ func TestCopyRefusesUnmaterializableSymlinkCommands(t *testing.T) {
 		return src, "cafe0001", func() {}, nil
 	}
 
-	resp := execInstall(t, tl, map[string]any{
+	err := execInstallRefused(t, tl, map[string]any{
 		"source": "https://github.com/acme/escapes",
 		"kind":   "plugin",
 		"apply":  true,
 	})
-	if resp.OK || resp.Status != "failed" || len(resp.Actions) != 1 || resp.Actions[0].Status != "failed" {
-		t.Fatalf("response = %+v, want a failed apply for the unmaterializable symlink", resp)
-	}
-	if !strings.Contains(resp.Actions[0].Error, "approved plan counted") {
-		t.Fatalf("action error = %q, want the capability-verification refusal", resp.Actions[0].Error)
+	if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), "approved plan counted") {
+		t.Fatalf("error = %v, want the capability-verification refusal at planning", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".reasonix", "plugins", "escapes")); !os.IsNotExist(err) {
 		t.Fatal("failed install must not leave the copied tree behind")
@@ -2468,14 +2587,14 @@ func TestFailedReplaceKeepsExistingPluginInstall(t *testing.T) {
 	}
 
 	current, commit = v2, "cafe0002"
-	update := execInstall(t, tl, map[string]any{
+	err := execInstallRefused(t, tl, map[string]any{
 		"source":  "https://github.com/acme/pwf",
 		"kind":    "plugin",
 		"apply":   true,
 		"replace": true,
 	})
-	if update.OK || update.Status != "failed" {
-		t.Fatalf("update = %+v, want a failed apply for the unmaterializable symlink", update)
+	if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), "approved plan counted") {
+		t.Fatalf("update error = %v, want the capability-verification refusal at planning", err)
 	}
 
 	installedRoot := filepath.Join(home, ".reasonix", "plugins", "pwf")
@@ -2558,7 +2677,11 @@ func TestBackupPathCannotCollideWithSiblingPlugin(t *testing.T) {
 	if _, ok, _ := pluginpkg.FindInstalled(filepath.Join(home, ".reasonix"), "foo.pre-replace"); !ok {
 		t.Fatal("sibling plugin must stay registered")
 	}
-	pkg, _, err := pluginpkg.ParseDir(filepath.Join(home, ".reasonix", "plugins", "foo"))
+	installed, found, err := pluginpkg.FindInstalled(filepath.Join(home, ".reasonix"), "foo")
+	if err != nil || !found {
+		t.Fatalf("updated foo registration = %+v, found=%t, error=%v", installed, found, err)
+	}
+	pkg, _, err := pluginpkg.ParseDir(pluginpkg.ResolveRoot(filepath.Join(home, ".reasonix"), installed.Root))
 	if err != nil {
 		t.Fatalf("ParseDir foo: %v", err)
 	}

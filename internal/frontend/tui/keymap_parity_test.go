@@ -241,6 +241,52 @@ func TestCtrlDQuitsOnlyIdleAndEmpty(t *testing.T) {
 	}
 }
 
+// 1.x closed an open completion menu on Esc and, while a turn ran, stopped the
+// turn too; the menu is not a reason for Esc to lose its meaning.
+func TestEscInTheMenuAlsoStopsARunningTurn(t *testing.T) {
+	m, k := testModel(t)
+	startTurn(m)
+	menuFor(m, "/z", Completion{Kind: "slash", To: 2, Items: []CompletionItem{{Label: "/zebra", Insert: "/zebra"}}})
+	run(m, press(m, "esc"))
+	if m.menu != nil {
+		t.Fatal("esc left the menu open")
+	}
+	if !calledWith(k, "POST /cancel") {
+		t.Fatalf("esc with the menu open did not cancel the running turn:\n%s", strings.Join(k.seen(), "\n"))
+	}
+	if m.composer.Value() != "/z" {
+		t.Fatalf("esc cleared the draft: %q", m.composer.Value())
+	}
+}
+
+func TestEscInTheMenuOnlyClosesItWhenIdle(t *testing.T) {
+	m, k := testModel(t)
+	menuFor(m, "/z", Completion{Kind: "slash", To: 2, Items: []CompletionItem{{Label: "/zebra", Insert: "/zebra"}}})
+	run(m, press(m, "esc"))
+	if m.menu != nil {
+		t.Fatal("esc left the menu open")
+	}
+	if m.composer.Value() != "/z" {
+		t.Fatalf("esc on the menu cleared the draft: %q", m.composer.Value())
+	}
+	if calledWith(k, "POST /cancel") {
+		t.Fatal("esc on an idle menu sent a cancel")
+	}
+}
+
+func TestViEscInTheMenuDoesNotStopARunningTurn(t *testing.T) {
+	m, k := newViModel(t)
+	startTurn(m)
+	menuFor(m, "/z", Completion{Kind: "slash", To: 2, Items: []CompletionItem{{Label: "/zebra", Insert: "/zebra"}}})
+	run(m, press(m, "esc"))
+	if m.menu != nil {
+		t.Fatal("esc left the menu open")
+	}
+	if calledWith(k, "POST /cancel") {
+		t.Fatal("vi mode: esc with the menu open cancelled the turn")
+	}
+}
+
 func TestDoubleEscOnAnIdleEmptyComposerStillOpensRewind(t *testing.T) {
 	m, _ := testModel(t)
 	press(m, "esc")
@@ -295,5 +341,44 @@ func TestCtrlNAndCtrlPMoveThePickerSelection(t *testing.T) {
 	m.Update(ctrlP)
 	if m.picker.sel != 0 || m.picker.query != "" {
 		t.Fatalf("picker after two Ctrl+P = sel %d, query %q; want 0 and no filter", m.picker.sel, m.picker.query)
+	}
+}
+
+// Ctrl+Enter steers a running turn, as 1.x did and docs/GUIDE.md says; idle it
+// sends nothing, so a press meant as a newline never submits the draft.
+func TestCtrlEnterSteersOnlyARunningTurn(t *testing.T) {
+	m, k := testModel(t)
+	ctrlEnter := tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl}
+	typeText(m, "hello")
+	run(m, m.keyCmd(ctrlEnter))
+	if calledWith(k, "POST /submit") || m.composer.Value() != "hello" {
+		t.Fatalf("idle Ctrl+Enter sent or changed the draft (composer %q):\n%s", m.composer.Value(), strings.Join(k.seen(), "\n"))
+	}
+	m.composer.Reset()
+	startTurn(m)
+	typeText(m, "use make")
+	run(m, m.keyCmd(ctrlEnter))
+	if calls := strings.Join(k.seen(), "\n"); !strings.Contains(calls, `POST /inbox/items {"input":"use make","intent":"steer"}`) {
+		t.Fatalf("Ctrl+Enter during a turn did not steer:\n%s", calls)
+	}
+	if m.composer.Value() != "" {
+		t.Fatalf("the steered text stayed in the composer: %q", m.composer.Value())
+	}
+}
+
+// Ctrl+Z suspends the TUI to the shell, as 1.x did; Bubble Tea releases the
+// terminal first and ignores the request where there is no job control.
+func TestCtrlZSuspendsToTheShell(t *testing.T) {
+	m, k := testModel(t)
+	typeText(m, "draft")
+	cmd := m.keyCmd(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("Ctrl+Z did nothing")
+	}
+	if _, ok := cmd().(tea.SuspendMsg); !ok {
+		t.Fatal("Ctrl+Z did not ask to suspend")
+	}
+	if m.composer.Value() != "draft" || calledWith(k, "POST /") {
+		t.Fatalf("Ctrl+Z touched the draft or the kernel: %q\n%s", m.composer.Value(), strings.Join(k.seen(), "\n"))
 	}
 }

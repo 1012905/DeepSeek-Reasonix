@@ -12,6 +12,7 @@ import (
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/surfacespec"
 	"reasonix/internal/state/sessioninbox"
 )
 
@@ -31,16 +32,17 @@ const (
 
 // InboxRequest is the frontend-facing enqueue payload.
 type InboxRequest struct {
-	Intent      sessioninbox.InboxIntent
-	Origin      sessioninbox.PromptOrigin
-	Display     string
-	Raw         string
-	Submit      string
-	Format      string
-	Source      string
-	Idempotency string
-	Invocations []InvocationRequest
-	Extra       map[string]string
+	SurfaceAction *surfacespec.Action
+	Intent        sessioninbox.InboxIntent
+	Origin        sessioninbox.PromptOrigin
+	Display       string
+	Raw           string
+	Submit        string
+	Format        string
+	Source        string
+	Idempotency   string
+	Invocations   []InvocationRequest
+	Extra         map[string]string
 	// FreezeRefs lists workspace-relative paths to freeze at enqueue time.
 	FreezeRefs []string
 	// Via is the paired device the item came from; nil is the window.
@@ -221,15 +223,22 @@ func (c *Controller) ensureInbox() (*sessioninbox.Store, error) {
 	}
 	snap := st.Snapshot()
 	if snap.Recovered && snap.RecoveredN > 0 {
-		c.sink.Emit(event.Event{
-			Kind:  event.Notice,
-			Level: event.LevelWarn,
-			Code:  "inbox_recovered",
-			Text:  fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", snap.RecoveredN),
-		})
+		c.sink.Emit(inboxRecoveredNotice(snap.RecoveredN))
 		sessioninbox.NoteRecovered(snap.RecoveredN)
 	}
 	return st, nil
+}
+
+// inboxRecoveredNotice carries the count as a typed payload; the English text is
+// the fallback for a frontend that does not word the code itself.
+func inboxRecoveredNotice(n int) event.Event {
+	return event.Event{
+		Kind:   event.Notice,
+		Level:  event.LevelWarn,
+		Code:   event.NoticeCodeInboxRecovered,
+		Text:   fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", n),
+		Detail: event.InboxRecovered{Count: n}.Encode(),
+	}
 }
 
 // rebindInbox opens the inbox for the current session path. Safe across
@@ -260,12 +269,7 @@ func (c *Controller) rebindInbox() {
 	if snap.Recovered && snap.RecoveredN > 0 {
 		// Emit after unlock via deferred sink call would race; emit here.
 		go func(n int) {
-			c.sink.Emit(event.Event{
-				Kind:  event.Notice,
-				Level: event.LevelWarn,
-				Code:  "inbox_recovered",
-				Text:  fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", n),
-			})
+			c.sink.Emit(inboxRecoveredNotice(n))
 		}(snap.RecoveredN)
 		sessioninbox.NoteRecovered(snap.RecoveredN)
 	}
@@ -308,7 +312,9 @@ func (c *Controller) EnqueueInbox(req InboxRequest) (sessioninbox.InboxReceipt, 
 		Extra:        maps.Clone(req.Extra),
 		Via:          req.Via,
 	}
-	env.FrozenRefBlock, env.FrozenImages, env.ReferenceErrors = c.freezeInboxReferences(context.Background(), submit, req.FreezeRefs)
+	if req.SurfaceAction == nil {
+		env.FrozenRefBlock, env.FrozenImages, env.ReferenceErrors = c.freezeInboxReferences(context.Background(), submit, req.FreezeRefs)
+	}
 	intent := req.Intent
 	if intent != sessioninbox.IntentSteer {
 		intent = sessioninbox.IntentFollowup
@@ -382,6 +388,9 @@ func (c *Controller) UpdateInboxItem(id, display, raw, submit string) (sessionin
 	if err != nil {
 		return sessioninbox.InboxItemMeta{}, err
 	}
+	if previous.Extra[surfacespec.ActionMessageName] != "" {
+		return sessioninbox.InboxItemMeta{}, sessioninbox.ErrInvalidState
+	}
 	env := sessioninbox.PromptEnvelope{
 		DisplayText:  display,
 		RawText:      raw,
@@ -422,6 +431,9 @@ func (c *Controller) AppendInboxItem(id, text, idempotency string, extra map[str
 	_, previous, err := st.ReadItem(id)
 	if err != nil {
 		return sessioninbox.InboxItemMeta{}, err
+	}
+	if previous.Extra[surfacespec.ActionMessageName] != "" {
+		return sessioninbox.InboxItemMeta{}, sessioninbox.ErrInvalidState
 	}
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -469,58 +481,6 @@ func (c *Controller) AppendInboxItem(id, text, idempotency string, extra map[str
 // removed the same way and by the same verb - it is queued too, and a frontend
 // that has to name a second one is a frontend that has to know which half of
 // the queue a line landed in.
-func (c *Controller) DeleteInboxItem(id string) error {
-	st, err := c.ensureInbox()
-	if err != nil {
-		return err
-	}
-	switch dropped, dropErr := c.DropQueuedSteer(id); {
-	case dropErr != nil:
-		return dropErr
-	case dropped:
-		return nil
-	}
-	if err := st.DeleteItem(id); !errors.Is(err, sessioninbox.ErrInvalidState) {
-		return err
-	}
-	// Not in the queue and not pending: for a steer that means the turn read it
-	// already, which is a different answer than "wrong state for a delete".
-	if meta, _, readErr := st.ReadItem(id); readErr == nil && steerAlreadyAdmitted(meta.State) {
-		return ErrSteerApplied
-	}
-	return sessioninbox.ErrInvalidState
-}
-
-// CancelWithInboxItems stops the active turn and discards only the durable
-// pending items explicitly owned by the cancelling frontend. Admission is
-// paused around the batch deletion so TurnDone cannot race a cancelled item
-// into a new provider turn. Unrelated inbox items remain intact.
-func (c *Controller) CancelWithInboxItems(ids []string, source string) error {
-	st, err := c.ensureInbox()
-	if err != nil {
-		c.Cancel()
-		return err
-	}
-	wasPaused := st.Snapshot().Paused
-	if err := st.SetPaused(true); err != nil {
-		c.Cancel()
-		return err
-	}
-	if err := st.DiscardPendingItemsOwned(ids, strings.TrimSpace(source)); err != nil {
-		// Keep the inbox paused for inspection if an item already crossed the
-		// admission boundary. Cancellation still stops that in-flight turn.
-		c.Cancel()
-		return err
-	}
-	c.Cancel()
-	if !wasPaused {
-		if err := st.SetPaused(false); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (c *Controller) MoveInboxItem(id string, toIndex int) error {
 	st, err := c.ensureInbox()
 	if err != nil {
@@ -641,6 +601,9 @@ func (c *Controller) TrySubmitInboxItem(id string) (sessioninbox.InboxReceipt, e
 		if err := st.SetState(id, sessioninbox.StateQueued, ""); err != nil {
 			_ = st.ForcePause(true, 1)
 			return sessioninbox.InboxReceipt{}, err
+		}
+		if result == turnDroppedWorkspace {
+			c.resumeInboxAfterWorkspaceCheckout()
 		}
 		return c.receiptForAdmissionResult(id, st, result), nil
 	}

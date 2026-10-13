@@ -5,6 +5,8 @@ import { Exception } from "./CapabilityScope";
 import { Clip } from "./Clip";
 import { Switch } from "./Switch";
 import { reason } from "../i18n/kernel";
+import { listMatcher } from "./listsearch";
+import "../styles/mcpheld.css";
 
 // One external service: whether it is answering, what it brought, and the two
 // acts that change that — switching it off and letting it try again.
@@ -20,6 +22,20 @@ const MCP_STATE: Record<string, string> = {
   idle: "未连接",
   // Project declarations require approval before the server can launch.
   pending: "待授权 · 来自项目声明",
+};
+
+// Why a pending server waits, keyed by the kernel's code. The state label
+// already says a project declared it; a code with no entry adds nothing.
+const PENDING_WHY: Record<string, string> = {
+  changed_since_enabled: "启用之后它要启动的内容变了，或是由旧版本启用的。确认下面的命令后重新启用。",
+};
+
+// How a withheld tool differs from what the user approved, keyed by the kernel's
+// class. A class with no entry is shown as the kernel wrote it.
+const HELD_CLASS: Record<string, string> = {
+  added: "新增",
+  changed: "定义有改动",
+  unverifiable: "无法核对",
 };
 
 // A tag only when the schema carries the server's tools or config asks it to:
@@ -43,11 +59,14 @@ export function ServerRow({
   const [busy, setBusy] = useState("");
   const [failed, setFailed] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [q, setQ] = useState("");
+  const search = useRef<HTMLInputElement>(null);
   if (owner.port !== port || owner.root !== root) {
     setOwner({ port, root });
     setBusy("");
     setFailed("");
     setConfirming(false);
+    setQ("");
   }
   // 状态码是主机答上来的事实，画出来即可；它是不是「需要你重新认证」还要看自动
   // 刷新有没有跑过，那件事目前无人知道。m.error 是外部服务器自己写的文本，只作
@@ -125,7 +144,34 @@ export function ServerRow({
     </div>
   );
 
+  const heldTools = m.held ?? [];
+  // The approval is for the exact set the kernel withheld; the digest it sent is
+  // handed back, and a set that changed meanwhile is refused rather than waved through.
+  const held = heldTools.length > 0 && !!m.heldDigest && (
+    <div className="srv-held" role="group" aria-label={t("等待你批准的工具")}>
+      <span className="ds">
+        {t("这个服务有 {n} 个工具的定义与你批准过的不一致，已暂时不交给模型：", { n: heldTools.length + (m.heldMore ?? 0) })}
+      </span>
+      <ul>
+        {heldTools.map((h) => (
+          <li key={h.name}>
+            <b>{h.name}</b>
+            <i>{t(HELD_CLASS[h.class] ?? h.class)}</i>
+          </li>
+        ))}
+      </ul>
+      {!!m.heldMore && <span className="hn">{t("还有 {n} 个没有列出，批准时会一并生效。", { n: m.heldMore })}</span>}
+      {live && (
+        <button className="act" data-action="mcp.trust" data-target={m.name} disabled={!!busy} onClick={() => void run("trust", () => port.trustMcp(m.name, m.heldDigest!))}>
+          {t(busy === "trust" ? "批准中…" : "批准并重新连接")}
+        </button>
+      )}
+    </div>
+  );
   const tools = m.toolList ?? [];
+  const searchable = tools.length > 5;
+  const matches = listMatcher(searchable ? q : "");
+  const shown = tools.filter((tool) => matches([tool.name, tool.description, tool.error]));
   const tag = loadTag(m);
   // The tool list is what gets loaded, so the choice sits above it; a server
   // whose tools are not known yet has nothing to load either way.
@@ -173,12 +219,22 @@ export function ServerRow({
       )}
     </div>
   );
-  const why = failed || m.error;
+  // Approving a repository's server approves what it runs, so the line it
+  // launches sits beside the switch that approves it.
+  const launch = m.state === "pending" && !!m.launch && (
+    <div className="srv-ab" data-launch>
+      <span className="ds">{t("将启动")} · <code>{m.launch}</code></span>
+    </div>
+  );
+  const pendingWhy = m.state === "pending" && m.pendingReason ? PENDING_WHY[m.pendingReason] : undefined;
+  const why = failed || (pendingWhy ? t(pendingWhy) : m.error);
   if (!tools.length) {
     return (
       <div className="srv mcp-server" data-st={m.state} data-local={m.localOverride ? "" : undefined} aria-busy={!!busy}>
         <div className="srv-hd">{head}</div>
         {about}
+        {launch}
+        {held}
         {why && <div className="why">{why}</div>}
         {confirm}
       </div>
@@ -186,15 +242,25 @@ export function ServerRow({
   }
   return (
     // Asking to remove has to open the row: the confirmation lives inside the
-    // fold, and what the server contributes is worth seeing before dropping it.
-    <details className="srv mcp-server" data-st={m.state} data-local={m.localOverride ? "" : undefined} aria-busy={!!busy} open={confirming || undefined}>
+    // fold. A row with withheld tools opens too, so the approval is not behind a click.
+    <details className="srv mcp-server" data-st={m.state} data-local={m.localOverride ? "" : undefined} aria-busy={!!busy} open={confirming || heldTools.length > 0 || undefined}>
       <summary>{head}</summary>
       {about}
+      {launch}
+      {held}
       {why && <div className="why">{why}</div>}
       {confirm}
       {load}
       <div className="peek">
-        {tools.map((tool) => (
+        {searchable && <div className="msearch">
+          <input ref={search} type="search" data-action="mcp.tool-search" data-target={m.name}
+            value={q} spellCheck={false} aria-label={t("搜索 {name} 的工具", { name: m.name })}
+            placeholder={t("搜索 {name} 的工具", { name: m.name })} onChange={(e) => setQ(e.target.value)} />
+          {q && <button className="act" data-action="mcp.tool-search-clear" data-target={m.name}
+            onClick={() => { setQ(""); search.current?.focus(); }}>{t("清除")}</button>}
+        </div>}
+        {tools.length > 0 && shown.length === 0 && <div className="empty" role="status">{t("没有匹配的工具。")}</div>}
+        {shown.map((tool) => (
           // 一行一个工具：它叫什么、它自己说它干什么、以及这一刀下去会不会动
           // 你的东西。schema 被拒的那些照列，但写明为什么调不了。
           <div className="trow" key={tool.name} data-bad={tool.error ? "" : undefined}>

@@ -59,6 +59,11 @@ type response struct {
 	Warnings []string  `json:"warnings,omitempty"`
 	Error    string    `json:"error,omitempty"`
 	Next     string    `json:"next,omitempty"`
+	// PreviewTruncated is set when text in this answer, or in a listed action, was cut or removed.
+	PreviewTruncated bool `json:"previewTruncated,omitempty"`
+	// HiddenActions counts planned steps left out of Actions; none of them is high risk.
+	// It is separate from PreviewTruncated, which says only that text was cut or removed.
+	HiddenActions int `json:"hiddenActions,omitempty"`
 
 	// ContentDigest is what a reviewer records to pin this exact material;
 	// empty when the plan's material cannot be pinned.
@@ -120,22 +125,28 @@ type action struct {
 	// Runtime carries a plugin package's declared runtime process so
 	// frontends can render the full-trust implications before approval.
 	// Purely additive: older consumers ignore it.
-	Runtime  *RuntimePlanInfo `json:"runtime,omitempty"`
-	Warnings []string         `json:"warnings,omitempty"`
-	Error    string           `json:"error,omitempty"`
-	Next     string           `json:"next,omitempty"`
+	Runtime   *RuntimePlanInfo `json:"runtime,omitempty"`
+	Warnings  []string         `json:"warnings,omitempty"`
+	Error     string           `json:"error,omitempty"`
+	ErrorCode string           `json:"errorCode,omitempty"`
+	Next      string           `json:"next,omitempty"`
+	// PreviewTruncated is set when the projection cut any field or list above.
+	PreviewTruncated bool `json:"previewTruncated,omitempty"`
 
 	// Internal state used by apply. Stripped by publicActions before
 	// serializing to JSON.
-	entry      config.PluginEntry
-	skill      skillCandidate
-	disconnect func() // optional MCP rollback; nil when not connected
+	entry          config.PluginEntry
+	skill          skillCandidate
+	skillFiles     map[string][]string
+	disconnect     func() // optional MCP rollback; nil when not connected
+	resolvedSource string
 	// preparedRoot lets a multi-plugin marketplace apply reuse the exact clone
 	// that produced its approved plan instead of cloning the same repository
 	// once per plugin. cleanup is attached to one action and runs after all
 	// actions finish.
 	preparedRoot string
 	cleanup      func()
+	treeDigest   string
 	failure      error
 }
 
@@ -201,8 +212,11 @@ func publicActions(in []action) []action {
 		out[i].Headers = secrets.RedactConfigMap(in[i].Headers)
 		out[i].Error = publicFailure(in[i].failure, in[i].Error)
 		out[i].failure = nil
+		out[i] = previewAction(out[i])
 		out[i].entry = config.PluginEntry{}
 		out[i].skill = skillCandidate{}
+		out[i].skillFiles = nil
+		out[i].resolvedSource = ""
 		out[i].preparedRoot = ""
 		out[i].cleanup = nil
 	}
@@ -213,7 +227,7 @@ func marshalJSON(v any) string {
 	if result, ok := v.(response); ok {
 		result.Source = secrets.RedactConfigValue("", result.Source)
 		result.Error = publicFailure(result.failure, result.Error)
-		v = result
+		v = previewResponse(result)
 	}
 	b, _ := json.Marshal(v)
 	return string(b)

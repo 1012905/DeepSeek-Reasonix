@@ -97,7 +97,7 @@ func (m *model) workingLine() string {
 		return ""
 	}
 	since := time.Since(m.runSince)
-	secs := int(since.Seconds())
+	elapsed := i18n.Elapsed(since)
 	const mark = "\x00"
 	var line string
 	switch label := phaseLabel(m.tr.Phase); {
@@ -106,11 +106,11 @@ func (m *model) workingLine() string {
 		if m.viActive() {
 			stop = i18n.M.ChatStatusCancellingViFmt
 		}
-		line = fmt.Sprintf("  "+stop, mark, secs)
+		line = fmt.Sprintf("  "+stop, mark, elapsed)
 	case label != "":
-		line = fmt.Sprintf("  %s %s · %ds", mark, label, secs)
+		line = fmt.Sprintf("  %s %s · %s", mark, label, elapsed)
 	default:
-		line = fmt.Sprintf("  "+i18n.M.ChatStatusThinkingFmt, mark, secs, m.interruptKey())
+		line = fmt.Sprintf("  "+i18n.M.ChatStatusThinkingFmt, mark, elapsed, m.interruptKey())
 	}
 	if m.tr.TurnOut > 0 {
 		line += " · ↓" + shortTokens(m.tr.TurnOut)
@@ -163,20 +163,32 @@ func shellEdge(s string) string { return termrender.ThemeFg(tagShellColor, s) }
 // rowLine is a selectable row: "❯ N. label", bold where the cursor is, yellow
 // where it is active, dim otherwise.
 func rowLine(cur bool, num int, box, label string, active bool) string {
-	prefix := "  "
+	return rowPrefix(cur) + rowStyle(cur, active)(fmt.Sprintf("%d. %s%s", num, box, label))
+}
+
+// markedRowLine is rowLine with a mark drawn in the accent outside the row's
+// own style, so a dimmed row does not dim it.
+func markedRowLine(cur bool, num int, mark, label string, active bool) string {
+	style := rowStyle(cur, active)
+	return rowPrefix(cur) + style(fmt.Sprintf("%d. ", num)) + termrender.Accent(mark) + style(" "+label)
+}
+
+func rowPrefix(cur bool) string {
 	if cur {
-		prefix = termrender.Accent("❯ ")
+		return termrender.Accent("❯ ")
 	}
-	body := fmt.Sprintf("%d. %s%s", num, box, label)
+	return "  "
+}
+
+func rowStyle(cur, active bool) func(string) string {
 	switch {
 	case cur:
-		body = termrender.Bold(body)
+		return termrender.Bold
 	case active:
-		body = termrender.Yellow(body)
+		return termrender.Yellow
 	default:
-		body = termrender.Dim(body)
+		return termrender.Dim
 	}
-	return prefix + body
 }
 
 func (m *model) composerLines() []string {

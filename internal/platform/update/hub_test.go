@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -92,5 +93,38 @@ func TestHubReadsTheCatalogAsStudio(t *testing.T) {
 	want := UserAgent("2.26.0")
 	if len(cap.got) != 1 || cap.got[0] != want || !strings.HasPrefix(want, "Reasonix-Studio/2.26.0 (") {
 		t.Fatalf("catalog User-Agent = %q, want %q", cap.got, want)
+	}
+}
+
+type catalogBody string
+
+func (c catalogBody) RoundTrip(r *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(c))), Request: r}, nil
+}
+
+const withdrawnHubCatalog = `{"schemaVersion":1,"versions":[
+ {"version":"2.37.0","tag":"studio-v2.37.0","manifest":"https://x/2.37.0/latest.json"},
+ {"version":"2.35.0","tag":"studio-v2.35.0","manifest":"https://x/2.35.0/latest.json"}],
+ "withdrawn":[{"version":"2.36.0","tag":"studio-v2.36.0","manifest":"https://x/2.36.0/latest.json","reason":"blank window on a fresh folder"}]}`
+
+func TestHubNamesAWithdrawnRunningVersionAndPointsAtTheFix(t *testing.T) {
+	hub := hubOver(context.Background(), Install{Version: "2.36.0"}, &http.Client{Transport: catalogBody(withdrawnHubCatalog)})
+	if hub.Withdrawn == nil || hub.Withdrawn.Version != "2.36.0" || hub.Withdrawn.Reason != "blank window on a fresh folder" {
+		t.Fatalf("Withdrawn = %+v, want the running 2.36.0 with its reason", hub.Withdrawn)
+	}
+	if hub.Latest != "2.37.0" || !hub.Newer {
+		t.Fatalf("latest = %q newer = %v, want the fix offered", hub.Latest, hub.Newer)
+	}
+	for _, row := range hub.Versions {
+		if row.Version == "2.36.0" && !row.Current {
+			t.Errorf("the running row lost its mark: %+v", row)
+		}
+	}
+}
+
+func TestHubSaysNothingOfWithdrawalForAVersionThatWasNeverPulled(t *testing.T) {
+	hub := hubOver(context.Background(), Install{Version: "2.35.0"}, &http.Client{Transport: catalogBody(withdrawnHubCatalog)})
+	if hub.Withdrawn != nil {
+		t.Fatalf("Withdrawn = %+v, want none for 2.35.0", hub.Withdrawn)
 	}
 }

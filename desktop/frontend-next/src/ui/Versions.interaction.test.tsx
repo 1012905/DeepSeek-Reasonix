@@ -15,8 +15,8 @@ const hub: VersionHub = {
   latest: "2.21.0",
   newer: true,
   versions: [
-    { version: "2.21.0", tag: "studio-v2.21.0", publishedAt: "", current: false, older: false },
-    { version: "2.20.0", tag: "studio-v2.20.0", publishedAt: "", current: true, older: false },
+    { version: "2.21.0", tag: "studio-v2.21.0", publishedAt: "", hasNotes: false, current: false, older: false },
+    { version: "2.20.0", tag: "studio-v2.20.0", publishedAt: "", hasNotes: false, current: true, older: false },
   ],
 };
 
@@ -88,5 +88,42 @@ describe("the version panel", () => {
     const link = screen.getByRole("link", { name: "下载完整安装包" });
     expect(link.getAttribute("href")).toBe("https://github.com/esengine/DeepSeek-Reasonix/releases/tag/studio-v2.21.0");
     expect(screen.getByText("update: set aside app.exe: access denied")).toBeTruthy();
+  });
+});
+
+describe("the version list's history", () => {
+  const many = (pinned = ""): VersionHub => ({
+    current: "2.20.0",
+    pinned,
+    stalePin: false,
+    latest: "2.20.0",
+    newer: false,
+    versions: [
+      { version: "2.20.0", tag: "studio-v2.20.0", publishedAt: "", current: true, older: false, hasNotes: false },
+      ...["2.19.0", "2.18.0", "2.17.0", "2.16.0", "2.15.0", "2.14.0"].map((version) => ({ version, tag: `studio-v${version}`, publishedAt: "", current: false, older: true, hasNotes: false })),
+    ],
+  });
+  const portFor = (h: VersionHub) => ({
+    versions: () => Promise.resolve(h),
+    pinVersion: vi.fn(() => Promise.resolve()),
+    goToVersion: vi.fn(() => Promise.resolve()),
+    restartToVersion: vi.fn(() => Promise.resolve()),
+    onUpdateProgress: () => () => {},
+  });
+
+  it("keeps the running release and the newest few earlier ones, with the rest one click away", async () => {
+    render(<Versions port={portFor(many())} />);
+    expect(await screen.findByText("2.19.0")).toBeTruthy();
+    expect(screen.getByText("2.17.0")).toBeTruthy();
+    expect(screen.queryByText("2.16.0")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "显示更早的 3 个版本" }));
+    expect(screen.getByText("2.14.0")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /显示更早的/ })).toBeNull();
+  });
+
+  it("never hides the version the person pinned", async () => {
+    render(<Versions port={portFor(many("2.14.0"))} />);
+    expect(await screen.findByText("2.14.0")).toBeTruthy();
+    expect(screen.queryByText("2.16.0")).toBeNull();
   });
 });

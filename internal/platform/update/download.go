@@ -16,6 +16,9 @@ var (
 	ErrFetch  = errors.New("update: the release could not be downloaded")
 	ErrVerify = errors.New("update: the release failed its signature check")
 	ErrStore  = errors.New("update: the verified release could not be saved")
+	// ErrWithdrawn is a release the publisher pulled; naming it in a catalog row
+	// does not make it installable.
+	ErrWithdrawn = errors.New("update: the release was withdrawn")
 )
 
 // MaxSignatureSize caps a detached .minisig. A signature is a few hundred bytes;
@@ -51,6 +54,9 @@ func (u *Updater) ManifestFor(ctx context.Context, version string) (*Manifest, e
 	idx, err := FetchIndex(ctx, u.opts.HTTP, u.opts.IndexURL, u.opts.UserAgent)
 	if err != nil {
 		return nil, err
+	}
+	if w, gone := idx.WithdrawnVersion(version); gone {
+		return nil, fmt.Errorf("%w: %s", ErrWithdrawn, w.Version)
 	}
 	for _, e := range idx.Versions {
 		if !SameVersion(e.Version, version) {

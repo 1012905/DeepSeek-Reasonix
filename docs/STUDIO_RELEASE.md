@@ -28,7 +28,7 @@ Workflow: `.github/workflows/release-studio.yml`. Trigger: push of a `studio-vX.
 
 ## 3. Steps
 
-1. Write `release-notes/studio/X.Y.Z.md` (format in section 6), commit, push to `studio`.
+1. Gather `release-notes/studio/unreleased/*.md` (one file per pull request, named by its number, items named after it) into `release-notes/studio/X.Y.Z.md` (format in section 6), `git rm` the fragments in the same commit, push to `studio`.
 2. Wait until P2 holds for the commit that contains the notes.
 3. Tag the verified commit and push the tag:
 
@@ -53,7 +53,7 @@ Jobs in the run:
 | --- | --- | --- |
 | `resolve` | Validates the tag shape and that the commit is on `studio`. | fails on any other ref |
 | `signing-contract` | Validates `.signpath/contracts/release-signing.yml` against the workflows that reach the Certum credentials and prints its fingerprint. | fails on an undeclared signing workflow |
-| `build` | Builds windows/amd64, windows/arm64 (on a native `windows-11-arm` runner), darwin/amd64, darwin/arm64, linux/amd64; signs macOS. Every PE image in a Windows bundle must carry its architecture's machine type. With signing on, each Windows leg uploads its bundle instead of packaging it. | Apple secrets are required |
+| `build` | Builds windows/amd64, windows/arm64 (on a native `windows-11-arm` runner), darwin/amd64, darwin/arm64, linux/amd64, linux/arm64 (on a native `ubuntu-22.04-arm` runner, with a system-installed fpm because electron-builder's own is x86_64-only); signs macOS. Windows PE images and all Linux ELF images must match the package architecture. Linux packages pass installed-shell acceptance before upload. With signing on, each Windows leg uploads its bundle instead of packaging it. | Apple secrets are required |
 | `windows-sign-payload` | Only with `STUDIO_SIGNING_ENABLED=true`. One leg per architecture, run one after the other (`max-parallel: 1`). Refuses a bundle whose PE files differ from the declared list or are not all the leg's architecture, signs the release PE files, verifies them and the two Microsoft-signed DLLs, and records a digest of the whole signed tree as a job output. Installs no toolchain. | shared concurrency group `certum-signing`, environment `studio-release` |
 | `windows-package` | Builds each architecture's installer and zip from its signed tree as it came; the arm64 installer is packed with `ELECTRON_BUILDER_7Z_FILTER=BCJ`. Holds no secrets. | none |
 | `windows-verify-package` | Per architecture: checks the payload against the recorded digest, unpacks the zip and the installer, requires both trees to match the payload file for file and the installer to carry exactly its architecture's application archive, and outputs the SHA-256 of both packages. Holds no secrets and no environment. | none |
@@ -229,9 +229,9 @@ The PE files are declared in `scripts/windows-signing-lib.ps1`. A PE file is a `
 
 A bundle holding a PE file the list does not name fails with `studio-signing.undeclared-pe`, and one missing a listed file with `studio-signing.missing-pe`. A person adds it to the right list.
 
-The release PE files as of 2.20.3:
+The release PE files:
 
-- `Reasonix Studio.exe`, `resources/bin/reasonix-studio-host.exe`, `resources/bin/reasonix-computer-helper.exe`
+- `Reasonix Studio.exe`, `resources/bin/reasonix-studio-host.exe`, `resources/bin/cua-driver.exe`
 - `dxcompiler.dll`, `ffmpeg.dll`, `vk_swiftshader.dll`, `vulkan-1.dll`
 
 | Rule | Detail |
@@ -274,7 +274,8 @@ Studio and 1.x signing jobs and smoke tests share the concurrency group `certum-
 
 | R2 path | Owner | Content |
 | --- | --- | --- |
-| `studio/versions.json` | this workflow | Studio catalog, newest first |
+| `studio/versions.json` | this workflow | Studio catalog, newest first; an entry names its notes object in an optional `notes` field |
+| `studio/notes/X.Y.Z.md` | this workflow | the rendered version notes, immutable; uploaded before the catalog entry that names it |
 | `studio-vX.Y.Z/` | this workflow | artifacts, signatures, `latest.json` |
 | `cli/stable/latest.json`, `cli/preview/latest.json` | `cli-pointer` | what `reasonix upgrade` reads through `crash.reasonix.io/v1/cli/releases/<channel>/latest.json`; only ever moves to a newer version |
 | `cli/releases/vX.Y.Z/latest.json` | `cli-pointer` | immutable record of one CLI release; a rerun with different content fails |
@@ -285,4 +286,34 @@ Studio and 1.x signing jobs and smoke tests share the concurrency group `certum-
 `latest.json` keys `platforms` (and `deltas`) as `<GOOS>-<GOARCH>`, derived from the artifact name by `studio-manifest` and asked for by the running kernel through `runtime.GOOS` and `runtime.GOARCH`.
 
 - The key is the binary's own architecture, not the machine's. An x64 build running under ARM64 emulation asks for `windows-amd64` and keeps updating to the amd64 installer; it is not moved to a native build.
+- Linux ships a `.deb` and an `.rpm` for each of amd64 and arm64 (aarch64), all named `ReasonixStudio-linux-<arch>.<ext>`; the publish job requires all four by name.
+- CI and releases use `scripts/verify-linux-package.sh` to read both formats back: package name, architecture, root-owned update payload, every ELF image, and static Go binaries.
+- `scripts/linux-install-smoke.sh` runs only with `GITHUB_ACTIONS=true`. It installs and reinstalls the `.deb`, drives its packaged Electron window under Xvfb through a renderer-to-kernel request and second launch, checks normal shell/kernel exit, and uninstalls.
+- ARM64 packaging does not establish compatibility with every UOS/Kylin version. Qualify the target distribution's glibc, GTK/NSS, graphics/session environment and, for `.deb` self-update, apt, pkexec and Polkit. RPM updates remain manual.
+- `native_packages["linux-<arch>"]` is the `.deb` and has to stay that: every installed client hands it to dpkg.
+- The `.rpm` is `native_packages["linux-<arch>-rpm"]`. No shipped client reads it yet, so an `.rpm` install is updated by downloading the new package.
+- The `.rpm` carries no rpm GPG signature, and `dnf install` of a local file does not check one by default.
+- Its integrity rests on HTTPS and the minisign signature beside it. Verify with `minisign -Vm ReasonixStudio-linux-amd64.rpm -P RWSw66n0RsoSr6Zhh6qt5YO95YkpCayTOCMFVDNUQSjJYwxoYngNVBSq`, the key compiled into `internal/platform/update/verify.go`.
+- fpm spells the architecture in an `.rpm` name its own way (`x86_64`, `aarch64`); `desktop/electron/packaging/canonical-artifact-names.js` renames it to the release architecture and fails the build on any spelling left over.
 - When a client tries to install a release whose manifest lacks its key (and, on Linux, a matching `native_packages` key), staging fails with `update.no_package` naming the release page; no other architecture's package is substituted. A missing `deltas` entry means the full package is downloaded.
+
+Linux 验收：CI 与发布流程检查两种包的实际架构、权限与 Go 静态链接；安装测试仅在 `GITHUB_ACTIONS=true` 时运行，覆盖启动、内核通信、第二次启动、重装、正常退出和卸载。UOS／麒麟的具体版本仍需实机验证。
+
+A notes upload that fails does not fail `publish`: the step warns, `::warning::release notes for vX.Y.Z were not uploaded`, and the catalog entry is written without a `notes` field. Run the backfill (section 9) afterwards to attach them.
+
+## 9. Backfilling notes
+
+Releases from the one that introduced `studio/notes/` publish their notes with the catalog entry. Older catalog entries get theirs once, by hand:
+
+```bash
+R2_ACCOUNT_ID=... R2_BUCKET=... bash scripts/backfill-studio-notes.sh          # dry run
+R2_ACCOUNT_ID=... R2_BUCKET=... bash scripts/backfill-studio-notes.sh --apply
+```
+
+Run it from a clone with the `studio-v*` tags, with the mirror's AWS credentials and `GH_TOKEN` in the environment.
+
+- It acts only on catalog entries without a `notes` field.
+- An object already in the bucket is kept.
+- A tag without a notes file leaves its entry bare.
+- The catalog is read again and written last.
+- `--apply` refuses while any `release-studio.yml` run is queued or in progress, because that run's catalog write would race this one.

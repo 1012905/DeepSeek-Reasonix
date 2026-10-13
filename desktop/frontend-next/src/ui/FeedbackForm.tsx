@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import { t } from "../i18n";
+import { systemLabel } from "./osname";
 import { tx } from "../i18n/rich";
 import { FEEDBACK_CATEGORIES, FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, type FeedbackCategory, type FeedbackEnv, type FeedbackReceipt } from "../port/feedback";
+import { host } from "../port/host";
 import type { AgentPort } from "../port/port";
 import { CopyButton } from "./CopyButton";
 import { StudioIcon } from "./StudioIcon";
@@ -51,6 +53,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
   const [over, setOver] = useState(false);
   const [phase, setPhase] = useState<"editing" | "sending" | "sent">("editing");
   const [failure, setFailure] = useState<FeedbackFailure | null>(null);
+  const [logsFailed, setLogsFailed] = useState(false);
   const [sent, setSent] = useState<FeedbackReceipt | null>(null);
   const key = useRef(uuid());
   const attempt = useRef("");
@@ -58,6 +61,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
   const field = useRef<HTMLTextAreaElement>(null);
   const submit = useRef<HTMLButtonElement>(null);
   const done = useRef<HTMLHeadingElement>(null);
+  const shotEpoch = useRef(0);
   const heldShots = useRef(shots);
   heldShots.current = shots;
 
@@ -68,14 +72,15 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
       .then((e) => {
         setEnv(e);
         setName((prev) => prev || e.displayName);
-        requestAnimationFrame(() => {
-          if (document.activeElement?.closest('[role="tablist"]')) field.current?.focus();
-        });
       })
       .catch((e) => setEnvFailure(feedbackFailure(e)));
   }, [port]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    if (env && document.activeElement?.closest('[role="tablist"]')) field.current?.focus();
+  }, [env]);
 
   useEffect(() => {
     if (phase !== "sent") holdDraft({ category, body, contact, shots });
@@ -105,7 +110,9 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
       const { taken, refused: no } = admit(heldShots.current.length, files, limits);
       setRefused(no);
       if (taken.length === 0) return;
+      const epoch = shotEpoch.current;
       const read = await Promise.allSettled(taken.map(readShot));
+      if (epoch !== shotEpoch.current) return;
       const ok = read.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
       setShots((prev) => [...prev, ...ok].slice(0, limits.images));
     },
@@ -156,6 +163,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
         locale: document.documentElement.lang,
         images: payload(shots),
       });
+      shotEpoch.current++;
       dropDraft();
       setSent(receipt);
       setPhase("sent");
@@ -366,7 +374,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
             <dt>{t("版本")}</dt>
             <dd>{env.env.version}{env.env.commit ? ` (${env.env.commit})` : ""}</dd>
             <dt>{t("系统")}</dt>
-            <dd>{[env.env.os, env.env.osVersion, env.env.arch].filter(Boolean).join(" ")}</dd>
+            <dd>{systemLabel(env.env.os, env.env.osVersion, env.env.arch)}</dd>
             <dt>{t("入口")}</dt>
             <dd>{env.env.surface}</dd>
             <dt>{t("语言")}</dt>
@@ -377,6 +385,23 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
             <dd>{env.env.providerKind}</dd>
           </dl>
           <p className="fbk-hint">{t("只读。不包含密钥、地址或任何文件内容。")}</p>
+          {host().revealsLogs() && (
+            <div className="fbk-logs">
+              <button
+                type="button"
+                className="btn sm"
+                data-action="feedback.logs"
+                onClick={() => {
+                  setLogsFailed(false);
+                  void host().revealLogs().then((why) => setLogsFailed(why !== null));
+                }}
+              >
+                {t("打开日志文件夹")}
+              </button>
+              <p className="fbk-hint">{t("维护者向你要日志时，打开这个文件夹，把最新的 shell.log 和 host.log 发给我们。发之前可以先自己看一眼。")}</p>
+              {logsFailed && <p className="fbk-hint" role="alert" data-tone="error">{t("无法打开日志文件夹")}</p>}
+            </div>
+          )}
         </section>
       )}
 

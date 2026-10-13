@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"reasonix/internal/contract/surfacespec"
 	"reasonix/internal/state/sessioninbox"
 )
 
@@ -58,12 +59,15 @@ func (c *Controller) prepareInboxRun(env sessioninbox.PromptEnvelope, origin ses
 	}
 	display := firstNonEmptyStr(env.DisplayText, submit)
 	raw := firstNonEmptyStr(env.RawText, submit)
+	if env.Extra[surfacespec.ActionMessageName] != "" {
+		raw = submit
+	}
 	requests := controlInvocationsFromInbox(env)
 	if len(requests) == 0 {
 		return func(ctx context.Context) error {
 			return c.runTurnLoop(c.withTurnTags(ctx, turnTags{format: strings.TrimSpace(env.Format), via: env.Via}), orchestratedTurn{
 				input: submit, raw: raw, display: display, images: c.frozenTurnImages(frozenImages),
-				synthetic: origin.IsHost(),
+				synthetic: origin.IsHost(), opensTurn: origin.IsHost(),
 			})
 		}, "", nil
 	}
