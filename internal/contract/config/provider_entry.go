@@ -220,10 +220,10 @@ func noProviderStart(c *Config) (string, bool, bool) {
 
 // kindError is what a selected entry that cannot be used answers.
 func kindError(e *ProviderEntry, model string) error {
-	switch {
-	case e.Kind == UnconfiguredKind:
+	switch e.Kind {
+	case UnconfiguredKind:
 		return fmt.Errorf("%w; run `reasonix setup` to add one", provider.ErrNoProvider)
-	case e.Kind == "":
+	case "":
 		return fmt.Errorf("provider %q: kind is required", model)
 	}
 	return nil
