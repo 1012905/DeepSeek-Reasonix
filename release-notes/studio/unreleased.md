@@ -18,3 +18,7 @@
 - 修复：在 Windows 上点击任务完成通知，现在会把 Studio 窗口带到前台（此前在部分系统上只有任务栏图标闪烁）；点击过程也会写入日志，方便排查。关联 #12817。
 - Fix: clicking a task-finished notification on Windows now brings Studio's window to the
   front (it only flashed the taskbar on some systems); the click path is logged. Refs #12817.
+- 新增「磁盘空间不足时」通知（通知设置里，默认开）：项目或会话所在的磁盘剩余不足 5 GB 或不足 3% 时提醒一次，
+  之后很长时间不重复；只提醒，不清理任何文件。关联 #12958。
+- New "when disk space is low" notification (on by default): warns once when the drive holding your
+  project or sessions has under 5 GB or 3% free. It only warns. Fixes #12958.

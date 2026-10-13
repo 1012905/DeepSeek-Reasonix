@@ -260,6 +260,7 @@ type NotificationsConfig struct {
 	ApprovalRequest bool `toml:"approval_request"`
 	AskRequest      bool `toml:"ask_request"`
 	FeedbackReply   bool `toml:"feedback_reply"`
+	DiskLow         bool `toml:"disk_low"`
 	// Sound plays a short system chime for the events switched on above, whether
 	// or not system notifications are; off unless asked for.
 	Sound bool `toml:"sound"`
@@ -1384,6 +1385,7 @@ func Default() *Config {
 			ApprovalRequest: true,
 			AskRequest:      true,
 			FeedbackReply:   true,
+			DiskLow:         true,
 		},
 		Agent: AgentConfig{
 			SystemPrompt: DefaultSystemPrompt,

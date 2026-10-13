@@ -147,6 +147,7 @@ export interface NotifyPrefs {
   approval: boolean;
   ask: boolean;
   feedbackReply: boolean;
+  diskLow: boolean;
   sound: boolean;
 }
 

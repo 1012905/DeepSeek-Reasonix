@@ -83,6 +83,13 @@ export function Notifications({ port }: { port: AgentPort }) {
           </span>
           <Switch data-action="notify.feedback-reply" on={prefs.feedbackReply} busy={!active} label={t("反馈有新回复时")} onClick={() => flip({ feedbackReply: !prefs.feedbackReply })} />
         </div>
+        <div className="lrow subrow" data-off={active ? undefined : ""}>
+          <span className="tx">
+            <span className="lb">{t("磁盘空间不足时")}</span>
+            <span className="ds">{t("项目或会话所在的磁盘剩余空间很少时提醒（不足 5 GB 或不足 3%），同一块盘长时间不重复提醒；只提醒，不会清理任何文件")}</span>
+          </span>
+          <Switch data-action="notify.disk-low" on={prefs.diskLow} busy={!active} label={t("磁盘空间不足时")} onClick={() => flip({ diskLow: !prefs.diskLow })} />
+        </div>
       </div>
       <ApplyNote id="notify" />
     </section>
