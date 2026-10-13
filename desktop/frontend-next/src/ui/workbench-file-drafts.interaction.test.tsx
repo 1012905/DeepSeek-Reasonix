@@ -127,3 +127,100 @@ it("retains edits typed during saving and suppresses repeated save shortcuts", a
   await f.user.click(button("save"));
   expect(f.save.mock.calls[1][0]).toEqual(file("a.txt", "saved a.txt draft newer", "r2"));
 });
+
+it.each(["workspace", "connection"])("isolates same-path drafts and pending saves after a %s change", async (change) => {
+  const f = fixture();
+  const pending = deferred<WorkspaceFile>();
+  f.save.mockReturnValueOnce(pending.promise);
+  await f.open("a.txt");
+  await append(" old draft");
+  await f.user.click(button("save"));
+  const nextPort = change === "connection" ? new MockPort() : f.port;
+  const nextRead = deferred<WorkspaceFile>();
+  vi.spyOn(nextPort, "workspaceFile").mockReturnValue(nextRead.promise);
+  const nextSave = vi.spyOn(nextPort, "saveWorkspaceFile").mockImplementation(async (file) => ({ ...file, revision: "next-saved" }));
+  nextSave.mockClear();
+  f.rerender(<WorkbenchPanel {...f.props} port={nextPort} workspaceRoot={change === "workspace" ? "/two" : "/one"} />);
+  expect(document.querySelector(".cm-content")).toBeNull();
+  expect(button("save").disabled).toBe(true);
+  await act(async () => nextRead.resolve(file("a.txt", "new workspace", "next")));
+  await editor("new workspace");
+  await append(" draft");
+  await act(async () => pending.resolve(file("a.txt", "saved a.txt old draft", "r2")));
+  await editor("new workspace draft");
+  await f.user.click(button("save"));
+  expect(nextSave).toHaveBeenCalledExactlyOnceWith(file("a.txt", "new workspace draft", "next"));
+});
+
+it.each(["workspace", "connection"])("ignores an old %s read and refreshes the same path in the new scope", async (change) => {
+  const f = fixture();
+  const old = deferred<WorkspaceFile>();
+  f.read.mockReturnValueOnce(old.promise);
+  await f.open("a.txt");
+  const nextPort = change === "connection" ? new MockPort() : f.port;
+  vi.spyOn(nextPort, "workspaceFile").mockResolvedValue(file("a.txt", "new scope", "next"));
+  f.rerender(<WorkbenchPanel {...f.props} port={nextPort} workspaceRoot={change === "workspace" ? "/two" : "/one"} />);
+  await editor("new scope");
+  await act(async () => old.resolve(file("a.txt", "old scope")));
+  await editor("new scope");
+  expect(f.save).not.toHaveBeenCalled();
+});
+
+it("does not save the previous draft while another file is loading and ignores out-of-order reads", async () => {
+  const f = fixture();
+  await f.open("a.txt");
+  await append(" draft");
+  const first = deferred<WorkspaceFile>();
+  const second = deferred<WorkspaceFile>();
+  f.read.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  await f.open("b.txt");
+  expect(button("save").disabled).toBe(true);
+  await f.user.click(button("save"));
+  expect(f.save).not.toHaveBeenCalled();
+  await f.user.click(button("tab", "file:a.txt"));
+  await editor("saved a.txt draft");
+  await f.user.click(button("tab", "file:b.txt"));
+  await act(async () => second.resolve(file("b.txt", "latest read", "r3")));
+  await editor("latest read");
+  await act(async () => first.resolve(file("b.txt", "stale read", "r2")));
+  await editor("latest read");
+});
+
+it("refreshes clean tabs and their diffs while keeping another tab's dirty draft", async () => {
+  const f = fixture();
+  await f.open("a.txt");
+  await append(" draft");
+  await f.open("b.txt");
+  await editor("saved b.txt");
+  f.read.mockImplementation(async (path) => file(path, `changed ${path}`, "r2"));
+  vi.spyOn(f.port, "changeDiff").mockResolvedValue({ path: "b.txt", diff: "diff --git a/b.txt b/b.txt\n--- a/b.txt\n+++ b/b.txt\n@@ -1 +1 @@\n-old\n+new\n", truncated: false });
+  f.rerender(<WorkbenchPanel {...f.props} wrote={1} />);
+  await editor("changed b.txt");
+  await f.user.click(document.querySelector('[data-action="workbench.mode"][data-value="diff"]')!);
+  await waitFor(() => expect(document.querySelector(".workbench-diff")?.textContent).toContain("new"));
+  await f.user.click(button("tab", "file:a.txt"));
+  await f.user.click(document.querySelector('[data-action="workbench.mode"][data-value="file"]')!);
+  await editor("saved a.txt draft");
+});
+
+it("resumes Markdown polling after changing modes during a pending poll", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const f = fixture();
+    vi.mocked(f.port.workspaceFiles).mockResolvedValue({ files: ["notes.md"], directories: [] });
+    f.rerender(<WorkbenchPanel {...f.props} wrote={1} />);
+    f.read.mockResolvedValue(file("notes.md", "# First"));
+    await f.open("notes.md");
+    await waitFor(() => expect(document.querySelector(".workbench-read h1")?.textContent).toBe("First"));
+    const pending = deferred<WorkspaceFile>();
+    f.read.mockReturnValueOnce(pending.promise);
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    await f.user.click(document.querySelector('[data-action="workbench.mode"][data-value="file"]')!);
+    await f.user.click(document.querySelector('[data-action="workbench.mode"][data-value="read"]')!);
+    f.read.mockResolvedValue(file("notes.md", "# Latest", "r3"));
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    await waitFor(() => expect(document.querySelector(".workbench-read h1")?.textContent).toBe("Latest"));
+    await act(async () => pending.resolve(file("notes.md", "# Stale", "r2")));
+    expect(document.querySelector(".workbench-read h1")?.textContent).toBe("Latest");
+  } finally { vi.useRealTimers(); }
+});
