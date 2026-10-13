@@ -45,6 +45,7 @@ type ExtensionViewNode struct {
 	ActionID string              `json:"actionId,omitempty"`
 	Children []ExtensionViewNode `json:"children,omitempty"`
 	Field    *surfacespec.Field  `json:"field,omitempty"`
+	Diff     *surfacespec.Diff   `json:"diff,omitempty"`
 }
 
 // ExtensionPanel is the JSON form of an event.ExtensionPanelView.
@@ -195,7 +196,7 @@ func viewNodes(in []event.ExtensionViewNode) []ExtensionViewNode {
 		out = append(out, ExtensionViewNode{
 			Kind: n.Kind, Value: n.Value, Key: n.Key, Label: n.Label,
 			Tone: n.Tone, Progress: n.Progress, ActionID: n.ActionID,
-			Children: viewNodes(n.Children), Field: n.Field,
+			Children: viewNodes(n.Children), Field: n.Field, Diff: n.Diff,
 		})
 	}
 	return out

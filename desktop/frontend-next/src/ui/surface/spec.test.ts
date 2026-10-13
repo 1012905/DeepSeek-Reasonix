@@ -6,6 +6,18 @@ const choice: SurfaceField = { type: "multichoice", required: true, options: [{ 
 const valid = { spec_version: 1, body: [{ kind: "stack", children: [{ kind: "text", value: "Settings" }, { kind: "choice_card", key: "mode", label: "Mode", field: choice }] }] };
 
 describe("surface contract", () => {
+  it("accepts drafts and plain text differences with closed properties", () => {
+    const draft = { kind: "editable_text", key: "draft", label: "Draft", field: { type: "string", default: "  draft\n" } };
+    const diff = { kind: "diff_preview", diff: { before: "", after: "  after\n<script>" } };
+    expect(parseSurface({ spec_version: 1, body: [draft, diff] })).not.toBeNull();
+    for (const node of [
+      { ...draft, field: { type: "number" } },
+      { ...diff, diff: { before: "" } },
+      { ...diff, diff: { before: "", after: "", apply: true } },
+      { ...diff, actionId: "approve" },
+      { ...diff, diff: { before: "x".repeat(4001), after: "" } },
+    ]) expect(parseSurface({ spec_version: 1, body: [node] })).toBeNull();
+  });
   it("accepts a native field tree and bounded typed values", () => {
     expect(parseSurface(valid)).not.toBeNull();
     expect(validSurfaceValue(choice, ["fast", "full"])).toBe(true);

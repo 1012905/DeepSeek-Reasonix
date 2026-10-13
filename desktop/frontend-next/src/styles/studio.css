@@ -2799,7 +2799,7 @@ body { font-size: 14px; line-height: 1.75; }
 .flow .opt .ds { margin-top: 3px; color: var(--faint); font-size: 10.5px; line-height: 1.45; }
 .flow .opt-other { border-style: dashed !important; }
 .plan[data-paused] .s[data-now] .b { animation: none; }
-.flow .other-wrap input { min-height: 38px; border-radius: 8px; }
+.flow .other-wrap input, .flow .other-wrap textarea { min-height: 38px; border-radius: 8px; }
 .flow .ask-foot { justify-content: flex-end; margin-top: var(--y-close); padding: 9px 15px 14px; gap: 7px; border-top: 0; background: transparent; }
 .flow .ask-foot .btn { min-width: 84px; min-height: 32px; border-radius: 7px; }
 .flow .ask-foot .dismiss { margin-left: 0; padding: 7px 9px; border-radius: 6px; text-decoration: none; }

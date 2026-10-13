@@ -3,9 +3,27 @@ package eventwire
 import (
 	"encoding/json"
 	"reasonix/internal/base/secrets"
+	"reasonix/internal/contract/surfacespec"
 	"strings"
 	"testing"
 )
+
+func TestDraftDiffWireAndHistoryRedaction(t *testing.T) {
+	credential := "sk-" + strings.Repeat("x", 48)
+	spec := surfacespec.Spec{SpecVersion: 1, Body: []surfacespec.Node{
+		{Kind: "editable_text", Key: "draft", Label: "Draft", Field: &surfacespec.Field{Type: "string"}},
+		{Kind: "diff_preview", Diff: &surfacespec.Diff{Before: credential, After: "updated " + credential}},
+	}}
+	wire, err := json.Marshal(viewNodes(spec.Body))
+	if err != nil || !strings.Contains(string(wire), `"before"`) || !strings.Contains(string(wire), `"after"`) {
+		t.Fatalf("diff missing from wire: %s %v", wire, err)
+	}
+	raw, _ := spec.Canonical()
+	got := SurfaceArgs("render_surface", "", string(raw))
+	if got == "" || strings.Contains(got, credential) {
+		t.Fatalf("history redaction: %s", got)
+	}
+}
 
 func TestSurfaceArgsRedactionDoesNotChangeNeighbouringTools(t *testing.T) {
 	credential := "sk-" + strings.Repeat("x", 48)

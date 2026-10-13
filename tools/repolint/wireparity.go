@@ -42,6 +42,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/contract/surfacespec/spec.go", "Spec", tsSurfaceFile, "SurfaceSpec"},
 	{"internal/contract/surfacespec/spec.go", "Node", tsWireFile, "ExtensionViewNode"},
 	{"internal/contract/surfacespec/spec.go", "Field", tsWireFile, "SurfaceField"},
+	{"internal/contract/surfacespec/spec.go", "Diff", tsWireFile, "SurfaceDiff"},
 	{"internal/contract/surfacespec/spec.go", "Option", tsWireFile, "SurfaceOption"},
 	{"internal/contract/eventwire/extension.go", "ExtensionViewNode", tsWireFile, "ExtensionViewNode"},
 	{"internal/contract/eventwire/extension.go", "ExtensionSurface", tsWireFile, "ExtensionSurface"},

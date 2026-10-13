@@ -29,6 +29,12 @@ type Node struct {
 	ActionID string   `json:"actionId,omitempty"`
 	Children []Node   `json:"children,omitempty"`
 	Field    *Field   `json:"field,omitempty"`
+	Diff     *Diff    `json:"diff,omitempty"`
+}
+
+type Diff struct {
+	Before string `json:"before"`
+	After  string `json:"after"`
 }
 
 type Field struct {
