@@ -31,6 +31,8 @@ func (t *mutableLazyTarget) Name() string            { return t.name }
 func (t *mutableLazyTarget) Description() string     { return "writer test target" }
 func (t *mutableLazyTarget) Schema() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
 func (t *mutableLazyTarget) ReadOnly() bool          { return false }
+func (t *mutableLazyTarget) MCPServerName() string   { return "srv" }
+func (t *mutableLazyTarget) MCPRawToolName() string  { return "mutate" }
 func (t *mutableLazyTarget) Execute(context.Context, json.RawMessage) (string, error) {
 	t.calls++
 	return "executed", nil
@@ -41,6 +43,8 @@ func (t *destructiveLazyTarget) Description() string      { return "destructive 
 func (t *destructiveLazyTarget) Schema() json.RawMessage  { return json.RawMessage(`{"type":"object"}`) }
 func (t *destructiveLazyTarget) ReadOnly() bool           { return true }
 func (t *destructiveLazyTarget) MCPDestructiveHint() bool { return true }
+func (t *destructiveLazyTarget) MCPServerName() string    { return "srv" }
+func (t *destructiveLazyTarget) MCPRawToolName() string   { return "wipe" }
 func (t *destructiveLazyTarget) Execute(context.Context, json.RawMessage) (string, error) {
 	t.calls++
 	return "executed", nil
