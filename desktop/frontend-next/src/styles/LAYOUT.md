@@ -1479,6 +1479,19 @@ what exists.
 - `perf/tooltip.mjs` measures both in Chromium; `controltip.test.ts` pins the
   rules statically.
 
+## Dialogs centre on the window
+
+- A veil (settings, feedback, a full screenshot, a checkpoint preview, a
+  sub-agent transcript) starts below the title bar so the bar stays usable.
+- Centred in that box alone, a dialog would sit half a bar below the window's
+  middle, which reads as off balance against the whole window.
+- `dialogcenter.css` gives each veil a transparent bottom border as tall as the
+  bar, so the box it centres in is symmetric about the window's middle. A border
+  rather than padding because padding on these veils is set per breakpoint, and
+  percentage heights inside then leave room for it on their own.
+- The phone layout (`data-fold~="scene"`) shows settings full screen, so it is
+  excluded.
+
 ## The feedback veil
 
 - `.fbk-veil` is a flat scrim, not a blurred backdrop.
