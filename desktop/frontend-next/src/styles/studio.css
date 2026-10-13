@@ -896,7 +896,7 @@ body { background: var(--page) !important; }
 .activity-count { margin-left: auto; color: var(--faint); font: 450 10px/1.5 var(--ui); }
 .activity-fold-icon { margin-left: 2px; color: var(--faint); transition: transform 140ms ease; }
 .activity-group[open] .activity-fold-icon { transform: rotate(180deg); }
-.activity-group[open] > summary { border-bottom: 1px solid var(--hair); }
+.activity-group[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--raised); border-bottom: 1px solid var(--hair); }
 .activity-group::details-content {
   block-size: 0; overflow: hidden; opacity: 0;
   transition: block-size 150ms ease-out, opacity 110ms ease-out,
