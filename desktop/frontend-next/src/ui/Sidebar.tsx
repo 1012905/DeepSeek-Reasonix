@@ -1,6 +1,7 @@
 import { FeedbackBadge, feedbackEntryTab } from "./feedbackentry";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
+import logoWordmark from "../assets/logo-wordmark.svg";
 import type { AccountState } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
@@ -194,11 +195,8 @@ export function Sidebar({
       <div className="railscroll">
       <div className="studio-rail-head">
         <div className="studio-brand" aria-label="Reasonix Studio">
-          <span className="studio-brand-mark" aria-hidden="true"><StudioIcon name="brand" /></span>
-          <span className="studio-brand-word" aria-hidden="true">
-            <b>reasoni<span className="studio-brand-accent">x</span></b>
-            <small>studio</small>
-          </span>
+          <img className="studio-brand-logo" src={logoWordmark} alt="" aria-hidden="true" draggable={false} />
+          <small className="studio-brand-sub" aria-hidden="true">studio</small>
           <button className="studio-collapse" data-action="chrome.rail" onClick={() => onCollapse()} aria-label={t("收起工作区栏")} title={t("收起侧栏")}><StudioIcon name="panel" /></button>
         </div>
         <button
