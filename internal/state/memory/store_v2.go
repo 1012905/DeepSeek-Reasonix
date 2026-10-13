@@ -294,15 +294,46 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 	return result, nil
 }
 
+// undoPlainWrite puts a fact file back the way it was before a save whose index
+// publication failed: a new fact is removed, an update is rewritten from the
+// bytes and mode that were on disk, so nothing the user wrote is normalised.
+func undoPlainWrite(path string, preimage []byte, mode os.FileMode, exists bool) error {
+	if !exists {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return writeMemoryAtomic(path, preimage, mode)
+}
+
 // publishRename retires the old name before publishing the new one, so no
 // failure can leave one id with two active names; steps before publication are
 // undone from the retired copy.
 func (s Store) publishRename(dir, path, existingPath string, existing, m Memory, exists bool) error {
 	if !exists || cleanMemoryPath(existingPath) == cleanMemoryPath(path) {
+		var preimage []byte
+		mode := os.FileMode(0o644)
+		if exists {
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			preimage = raw
+			if info, err := os.Stat(path); err == nil {
+				mode = info.Mode().Perm()
+			}
+		}
 		if err := writeMemoryAtomic(path, []byte(render(m, m.Name)), 0o644); err != nil {
 			return err
 		}
-		return reindexIn(dir, m.Name, m)
+		if err := reindexIn(dir, m.Name, m); err != nil {
+			if undone := undoPlainWrite(path, preimage, mode, exists); undone != nil {
+				return fmt.Errorf("%w (and the saved %q could not be withdrawn: %w)", err, m.Name, undone)
+			}
+			return err
+		}
+		return nil
 	}
 	srcDir := filepath.Dir(existingPath)
 	srcRoot, err := os.OpenRoot(srcDir)
