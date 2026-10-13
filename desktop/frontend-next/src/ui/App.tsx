@@ -597,6 +597,10 @@ export function App({ hub }: { hub: HubPort }) {
             onHome={hidePrefs}
             onRail={() => setRail((v) => !v)}
             onFeedback={() => setFeedback(feedbackEntryTab(feedbackUnread))}
+            onNew={() => {
+              hidePrefs();
+              void openPane({ root: newSessionRoot }).catch(fail);
+            }}
             feedbackUnread={feedbackUnread}
             shown={navRail.shown}
           />
