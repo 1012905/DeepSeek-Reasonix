@@ -140,6 +140,7 @@ jobs:
           node perf/contrast.mjs
           node perf/stickyfold.mjs
           node perf/crumb.mjs
+          node perf/hoverradius.mjs
           node perf/sessionrows.mjs
           node perf/wheel.mjs
           node perf/branch-tooltip.mjs
