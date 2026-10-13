@@ -31,3 +31,7 @@
   每条用户消息的缩略原话；摘要请求的输入也加了上限，不再把接近整个窗口的内容一次发出去。关联 #12961。
 - Fix: when compaction cannot get a summary, the folded user messages no longer vanish; the placeholder
   digest keeps a shortened copy of each, and one summarizer request is capped. Refs #12961.
+- 删除最后一个模型服务后，Studio 现在能正常启动并直接进入连接引导，不再悄悄补回官方 DeepSeek；
+  之后添加的第一个服务会自动成为当前模型。关联 #12915。
+- Studio now starts and opens the connection guide after the last provider is removed, instead of
+  bringing the built-in DeepSeek back; the first provider added becomes current. Fixes #12915.

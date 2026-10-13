@@ -99,6 +99,12 @@ type Approvals interface {
 	SetMode(plan, autoApproveTools bool)
 }
 
+// QuestionInteraction carries live gestures from HTTP question cards. ACP's
+// permission request/response protocol carries no intermediate interaction.
+type QuestionInteraction interface {
+	EngageQuestion(id string) bool
+}
+
 // FolderTrust is the person's decision about the workspace folder and the
 // default posture it feeds. Only a frontend that shows the folder asks it.
 type FolderTrust interface {
@@ -439,6 +445,7 @@ type SessionAPI interface {
 	Lifecycle
 	TurnControl
 	Approvals
+	QuestionInteraction
 	FolderTrust
 	PlanDecisions
 	Goals

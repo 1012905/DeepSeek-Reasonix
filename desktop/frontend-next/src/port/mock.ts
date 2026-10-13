@@ -733,6 +733,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async answer(_id: string, _answers: { questionId: string; selected: string[] }[]) {
     this.ungate();
   }
+  async engageQuestion(_id: string) {}
 
   async invokeExtensionAction(name: string) {
     return `${name} 在 mock 里没有真实扩展可执行`;

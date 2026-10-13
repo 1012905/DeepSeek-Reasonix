@@ -402,6 +402,9 @@ func (m *model) onScreenMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return m.onSent(msg), true
 	case urlAnswerMsg:
 		return m.onURLAnswer(msg), true
+	case askEngagementMsg:
+		m.onAskEngagement(msg)
+		return nil, true
 	case clipImageMsg:
 		return m.onClipImage(msg), true
 	case clipTextMsg:
