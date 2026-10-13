@@ -9,6 +9,7 @@ import { Cross } from "./glyphs";
 import { StudioIcon } from "./StudioIcon";
 import { Confirm } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
+import { RowCount } from "./RowCount";
 import { clearDraftForSession } from "./drafts";
 
 // The same ceiling the local column uses. A machine worked on for months holds
@@ -335,11 +336,13 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                         {/* Only the far kernel knows what it holds. Cold, "0
                             会话" would be this window guessing, and guessing
                             zero about a project worked in for months. */}
-                        {tree && ws.sessions.length > 0 ? (
-                          <span className="wsmeta">{ws.total !== undefined && ws.total > ws.sessions.length ? t("{n} / {total} 会话", { n: ws.sessions.length, total: ws.total }) : t("{n} 会话", { n: ws.sessions.length })}</span>
-                        ) : null}
                         <span className="wsacts">
                           {folded && <UnreadCount n={ws.sessions.filter((x) => x.unread).length} />}
+                          <span className="rowswap">
+                          {tree && ws.sessions.length > 0 ? (
+                            <RowCount c={ws.total !== undefined && ws.total > ws.sessions.length ? { shown: ws.sessions.length, of: ws.total } : { shown: ws.sessions.length }} />
+                          ) : null}
+                          <span className="rowbtns">
                           <button
                             className="wsadd"
                             data-action="session.new"
@@ -374,6 +377,8 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                               <Cross />
                             </button>
                           ) : null}
+                          </span>
+                          </span>
                         </span>
                       </div>
                       {!folded && (
