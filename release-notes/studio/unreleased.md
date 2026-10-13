@@ -15,3 +15,8 @@
 - A long expanded process group keeps its header at the top while you scroll, so it can be folded without scrolling back up. Fixes #12931.
 - 标题栏里的会话标题现在紧挨着项目名称，不再被推到最右边。关联 #12924。
 - The session title in the title bar now sits right beside the project name instead of being pushed to the far right. Fixes #12924.
+- 对话里的「执行过程」不再是带边框的卡片，改成和「思考」一样的淡色一行，展开后只在左侧留一条细线，让回复和结论更突出。关联 #12953。
+- The activity group in a conversation is now a quiet line like the thinking row instead of a bordered card, with a thin rule at its left when open, so the reply and conclusion stand out. Fixes #12953.
+- 修复：在 Windows 上点击任务完成通知，现在会把 Studio 窗口带到前台（此前在部分系统上只有任务栏图标闪烁）；点击过程也会写入日志，方便排查。关联 #12817。
+- Fix: clicking a task-finished notification on Windows now brings Studio's window to the
+  front (it only flashed the taskbar on some systems); the click path is logged. Refs #12817.

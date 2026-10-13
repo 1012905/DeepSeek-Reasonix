@@ -384,7 +384,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	owner := &shellOwner{to: handshakeTo}
 	// A toast the user clicks is answered here, in the process that sent it, and
 	// the shell is the one that can bring its window forward.
-	notify.OnActivate(showOnToastClick(owner))
+	notify.OnActivate(showOnToastClick(owner, logs))
 	// A toast that did not go out is invisible to the person it was for, so the
 	// reason belongs in the log the shell keeps.
 	notify.OnSendFailure(func(err error) { fmt.Fprintf(logs, "notify: %v\n", err) })

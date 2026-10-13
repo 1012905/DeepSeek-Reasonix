@@ -27,7 +27,14 @@ try {
     await page.locator("#scroller").evaluate((el) => { el.scrollTop = 0; });
     const rest = await page.evaluate(() => Math.round(document.querySelector(".activity-group > summary").getBoundingClientRect().top - document.querySelector("#scroller").getBoundingClientRect().top));
     assert.ok(rest >= 0, `${scheme}: at rest the header sits where it did`);
-    console.log(`${scheme}: header held at the top of the scroller, opaque`);
+    await page.locator(".activity-group > summary").click();
+    const quiet = await page.evaluate(() => {
+      const group = getComputedStyle(document.querySelector(".activity-group"));
+      return { border: group.borderTopWidth, bg: group.backgroundColor };
+    });
+    assert.equal(quiet.border, "0px", `${scheme}: a folded group is a quiet line, not a bordered card`);
+    assert.equal(quiet.bg, "rgba(0, 0, 0, 0)", `${scheme}: a folded group paints no ground of its own`);
+    console.log(`${scheme}: header held at the top of the scroller, opaque; folded group is a quiet line`);
     await page.close();
   }
 } finally {
