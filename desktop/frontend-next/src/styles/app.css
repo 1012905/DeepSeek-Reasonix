@@ -4,7 +4,6 @@
   ::-webkit-scrollbar { width: 10px; height: 10px }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9px; border: 3px solid transparent; background-clip: content-box }
   ::-webkit-scrollbar-track { background: transparent }
-
   body {
     margin: 0; padding: 0; background: var(--page); color: var(--text);
     font: var(--w-reg) var(--fs-lead)/1.6 var(--ui);
@@ -12,7 +11,6 @@
   }
 
   [data-platform="darwin"] body { -webkit-font-smoothing: antialiased }
-
   body { font-synthesis-weight: none }
 
   :lang(zh) :is(.lbl, .dgrp-h, .side .lbl) {
@@ -153,7 +151,7 @@
     --chrome-h: 51px; --lights-w: 96px; --lights-h: var(--chrome-h);
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="off"] .chrome {
-    padding-left: calc(var(--lights-w) + 50px - var(--nav-w));
+    padding-left: calc(var(--lights-w) + var(--rail-toggle-gap) - var(--nav-w));
   }
   [data-titlebar="app"][data-platform="darwin"] .app[data-rail="on"] .studio-rail-head {
     padding-top: var(--lights-h); -webkit-app-region: drag;
@@ -191,7 +189,7 @@
 
   .crumb-proj {
     font-weight: var(--w-med); color: var(--muted);
-    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .chrome .r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .btn {
@@ -410,7 +408,6 @@
   @keyframes breathe { 0%, 100% { opacity: .45 } 50% { opacity: 1 } }
 
   .pane[data-run="done"] .rmark { color: var(--ok) }
-  @keyframes drawin { from { stroke-dashoffset: 100 } to { stroke-dashoffset: 0 } }
 
   .queue {
     display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;
@@ -528,11 +525,10 @@
   .call[data-pending] > .c { opacity: .7 }
 
   .app {
-    --nav-w: 0px; --rail-w: var(--rail-open); --side-w: 0px; --dock-w: var(--dock-open);
-    transition: --nav-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --rail-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --side-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --dock-w var(--t-panel) cubic-bezier(.32, .72, 0, 1);
+    --nav-w: 0px; --rail-w: var(--rail-open); --side-w: 0px;
+    transition: --nav-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --rail-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --side-w var(--t-panel) cubic-bezier(.32, .72, 0, 1);
   }
   .app[data-rail="off"] { --rail-w: 0px }
-  .app[data-browser="off"] { --dock-w: 0px }
   .app[data-side="on"] { --side-w: var(--side-open) }
 
   .app[data-drag] { transition: none }
@@ -806,10 +802,10 @@
   [data-pane="flow"]:has(.hero) { justify-content: center }
   [data-pane="flow"]:has(.hero) .flow { margin-top: 0 }
   .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 34px }
-  .hero .rmark { width: 78px; height: 78px; color: var(--faint); opacity: .92 }
-  .hero .rmark path { stroke-width: .42; animation: drawin 1.4s var(--ease-out) both }
-  .hero .rmark path:nth-child(2) { animation-delay: .22s }
-  .hero .rmark path:nth-child(3) { animation-delay: .44s }
+  .hero .sym-mark {
+    width: 78px; height: 78px; display: block;
+    color: var(--faint); opacity: .92;
+  }
   .hero .t {
     margin-top: 26px; font: var(--w-reg) 25px/1.25 var(--ui);
     letter-spacing: var(--track-display); color: var(--text);
@@ -1271,6 +1267,8 @@
   .fold:hover { color: var(--text) }
 
   .peek { margin-top: 7px; display: flex; flex-direction: column; gap: 3px }
+  .peek .contributions { display: flex; flex-direction: column; gap: 3px; margin-top: 7px }
+  .peek .contributions > .kind { margin: 0; font: var(--w-med) var(--fs-ui) var(--ui); color: var(--muted) }
   .peek .row { display: flex; gap: 9px; font: var(--w-reg) var(--fs-ui) var(--mono); color: var(--faint) }
   .peek .row .d { color: var(--ghost) }
   .peek .row .n { margin-left: auto; color: var(--ghost); font-variant-numeric: tabular-nums }
@@ -1529,15 +1527,15 @@
 
   .other-wrap { margin-top: 8px }
   .ask[data-sealed] .other-wrap:not([data-on]) { display: none }
-  .other-wrap input {
+  .other-wrap input, .other-wrap textarea {
     width: 100%; padding: 9px 11px; border-radius: var(--r-sm);
     border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--border));
     background: var(--surface); color: var(--text);
     font: var(--w-reg) var(--fs-ui) var(--ui); outline: none;
   }
-  .other-wrap input::placeholder { color: var(--ghost) }
-  .other-wrap input:focus { border-color: var(--accent) }
-
+  .other-wrap textarea { resize: vertical; min-height: 120px; }
+  .other-wrap input::placeholder, .other-wrap textarea::placeholder { color: var(--ghost) }
+  .other-wrap input:focus, .other-wrap textarea:focus { border-color: var(--accent) }
   .ask-foot { display: flex; align-items: center; gap: 12px; padding: 13px }
   .ask-foot .dismiss {
     margin-left: auto; background: none; border: 0; cursor: pointer;
@@ -1553,7 +1551,7 @@
   .ask[data-sealed] .opt:hover { border-color: var(--border) }
   .ask[data-sealed] .opt[data-on]:hover { border-color: var(--accent) }
   .ask[data-sealed] .ask-hint { opacity: .5 }
-  .ask[data-sealed] .other-wrap input { opacity: .8 }
+  .ask[data-sealed] .other-wrap input, .ask[data-sealed] .other-wrap textarea { opacity: .8 }
   .ask[data-sealed] .ask-tab { cursor: pointer }
 
   .ask-done {
@@ -2633,19 +2631,19 @@
     border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface);
     transition: border-color var(--t-card) var(--ease-out), box-shadow var(--t-card) var(--ease-out);
   }
-  .advset > summary {
+  .advset:not(.appearance-advanced) > summary {
     display: flex; align-items: center; gap: 10px; padding: 16px 0; cursor: pointer;
     color: var(--muted); list-style: none;
   }
   .advset > summary::-webkit-details-marker { display: none }
-  .advset > summary::after {
+  .advset:not(.appearance-advanced) > summary::after, .appearance-advanced > summary > h3::after {
     content: ""; margin-left: auto; flex: none; width: 10px; height: 10px;
     color: var(--ghost); background: currentColor; transform: rotate(90deg);
     -webkit-mask: var(--chev) center / contain no-repeat; mask: var(--chev) center / contain no-repeat;
     transition: transform var(--m-line) ;
   }
-  .advset[open] > summary::after { transform: rotate(270deg) }
-  .advset > summary:hover { color: var(--text) }
+  .advset:not(.appearance-advanced)[open] > summary::after, .appearance-advanced[open] > summary > h3::after { transform: rotate(270deg) }
+  .advset:not(.appearance-advanced) > summary:hover { color: var(--text) }
   @media (hover: hover) {
     .advset:hover { border-color: color-mix(in srgb, var(--accent) 20%, var(--border)) }
   }
@@ -2653,19 +2651,19 @@
     border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 7%, transparent);
   }
-  .advset > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs) }
-  .advset > summary .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
-  .advset > summary .lb { font: var(--w-reg) var(--fs-ui) var(--ui); color: inherit }
-  .advset > summary .ds { font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
-  .advset[open] > summary { margin-bottom: 0; border-bottom: 1px solid var(--hair) }
-  .advset > .grp {
+  .advset:not(.appearance-advanced) > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs) }
+  .advset:not(.appearance-advanced) > summary .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+  .advset:not(.appearance-advanced) > summary .lb { font: var(--w-reg) var(--fs-ui) var(--ui); color: inherit }
+  .advset:not(.appearance-advanced) > summary .ds { font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
+  .advset:not(.appearance-advanced)[open] > summary { margin-bottom: 0; border-bottom: 1px solid var(--hair) }
+  .advset:not(.appearance-advanced) > .grp {
     margin: 0; padding: 18px 0; border: 0; border-bottom: 1px solid var(--hair);
     border-radius: 0; background: transparent; box-shadow: none;
   }
-  .advset > .grp:last-child { border-bottom: 0 }
+  .advset:not(.appearance-advanced) > .grp:last-child { border-bottom: 0 }
   .grp-hd { display: flex; align-items: baseline; gap: 12px }
 
-  .grp > .grp-hd h3 { margin: 0; font: var(--w-semi) var(--fs-lead)/1.35 var(--ui); color: var(--text); letter-spacing: -.005em }
+  .grp > .grp-hd h3, .grp > h3.grp-hd { margin: 0; font: var(--w-semi) var(--fs-lead)/1.35 var(--ui); color: var(--text); letter-spacing: -.005em }
   .grp .now {
     margin-left: auto; flex: none; padding: 2px 7px; border-radius: var(--r-pill);
     background: var(--overlay); font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint);
@@ -2983,11 +2981,11 @@
   .skrow[data-local] { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent) }
 
   .msearch { display: flex; align-items: center; gap: 10px; margin-bottom: 12px }
-  .msearch input {
+  .msearch input, .mline .malias {
     flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--border);
     border-radius: var(--r-sm); background: var(--raised); color: var(--text); font: var(--w-reg) var(--fs-ui) var(--ui);
   }
-  .msearch input:focus { outline: 2px solid var(--focus); outline-offset: 1px }
+  .msearch input:focus, .mline .malias:focus { outline: 2px solid var(--focus); outline-offset: 1px }
   .msearch .cnt { flex: none; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint) }
 
   .vway { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 2px 12px 10px;
@@ -3086,7 +3084,6 @@
 
   .mline .vtag[data-flat] { color: var(--deleg); background: var(--deleg-wash); border-color: transparent; cursor: default }
 
-  .mlist .mrows { max-height: 292px; overflow-y: auto; overscroll-behavior: contain }
   .mlist .mmore { margin-top: 7px; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
   .mlist .empty { margin-top: 9px }
 
@@ -3753,6 +3750,13 @@
   }
   .skrow .sc { flex: none; min-width: 44px; text-align: right; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint) }
   .skrow .sw { margin-left: 4px; align-self: center }
+  .skrow:has(> .skprofile) { flex-wrap: wrap }
+  .skprofile { flex-basis: 100%; min-width: 0; font: var(--w-reg) var(--fs-meta)/1.55 var(--ui); color: var(--muted) }
+  .skprofile > p { margin: 8px 0 }
+  .skprofile > dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 8px 0 0 }
+  .skprofile dt { color: var(--faint) }
+  .skprofile dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono) }
+  .skprofile code { display: block; font: inherit }
 
   .seg {
     display: inline-flex; flex: none; align-self: start; flex-wrap: wrap;
@@ -3853,7 +3857,7 @@
   .md h1 { font-size: calc(var(--read) * 1.38) } .md h2 { font-size: calc(var(--read) * 1.2) }
   .md h3 { font-size: calc(var(--read) * 1.06) }
   .md h4 { font-size: var(--read); color: var(--muted) }
-  .md ul, .md ol { margin: 0 0 .7em; padding-left: 1.4em }
+  .md ul, .md ol { margin: 0 0 .7em; padding-inline-start: 1.4em }
   .md li { margin: .18em 0 }
   .md li::marker { color: var(--ghost) }
   .md strong { font-weight: var(--w-semi); color: var(--text-strong, var(--text)) }
@@ -3861,8 +3865,8 @@
   .md del { color: var(--faint) }
   .md hr { height: 1px; margin: 1em 0; border: 0; background: var(--hair) }
   .md blockquote {
-    margin: 0 0 .7em; padding: 2px 0 2px 11px;
-    border-left: 2px solid var(--border); color: var(--faint);
+    margin: 0 0 .7em; padding-block: 2px; padding-inline: 11px 0;
+    border-inline-start: 2px solid var(--border); color: var(--faint);
   }
 
   .code-wrap {
@@ -4012,13 +4016,13 @@
     display: grid; margin-top: 3px; column-gap: 10px;
     grid-template-columns: minmax(104px, max-content) minmax(0, 1fr) max-content minmax(0, max-content);
   }
-
   .vrow {
     grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: baseline;
     padding: 9px 12px; border-top: 1px solid var(--hair);
     animation: card var(--t-card) var(--ease-out) both;
   }
   .vrow:last-of-type { border-bottom: 1px solid var(--hair) }
+  .vlist .vmore { margin: 10px 0 0 12px }
   .vrow[data-on] { box-shadow: inset 2px 0 0 var(--accent); background: var(--accent-wash) }
   .vrow .nm { grid-column: 1; font: var(--w-reg) var(--fs-ui) var(--mono); color: var(--muted) }
 
@@ -4243,30 +4247,26 @@
     text-align: center; padding: 0 40px; width: 100%;
   }
 
-  .oobe-mark { width: 54px; height: 54px; display: block; margin: 0 auto }
-  .oobe-mark path { fill: none; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round }
-  .oobe-mark .base { stroke: rgba(255,255,255,.92) }
-  .oobe-mark .lume { stroke: #FFE9B8; filter: drop-shadow(0 0 4px rgba(255,215,130,.9)); opacity: 0 }
-  .oobe[data-play] .oobe-mark .base {
-    stroke-dasharray: 100; stroke-dashoffset: 100;
-    animation: oobedraw 1s var(--ease-out) .25s forwards;
+  .oobe-lockup { display: grid; justify-items: center; }
+  .oobe-mark {
+    display: block; margin: 0 auto; width: 300px; aspect-ratio: 1692.66 / 392.25;
+    filter: drop-shadow(0 0 18px rgb(1 83 229 / .45));
   }
-  .oobe[data-play] .oobe-mark .base:nth-of-type(2) { animation-delay: .45s }
-  .oobe[data-play] .oobe-mark .base:nth-of-type(3) { animation-delay: .65s }
-  .oobe[data-play] .oobe-mark .lume {
-    stroke-dasharray: 14 86; stroke-dashoffset: 100;
-    animation: oobetrace 1.5s ease-in-out 1.25s forwards;
+  .oobe[data-play] .oobe-mark {
+    opacity: 0;
+    animation: oobebrand .9s var(--ease-out) .25s forwards,
+               oobelume 1.6s ease-in-out 1.25s forwards;
   }
-  @keyframes oobedraw { to { stroke-dashoffset: 0 } }
-  @keyframes oobetrace { 0% { opacity: 0; stroke-dashoffset: 100 } 15%,85% { opacity: 1 }
-                         100% { opacity: 0; stroke-dashoffset: -20 } }
+  @keyframes oobelume {
+    0% { filter: drop-shadow(0 0 5px rgb(255 215 130 / .9)) brightness(1.45) }
+    32% { filter: drop-shadow(0 0 26px rgb(255 233 184 / .85)) brightness(1.25) }
+    100% { filter: drop-shadow(0 0 18px rgb(1 83 229 / .45)) brightness(1) }
+  }
 
   .oobe-brand {
-    margin: 26px 0 0; font: 300 40px/1.15 var(--mono); letter-spacing: -.02em; white-space: nowrap;
-    background: linear-gradient(100deg,
-      #7C766A 0%, #7C766A 34%, #FFEFCB 45%, #FFFFFF 50%, #FFEFCB 55%, #7C766A 66%, #7C766A 100%);
-    background-size: 260% 100%; background-position: 130% 0;
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin: 16px 0 0; font: 650 var(--fs-display)/1 var(--mono); letter-spacing: .21em;
+    text-transform: uppercase; white-space: nowrap;
+    color: rgb(255 255 255 / .72);
   }
 
   .oobe-sub {
@@ -4275,13 +4275,11 @@
   }
   .oobe[data-play] .oobe-brand {
     opacity: 0;
-    animation: oobebrand .9s var(--ease-out) 1.5s forwards,
-               oobesweep 2.2s cubic-bezier(.4,0,.2,1) 2s forwards;
+    animation: oobebrand .9s var(--ease-out) 1.5s forwards;
   }
   .oobe[data-play] .oobe-sub { opacity: 0; animation: ooberise .8s var(--ease-out) 2.1s forwards }
   @keyframes oobebrand { from { opacity: 0; transform: translateY(10px); filter: blur(6px) }
                          to { opacity: 1; transform: none; filter: none } }
-  @keyframes oobesweep { from { background-position: 130% 0 } to { background-position: -40% 0 } }
   @keyframes ooberise  { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 
   .oobe-lines { position: relative; height: 96px; width: 100%; margin-top: 4px }
@@ -4320,14 +4318,16 @@
 
   @media (prefers-reduced-motion: reduce) {
     .oobe[data-play] * { animation: none !important }
+    .oobe[data-play] .oobe-mark,
     .oobe[data-play] .oobe-brand,
     .oobe[data-play] .oobe-sub { opacity: 1 }
+    .oobe[data-play] .oobe-mark { filter: drop-shadow(0 0 18px rgb(1 83 229 / .45)) }
     .oobe[data-play][data-held] .oobe-scene { transform: translateY(calc(-14vh / var(--zoom, 1))) scale(.62) }
     .oobe[data-play][data-held] .oobe-lines { height: 0; opacity: 0 }
     .oobe[data-play][data-held] .onb { opacity: 1 }
-    .oobe[data-play] .oobe-brand { background-position: -40% 0 }
   }
-  [data-fold~="scene"] .oobe-brand { font-size: 32px }
+  [data-fold~="scene"] .oobe-mark { width: 240px }
+  [data-fold~="scene"] .oobe-brand { font-size: var(--fs-title) }
   [data-fold~="scene"] .oobe-line b { font-size: var(--fs-display) }
 
   .onb-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100% }

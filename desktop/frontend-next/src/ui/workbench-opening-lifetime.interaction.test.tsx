@@ -62,7 +62,7 @@ it('does not start a preview after its file read finishes behind a newer Files s
   await act(async()=>read({path:'index.html',content:'hello',revision:'r1'}));
   expect(open).not.toHaveBeenCalled();
   expect(filesShown()).toBe(true);
-  fireEvent.click(document.querySelector('[data-action="workbench.tab"][data-target="file:index.html"]')!);
+  fireEvent.click(document.querySelector('[data-action-click="workbench.tab"][data-target="file:index.html"]')!);
   await waitFor(()=>expect(open).toHaveBeenCalledOnce());
 });
 

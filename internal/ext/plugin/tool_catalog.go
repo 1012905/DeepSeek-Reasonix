@@ -39,7 +39,7 @@ func (c *Client) readToolCatalog(ctx context.Context, settle bool) (toolCatalog,
 		return toolCatalog{}, err
 	}
 	out := slices.DeleteFunc(slices.Clone(listed), func(t mcpTool) bool { return !c.spec.ToolEnabled(t.Name) })
-	if err := validateMCPToolNames(out); err != nil {
+	if err := validateMCPToolNames(c.name, c.spec.StripRawPrefix, out); err != nil {
 		return toolCatalog{}, fmt.Errorf("plugin %q: %w", c.name, err)
 	}
 	held := judgeToolPins(c.spec, listed)

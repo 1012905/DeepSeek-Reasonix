@@ -269,8 +269,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// guidance (with a prefix), not a new task. One cache miss per
 		// steer is unavoidable — the model must see the new instruction.
 		if text, entry, ok := a.consumeSteer(); ok {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(sessionstore.MidTurnSteerMessage(text, entry.host)), Via: entry.via})
-			a.svc.sink.Emit(event.Event{Kind: event.Steer, Text: text, ItemID: entry.itemID, Via: entry.via, HostAuthored: entry.host})
+			a.landSteer(text, entry)
 		} else if entry.itemID != "" {
 			// Loader failed after dequeue: durable entry stays for inspection
 			// (unapplied path marks uncertain + pause via the notice sink).
@@ -326,7 +325,6 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// Keep reasoning_content on the assistant turn for display and session
 		// archive. Most OpenAI-compatible backends do not replay it; providers
 		// with an explicit round-trip contract retain the raw provider text.
-		calls = a.withPreviewFileDiffs(ctx, calls)
 		workMs, committed := state.workDurationMs(), a.callsToCommit(streamed, calls)
 		a.sess.conversation.Add(provider.Message{
 			Role:               provider.RoleAssistant,

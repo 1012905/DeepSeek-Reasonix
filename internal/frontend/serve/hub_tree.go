@@ -66,6 +66,9 @@ type treeSession struct {
 	// Unread is a turn that finished since the person last looked. The kernel
 	// derives it from two stored timestamps; absence reads as seen.
 	Unread bool `json:"unread,omitempty"`
+	// Legacy marks a conversation kept in the 1.x store: this build reads that
+	// log and never writes it, so the row says so rather than looking native.
+	Legacy bool `json:"legacy,omitempty"`
 	// Copies are this conversation's conflict-recovery copies. A save that
 	// keeps conflicting writes one file per turn, all under the one title, and
 	// unfolded that is a sidebar of rows the user never made.
@@ -87,6 +90,7 @@ func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tree/sessions/pin", h.pinSession)
 	mux.HandleFunc("POST /tree/sessions/pins", h.syncPins)
 	mux.HandleFunc("POST /tree/sessions/rename", h.renameSession)
+	mux.HandleFunc("POST /tree/sessions/auto-name", h.autoNameSession)
 	mux.HandleFunc("POST /tree/sessions/export", h.exportSession)
 	mux.HandleFunc("POST /tree/sessions/import-legacy", h.importLegacySessions)
 }
@@ -536,34 +540,6 @@ func sessionHolder(held *sessionstore.SessionLeaseError) map[string]any {
 		return nil
 	}
 	return map[string]any{"pid": held.Info.PID, "host": held.Info.Hostname}
-}
-
-// renameSession sets the name a session shows under. Unlike removal this is
-// safe on an open one — the title lives in the sidecar, not the transcript — so
-// a tab can be renamed without closing the pane behind it.
-func (h *Hub) renameSession(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Path  string `json:"path"`
-		Title string `json:"title"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		badBody(w)
-		return
-	}
-	path, err := filepath.Abs(strings.TrimSpace(body.Path))
-	if err != nil || !store.IsSessionTranscriptName(filepath.Base(path)) {
-		refuse(w, http.StatusBadRequest, codeSessionBadPath, "the session path could not be resolved", nil)
-		return
-	}
-	if !h.ownsSessionDir(filepath.Dir(path)) {
-		refuse(w, http.StatusForbidden, "session.outside_workspace", "path outside a known workspace", nil)
-		return
-	}
-	if err := sessionstore.RenameSession(path, body.Title); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // exportSession returns the transcript only after applying the same workspace

@@ -173,7 +173,7 @@ export class MockHub implements HubPort {
           i === 0
             ? [
                 { path: "/sessions/mock.jsonl", name: "mock", title: "并行会话演示", turns: 3, runtimeId: open.get("/sessions/mock.jsonl") },
-                { path: "/sessions/older.jsonl", name: "older", title: "上一次的会话", turns: 12, runtimeId: open.get("/sessions/older.jsonl") },
+                { path: "/sessions/older.jsonl", name: "older", title: "上一次的会话", turns: 12, runtimeId: open.get("/sessions/older.jsonl"), legacy: true },
               ]
             : [{ path: "/sessions/site.jsonl", name: "site", title: "站点改版", turns: 5, runtimeId: open.get("/sessions/site.jsonl") }],
       })),
@@ -186,6 +186,8 @@ export class MockHub implements HubPort {
   }
 
   async revealWorkspace() {}
+
+  async openWorkspace() {}
 
   removeWorkspace(path: string) {
     const at = this.roots.indexOf(path);
@@ -224,6 +226,10 @@ export class MockHub implements HubPort {
 
   renameSession(_path: string, _title: string) {
     return Promise.resolve();
+  }
+
+  autoNameSession(_path: string) {
+    return Promise.resolve({ title: "最近的聊天话题" });
   }
 
   exportSession(path: string) {
@@ -267,6 +273,17 @@ export class MockHub implements HubPort {
   setSharePort(port: number) {
     this.share = { ...this.share, port: port || undefined };
     return Promise.resolve({ ...this.share });
+  }
+
+  private remember = false;
+
+  shareRemember() {
+    return Promise.resolve<{ remember: boolean } | null>({ remember: this.remember });
+  }
+
+  setShareRemember(remember: boolean) {
+    this.remember = remember;
+    return Promise.resolve({ remember: this.remember });
   }
 
   closeShare() {

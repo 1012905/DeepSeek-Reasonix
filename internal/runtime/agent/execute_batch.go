@@ -50,14 +50,16 @@ func (l barrierLevel) message() string {
 // form the model sees; rawOutput is the full original when truncation applied
 // (empty when identical so we avoid double storage). images ride outside text.
 type toolOutcome struct {
+	preview   *event.FileDiff
 	output    string
 	rawOutput string // full original when different from output
 	images    []string
 	blocked   bool
 	// endsRound marks a call whose result is a user decision. The pre-scheduling
 	// scan cannot see one an extension substituted in, so the call reports it.
-	endsRound bool
-	errMsg    string
+	endsRound     bool
+	errMsg        string
+	checkpointErr error
 	// refusalCode is the identity of a host refusal, carried beside the words
 	// rather than recovered from them. Empty when the call was not refused.
 	refusalCode    string
@@ -138,23 +140,12 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 	startedAt := make([]int64, len(calls))
 	completedStepInBatch := false
 	receiptMark := a.ledgerMark()
-	// Full dispatches used the batch's initial file state. After a writer runs
-	// (even a failed one — disk may have mutated), refresh dependent writer
-	// previews. The first writer stays on the single-preview fast path.
-	earlierWriterRan := false
 	surfaceWriters := make([]bool, len(calls))
 	run := func(i int) {
 		t, _, ambiguous := a.svc.tools.ResolveCall(calls[i].Name)
 		known := t != nil && len(ambiguous) == 0
 		writer := known && !t.ReadOnly()
 		surfaceWriters[i] = writer
-		if earlierWriterRan && writer {
-			if refreshed, changed := refreshCurrentFileDiff(ctx, t, calls[i]); changed {
-				calls[i] = refreshed
-				a.sess.conversation.UpdateToolCallPreview(refreshed)
-				a.emitFullToolDispatch(ctx, refreshed, true)
-			}
-		}
 		start := time.Now()
 		startedAt[i] = start.UnixMilli()
 		if calls[i].Name == "complete_step" && completedStepInBatch {
@@ -168,6 +159,9 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 			return
 		}
 		outcomes[i] = a.executeOne(ctx, turn, calls[i])
+		if p := outcomes[i].preview; p != nil {
+			calls[i].Diff, calls[i].Added, calls[i].Removed = p.Diff, p.Added, p.Removed
+		}
 		recordWorkspaceMutation(a.svc.sink, outcomes[i].workspaceMutation)
 		if outcomes[i].executed {
 			surfaceWriters[i] = outcomes[i].workspaceMutation != nil
@@ -189,9 +183,6 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 		if calls[i].ResolvedReadOnly != nil {
 			a.sess.conversation.UpdateToolCallResolution(calls[i])
 			a.emitResolvedToolDispatch(calls[i], outcomes[i].resolvedProfile)
-		}
-		if surfaceWriters[i] || (outcomes[i].resolved && !outcomes[i].resolvedReadOnly) {
-			earlierWriterRan = true
 		}
 	}
 	cancelled := false
@@ -333,9 +324,7 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 			}
 		}
 		a.emitToolCard(ctx, c, tr, o.todoEcho)
-		if o.truncMsg != "" {
-			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: o.truncMsg})
-		}
+		a.emitToolOutcomeWarnings(o)
 	}
 	a.observeOutcomeShadow(cancelled, receiptMark)
 	images := make([][]string, len(calls))
@@ -545,7 +534,7 @@ launch:
 func scheduleUpToDecision(reg *tool.Registry, calls []provider.ToolCall) ([]provider.ToolCall, int) {
 	for i, c := range calls {
 		t, _, ambiguous := reg.ResolveCall(c.Name)
-		if t != nil && len(ambiguous) == 0 && tool.IsDecisionBarrier(t) {
+		if t != nil && len(ambiguous) == 0 && tool.IsDecisionBarrierCall(t, json.RawMessage(c.Arguments)) {
 			return calls[:i+1], i
 		}
 	}
@@ -588,5 +577,16 @@ func refusalCodeOf(err error) string {
 	if errors.As(err, &refusal) {
 		return refusal.Code
 	}
+	var identity tool.RefusalIdentity
+	if errors.As(err, &identity) {
+		return identity.RefusalCode()
+	}
 	return ""
+}
+
+func (a *Agent) emitToolOutcomeWarnings(outcome toolOutcome) {
+	a.emitCheckpointWarning(outcome.checkpointErr)
+	if outcome.truncMsg != "" {
+		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: outcome.truncMsg})
+	}
 }

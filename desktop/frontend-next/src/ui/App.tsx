@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import { Chrome } from "./Chrome";
+import { RailToggle } from "./RailToggle";
 import { useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
 import { useTreeWindow, type TreePaging } from "./treewindow";
@@ -17,9 +18,12 @@ import { Pane, type PaneReport } from "./Pane";
 import { clearDraftForSession } from "./drafts";
 import { DOCK, Gutter, RAIL, dockMax, keepWidth, widthOf } from "./Gutter";
 import { useWindowKeys, type Shortcut } from "./windowkeys";
+import { useEscStop } from "../state/escstop";
+import { StopHint } from "./StopHint";
 import { folded as roomGaveUp, onRoomWidth } from "./viewport";
 import { useFoldAway } from "./foldaway";
 import { useDrawerCloses } from "./drawer";
+import { RenameSession } from "./RenameSession";
 import { RemoteAsk } from "./RemoteAsk";
 import { useFeedbackUnread } from "./useFeedbackUnread";
 import { Feedback, type FeedbackTab } from "./Feedback";
@@ -37,7 +41,8 @@ import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
 import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
-import { isUnread, useViewed } from "./unread";
+import { useLiveGrace } from "./useLiveGrace";
+import { isUnread, useViewed, useUnreadBadge } from "./unread";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
@@ -106,6 +111,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [findPulse, setFindPulse] = useState(0);
   const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
+  const [renaming, setRenaming] = useState<{ path: string; title: string } | null>(null);
   // false = closed, true = open at its last section, a string = open there.
   const [settings, setSettings] = useState<string | boolean>(false);
   const [feedback, setFeedback] = useState<FeedbackTab | null>(null);
@@ -139,7 +145,10 @@ export function App({ hub }: { hub: HubPort }) {
   // a few hundred sessions each frame — which is what its memo is there for.
   const liveIds = useCallback((ids: string[]) => ids.filter((id) => runsRef.current[id]?.live), []);
 
+  const { listedIds, noteReport } = useLiveGrace(runsRef, runs);
+
   const onReport = useCallback((id: string, next: PaneReport) => {
+    noteReport(id, next.live);
     setRuns((prev) =>
       prev[id]?.run === next.run && prev[id]?.live === next.live ? prev : { ...prev, [id]: { run: next.run, live: next.live } },
     );
@@ -149,7 +158,7 @@ export function App({ hub }: { hub: HubPort }) {
     // cost of a window render per background beat.
     reportsRef.current[id] = next;
     if (id === activeRef.current) setReport(next);
-  }, []);
+  }, [noteReport]);
 
   // The window's title, run pill and status belong to the pane in front. They
   // were only ever written when a pane reported, so switching to an idle pane
@@ -324,7 +333,8 @@ export function App({ hub }: { hub: HubPort }) {
   // Transition made a simple sidebar click pay for a full-page texture before
   // the active id changed. Selection feedback should be immediate.
   const reloadBooks = useCallback(() => Promise.all([reloadTree(), reloadRemoteTrees()]), [reloadTree, reloadRemoteTrees]);
-  const viewed = useViewed({ runtimes, ports: panePorts, active, tree, remote: remoteTrees, reload: reloadBooks });
+  const viewed = useViewed({ runtimes, ports: panePorts, active: settings || feedback ? "" : active, tree, remote: remoteTrees, reload: reloadBooks });
+  useUnreadBadge(viewed.tree, viewed.remote);
   const focusPane = useCallback(
     (id: string) => {
       sw.cancel();
@@ -410,7 +420,9 @@ export function App({ hub }: { hub: HubPort }) {
   );
   const closeBrowser = useCallback(() => setBrowser(false), []);
   const stopTurn = useCallback(() => activePort?.cancel(), [activePort]);
-  useWindowKeys(shortcuts, { browser, settings: !!settings, running, closeBrowser, stop: stopTurn });
+  const escMode = useEscStop();
+  const [stopArmed, setStopArmed] = useState(false);
+  useWindowKeys(shortcuts, { browser, settings: !!settings, running, confirm: escMode === "confirm", closeBrowser, stop: stopTurn, onArm: setStopArmed });
 
   // A setting changed in the pane is a fact about the session behind it, and
   // the pane is what holds that fact. Without a nudge it keeps polling only
@@ -495,12 +507,11 @@ export function App({ hub }: { hub: HubPort }) {
   // so a refusal has to land in the error bar rather than in a caller.
   const dropPanes = useCallback((ids: string[]) => void closePanes(ids).catch(fail), [closePanes, fail]);
 
-  // One rename for both surfaces: the tab renames by the pane's session path,
-  // the sidebar by the row's — the same file either way.
   const renameSession = useCallback(
-    (path: string, title: string) => {
+    (path: string, title: string, mode: "inline" | "dialog" = "dialog") => {
       if (!path) return;
-      void hub.renameSession(path, title).then(reloadTree).catch(fail);
+      if (mode === "inline") void hub.renameSession(path, title).then(reloadTree).catch(fail);
+      else setRenaming({ path, title });
     },
     [hub, reloadTree, fail],
   );
@@ -575,9 +586,7 @@ export function App({ hub }: { hub: HubPort }) {
         }}
         browser={browser}
         account={account}
-        rail={rail}
         theme={scheme}
-        onRail={() => setRail((v) => !v)}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
         onFind={openFind}
         hub={hub} onError={fail}
@@ -594,6 +603,10 @@ export function App({ hub }: { hub: HubPort }) {
             onHome={hidePrefs}
             onRail={() => setRail((v) => !v)}
             onFeedback={() => setFeedback(feedbackEntryTab(feedbackUnread))}
+            onNew={() => {
+              hidePrefs();
+              void openPane({ root: newSessionRoot }).catch(fail);
+            }}
             feedbackUnread={feedbackUnread}
             shown={navRail.shown}
           />
@@ -609,6 +622,7 @@ export function App({ hub }: { hub: HubPort }) {
           active={active}
           activeWorkspace={activeWorkspace}
           liveIds={liveIds}
+          listedIds={listedIds}
           pinned={pinnedSessions}
           onPin={togglePinnedSession}
           remotes={remotes}
@@ -659,7 +673,7 @@ export function App({ hub }: { hub: HubPort }) {
               showRoot={manyRoots}
               onFocus={focusPane}
               onClose={dropPanes}
-              onRename={(rt, title) => renameSession(rt.sessionPath ?? "", title)}
+              onRename={(rt, title, mode) => renameSession(rt.sessionPath ?? "", title, mode)}
             />
           )}
 
@@ -737,8 +751,13 @@ export function App({ hub }: { hub: HubPort }) {
       </div>
 
       {adder.pathOpen && <AddWorkspacePrompt busy={adder.busy} onSubmit={adder.addPath} onClose={adder.closePath} />}
+      {renaming && (
+        <RenameSession session={renaming} hub={hub} onClose={() => setRenaming(null)}
+          onSaved={() => { setRenaming(null); void reloadTree().catch(fail); }} />
+      )}
 
       {feedback && activePort && (
+
         <Feedback port={machinePort} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />
       )}
 
@@ -774,6 +793,8 @@ export function App({ hub }: { hub: HubPort }) {
         </Suspense>
         </Boundary>
       )}
+      <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
+      <StopHint armed={stopArmed} />
     </div>
   );
 }

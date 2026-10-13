@@ -160,6 +160,41 @@ export function setNavRailMode(mode: NavRailMode): void {
   navRailListeners.forEach((fn) => fn());
 }
 
+// How long a session that finished its turn stays in the sidebar's running list,
+// in minutes. Off (0) unless this machine chose a value: leaving the list the
+// moment a turn ends is the long-standing behaviour, and keeping a row there is
+// the reader's call. Only the offered values are read back.
+const LIVE_GRACE_KEY = "rx-live-grace";
+export const LIVE_GRACE_CHOICES: readonly number[] = [0, 10, 30, 60, 240];
+
+const liveGraceListeners = new Set<() => void>();
+
+export function liveGraceMinutes(): number {
+  try {
+    const raw = localStorage.getItem(LIVE_GRACE_KEY);
+    const minutes = raw === null ? 0 : Number(raw);
+    return LIVE_GRACE_CHOICES.includes(minutes) && String(minutes) === raw ? minutes : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function onLiveGraceChange(fn: () => void): () => void {
+  liveGraceListeners.add(fn);
+  return () => {
+    liveGraceListeners.delete(fn);
+  };
+}
+
+export function setLiveGraceMinutes(minutes: number): void {
+  try {
+    localStorage.setItem(LIVE_GRACE_KEY, String(minutes));
+  } catch {
+    /* a private window keeps the default, which is the same answer it gives */
+  }
+  liveGraceListeners.forEach((fn) => fn());
+}
+
 // How each foldable part of the transcript starts. "live" opens while the part
 // is still being written and folds once it is done; "failed" opens only a step
 // that failed; "changed" opens only what wrote a file. A block the reader opened

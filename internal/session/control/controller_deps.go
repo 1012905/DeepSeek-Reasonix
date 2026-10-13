@@ -201,3 +201,11 @@ func (c *Controller) publishPerProjectContext(opts Options) {
 // it opened. Host git reads the workspace through it rather than rediscovering
 // the repository from files the session's own commands may have written.
 func (c *Controller) WorkspaceRepo() gitcmd.Repo { return c.workspaceRepo }
+
+// Executor returns the underlying agent when present (nil for pure runners).
+func (c *Controller) Executor() *agent.Agent {
+	if c == nil {
+		return nil
+	}
+	return c.executor
+}

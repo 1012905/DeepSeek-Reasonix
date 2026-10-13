@@ -42,6 +42,9 @@ export interface TreeSession {
   // pane rather than opening a second writer for one file.
   runtimeId?: string;
   archived?: boolean;
+  // Set when Reasonix 1.x kept this transcript: it is read here and never
+  // written, so the row says which store it came from.
+  legacy?: boolean;
   // The kernel is the authority for pins.
   pinned?: boolean;
   // Unix ms of an automatic archive, absent for a manual one.
@@ -141,6 +144,7 @@ export interface HubPort extends SharePort {
   removeWorkspace(path: string): Promise<void>;
   /** Show a listed project's folder in the system file manager. */
   revealWorkspace(path: string): Promise<void>;
+  openWorkspace(path: string): Promise<void>;
   moveWorkspace(path: string, direction: -1 | 1): Promise<void>;
   removeSession(path: string): Promise<void>;
   archiveSession(path: string, archived: boolean): Promise<void>;
@@ -150,6 +154,7 @@ export interface HubPort extends SharePort {
   // gate: until then the kernel archives nothing on its own.
   syncPins(paths: string[]): Promise<void>;
   renameSession(path: string, title: string): Promise<void>;
+  autoNameSession(path: string): Promise<{ title: string }>;
   exportSession(path: string): Promise<{ name: string; content: string }>;
   importLegacySessions(path: string, workspace: string): Promise<LegacyImport>;
   // The host book with each link's state, or null where this kernel refuses
@@ -293,6 +298,11 @@ export class SseHub implements HubPort {
     if (why) throw new HttpError(0, why.error || "not shown", why, !!(why.code || why.error));
   }
 
+  async openWorkspace(path: string) {
+    const why = await host().openWorkspace(path);
+    if (why) throw new HttpError(0, why.error || "not opened", why, !!(why.code || why.error));
+  }
+
   async removeWorkspace(path: string) {
     await this.post<void>("/tree/workspaces/remove", { path });
   }
@@ -319,6 +329,10 @@ export class SseHub implements HubPort {
 
   async renameSession(path: string, title: string) {
     await this.post<void>("/tree/sessions/rename", { path, title });
+  }
+
+  autoNameSession(path: string) {
+    return this.post<{ title: string }>("/tree/sessions/auto-name", { path });
   }
 
   exportSession(path: string) {
@@ -507,6 +521,16 @@ export class SseHub implements HubPort {
 
   closeShare() {
     return this.post<ShareStatus>("/share/close", {});
+  }
+
+  async shareRemember() {
+    const res = await fetch("/share/remember", { credentials: "same-origin" });
+    if (!res.ok) await SseHub.fail("/share/remember", res);
+    return (await res.json()) as { remember: boolean };
+  }
+
+  setShareRemember(remember: boolean) {
+    return this.post<{ remember: boolean }>("/share/remember", { remember });
   }
 
   setSharePort(port: number) {

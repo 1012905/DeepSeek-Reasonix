@@ -23,7 +23,6 @@ const DECORATIVE: [string, string, string[]][] = [
   ["studio", ".agent-tx-hd .who", ["--label-agent"]],
   ["studio", '.chipmirror .skillchip[data-kind="subagent"]', ["--label-agent", "--label-agent-wash"]],
   ["studio", ".chipmirror .skillchip", ["--brand", "--brand-wash"]],
-  ["studio", ".studio-brand-accent", []],
   ["studio", ".studio-wallet > span", ["--brand"]],
   ["studio", ':root[data-theme="light"] .studio-wallet > span', ["--brand"]],
   ["studio", ".chrome .browser-action", ["--brand"]],

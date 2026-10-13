@@ -55,6 +55,17 @@
     "source": "executor"
    },
    {
+    "kind": "tool_dispatch",
+    "tool": {
+     "id": "call-write",
+     "name": "write_file",
+     "readOnly": false,
+     "refreshed": true,
+     "issuer": "model"
+    },
+    "source": "executor"
+   },
+   {
     "kind": "approval_request",
     "approval": {
      "id": "b1",
@@ -246,6 +257,17 @@
      "id": "call-write",
      "name": "write_file",
      "readOnly": false,
+     "issuer": "model"
+    },
+    "source": "executor"
+   },
+   {
+    "kind": "tool_dispatch",
+    "tool": {
+     "id": "call-write",
+     "name": "write_file",
+     "readOnly": false,
+     "refreshed": true,
      "issuer": "model"
     },
     "source": "executor"

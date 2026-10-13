@@ -329,7 +329,7 @@ func (b *builder) wireTools() error {
 		t.reg.Add(script.New())
 	}
 	b.wireMCP()
-	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession)
+	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession, opts.ComputerDriver)
 	b.timer.mark("mcp")
 
 	t.maxSteps = max(opts.MaxSteps, 0)
@@ -350,7 +350,7 @@ func (b *builder) wireTools() error {
 	t.hooks, t.hookRunner = loadHooks(opts, b.roots, root, b.shell, b.sink)
 
 	t.roles = roleWiring{cfg: cfg, roots: b.roots, resolver: b.providers.effective, extension: b.providers.extension,
-		proxy: b.proxy, sink: b.sink, gate: t.gate, reg: t.reg, keep: b.keep, hooks: t.hookRunner}
+		proxy: b.proxy, sink: b.sink, gate: t.gate, reg: t.reg, keep: b.keep, hooks: t.hookRunner, checkTargetAccess: t.env.targetAccessCheck()}
 	t.sub = newSubagentConfig(opts, cfg, b.model.entry, b.model.name, b.providers.effective, b.proxy, b.prompt.skillStore)
 	if t.sub.inheritedEffortDropped {
 		report(b.sink, event.Event{
@@ -364,6 +364,9 @@ func (b *builder) wireTools() error {
 		session: b.session, bashEnforced: env.bash.Enforce, extraRoots: b.workspaceExtraRoots()})
 	b.addIsolation()
 	registerSessionTools(t.reg, opts.Ablation, b.roots, b.session.dir, b.prompt.memory.Store)
+	if opts.NativeSurfaces {
+		t.reg.Add(agent.NewRenderSurfaceTool())
+	}
 
 	t.runners = skillRunners{readOnly: t.skillRun.runReadOnly, run: t.skillRun.run, profile: skillProfile(cfg, t.sub.inheritedFor)}
 	t.cmds = loadCommands(opts, root)
@@ -472,6 +475,7 @@ func (b *builder) executor() *agent.Agent {
 		ScreenExternalContent:   cfg.Agent.ScreenExternalContent,
 		MaxPerseverationRetries: perseverationRetries(cfg, entry),
 		Gate:                    t.gate,
+		CheckTargetAccess:       t.roles.checkTargetAccess,
 		Hooks:                   t.hookRunner,
 		Jobs:                    b.session.jobs,
 		// Reserving writes at the executor entry covers every writer, late MCP
@@ -482,6 +486,7 @@ func (b *builder) executor() *agent.Agent {
 		EvidenceSeal:                 t.env.evidenceSeal,
 		AgentPreset:                  b.model.preset,
 		DeliveryProfile:              b.model.delivery,
+		WaiveOwedChecks:              cfg.HostVerificationOff(),
 		Ablation:                     b.opts.Ablation,
 		WorkspaceLease:               b.session.lease,
 		CapabilityLedger:             t.caps.ledger,
@@ -673,7 +678,7 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		Memory:                  b.prompt.memory,
 		ProjectChecks:           b.prompt.projectChecks, ProjectSensitivePaths: b.prompt.sensitivePaths,
 	}
-	return finalizeBuildResult(b.roots, &BuildResult{Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
+	return finalizeBuildResult(b.roots, &BuildResult{ComputerDriver: b.opts.ComputerDriver, Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
 }
 
 // clock is the one place the system clock enters the assembly: a host supplies

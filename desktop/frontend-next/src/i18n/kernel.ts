@@ -19,9 +19,19 @@ export const PROVIDER_EDIT_DISABLED = "provider.editing_disabled";
 // A paired device answers this for every account route, votes included.
 export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 // The write landed and only applying it to the open conversation did not.
-export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running"];
+export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running", "context.window_after_this_turn"];
+
+/** Whether a refused save had already written the setting: it holds, but the running session has not taken it. */
+export const savedNotApplied = (e: unknown): boolean => e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
 
 const SAID: Record<string, string> = {
+  "surface.value_invalid": "填写内容不符合字段要求，请检查后重试",
+  "surface.expired": "界面已失效，请等待新的请求",
+  "surface.schema_invalid": "界面描述不符合约定",
+  "surface.spec_version_unsupported": "界面版本暂不支持",
+  "surface.limit_exceeded": "界面内容超过限制",
+  "surface.component_unknown": "界面包含不支持的组件",
+  "surface.replay_incomplete": "扩展界面恢复失败",
   "shell.destructive_target": "递归删除目标受保护或超出授权范围；请使用工作区或授权目录内的字面路径",
   "shell.analysis_unknown": "无法确定递归删除范围；请使用字面命令名、路径和解释器内容",
   "shell.delete_sequence": "请拆分命令；递归删除前只能使用字面路径切换目录，不能依赖变量赋值",
@@ -33,6 +43,12 @@ const SAID: Record<string, string> = {
   "shell.command_line_too_long": "命令超过主机长度限制；请拆分命令或从文件读取长文本",
   "tool.arguments_invalid": "参数不符合该工具的约定，本次调用没有执行；请按工具说明补全或更正参数后重试",
   "workspace.write_conflict": "另一个会话持有所需的写入范围。本次操作未执行；请结束当前轮次，待该范围释放后再重试",
+  "session.title_empty": "请输入聊天标题",
+  "session.title_no_message": "该会话还没有可用于命名的用户消息",
+  "session.title_unavailable": "未配置可用于自动命名的模型，请先配置模型",
+  "session.title_failed": "自动命名失败，原标题未更改，请重试",
+  "session.title_save_failed": "会话标题保存失败，请重试",
+
   // ── 忙：不是出错，是「现在不行」 ─────────────────────────────────
   "plan.decision_stale": "该决定已不符合当前状态：计划在你回答前已发生变更",
   "busy.switch_model": "当前回合正在进行，请先停止或等它结束再切换模型",
@@ -48,6 +64,11 @@ const SAID: Record<string, string> = {
   "workspace.file_missing": "找不到该文件，它可能已被移动或删除",
   "workspace.file_failed": "文件操作失败，请重试",
   "workspace.path_outside_tree": "该路径不在当前工作区内",
+  "workspace.target_access_unconfigured": "未配置文件访问策略，无法执行此文件操作。",
+  "workspace.read_forbidden": "无法读取目标文件：没有权限访问。",
+  "workspace.read_outside_scope": "无法读取目标文件：没有权限访问。",
+  "workspace.overwrite_read_forbidden": "无法覆盖目标文件：没有权限读取原文件内容。",
+  "workspace.overwrite_read_outside_scope": "无法覆盖目标文件：没有权限读取原文件内容。",
   "workspace.write_outside_scope": "写入目标不在工作区可写范围内。这是文件工具的写入范围，不是操作系统沙箱；要允许写入，请在 设置 → 沙箱 → 额外可写目录 中添加目标文件夹",
   "workspace.network_path_outside_scope": "该路径指向网络上的另一台机器，不在当前工作区内。文件工具只按路径写法拒绝它，不会去访问；工作区本身在网络共享上时，其下的路径可用",
   "workspace.files_failed": "无法读取工作区文件列表",
@@ -193,12 +214,14 @@ const SAID: Record<string, string> = {
   "share.port_in_use": "端口 {port} 已被其他程序占用，请换一个端口，或清空后让系统自动选择。",
   "share.port_out_of_range": "端口需要在 {min}–{max} 之间，或清空后让系统自动选择。",
   "share.port_save_failed": "无法保存端口设置：{error}",
+  "share.remember_save_failed": "无法保存配对记忆设置：{error}",
   "share.device_unknown": "没有这台已配对的设备，可能已被移除。",
   "picker.unsupported": "这个系统没有可用的文件夹选择框，请直接填写路径。",
   "picker.failed": "打不开文件夹选择框：{error}",
   "provider.bad_key_slot": "名称「{name}」不能用来存放密钥：密钥槽位由名称推导，而它不能以数字开头。改一个以字母开头的名称即可，密钥本身没有问题。",
   "page.not_built": "这个内核没有带界面，只提供接口",
   "provider.key_missing": "当前模型还没有 API key，请先在设置里添加",
+  "provider.none_configured": "还没有可用的模型服务，请先添加一个",
   "provider.key_required": "请填写 API key",
   "provider.key_too_large": "该 key 长度异常，可能粘贴了错误内容",
   "provider.setup_done": "已连接，无需重复配置",
@@ -256,7 +279,10 @@ const SAID: Record<string, string> = {
   "conversation_branch.failed": "分支失败，请重试",
 
   "commit.no_repository": "这个工作区不是 git 仓库，无法提交",
-  "commit.nothing_staged": "暂存区是空的，先用 git add 暂存要提交的文件",
+  "commit.nothing_staged": "暂存区是空的：先在改动列表里勾选要提交的文件，或点「暂存全部」",
+  "stage.unknown_path": "这个文件已经不在改动列表里了，请刷新后再试",
+  "stage.bad_request": "暂存请求无法识别",
+  "stage.failed": "暂存失败，请重试",
   "commit.staged_changed": "暂存区在你确认之后又变了，请重新起草",
   "commit.secrets_staged": "暂存的内容里有疑似密钥的文件，需要你确认后才能提交",
   "commit.empty_message": "提交说明是空的",

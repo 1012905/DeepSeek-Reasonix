@@ -24,7 +24,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 	if err != nil {
 		return sessionPage{Sessions: []treeSession{}}
 	}
-	titles := h.titleCacheFor(dir)
+	titles := h.titleCacheFor(dir).snapshot()
 	byID := make(map[string]sessionstore.SessionInfo, len(listed))
 	for _, si := range listed {
 		byID[sessionstore.BranchID(si.Path)] = si
@@ -81,7 +81,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 			lead[recoveryLineageRoot(si, byID)] = len(out)
 		}
 		out = append(out, treeSession{
-			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread,
+			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread, Legacy: sessionstore.IsForeignSessionLog(si.Path),
 		})
 		decorateArchiveState(&out[len(out)-1], si.Path)
 	}
@@ -95,16 +95,13 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 // rowTitle reads a row's title once, on first use: a name the user typed
 // outranks the generated one, and without that a rename would be written to the
 // sidecar and never show up.
-func rowTitle(titles *titleCache, si sessionstore.SessionInfo, name string) func() string {
+func rowTitle(titles titleSnapshot, si sessionstore.SessionInfo, name string) func() string {
 	var title string
 	done := false
 	return func() string {
 		if !done {
 			done = true
-			title = strings.TrimSpace(si.CustomTitle)
-			if title == "" {
-				title, _ = titles.get(name+".jsonl", titleSource(si.Preview), sessionstore.SessionContentModTime(si.Path).UnixNano())
-			}
+			title = titles.display(name+".jsonl", titleSource(si.Preview), sessionstore.SessionContentModTime(si.Path).UnixNano(), si.CustomTitle)
 			if title == "" {
 				title = previewTitle(si.Preview)
 			}

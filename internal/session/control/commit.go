@@ -37,6 +37,25 @@ type CommitResult struct {
 	Subject string `json:"subject"`
 }
 
+// StageRequest names the changes to move into the index, or out of it when
+// Unstage is set. All means every change the workspace lists.
+type StageRequest struct {
+	Paths   []string `json:"paths,omitempty"`
+	All     bool     `json:"all,omitempty"`
+	Unstage bool     `json:"unstage,omitempty"`
+}
+
+// StageChanges stages or unstages the named changes. It shares the commit lock,
+// so the index never moves under a commit in flight.
+func (c *Controller) StageChanges(ctx context.Context, req StageRequest) error {
+	c.commitMu.Lock()
+	defer c.commitMu.Unlock()
+	if req.Unstage {
+		return gitcommit.Unstage(ctx, c.workspaceRepo, req.Paths, req.All)
+	}
+	return gitcommit.Stage(ctx, c.workspaceRepo, req.Paths, req.All)
+}
+
 // ProposeCommit reads the staged changes and has the session's model propose a
 // message. Nothing is staged or committed: the person edits the text first.
 func (c *Controller) ProposeCommit(ctx context.Context) (CommitProposal, error) {

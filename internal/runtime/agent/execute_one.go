@@ -7,12 +7,12 @@ import (
 	"reasonix/internal/runtime/usecap"
 	"strings"
 
+	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/planmode"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/safety/permission"
-	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/tools/shellrun"
 )
 
@@ -25,6 +25,7 @@ const CodeMCPToolDisabled = tool.CodeMCPToolDisabled
 // Package-private; not shared across goroutines beyond the single executeOne
 // invocation that owns it.
 type toolCallPlan struct {
+	preview       *event.FileDiff
 	call          provider.ToolCall
 	tool          tool.Tool
 	canonicalName string
@@ -103,7 +104,7 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	defer func() { out.todoEcho = a.todoWriteEchoes(call, todosBefore, out.errMsg) }()
 	defer func() {
 		if plan.mutationObserved && !plan.mutationAfterDone {
-			a.observeAfterMutation(plan)
+			out.checkpointErr = a.observeAfterMutation(plan)
 		}
 		if plan.releaseMutationWrite != nil {
 			plan.releaseMutationWrite()
@@ -124,6 +125,7 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 		out.resolvedProfile = delegationProfile(plan.resolvedMeta.Target, plan.resolvedMeta.Args)
 	}()
 	defer finalizeWorkspaceMutationOutcome(&out, plan)
+	defer func() { out.preview = plan.preview }()
 
 	if blocked, early := a.parseToolCall(ctx, plan); early {
 		return blocked
@@ -139,7 +141,9 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	}
 	// Read after tool.before: an extension may have substituted the call, and the
 	// batch scan judged the one the model wrote.
-	defer func() { out.endsRound = out.endsRound || tool.IsDecisionBarrier(plan.tool) }()
+	defer func() {
+		out.endsRound = out.endsRound || tool.IsDecisionBarrierCall(plan.tool, json.RawMessage(plan.call.Arguments)) || tool.IsDecisionBarrier(plan.execTool)
+	}()
 	if blocked, early := a.refuseNetworkToolPaths(plan); early {
 		return blocked
 	}
@@ -221,6 +225,10 @@ func (a *Agent) resolveToolPolicy(ctx context.Context, turn *turnRuntime, plan *
 	if blocked, early := a.applyContextualToolGate(ctx, plan); early {
 		return blocked, true
 	}
+	if blocked, early := a.applyTargetAccess(ctx, plan); early {
+		return blocked, true
+	}
+	a.previewForApproval(ctx, plan)
 	if blocked, early := a.applyDeliveryPolicyGates(ctx, turn, plan); early {
 		return blocked, true
 	}
@@ -378,7 +386,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 			// A connected mcp-server call completes during resolution by listing
 			// its live tools, so account for that successful call here too.
 			if rc.ProxyAction == "call" && !rc.Unavailable {
-				a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), nil)
+				a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), nil, nil)
 			}
 			result := rc.Result
 			if a.task.ledger != nil {
@@ -549,15 +557,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	}
 	// Resolve the concrete execution target before hooks. A proxy may carry a
 	// different target/name/argument set than the provider-visible call.
-	plan.runTool = plan.execTool
-	plan.runArgs = plan.execArgs
-	if plan.resolved.Target != nil {
-		plan.runTool = plan.resolved.Target
-		plan.runArgs = plan.resolved.Args
-		if len(plan.runArgs) == 0 {
-			plan.runArgs = json.RawMessage(`{}`)
-		}
-	}
+	plan.runTool, plan.runArgs = plan.executionTarget()
 	// Hooks can write beyond a tool's paths, so permission precedes lease
 	// acquisition and hooks follow it under a conservative workspace claim.
 	if plan.mutates && a.svc.workspaceLease != nil {
@@ -591,37 +591,19 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Acquire the checkpoint barrier before preimage capture and any hook. It is
 	// held through post hooks and AfterMutation so rewind cannot interleave with
 	// writer-side user code.
-	if !plan.readOnly && a.svc.mutationObserver != nil && a.svc.mutationObserver.Store() != nil {
-		barrier := a.svc.mutationObserver.Store().Barrier()
-		if err := barrier.EnterWrite(); err != nil {
-			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: mutation barrier unavailable"}, true
+	if !plan.readOnly && a.svc.mutationObserver != nil {
+		release, err := a.svc.mutationObserver.BeginWrite()
+		if err != nil {
+			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: checkpoint write preparation failed"}, true
 		}
-		plan.releaseMutationWrite = barrier.ExitWrite
+		plan.releaseMutationWrite = release
 	}
-	// Checkpoint the file this writer is about to change before PreToolUse.
-	// A hook may mutate and then block the call, so the deferred AfterMutation
-	// still finalizes the fingerprint on every return path. Built-in
-	// Previewers get precise paths (complete coverage). Bash / opaque MCP
-	// writers record explicit coverage gaps instead of guessing targets.
+	if blocked, early := a.preToolUse(ctx, plan); early {
+		return blocked, true
+	}
 	if !plan.readOnly {
 		a.observeBeforeMutation(ctx, plan)
 		plan.mutationObserved = plan.mutationPath != "" || len(plan.declaredPaths) > 0
-		if toolHooksMayMutateWorkspace(a.svc.hooks) && a.svc.mutationObserver != nil {
-			a.svc.mutationObserver.RecordGap(checkpoint.CoverageGap{Reason: checkpoint.GapHookWrite, Tool: plan.evidenceName, Detail: "tool hook may write paths that are not declared by the tool"})
-		}
-	}
-	// Proxy tools fire hooks against the real MCP target name and arguments.
-	if a.svc.hooks != nil {
-		if block, msg := a.svc.hooks.PreToolUse(ctx, plan.permName, plan.permArgs); block {
-			if msg == "" {
-				msg = "blocked by a PreToolUse hook"
-			}
-			return toolOutcome{
-				output:  "blocked: " + msg,
-				blocked: true,
-				errMsg:  "blocked by PreToolUse hook",
-			}, true
-		}
 	}
 	plan.cctx = a.toolCallContext(ctx, plan)
 	if plan.mutates {
@@ -737,11 +719,11 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	a.recordToolReceipts(ctx, plan, result, execution, err)
 	result = a.withObligationNotice(result, owedBefore, execution, readOnly)
 	// Track skill/capability outcomes for Delivery gates.
-	a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), err)
+	a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), runTool, err)
 	a.notifyToolHooks(ctx, permName, permArgs, result, err)
 	// Always re-read after post hooks — partial writes and hook side effects can
 	// change the previewed path even when the concrete tool returned an error.
-	a.observeAfterMutation(plan)
+	checkpointErr := a.observeAfterMutation(plan)
 	plan.mutationAfterDone = true
 	if a.svc.recoveryGate != nil {
 		a.observeRecoveryResult(ctx, evidenceName, evidenceArgs, readOnly, mutates, result, err, false, false, recoveryGen)
@@ -760,7 +742,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
 			output: body, images: images, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
-			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err),
+			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
 		if truncMsg != "" {
 			out.rawOutput = rawErr
@@ -772,7 +754,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
 		output: body, images: images, bound: bound, truncMsg: truncMsg,
-		execution: execution, provenance: plan.provenanceOf(runTool, runArgs),
+		execution: execution, provenance: plan.provenanceOf(runTool, runArgs), checkpointErr: checkpointErr,
 	}
 	if truncMsg != "" {
 		out.rawOutput = result

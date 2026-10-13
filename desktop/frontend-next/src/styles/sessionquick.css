@@ -25,3 +25,11 @@
   .rail .sessrow-context[data-unread] > .sesscopies { margin-inline-end: 8px; }
   .rail .sessrow-context[data-unread] > .sesstitle { padding-inline-end: 9px; }
 }
+.rail .sesslegacy {
+  flex: none; display: inline-flex; align-items: center; padding: 0 5px; height: 15px;
+  border: 1px solid var(--border); border-radius: var(--r-xs);
+  color: var(--ghost); cursor: default;
+  font: var(--w-reg) var(--fs-micro) var(--ui);
+}
+.rail .sessrow:hover > .sesslegacy,
+.rail .sessrow:focus-within > .sesslegacy { display: none; }

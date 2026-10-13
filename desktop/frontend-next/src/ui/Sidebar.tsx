@@ -1,6 +1,7 @@
 import { FeedbackBadge, feedbackEntryTab } from "./feedbackentry";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
+import logoWordmark from "../assets/logo-wordmark.svg";
 import type { AccountState } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
@@ -32,6 +33,7 @@ interface Props {
   // decides it from the focused pane, so it arrives rather than being derived.
   activeWorkspace: TreeWorkspace | undefined;
   liveIds: (ids: string[]) => string[];
+  listedIds?: (ids: string[]) => string[];
   // Pins outlive this column — archiving a session drops one — so the set is the
   // window's and only the toggle comes down here.
   pinned: Set<string>;
@@ -51,7 +53,7 @@ interface Props {
   onClosePanes: (ids: string[]) => Promise<void>;
   onPause: (runtimeId: string) => void;
   onArchive: (path: string, archived: boolean, runtimeId?: string) => Promise<void>;
-  onRename: (path: string, title: string) => void;
+  onRename: (path: string, title: string, mode?: "inline" | "dialog") => void;
   onCollapse: () => void;
   account: AccountState | null;
   accountUnread: string;
@@ -80,6 +82,7 @@ export function Sidebar({
   active,
   activeWorkspace,
   liveIds,
+  listedIds = liveIds,
   pinned,
   onPin,
   remotes,
@@ -178,7 +181,7 @@ export function Sidebar({
     0,
   );
   const archivedCount = tree.reduce((n, ws) => n + (ws.archived ?? ws.sessions.filter((session) => session.archived).length), 0);
-  const liveCount = liveIds(runtimes.map((rt) => rt.id)).length;
+  const liveCount = listedIds(runtimes.map((rt) => rt.id)).length;
 
   const onFold = (root: string, shut: boolean) =>
     setFolded((prev) => {
@@ -216,10 +219,9 @@ export function Sidebar({
       <div className="railscroll">
       <div className="studio-rail-head">
         <div className="studio-brand" aria-label="Reasonix Studio">
-          <span className="studio-brand-mark" aria-hidden="true"><StudioIcon name="brand" /></span>
-          <span className="studio-brand-word" aria-hidden="true">
-            <b>reasoni<span className="studio-brand-accent">x</span></b>
-            <small>studio</small>
+          <span className="studio-brand-lockup" aria-hidden="true">
+            <img className="studio-brand-logo" src={logoWordmark} alt="" draggable={false} />
+            <small className="studio-brand-sub">studio</small>
           </span>
         </div>
         <button
@@ -242,10 +244,10 @@ export function Sidebar({
         <div className="studio-section-label studio-session-label"><span>{t("会话")}</span></div>
         <div className="studio-session-filters" role="group" aria-label={t("会话范围")}>
           <div className="studio-session-segments">
-            <button data-action="session.filter" data-value="all" aria-pressed={railScope === "all"} onClick={() => setRailScope("all")}><span>{t("全部")}</span><b>{sessionCount}</b></button>
-            <button data-action="session.filter" data-value="live" aria-pressed={railScope === "live"} onClick={() => setRailScope("live")}><span>{t("进行中")}</span><b>{liveCount}</b></button>
-            <button data-action="session.filter" data-value="pinned" aria-pressed={railScope === "pinned"} onClick={() => setRailScope("pinned")}><span>{t("置顶")}</span><b>{pinned.size}</b></button>
-            <button data-action="session.filter" data-value="archived" aria-pressed={railScope === "archived"} onClick={() => setRailScope("archived")}><span>{t("归档")}</span><b>{archivedCount}</b></button>
+            <button data-action="session.filter" data-value="all" aria-pressed={railScope === "all"} onClick={() => setRailScope("all")}><span>{t("全部")}</span>{sessionCount > 0 && <b>{sessionCount}</b>}</button>
+            <button data-action="session.filter" data-value="live" aria-pressed={railScope === "live"} onClick={() => setRailScope("live")}><span>{t("进行中")}</span>{liveCount > 0 && <b>{liveCount}</b>}</button>
+            <button data-action="session.filter" data-value="pinned" aria-pressed={railScope === "pinned"} onClick={() => setRailScope("pinned")}><span>{t("置顶")}</span>{pinned.size > 0 && <b>{pinned.size}</b>}</button>
+            <button data-action="session.filter" data-value="archived" aria-pressed={railScope === "archived"} onClick={() => setRailScope("archived")}><span>{t("归档")}</span>{archivedCount > 0 && <b>{archivedCount}</b>}</button>
           </div>
           <button className="studio-filter-search" data-action="workspace.search" onClick={() => document.querySelector<HTMLInputElement>(".wsfind input")?.focus()} aria-label={t("按名称筛选会话")}><StudioIcon name="search" /></button>
         </div>
@@ -266,6 +268,7 @@ export function Sidebar({
         onFocus={onFocusPane}
         onClose={onClosePanes}
         liveIds={liveIds}
+        listedIds={listedIds}
         runs={runs}
         scope={railScope}
         pinned={pinned}

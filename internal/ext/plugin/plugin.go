@@ -1381,17 +1381,17 @@ func (c *Client) listToolsRawSettled(ctx context.Context) ([]mcpTool, error) {
 	return out, nil
 }
 
-func validateMCPToolNames(tools []mcpTool) error {
-	seen := make(map[string]bool, len(tools))
+func validateMCPToolNames(server, stripRawPrefix string, tools []mcpTool) error {
+	seen := make(map[string]string, len(tools))
 	for _, candidate := range tools {
-		name := strings.TrimSpace(candidate.Name)
-		if name == "" {
-			return fmt.Errorf("tools/list returned an empty tool name")
+		if strings.TrimSpace(candidate.Name) == "" {
+			return fmt.Errorf("%w: tools/list returned an empty tool name", ErrAmbiguousToolCatalog)
 		}
-		if seen[candidate.Name] {
-			return fmt.Errorf("tools/list returned duplicate tool name %q", candidate.Name)
+		name := toolName(server, strings.TrimPrefix(candidate.Name, stripRawPrefix))
+		if previous, ok := seen[name]; ok {
+			return fmt.Errorf("%w: tools/list names %q and %q share model-visible name %q", ErrAmbiguousToolCatalog, previous, candidate.Name, name)
 		}
-		seen[candidate.Name] = true
+		seen[name] = candidate.Name
 	}
 	return nil
 }
@@ -1423,7 +1423,7 @@ func (c *Client) cachedTools() ([]tool.Tool, bool) {
 // "mcp__<server>__<tool>". The registry separately resolves unique portable
 // and Claude plugin-qualified references without exposing duplicate schemas.
 func toolName(server, raw string) string {
-	return ToolPrefix(server) + normalizeName(raw)
+	return boundedToolName(ToolPrefix(server), normalizeName(raw))
 }
 
 // ToolPrefix is the model-visible namespace prefix for every tool from server.

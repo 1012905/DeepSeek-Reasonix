@@ -65,6 +65,8 @@ type Options struct {
 	RequireVisibleFinal bool
 	// Gate is the per-call permission gate. nil disables gating.
 	Gate Gate
+	// CheckTargetAccess applies workspace path policy before hooks or previews.
+	CheckTargetAccess tool.TargetAccessCheck
 	// ReadOnlyExecution enables a permanent host-side read-only boundary for
 	// planner and research agents. It is intentionally independent of Plan mode
 	// so a stale collaboration flag cannot authorize a dynamic writer target.
@@ -158,6 +160,11 @@ type Options struct {
 	// Deprecated: prefer AgentPreset + turn TaskPolicy. Still honored when
 	// AgentPreset is empty for one compatibility version of direct constructors.
 	DeliveryProfile bool
+
+	// WaiveOwedChecks is the user's choice to drop the check, review and
+	// sign-off a turn that changed files owes before it may finish. It never
+	// comes from a project file.
+	WaiveOwedChecks bool
 
 	// AgentPreset is the session role setting (balanced|delivery). Empty
 	// falls back to balanced unless DeliveryProfile is true (then delivery).

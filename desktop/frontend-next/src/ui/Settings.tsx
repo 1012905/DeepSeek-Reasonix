@@ -2,7 +2,6 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
-import { HttpError } from "../port/port";
 import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
 import { useSettingsSearch } from "./useSettingsSearch";
@@ -21,7 +20,7 @@ import { ExtTabs, MarketGroup } from "./Market";
 import { InstalledLocation } from "./InstalledLocation";
 import { Switch } from "./Switch";
 import { ServerRow } from "./ServerRow";
-import { SkillRow } from "./SkillRow";
+import { SkillGroups } from "./SkillRow";
 import { Hooks } from "./Hooks";
 import { Network } from "./Network";
 import { Shell as ShellPicker } from "./Shell";
@@ -52,7 +51,7 @@ import { UsageSettings } from "./UsageSettings";
 import { Storage } from "./Storage";
 import { Appearance, SCHEMES } from "./Appearance";
 import { ScopeBar } from "./CapabilityScope";
-import { SAVED_NOT_APPLIED, reason } from "../i18n/kernel";
+import { savedNotApplied, reason } from "../i18n/kernel";
 import { SettingsHeading } from "./SettingsHeading";
 import { APPROVALS, approvalName, approvalNote } from "./approvals";
 
@@ -242,7 +241,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
       await fn();
       onChanged();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -715,9 +714,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                       : "模型自动发现已关闭：仅显式指定的技能会运行。开关立即生效，自下一条消息起，无需新建会话。",
                   )}
                 >
-                  {looseSkills.map((sk) => (
-                    <SkillRow key={sk.name} sk={sk} implicit={implicit} port={port} onDone={afterExtChange} root={scopeAt} onFailed={setFailed} />
-                  ))}
+                  <SkillGroups skills={looseSkills} implicit={implicit} port={port} onDone={afterExtChange} root={scopeAt} onFailed={setFailed} />
                   {extErrors.skills && <div className="rnote" data-s="bad" role="alert">{extErrors.skills} <button className="act" data-action="extensions.refresh" disabled={extRefreshing} onClick={reloadExt}>{t("重试")}</button></div>}
                   {looseSkills.length === 0 && !extRefreshing && !extErrors.skills && <div className="empty">{t("当前工作目录下没有技能。")}</div>}
                 </Group>
