@@ -139,7 +139,7 @@ type Store struct {
 	barrier       *MutationBarrier
 	activeWriters []ActiveWriter
 	plans         map[string]preparedPlan
-	lastUndo      *TransactionManifest
+	undo          undoState
 	undoChanged   func()
 	sessionID     string
 	mutationSeq   int64
@@ -225,16 +225,6 @@ func (s *Store) activeWriterConflicts() []RewindConflict {
 	return conflicts
 }
 
-// InvalidateUndo clears the last undo slot (new turn / new mutation / new rewind).
-func (s *Store) InvalidateUndo() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.unlockUndoChange(s.lastUndo)
-	s.lastUndo = nil
-}
-
 func (s *Store) load() {
 	seen := map[int]bool{}
 	loadDir := func(dir string, expired bool) {
@@ -295,9 +285,12 @@ func (s *Store) load() {
 
 // Begin opens a checkpoint for a new user turn, finalizing the previous one. The
 // prompt labels it in the picker; msgIndex is the conversation-rewind boundary.
-func (s *Store) Begin(turn int, prompt string, msgIndex int) {
+func (s *Store) Begin(turn int, prompt string, msgIndex int) error {
 	s.mu.Lock()
-	defer s.unlockUndoChange(s.lastUndo)
+	defer s.unlockUndoChange(s.undoOfferLocked())
+	if err := s.invalidateUndoLocked(); err != nil {
+		return err
+	}
 	if s.cur != nil {
 		s.recomputeCoverageLocked(s.cur)
 		s.done = append(s.done, s.cur)
@@ -312,9 +305,9 @@ func (s *Store) Begin(turn int, prompt string, msgIndex int) {
 		Coverage:      CoverageNone,
 	}
 	s.seen = map[string]bool{}
-	s.lastUndo = nil // new turn invalidates undo
 	s.persistBestEffort(s.cur)
 	s.gcLocked()
+	return nil
 }
 
 // Bounds returns turn → MsgIndex over all checkpoints (persisted + current), so
@@ -472,11 +465,11 @@ func (s *Store) CaptureBefore(path string, opts CaptureBeforeOpts) {
 	s.persistBestEffort(s.cur)
 }
 
-// CaptureAfter records the after fingerprint for a path already in the current
-// (or any) checkpoint that owns it.
-func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) {
+// CaptureAfter records completed writes; undo must be retired before writing.
+// Recording failures do not change whether the tool executed.
+func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) error {
 	if path == "" {
-		return
+		return nil
 	}
 	pathKey := NormalizeRelPath(s.root, path)
 	fp, gap, err := CapturePath(path, CaptureOptions{
@@ -486,10 +479,12 @@ func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) {
 	if gap != nil {
 		s.RecordGap(*gap)
 	}
-	_ = err
+	if err != nil {
+		return err
+	}
 
 	s.mu.Lock()
-	defer s.unlockUndoChange(s.lastUndo)
+	defer s.unlockUndoChange(s.undoOfferLocked())
 	s.mutationSeq = opts.Seq
 	if s.cur != nil {
 		s.cur.LastMutationSeq = opts.Seq
@@ -509,9 +504,7 @@ func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) {
 		}
 		if updated {
 			s.recomputeCoverageLocked(s.cur)
-			s.persistBestEffort(s.cur)
-			s.lastUndo = nil // mutation invalidates undo
-			return
+			return s.persist(s.cur)
 		}
 	}
 	// Path might only appear in earlier turns; still record after on earliest?
@@ -527,11 +520,10 @@ func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) {
 			c.Files[j].AfterExisted = &existed
 			c.Files[j].AfterSHA256 = fp.SHA256
 			c.Files[j].AfterMode = fp.Mode
-			s.persistBestEffort(c)
-			s.lastUndo = nil
-			return
+			return s.persist(c)
 		}
 	}
+	return nil
 }
 
 // RecordGap appends a coverage gap to the current checkpoint.
@@ -639,7 +631,7 @@ func (s *Store) persistBestEffort(c *Checkpoint) {
 // gcLocked drops file payloads for old checkpoints beyond retainN / blobQuota.
 // Caller holds s.mu.
 func (s *Store) gcLocked() {
-	if s.blobs == nil || s.retainN <= 0 {
+	if s.blobs == nil || s.retainN <= 0 || s.undo.pending != nil {
 		return
 	}
 	// Collect recoverable checkpoints (have file payloads) oldest first.
@@ -693,7 +685,7 @@ func (s *Store) gcLocked() {
 }
 
 // pruneBlobsLocked performs mark-and-sweep after checkpoint metadata has been
-// persisted. Transaction manifests and the current undo slot also keep their
+// persisted. Transaction manifests and pending/available undo state keep their
 // forward/restore payloads live. Caller holds s.mu.
 func (s *Store) pruneBlobsLocked() {
 	if s.blobs == nil {
@@ -710,8 +702,11 @@ func (s *Store) pruneBlobsLocked() {
 			mark(f.BlobRef)
 		}
 	}
-	if s.lastUndo != nil {
-		for _, target := range s.lastUndo.Targets {
+	for _, tx := range []*TransactionManifest{s.undo.current, s.undo.pending} {
+		if tx == nil {
+			continue
+		}
+		for _, target := range tx.Targets {
 			mark(target.RestoreBlob)
 			mark(target.ForwardBlob)
 		}

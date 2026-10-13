@@ -8,6 +8,7 @@ package event
 // wire-stable: never rename or reuse one once shipped.
 const (
 	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
+	NoticeCodeCheckpointRecordingFailed                         = "checkpoint_recording_failed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
