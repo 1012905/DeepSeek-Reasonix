@@ -286,3 +286,50 @@ func TestRPMRidesBesideTheDebWithoutMovingItsKey(t *testing.T) {
 		t.Errorf("downloads = %v, want only the rpm added", after.Downloads)
 	}
 }
+
+// A release that ships Linux for both architectures keys each package under its
+// own platform: an arm64 client must never be handed the amd64 .deb, and adding
+// the second architecture must not move the first one's entries.
+func TestLinuxArm64PackagesAreKeyedBesideAmd64(t *testing.T) {
+	dir := t.TempDir()
+	names := []string{
+		"ReasonixStudio-linux-amd64.deb", "ReasonixStudio-linux-amd64.rpm",
+		"ReasonixStudio-linux-arm64.deb", "ReasonixStudio-linux-arm64.rpm",
+	}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GITHUB_REPOSITORY", "esengine/DeepSeek-Reasonix")
+	if err := run(dir, "v0.1.0", "studio-v0.1.0", "", true); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "latest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m update.Manifest
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	for key, file := range map[string]string{
+		"linux-amd64":     "ReasonixStudio-linux-amd64.deb",
+		"linux-amd64-rpm": "ReasonixStudio-linux-amd64.rpm",
+		"linux-arm64":     "ReasonixStudio-linux-arm64.deb",
+		"linux-arm64-rpm": "ReasonixStudio-linux-arm64.rpm",
+	} {
+		got, ok := m.NativePackages[key]
+		if !ok || !strings.HasSuffix(got.URL, "/"+file) || got.Sig != got.URL+".minisig" {
+			t.Errorf("native_packages[%s] = %+v, want the signed %s", key, got, file)
+		}
+	}
+	if len(m.NativePackages) != 4 {
+		t.Errorf("native packages = %v, want the four Linux packages", m.NativePackages)
+	}
+	for _, name := range names {
+		if _, ok := m.Downloads[name]; !ok {
+			t.Errorf("downloads must offer %s to a person", name)
+		}
+	}
+}
