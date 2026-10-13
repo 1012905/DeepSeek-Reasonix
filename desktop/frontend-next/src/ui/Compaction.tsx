@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
-import { reason, SAVED_NOT_APPLIED } from "../i18n/kernel";
-import { HttpError } from "../port/http_error";
+import { reason, savedNotApplied } from "../i18n/kernel";
+import { SaveNote } from "./SaveNote";
 import type { AgentPort, CompactionSettings } from "../port/port";
 import { foldModeOf, foldModeValue, type FoldMode as Mode } from "./foldbound";
 
@@ -51,7 +51,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
       setChoice(null);
       onChanged();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       sent.current = null;
       setBusy(false);
@@ -206,12 +206,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
             </span>
             <span className="sc">{off ? "—" : tokens(capacity)}</span>
       </div>
-      {note && (
-        <div className="find" data-lvl={note.unapplied ? "warn" : "err"} role={note.unapplied ? "status" : "alert"}>
-          <span className="t">{t(note.unapplied ? "已保存，尚未生效" : "操作未完成")}</span>
-          <span className="why">{note.text}</span>
-        </div>
-      )}
+      <SaveNote note={note} />
     </>
   );
 }

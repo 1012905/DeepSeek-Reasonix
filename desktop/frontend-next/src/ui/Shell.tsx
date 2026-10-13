@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { t } from "../i18n";
 import type { AgentPort, ShellOption, ShellSettings } from "../port/port";
-import { reason, SAVED_NOT_APPLIED } from "../i18n/kernel";
-import { HttpError } from "../port/http_error";
+import { reason, savedNotApplied } from "../i18n/kernel";
+import { SaveNote } from "./SaveNote";
 
 // The product name, not the executable: "powershell.exe" is what the file is
 // called, "Windows PowerShell" is what the user installed.
@@ -60,7 +60,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
       setCustom(next.path ?? "");
       onChanged?.();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -147,12 +147,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
         </div>
       </details>
 
-      {note && (
-        <div className="find" data-lvl={note.unapplied ? "warn" : "err"} role={note.unapplied ? "status" : "alert"}>
-          <span className="t">{t(note.unapplied ? "已保存，尚未生效" : "操作未完成")}</span>
-          <span className="why">{note.text}</span>
-        </div>
-      )}
+      <SaveNote note={note} />
     </div>
   );
 }
