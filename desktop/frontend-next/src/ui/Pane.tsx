@@ -321,7 +321,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   useEffect(() => {
     if (!ready && !roundTrips && !folds) return;
     port.context().then(setCtx).catch(() => setCtx(null));
-  }, [ready, port, roundTrips, folds, status?.sessionPath, running]);
+  }, [ready, port, roundTrips, folds, status?.sessionPath, running, pulse]);
 
   // The sidebar has to hear about this pane's session twice: when the first
   // turn mints the file (before that there is no row to show) and when the turn
