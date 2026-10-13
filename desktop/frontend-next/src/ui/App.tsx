@@ -23,6 +23,7 @@ import { StopHint } from "./StopHint";
 import { folded as roomGaveUp, onRoomWidth } from "./viewport";
 import { useFoldAway } from "./foldaway";
 import { useDrawerCloses } from "./drawer";
+import { RenameSession } from "./RenameSession";
 import { RemoteAsk } from "./RemoteAsk";
 import { useFeedbackUnread } from "./useFeedbackUnread";
 import { Feedback, type FeedbackTab } from "./Feedback";
@@ -110,6 +111,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [findPulse, setFindPulse] = useState(0);
   const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
+  const [renaming, setRenaming] = useState<{ path: string; title: string } | null>(null);
   // false = closed, true = open at its last section, a string = open there.
   const [settings, setSettings] = useState<string | boolean>(false);
   const [feedback, setFeedback] = useState<FeedbackTab | null>(null);
@@ -505,12 +507,11 @@ export function App({ hub }: { hub: HubPort }) {
   // so a refusal has to land in the error bar rather than in a caller.
   const dropPanes = useCallback((ids: string[]) => void closePanes(ids).catch(fail), [closePanes, fail]);
 
-  // One rename for both surfaces: the tab renames by the pane's session path,
-  // the sidebar by the row's — the same file either way.
   const renameSession = useCallback(
-    (path: string, title: string) => {
+    (path: string, title: string, mode: "inline" | "dialog" = "dialog") => {
       if (!path) return;
-      void hub.renameSession(path, title).then(reloadTree).catch(fail);
+      if (mode === "inline") void hub.renameSession(path, title).then(reloadTree).catch(fail);
+      else setRenaming({ path, title });
     },
     [hub, reloadTree, fail],
   );
@@ -672,7 +673,7 @@ export function App({ hub }: { hub: HubPort }) {
               showRoot={manyRoots}
               onFocus={focusPane}
               onClose={dropPanes}
-              onRename={(rt, title) => renameSession(rt.sessionPath ?? "", title)}
+              onRename={(rt, title, mode) => renameSession(rt.sessionPath ?? "", title, mode)}
             />
           )}
 
@@ -750,8 +751,13 @@ export function App({ hub }: { hub: HubPort }) {
       </div>
 
       {adder.pathOpen && <AddWorkspacePrompt busy={adder.busy} onSubmit={adder.addPath} onClose={adder.closePath} />}
+      {renaming && (
+        <RenameSession session={renaming} hub={hub} onClose={() => setRenaming(null)}
+          onSaved={() => { setRenaming(null); void reloadTree().catch(fail); }} />
+      )}
 
       {feedback && activePort && (
+
         <Feedback port={machinePort} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />
       )}
 
