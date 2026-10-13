@@ -98,6 +98,12 @@ for (const scheme of ["light", "dark"]) {
   await page.waitForTimeout(250);
   const hover = await look();
   check(`${scheme}: on hover the actions take the count's place`, hover.count === 0 && hover.actions === 1, JSON.stringify(hover));
+  const edge = (sel) => page.evaluate((q) => { const r = document.querySelector(q).getBoundingClientRect(); return Math.round(r.right * 10) / 10; }, sel);
+  const projectRight = await edge(".wsrow .wsmore");
+  await page.locator(".machrow[data-here]").hover();
+  await page.waitForTimeout(250);
+  const machineRight = await edge(".machrow[data-here] .machpick");
+  check(`${scheme}: the machine row's + ends where a project row's … ends`, Math.abs(machineRight - projectRight) <= 2, `${machineRight} vs ${projectRight}`);
   await page.close();
 }
 await browser.close();
