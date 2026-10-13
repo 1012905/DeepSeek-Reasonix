@@ -54,7 +54,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		if c.AutoSubmit {
 			b.WriteString("auto_submit = true   # CLI ask: commit a multi-question batch once its last question is answered; user/global only\n")
 		}
-		fmt.Fprintf(&b, "credentials_store = %q   # legacy compatibility; provider keys are saved in Reasonix's global .env\n", normalizeCredentialsStore(c.CredentialsStore))
+		fmt.Fprintf(&b, "credentials_store = %q   # legacy compatibility; provider keys are saved in Reasonix's global .env\n%s", normalizeCredentialsStore(c.CredentialsStore), emptyProvidersLine(c.Providers))
 	}
 	b.WriteString("\n")
 
