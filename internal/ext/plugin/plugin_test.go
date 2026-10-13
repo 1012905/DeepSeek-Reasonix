@@ -1520,7 +1520,7 @@ func TestValidateMCPToolNamesRejectsAmbiguousLists(t *testing.T) {
 		"duplicate": {{Name: "read"}, {Name: "read"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := validateMCPToolNames(tools); err == nil {
+			if err := validateMCPToolNames("srv", "", tools); err == nil {
 				t.Fatalf("validateMCPToolNames(%+v) succeeded", tools)
 			}
 		})

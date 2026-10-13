@@ -432,6 +432,17 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 	}
 	shared.generation = host.registerDeferredCancel(spec.Name, cancel)
 
+	if cs != nil {
+		var names []mcpTool
+		for _, ct := range cs.Tools {
+			if spec.ToolEnabled(ct.Name) {
+				names = append(names, mcpTool{Name: ct.Name})
+			}
+		}
+		if validateMCPToolNames(spec.Name, spec.StripRawPrefix, names) != nil {
+			cs = nil
+		}
+	}
 	var out []tool.Tool
 	// A snapshot with zero tools presents nothing the model could call, so it
 	// gets the same connect stub as a cache miss — otherwise the live tools
