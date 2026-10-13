@@ -701,7 +701,7 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.post0<BrowserTab>("/browser/open", { url, newTab });
   }
   browserClose(tab: string) {
-    return this.post0<void>("/browser/close", { tab });
+    return this.post("/browser/close", { tab });
   }
   async readQueued(itemId: string) {
     const r = await this.get<{ envelope?: { displayText?: string } }>("/inbox/items/" + encodeURIComponent(itemId));
