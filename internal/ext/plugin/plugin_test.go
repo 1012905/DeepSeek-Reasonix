@@ -1762,6 +1762,10 @@ func TestReaderIntentRefusesDispatchAfterSafetyDrift(t *testing.T) {
 	rt.client.toolsMu.Lock()
 	rt.readOnly = true
 	rt.client.toolsMu.Unlock()
+	// The handshake's schema cache is written on the side and reads rt.schema;
+	// nothing in the product changes it after the handshake, so only this test
+	// has to wait for that read before replacing it.
+	host.bgWrites.Wait()
 	rt.schema = json.RawMessage(`{"type":"object","properties":{"msg":{"type":"number"}}}`)
 	if _, _, err := rt.ExecuteWithImages(readerCtx, json.RawMessage(`{"msg":"schema-changed","z":"ok"}`)); err != nil {
 		t.Fatalf("schema-only reader change should execute: %v", err)
