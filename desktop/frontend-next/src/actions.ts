@@ -137,6 +137,8 @@ export const ACTIONS: UIAction[] = [
   // Drafting reads the index and asks the model; only confirm records a commit,
   // and only locally.
   { id: "commit.draft", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "workbench.stage", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "workbench.stage-all", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "commit.edit", kind: "view", target: "none", proof: "interaction" },
   { id: "commit.acknowledge", kind: "view", target: "none", proof: "interaction" },
   { id: "commit.confirm", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

@@ -24,6 +24,7 @@ import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
+import { WorkbenchChanges } from "./WorkbenchChanges";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { useHtmlPreview } from "./useHtmlPreview";
@@ -630,35 +631,17 @@ export function WorkbenchPanel({
               file only once its folder is expanded, so a change three levels
               down was invisible until someone went looking for it. */}
           {changes.length > 0 && (
-            <div className="workbench-changes">
-              <div className="workbench-explorer-head">
-                <span>{t("改动")}</span>
-                <small>{changes.length}</small>
-                {onTreeChanged && commit.button}
-              </div>
-              {commit.card}
-              {changes.map((item) => (
-                <button
-                  className="workbench-change-row"
-                  data-action="workbench.diff"
-                  data-target={item.path}
-                  key={`c:${item.path}`}
-                  title={item.path}
-                  aria-current={active?.kind === "file" && active.path === item.path && mode === "diff" ? "page" : undefined}
-                  onClick={() => {
-                    openFile(item.path);
-                    setMode("diff");
-                  }}
-                >
-                  <em data-status={item.status}>{item.status || "M"}</em>
-                  <span>{item.path.slice(item.path.lastIndexOf("/") + 1)}</span>
-                  {/* Absent counts print nothing: a binary file did not change
-                      by zero lines, git simply did not count it. */}
-                  {item.insertions !== undefined && <i data-io="up">+{item.insertions}</i>}
-                  {item.deletions !== undefined && <i data-io="down">-{item.deletions}</i>}
-                </button>
-              ))}
-            </div>
+            <WorkbenchChanges
+              port={port}
+              changes={changes}
+              current={active?.kind === "file" && mode === "diff" ? active.path : ""}
+              onOpen={(path) => {
+                openFile(path);
+                setMode("diff");
+              }}
+              onChanged={onTreeChanged}
+              commit={commit}
+            />
           )}
           <div className="workbench-filelist">
             {rows.map((row) =>
