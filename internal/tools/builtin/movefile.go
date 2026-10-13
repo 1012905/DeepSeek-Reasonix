@@ -46,9 +46,17 @@ func (moveFile) ReadOnly() bool { return false }
 
 func (moveFile) WritesNamedPaths() bool { return true }
 
-// Rename does not read contents; the cross-device copy checks its source before opening it.
-func (moveFile) ReadPaths(context.Context, json.RawMessage) ([]string, error) {
-	return nil, nil
+// ReadPaths names the source: a move hands its content to the destination, so a
+// source under a forbidden-read root is refused whether the filesystem renames it
+// or has to copy it. The destination is only written, never read.
+func (m moveFile) ReadPaths(_ context.Context, args json.RawMessage) ([]string, error) {
+	var p struct {
+		SourcePath string `json:"source_path"`
+	}
+	if err := json.Unmarshal(args, &p); err != nil || p.SourcePath == "" {
+		return nil, nil
+	}
+	return []string{resolveIn(m.workDir, resolveSessionTemp(m.sessionTemp, p.SourcePath))}, nil
 }
 
 func (m moveFile) Execute(ctx context.Context, args json.RawMessage) (string, error) {
@@ -71,6 +79,9 @@ func (m moveFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 		return "", err
 	}
 	if err := confineWrite(ctx, m.roots, m.guard, m.managed, m.sessionTemp, dst); err != nil {
+		return "", err
+	}
+	if err := checkReadTargetAccess(m.readRoots, m.forbidRoots, src); err != nil {
 		return "", err
 	}
 	info, err := os.Stat(src)
@@ -105,9 +116,6 @@ func (m moveFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 			return fmt.Sprintf("moved %s to %s", src, dst), nil
 		}
 		if isCrossDeviceMove(err) {
-			if err := checkReadTargetAccess(m.readRoots, m.forbidRoots, src); err != nil {
-				return "", err
-			}
 			if cerr := copyRegularFileAndRemoveSource(src, dst, info); cerr != nil {
 				return "", fmt.Errorf("move %s to %s: %w", src, dst, cerr)
 			}

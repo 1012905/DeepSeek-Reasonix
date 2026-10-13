@@ -11,39 +11,60 @@ import (
 	"reasonix/internal/contract/tool"
 )
 
-func TestMoveFileRenameDoesNotRequireContentRead(t *testing.T) {
+func TestMoveFileRenameOnlyRequiresReadOfItsSource(t *testing.T) {
 	withProtectSensitiveFiles(t, true)
 	root := testenv.TempDir(t)
 	private := filepath.Join(root, "private")
 	if err := os.MkdirAll(private, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"protected_destination"} {
-		t.Run(name, func(t *testing.T) {
-			src, dst := filepath.Join(root, "source.txt"), filepath.Join(private, "server.key")
-			if err := os.WriteFile(src, []byte("synthetic content\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			ws := Workspace{Dir: root, ForbidReadRoots: []string{private}}
-			mover := ws.Tools("move_file")[0]
-			args := argsJSON(t, map[string]any{"source_path": src, "destination_path": dst})
-			if err := ws.TargetAccessCheck()(context.Background(), mover, args); err != nil {
-				t.Fatalf("rename incorrectly requires content read: %v", err)
-			}
-			if _, err := mover.Execute(context.Background(), args); err != nil {
-				t.Fatal(err)
-			}
-			if got, err := os.ReadFile(dst); err != nil || string(got) != "synthetic content\n" {
-				t.Fatalf("destination=%q error=%v", got, err)
-			}
-			if _, err := os.Stat(src); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("source remained after rename: %v", err)
-			}
-		})
-	}
+	t.Run("protected_destination", func(t *testing.T) {
+		src, dst := filepath.Join(root, "source.txt"), filepath.Join(private, "server.key")
+		if err := os.WriteFile(src, []byte("synthetic content\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		ws := Workspace{Dir: root, ForbidReadRoots: []string{private}}
+		mover := ws.Tools("move_file")[0]
+		args := argsJSON(t, map[string]any{"source_path": src, "destination_path": dst})
+		if err := ws.TargetAccessCheck()(context.Background(), mover, args); err != nil {
+			t.Fatalf("a forbidden destination is only written, not read: %v", err)
+		}
+		if _, err := mover.Execute(context.Background(), args); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := os.ReadFile(dst); err != nil || string(got) != "synthetic content\n" {
+			t.Fatalf("destination=%q error=%v", got, err)
+		}
+		if _, err := os.Stat(src); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("source remained after rename: %v", err)
+		}
+	})
+	t.Run("protected_source", func(t *testing.T) {
+		src, dst := filepath.Join(private, "note.txt"), filepath.Join(root, "leak.txt")
+		const secret = "PROTECTED_RENAME_CANARY\n"
+		if err := os.WriteFile(src, []byte(secret), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		ws := Workspace{Dir: root, ForbidReadRoots: []string{private}}
+		mover := ws.Tools("move_file")[0]
+		args := argsJSON(t, map[string]any{"source_path": src, "destination_path": dst})
+		var refusal tool.Refusal
+		if err := ws.TargetAccessCheck()(context.Background(), mover, args); !errors.As(err, &refusal) || refusal.Code != CodeReadForbidden {
+			t.Fatalf("admission must refuse a forbidden source: %v", err)
+		}
+		if _, err := mover.Execute(context.Background(), args); !errors.As(err, &refusal) || refusal.Code != CodeReadForbidden {
+			t.Fatalf("execution must refuse a forbidden source even without admission: %v", err)
+		}
+		if got, err := os.ReadFile(src); err != nil || string(got) != secret {
+			t.Fatalf("source changed: %q %v", got, err)
+		}
+		if _, err := os.Stat(dst); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("a refused move left the content at the destination: %v", err)
+		}
+	})
 }
 
-func TestMoveFileCopyFallbackChecksOnlySourceReads(t *testing.T) {
+func TestMoveFileCopyFallbackAgreesWithAdmission(t *testing.T) {
 	for _, forbiddenSource := range []bool{false, true} {
 		name := "protected_destination"
 		if forbiddenSource {
@@ -63,8 +84,9 @@ func TestMoveFileCopyFallbackChecksOnlySourceReads(t *testing.T) {
 			ws := Workspace{Dir: root, ForbidReadRoots: []string{forbidden}}
 			mover := ws.Tools("move_file")[0]
 			args := argsJSON(t, map[string]any{"source_path": src, "destination_path": dst})
-			if err := ws.TargetAccessCheck()(context.Background(), mover, args); err != nil {
-				t.Fatalf("rename admission incorrectly requires content read: %v", err)
+			admission := ws.TargetAccessCheck()(context.Background(), mover, args)
+			if forbiddenSource != (admission != nil) {
+				t.Fatalf("admission for forbiddenSource=%v = %v", forbiddenSource, admission)
 			}
 			oldRename := renameFile
 			renameFile = func(oldpath, newpath string) error {
