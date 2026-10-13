@@ -14,6 +14,7 @@ import "./styles/stophint.css";
 import "./styles/phonecomposer.css";
 import "./styles/tips.css";
 import "./styles/waitnote.css";
+import "./styles/jsontext.css";
 import "./styles/narrow.css";
 import "./styles/workfold.css";
 import "./styles/workbench-launcher.css";
