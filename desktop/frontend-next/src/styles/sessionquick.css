@@ -25,7 +25,6 @@
   .rail .sessrow-context[data-unread] > .sesscopies { margin-inline-end: 8px; }
   .rail .sessrow-context[data-unread] > .sesstitle { padding-inline-end: 9px; }
 }
-/* The 1.x badge sits at the row's end, and yields to the hover actions. */
 .rail .sesslegacy {
   flex: none; display: inline-flex; align-items: center; padding: 0 5px; height: 15px;
   border: 1px solid var(--border); border-radius: var(--r-xs);
