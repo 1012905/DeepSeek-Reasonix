@@ -40,6 +40,20 @@ const flowHidden = () => document.querySelector(".compose")!.hasAttribute("hidde
 const box = () => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="任务输入"]')!;
 
 describe("a pane's view", () => {
+  it("refreshes the open conversation's context after model settings change", async () => {
+    const port = new MockPort();
+    const context = port.context.bind(port);
+    let window = 160_000;
+    vi.spyOn(port, "context").mockImplementation(async () => ({ ...await context(), window }));
+    const all = { ...props, rt: rtOf("p1"), port: port as AgentPort };
+    const view = render(<Pane {...all} />);
+    await waitFor(() => expect(document.querySelector(".chrome-context-total")?.textContent).toContain("160k"));
+
+    window = 1_000_000;
+    view.rerender(<Pane {...all} pulse={1} />);
+    await waitFor(() => expect(document.querySelector(".chrome-context-total")?.textContent).toContain("1.0M"));
+  });
+
   it("opens on the conversation with the composer showing", () => {
     mount();
     expect(selected()).toBe("flow");
