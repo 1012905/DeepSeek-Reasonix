@@ -13,6 +13,8 @@
 - Studio 增强 Linux 两种安装包及全部 12 个发布产物的校验，GitHub Actions 验证安装后的通信、第二次启动、重装、正常退出和卸载。（#12906）
 - 展开很长的执行过程时，头部会吸在顶部，随时可以直接折叠，不用再往上翻。关联 #12931。
 - A long expanded process group keeps its header at the top while you scroll, so it can be folded without scrolling back up. Fixes #12931.
+- 标题栏里的会话标题现在紧挨着项目名称，不再被推到最右边。关联 #12924。
+- The session title in the title bar now sits right beside the project name instead of being pushed to the far right. Fixes #12924.
 - 对话里的「执行过程」不再是带边框的卡片，改成和「思考」一样的淡色一行，展开后只在左侧留一条细线，让回复和结论更突出。关联 #12953。
 - The activity group in a conversation is now a quiet line like the thinking row instead of a bordered card, with a thin rule at its left when open, so the reply and conclusion stand out. Fixes #12953.
 - 新增外观设置「进行中列表保留已完成会话」：会话完成一轮后，可在侧栏「进行中」里再保留 10 分钟到 4 小时，默认关闭。关联 #12312。
