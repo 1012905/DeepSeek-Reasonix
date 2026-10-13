@@ -42,10 +42,10 @@ function surfaceCall(item: Item) {
   return item.t === "ask" && item.ask.questions[0]?.surface ? item.ask.questions[0].callId : undefined;
 }
 
-export function restoredPrompts(history: Item[], current: Item[]) {
-  const retained = current.filter(i => i.t === "extension" || promptOpen(i));
+// A surface the record holds as expired is replaced by the live card the pane still carries.
+export function withoutRetiredSurfaces(history: Item[], retained: Item[]) {
   const calls = new Set(retained.map(surfaceCall).filter(Boolean));
-  return [...history.filter(i => !(i.t === "ask" && i.surfaceExpired && calls.has(i.ask.id))), ...retained];
+  return history.filter(i => !(i.t === "ask" && i.surfaceExpired && calls.has(i.ask.id)));
 }
 
 // A prompt answered somewhere else — another window, a revise — is a transition,
