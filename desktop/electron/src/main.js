@@ -68,7 +68,7 @@ const hostBinary = layout.hostBinary(where);
 const computerHelper = layout.computerHelper(where);
 const pageDir = layout.pageDir(where);
 
-const acts = actHandler({ app, showWindow: () => showWindow() });
+const acts = actHandler({ app, showWindow: () => showWindow(), log: (line) => logs?.shell.line(line) });
 let kernel = null;
 let win = null;
 let origin = "";
@@ -296,7 +296,7 @@ function showWindow() {
   if (quitting || !win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   reload?.revive();
-  raise(win);
+  logs?.shell.line(`shell: window raised; focused=${raise(win)}`);
 }
 
 // A window larger than the display it opens on puts its own title bar off
