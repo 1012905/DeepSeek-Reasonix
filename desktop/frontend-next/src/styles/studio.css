@@ -4039,10 +4039,11 @@ body { font-size: 14px; line-height: 1.75; }
 /* The brand rail and conversation chrome are one application title bar. Keep
    their optical centres on the same 54px row instead of letting sidebar
    content padding push the wordmark a full control-height lower. */
-.studio-rail-head { padding-top: 0; padding-left: calc(22px + max(0px, 44px - var(--nav-w))); }
+.studio-rail-head { padding-top: 0; }
 .studio-brand {
   height: var(--chrome-h);
   padding-block: 0;
+  padding-left: max(0px, 44px - var(--nav-w));
   margin-bottom: 12px;
 }
 .chrome .thbtn,

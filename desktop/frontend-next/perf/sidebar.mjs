@@ -36,6 +36,12 @@ for (const scheme of ["light", "dark"]) {
     const open = await spot();
     check(`${tag}: exactly one sidebar toggle is drawn while the sidebar is open`, open.count === 1, String(open.count));
     check(`${tag}: nothing lies over it`, open.reached === true);
+    const inset = await page.evaluate(() => {
+      const edge = document.querySelector(".rail").getBoundingClientRect().left;
+      const left = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().left - edge);
+      return { newTask: left(".studio-new-task"), search: left(".studio-search") };
+    });
+    check(`${tag}: the head rows sit 22px in from the sidebar edge, with no blank strip under the toggle`, inset.newTask === 22 && inset.search === 22, JSON.stringify(inset));
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/${process.env.SIDEBAR_TAG ?? "shot"}-open-${tag.replace("/", "-")}.png` });
     await page.locator('[data-action="chrome.rail"]').filter({ visible: true }).first().click({ position: { x: 15, y: 15 } });
     const shut = await spot();
