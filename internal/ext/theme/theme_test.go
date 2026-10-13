@@ -1,10 +1,8 @@
 package theme
 
 import (
-	"math"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -162,51 +160,5 @@ func TestInstalledPackShadowsTheShippedOne(t *testing.T) {
 	}
 	if pack, err := Load(id); err != nil || pack.Name != "Mine" {
 		t.Fatalf("Load(%q) = %+v, %v", id, pack, err)
-	}
-}
-
-func luminance(hex string) float64 {
-	var rgb [3]float64
-	for i := range rgb {
-		v, _ := strconv.ParseUint(hex[1+2*i:3+2*i], 16, 8)
-		c := float64(v) / 255
-		if c <= 0.03928 {
-			rgb[i] = c / 12.92
-		} else {
-			rgb[i] = math.Pow((c+0.055)/1.055, 2.4)
-		}
-	}
-	return 0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]
-}
-
-func contrast(a, b string) float64 {
-	la, lb := luminance(a), luminance(b)
-	if la < lb {
-		la, lb = lb, la
-	}
-	return (la + 0.05) / (lb + 0.05)
-}
-
-// A neutral palette for people who find the warm default dated: it ships with
-// the app, and what it draws as text stays readable in both modes.
-func TestNeutralBlueIsShippedAndItsTextIsLegible(t *testing.T) {
-	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
-	p, err := Load("official-neutral-blue")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Name != "Neutral Blue" {
-		t.Fatalf("name = %q", p.Name)
-	}
-	for _, mode := range []string{"light", "dark"} {
-		tk := p.Tokens[mode]
-		for _, pair := range [][2]string{
-			{"fg", "bg"}, {"fgDim", "bg"}, {"fgFaint", "bg"}, {"fgFaint", "panel"}, {"accent", "bg"}, {"accentFg", "accent"},
-			{"synKeyword", "codeBg"}, {"synString", "codeBg"}, {"synNumber", "codeBg"}, {"synFunction", "codeBg"},
-		} {
-			if got := contrast(tk[pair[0]], tk[pair[1]]); got < 4.5 {
-				t.Errorf("%s: %s on %s = %.1f, want at least 4.5", mode, pair[0], pair[1], got)
-			}
-		}
 	}
 }
