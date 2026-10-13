@@ -15,3 +15,6 @@
 - A long expanded process group keeps its header at the top while you scroll, so it can be folded without scrolling back up. Fixes #12931.
 - 对话里的「执行过程」不再是带边框的卡片，改成和「思考」一样的淡色一行，展开后只在左侧留一条细线，让回复和结论更突出。关联 #12953。
 - The activity group in a conversation is now a quiet line like the thinking row instead of a bordered card, with a thin rule at its left when open, so the reply and conclusion stand out. Fixes #12953.
+- 新增外观设置「进行中列表保留已完成会话」：会话完成一轮后，可在侧栏「进行中」里再保留 10 分钟到 4 小时，默认关闭。关联 #12312。
+- New appearance setting "Keep finished sessions in Running": a session that finishes a turn can stay in the
+  sidebar's Running list for 10 minutes to 4 hours. Off by default. Fixes #12312.

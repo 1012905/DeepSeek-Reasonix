@@ -260,6 +260,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "appearance", anchor: "language", title: "语言", scope: "machine", apply: "restart", keywords: ["中文", "english", "界面语言"] },
   { section: "appearance", anchor: "graphics", title: "图形渲染", scope: "machine", apply: "restart", keywords: ["硬件加速", "显卡", "gpu", "软件渲染", "占用", "卡顿"] },
   { section: "appearance", anchor: "navrail", title: "图标栏", scope: "machine", apply: "immediate", keywords: ["侧边栏", "导航", "图标", "sidebar", "nav"] },
+  { section: "appearance", anchor: "live-grace", title: "进行中列表保留已完成会话", scope: "machine", apply: "immediate", keywords: ["进行中", "完成", "保留", "过滤", "running", "grace", "sidebar"] },
   { section: "appearance", anchor: "send-shortcut", title: "发送快捷键", scope: "machine", apply: "immediate", keywords: ["发送", "回车", "换行", "enter", "ctrl", "cmd"] },
   { section: "appearance", anchor: "esc-stop", title: "Esc 停止任务", scope: "machine", apply: "immediate", keywords: ["esc", "停止", "中断", "确认", "误触", "stop"] },
   { section: "appearance", anchor: "session-tabs", title: "会话标签栏", scope: "machine", apply: "immediate", keywords: ["标签", "会话切换", "tabs", "session"] },

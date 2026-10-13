@@ -60,6 +60,7 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.open-project", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "appearance.theme", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.nav-rail", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.live-grace", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.esc-stop", kind: "view", target: "none", proof: "interaction" },

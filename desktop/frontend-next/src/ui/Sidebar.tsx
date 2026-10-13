@@ -33,6 +33,7 @@ interface Props {
   // decides it from the focused pane, so it arrives rather than being derived.
   activeWorkspace: TreeWorkspace | undefined;
   liveIds: (ids: string[]) => string[];
+  listedIds?: (ids: string[]) => string[];
   // Pins outlive this column — archiving a session drops one — so the set is the
   // window's and only the toggle comes down here.
   pinned: Set<string>;
@@ -81,6 +82,7 @@ export function Sidebar({
   active,
   activeWorkspace,
   liveIds,
+  listedIds = liveIds,
   pinned,
   onPin,
   remotes,
@@ -179,7 +181,7 @@ export function Sidebar({
     0,
   );
   const archivedCount = tree.reduce((n, ws) => n + (ws.archived ?? ws.sessions.filter((session) => session.archived).length), 0);
-  const liveCount = liveIds(runtimes.map((rt) => rt.id)).length;
+  const liveCount = listedIds(runtimes.map((rt) => rt.id)).length;
 
   const onFold = (root: string, shut: boolean) =>
     setFolded((prev) => {
@@ -266,6 +268,7 @@ export function Sidebar({
         onFocus={onFocusPane}
         onClose={onClosePanes}
         liveIds={liveIds}
+        listedIds={listedIds}
         runs={runs}
         scope={railScope}
         pinned={pinned}
