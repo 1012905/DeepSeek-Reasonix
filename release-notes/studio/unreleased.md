@@ -27,6 +27,10 @@
   之后很长时间不重复；只提醒，不清理任何文件。关联 #12958。
 - New "when disk space is low" notification (on by default): warns once when the drive holding your
   project or sessions has under 5 GB or 3% free. It only warns. Fixes #12958.
+- 修复：压缩拿不到摘要时（例如摘要请求被模型拒绝），被折叠的用户消息不再整段消失：占位摘要会带上
+  每条用户消息的缩略原话；摘要请求的输入也加了上限，不再把接近整个窗口的内容一次发出去。关联 #12961。
+- Fix: when compaction cannot get a summary, the folded user messages no longer vanish; the placeholder
+  digest keeps a shortened copy of each, and one summarizer request is capped. Refs #12961.
 - 删除最后一个模型服务后，Studio 现在能正常启动并直接进入连接引导，不再悄悄补回官方 DeepSeek；
   之后添加的第一个服务会自动成为当前模型。关联 #12915。
 - Studio now starts and opens the connection guide after the last provider is removed, instead of
