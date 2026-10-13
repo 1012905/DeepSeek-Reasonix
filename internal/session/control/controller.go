@@ -83,6 +83,7 @@ var errNoSessionPath = errors.New("session has content but no session path; conv
 // Controller drives one chat session. Construct with New; drive with the command
 // methods; observe through the Sink passed in Options.
 type Controller struct {
+	surfacePublications liveSurfacePublications
 	controllerDeps
 
 	guardianPath string // persisted guardian session file ("" when disabled)
@@ -1107,14 +1108,6 @@ func (c *Controller) ReloadCommands(ctx context.Context) error {
 	cmdSlice := cmds
 	c.commands.Store(&cmdSlice)
 	return loadErr
-}
-
-// Executor returns the underlying agent when present (nil for pure runners).
-func (c *Controller) Executor() *agent.Agent {
-	if c == nil {
-		return nil
-	}
-	return c.executor
 }
 
 // HookRunner returns the session's hook runner (nil-safe; may hold zero hooks),

@@ -76,3 +76,15 @@ describe("what the card says when a fold installed nothing", () => {
     expect(EN[zh]).not.toBe(zh);
   });
 });
+
+describe("the live progress line", () => {
+  const live = (c: Compaction) => renderToStaticMarkup(<CompactionCard c={c} done={false} />);
+
+  it("is drawn before the first summary token, so the first one does not move the card", () => {
+    expect(live({ trigger: "manual", messages: 21 })).toContain("comp-live");
+  });
+
+  it("is drawn while the summary streams, on one line", () => {
+    expect(live({ trigger: "manual", messages: 21, summary: "## Summary\nfirst\nsecond" })).toContain("comp-live");
+  });
+});

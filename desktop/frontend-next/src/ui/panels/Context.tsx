@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { t } from "../../i18n";
-import { reason } from "../../i18n/kernel";
+import { reason, savedNotApplied } from "../../i18n/kernel";
+import { SaveNote } from "../SaveNote";
 import type { AgentPort, ContextBreakdown } from "../../port/port";
 import { pct as percent, tokens } from "../../i18n/format";
 import { pinToViewport } from "../place";
 import { useFoldBound } from "./useFoldBound";
 import { Row } from "./kit";
+import { CompactNow, type CompactAction } from "../CompactNow";
 
 // The order is the order they arrive in a prompt, so the bar reads the way the
 // request is built rather than by size — a class that grows is easier to spot
@@ -62,7 +64,7 @@ function place(anchor: RefObject<HTMLElement | null>) {
  *  all. Each names its own denominator, so neither becomes a percentage of
  *  something unstated, and the window stays the number a relay gets wrong and
  *  the only place it can be corrected. */
-export function Context({ ctx, legend = false, port, onCtx }: {
+export function Context({ ctx, legend = false, port, onCtx, compact }: {
   ctx: ContextBreakdown | null;
   legend?: boolean;
   // Both are needed to offer the missing window: one to declare it, one to
@@ -70,6 +72,7 @@ export function Context({ ctx, legend = false, port, onCtx }: {
   // cannot draw, which is the half that was there before.
   port?: AgentPort;
   onCtx?: (next: ContextBreakdown) => void;
+  compact?: CompactAction;
 }) {
   // Every hook runs before the first return: ctx arrives one render after the
   // rail mounts, and a guard above them made that render ask for hooks the
@@ -124,6 +127,7 @@ export function Context({ ctx, legend = false, port, onCtx }: {
           {t("该来源未声明窗口大小，因此无法显示已用比例，也不会自动压缩。中转服务转发的是第三方模型，其容量只有你知道。")}
         </p>
         {field}
+        {compact && <CompactNow action={compact} />}
       </>
     );
     return legend ? <div className="block" data-b="ctx">{missing}</div> : missing;
@@ -175,6 +179,7 @@ export function Context({ ctx, legend = false, port, onCtx }: {
           any more — so both keep a row, and each names its own denominator
           rather than collapsing into one percentage of something unstated. */}
       <Row k={t("上下文")} v={<span className="ctxq">{tokens(Math.round(used))}</span>} />
+      {compact && <CompactNow action={compact} />}
       {!folds && <Row k={t("模型容量")} v={windowFigure} />}
       {!folds && editing && field}
       <div
@@ -356,18 +361,18 @@ function DeclareWindow({ port, onSet, was, onDone }: {
   // an empty box asks for the whole number again to change one digit of it.
   const [draft, setDraft] = useState(was > 0 ? String(was) : "");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [note, setNote] = useState<{ text: string; unapplied: boolean } | null>(null);
 
   const commit = async () => {
     const window = Number(draft);
     if (!window || busy) return;
     setBusy(true);
-    setError("");
+    setNote(null);
     try {
       onSet(await port.setContextWindow(window));
       onDone();
     } catch (e) {
-      setError(reason(e));
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy(false);
     }
@@ -394,11 +399,11 @@ function DeclareWindow({ port, onSet, was, onDone }: {
           {t("保存")}
         </button>
       </div>
-      {error && <p className="ctxnote" data-lvl="warn">{error}</p>}
+      <SaveNote note={note} />
       <p className="ctxnote">
         {t(was > 0
-          ? "只改当前这个模型，同一个来源下的其它模型不动。填模型文档写的上下文上限，不是最大输出。会重建运行时，任务跑着的时候改不了。"
-          : "填写模型文档中的上下文上限，而非最大输出长度。将重建运行时，任务运行期间无法修改。")}
+          ? "只改当前这个模型，同一个来源下的其它模型不动。填模型文档写的上下文上限，不是最大输出。"
+          : "填写模型文档中的上下文上限，而非最大输出长度。")}
       </p>
     </div>
   );

@@ -16,6 +16,9 @@ interface Inputs {
   onSettings: (section?: string) => void;
   onRunDetail: () => void;
   onError: (e: unknown) => void;
+  // The title the branch is given and what to do with the session it makes.
+  branchName?: string;
+  onBranched?: (path: string) => void;
 }
 
 interface ReplyTurn {
@@ -36,7 +39,7 @@ function sameTurns(a: Map<string, ReplyTurn>, b: Map<string, ReplyTurn>) {
 /** What a finished reply can be acted on with, and the draft signal a quote
  *  travels to the composer on. The transcript owns neither: the pane holds the
  *  session these read from, and the composer is where a quote has to land. */
-export function useReplyActions({ port, items, checkpoints, running, model, submit, reloadSession, onSettings, onRunDetail, onError }: Inputs) {
+export function useReplyActions({ port, items, checkpoints, running, model, submit, reloadSession, onSettings, onRunDetail, onError, branchName, onBranched }: Inputs) {
   const [quote, setQuote] = useState<Quote>({ text: "", n: 0 });
 
   // Re-running a turn is a conversation rewind and then the same words again:
@@ -107,11 +110,16 @@ export function useReplyActions({ port, items, checkpoints, running, model, subm
         const ask = replyTurns.get(id);
         if (ask) void regenerate(ask.turn, ask.text).catch(onError);
       },
+      canBranch: (id: string) => !running && !!onBranched && replyTurns.has(id),
+      onBranch: (id: string) => {
+        const ask = replyTurns.get(id);
+        if (!running && ask && onBranched) void port.branchAt(ask.turn, branchName ?? "").then(onBranched, onError);
+      },
       model,
       onConfigureModel: () => onSettings("model"),
       onRunDetail,
     }),
-    [replyTurns, running, regenerate, model, onSettings, onRunDetail, turnOf, onError],
+    [replyTurns, running, regenerate, model, onSettings, onRunDetail, turnOf, onError, port, branchName, onBranched],
   );
 
   // Rewriting a message is the same act with different words: the turn goes

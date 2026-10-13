@@ -37,6 +37,13 @@ type VersionEntry struct {
 	Older       bool   `json:"older"`
 }
 
+// WithdrawnNote says the running version was pulled after publication and why,
+// so a panel can tell its user to move off it instead of presenting an update.
+type WithdrawnNote struct {
+	Version string `json:"version"`
+	Reason  string `json:"reason"`
+}
+
 // VersionHub is everything a version panel renders from. Err is carried beside
 // the data rather than replacing it: an unreachable catalog must not hide which
 // version is running.
@@ -47,7 +54,9 @@ type VersionHub struct {
 	Latest   string         `json:"latest"`
 	Newer    bool           `json:"newer"`
 	Versions []VersionEntry `json:"versions"`
-	Err      string         `json:"err,omitempty"`
+	// Withdrawn is set when the running version is one the publisher pulled.
+	Withdrawn *WithdrawnNote `json:"withdrawn,omitempty"`
+	Err       string         `json:"err,omitempty"`
 }
 
 // catalogTimeout bounds the whole read. A version panel that hangs is worse
@@ -76,6 +85,9 @@ func hubOver(ctx context.Context, in Install, client *http.Client) VersionHub {
 	st, err := New(Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: StudioCatalog, UserAgent: UserAgent(in.Version)}).Check(ctx)
 	hub.Latest, hub.Newer, hub.StalePin = st.Latest, st.Newer, st.StalePin
 	hub.Versions = versionRows(st.Entries, in.Version)
+	if st.Withdrawn != nil {
+		hub.Withdrawn = &WithdrawnNote{Version: st.Withdrawn.Version, Reason: st.Withdrawn.Reason}
+	}
 	if err != nil {
 		hub.Err = err.Error()
 	}

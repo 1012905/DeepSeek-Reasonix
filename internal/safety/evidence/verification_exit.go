@@ -191,23 +191,36 @@ func (l *Ledger) LatestUnreadableVerificationAfter(after int) (Receipt, bool) {
 	return Receipt{}, false
 }
 
-// LatestUnrecognizedCommandAfter returns the most recent successful command
-// after the boundary that the host did not read as a check. It answers a
-// different question from "no check ran": the model ran something and the
-// classifier, which cannot tell a project's check from a deploy, saw nothing.
-func (l *Ledger) LatestUnrecognizedCommandAfter(after int) (Receipt, bool) {
+// HasUnrecognizedCommandAfter reports whether anything ran after the boundary
+// that the host did not read as a check. It answers a different question from
+// "no check ran": the model ran something and the classifier, which cannot tell
+// a project's check from a deploy, saw nothing.
+func (l *Ledger) HasUnrecognizedCommandAfter(after int) bool {
 	if l == nil {
-		return Receipt{}, false
+		return false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for i := len(l.receipts) - 1; i > after && i >= 0; i-- {
-		r := l.receipts[i]
-		if r.Success && strings.TrimSpace(r.Command) != "" && !ReceiptRunsVerification(r) {
-			return r, true
-		}
+	return slices.ContainsFunc(l.receipts[max(after+1, 0):], unrecognizedCommand)
+}
+
+// HasUnrecognizedMutationAfter reports whether any of those commands changed
+// state. One is enough: a command the host watched write, or could not watch,
+// is not one it can say left the tree as it found it, and a quieter command
+// beside it proves nothing about that one.
+func (l *Ledger) HasUnrecognizedMutationAfter(after int) bool {
+	if l == nil {
+		return false
 	}
-	return Receipt{}, false
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.ContainsFunc(l.receipts[max(after+1, 0):], func(r Receipt) bool {
+		return unrecognizedCommand(r) && r.Mutation
+	})
+}
+
+func unrecognizedCommand(r Receipt) bool {
+	return r.Success && strings.TrimSpace(r.Command) != "" && !ReceiptRunsVerification(r)
 }
 
 // ReceiptRunsVerification reports whether a receipt carries a verification. The

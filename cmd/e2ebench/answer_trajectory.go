@@ -203,6 +203,11 @@ func answerLeakDetected(r result) bool {
 }
 
 func recordTaskTrajectory(r *result, path string, t task) {
+	if r.SFT != nil && r.Segments <= 1 {
+		if err := bindSFTTrajectory(path, r.SFT); err != nil {
+			r.Note = appendNote(r.Note, "SFT provenance: "+err.Error())
+		}
+	}
 	if summary, err := summarizeTrajectory(path); err == nil {
 		r.Trajectory = summary
 	}

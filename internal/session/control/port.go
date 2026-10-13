@@ -84,7 +84,7 @@ type Approvals interface {
 	// ResolveRecovery answers an Auto Guard card: continue|continue_task|revise. Revise
 	// refuses the mutation and steers feedback.
 	ResolveRecovery(id string, action agent.RecoveryAction, feedback string) error
-	AnswerQuestion(id string, answers []event.AskAnswer)
+	AnswerQuestion(id string, answers []event.AskAnswer) error
 	Ask(ctx context.Context, questions []event.AskQuestion) ([]event.AskAnswer, error)
 	ReplayPendingPrompts()
 	ReplayPendingPromptsWith(sinkFactory func() event.Sink)
@@ -97,6 +97,12 @@ type Approvals interface {
 	Bypass() bool
 	SetBypass(on bool)
 	SetMode(plan, autoApproveTools bool)
+}
+
+// QuestionInteraction carries live gestures from HTTP question cards. ACP's
+// permission request/response protocol carries no intermediate interaction.
+type QuestionInteraction interface {
+	EngageQuestion(id string) bool
 }
 
 // FolderTrust is the person's decision about the workspace folder and the
@@ -155,10 +161,12 @@ type SessionHistory interface {
 	Rewind(turn int, scope RewindScope) error
 	PrepareRewind(turn int, scope RewindScope) (checkpoint.RewindPlan, error)
 	CommitRewind(planID string) (checkpoint.RewindResult, error)
+	AvailableUndo() (*checkpoint.RewindUndo, error)
 	UndoRewind(transactionID string) (checkpoint.RewindResult, error)
 	PrepareFileRevert(path string) (checkpoint.RewindPlan, error)
 	CommitFileRevert(planID string, resolution checkpoint.ConflictResolution) (checkpoint.RewindResult, error)
 	Branch(name string) (string, error)
+	BranchAt(turn int, name string) (string, error)
 	Branches() ([]sessionstore.BranchInfo, error)
 	BranchTreeText() string
 	SwitchBranch(ref string) (sessionstore.BranchInfo, error)
@@ -257,6 +265,8 @@ type MCPControl interface {
 // file that failed to parse. None of it is a capability listing, so a pane that lists
 // skills or MCP servers cannot reach a permission rule from the same port.
 type RuntimeSettings interface {
+	WebSearchModel() (WebSearchModelSetting, error)
+	SaveWebSearchModel(ref string) error
 	NetworkSettings() NetworkSettings
 	SaveNetworkSettings(in NetworkSettings, password string, clearPassword bool) error
 	DiagnoseNetwork(ctx context.Context) []NetworkProbe
@@ -342,6 +352,7 @@ type Status interface {
 	// One browser, one list of tabs: what the window opens the agent can drive,
 	// and what the agent opens the window can show.
 	BrowserOpen(ctx context.Context, rawURL, tabID string, newTab bool) (browser.TabInfo, error)
+	BrowserClose(ctx context.Context, tabID string) error
 }
 
 // BackgroundJobs stops work a session left running outside any turn.
@@ -407,7 +418,7 @@ type Settings interface {
 type Provenance interface {
 	SubmitHTTPFrom(input, format string, via *provider.Via) Admission
 	ApproveFrom(id string, allow, session, persist bool, via *provider.Via)
-	AnswerQuestionFrom(id string, answers []event.AskAnswer, via *provider.Via)
+	AnswerQuestionFrom(id string, answers []event.AskAnswer, via *provider.Via) error
 }
 
 // LocalShell is a `!` command typed on the machine the kernel runs on. Only
@@ -417,22 +428,31 @@ type LocalShell interface {
 }
 
 // Commits proposes a commit message for the staged changes and records a local
-// commit once the person has confirmed the text. It never stages, pushes or
-// rewrites history. It also moves the workspace between local git branches —
+// commit once the person has confirmed the text. It stages or unstages only what
+// the person names, and never pushes or rewrites history. It also moves the workspace between local git branches —
 // a workspace write like a commit, refused typed while a turn runs.
 type Commits interface {
 	ProposeCommit(ctx context.Context) (CommitProposal, error)
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
+	StageChanges(ctx context.Context, req StageRequest) error
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 
 // SessionAPI is the full driving port — the composition of every sub-port, for
 // a frontend that drives all of it: the TUI does, and the HTTP server all but
 // one. A leaner frontend names EditorAPI instead.
+type SurfaceHistory interface {
+	NativeSurfaces() bool
+	ExtensionSurfaces() []event.ExtensionSurfacePayload
+}
+
 type SessionAPI interface {
+	SurfaceActions
+	SurfaceHistory
 	Lifecycle
 	TurnControl
 	Approvals
+	QuestionInteraction
 	FolderTrust
 	PlanDecisions
 	Goals

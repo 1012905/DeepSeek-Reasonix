@@ -40,7 +40,7 @@ export type Item =
   // kernel recorded they said, since this screen never saw the selection.
   // recorded is the call's result when the card is rebuilt from history: the
   // record keeps what the model was told, not which options were pressed.
-  | { t: "ask"; id: string; ask: Ask; answered?: string[][]; answeredElsewhere?: boolean; timedOut?: boolean; by?: Via | "window"; said?: string; recorded?: string }
+  | { t: "ask"; id: string; ask: Ask; answered?: string[][]; answeredElsewhere?: boolean; timedOut?: boolean; by?: Via | "window"; said?: string; recorded?: string; surfaceValues?: Record<string, unknown>; surfaceExpired?: boolean }
   | { t: "compaction"; id: string; c: Compaction; done: boolean }
   | { t: "remember"; id: string; m: RememberedFact; forgotten?: boolean }
   | { t: "receipt"; id: string; r: Receipt }
@@ -226,6 +226,8 @@ export interface SessionState {
   // event, which replaces the estimate with what was billed — a reading that is
   // still an estimate says so rather than passing for the measured one.
   outLive: number;
+  interactionIDs: { asked:string[]; answered:string[] };
+  interactions: { requests:number; questions:number; options:number; answers:number; customAnswers:number };
   metrics: Metrics;
   waiting: Waiting;
   running: boolean;
@@ -243,6 +245,7 @@ export interface SessionState {
   // and this is what asks it again. Counting, not the kernel's own revision:
   // the point is that it changed, and a counter cannot arrive out of order.
   queueMoved: number;
+  rewindMoved: number;
   // How many times the agent's browser tabs moved; the tabs are read back.
   browserTabsMoved: number;
   // Standing extension surfaces, keyed by plugin and surface id. They describe

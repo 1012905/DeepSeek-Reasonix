@@ -12,8 +12,12 @@ import { reason } from "../i18n/kernel";
 import { Notifications } from "./Notifications";
 import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
+import { LiveGraceSection } from "./LiveGraceSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
+import { SendShortcut } from "./SendShortcut";
+import { SessionTabsSetting } from "./SessionTabsSetting";
+import { EscStopSetting } from "./EscStopSetting";
 import { ThemeImport } from "./ThemeImport";
 import { ThemeRemove } from "./ThemeRemove";
 import { useThemeInventory } from "./useThemeInventory";
@@ -152,7 +156,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
   );
   const cell = (p: ThemePack) => (
     <div className="pal-cell" key={p.id}>
-      <Swatch pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
+      <Swatch pack={p} theme={theme} name={t(p.name)} on={!!p.active} onPick={() => pick(p.id)} />
       {p.removable && <ThemeRemove name={p.name} onRemove={() => remove(p.id)} />}
     </div>
   );
@@ -163,10 +167,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
   // page a user opens merely to switch between light and dark. If one of them
   // is active it remains visible beside the foundations, so the current state
   // never disappears into a closed disclosure.
-  const foundations = packs.filter((p) => !p.background?.image);
-  const activeIllustrated = packs.find((p) => p.active && p.background?.image);
+  const foundations = packs.filter((p) => !p.background?.image && !p.sky);
+  const activeIllustrated = packs.find((p) => p.active && (p.background?.image || p.sky));
   const featured = activeIllustrated ? [...foundations, activeIllustrated] : foundations;
-  const illustrated = packs.filter((p) => p.background?.image && p.id !== activeIllustrated?.id);
+  const illustrated = packs.filter((p) => (p.background?.image || p.sky) && p.id !== activeIllustrated?.id);
 
   // A change lands on screen through App's own effect; this only sends it on
   // so the next launch opens the same way.
@@ -544,7 +548,11 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <WindowSection port={port} />
       <NavRailSection />
+      <LiveGraceSection />
       <GraphicsSection />
+      <SendShortcut />
+      <EscStopSetting />
+      <SessionTabsSetting />
       <Folding />
       <Notifications port={port} />
 
@@ -714,7 +722,7 @@ function Swatch({
     : undefined;
 
   return (
-    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description || name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
+    <button className="pal" type="button" data-action="theme.activate" data-value={pack?.id ?? ""} title={pack?.description ? t(pack.description) : name} data-on={on ? "" : undefined} aria-pressed={on} onClick={onPick}>
       <span className="pal-art" style={style}>
         <span className="pal-rail" />
         <span className="pal-body">

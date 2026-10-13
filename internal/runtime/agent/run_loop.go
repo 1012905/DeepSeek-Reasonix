@@ -269,8 +269,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// guidance (with a prefix), not a new task. One cache miss per
 		// steer is unavoidable — the model must see the new instruction.
 		if text, entry, ok := a.consumeSteer(); ok {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(sessionstore.MidTurnSteerMessage(text, entry.host)), Via: entry.via})
-			a.svc.sink.Emit(event.Event{Kind: event.Steer, Text: text, ItemID: entry.itemID, Via: entry.via, HostAuthored: entry.host})
+			a.landSteer(text, entry)
 		} else if entry.itemID != "" {
 			// Loader failed after dequeue: durable entry stays for inspection
 			// (unapplied path marks uncertain + pause via the notice sink).

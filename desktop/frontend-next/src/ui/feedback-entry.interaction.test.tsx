@@ -13,6 +13,7 @@ import type { FeedbackMine } from "../port/feedback";
 afterEach(() => {
   cleanup();
   dropDraft();
+  localStorage.removeItem("rx-show-session-tabs");
   vi.restoreAllMocks();
 });
 
@@ -82,6 +83,7 @@ describe("the unread badge", () => {
     render(<App hub={h} />);
     await userEvent.click(await screen.findByRole("button", { name: /3 项待查看/ }));
     await screen.findByText("FB-1C5W-7NB2");
+    for (const open of screen.getAllByRole("button", { name: /展开对话/ })) await userEvent.click(open);
     await waitFor(() => expect(screen.getByRole("button", { name: /发送反馈.*1 项待查看/ })).toBeTruthy());
     expect(document.querySelector(".studio-feedback .fbk-badge")!.textContent).toBe("1");
   });
@@ -152,6 +154,7 @@ describe("the mock keeps what the badge reads", () => {
 
 
 it("starts and rebinds feedback polling when the first local owner becomes available", async () => {
+  localStorage.setItem("rx-show-session-tabs", "on");
   const h = hub();
   await h.close("r1");
   const remote = await h.openRemote({ host: "gpu", workspace: "/remote", sessionPath: "/remote/session.jsonl" });

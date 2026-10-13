@@ -169,6 +169,9 @@ func (m *model) menuKey(k string) (tea.Cmd, bool) {
 		m.menu.sel = (m.menu.sel + n - 1) % n
 	case "esc":
 		m.menu = nil
+		if m.tr.Running && !m.viActive() {
+			return m.cancelTurn(), true
+		}
 	case "tab":
 		return m.acceptCompletion(), true
 	case "enter":

@@ -9,6 +9,7 @@ export interface ProviderEntry {
   kind: string;
   baseUrl: string;
   models: string[];
+  modelAliases?: Record<string, string>;
   default: string;
   hasKey: boolean;
   keyEnv?: string;
@@ -215,6 +216,8 @@ export interface ProviderModelCheckRequest {
 // Changing a source that already exists: everything else on the entry stays.
 export interface ProviderEdit {
   name: string;
+  // Omitted preserves aliases; blank or missing values reset listed models.
+  modelAliases?: Record<string, string>;
   // Omitted leaves the wire format alone.
   kind?: string;
   baseUrl?: string;
@@ -288,6 +291,8 @@ export interface ProviderDraft {
 // /provider-setup 404s once one exists, so null means "ready".
 export interface ProviderSetup {
   required: boolean;
+  // The runtime started with no provider at all: there is no model whose key could be missing.
+  noProvider?: boolean;
   provider?: string;
   model?: string;
   modelRef?: string;

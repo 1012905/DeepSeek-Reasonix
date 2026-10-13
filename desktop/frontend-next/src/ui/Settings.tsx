@@ -2,7 +2,6 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
-import { HttpError } from "../port/port";
 import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
 import { useSettingsSearch } from "./useSettingsSearch";
@@ -52,7 +51,7 @@ import { UsageSettings } from "./UsageSettings";
 import { Storage } from "./Storage";
 import { Appearance, SCHEMES } from "./Appearance";
 import { ScopeBar } from "./CapabilityScope";
-import { SAVED_NOT_APPLIED, reason } from "../i18n/kernel";
+import { savedNotApplied, reason } from "../i18n/kernel";
 import { SettingsHeading } from "./SettingsHeading";
 import { APPROVALS, approvalName, approvalNote } from "./approvals";
 
@@ -242,7 +241,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
       await fn();
       onChanged();
     } catch (e) {
-      setNote({ text: reason(e), unapplied: e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "") });
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -539,7 +538,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
           {at === "model" && (
             <>
               <Group id="model" title={t("按用途选择模型")} now={nav.model}
-                hint={t("默认模型用于当前对话和大多数任务，其他用途默认跟随它；只有要为某件事换一个模型时才改。切换会保留对话并重建运行时，任务执行期间无法修改。")}>
+                hint={t("默认模型用于当前对话和大多数任务，其他用途默认跟随它；只有要为某件事换一个模型时才改。网页搜索默认用对话模型自带的搜索；指定独立搜索模型后，每次搜索多一次计费，且不带对话上下文。切换会保留对话并重建运行时，任务执行期间无法修改。")}>
                 <ModelUsage models={models} roles={roles} main={status?.modelRef} busy={busy} protocol={protocol}
                   onMain={(ref) => run(ref, async () => {
                     await port.setModel(ref);

@@ -1,3 +1,4 @@
+import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
 import type { Attachment, DroppedRef } from "./attachment";
@@ -19,11 +20,11 @@ export type { MemoryEdit } from "./memory";
 export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
 import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
-import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
+import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry } from "./skill";
 import type { StudioCrash, StudioLogs, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
-import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
+import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
 // The port is one contract; its subjects each keep their own file, the way the
 // wire and the layers below already do. This is where a reader still finds
@@ -33,9 +34,9 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource, JobEntry, McpCatalog, McpDraft,
   McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, MemoryCatalog,
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
-  RewindResult, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus,
+  RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, UpdateProgress, VersionEntry,
-  StudioCrash, StudioLogs, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
+  StudioCrash, StudioLogs, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
@@ -147,6 +148,7 @@ export interface NotifyPrefs {
   approval: boolean;
   ask: boolean;
   feedbackReply: boolean;
+  diskLow: boolean;
   sound: boolean;
 }
 
@@ -300,6 +302,9 @@ export interface AgentPort {
   // Retries a failed or disconnected server and answers with its new state, so
   // the caller never has to race a follow-up GET against the connect.
   reconnectMcp(name: string): Promise<{ state: string; tools?: number; error?: string }>;
+  // Approves the withheld definitions the digest names, then reconnects. The
+  // kernel refuses a digest that no longer matches what it withholds.
+  trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;
   setMcpLoad(name: string, load: McpLoad): Promise<void>;
@@ -432,6 +437,8 @@ export interface AgentPort {
   /** Show a workspace entry, "" being the root, in the system file manager.
    *  Refuses with the kernel's code for anything outside the workspace. */
   revealInFileManager(path: string): Promise<void>;
+  opensFiles(): boolean;
+  openFile(path: string): Promise<void>;
   sessions(): Promise<SessionEntry[]>;
   resume(path: string): Promise<void>;
   newSession(): Promise<void>;
@@ -456,6 +463,10 @@ export interface AgentPort {
   // the user agreed to.
   prepareRewind(turn: number, scope: RewindScope): Promise<RewindPlan>;
   commitRewind(planId: string): Promise<RewindResult>;
+  // Copies the conversation up to the end of a turn into a new session and
+  // answers with its path; this session stays where it is.
+  branchAt(turn: number, name: string): Promise<string>;
+  availableUndo(): Promise<RewindUndo | null>;
   // Reverses a committed rewind. Only reachable while the caller still holds the
   // transaction id the commit returned.
   undoRewind(transactionId: string): Promise<void>;
@@ -493,6 +504,9 @@ export interface AgentPort {
   // the text, and commitStaged records it locally once they confirm.
   proposeCommit(signal?: AbortSignal): Promise<CommitProposal>;
   commitStaged(req: CommitRequest): Promise<CommitResult>;
+  // Moves changes the workspace lists into or out of the index, so a commit has
+  // something to record without a terminal.
+  stageChanges(req: StageRequest): Promise<void>;
   // Dot entries are left out unless hidden is set; VCS stores never appear.
   workspaceFiles(path?: string, query?: string, hidden?: boolean): Promise<WorkspaceFiles>;
   workspaceFile(path: string): Promise<WorkspaceFile>;
@@ -542,6 +556,7 @@ export interface AgentPort {
   // the agent can read and drive; the window keeping its own would be a page
   // neither could hand to the other.
   browserOpen(url: string, newTab: boolean): Promise<BrowserTab>;
+  browserClose(tab: string): Promise<void>;
   // The entry's full text. preview is cut to a manifest-sized line, so editing
   // against it would silently shorten what the user actually said.
   readQueued(itemId: string): Promise<string>;
@@ -566,7 +581,8 @@ export interface AgentPort {
   // A plan card has three outcomes, not two. The id is the host's; the frontend
   // sends it back untouched rather than describing the state it thinks it is in.
   planDecision(id: string, action: PlanAction): Promise<void>;
-  answer(id: string, answers: { questionId: string; selected: string[] }[]): Promise<void>;
+  answer(id: string, answers: { questionId: string; selected: string[]; value?: Record<string, unknown> }[]): Promise<void>;
+  engageQuestion(id: string): Promise<void>;
   // Installed theme packs and which one is active. The list carries every
   // pack's tokens so a picker can preview without a second request.
   context(): Promise<ContextBreakdown>;
@@ -601,6 +617,9 @@ export interface AgentPort {
   openThemeFolder(): Promise<string>;
   // Extension surfaces arrive on the event stream; these carry the user's half
   // back — an action the card offered, or a published form's values.
+  surfaceAction(request: SurfaceActionRequest): Promise<Queued>;
+  surfaceActionState(callId: string): Promise<SurfaceActionRecord>;
+  extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]>;
   invokeExtensionAction(name: string): Promise<string>;
   submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>): Promise<void>;
 

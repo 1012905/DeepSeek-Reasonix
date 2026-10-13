@@ -7,6 +7,20 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
+// The in-memory stand-in for a config that lists no provider: never written
+// out or offered, it lets the kernel start so the window can ask to connect.
+const (
+	UnconfiguredKind  = "unconfigured"
+	UnconfiguredName  = "unconfigured"
+	UnconfiguredModel = "none"
+	UnconfiguredRef   = UnconfiguredName + "/" + UnconfiguredModel
+)
+
+// UnconfiguredEntry is the placeholder entry.
+func UnconfiguredEntry() ProviderEntry {
+	return ProviderEntry{Name: UnconfiguredName, Kind: UnconfiguredKind, Model: UnconfiguredModel}
+}
+
 // ProviderEntry declares a model provider instance. ContextWindow is the model's
 // token budget; the harness compacts older history as a turn's prompt approaches
 // it (see agent compaction). 0 disables compaction for the instance.
@@ -15,12 +29,13 @@ type ProviderEntry struct {
 	DisplayName   string            `toml:"display_name"` // what the UI calls this entry; Name stays the identity refs point at
 	Kind          string            `toml:"kind"`
 	BaseURL       string            `toml:"base_url"`
-	ChatURL       string            `toml:"chat_url"`    // legacy OpenAI chat endpoint override; retained with its historical semantics
-	RequestURL    string            `toml:"request_url"` // exact provider request URL written by current settings UI
-	Model         string            `toml:"model"`       // a single model (back-compat)
-	Models        []string          `toml:"models"`      // a vendor's model list (one base_url/key, many models)
-	ModelsURL     string            `toml:"models_url"`  // auto-fetch models from this URL on startup
-	Default       string            `toml:"default"`     // default model when Models is set (else Models[0])
+	ChatURL       string            `toml:"chat_url"`      // legacy OpenAI chat endpoint override; retained with its historical semantics
+	RequestURL    string            `toml:"request_url"`   // exact provider request URL written by current settings UI
+	Model         string            `toml:"model"`         // a single model (back-compat)
+	Models        []string          `toml:"models"`        // a vendor's model list (one base_url/key, many models)
+	ModelAliases  map[string]string `toml:"model_aliases"` // display only; keys are exact model IDs within this provider
+	ModelsURL     string            `toml:"models_url"`    // auto-fetch models from this URL on startup
+	Default       string            `toml:"default"`       // default model when Models is set (else Models[0])
 	APIKeyEnv     string            `toml:"api_key_env"`
 	PresetID      string            `toml:"preset_id"`      // curated preset provenance: UI dedupe, and the vetting a wire contract reads.
 	PresetVersion int               `toml:"preset_version"` // curated preset schema version for future migrations.
@@ -101,6 +116,10 @@ type ProviderEntry struct {
 	// send nothing — before headers or between events — before it is dropped.
 	// Zero keeps the 300s default; a silent pre-header wait is retried once.
 	IdleTimeoutSeconds int `toml:"idle_timeout_seconds"`
+
+	// searchAssigned is set on resolved copies when a dedicated search model is
+	// selected, so no conversation request also carries the built-in tool.
+	searchAssigned bool
 }
 
 type ProviderModelOverride struct {
@@ -169,4 +188,43 @@ func providerHasAnyModel(e ProviderEntry) bool {
 		}
 	}
 	return false
+}
+
+// emptyProvidersLine is what a user config says when it lists no provider: an
+// absent key reads as a fresh install and brings the built-in providers back.
+func emptyProvidersLine(providers []ProviderEntry) string {
+	if len(providers) > 0 {
+		return ""
+	}
+	return "providers = []   # every provider removed; without this line the built-in DeepSeek providers return\n"
+}
+
+// standIn resolves the reserved stand-in ref while no provider is listed.
+func standIn(c *Config, ref string) (*ProviderEntry, bool) {
+	if ref != UnconfiguredRef || c == nil || len(c.Providers) > 0 {
+		return nil, false
+	}
+	e := UnconfiguredEntry()
+	return &e, true
+}
+
+// noProviderStart is where a new session opens with nothing configured: there is
+// no stale default to preserve, so every caller gets the stand-in and the window
+// asks for a connection.
+func noProviderStart(c *Config) (string, bool, bool) {
+	if c == nil {
+		return "", false, false
+	}
+	return UnconfiguredRef, false, true
+}
+
+// kindError is what a selected entry that cannot be used answers.
+func kindError(e *ProviderEntry, model string) error {
+	switch e.Kind {
+	case UnconfiguredKind:
+		return fmt.Errorf("%w; run `reasonix setup` to add one", provider.ErrNoProvider)
+	case "":
+		return fmt.Errorf("provider %q: kind is required", model)
+	}
+	return nil
 }

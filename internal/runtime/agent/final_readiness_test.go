@@ -99,13 +99,22 @@ func TestFinalReadinessIgnoresLoopGuardQuotedInToolOutput(t *testing.T) {
 
 // The table will never enumerate every project's own runner, so a project
 // driven by its own scripts runs its check, passes it, and is told it verified
-// nothing. That miss is the host's, so the turn is not charged for it: failing
-// work that did verify itself punishes the gate's blind spot, and the gate
-// lapses next turn regardless, so the failure collects nothing later either.
+// nothing. That miss is the host's, and the turn is not charged for it — but
+// only while the host can say the command changed nothing, which is the fact
+// that separates its blind spot from a change nobody verified.
 func TestVerificationGapSeparatesTheHostsBlindSpotFromTheTurns(t *testing.T) {
 	const ran = "./check.sh"
-	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"wordcount.sh"}}
-	command := evidence.Receipt{ToolName: "bash", Success: true, Command: ran}
+	writer := evidence.Receipt{
+		ToolName: "write_file", Success: true, Write: true, Mutation: true,
+		MutationEvidence: evidence.MutationProven, Paths: []string{"wordcount.sh"},
+	}
+	// The walk that follows an unclassified call came back seeing no change.
+	settled := evidence.Receipt{ToolName: "bash", Success: true, Command: ran}
+	// The same call where the host could not complete that walk.
+	unwatched := evidence.Receipt{
+		ToolName: "bash", Success: true, Command: ran,
+		Mutation: true, MutationEvidence: evidence.MutationUnknown,
+	}
 	declared := instruction.VerifyCheck{Command: "make check", SourcePath: "AGENTS.md", Line: 3}
 
 	cases := []struct {
@@ -114,9 +123,10 @@ func TestVerificationGapSeparatesTheHostsBlindSpotFromTheTurns(t *testing.T) {
 		ledger   *evidence.Ledger
 		wantOwed bool
 	}{
-		{"a command the table could not read is owed by nobody", nil, readinessLedger(writer, command), false},
+		{"a command the table could not read is owed by nobody", nil, readinessLedger(writer, settled), false},
+		{"a command the host could not watch leaves the change owed", nil, readinessLedger(writer, unwatched), true},
 		{"nothing ran at all is the turn's own miss", nil, readinessLedger(writer), true},
-		{"a project that declared checks owes those", []instruction.VerifyCheck{declared}, readinessLedger(writer, command), true},
+		{"a project that declared checks owes those", []instruction.VerifyCheck{declared}, readinessLedger(writer, settled), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,21 +151,128 @@ func TestVerificationGapSeparatesTheHostsBlindSpotFromTheTurns(t *testing.T) {
 	}
 }
 
-// The host's blind spot must never be what fails a run.
-func TestUnreadableCommandDoesNotFailTheTurn(t *testing.T) {
-	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"wordcount.sh"}}
-	command := evidence.Receipt{ToolName: "bash", Success: true, Command: "./check.sh"}
+// The waiver above stands on the host having seen the command change nothing.
+// Where the host watched it write, or could not watch at all, the check it would
+// have stood in for never ran, and the change it left is what the turn owes.
+func TestAWriteTheHostSawDoesNotClearTheOwedCheck(t *testing.T) {
+	writer := evidence.Receipt{
+		ToolName: "write_file", Success: true, Write: true, Mutation: true,
+		MutationEvidence: evidence.MutationProven, Paths: []string{"internal/x/a.go"},
+	}
+	cases := []struct {
+		name     string
+		command  evidence.Receipt
+		wantOwed bool
+	}{
+		{
+			"a redirect the host watched",
+			evidence.Receipt{
+				ToolName: "bash", Success: true, Command: "echo hi > internal/x/b.txt",
+				Mutation: true, MutationEvidence: evidence.MutationProven,
+				Paths: []string{"internal/x/b.txt"}, PathsComplete: true,
+			},
+			true,
+		},
+		{
+			"a deletion the host watched",
+			evidence.Receipt{
+				ToolName: "bash", Success: true, Command: "rm -f internal/x/old.go",
+				Mutation: true, MutationEvidence: evidence.MutationProven,
+				Paths: []string{"internal/x/old.go"}, PathsComplete: true,
+			},
+			true,
+		},
+		{
+			"a write the host could not watch",
+			evidence.Receipt{
+				ToolName: "bash", Success: true, Command: "./deploy.sh",
+				Mutation: true, MutationEvidence: evidence.MutationUnknown,
+			},
+			true,
+		},
+		{
+			"a command the host graded as changing nothing",
+			evidence.Receipt{ToolName: "bash", Success: true, Command: "./check.sh"},
+			false,
+		},
+	}
 	reg := tool.NewRegistry()
 	reg.Add(fakeTool{name: "bash"})
-
-	a := &Agent{
-		task: taskRuntime{ledger: readinessLedger(writer, command)},
-		svc:  agentServices{tools: reg},
-		turn: turnRuntime{policySet: true, policy: taskpolicy.TaskPolicy{Verification: taskpolicy.VerifyTargeted}},
+	owedFor := func(receipts ...evidence.Receipt) (string, bool) {
+		a := &Agent{
+			task: taskRuntime{ledger: readinessLedger(receipts...)},
+			svc:  agentServices{tools: reg},
+			turn: turnRuntime{policySet: true, policy: taskpolicy.TaskPolicy{Verification: taskpolicy.VerifyTargeted}},
+		}
+		gap, owed := a.verificationGap(0)
+		got := a.finalReadinessCheckFor()
+		if ready := got.reason == ""; ready == owed {
+			t.Fatalf("verificationGap owed = %v but finalReadinessCheckFor = %+v", owed, got)
+		}
+		return gap, owed
 	}
-	got := a.ReadinessResult()
-	if !got.Ready {
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gap, owed := owedFor(writer, tc.command)
+			if owed != tc.wantOwed {
+				t.Fatalf("owed = %v, want %v: %q", owed, tc.wantOwed, gap)
+			}
+		})
+	}
+
+	// A quiet command beside a writing one says nothing about that one: the
+	// waiver asks about every unrecognized command, not the most recent.
+	quiet := evidence.Receipt{ToolName: "bash", Success: true, Command: "ls"}
+	wrote := evidence.Receipt{
+		ToolName: "bash", Success: true, Command: "./deploy.sh",
+		Mutation: true, MutationEvidence: evidence.MutationUnknown,
+	}
+	t.Run("a quiet command after a writing one", func(t *testing.T) {
+		if gap, owed := owedFor(writer, wrote, quiet); !owed {
+			t.Fatalf("owed = false, want true: a later %q waived the write %q left: %q", quiet.Command, wrote.Command, gap)
+		}
+	})
+	t.Run("a writing command after a quiet one", func(t *testing.T) {
+		if gap, owed := owedFor(writer, quiet, wrote); !owed {
+			t.Fatalf("owed = false, want true: %q", gap)
+		}
+	})
+	t.Run("quiet commands only", func(t *testing.T) {
+		if gap, owed := owedFor(writer, quiet, quiet); owed {
+			t.Fatalf("owed = true, want the waiver to stand: %q", gap)
+		}
+	})
+}
+
+// The host's blind spot must never be what fails a run. A command it watched
+// leave the tree as it found it is that blind spot; one it could not watch is
+// an unproven change, and the turn owes what it left behind.
+func TestACommandGradedAsChangingNothingDoesNotFailTheTurn(t *testing.T) {
+	writer := evidence.Receipt{
+		ToolName: "write_file", Success: true, Write: true, Mutation: true,
+		MutationEvidence: evidence.MutationProven, Paths: []string{"wordcount.sh"},
+	}
+	settled := evidence.Receipt{ToolName: "bash", Success: true, Command: "./check.sh", Mutation: false}
+	unwatched := evidence.Receipt{
+		ToolName: "bash", Success: true, Command: "./check.sh",
+		Mutation: true, MutationEvidence: evidence.MutationUnknown,
+	}
+	reg := tool.NewRegistry()
+	reg.Add(fakeTool{name: "bash"})
+	readiness := func(command evidence.Receipt) ReadinessResult {
+		a := &Agent{
+			task: taskRuntime{ledger: readinessLedger(writer, command)},
+			svc:  agentServices{tools: reg},
+			turn: turnRuntime{policySet: true, policy: taskpolicy.TaskPolicy{Verification: taskpolicy.VerifyTargeted}},
+		}
+		return a.ReadinessResult()
+	}
+
+	if got := readiness(settled); !got.Ready {
 		t.Fatalf("ReadinessResult() = %+v, want ready: the host's blind spot must not fail the run", got)
+	}
+	if got := readiness(unwatched); got.Ready {
+		t.Fatalf("ReadinessResult() = %+v, want not ready: an unwatched change is still owed", got)
 	}
 }
 

@@ -15,6 +15,12 @@ export interface VersionNotes {
   cached: boolean;
 }
 
+// The running version was pulled after publication; reason is the publisher's.
+export interface WithdrawnNote {
+  version: string;
+  reason: string;
+}
+
 // err rides alongside the data: an unreachable catalog must not hide which
 // version is running.
 export interface VersionHub {
@@ -24,6 +30,7 @@ export interface VersionHub {
   latest: string;
   newer: boolean;
   versions: VersionEntry[];
+  withdrawn?: WithdrawnNote;
   err?: string;
 }
 
