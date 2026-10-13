@@ -404,8 +404,6 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// A toast that did not go out is invisible to the person it was for, so the
 	// reason belongs in the log the shell keeps.
 	notify.OnSendFailure(func(err error) { fmt.Fprintf(logs, "notify: %v\n", err) })
-	sender := notify.NewPlatformSender()
-	go watchDisk(ctx, notifySet, sender, []string{root, serve.SessionDirFor(root)}, diskWatchEvery, diskhealth.Read)
 	hub := serve.NewHub(serve.HubOptions{
 		ComputerDriver: driver,
 		Serve:          hubCfg,
@@ -415,7 +413,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		DecorateSink:   decorate,
 		Tray:           &studioTray{tracker: tracker},
 		Notifications:  notifySet,
-		NotifySender:   sender,
+		NotifySender:   startDiskWatch(ctx, notifySet, []string{root, serve.SessionDirFor(root)}),
 		BrowserHost:    browserHost,
 		Asks:           asks,
 		Remote:         remotehost.New(ctx, version, asks),
