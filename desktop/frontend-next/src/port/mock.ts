@@ -1,3 +1,4 @@
+import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import type { PlanAction } from "./session";
 import { HttpError } from "./port";
 import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
@@ -673,6 +674,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     window.clearTimeout(at);
     this.queued.delete(itemId);
     this.dropQueued(itemId);
+    for(const [id,record] of this.surfaceActions) if(record.itemId===itemId)this.surfaceActions.set(id,{...record,status:"withdrawn"});
   }
 
   async submit(text: string, chips?: ChipCall): Promise<Queued | void> {
@@ -735,6 +737,9 @@ export class MockPort extends MockWorkspace implements AgentPort {
   }
   async engageQuestion(_id: string) {}
 
+  private surfaceActions = new Map<string,SurfaceActionRecord>();
+  async surfaceActionState(callId: string):Promise<SurfaceActionRecord> {return this.surfaceActions.get(callId) ?? {active:true,action:{surfaceId:"mock",sessionId:"mock",callId,actionId:"",requestId:"",values:{}}};}
+  async surfaceAction(request: SurfaceActionRequest) {const rec=await (request.delivery==="steer"?this.steer(JSON.stringify(request.action)):this.queueFollowup(JSON.stringify(request.action)));this.surfaceActions.set(request.action.callId,{active:true,action:request.action,itemId:rec.itemId,status:"accepted",canWithdraw:true});return rec;}
   async extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]> { return []; }
   async invokeExtensionAction(name: string) {
     return `${name} 在 mock 里没有真实扩展可执行`;

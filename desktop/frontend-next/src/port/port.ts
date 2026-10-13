@@ -1,3 +1,4 @@
+import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
 import type { Attachment, DroppedRef } from "./attachment";
@@ -616,6 +617,8 @@ export interface AgentPort {
   openThemeFolder(): Promise<string>;
   // Extension surfaces arrive on the event stream; these carry the user's half
   // back — an action the card offered, or a published form's values.
+  surfaceAction(request: SurfaceActionRequest): Promise<Queued>;
+  surfaceActionState(callId: string): Promise<SurfaceActionRecord>;
   extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]>;
   invokeExtensionAction(name: string): Promise<string>;
   submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>): Promise<void>;

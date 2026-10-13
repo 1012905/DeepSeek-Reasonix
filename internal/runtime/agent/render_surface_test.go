@@ -34,3 +34,17 @@ func TestRenderSurfaceUsesTypedAsk(t *testing.T) {
 		t.Fatalf("headless: %s %v", result, err)
 	}
 }
+func TestRenderSurfaceActionsDoNotAskAndHeadlessCannotOfferInput(t *testing.T) {
+	const spec = `{"spec_version":1,"body":[{"kind":"editable_text","key":"draft","label":"Draft","field":{"type":"string","required":true}},{"kind":"button","label":"Continue","actionId":"continue"}]}`
+	asker := &surfaceAsker{}
+	result, err := NewRenderSurfaceTool().Execute(WithCallContext(context.Background(), "action", event.Discard, asker, false), []byte(spec))
+	if err != nil || !strings.Contains(result, `"nonblocking":true`) || len(asker.questions) != 0 {
+		t.Fatalf("%s %v %+v", result, err, asker.questions)
+	}
+	result, err = NewRenderSurfaceTool().Execute(context.Background(), []byte(spec))
+	if err != nil || !strings.Contains(result, "unresolved") {
+		t.Fatalf("headless: %s %v", result, err)
+	}
+}
+
+func (a *surfaceAsker) PublishNativeSurface(_, _ string) error { return nil }

@@ -21,6 +21,18 @@ export function surfaceFields(spec: SurfaceSpec) {
   return fields;
 }
 
+export function surfaceActions(spec: SurfaceSpec) {
+  const actions: SurfaceSpec["body"] = [];
+  const walk = (nodes: SurfaceSpec["body"]) => nodes.forEach(n=>{if(n.kind==="button")actions.push(n);if(n.children)walk(n.children);});
+  walk(spec.body);return actions;
+}
+
+export function actionSurfaceOfTool(tool: Tool) {
+  const spec=surfaceOfTool(tool);
+  if(!spec || !surfaceActions(spec).length)return null;
+  try {return JSON.parse(tool.output ?? "{}").nonblocking===true ? spec : null;} catch {return null;}
+}
+
 function recordedValues(spec: SurfaceSpec, output?: string): Record<string, unknown> | undefined {
   try {
     const raw = JSON.parse(output ?? "");
@@ -38,7 +50,7 @@ function recordedValues(spec: SurfaceSpec, output?: string): Record<string, unkn
 export function surfaceHistory(item: Item): Item {
   if (item.t !== "tool") return item;
   const spec = surfaceOfTool({ ...item.tool, err: undefined });
-  if (!spec || !surfaceFields(spec).length) return item;
+  if (!spec || surfaceActions(spec).length || !surfaceFields(spec).length) return item;
   const values = item.tool.err ? undefined : recordedValues(spec, item.tool.output);
   return { t: "ask", id: item.id, ask: { id: item.tool.id ?? item.id, questions: [{ id: "surface", prompt: spec.title ?? "", options: [], surface: spec }] }, answered: values ? [[]] : [], surfaceValues: values, surfaceExpired: !values };
 }

@@ -24,7 +24,7 @@ func (s *Spec) Validate() error {
 			return err
 		}
 	}
-	return nil
+	return s.validateActions()
 }
 
 func validateNode(n Node, path string, depth int, budget *int, fields map[string]*Field) error {
@@ -79,6 +79,11 @@ func nodeFields(n Node, path string, fields map[string]*Field) (string, error) {
 		if n.Progress == nil || !finite(*n.Progress) || *n.Progress < 0 || *n.Progress > 1 {
 			return "", fail(CodeValueInvalid, path+"/progress")
 		}
+	case "button":
+		if !identifier(n.ActionID) || n.Label == "" {
+			return "", fail(CodeSchemaInvalid, path)
+		}
+		allowed = "label actionId"
 	case "divider":
 	case "row", "stack":
 		allowed = "children"

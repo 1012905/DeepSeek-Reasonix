@@ -46,7 +46,7 @@ func TestHostileSurfaceSpecs(t *testing.T) {
 		"html":                `{"spec_version":1,"body":[{"kind":"html","value":"<script/>"}]}`,
 		"unknown property":    strings.Replace(form, `"title":"Configure"`, `"url":"https://example.com"`, 1),
 		"duplicate property":  strings.Replace(form, `"spec_version":1`, `"spec_version":1,"SPEC_VERSION":1`, 1),
-		"action":              `{"spec_version":1,"body":[{"kind":"button","label":"Approve","actionId":"approve"}]}`,
+		"action":              `{"spec_version":1,"body":[{"kind":"button","label":"Approve","actionId":"approve","operation":"approve"}]}`,
 		"duplicate field":     strings.Replace(form, `"key":"mode"`, `"key":"count"`, 1),
 		"bad default":         strings.Replace(form, `"default":2`, `"default":"2"`, 1),
 		"leaf children":       `{"spec_version":1,"body":[{"kind":"text","value":"hi","children":[{"kind":"text","value":"hidden"}]}]}`,

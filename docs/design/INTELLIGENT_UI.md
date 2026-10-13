@@ -51,7 +51,7 @@ The follow-up branch introduces `surfacespec` version 1. Its node is the existin
 
 The legacy plugin publisher keeps its existing catalogue and action path. Model-authored inputs use the same node contract, with submissions handled by the controller's ask path.
 
-The model catalogue accepts text, plain-text markdown, semantic containers, key/value rows, meters, pips, dividers, fields and choice cards. It rejects action buttons, executable components and unknown properties.
+The model catalogue accepts text, plain-text markdown, semantic containers, key/value rows, meters, pips, dividers, fields and choice cards. It rejects executable components, host approval operations and unknown properties. P2 also accepts opaque input buttons.
 
 Fields carry string, number, boolean, choice or multichoice values; choices use stable ids with optional description and preview text.
 
@@ -59,7 +59,7 @@ The parser caps a spec at 64 KiB, 200 nodes, eight tree levels, 16 fields and 16
 
 Hosts explicitly enable `Options.NativeSurfaces` for the desktop and HTTP native renderer. Other entry points do not register the tool. It is hidden from provider schemas and discovered through `use_capability`; its schema is delivered in the turn tail.
 
-Interactive trees publish a single ask carrying the validated spec and the host-owned tool call id. A desktop submits typed JSON in `AskAnswer.Value`. Validation and removal from the pending queue happen under the same lock; a refusal leaves the prompt pending.
+Forms without buttons publish a single ask carrying the validated spec and the host-owned tool call id. A desktop submits typed JSON in `AskAnswer.Value`. Validation and removal from the pending queue happen under the same lock; a refusal leaves the prompt pending.
 
 Empty answer lists retain the existing explicit skip semantics.
 
@@ -67,7 +67,7 @@ Reloaded pending requests replace the matching expired history marker and retain
 
 Replaying or mounting a restored row owes no entrance motion.
 
-The native renderer reuses `ExtensionView`, existing choice controls and input styling. Markdown and previews remain plain text. Both live and historical surface specs pass host credential redaction. Model surfaces cannot publish actions, grant permissions or settle approval prompts.
+The native renderer uses a restricted A2UI catalogue and styled Mantine controls. Markdown and previews are plain text. Live and historical specs pass credential redaction. Surface input cannot grant permissions or settle approval prompts.
 
 ## P2 drafts and previews
 
@@ -79,13 +79,35 @@ Previews do not interpret paths or expose file operations. Both sides pass the s
 
 The draft and preview vocabulary is mirrored under wire parity. Existing form controls and Studio colours render both components without a gutter or vertical rail. Display-only previews return immediately; draft forms retain the existing blocking ask semantics.
 
-This slice does not complete P2: nonblocking `surface_action` delivery, queue/withdraw/steer integration and their full lifecycle acceptance remain pending. No improvement in user turns has been measured.
+## P2 nonblocking actions
+
+Trees containing `button` nodes publish without opening an ask. Buttons carry only an opaque action id and label. The controller receives the action id and typed field values as a `surface_action` JSON tail note. Approval, permission, shell and invocation operations are absent from this schema.
+
+The desktop chooses queue or steer delivery using host controls. The same durable inbox owns admission, pause, retry, cancellation and withdrawal for both composer input and surface actions. Values remain literal data: references and command syntax inside fields are not interpreted.
+
+`GET /surfaces/{id}/action` reads current replay and control availability. `POST /surfaces/action` validates the session, call, canonical surface hash, action id, request id and field values before queueing. Nonblocking actions require an interactive native publisher; headless runs get the declared unresolved reply.
+
+A controller keeps at most 64 live publication identities, without retaining a second copy of the spec. Eligibility belongs to the current executor session. Old unanswered publications expire after a rebuild or resume; a replay never publishes them again.
+
+Local-only action receipts use the existing session message representation. They stay out of provider requests and conversation rows. Pending envelopes also reconstruct accepted values if a receipt snapshot was unavailable. Inbox tombstones distinguish withdrawn input from an already accepted action.
+
+A durable enqueue is the input acknowledgment. Receipt snapshots follow the same best-effort save rule as admitted user messages. Snapshot failures do not falsely report that the durable input was refused. No new store or persistent schema field is introduced.
+
+Accepted cards restore values readonly. A live withdrawn card can be edited again; a cold withdrawn record remains readonly. Withdrawal is offered only while the inbox says it can succeed. Generic queued-text editing refuses typed action envelopes; withdraw and edit through the original card instead.
+
+Request identities survive uncertain delivery and unchanged retries. Reusing an identity with different values is refused. Native action cards remain outside execution-work disclosures, and remounting or fetching replay state owes no entrance motion.
+
+Steer payloads retain structured content for the model and separate display text for the user. Pending replay, queue cancellation and session rotation preserve their existing ownership rules. Existing asks, plugin actions and approval pipelines remain separate typed channels.
+
+The ask-based measurement counters exclude nonblocking publications and clicks. No improvement in user turns has been measured.
+
+The [fixed-task evaluation protocol](../../benchmarks/intelligent-ui/README.md) defines paired tasks, outcome checks and content-free observer records. Collection remains outstanding; TUI work remains deferred.
 
 ## A2UI renderer integration
 
 The desktop uses pinned `@a2ui/react` and `@a2ui/web_core` 0.13.0 through their v0.9 entry points. A local adapter converts existing surface nodes to A2UI messages. The model-facing spec, hidden discovery and controller answer channel keep their existing contracts.
 
-The renderer receives only locally generated messages and the Studio component catalogue. It has no registered functions, media, URLs or executable components. Plugin buttons retain the existing extension callback; model specs still reject buttons before rendering.
+The renderer receives only locally generated messages and the Studio component catalogue. It has no registered functions, media, URLs or executable components. Plugin buttons retain the existing extension callback; model buttons carry opaque action ids through the controller's native input path.
 
 A2UI owns the transient tree and draft data bindings. Field keys map to positional binding ids, so previously accepted prototype-like names never become library paths. Answers map back to original keys and preserve string bytes; numeric inputs convert according to the declared field type.
 

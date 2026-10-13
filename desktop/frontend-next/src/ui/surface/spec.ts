@@ -47,6 +47,7 @@ export function parseSurface(raw: unknown): SurfaceSpec | null {
   if (new TextEncoder().encode(JSON.stringify(raw)).length > 65536) return null;
   let remaining = 200;
   const fields = new Set<string>();
+  const actions = new Set<string>();
   function node(v: unknown, depth: number): boolean {
     if (!object(v) || depth > 8 || --remaining < 0) return false;
     if (!text(v.value, 4000) || !text(v.key, 200) || !text(v.label, 200)) return false;
@@ -57,6 +58,9 @@ export function parseSurface(raw: unknown): SurfaceSpec | null {
       case "kv": if (!text(v.key, 200, true)) return false; allowed = ["key", "value", "tone"]; break;
       case "pip": if (!v.tone) return false; allowed = ["value", "tone"]; break;
       case "meter": if (!finite(v.progress) || v.progress < 0 || v.progress > 1) return false; allowed = ["label", "progress", "tone"]; break;
+      case "button":
+        if (!id(v.actionId) || actions.has(v.actionId) || actions.size >=16 || !text(v.label,200,true)) return false;
+        actions.add(v.actionId); allowed = ["label","actionId"]; break;
       case "divider": allowed = []; break;
       case "row": case "stack": if (!Array.isArray(v.children) || !v.children.length) return false; allowed = ["children"]; break;
       case "diff_preview":
