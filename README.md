@@ -59,7 +59,7 @@
 
 ## ❤️Sponsor
 
-<table><tr><td width="180"><a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="./.github/sponsor/packycode-dark.svg"><img src="./.github/sponsor/packycode-light.svg" alt="PackyCode" width="150"></picture></a></td><td>Thanks to PackyCode for sponsoring this project! Access leading AI models through PackyCode with one API endpoint and one API key, with automatic failover and dedicated high-speed routes for Codex and Claude Code.</td></tr></table>
+<table><tr><td width="180" align="center" valign="middle"><a href="https://www.rightapi.ai/register?aff=e083bf73" target="_blank" rel="sponsored noopener noreferrer"><img src="./.github/sponsor/rightcode.png" alt="Right Code" width="64"></a></td><td valign="middle">Thanks to Right Code for sponsoring this project! Right Code reliably provides routing services for models such as Claude Code, Codex, and Gemini, with both pay-as-you-go and monthly subscription billing options available. Invoices are available upon top-up, and enterprise and team users can receive dedicated one-on-one support. Register via <a href="https://www.rightapi.ai/register?aff=e083bf73" target="_blank" rel="sponsored noopener noreferrer">this link</a>.</td></tr><tr><td width="180" align="center" valign="middle"><a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="./.github/sponsor/packycode-dark.svg"><img src="./.github/sponsor/packycode-light.svg" alt="PackyCode" width="80"></picture></a></td><td valign="middle">Thanks to PackyCode for sponsoring this project! Access leading AI models through PackyCode with one API endpoint and one API key, with automatic failover and dedicated high-speed routes for Codex and Claude Code. Register via <a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer">this link</a>.</td></tr></table>
 
 ## What it is
 
@@ -151,7 +151,7 @@ pre-releases):
 | --- | --- | --- |
 | macOS | `.dmg` or `.zip` | Apple Silicon (`arm64`) / Intel (`amd64`) |
 | Windows | Installer `-installer.exe` or portable `.zip` | x64 |
-| Linux | `.deb` | x64 |
+| Linux | `.deb` or `.rpm` | x64 (`amd64`) / ARM64 (`arm64`, aarch64) |
 
 Every package ships with a `.minisig` signature, and the release carries
 `SHA256SUMS`. Once installed, Studio updates itself in place.
@@ -278,9 +278,9 @@ A small list of folks whose work has shaped Reasonix the most — the current to
 | --- | --- | --- | --- |
 | [**SivanCola**](https://github.com/SivanCola) | [**KHG420**](https://github.com/KHG420) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
 | [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**Harbor404**](https://github.com/Harbor404) | [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) |
-| [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) | [**eghrhegpe**](https://github.com/eghrhegpe) | [**Bernardxu123**](https://github.com/Bernardxu123) |
-| [**HaoyueQin**](https://github.com/HaoyueQin) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**BuGlessRB**](https://github.com/BuGlessRB) | [**CVEngineer66**](https://github.com/CVEngineer66) |
-| [**JesonChou**](https://github.com/JesonChou) | [**lanshi17**](https://github.com/lanshi17) | [**par73e**](https://github.com/par73e) | [**SuMuxi66**](https://github.com/SuMuxi66) |
+| [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) | [**XTLine**](https://github.com/XTLine) | [**eghrhegpe**](https://github.com/eghrhegpe) |
+| [**noreply**](https://github.com/noreply) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**xxoingr**](https://github.com/xxoingr) | [**Bernardxu123**](https://github.com/Bernardxu123) |
+| [**HaoyueQin**](https://github.com/HaoyueQin) | [**BuGlessRB**](https://github.com/BuGlessRB) | [**CVEngineer66**](https://github.com/CVEngineer66) | [**JesonChou**](https://github.com/JesonChou) |
 <!-- reasonix-top-contributors:end -->
 
 Special thanks to [**Bernardxu123**](https://github.com/Bernardxu123) for designing the project logo and intro video.

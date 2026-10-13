@@ -1,35 +1,47 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
-import type { ProviderCheck, ProviderEntry } from "../port/port";
+import type { Protocol, ProviderCheck, ProviderEntry } from "../port/port";
 import { checkedFact, clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
 import type { Port } from "./Providers";
-import { SAVED_NOT_APPLIED, reason, say } from "../i18n/kernel";
+import { savedNotApplied, reason, say } from "../i18n/kernel";
 import { checkFailure } from "./provider_check";
-import { HttpError } from "../port/port";
 import { IDLE_TIMEOUT_MAX, IDLE_TIMEOUT_MIN, THINKING, headerLines, parseEffortLevels, parseExtraBody, parseHeaders, parseIdleTimeout } from "./provider_compat";
 import { ModelEfforts } from "./ModelEfforts";
 import { EffortShape } from "./EffortShape";
 import type { ModelEffort, ModelLimit, ProviderEdit } from "../port/port";
+import { KIND_LABEL } from "./vendors";
 import { ModelLimits, limitTextOf, limitsToSend, type LimitText } from "./ModelLimits";
+import { useModelBatch } from "./useModelBatch";
 
 // Only what this form owns is sent: the entry keeps its prices, effort
 // vocabularies and everything else the panel cannot show.
 // declare opens the form on the reasoning fields: the composer sends a user
 // here when the endpoint reported no effort levels.
 export function EditConn({
-  entry, initialCheck, port, busy, setBusy, onDone, onRevert, onSaved, onDirty, declare = false, justSaved = false,
+  entry, wireFixed = false, initialCheck, port, busy, setBusy, onDone, onRevert, onSaved, onDirty, declare = false, justSaved = false,
 }: {
-  entry: ProviderEntry; initialCheck?: ProviderCheck; port: Port;
+  entry: ProviderEntry; wireFixed?: boolean; initialCheck?: ProviderCheck; port: Port;
   busy: string; setBusy: (b: string) => void; onDone: () => void | Promise<void>; onRevert: () => void; onSaved?: () => void; onDirty?: (dirty: boolean) => void;
   declare?: boolean; justSaved?: boolean;
 }) {
   const seededModels = [...new Set([...entry.models, ...(initialCheck?.models ?? [])])];
   const seededVision = [...new Set([...(entry.visionModels ?? []), ...(initialCheck?.vision ?? [])])];
   const [baseUrl, setBaseUrl] = useState(entry.baseUrl);
+  const [kind, setKind] = useState(entry.kind);
+  const [wires, setWires] = useState<Protocol[]>([]);
+  useEffect(() => {
+    let live = true;
+    Promise.resolve().then(() => port.protocols()).then((items) => live && setWires(items)).catch(() => live && setWires([]));
+    return () => { live = false; };
+  }, [port]);
+  const sameRole = (p: Protocol) => (p.answers ?? "chat") === (wires.find((w) => w.kind === entry.kind)?.answers ?? "chat");
+  // An account with a sibling door already switches between wires above; retyping one entry would make two doors of one kind.
+  const kinds = wireFixed ? [] : wires.some((w) => w.kind === entry.kind) ? wires.filter(sameRole).map((w) => w.kind) : [];
   const [completed, setCompleted] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState<string[]>(seededModels);
   const [picked, setPicked] = useState<string[]>(entry.models);
+  const [aliases, setAliases] = useState<Record<string, string>>(entry.modelAliases ?? {});
   const [vision, setVision] = useState<string[]>(seededVision);
   const [visionSettable, setVisionSettable] = useState<string[] | undefined>(
     entry.visionSettable ? [...new Set([...entry.visionSettable, ...(initialCheck?.vision ?? [])])] : undefined,
@@ -37,9 +49,6 @@ export function EditConn({
   const [facts, setFacts] = useState<Record<string, ModelFact>>(() => modelFacts(entry.models, initialCheck));
   const [diff, setDiff] = useState(() => initialCheck?.ok ? catalogDiff(entry.models, initialCheck.models ?? [], false) : null);
   const [checkingModel, setCheckingModel] = useState("");
-  const [batch, setBatch] = useState<"idle" | "running" | "stopped">("idle");
-  const run = useRef<AbortController | null>(null);
-  const testing = checkingModel !== "" || batch === "running";
   const [def, setDef] = useState(entry.default || entry.models[0] || "");
   const [err, setErr] = useState<{ text: string; kind: "save" | "unapplied" } | null>(null);
   const [refreshFail, setRefreshFail] = useState("");
@@ -52,6 +61,12 @@ export function EditConn({
     () => Object.fromEntries(Object.entries(entry.modelLimits ?? {}).map(([m, l]) => [m, limitTextOf(l)])),
   );
   const [think, setThink] = useState(entry.reasoningProtocol ?? "");
+  // Until saved, the thinking field follows the wire being picked: the stored
+  // entry's field belongs to the stored wire.
+  const draftWire = wires.find((w) => w.kind === kind);
+  const effortField = kind === entry.kind || !draftWire
+    ? entry.effortField
+    : !draftWire.effortUnder?.length || think === "" || draftWire.effortUnder.includes(think) ? draftWire.effortField : undefined;
   const [levelText, setLevelText] = useState((entry.supportedEfforts ?? []).join(", "));
   const [defEffort, setDefEffort] = useState(entry.defaultEffort ?? "");
   const levels = parseEffortLevels(levelText);
@@ -69,6 +84,7 @@ export function EditConn({
   const [extra, setExtra] = useState(entry.extraBody ? JSON.stringify(entry.extraBody, null, 2) : "");
   const saving = busy === `edit:${entry.name}`;
   const refreshing = busy === `refresh:${entry.name}`;
+  const listable = entry.canListModels !== false;
   const extraBad = extra.trim() !== "" && parseExtraBody(extra) === null;
 
   const toggle = (list: string[], set: (v: string[]) => void, m: string) =>
@@ -143,7 +159,7 @@ export function EditConn({
         model,
         baseUrl: baseUrl.trim(),
         apiKey: apiKey.trim(),
-        kind: entry.kind,
+        kind,
       });
       setFacts((current) => ({
         ...current,
@@ -160,43 +176,6 @@ export function EditConn({
         ...current,
         [model]: { ...(current[model] ?? { origin: "configured" }), checking: false },
       }));
-    }
-  };
-
-  const stopBatch = useCallback(() => {
-    if (!run.current) return false;
-    run.current.abort();
-    run.current = null;
-    setFacts(stopChecking);
-    setBatch("stopped");
-    return true;
-  }, []);
-
-  const testAll = async () => {
-    if (run.current || picked.length === 0) return;
-    const ctl = new AbortController();
-    run.current = ctl;
-    setBatch("running");
-    const queue = [...picked];
-    const lane = async () => {
-      for (let model = queue.shift(); model !== undefined && !ctl.signal.aborted; model = queue.shift()) {
-        const m = model;
-        setFacts((cur) => ({ ...cur, [m]: { ...(cur[m] ?? { origin: "configured" }), checking: true } }));
-        let next: (fact: ModelFact | undefined) => ModelFact;
-        try {
-          const got = await port.checkProviderModel({ name: entry.name, model: m, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), kind: entry.kind });
-          next = (fact) => ({ ...checkedFact(fact, "configured", got), checking: false });
-        } catch {
-          next = (fact) => ({ ...(fact ?? { origin: "configured" }), status: "unknown", reason: "network", checking: false });
-        }
-        if (ctl.signal.aborted) return;
-        setFacts((cur) => ({ ...cur, [m]: next(cur[m]) }));
-      }
-    };
-    await Promise.all([lane(), lane()]);
-    if (run.current === ctl) {
-      run.current = null;
-      setBatch("idle");
     }
   };
 
@@ -229,9 +208,11 @@ export function EditConn({
 
   const draft = (): ProviderEdit => ({
     name: entry.name,
+    ...(kind !== entry.kind && { kind }),
     baseUrl: baseUrl.trim(),
     apiKey: apiKey.trim(),
     models: picked,
+    modelAliases: Object.fromEntries(Object.entries(aliases).filter(([m, value]) => picked.includes(m) && value.trim()).map(([m, value]) => [m, value.trim()])),
     default: picked.includes(def) ? def : picked[0] ?? "",
     vision: vision.filter((m) => picked.includes(m)),
     contextWindow: Number(win.replace(/\D/g, "")) || 0,
@@ -259,10 +240,12 @@ export function EditConn({
   const dirty = draftKey !== stored;
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
   useEffect(() => () => onDirty?.(false), [onDirty]);
-  useEffect(() => {
-    if (!stopBatch()) setBatch((b) => (b === "stopped" ? "idle" : b));
-  }, [draftKey, stopBatch]);
-  useEffect(() => () => run.current?.abort(), []);
+  const { batch, testAll } = useModelBatch({
+    port, picked, draftKey, setFacts, origin: "configured",
+    blocked: checkingModel !== "" || busy !== "",
+    request: { name: entry.name, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), kind },
+  });
+  const testing = checkingModel !== "" || batch === "running";
   const [edited, setEdited] = useState(false);
   if (dirty && !edited) setEdited(true);
 
@@ -281,7 +264,7 @@ export function EditConn({
       await port.editProvider(draft());
       await onDone();
     } catch (e) {
-      const unapplied = e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
+      const unapplied = savedNotApplied(e);
       setErr({ text: reason(e), kind: unapplied ? "unapplied" : "save" });
       // Saved but not yet applied: the list has to show what is on file while
       // the form stays open to say why.
@@ -301,6 +284,18 @@ export function EditConn({
       if (canSave) void save();
     }}>
       <div className="fields">
+        {kinds.length > 1 && (
+          <label className="grow full">
+            <span>{t("接口协议")}</span>
+            <select aria-label={t("接口协议")} data-action="provider.draft" data-value="protocol" value={kind} onChange={(e) => {
+              setKind(e.target.value);
+              setFacts(clearModelCheckFacts);
+            }} disabled={busy !== "" || checkingModel !== ""}>
+              {kinds.map((k) => <option key={k} value={k}>{t(KIND_LABEL[k] ?? k)}</option>)}
+            </select>
+            <i className="tip">{t("以服务商文档为准；模型列表无法可靠判断聊天协议。")}</i>
+          </label>
+        )}
         <label className="grow full">
           <span>{t("接口地址")}</span>
           <input value={baseUrl} onChange={(e) => {
@@ -347,10 +342,12 @@ export function EditConn({
         <div className="mlhead">
           <span className="ttl">{t("模型")}</span>
           <span className="count">{t("已启用 {on}/{all}", { on: picked.length, all: models.length })}</span>
-          <button className="mrefresh" data-action="provider.probe" onClick={refetch} disabled={busy !== "" || testing}
-            title={t("用已保存或刚填的密钥向服务商读取模型列表，可直接勾选；服务商新增或下架模型后也一样")}>
-            {t(refreshing ? "正在从服务商读取…" : "从服务商读取可用模型")}
-          </button>
+          {listable && (
+            <button className="mrefresh" data-action="provider.probe" onClick={refetch} disabled={busy !== "" || testing}
+              title={t("用已保存或刚填的密钥向服务商读取模型列表，可直接勾选；服务商新增或下架模型后也一样")}>
+              {t(refreshing ? "正在从服务商读取…" : "从服务商读取可用模型")}
+            </button>
+          )}
           <button className="mrefresh" data-action="provider.model-check-all" onClick={testAll}
             disabled={busy !== "" || testing || picked.length === 0} aria-busy={batch === "running" || undefined}>
             {t("测试已启用模型（{n}）", { n: picked.length })}
@@ -380,12 +377,14 @@ export function EditConn({
           facts={facts}
           visionLocked={visionLocked}
           onCheck={checkModel}
+          aliases={aliases}
+          onAlias={(m, value) => setAliases((current) => ({ ...current, [m]: value }))}
           checkDisabled={busy !== "" || testing}
           onToggle={(m) => toggle(picked, setPicked, m)}
           onVision={(m) => toggle(vision, setVision, m)}
           onDefault={setDef}
           onAdd={addModel}
-          onFetch={refetch}
+          onFetch={listable ? refetch : undefined}
           fetching={refreshing}
           fetchDisabled={busy !== "" || testing}
           fetchFail={refreshFail}
@@ -419,7 +418,7 @@ export function EditConn({
               <i className="tip">
                 {t("端点控制思考深度的方式。此项无法自动探测：中转站转发的是第三方模型，只有你知道其后端。选择后才能调整推理强度，选择错误会导致请求被端点拒绝。")}
               </i>
-              <EffortShape field={think === (entry.reasoningProtocol ?? "") ? entry.effortField : undefined} level={levels[0]} />
+              <EffortShape field={think === (entry.reasoningProtocol ?? "") || kind !== entry.kind ? effortField : undefined} level={levels[0]} />
             </label>
             <label className="grow">
               <span>{t("推理档位")}</span>
@@ -435,8 +434,8 @@ export function EditConn({
               <i className="tip">
                 {levelsDormant
                   ? t("当前思考参数不使用自定义档位；已填写的档位会保留，切换协议后生效。")
-                  : entry.effortField
-                    ? t("端点接受的取值，逗号分隔，按原样作为 {field} 的值发送。填写后会替代思考参数自带的档位；型号没有内置档位时需要在这里手填才能选。", { field: entry.effortField })
+                  : effortField
+                    ? t("端点接受的取值，逗号分隔，按原样作为 {field} 的值发送。填写后会替代思考参数自带的档位；型号没有内置档位时需要在这里手填才能选。", { field: effortField })
                     : t("端点接受的取值，逗号分隔，按原样发送。填写后会替代思考参数自带的档位；型号没有内置档位时需要在这里手填才能选。")}
               </i>
             </label>
@@ -581,7 +580,3 @@ const PHASE_TEXT: Record<Phase, string> = {
   clean: "没有更改", dirty: "有未保存的更改", failed: "有未保存的更改", saving: "正在保存…",
   saved: "已保存", unapplied: "已保存，尚未生效",
 };
-
-function stopChecking(facts: Record<string, ModelFact>): Record<string, ModelFact> {
-  return Object.fromEntries(Object.entries(facts).map(([model, fact]) => [model, fact.checking ? { ...fact, checking: false } : fact]));
-}

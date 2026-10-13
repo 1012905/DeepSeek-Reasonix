@@ -3,8 +3,32 @@ import { boot as bootLang } from "../src/i18n";
 import { track as trackWidth } from "../src/ui/viewport";
 import "../src/styles/tokens.css";
 import "../src/styles/app.css";
+import "../src/styles/dock.css";
 import "../src/styles/studio.css";
+import "../src/styles/changedpill.css";
+import "../src/styles/chart.css";
+import "../src/styles/community.css";
+import "../src/styles/providerpresets.css";
+import "../src/styles/sessionnotes.css";
+import "../src/styles/sessionquick.css";
+import "../src/styles/sidebardrop.css";
+import "../src/styles/sponsor.css";
+import "../src/styles/versions.css";
+import "../src/styles/phonecomposer.css";
+import "../src/styles/stophint.css";
+import "../src/styles/dialogcenter.css";
+import "../src/styles/treerows.css";
+import "../src/styles/workbench-changes.css";
+import "../src/styles/vthumb.css";
+import "../src/styles/tips.css";
+import "../src/styles/waitnote.css";
+import "../src/styles/jsontext.css";
+import "../src/styles/skillpin.css";
+import "../src/styles/narrow.css";
+import "../src/styles/workfold.css";
+import "../src/styles/workbench-launcher.css";
 import "../src/styles/feedback.css";
+import "../src/styles/themes.css";
 import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
@@ -27,6 +51,7 @@ let peakInFlight = 0;
 // ?pack=sky opens on a pack with the live sky; ?pack=photo on one with a
 // picture. Both are the states where the shell goes translucent over a backdrop.
 const PACK = new URLSearchParams(location.search).get("pack");
+const GLOW = new URLSearchParams(location.search).get("glow");
 
 function benchPack(): ThemePack | null {
   const tokens = {
@@ -42,13 +67,25 @@ function benchPack(): ThemePack | null {
   if (PACK === "photo") {
     return {
       id: "bench-photo", name: "Bench photo", active: true, tokens,
-      background: { image: true, focusX: 0.5, focusY: 0.5, homeOpacity: 0.9, taskOpacity: 0.5, overlayStrength: 0.4 },
+      background: {
+        image: true, focusX: 0.5, focusY: 0.5, homeOpacity: 0.9, taskOpacity: 0.5, overlayStrength: 0.4,
+        ...(GLOW === "none" || GLOW === "default" ? { textGlow: GLOW } : {}),
+      },
     };
   }
   return null;
 }
 
 class BenchPort extends MockPort {
+  async versions() {
+    if (!query.has("versions")) return super.versions();
+    const names = ["2.38.0", "2.37.0", "2.36.0", "2.35.0", "2.34.0", "2.33.0", "2.32.0", "2.31.0", "2.30.0", "2.29.0"];
+    return {
+      current: "2.37.0", pinned: "", stalePin: false, latest: "2.38.0", newer: true,
+      versions: names.map((version) => ({ version, tag: `studio-v${version}`, publishedAt: new Date(Date.now() - (38 - Number(version.split(".")[1])) * 864e5).toISOString(), current: version === "2.37.0", older: Number(version.split(".")[1]) < 37, hasNotes: false })),
+    };
+  }
+
   private readonly subs = new Set<(e: WireEvent) => void>();
 
   async themes(): Promise<ThemePack[]> {
@@ -76,6 +113,10 @@ class BenchPort extends MockPort {
 
   async providerSetup() {
     return ONBOARDING ? { required: true, provider: "", model: "" } : null;
+  }
+
+  async foldWorkSettings() {
+    return { ...(await super.foldWorkSettings()), fold: query.has("fold") };
   }
 
   async workspaceGit() {
@@ -168,10 +209,14 @@ class BenchPort extends MockPort {
   }
 }
 
+// ?skill=1 makes the last user turn a skill invocation, the way the host sends one.
+const SKILL_PIN = `<skill-pin name="code-quality">\n# Skill: code-quality\n> 专业的代码质量审查 Skill：多维度 Code Review（正确性、安全性、性能、可维护性），带量化评分。\n(scope: user · ~/.reasonix/skills/code-quality/SKILL.md)\n\n${"审查要点：先读改动范围，再逐项检查。\n".repeat(30)}\n\nArguments: 看一下 internal/auth\n</skill-pin>`;
+
 function storedHistory(): HistoryMessage[] {
   const msgs: HistoryMessage[] = [];
   for (let i = 0; i < TURNS; i++) {
-    msgs.push({ role: "user", content: `第 ${i} 个问题，麻烦看一下这个文件。` });
+    const pinned = query.get("skill") === "1" && i === TURNS - 1;
+    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。` });
     msgs.push({
       role: "assistant",
       content: `第 ${i} 段回答，说明刚才那一步做了什么。\n\n- 要点一\n- 要点二\n`,
@@ -209,6 +254,11 @@ const NO_PANES = PANES === 0;
 
 class BenchHub extends MockHub {
   readonly feeds = new Map<string, BenchPort>();
+  private readonly settingsPort = new BenchPort();
+
+  machinePort(): AgentPort {
+    return this.settingsPort;
+  }
 
   portFor(rt: RuntimeView): AgentPort {
     let port = this.feeds.get(rt.id);

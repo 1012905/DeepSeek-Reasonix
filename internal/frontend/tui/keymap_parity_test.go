@@ -241,6 +241,52 @@ func TestCtrlDQuitsOnlyIdleAndEmpty(t *testing.T) {
 	}
 }
 
+// 1.x closed an open completion menu on Esc and, while a turn ran, stopped the
+// turn too; the menu is not a reason for Esc to lose its meaning.
+func TestEscInTheMenuAlsoStopsARunningTurn(t *testing.T) {
+	m, k := testModel(t)
+	startTurn(m)
+	menuFor(m, "/z", Completion{Kind: "slash", To: 2, Items: []CompletionItem{{Label: "/zebra", Insert: "/zebra"}}})
+	run(m, press(m, "esc"))
+	if m.menu != nil {
+		t.Fatal("esc left the menu open")
+	}
+	if !calledWith(k, "POST /cancel") {
+		t.Fatalf("esc with the menu open did not cancel the running turn:\n%s", strings.Join(k.seen(), "\n"))
+	}
+	if m.composer.Value() != "/z" {
+		t.Fatalf("esc cleared the draft: %q", m.composer.Value())
+	}
+}
+
+func TestEscInTheMenuOnlyClosesItWhenIdle(t *testing.T) {
+	m, k := testModel(t)
+	menuFor(m, "/z", Completion{Kind: "slash", To: 2, Items: []CompletionItem{{Label: "/zebra", Insert: "/zebra"}}})
+	run(m, press(m, "esc"))
+	if m.menu != nil {
+		t.Fatal("esc left the menu open")
+	}
+	if m.composer.Value() != "/z" {
+		t.Fatalf("esc on the menu cleared the draft: %q", m.composer.Value())
+	}
+	if calledWith(k, "POST /cancel") {
+		t.Fatal("esc on an idle menu sent a cancel")
+	}
+}
+
+func TestViEscInTheMenuDoesNotStopARunningTurn(t *testing.T) {
+	m, k := newViModel(t)
+	startTurn(m)
+	menuFor(m, "/z", Completion{Kind: "slash", To: 2, Items: []CompletionItem{{Label: "/zebra", Insert: "/zebra"}}})
+	run(m, press(m, "esc"))
+	if m.menu != nil {
+		t.Fatal("esc left the menu open")
+	}
+	if calledWith(k, "POST /cancel") {
+		t.Fatal("vi mode: esc with the menu open cancelled the turn")
+	}
+}
+
 func TestDoubleEscOnAnIdleEmptyComposerStillOpensRewind(t *testing.T) {
 	m, _ := testModel(t)
 	press(m, "esc")

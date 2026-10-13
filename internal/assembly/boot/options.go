@@ -16,11 +16,14 @@ import (
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/model/billing"
+	"reasonix/internal/platform/computer"
 	"reasonix/internal/runtime/taskmonitor"
 	"reasonix/internal/safety/sandbox"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessiontemp"
+	"reasonix/internal/state/workspacelease"
 	"reasonix/internal/tools/builtin"
+	"reasonix/internal/tools/jobs"
 )
 
 // Options carries the per-run knobs a frontend chooses; everything else is read
@@ -29,14 +32,16 @@ import (
 // run/serve pass true so a missing key fails fast, chat/desktop false so the UI
 // is reachable before one is set.
 type Options struct {
+	ComputerDriver *computer.Driver
 	// Version is the host declaring a real installation, which is what lets an
 	// assembly record the last-known-good config snapshot recovery reads back.
-	Version     string
-	Model       string
-	MaxSteps    int
-	MaxStepsKey string
-	RequireKey  bool
-	Sink        event.Sink
+	Version        string
+	Model          string
+	MaxSteps       int
+	MaxStepsKey    string
+	RequireKey     bool
+	Sink           event.Sink
+	NativeSurfaces bool
 	// OpenOnFallbackModel lets an unnamed build pass over a default_model nothing
 	// configured serves. Only a window sets it: it must open to be fixed, while a
 	// headless run must not move to another provider and its billing unasked.
@@ -70,6 +75,7 @@ type Options struct {
 	Home string
 	// Tests that compare prompt bytes must not depend on host discovery probes.
 	resolvedShell *sandbox.Shell
+	clock         func() time.Time
 	// tuneShell adjusts shell discovery before it runs; tests drive a slow interpreter through it.
 	tuneShell func(*sandbox.ShellDiscovery)
 	// StatsSource labels this frontend's usage records. Unset — or a value this
@@ -157,6 +163,10 @@ type Options struct {
 	// BrowserSession is the agent's browser and the tabs it has open; Rebuild
 	// reuses old's so a model switch does not close them.
 	BrowserSession *browser.Session
+	// Jobs and WorkspaceLease are the outgoing controller's, adopted by a
+	// replacement of the same workspace so running jobs outlive the rebuild.
+	Jobs           *jobs.Manager
+	WorkspaceLease *workspacelease.Owner
 	RuntimeReload
 	// deferPublish keeps a replacement generation private until migration and
 	// commit succeed. Cold BuildRuntime leaves this false and publishes at boot.

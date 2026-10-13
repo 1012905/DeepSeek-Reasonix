@@ -105,6 +105,7 @@ type Hub struct {
 	resolve    ClientResolver
 	known      map[string]bool
 	crashed    map[string]bool
+	surfaces   map[string]surfaceRecord
 	actions    map[string]map[string]protocol.UIActionDecl
 }
 
@@ -124,6 +125,7 @@ func New(opts Options) *Hub {
 		resolve:    opts.Resolve,
 		known:      map[string]bool{},
 		crashed:    map[string]bool{},
+		surfaces:   map[string]surfaceRecord{},
 		actions:    map[string]map[string]protocol.UIActionDecl{},
 	}
 }
@@ -148,6 +150,11 @@ func (h *Hub) Generation() uint64 {
 func (h *Hub) BindGeneration(sessionID string, gen uint64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.sessionID != strings.TrimSpace(sessionID) {
+		h.surfaces = map[string]surfaceRecord{}
+	} else if h.generation != gen {
+		h.expireSurfacesLocked("")
+	}
 	h.sessionID = strings.TrimSpace(sessionID)
 	h.generation = gen
 }
@@ -178,6 +185,7 @@ func (h *Hub) ClientCrashed(pluginID string) {
 	defer h.mu.Unlock()
 	if h.known[pluginID] {
 		h.crashed[pluginID] = true
+		h.expireSurfacesLocked(pluginID)
 	}
 }
 
@@ -252,6 +260,13 @@ func (h *Hub) publish(pluginID string, _ context.Context, p protocol.UIPublishPa
 	payload, err := decodePublishEvent(pluginID, p)
 	if err != nil {
 		return protocol.UIPublishResult{}, err
+	}
+	accepted, err := h.rememberSurface(payload)
+	if err != nil {
+		return protocol.UIPublishResult{}, err
+	}
+	if !accepted {
+		return protocol.UIPublishResult{Accepted: false}, nil
 	}
 	kind := event.ExtensionSurface
 	if p.Kind == protocol.UISurfaceStatus {

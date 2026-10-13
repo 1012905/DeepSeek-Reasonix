@@ -48,7 +48,7 @@ async function mount(running = false, pathless = false) {
     const onReport = useCallback((_: string, next: PaneReport) => setReport(next), []);
     return <>
       <Chrome port={port} status={report?.status ?? null} title="active" steer={0} onSettings={() => {}} onBrowser={() => {}}
-        browser={false} account={null} rail theme="light" onRail={() => {}} onTheme={() => {}} onFind={() => {}} />
+        browser={false} account={null} theme="light" onTheme={() => {}} onFind={() => {}} />
       <Pane port={port} rt={{ id: "r1", base: "/rt/r1", root: "/workspace", name: "workspace", sessionPath }}
         title="active" active visible sideHost={null} side={false} onFocus={() => {}} onReport={onReport}
         onSessionChanged={() => {}} pulse={0} findPulse={0} onSettings={() => {}} needsProject={false}

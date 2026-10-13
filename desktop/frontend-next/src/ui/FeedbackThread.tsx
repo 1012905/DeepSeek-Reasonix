@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { current, t } from "../i18n";
 import { FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, FEEDBACK_REPLYABLE, isUnderReview, type FeedbackItem, type FeedbackReply } from "../port/feedback";
 import type { AgentPort } from "../port/port";
@@ -27,13 +27,16 @@ function when(iso: string): string {
 interface ThreadProps {
   item: FeedbackItem;
   fresh: number;
-  onShowAll?: (receipt: string) => void;
+  onView?: (receipt: string, all: boolean | null) => void;
 }
 
 // Replies are plain text by contract: they render as text nodes, never linked,
 // formatted or interpreted, whoever wrote them.
-export function FeedbackThread({ item, fresh, onShowAll }: ThreadProps) {
+export function FeedbackThread({ item, fresh, onView }: ThreadProps) {
   const [all, setAll] = useState(false);
+  const [expanded, setExpanded] = useState(item.needsInput);
+  const id = useId();
+  useEffect(() => { if (item.needsInput) onView?.(item.receipt, false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const replies = item.replies;
   const hidden = all ? 0 : Math.max(0, replies.length - SHOWN);
   const shown = replies.slice(hidden);
@@ -42,23 +45,35 @@ export function FeedbackThread({ item, fresh, onShowAll }: ThreadProps) {
   if (replies.length === 0) return null;
   return (
     <section className="fbk-thread" aria-label={t("对话")}>
-      {hidden > 0 && (
-        <button type="button" className="btn sm" data-action="feedback.thread.more" onClick={() => { setAll(true); onShowAll?.(item.receipt); }}>
-          {t("显示更早的 {n} 条", { n: hidden })}
-        </button>
-      )}
-      <ol>
-        {shown.map((r) => (
-          <li key={r.id} data-author={r.author} data-new={isNew(r) ? "" : undefined}>
-            <div className="fbk-msg-hd">
-              <b>{t(AUTHOR_LABEL[r.author])}</b>
-              {isNew(r) && <span className="fbk-new">{t("新")}</span>}
-              <time dateTime={r.createdAt}>{when(r.createdAt)}</time>
-            </div>
-            <p className="fbk-msg" dir="auto">{r.body}</p>
-          </li>
-        ))}
-      </ol>
+      <button type="button" className="btn sm fbk-thread-toggle" data-action="feedback.thread.toggle" data-target={item.receipt} aria-expanded={expanded} aria-controls={id} onClick={() => {
+        const next = !expanded;
+        setExpanded(next);
+        onView?.(item.receipt, next ? all : null);
+      }}>
+        <StudioIcon name={expanded ? "down" : "chevron"} />
+        <span>{t(expanded ? "收起对话" : "展开对话")}</span>
+        <span className="fbk-meta">{t("{n} 条回复", { n: replies.length })}</span>
+        {fresh > 0 && <span className="fbk-thread-new">{t("{n} 条新回复", { n: fresh })}</span>}
+      </button>
+      <div id={id} className="fbk-thread-body" hidden={!expanded}>
+        {hidden > 0 && (
+          <button type="button" className="btn sm" data-action="feedback.thread.more" onClick={() => { setAll(true); onView?.(item.receipt, true); }}>
+            {t("显示更早的 {n} 条", { n: hidden })}
+          </button>
+        )}
+        <ol>
+          {shown.map((r) => (
+            <li key={r.id} data-author={r.author} data-new={isNew(r) ? "" : undefined}>
+              <div className="fbk-msg-hd">
+                <b>{t(AUTHOR_LABEL[r.author])}</b>
+                {isNew(r) && <span className="fbk-new">{t("新")}</span>}
+                <time dateTime={r.createdAt}>{when(r.createdAt)}</time>
+              </div>
+              <p className="fbk-msg" dir="auto">{r.body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   );
 }
@@ -91,6 +106,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
   const field = useRef<HTMLTextAreaElement>(null);
   const replyable = !item.statusUnavailable && FEEDBACK_REPLYABLE.includes(item.status);
   if (!replyable) return null;
+  const reopens = item.status === "fixed";
   if (offline) return <p className="fbk-hint">{t("离线时暂时不能回复。")}</p>;
 
   const expanded = open || item.needsInput;
@@ -121,7 +137,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
     return (
       <button type="button" className="btn sm fbk-reply-open" ref={opener} data-action="feedback.reply.open" onClick={() => { setOpen(true); requestAnimationFrame(() => field.current?.focus()); }}>
         <StudioIcon name="edit" />
-        {t("回复")}
+        {t(reopens ? "仍未解决，回复" : "回复")}
       </button>
     );
   }
@@ -136,7 +152,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
       data-action-submit="feedback.reply.send"
       onSubmit={(e) => { e.preventDefault(); void send(); }}
     >
-      <label htmlFor={id} className="fbk-label">{item.needsInput ? t("你的回复") : t("回复维护者")}</label>
+      <label htmlFor={id} className="fbk-label">{item.needsInput ? t("你的回复") : t(reopens ? "说明还有什么问题" : "回复维护者")}</label>
       <textarea
         id={id}
         ref={field}
@@ -150,6 +166,7 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
       />
       <div className="fbk-reply-foot">
         <span id={`${id}-hint`} className="fbk-hint">
+          {reopens && t("发送后这份反馈会重新打开，维护者会再次处理。")}{" "}
           {item.issueNumber
             ? t("这份反馈已有公开议题 #{n}：你的回复会被公开转发到那个议题里。请不要写入密钥、密码或私有内容。", { n: item.issueNumber })
             : t("只发给维护者，不会公开。请不要写入密钥、密码或私有代码。")}

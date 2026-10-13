@@ -2,16 +2,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentPort, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../../port/port";
 import type { Item } from "../../state/session";
 import { RewindControl } from "./RewindControl";
+import { SkillPinView } from "./SkillPinView";
+import { parseSkillPin } from "./skillpin";
 import { CopyButton } from "../CopyButton";
 import { reason } from "../../i18n/kernel";
 import { t } from "../../i18n";
 import { StudioIcon } from "../StudioIcon";
 import { messageSource } from "../source";
+import { useSendShortcut } from "../../state/prefs";
+import { sendAria, sendHint, sendsOnKey } from "../sendkey";
+import { useIme } from "../ime";
 import { touchKeyboard } from "../touchKeyboard";
 import { useFitHeight } from "../fitHeight";
 import { useViewer } from "../../state/viewer";
-
-const SAVED_IMAGE = /(?:^|\s)@(\.reasonix\/attachments\/clipboard-[\d.-]+\.(?:png|jpe?g|gif|webp|bmp|svg))(?=\s|$)/gi;
 
 function SavedImage({ path, src }: { path: string; src: string }) {
   const [failed, setFailed] = useState(false);
@@ -27,7 +30,6 @@ export function UserCard({
   onResend,
   onPrepareRewind,
   onCommitRewind,
-  onUndoRewind,
 }: {
   item: Extract<Item, { t: "user" }>;
   port?: Pick<AgentPort, "workspaceImageURL">;
@@ -35,10 +37,11 @@ export function UserCard({
   onResend?: (turn: number, text: string) => Promise<void>;
   onPrepareRewind?: (turn: number, scope: RewindScope) => Promise<RewindPlan>;
   onCommitRewind?: (planId: string, text?: string) => Promise<RewindResult>;
-  onUndoRewind?: (transactionId: string) => Promise<void>;
 }) {
   // A rewind needs a turn the kernel claimed, and a queued line has not
   // happened yet — there is nothing behind it to take back.
+  const shortcut = useSendShortcut();
+  const ime = useIme();
   const editable = !!onResend && !!cp && !item.pending;
   const [draft, setDraft] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -46,8 +49,9 @@ export function UserCard({
   const box = useRef<HTMLTextAreaElement>(null);
   const source = messageSource(item.via, useViewer());
   const reopen = editable && draft === null;
-  const rewind = !!(cp && onPrepareRewind && onCommitRewind && onUndoRewind);
-  const images = useMemo(() => [...new Set(Array.from(item.text.matchAll(SAVED_IMAGE), (match) => match[1]))], [item.text]);
+  const rewind = !!(cp && onPrepareRewind && onCommitRewind);
+  const pin = useMemo(() => parseSkillPin(item.text), [item.text]);
+  const images = useMemo(() => [...new Set((item.attachments ?? []).map((a) => a.path))], [item.attachments]);
 
   useEffect(() => {
     const el = box.current;
@@ -89,7 +93,7 @@ export function UserCard({
                 const src = port.workspaceImageURL(path);
                 return <SavedImage key={src} path={path} src={src} />;
               })}</div>}
-              <div className="txt">{item.text}</div>
+              {pin ? <SkillPinView pin={pin} /> : <div className="txt">{item.text}</div>}
             </>
           ) : (
             <div className="reask">
@@ -101,14 +105,22 @@ export function UserCard({
                 value={draft}
                 rows={1}
                 readOnly={sending}
+                {...ime.handlers}
+                aria-keyshortcuts={sendAria(shortcut, touchKeyboard())}
+                title={sendHint(shortcut, false, touchKeyboard())}
                 aria-label={t("改写这条消息")}
                 onChange={(ev) => setDraft(ev.target.value)}
                 onKeyDown={(ev) => {
+                  if (ime.isIme(ev.nativeEvent)) {
+                    if (ev.key === "Enter") ev.preventDefault();
+                    if (ev.key === "Escape") ev.stopPropagation();
+                    return;
+                  }
                   if (ev.key === "Escape") {
                     ev.preventDefault();
                     ev.stopPropagation();
                     setDraft(null);
-                  } else if (ev.key === "Enter" && !ev.shiftKey && !touchKeyboard() && !ev.nativeEvent.isComposing) {
+                  } else if (sendsOnKey(ev, shortcut, touchKeyboard())) {
                     ev.preventDefault();
                     resend();
                   }
@@ -143,7 +155,7 @@ export function UserCard({
             </button>
           )}
           {rewind && (
-            <RewindControl cp={cp!} compact onPrepare={onPrepareRewind!} onCommit={(planId) => onCommitRewind!(planId, item.text)} onUndo={onUndoRewind!} />
+            <RewindControl cp={cp!} compact onPrepare={onPrepareRewind!} onCommit={(planId) => onCommitRewind!(planId, item.text)} />
           )}
         </div>
       </div>

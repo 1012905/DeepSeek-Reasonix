@@ -51,9 +51,11 @@ func (c *Controller) turnBlocksFor(source string, includeOwed bool, notes []stri
 		// the user's next message is owed.
 		blocks = append(blocks,
 			turnBlock{hookContextTag, c.drainHookContextBlock()},
+			turnBlock{currentDateTag, wrapTurnBlock(currentDateTag, c.date.owed())},
 			turnBlock{"available-skills", wrapTurnBlock("available-skills", c.skills.owedCatalog())},
 			turnBlock{"project-instructions", wrapTurnBlock("project-instructions", c.memory.owedInstructions())},
 			turnBlock{"mcp-prompt-failure", wrapTurnBlock("mcp-prompt-failure", c.mcp.promptFailures.owed())},
+			turnBlock{"refused-calls", c.refusedCallsBlock()},
 		)
 	}
 	return append(blocks,
@@ -119,10 +121,12 @@ func (c *Controller) activeGoalTurnBlock(goal, goalStatus string) string {
 // records why it did not retrieve instead of retrieving again.
 func (c *Controller) recallTail(source string, hasNotes bool) string {
 	if hasNotes {
-		c.memory.recordRecall(memory.RecallResult{
+		suppressed := memory.RecallResult{
 			Query:      strings.TrimSpace(source),
 			Suppressed: "memory update already supplies the new fact",
-		})
+		}
+		c.memory.recordRecall(suppressed)
+		event.RecordMemoryRecall(c.sink, memoryRecallAudit(suppressed))
 		return ""
 	}
 	if c.ablation.Off(ablation.Retrieval) {
@@ -155,7 +159,9 @@ func (c *Controller) runWithRunner(ctx context.Context, input string) error {
 }
 
 func (c *Controller) settleTurnProjections() {
+	c.date.debt.settle()
 	c.skills.catalog.settle()
 	c.memory.instructions.settle()
 	c.mcp.promptFailures.settle()
+	c.refused.settle()
 }

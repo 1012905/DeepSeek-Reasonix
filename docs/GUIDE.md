@@ -70,6 +70,8 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_subagent_depth = 2              # nested delegation depth; set 1 for the old single-layer boundary
 # max_subagent_concurrency = 6        # session-wide sub-agent concurrency (task/fleet/skills)
 # max_parallel_writers = 3            # concurrent writers with non-overlapping write_paths
+# write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace against other sessions; default strict
+# host_verification = "off"          # user file only; the host stops holding a turn that changed files to a check, a review and a sign-off; the receipt still says what was checked; default on
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
 # max_output_tokens = 32768        # ordinary coding / cost control
@@ -952,7 +954,7 @@ Picker and approval shortcuts:
 
 | Context | Keys | What they do |
 | --- | --- | --- |
-| Slash or `@` completion | `Up` / `Down`, `Ctrl+P` / `Ctrl+N`, `Tab` / `Enter`, `Esc` | Move, accept, or close the completion menu. |
+| Slash or `@` completion | `Up` / `Down`, `Ctrl+P` / `Ctrl+N`, `Tab` / `Enter`, `Esc` | Move, accept, or close the completion menu. While a turn is running, `Esc` also stops it, except in vi mode. |
 | Tool approval prompt | `y`/`1`, `a`/`2`, `p`/`3`, `n`/`4`, `Enter`, `Esc`, `Ctrl+C` | Allow once, allow for session, persist allow, deny, accept default allow once, deny, or cancel the turn. |
 | Ask question card | `Up`/`Down` or `j`/`k`, `Left`/`Right` or `h`/`l`, `Space`, `Enter`, `1`-`9`, `Esc`, `Ctrl+C` | Navigate answers/tabs, toggle multi-select answers, submit/activate, pick numbered options, dismiss, or cancel the turn. |
 | Rewind picker | `Up`/`Down` or `j`/`k`, `Enter`, `b`, `c`, `d`, `f`, `s`, `u`, `Esc` | Choose a turn, apply both/conversation/code/fork/summarize actions, or go back/close. |
@@ -1198,9 +1200,9 @@ headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 ```
 
 For a remote HTTP server without a static `Authorization` header, an
-authentication challenge is shown as **Sign in**. Run
-`reasonix mcp auth <name>` in the CLI, or click **Sign in** for that server in
-the Desktop MCP panel. Reasonix performs OAuth metadata discovery, dynamic
+authentication challenge (HTTP 401 with a `Bearer` challenge) is reported as
+needing sign-in. Run `reasonix mcp auth <name>` in the CLI; Studio has no
+sign-in control yet. Reasonix performs OAuth metadata discovery, dynamic
 client registration, PKCE S256 authorization, and refresh-token
 rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
@@ -1357,6 +1359,8 @@ Markdown files under `.reasonix/commands/` (project) or `~/.reasonix/commands/`
 (`git/commit.md` → `/git:commit`). The body is a prompt template; invoking the
 command sends it as a turn.
 
+In Studio, a finished reply has a "Branch into a new conversation" button. It copies the conversation up to that reply into a new session titled "<title> · branch" and leaves the original as it was. It needs a live turn boundary, so a session restored after a restart does not offer it.
+
 ### Subagent profiles
 
 Subagent profiles are manual Skills with `runAs: subagent` and
@@ -1414,10 +1418,14 @@ the host proves from its own receipts that the command ran after the write and
 passed. The agent decides only which of the commands it ran was the check;
 whether it ran, exited zero, and did so after the write are never its to claim.
 
-When a command ran that the host could not read as a check, it says so as a
-warning and lets the turn end: the miss is its own blind spot, not evidence the
-work went unverified. A turn that changed files and ran nothing at all is a
-different case and still fails.
+When a command ran that the host could not read as a check, and the host saw it
+leave the tree as it found it, the turn ends with a warning: the miss is its own
+blind spot, not evidence the work went unverified.
+
+Two cases still fail. A turn that changed files and ran nothing at all, and one
+whose unreadable command changed something — watched or merely unestablished.
+The way out of the second is the citation above, a check the host recognises, or
+`conclude_blocked`.
 
 Declaring checks is the stronger, optional form. Name them in any
 standing-instruction file, under exactly this heading:
@@ -1601,6 +1609,20 @@ resource. A local path is only treated as a reference when it actually exists,
 so ordinary `@mentions` stay literal. Typing `/` or `@` opens an autocomplete
 menu — slash commands, or hierarchical file navigation (one directory level at a
 time, descend into folders) plus MCP resources.
+
+In Studio's file panel, right-click one file or folder:
+
+- **Copy path** copies its absolute workspace path, including remote roots.
+  It is available once the workspace reports an absolute root.
+- **Copy reference** copies an `@` token to paste into the composer. Spaces and
+  tabs are escaped; folder references end in `/`. Names the reference grammar
+  cannot represent, or whose final whitespace the composer would trim, disable
+  this action.
+
+Paths containing `:` disable Copy reference because they can be interpreted as
+MCP resources instead of workspace entries.
+
+Copying does not open the entry or send a message.
 
 ## Two-model collaboration
 

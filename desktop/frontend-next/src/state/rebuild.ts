@@ -1,6 +1,6 @@
 import type { Item, PlanStep, SessionState, TurnTerminal } from "./session_types";
 import type { Executions } from "./executions";
-import { promptOpen } from "./prompts";
+import { promptOpen, withoutRetiredSurfaces } from "./prompts";
 
 // A rebuild re-reads the record while a turn may still be writing it. The
 // kernel commits each assistant round at its boundary, before its calls run,
@@ -30,7 +30,7 @@ export function rebuild(s: SessionState, ev: { items: Item[]; plan?: PlanStep[];
   // continue it — and rides /status as __running instead.
   const ended = !openCalls && tail.some((i) => i.t === "say") && ev.items[ev.items.length - 1]?.t === "say";
   const items = [
-    ...ev.items.map((row) => {
+    ...withoutRetiredSurfaces(ev.items, tail).map((row) => {
       if (row.t !== "tool" || !row.tool.id || !calls.has(row.tool.id)) return row;
       const open = calls.get(row.tool.id)!;
       // A bare record copy — the call without its result — yields to the live

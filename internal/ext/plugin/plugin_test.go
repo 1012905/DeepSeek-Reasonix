@@ -1286,6 +1286,7 @@ func TestHelperProcess(t *testing.T) {
 	}
 
 	in := bufio.NewReader(os.Stdin)
+	helperInitialized := false
 	for {
 		line, err := in.ReadBytes('\n')
 		if err != nil {
@@ -1309,6 +1310,14 @@ func TestHelperProcess(t *testing.T) {
 		}
 
 		var result any
+		// GO_WANT_HELPER_DEAF_BEFORE_INIT is a server whose SDK aborts serving on
+		// a first message that is not initialize but leaves the process running.
+		if os.Getenv("GO_WANT_HELPER_DEAF_BEFORE_INIT") == "1" && !helperInitialized && req.Method != "initialize" {
+			time.Sleep(time.Hour)
+		}
+		if req.Method == "initialize" {
+			helperInitialized = true
+		}
 		// GO_WANT_HELPER_MODERN serves 2026-07-28 only: discovery answers,
 		// initialize is an unknown method, and a request without _meta is refused.
 		if os.Getenv("GO_WANT_HELPER_MODERN") == "1" {
@@ -1511,8 +1520,8 @@ func TestValidateMCPToolNamesRejectsAmbiguousLists(t *testing.T) {
 		"duplicate": {{Name: "read"}, {Name: "read"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := validateMCPToolNames(tools); err == nil {
-				t.Fatalf("validateMCPToolNames(%+v) succeeded", tools)
+			if err := validateMCPToolNames("srv", "", tools); !errors.Is(err, ErrAmbiguousToolCatalog) {
+				t.Fatalf("validateMCPToolNames(%+v) = %v, want ErrAmbiguousToolCatalog", tools, err)
 			}
 		})
 	}
@@ -1753,6 +1762,10 @@ func TestReaderIntentRefusesDispatchAfterSafetyDrift(t *testing.T) {
 	rt.client.toolsMu.Lock()
 	rt.readOnly = true
 	rt.client.toolsMu.Unlock()
+	// The handshake's schema cache is written on the side and reads rt.schema;
+	// nothing in the product changes it after the handshake, so only this test
+	// has to wait for that read before replacing it.
+	host.bgWrites.Wait()
 	rt.schema = json.RawMessage(`{"type":"object","properties":{"msg":{"type":"number"}}}`)
 	if _, _, err := rt.ExecuteWithImages(readerCtx, json.RawMessage(`{"msg":"schema-changed","z":"ok"}`)); err != nil {
 		t.Fatalf("schema-only reader change should execute: %v", err)

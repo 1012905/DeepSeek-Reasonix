@@ -9,16 +9,14 @@ import (
 
 // submitAs runs a submitted line as the one who sent it: a paired device's
 // line lands as that device's, and the window's as its own.
-func submitAs(ctrl control.SessionAPI, r *http.Request, input, format string, refuseUnknownSlash bool) {
+func submitAs(ctrl control.SessionAPI, r *http.Request, input, format string, refuseUnknownSlash bool) control.Admission {
 	if refuseUnknownSlash {
-		ctrl.SubmitHTTPOptions(input, control.SubmitOptions{Format: format, Via: viaOf(r), RefuseUnknownSlash: true})
-		return
+		return ctrl.SubmitHTTPOptions(input, control.SubmitOptions{Format: format, Via: viaOf(r), RefuseUnknownSlash: true})
 	}
 	if via := viaOf(r); via != nil {
-		ctrl.SubmitHTTPFrom(input, format, via)
-		return
+		return ctrl.SubmitHTTPFrom(input, format, via)
 	}
-	ctrl.SubmitHTTPFormat(input, format)
+	return ctrl.SubmitHTTPFormat(input, format)
 }
 
 // approveAs answers a prompt as the one who answered it. The device changes
@@ -32,10 +30,9 @@ func approveAs(ctrl control.SessionAPI, r *http.Request, id string, allow, sessi
 }
 
 // answerAs settles a question as the one who answered it.
-func answerAs(ctrl control.SessionAPI, r *http.Request, id string, answers []event.AskAnswer) {
+func answerAs(ctrl control.SessionAPI, r *http.Request, id string, answers []event.AskAnswer) error {
 	if via := viaOf(r); via != nil {
-		ctrl.AnswerQuestionFrom(id, answers, via)
-		return
+		return ctrl.AnswerQuestionFrom(id, answers, via)
 	}
-	ctrl.AnswerQuestion(id, answers)
+	return ctrl.AnswerQuestion(id, answers)
 }
