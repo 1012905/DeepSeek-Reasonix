@@ -373,15 +373,6 @@ func (a *approvalManager) cancelAsk(id string) {
 	a.mu.Unlock()
 }
 
-// resolveAsk removes and returns the pending ask for id (AnswerQuestion path).
-func (a *approvalManager) resolveAsk(id string) (pendingAsk, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	p, ok := a.asks[id]
-	delete(a.asks, id)
-	return p, ok
-}
-
 // clearAll drops every in-flight prompt without signaling — the cancel path,
 // where blocked waiters unblock via their cancelled context instead.
 func (a *approvalManager) clearAll() {
