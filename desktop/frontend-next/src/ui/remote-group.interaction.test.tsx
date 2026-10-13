@@ -43,7 +43,7 @@ describe("the remote machines group", () => {
   it("holds every remote machine under one row that counts them", () => {
     render(<Rail />);
     expect(group().getAttribute("aria-level")).toBe("1");
-    expect(within(group()).getByText("2")).toBeTruthy();
+    expect(within(group()).getByText("2 台机器")).toBeTruthy();
     const machine = screen.getByText("gpu").closest('[role="treeitem"]')!;
     expect(machine.getAttribute("aria-level")).toBe("2");
   });

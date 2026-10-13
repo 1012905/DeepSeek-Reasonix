@@ -245,7 +245,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
         <i className="rmtpip" aria-hidden="true" />
         <span className="rmtname">{t("远程机器")}</span>
         <span className="rowswap">
-          <span className="rowcount" title={t("{n} 台机器", { n: hosts.length })} aria-label={t("{n} 台机器", { n: hosts.length })}>{hosts.length}</span>
+          <span className="rowcount" data-words="">{t("{n} 台机器", { n: hosts.length })}</span>
         </span>
       </div>
       {!needle && groupShut ? null : hosts.map((host) => {
