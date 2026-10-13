@@ -1,4 +1,4 @@
-import type { ChangeDiff, WorkspaceBranches, WorkspaceChanges, WorkspaceGit } from "./port";
+import type { ChangeDiff, StageRequest, WorkspaceBranches, WorkspaceChanges, WorkspaceGit } from "./port";
 import { SseFeedback } from "./sse_feedback";
 
 // The workspace's tree facts: what it differs by and which branch git says it
@@ -7,6 +7,10 @@ import { SseFeedback } from "./sse_feedback";
 export class SseWorkspace extends SseFeedback {
   changes() {
     return this.get<WorkspaceChanges>("/changes");
+  }
+
+  stageChanges(req: StageRequest) {
+    return this.post("/changes/stage", req);
   }
 
   workspaceGit() {

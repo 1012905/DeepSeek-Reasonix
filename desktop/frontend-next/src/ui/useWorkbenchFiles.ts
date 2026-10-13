@@ -36,17 +36,19 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
     let live = true;
     if (entry.pending === "save" || dirty(entry) || (entry.file && !shown) || (quiet && entry.pending === "read")) return;
     const ticket = ++entry.issued;
+    let changed = !quiet || !entry.file;
     void (async () => {
       const valid = () => live && current.current === entries && ticket === entry.issued;
       entry.pending = "read";
       if (!entry.file) entry.error = "";
-      notify();
+      if (changed) notify();
       try {
         const [file, patch] = await Promise.all([
           port.workspaceFile(path),
           quiet ? Promise.resolve(null) : port.changeDiff(path).catch(() => null),
         ]);
         if (!valid() || dirty(entry)) return;
+        changed ||= entry.file?.content !== file.content || entry.file?.revision !== file.revision || !!entry.error;
         entry.file = file;
         entry.draft = file.content;
         entry.error = "";
@@ -54,7 +56,7 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
       } catch (e) {
         if (valid() && !quiet) entry.error = reason(e);
       } finally {
-        if (valid()) { entry.pending = ""; notify(); }
+        if (valid()) { entry.pending = ""; if (changed) notify(); }
       }
     })();
     return () => {

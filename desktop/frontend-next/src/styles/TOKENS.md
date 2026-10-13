@@ -241,9 +241,14 @@ raised with its ratios kept.
 
 ## Weight and contrast
 
-- Default light Studio replies use `--w-read: 400` for prose only. Headings,
+- Default and plain-palette light Studio replies use `--w-read: 400` for prose only. Headings,
   emphasis and small UI text keep their existing weights. A chosen weight,
-  installed pack or dark scheme falls back to `--w-reg`.
+  illustrated/sky pack or dark scheme falls back to `--w-reg`.
+- `--default-*` holds the canonical Studio preview palette independently of
+  the active pack. Default surfaces and the default picker card share it.
+- `--accent-ink` is text on ordinary or tinted surfaces, distinct from
+  `--accent-fg` on filled controls. Packs may set `accentInk`; legacy packs
+  derive it by mixing their accent towards their body text colour.
 - `background.textGlow: none` paints `--flow-text-shadow: none` through the
   pack sheet. The backdrop transcript rule defaults to its 2px shadow and 7px
   halo when this variable is absent. The choice affects text only; the frosted

@@ -19,6 +19,7 @@ const { installReload } = require("./reload");
 const { externalTarget } = require("./links");
 const { reveal, revealWorkspace, revealLogs, openWorkspace } = require("./reveal");
 const { appIcon } = require("./appicon");
+const { setUnreadBadge } = require("./badge");
 const layout = require("./layout");
 const { offerCleanup } = require("./legacy");
 const { stripPackageGrants, unpaintedWindowCause } = require("./packagegrants");
@@ -380,6 +381,11 @@ nativeTheme.on("updated", () => {
 });
 
 ipcMain.handle("shell:graphics", (event) => graphicsHandler(app, fromWindow, gpuLaunch)(event));
+
+ipcMain.handle("window:unread-badge", (event, unread) => {
+  const target = fromWindow(event);
+  if (target && typeof unread === "boolean") setUnreadBadge(unread, target);
+});
 
 ipcMain.handle("window:minimise", (event) => {
   fromWindow(event)?.minimize();

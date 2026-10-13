@@ -232,7 +232,7 @@ jobs:
           if [ "$platform" = false ]; then
             legs="$(jq -c 'map(select(.platform == "linux"))' <<<"$legs")"
           elif [ "$arm64" = true ]; then
-            legs="$(jq -c '. + [{"os":"windows-11-arm","arch":"arm64","platform":"windows","ebarch":"arm64"}]' <<<"$legs")"
+            legs="$(jq -c '. + [{"os":"windows-11-arm","arch":"arm64","platform":"windows","ebarch":"arm64"},{"os":"ubuntu-22.04-arm","arch":"arm64","platform":"linux"}]' <<<"$legs")"
           else
             legs="$(jq -c . <<<"$legs")"
           fi
@@ -283,6 +283,15 @@ jobs:
       - name: Install Linux packaging deps
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y fakeroot rpm
+
+      # The fpm electron-builder carries is an x86_64 program, so on an ARM64
+      # runner the .deb and .rpm are built with one installed from RubyGems.
+      - name: Use a native fpm on ARM64 Linux
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: |
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install --no-document fpm -v 1.16.0
+          echo "USE_SYSTEM_FPM=true" >> "$GITHUB_ENV"
 
       - name: Build the SPA
         working-directory: desktop/frontend-next
@@ -514,14 +523,14 @@ jobs:
 
       # The Electron shell sets the package's glibc floor; a Go binary linked
       # with cgo would raise it to the runner's own.
-      - name: The .deb's Go binaries are statically linked
+      - name: The .deb's Go binaries are statically linked and built for the package's architecture
         if: runner.os == 'Linux'
         run: |
           deb=$(ls dist/ReasonixStudio-linux-*.deb)
           dpkg-deb -x "$deb" "$RUNNER_TEMP/deb"
           host=$(find "$RUNNER_TEMP/deb" -type f -path '*/resources/bin/reasonix-studio-host')
           test -n "$host"
-          node desktop/electron/packaging/elf.js "$host" "$RUNNER_TEMP/deb/usr/lib/reasonix-studio/reasonix-studio-update-helper"
+          node desktop/electron/packaging/elf.js --arch "${{ matrix.arch }}" "$host" "$RUNNER_TEMP/deb/usr/lib/reasonix-studio/reasonix-studio-update-helper"
 
       # Recorded, not asserted: the real bundle layout, so later work argues
       # from what electron-builder produced rather than from its documentation.

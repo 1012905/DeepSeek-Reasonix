@@ -969,7 +969,7 @@ test("only the Studio window reads or writes the preferences", () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function elf64(interpreter) {
+function elf64(interpreter, machine = 62) {
   const phoff = 64, phentsize = 56, phnum = interpreter ? 2 : 1;
   const dataOffset = phoff + phnum * phentsize;
   const path = Buffer.from(interpreter ? `${interpreter}\0` : "", "latin1");
@@ -979,7 +979,7 @@ function elf64(interpreter) {
   bytes[5] = 1;
   bytes[6] = 1;
   bytes.writeUInt16LE(2, 16);
-  bytes.writeUInt16LE(62, 18);
+  bytes.writeUInt16LE(machine, 18);
   bytes.writeBigUInt64LE(BigInt(phoff), 32);
   bytes.writeUInt16LE(64, 52);
   bytes.writeUInt16LE(phentsize, 54);
@@ -1010,6 +1010,26 @@ test("a Linux Go binary that needs the build host's dynamic loader is refused", 
     fs.writeFileSync(helper, elf64(null));
     assert.deepEqual(dynamicallyLinked([host, helper]), [{ file: host, interpreter: "/lib64/ld-linux-x86-64.so.2" }]);
     assert.deepEqual(dynamicallyLinked([helper]), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a Linux package's Go binaries must be built for the architecture the package is named for", () => {
+  const { elfMachine, wrongArchitecture } = require("../packaging/elf.js");
+  assert.equal(elfMachine(elf64(null, 62)), "amd64");
+  assert.equal(elfMachine(elf64(null, 183)), "arm64");
+  assert.equal(elfMachine(elf64(null, 40)), "machine 40");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reasonix-elf-"));
+  try {
+    const host = path.join(dir, "reasonix-studio-host");
+    const helper = path.join(dir, "reasonix-studio-update-helper");
+    fs.writeFileSync(host, elf64(null, 62));
+    fs.writeFileSync(helper, elf64(null, 183));
+    assert.deepEqual(wrongArchitecture([host, helper], "arm64"), [{ file: host, machine: "amd64" }]);
+    assert.deepEqual(wrongArchitecture([host, helper], "amd64"), [{ file: helper, machine: "arm64" }]);
+    assert.deepEqual(wrongArchitecture([host], "amd64"), []);
+    assert.throws(() => wrongArchitecture([host], "riscv64"), /no ELF machine/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -2197,4 +2217,34 @@ test("rewind notice dismissal survives the desktop preference disk round trip", 
   const record = { "rx-rewind-notice-dismissed:tx-saved": "1" };
   savePrefs(file, record);
   assert.deepEqual(loadPrefs(file), record);
+});
+
+const { setUnreadBadge } = require("../src/badge.js");
+
+test("macOS marks and clears the application Dock badge", () => {
+  const badges = [];
+  const app = { dock: { setBadge: (text) => badges.push(text) } };
+  setUnreadBadge(true, {}, { app }, "darwin");
+  setUnreadBadge(false, {}, { app }, "darwin");
+  assert.deepEqual(badges, ["•", ""]);
+});
+
+test("Windows uses a red dot overlay and removes it when all sessions are read", () => {
+  const calls = [];
+  const win = { setOverlayIcon: (...args) => calls.push(args) };
+  let pixels;
+  const nativeImage = { createFromBitmap: (buffer, size) => { pixels = buffer; assert.deepEqual(size, { width: 16, height: 16 }); return "dot"; } };
+  setUnreadBadge(true, win, { nativeImage }, "win32");
+  setUnreadBadge(false, win, { nativeImage }, "win32");
+  assert.equal(pixels[3], 0);
+  assert.equal(pixels[(8 * 16 + 8) * 4 + 3], 255);
+  assert.deepEqual(calls, [["dot", "Reasonix Studio"], [null, ""]]);
+});
+
+test("Linux clears its launcher badge without requiring Dock APIs", () => {
+  const counts = [];
+  const app = { setBadgeCount: (count) => counts.push(count) };
+  setUnreadBadge(true, {}, { app }, "linux");
+  setUnreadBadge(false, {}, { app }, "linux");
+  assert.deepEqual(counts, [1, 0]);
 });

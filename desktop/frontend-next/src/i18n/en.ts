@@ -445,6 +445,10 @@ export const EN: Record<string, string> = {
   "深色": "Dark",
   "配色": "Palette",
   "界面主题": "Interface theme",
+  "清白蓝": "Clear Blue",
+  "茶绿": "Tea Green",
+  "清透白底与克制蓝色，适合专注阅读和日常工作。": "Clean white surfaces and restrained blue accents for focused reading and everyday work.",
+  "柔和暖白与低饱和茶绿，营造安静舒展的工作台。": "Soft warm whites and muted tea greens for a calm, comfortable workbench.",
   "选择工作台的表面色与强调色。成功、警告和失败等状态色保持一致，代码字体在下方单独设置。":
     "Choose the workbench surfaces and accent. Success, warning and failure keep their meaning, while the code font is configured separately below.",
   "更多已安装主题": "More installed themes",
@@ -580,7 +584,7 @@ export const EN: Record<string, string> = {
   "在系统文件管理器中显示": "Show in file manager",
   "已在 {app} 中打开": "Opened in {app}",
   "通知": "Notifications",
-  "只在你没盯着窗口的时候有用：一轮跑完、停下来等批准、模型反过来问你、反馈有了回复，都可以让系统提醒一次。": "Only useful while you are not watching: a turn finishing, a stop for approval, the model asking you something, or a reply to your feedback can each raise one system alert.",
+  "一轮结束、等待批准、模型提问或反馈收到回复时，可以发送系统通知。完成后未读的会话会在应用图标上显示标记，查看对应会话后清除。": "Send system notifications when a turn ends, approval is needed, the model asks a question, or feedback receives a reply. Unread completed conversations mark the application icon until you view them.",
   "发送系统通知": "Send system notifications",
   "默认关闭。开启后，无论窗口是否在前台都会由系统弹出提醒；声音由系统决定。立即生效，正在跑的会话下一次事件就按新设置来": "Off by default. When on, the system raises the alert whether or not this window is in front; the sound is whatever the system decides. Immediate: a running session follows the new setting from its next event.",
   "播放提示音": "Play a sound",
@@ -1408,8 +1412,14 @@ export const EN: Record<string, string> = {
   "回合运行中，等它结束后再分支": "A turn is running; branch after it ends",
   "这个位置无法分支（重启后恢复的会话，或已被压缩的历史）": "This point cannot be branched (a session restored after a restart, or history that was compacted)",
   "分支失败，请重试": "Branching failed; try again",
-  "暂存区是空的，先用 git add 暂存要提交的文件":
-    "Nothing is staged; stage the files to commit with git add first",
+  "暂存区是空的：先在改动列表里勾选要提交的文件，或点「暂存全部」":
+    "Nothing is staged: tick the files to commit in the changes list, or press Stage all",
+  "这个文件已经不在改动列表里了，请刷新后再试": "That file is no longer in the changes list; refresh and try again",
+  "暂存请求无法识别": "The stage request was not understood",
+  "暂存 {path}": "Stage {path}",
+  "暂存全部": "Stage all",
+  "取消全部暂存": "Unstage all",
+  "暂存失败，请重试": "Staging failed; try again",
   "暂存区在你确认之后又变了，请重新起草":
     "The staged changes changed after you reviewed them; draft again",
   "暂存的内容里有疑似密钥的文件，需要你确认后才能提交":
