@@ -6,7 +6,6 @@ import type {
   AgentPort,
   BrowserTab,
   WorkspaceChange,
-  WorkspaceFile,
 } from "../port/port";
 import { openPage, observePageTabs } from "./browser_open";
 import { useBrowserSelection } from "./useBrowserSelection";
@@ -20,7 +19,7 @@ import { LazyMarkdown } from "./LazyMarkdown";
 import type { LocalRefs } from "./Markdown";
 import { docRef } from "./docrefs";
 import { useGlance } from "./glance";
-import { useMarkdownPoll } from "./useMarkdownPoll";
+import { useWorkbenchFiles } from "./useWorkbenchFiles";
 import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
@@ -179,11 +178,7 @@ export function WorkbenchPanel({
     [hosts, setHosts] = useState<Record<string, string>>({});
   const minted = useRef(0);
   const [mode, setMode] = useState<FileMode>("file");
-  const [file, setFile] = useState<WorkspaceFile | null>(null),
-    [draft, setDraft] = useState(""),
-    [diff, setDiff] = useState("");
-  const [busy, setBusy] = useState(false),
-    [failed, setFailed] = useState("");
+  const [failed, setFailed] = useState("");
   // Showing a file where it lives needs a shell on the kernel's own machine.
   const revealable = !remote && port.revealsFiles();
   const [platform, setPlatform] = useState("");
@@ -330,14 +325,18 @@ export function WorkbenchPanel({
   }, [filePath, readable, previewable]);
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
-  const revision = file?.path === filePath ? file.revision : undefined;
+  const { file, draft, diff, busy, error: fileFailed, setDraft, save } = useWorkbenchFiles({
+    port, workspaceRoot, path: filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
+    poll: (readable && mode === "read") || (previewable && mode === "preview"),
+  });
+  const revision = file?.revision;
   useEffect(() => {
-    if (mode !== "preview" || !previewable || !shown || showFiles || launcher || previewTab || (!revision && !failed)) return;
+    if (mode !== "preview" || !previewable || !shown || showFiles || launcher || previewTab || (!revision && !fileFailed && !failed)) return;
     openPreview(filePath, revision).catch((e) => {
       setFailed(reason(e));
       setMode("file");
     });
-  }, [mode, previewable, shown, showFiles, launcher, previewTab, revision, failed, filePath, openPreview, tabs]);
+  }, [mode, previewable, shown, showFiles, launcher, previewTab, revision, fileFailed, failed, filePath, openPreview, tabs]);
   useEffect(() => {
     if (mode === "preview" && revision) syncPreview(filePath, revision);
   }, [mode, filePath, revision, syncPreview]);
@@ -353,51 +352,6 @@ export function WorkbenchPanel({
   useEffect(() => {
     strip.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [activeKey, surfaces.length]);
-  const held = useRef({ file, draft });
-  held.current = { file, draft };
-  // Revisions are opaque, so only order says which answer is current: a read
-  // counts only if no save or later read has been issued since it started.
-  const issued = useRef(0);
-  const openPath = active?.kind === "file" ? active.path : "";
-  // The file is read again on the same occasions as the tree, because the agent
-  // and other applications write it without telling this view. Unsaved edits
-  // win: overwriting a draft with the disk would lose work nobody asked to drop.
-  useEffect(() => {
-    if (!openPath) return;
-    const prior = held.current.file?.path === openPath ? held.current.file : null;
-    if (prior && (!shown || held.current.draft !== prior.content)) return;
-    let live = true;
-    const ticket = ++issued.current;
-    if (!prior) {
-      setBusy(true);
-      setFailed("");
-    }
-    Promise.all([
-      port.workspaceFile(openPath),
-      port
-        .changeDiff(openPath)
-        .catch(() => ({ path: openPath, diff: "", truncated: false })),
-    ])
-      .then(
-        ([next, patch]) => {
-          if (!live || ticket !== issued.current) return;
-          const now = held.current;
-          if (prior && (now.file?.path !== openPath || now.draft !== now.file.content)) return;
-          setFailed("");
-          if (!prior || now.file?.revision !== next.revision) {
-            setFile(next);
-            setDraft(next.content);
-          }
-          setDiff(patch.diff);
-        },
-        (e) => live && ticket === issued.current && setFailed(reason(e)),
-      )
-      .finally(() => live && !prior && setBusy(false));
-    return () => {
-      live = false;
-    };
-  }, [port, openPath, shown, changeKey, glance, running, wrote]);
-  useMarkdownPoll({ port, filePath: shown && ((readable && mode === "read") || (previewable && mode === "preview")) ? filePath : "", held, issued, setFailed, setFile, setDraft });
   // Picking a file is asking to read it. Docked, the list and the file share one
   // column, so the list steps aside; side by side it stays where it is.
   const openFile = (path: string) => {
@@ -476,19 +430,6 @@ export function WorkbenchPanel({
   const close = (targets: Surface[]) => { supersede(); return closeTabs(targets); };
   const dismissTabMenu = useCallback(() => setTabMenu(null), []);
   const [tabMenu, setTabMenu] = useState<{ surface: Surface; x: number; y: number; anchor: HTMLElement } | null>(null);
-  const save = async () => {
-    if (!file || draft === file.content) return;
-    setBusy(true);
-    setFailed("");
-    issued.current++;
-    try {
-      setFile(await port.saveWorkspaceFile({ ...file, content: draft }));
-    } catch (e) {
-      setFailed(reason(e));
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
     <section className="workbench" aria-label={t("工作台")} data-action-keydown="layer.dismiss" onKeyDown={(e) => {
       if (launcher && e.key === "Escape") { e.stopPropagation(); toggleLauncher(); newTab.current?.focus(); }
@@ -616,9 +557,9 @@ export function WorkbenchPanel({
                 canSave={!busy && !!file && draft !== file.content}
                 onSave={() => void save()}
               />
-              {failed && !(mode === "preview" && previewTab) && (
+              {(fileFailed || failed) && !(mode === "preview" && previewTab) && (
                 <div className="workbench-error" role="alert">
-                  {failed}
+                  {fileFailed || failed}
                 </div>
               )}
               {mode === "preview" ? (

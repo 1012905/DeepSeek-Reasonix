@@ -224,3 +224,52 @@ it("resumes Markdown polling after changing modes during a pending poll", async 
     expect(document.querySelector(".workbench-read h1")?.textContent).toBe("Latest");
   } finally { vi.useRealTimers(); }
 });
+
+it("evicts clean closed files but retains a closed draft until its pending save settles", async () => {
+  const f = fixture();
+  await f.open("a.txt");
+  await editor("saved a.txt");
+  await f.user.click(button("close", "file:a.txt"));
+  const cleanRead = deferred<WorkspaceFile>();
+  f.read.mockReturnValueOnce(cleanRead.promise);
+  await f.open("a.txt");
+  expect(document.querySelector(".cm-content")).toBeNull();
+  await act(async () => cleanRead.resolve(file("a.txt")));
+  await append(" draft");
+  const pending = deferred<WorkspaceFile>();
+  f.save.mockReturnValueOnce(pending.promise);
+  await f.user.click(button("save"));
+  await f.user.click(button("close", "file:a.txt"));
+  await f.open("a.txt");
+  await editor("saved a.txt draft");
+  expect(button("save").disabled).toBe(true);
+  await f.user.click(button("close", "file:a.txt"));
+  await act(async () => pending.resolve(file("a.txt", "saved a.txt draft", "r2")));
+  const savedRead = deferred<WorkspaceFile>();
+  f.read.mockReturnValueOnce(savedRead.promise);
+  await f.open("a.txt");
+  expect(document.querySelector(".cm-content")).toBeNull();
+  await act(async () => savedRead.resolve(file("a.txt", "saved a.txt draft", "r2")));
+  await editor("saved a.txt draft");
+});
+
+it.each(["read", "save"])("ignores a late %s after unmounting and remounting the same workspace", async (operation) => {
+  const f = fixture();
+  const pending = deferred<WorkspaceFile>();
+  if (operation === "read") f.read.mockReturnValueOnce(pending.promise);
+  else f.save.mockReturnValueOnce(pending.promise);
+  await f.open("a.txt");
+  if (operation === "save") {
+    await append(" old draft");
+    await f.user.click(button("save"));
+  }
+  f.unmount();
+  f.read.mockResolvedValue(file("a.txt", "remounted", "r3"));
+  render(<WorkbenchPanel {...f.props} />);
+  await f.open("a.txt");
+  await editor("remounted");
+  await append(" new draft");
+  await act(async () => pending.resolve(file("a.txt", "old response", "r2")));
+  await editor("remounted new draft");
+  expect(f.save).toHaveBeenCalledTimes(operation === "save" ? 1 : 0);
+});
