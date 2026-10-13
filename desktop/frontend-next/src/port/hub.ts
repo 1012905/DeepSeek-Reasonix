@@ -42,6 +42,9 @@ export interface TreeSession {
   // pane rather than opening a second writer for one file.
   runtimeId?: string;
   archived?: boolean;
+  // Set when Reasonix 1.x kept this transcript: it is read here and never
+  // written, so the row says which store it came from.
+  legacy?: boolean;
   // The kernel is the authority for pins.
   pinned?: boolean;
   // Unix ms of an automatic archive, absent for a manual one.
