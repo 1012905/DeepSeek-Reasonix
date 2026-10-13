@@ -704,6 +704,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "运行环境": "Where it runs",
   "记录与用量": "What it remembers",
   "这台机器": "This machine",
+  "远程机器": "Remote machines",
+  "{n} 台机器": "{n} machines",
   "改动立刻生效；需要重建运行时的项目，在任务运行期间无法修改": "Changes take effect immediately; the ones that rebuild the runtime cannot be changed while a task is running",
   "上下文维护": "Context maintenance",
   "对话长到一定程度会自动整理成摘要再继续。整理点取「经济维护阈值」与「容量保护」中先到的那个。": "A long conversation is tidied into a summary and carries on. That happens at whichever comes first, the economic threshold or the capacity guard.",
