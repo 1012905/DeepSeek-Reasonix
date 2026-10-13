@@ -65,6 +65,9 @@ type Hub struct {
 	gcCtx     context.Context
 	// titles reads each project's cached session titles for the sidebar tree.
 	titles map[string]*titleCache
+	// titleFallback shares a successfully initialized provider and usage recorder.
+	titleFallback *Server
+
 	// wallets is shared by every pane: opening a conversation builds a runtime,
 	// and a per-runtime cache would be cold on exactly the read a switch waits on.
 	wallets *billing.Store

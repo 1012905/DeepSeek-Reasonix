@@ -98,6 +98,8 @@ it("selects rows with clicks and the keyboard without opening or focusing a pane
   expect(alpha.getAttribute("aria-selected")).toBe("true");
   expect(beta.getAttribute("aria-selected")).toBe("true");
   expect(screen.getByText("已选 2 个会话")).toBeTruthy();
+  await userEvent.dblClick(screen.getByText("Alpha"));
+  expect(screen.queryByRole("textbox", { name: "重命名该会话" })).toBeNull();
   expect(pane.onOpen).not.toHaveBeenCalled();
   expect(pane.onFocus).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole("button", { name: "完成选择" }));
