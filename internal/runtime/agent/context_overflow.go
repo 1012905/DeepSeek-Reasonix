@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"reasonix/internal/state/sessionstore"
 	"sync/atomic"
 
@@ -95,13 +97,25 @@ func (a *contextWindow) noteAcceptedPromptTokens(usage *provider.Usage) {
 	a.windowProbe.noteAccepted(usage.LatestPromptTokens())
 }
 
+// refusedOverWindow classifies a codeless 400/413 by measurement: the estimate
+// plus the configured (not the clipped) completion and its margin is past the
+// window. The wording is not read; a wrong call costs one bounded fold.
+func (a *contextWindow) refusedOverWindow(frozen *samplingRequest, err error) bool {
+	var apiErr *provider.APIError
+	if !errors.As(err, &apiErr) || (apiErr.Status != http.StatusBadRequest && apiErr.Status != http.StatusRequestEntityTooLarge) {
+		return false
+	}
+	window := a.effectiveContextWindow()
+	return window > 0 && a.estimatedRequestTokens(frozen.req)+a.configuredOutputBudget(a.maxOutputTokens)+outputBudgetReserveFor(window) > window
+}
+
 // recoverContextOverflow answers a provider's "this input is too long" by
 // folding the context and rebuilding the frozen request, so the round can be
 // replayed instead of failing the turn. It reports false when the fold freed
 // nothing, because resending a request the provider already refused only spends
 // another call to be told the same thing.
 func (a *contextWindow) recoverContextOverflow(ctx context.Context, frozen *samplingRequest, err error) bool {
-	if a == nil || frozen == nil || frozen.overflowFolded || !provider.IsContextOverflow(err) {
+	if a == nil || frozen == nil || frozen.overflowFolded || !(provider.IsContextOverflow(err) || a.refusedOverWindow(frozen, err)) {
 		return false
 	}
 	frozen.overflowFolded = true
@@ -110,13 +124,16 @@ func (a *contextWindow) recoverContextOverflow(ctx context.Context, frozen *samp
 	if _, prepareErr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
 		Trigger: CompactionTriggerOverflow,
 	}); prepareErr != nil {
+		frozen.overflowRecovery = prepareErr
 		return false
 	}
 	rebuilt, buildErr := a.prepareSamplingRequest(ctx)
 	if buildErr != nil {
+		frozen.overflowRecovery = buildErr
 		return false
 	}
 	if sessionstore.ProviderVisibleFingerprint(provider.ModelMessages(rebuilt.req.Messages)) == refused {
+		frozen.overflowRecovery = errors.New("folding freed nothing to send")
 		return false
 	}
 	frozen.req = rebuilt.req

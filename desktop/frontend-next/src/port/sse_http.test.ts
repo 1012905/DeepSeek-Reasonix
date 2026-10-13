@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HttpError, KernelBusyError } from "./port";
+import { DeliveryError, HttpError } from "./port";
 import { SseHttp } from "./sse_http";
+import { SsePort } from "./sse";
 
 class Probe extends SseHttp {
   call(path: string) {
@@ -10,7 +11,7 @@ class Probe extends SseHttp {
     return this.get<T>(path);
   }
   decide(path: string) {
-    return this.postDecision(path, {});
+    return this.postAcked(path, {});
   }
 }
 
@@ -95,7 +96,9 @@ describe("a decision submit", () => {
     );
     const settled = new Probe().decide("/approve").catch((e) => e);
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(await settled).toBeInstanceOf(KernelBusyError);
+    const err = (await settled) as DeliveryError;
+    expect(err).toBeInstanceOf(DeliveryError);
+    expect(err.fault).toBe("kernel_busy");
   });
 
   it("keeps a refusal it already received when the wait runs out mid-body", async () => {
@@ -111,7 +114,7 @@ describe("a decision submit", () => {
     const settled = new Probe().decide("/plan-decision").catch((e) => e);
     await vi.advanceTimersByTimeAsync(60_000);
     const err = await settled;
-    expect(err).not.toBeInstanceOf(KernelBusyError);
+    expect(err).not.toBeInstanceOf(DeliveryError);
     expect((err as HttpError).status).toBe(409);
   });
 
@@ -137,6 +140,75 @@ function answer(status: number, body: string, contentType: string) {
   }));
 }
 
+const silentKernel = () =>
+  vi.stubGlobal("fetch", (_: string, init: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }),
+  );
+
+describe("an unconfirmed call is told apart by who held it up", () => {
+  it("a stop the kernel never acknowledged ends as a typed error, not a wait with no end", async () => {
+    vi.useFakeTimers();
+    silentKernel();
+    const settled = new SsePort("", "r1").cancel().then(() => "acked", (e) => e);
+    await vi.advanceTimersByTimeAsync(60_000);
+    const err = await settled;
+    expect(err).toBeInstanceOf(DeliveryError);
+    expect((err as DeliveryError).fault).toBe("kernel_busy");
+  });
+
+  it("a stop the kernel acknowledged settles", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      return { ok: true, status: 204, text: async () => "" };
+    });
+    await expect(new SsePort("", "r1").cancel()).resolves.toBeUndefined();
+    expect(calls).toEqual(["/cancel"]);
+  });
+
+  it("blames this window, not the kernel, when the deadline fires far past its time", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let now = 1_000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    silentKernel();
+    const settled = new Probe().decide("/approve").catch((e) => e);
+    now += 90_000;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(((await settled) as DeliveryError).fault).toBe("ui_stalled");
+    vi.restoreAllMocks();
+  });
+
+  it("blames the kernel when the deadline fires on time", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let now = 1_000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    silentKernel();
+    const settled = new Probe().decide("/approve").catch((e) => e);
+    now += 20_050;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(((await settled) as DeliveryError).fault).toBe("kernel_busy");
+    vi.restoreAllMocks();
+  });
+
+  it("reports a refused connection as unreachable", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const err = (await new Probe().decide("/approve").catch((e) => e)) as DeliveryError;
+    expect(err).toBeInstanceOf(DeliveryError);
+    expect(err.fault).toBe("unreachable");
+  });
+
+  it("keeps a refusal the kernel spelled out for a stop", async () => {
+    vi.stubGlobal("fetch", async () => ({ ok: false, status: 403, text: async () => '{"code":"x.y","error":"no"}' }));
+    const err = (await new SsePort("", "r1").cancel().catch((e) => e)) as HttpError;
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.reason?.code).toBe("x.y");
+  });
+});
+
 describe("a failed call", () => {
   // http.Error writes plain text, and parsing the body as JSON first threw the
   // only account of the failure away: users reported "/providers/edit: 500".
@@ -160,5 +232,14 @@ describe("a failed call", () => {
     answer(502, "", "text/plain");
     const err = (await new Probe().call("/providers/edit").catch((e) => e)) as HttpError;
     expect(err.message).toBe("/providers/edit: 502");
+  });
+});
+
+// The kernel answers a closed browser tab with 204 and no body, so closing is
+// settled by the status alone.
+describe("closing a browser tab", () => {
+  it("succeeds on an empty 204 answer", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+    await expect(new SsePort("").browserClose("tab-1")).resolves.toBeUndefined();
   });
 });

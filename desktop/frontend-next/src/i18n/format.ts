@@ -31,6 +31,9 @@ export const count = (n: number) => nf({ maximumFractionDigits: 0 }).format(n);
 export const decimals = (v: number, digits: number) =>
   nf({ minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v);
 
+/** plain is a number kept to at most n places, with none padded on. */
+export const plain = (v: number, digits: number) => nf({ maximumFractionDigits: digits }).format(v);
+
 /** tokens abbreviates a count of tokens or characters. Under ten thousand it
  *  keeps one decimal and above it drops to none, so the field's width stays put
  *  as a turn grows. */
@@ -38,6 +41,15 @@ export function tokens(n: number): string {
   if (n < 1000) return count(n);
   if (n < 1_000_000) return `${nf({ maximumFractionDigits: n < 10_000 ? 1 : 0 }).format(n / 1000)}k`;
   return `${decimals(n / 1_000_000, 1)}M`;
+}
+
+/** elapsed is a run time said compactly: seconds under a minute, then minutes
+ *  and hours, a zero unit left out. It matches the terminal's wording. */
+export function elapsed(ms: number): string {
+  const total = Math.round(ms / 1000);
+  if (total < 60) return `${total}s`;
+  const parts = [[Math.floor(total / 3600), "h"], [Math.floor((total % 3600) / 60), "m"], [total % 60, "s"]] as const;
+  return parts.filter(([n]) => n > 0).map(([n, u]) => `${n}${u}`).join(" ");
 }
 
 /** seconds spells a millisecond duration. One place by default — the callers

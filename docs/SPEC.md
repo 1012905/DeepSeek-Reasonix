@@ -168,6 +168,10 @@ interface (`call` / `notify` / `close`) abstracts that, so the MCP-level logic
   answer `roots/list` with its file URI. `tools/call` includes a per-call
   `_meta.progressToken`; matching `notifications/progress` messages stream into
   the existing tool-progress event path.
+- A local stdio server's `tools/call` also carries `_meta["io.reasonix/cwd"]` (the
+  workspace root) and `_meta["io.reasonix/readOnly"]` (true in plan mode).
+- Remote HTTP and SSE servers get neither, so no local path leaves the machine. A
+  key the call already carries is kept, and both are hints, not authority.
 - A stdio server uses one persistent transport for initialize, reads, and
   writes, preserving state such as browser sessions across tool calls. The
   process uses the server's process sandbox because process confinement cannot
@@ -293,10 +297,11 @@ when the sole automatic threshold is crossed.
 - Automatic maintenance is planned once in `ContextManager.Prepare` from the
   current projection plus the append-only canonical tail. The canonical
   transcript is never rewritten. Subsequent thresholds merge
-  **prior digest + new history** into a single digest (no multi-span merge, no
-  application-layer retry). Failure records a generation-scoped
+  **prior digest + new history** into a single digest (no multi-span merge). Failure records a generation-scoped
   `blocked`/`failed` receipt; the same generation does not pay for another
   automatic summary. Manual `compress` can retry.
+- A summary cut at the output limit is retried once with a larger output cap;
+  if that is cut too, the failure keeps its typed code and records the cap.
 - Old multi-threshold keys (`soft_compact_ratio`, `tool_result_snip_ratio`,
   `compact_force_ratio`, `cold_resume_prune`, `context_editing`) are removed on
   ordinary start and ignored at runtime. Native provider tool clearing is not

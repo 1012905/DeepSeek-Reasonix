@@ -15,19 +15,19 @@ import (
 // one value rather than two fields.
 type compactionProgress struct {
 	stuck bool // a fold landed above the trigger, so pressure retries are pointless
-	// lastNoop is the verdict already reported for the running turn. A crossed
+	// lastReported is the verdict already reported for the running turn. A crossed
 	// threshold stays crossed, so without it every later round of the same turn
 	// would report the same "folded nothing" again.
-	lastNoop maintenanceNoop
+	lastReported maintenanceReport
 	// lastUserTurns is what the most recent fold could and could not hold of
 	// the user's own words. The notice fires once, at the moment of the fold;
 	// this is what /context can still answer with afterwards.
 	lastUserTurns userTurnRetention
 }
 
-// maintenanceNoop is one reported no-fold verdict, scoped to the turn it was
+// maintenanceReport is one reported no-fold verdict, scoped to the turn it was
 // reached under: the same reason in a later turn is news again.
-type maintenanceNoop struct {
+type maintenanceReport struct {
 	reason CompactionNoopReason
 	turn   int64
 }
@@ -36,7 +36,7 @@ type maintenanceNoop struct {
 // lastUserTurns stays: /context still answers with what the last fold held.
 func (p *compactionProgress) restart() {
 	p.stuck = false
-	p.lastNoop = maintenanceNoop{}
+	p.lastReported = maintenanceReport{}
 }
 
 // ContextManager is the sole owner of provider-visible context maintenance.
@@ -100,7 +100,8 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	// + role projection). Extension interceptors run only on the real sampling
 	// request so side-effecting plugins are not double-invoked; if they expand
 	// the prompt past the hard ceiling, overflow recovery still fires.
-	est := a.estimatedVisibleRequestTokens(visible)
+	visibleShape := a.visibleRequestShape(visible)
+	est := a.estimatedShapeTokens(visibleShape)
 	ownEst := est // before an observation that may count provider-injected content
 	prepared := PreparedContext{
 		Messages:          append([]provider.Message(nil), visible...),
@@ -112,9 +113,15 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	}
 	fold := a.compactTrigger()
 	hard := a.hardInputCeiling()
+	// pressure only decides whether to fold; the hard ceiling stays on the local
+	// estimate, because a provider count no fold can lower must not end the turn.
+	pressure := est
 	if policy.ObservedInputTokens > 0 {
 		est = policy.ObservedInputTokens
 		prepared.InputTokens = est
+		pressure = est
+	} else if floor, ok := a.providerReportedFloor(visibleShape, prepared.ProjectionVersion); ok {
+		pressure = max(pressure, floor)
 	}
 	inputHash := a.contextMaintenanceInputHash(visible)
 	if blocked, reason := a.contextMaintenanceBlocked(inputHash, ownEst, policy.Trigger == CompactionTriggerOverflow); blocked && policy.Trigger != CompactionTriggerManual {
@@ -123,9 +130,12 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 		if policy.Trigger == CompactionTriggerOverflow {
 			return PreparedContext{}, fmt.Errorf("%w: %s", ErrCompactionRequired, reason)
 		}
+		if policy.Trigger == CompactionTriggerPressure && ownEst >= fold {
+			a.noteMaintenanceHeld()
+		}
 		return prepared, nil
 	}
-	if est < fold {
+	if pressure < fold {
 		a.sess.win.compaction.stuck = false
 	}
 	if a.sess.win.compaction.stuck && policy.Trigger == CompactionTriggerPressure {
@@ -138,7 +148,7 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 			policy.Trigger == CompactionTriggerOverflow || est >= hard,
 		ignoreEconomics: policy.IgnoreEconomics || policy.Trigger == CompactionTriggerOverflow || est >= hard,
 	}
-	if est < fold && !scope.ignoreThreshold {
+	if pressure < fold && !scope.ignoreThreshold {
 		return prepared, nil
 	}
 
@@ -251,14 +261,18 @@ func (m ContextManager) currentPrepared() PreparedContext {
 // ModelMessages + role projection + tool schemas. Extension interceptors are
 // intentionally omitted here (see prepareOnce) to avoid double side effects.
 func (a *contextWindow) estimatedVisibleRequestTokens(visible []provider.Message) int {
+	return a.estimatedShapeTokens(a.visibleRequestShape(visible))
+}
+
+func (a *contextWindow) visibleRequestShape(visible []provider.Message) requestCalibrationShape {
 	if a == nil {
-		return 0
+		return requestCalibrationShape{}
 	}
 	msgs := a.providerProjectionMessages(provider.ModelMessages(append([]provider.Message(nil), visible...)))
 	for i := range msgs {
 		msgs[i].CreatedAt = 0
 	}
-	return a.estimatedRequestTokens(provider.Request{
+	return a.requestCalibrationShape(provider.Request{
 		Messages:    msgs,
 		Tools:       a.estimationSurface(),
 		MaxTokens:   a.maxOutputTokens,

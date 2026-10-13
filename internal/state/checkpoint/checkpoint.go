@@ -140,6 +140,7 @@ type Store struct {
 	activeWriters []ActiveWriter
 	plans         map[string]preparedPlan
 	lastUndo      *TransactionManifest
+	undoChanged   func()
 	sessionID     string
 	mutationSeq   int64
 	retainN       int
@@ -224,27 +225,14 @@ func (s *Store) activeWriterConflicts() []RewindConflict {
 	return conflicts
 }
 
-// LastUndoTransactionID returns the committed transaction id available for undo.
-func (s *Store) LastUndoTransactionID() string {
-	if s == nil {
-		return ""
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.lastUndo == nil || s.lastUndo.State != TxCommitted {
-		return ""
-	}
-	return s.lastUndo.ID
-}
-
 // InvalidateUndo clears the last undo slot (new turn / new mutation / new rewind).
 func (s *Store) InvalidateUndo() {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
+	defer s.unlockUndoChange(s.lastUndo)
 	s.lastUndo = nil
-	s.mu.Unlock()
 }
 
 func (s *Store) load() {
@@ -309,7 +297,7 @@ func (s *Store) load() {
 // prompt labels it in the picker; msgIndex is the conversation-rewind boundary.
 func (s *Store) Begin(turn int, prompt string, msgIndex int) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlockUndoChange(s.lastUndo)
 	if s.cur != nil {
 		s.recomputeCoverageLocked(s.cur)
 		s.done = append(s.done, s.cur)
@@ -501,7 +489,7 @@ func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) {
 	_ = err
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlockUndoChange(s.lastUndo)
 	s.mutationSeq = opts.Seq
 	if s.cur != nil {
 		s.cur.LastMutationSeq = opts.Seq
@@ -794,47 +782,6 @@ func (s *Store) NextTurn() int {
 		next = s.cur.Turn + 1
 	}
 	return next
-}
-
-// List returns every checkpoint's metadata, oldest turn first.
-func (s *Store) List() []Meta {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make([]Meta, 0, len(s.done)+1)
-	for _, c := range s.all() {
-		paths := make([]string, len(c.Files))
-		for i, f := range c.Files {
-			paths[i] = f.Path
-		}
-		meta := Meta{
-			Turn:               c.Turn,
-			MsgIndex:           c.MsgIndex,
-			Time:               c.Time,
-			Prompt:             c.Prompt,
-			Paths:              paths,
-			Coverage:           c.Coverage,
-			CoverageGaps:       append([]CoverageGap(nil), c.CoverageGaps...),
-			ExpiredFilePayload: c.ExpiredFilePayload,
-			ActiveWriters:      append([]ActiveWriter(nil), c.ActiveWriters...),
-			Legacy:             c.Legacy || c.Coverage == CoverageLegacy,
-		}
-		switch {
-		case meta.Legacy:
-			meta.CanUndoFiles = false
-			meta.DisabledReason = "legacy checkpoint cannot verify later manual edits"
-		case meta.ExpiredFilePayload:
-			meta.CanUndoFiles = false
-			meta.DisabledReason = "file recovery payload expired"
-		case meta.Coverage == CoverageNone:
-			meta.CanUndoFiles = false
-		case meta.Coverage == CoveragePartial:
-			meta.CanUndoFiles = len(paths) > 0
-		default:
-			meta.CanUndoFiles = len(paths) > 0
-		}
-		out = append(out, meta)
-	}
-	return out
 }
 
 // FileState returns the earliest pre-edit state recorded for p across the

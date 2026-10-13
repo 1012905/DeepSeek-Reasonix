@@ -3,13 +3,37 @@ import { boot as bootLang } from "../src/i18n";
 import { track as trackWidth } from "../src/ui/viewport";
 import "../src/styles/tokens.css";
 import "../src/styles/app.css";
+import "../src/styles/dock.css";
 import "../src/styles/studio.css";
+import "../src/styles/changedpill.css";
+import "../src/styles/chart.css";
+import "../src/styles/community.css";
+import "../src/styles/providerpresets.css";
+import "../src/styles/sessionnotes.css";
+import "../src/styles/sessionquick.css";
+import "../src/styles/sidebardrop.css";
+import "../src/styles/sponsor.css";
+import "../src/styles/versions.css";
+import "../src/styles/phonecomposer.css";
+import "../src/styles/stophint.css";
+import "../src/styles/dialogcenter.css";
+import "../src/styles/treerows.css";
+import "../src/styles/workbench-changes.css";
+import "../src/styles/vthumb.css";
+import "../src/styles/tips.css";
+import "../src/styles/waitnote.css";
+import "../src/styles/skillpin.css";
+import "../src/styles/narrow.css";
+import "../src/styles/workfold.css";
+import "../src/styles/workbench-launcher.css";
 import "../src/styles/feedback.css";
+import "../src/styles/themes.css";
 import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
 import type { AgentPort, Appearance, HistoryMessage } from "../src/port/port";
+import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
 import type { WireEvent } from "../src/port/wire";
 
@@ -23,8 +47,41 @@ let peakInFlight = 0;
 
 // A port whose event stream the driver owns outright: the fixture's scripted
 // beats never reach the UI, so a measurement times exactly the frames it fed.
+// ?pack=sky opens on a pack with the live sky; ?pack=photo on one with a
+// picture. Both are the states where the shell goes translucent over a backdrop.
+const PACK = new URLSearchParams(location.search).get("pack");
+const GLOW = new URLSearchParams(location.search).get("glow");
+
+function benchPack(): ThemePack | null {
+  const tokens = {
+    light: { bg: "#F2F6F8", bgSoft: "#F9FCFD", panel: "#FFFFFF", border: "#CBD9E0", fg: "#12191C", fgDim: "#4E5D65", accent: "#0E6E82" },
+    dark: { bg: "#080D10", bgSoft: "#0C1316", panel: "#131C21", border: "#23333A", fg: "#E4EEF2", fgDim: "#8298A2", accent: "#4FB6CE" },
+  };
+  if (PACK === "sky") {
+    return {
+      id: "bench-sky", name: "Bench sky", active: true, tokens,
+      sky: { ray: "rgba(255,216,142,.55)", cloud: "255,240,212", cloudLit: "242,206,140", rayAlpha: 0.85, cloudAlpha: 0.4 },
+    };
+  }
+  if (PACK === "photo") {
+    return {
+      id: "bench-photo", name: "Bench photo", active: true, tokens,
+      background: {
+        image: true, focusX: 0.5, focusY: 0.5, homeOpacity: 0.9, taskOpacity: 0.5, overlayStrength: 0.4,
+        ...(GLOW === "none" || GLOW === "default" ? { textGlow: GLOW } : {}),
+      },
+    };
+  }
+  return null;
+}
+
 class BenchPort extends MockPort {
   private readonly subs = new Set<(e: WireEvent) => void>();
+
+  async themes(): Promise<ThemePack[]> {
+    const pack = benchPack();
+    return pack ? [pack] : super.themes();
+  }
 
   async saveAppearance(look: Appearance) {
     saves.push(look);
@@ -46,6 +103,15 @@ class BenchPort extends MockPort {
 
   async providerSetup() {
     return ONBOARDING ? { required: true, provider: "", model: "" } : null;
+  }
+
+  async foldWorkSettings() {
+    return { ...(await super.foldWorkSettings()), fold: query.has("fold") };
+  }
+
+  async workspaceGit() {
+    const git = await super.workspaceGit();
+    return query.get("git") === "none" ? { ...git, repo: false } : git;
   }
 
   async appearance() {
@@ -100,6 +166,12 @@ class BenchPort extends MockPort {
     return { ...q, items, capacity: { ...q.capacity, items: QUEUE, maxItems: 64 } };
   }
 
+  // ?queuebody= makes a seeded line readable back, as the kernel's is.
+  async readQueued(itemId: string): Promise<string> {
+    if (!QUEUE_BODY) return super.readQueued(itemId);
+    return "请把这个模块里所有的错误处理统一改成带类型的错误，并且保证调用方可以用 errors.Is 区分每一种失败，同时补上对应的单元测试，再检查文档里提到旧行为的地方是否需要更新。".repeat(3);
+  }
+
   // ?statusms= stands in for what the kernel's /status really costs when the
   // provider declares a wallet endpoint: that read goes out to the network.
   // ?jobs= seeds that many background jobs; stopping one is kept here because
@@ -127,10 +199,14 @@ class BenchPort extends MockPort {
   }
 }
 
+// ?skill=1 makes the last user turn a skill invocation, the way the host sends one.
+const SKILL_PIN = `<skill-pin name="code-quality">\n# Skill: code-quality\n> 专业的代码质量审查 Skill：多维度 Code Review（正确性、安全性、性能、可维护性），带量化评分。\n(scope: user · ~/.reasonix/skills/code-quality/SKILL.md)\n\n${"审查要点：先读改动范围，再逐项检查。\n".repeat(30)}\n\nArguments: 看一下 internal/auth\n</skill-pin>`;
+
 function storedHistory(): HistoryMessage[] {
   const msgs: HistoryMessage[] = [];
   for (let i = 0; i < TURNS; i++) {
-    msgs.push({ role: "user", content: `第 ${i} 个问题，麻烦看一下这个文件。` });
+    const pinned = query.get("skill") === "1" && i === TURNS - 1;
+    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。` });
     msgs.push({
       role: "assistant",
       content: `第 ${i} 段回答，说明刚才那一步做了什么。\n\n- 要点一\n- 要点二\n`,
@@ -157,15 +233,22 @@ const TURNS = Number(query.get("turns") ?? 0);
 const STATUS_MS = Number(query.get("statusms") ?? 0);
 // ?queue= is how many lines are already waiting when the window opens.
 const QUEUE = Number(query.get("queue") ?? 0);
+const QUEUE_BODY = query.has("queuebody");
 const JOBS = Number(query.get("jobs") ?? 0);
 // ?treems= holds every tree read back until that long after load, so the
 // window can be seen before the kernel has named a single folder.
 const TREE_AT = performance.now() + Number(query.get("treems") ?? 0);
-// ?panes=0 opens the window with no conversation open.
-const NO_PANES = query.get("panes") === "0";
+// ?panes=0 opens the window with no conversation open; ?panes=N opens N.
+const PANES = query.has("panes") ? Number(query.get("panes")) : 1;
+const NO_PANES = PANES === 0;
 
 class BenchHub extends MockHub {
   readonly feeds = new Map<string, BenchPort>();
+  private readonly settingsPort = new BenchPort();
+
+  machinePort(): AgentPort {
+    return this.settingsPort;
+  }
 
   portFor(rt: RuntimeView): AgentPort {
     let port = this.feeds.get(rt.id);
@@ -174,7 +257,17 @@ class BenchHub extends MockHub {
   }
 
   runtimes(): Promise<RuntimeView[]> {
-    return NO_PANES ? Promise.resolve([]) : super.runtimes();
+    if (NO_PANES) return Promise.resolve([]);
+    if (PANES <= 1) return super.runtimes();
+    return Promise.resolve(
+      Array.from({ length: PANES }, (_, i) => ({
+        id: `r${i + 1}`,
+        base: i === 0 ? "" : `/rt/r${i + 1}`,
+        root: "~/projects/DeepSeek-Reasonix",
+        name: "DeepSeek-Reasonix",
+        sessionPath: `/sessions/pane-${i + 1}.jsonl`,
+      })),
+    );
   }
 
   tree(): Promise<TreeWorkspace[]> {

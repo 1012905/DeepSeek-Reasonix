@@ -33,7 +33,8 @@ type mcpManager struct {
 	defaultCallTimeout time.Duration
 	// sealed, once set, refuses every connection. It is written before the
 	// controller is handed to a caller and only read after.
-	sealed error
+	sealed         error
+	promptFailures promptFailureDebt
 }
 
 // seal makes the manager refuse to connect or register any server.
@@ -84,6 +85,7 @@ func (m *mcpManager) connectSpec(s plugin.Spec) (int, error) {
 		for _, t := range tools {
 			reg.Add(t)
 		}
+		plugin.ApplyHeldMCPPolicy(reg, host, s)
 	}
 	return len(tools), nil
 }
@@ -124,6 +126,7 @@ func (m *mcpManager) registerSpecOnDemand(s plugin.Spec) (int, error) {
 		for _, t := range tools {
 			reg.Add(t)
 		}
+		plugin.ApplyHeldMCPPolicy(reg, host, s)
 	}
 	return len(tools), nil
 }
@@ -133,6 +136,7 @@ func (m *mcpManager) registerSpecOnDemand(s plugin.Spec) (int, error) {
 func (m *mcpManager) disconnect(name string) bool {
 	if reg := m.registry(); reg != nil {
 		reg.ClearDisabledMCP(name)
+		reg.ReplaceHeldMCP(name, nil)
 	}
 	host := m.hostRef()
 	if host == nil {

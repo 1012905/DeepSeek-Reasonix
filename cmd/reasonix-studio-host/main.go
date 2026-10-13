@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -35,6 +36,8 @@ import (
 	"reasonix/internal/frontend/traystate"
 	"reasonix/internal/platform/account"
 	"reasonix/internal/platform/appupdate"
+	"reasonix/internal/platform/computer"
+	"reasonix/internal/platform/crashreport"
 	"reasonix/internal/platform/feedback"
 	"reasonix/internal/platform/instanceid"
 	"reasonix/internal/platform/notify"
@@ -66,6 +69,7 @@ type shellIdentity struct {
 	version string
 	exe     string
 	pid     int
+	logsDir string
 }
 
 func (s shellIdentity) stated() bool {
@@ -88,7 +92,7 @@ func studioInstall(shell shellIdentity) *update.Install {
 // nil where the shell did not state enough to own one. Nil is the gate: the
 // routes are not registered, so a host that cannot name the application it
 // would replace has no way to be asked to replace it.
-func studioUpdateHost(shell shellIdentity, to io.Writer) appupdate.Capability {
+func studioUpdateHost(shell shellIdentity, owner *shellOwner) appupdate.Capability {
 	if !shell.stated() {
 		return nil
 	}
@@ -96,7 +100,7 @@ func studioUpdateHost(shell shellIdentity, to io.Writer) appupdate.Capability {
 	// still work; the swap is what refuses, by name.
 	application, _ := update.ApplicationAt(shell.exe, shell.pid)
 	return appupdate.New(appupdate.Options{
-		Owner:       &shellOwner{to: to},
+		Owner:       owner,
 		Running:     shell.version,
 		Line:        update.StudioLine(),
 		Application: application,
@@ -126,7 +130,10 @@ func main() {
 	// replace it.
 	studioApp := flag.String("studio-app", "", "the application executable this host runs inside")
 	studioAppPID := flag.Int("studio-app-pid", 0, "the process id of that application")
-	computerHelper := flag.String("computer-helper", "", "the native helper that operates this machine's applications")
+	computerDriver := flag.String("cua-driver", "", "the pinned CUA Driver executable")
+	computerAbortSocket := flag.String("computer-abort-socket", "", "the private Studio CUA interruption endpoint")
+	computerSocket := flag.String("computer-socket", "", "the private embedded CUA socket owned by Studio")
+	crashDir := flag.String("crash-dir", "", "the directory a fatal runtime error is written to")
 	stripGrants := flag.Bool("strip-package-grants", false, "remove app-package grants from the directory -studio-app runs from, print what changed, and exit")
 	flag.Parse()
 	if *stripGrants {
@@ -139,16 +146,46 @@ func main() {
 		fmt.Fprintln(os.Stdout, instanceid.Current())
 		return
 	}
-	boot.SetComputerHelper(*computerHelper)
-	shell := shellIdentity{version: *studioVersion, exe: *studioApp, pid: *studioAppPID}
-	os.Exit(run(parentLease(os.Stdin), os.Stdout, os.Stderr, *page, shell))
+	var driver *computer.Driver
+	if *computerDriver != "" {
+		if *computerSocket != "" {
+			driver = computer.NewEmbeddedDriver(*computerDriver, *computerSocket, *computerAbortSocket, os.Environ())
+		} else {
+			driver = computer.NewDriver(*computerDriver, os.Environ())
+		}
+	}
+
+	shell := shellIdentity{version: *studioVersion, exe: *studioApp, pid: *studioAppPID, logsDir: logsDirOf(*crashDir)}
+	releaseFatalLog := crashreport.InstallFatalLog(*crashDir, defaultVersion(shell.version))
+	code := run(parentLease(os.Stdin), os.Stdout, os.Stderr, *page, shell, driver)
+	releaseFatalLog()
+	os.Exit(code)
+}
+
+// logsDirOf is the shell's logs directory: the crash directory it passed is
+// the "crash" folder inside it.
+func logsDirOf(crashDir string) string {
+	if strings.TrimSpace(crashDir) == "" {
+		return ""
+	}
+	return filepath.Dir(crashDir)
+}
+
+func defaultVersion(stated string) string {
+	if strings.TrimSpace(stated) != "" {
+		return stated
+	}
+	return version
 }
 
 // run serves until the lease ends or the process is signalled. stdout carries
 // the handshake first and then one line per act a handover asks of the shell,
 // because that pipe is the only channel pointing that way; every log goes to
 // logs, which is why no line there can be mistaken for one of these.
-func run(lease io.Reader, handshakeTo, logs io.Writer, page string, shell shellIdentity) int {
+func run(lease io.Reader, handshakeTo, logs io.Writer, page string, shell shellIdentity, driver *computer.Driver) int {
+	if driver != nil {
+		defer driver.Close()
+	}
 	phases := newStartupPhases(logs, time.Now)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -171,7 +208,7 @@ func run(lease io.Reader, handshakeTo, logs io.Writer, page string, shell shellI
 		fmt.Fprintln(logs, "reasonix-studio-host: no built page found; serving the kernel only")
 	}
 
-	hub, err := assemble(ctx, logs, handshakeTo, shell, served, phases)
+	hub, err := assemble(ctx, logs, handshakeTo, shell, served, phases, driver)
 	if err != nil {
 		fmt.Fprintln(logs, "reasonix-studio-host:", err)
 		return 1
@@ -289,7 +326,7 @@ func resolveKernelLanguage(cfg *config.Config) string {
 
 // assemble builds the hub this host serves: one pane on the workspace it was
 // launched in, carrying the capabilities a local window may exercise.
-func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdentity, page fs.FS, phases *startupPhases) (*serve.Hub, error) {
+func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdentity, page fs.FS, phases *startupPhases, driver *computer.Driver) (*serve.Hub, error) {
 	// The one-time upgrades belong to whichever entry point starts first; a
 	// person who only ever opens the window would otherwise never get them.
 	if _, err := config.ApplyUserConfigUpgradesOnStartup(config.UserConfigPath()); err != nil {
@@ -316,7 +353,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	bc := serve.NewBroadcaster()
 	paneSink := decorate(bc)
 	if cfg.DesktopTelemetry() || cfg.DesktopMetrics() {
-		reporter := telemetry.Start(studioTelemetryOptions(cfg, shell.version))
+		reporter := telemetry.Start(studioTelemetryOptions(ctx, cfg, shell.version))
 		if cfg.DesktopMetrics() {
 			paneSink = reporter.Wrap(paneSink)
 		}
@@ -325,6 +362,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	root := launchWorkspace(shell.exe)
 	phases.mark(startupWorkspace)
 	built, err := boot.BuildRuntime(ctx, boot.Options{
+		ComputerDriver:  driver,
 		Version:         version,
 		WorkspaceRoot:   root,
 		SessionDir:      serve.SessionDirFor(root),
@@ -350,31 +388,50 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	browserHost := serve.NewBrowserHost()
 	boot.SetBrowserHost(browserHost.Dial)
 	hubCfg := hostServeConfig(cfg.Serve)
-	// Shut until the person at the window opens it; the context ending closes
-	// it with the rest of the kernel, unpairing every device.
+	// Shut until the person at the window opens it; the context ending stops it
+	// with the rest of the kernel, keeping the phones this machine already adopted.
 	share := serve.NewDeviceShare(page)
 	share.RestorePort(cfg.SharePort())
 	go func() {
 		<-ctx.Done()
-		share.Close()
+		share.Shutdown()
 	}()
+	owner := &shellOwner{to: handshakeTo}
+	// A toast the user clicks is answered here, in the process that sent it, and
+	// the shell is the one that can bring its window forward.
+	notify.OnActivate(showOnToastClick(owner, logs))
+	// A toast that did not go out is invisible to the person it was for, so the
+	// reason belongs in the log the shell keeps.
+	notify.OnSendFailure(func(err error) { fmt.Fprintf(logs, "notify: %v\n", err) })
 	hub := serve.NewHub(serve.HubOptions{
-		Serve:         hubCfg,
-		Surface:       surface.Desktop,
-		Page:          page,
-		Grant:         grantHostCapabilities,
-		DecorateSink:  decorate,
-		Tray:          &studioTray{tracker: tracker},
-		Notifications: notifySet,
-		BrowserHost:   browserHost,
-		Asks:          asks,
-		Remote:        remotehost.New(ctx, version, asks),
-		OnClose:       func(rt *serve.Runtime) { tracker.Drop(paneKey(rt.Events)) },
-		Install:       studioInstall(shell),
-		Update:        studioUpdateHost(shell, handshakeTo),
-		Share:         share,
+		ComputerDriver: driver,
+		Serve:          hubCfg,
+		Surface:        surface.Desktop,
+		Page:           page,
+		Grant:          grantHostCapabilities,
+		DecorateSink:   decorate,
+		Tray:           &studioTray{tracker: tracker},
+		Notifications:  notifySet,
+		NotifySender:   startDiskWatch(ctx, notifySet, []string{root, serve.SessionDirFor(root)}),
+		BrowserHost:    browserHost,
+		Asks:           asks,
+		Remote:         remotehost.New(ctx, version, asks),
+		OnClose:        func(rt *serve.Runtime) { tracker.Drop(paneKey(rt.Events)) },
+		Install:        studioInstall(shell),
+		Update:         studioUpdateHost(shell, owner),
+		Share:          share,
+		LogsDir:        shell.logsDir,
 	})
 	share.Attach(hub.Handler())
+	// A share the person had open reopens where it was: the phone that paired
+	// against that address keeps its cookie. An address that is gone falls back
+	// to one this machine now offers, at the cost of one fresh scan.
+	state := share.RestoreState()
+	if state.Open {
+		if _, err := share.Reopen(state.Address); err != nil {
+			fmt.Fprintln(logs, "reasonix-studio-host: could not reopen phone access:", err)
+		}
+	}
 	srv := serve.New(built.Controller, bc, hubCfg)
 	srv.SetPaneSink(paneSink)
 	srv.AdoptRuntime(built)
@@ -416,19 +473,29 @@ func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, t
 		registrar.SetCloudRemoteStatus(func() serve.CloudRemoteStatus {
 			status := host.Status()
 			return serve.CloudRemoteStatus{
-				DeviceID: status.DeviceID, Name: status.Name, Online: status.Online, Error: status.Error,
+				DeviceID: status.DeviceID, Name: status.Name, Online: status.Online, Error: status.Error, Reason: string(status.Reason),
 			}
 		})
 	}
 	go host.Run(ctx)
 }
 
-func studioTelemetryOptions(cfg *config.Config, studioVersion string) telemetry.Options {
+// desktopTelemetryOn reads the user-level setting as it is now. A file that does
+// not parse is not consent, and neither the project config nor a migration
+// rewrite is involved; a missing file keeps the documented default (on).
+func desktopTelemetryOn() bool {
+	cfg, err := config.LoadForEditReadOnlyStrict(config.UserConfigPath())
+	return err == nil && cfg != nil && cfg.DesktopTelemetry()
+}
+
+func studioTelemetryOptions(ctx context.Context, cfg *config.Config, studioVersion string) telemetry.Options {
 	return telemetry.Options{
+		Context:      ctx,
 		Mode:         "on",
 		Version:      studioVersion,
 		Surface:      surface.Studio,
 		SuppressPing: !cfg.DesktopTelemetry(),
+		PingAllowed:  desktopTelemetryOn,
 		HomeDir:      config.ReasonixHomeDir(),
 		Interactive:  true,
 		Proxy:        cfg.NetworkProxySpec(),

@@ -2,10 +2,13 @@ package update
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/safety/redirectguard"
 )
 
@@ -53,8 +56,17 @@ type Updater struct {
 // of the caller's clients: everything fetched here is release bytes, and a
 // client assembled from netclient carries no redirect policy of its own.
 func New(opts Options) *Updater {
+	if opts.UserAgent == "" {
+		opts.UserAgent = UserAgent(provider.ClientVersion())
+	}
 	opts.HTTP, opts.Fallback = guarded(opts.HTTP), guarded(opts.Fallback)
 	return &Updater{opts: opts}
+}
+
+// UserAgent is how Studio names its update traffic to the release edge: the
+// string already proven for artifact downloads, shared by every read of it.
+func UserAgent(version string) string {
+	return fmt.Sprintf("Reasonix-Studio/%s (%s/%s)", version, runtime.GOOS, runtime.GOARCH)
 }
 
 // releaseHosts is where Studio's own artifacts are published: the catalog and
@@ -85,6 +97,9 @@ type Status struct {
 	Newer     bool
 	AutoOK    bool // may be installed without asking; false while pinned
 	StalePin  bool
+	// Withdrawn is set when the running version itself was pulled, so a panel
+	// can say so and point at Latest instead of presenting an ordinary update.
+	Withdrawn *WithdrawnEntry
 	Entries   []IndexEntry
 }
 
@@ -93,11 +108,14 @@ type Status struct {
 // version is running is a local fact and must survive a network error.
 func (u *Updater) Check(ctx context.Context) (Status, error) {
 	st := Status{Current: u.opts.Current, Pinned: strings.TrimSpace(u.opts.Pinned)}
-	idx, err := FetchIndex(ctx, u.opts.HTTP, u.opts.IndexURL)
+	idx, err := FetchIndex(ctx, u.opts.HTTP, u.opts.IndexURL, u.opts.UserAgent)
 	if err != nil {
 		return st, err
 	}
 	st.Entries = idx.Versions
+	if w, gone := idx.WithdrawnVersion(st.Current); gone {
+		st.Withdrawn = &w
+	}
 	for _, e := range idx.Versions {
 		if st.Latest == "" || CompareVersions(e.Version, st.Latest) > 0 {
 			st.Latest = e.Version
@@ -111,5 +129,5 @@ func (u *Updater) Check(ctx context.Context) (Status, error) {
 // Manifest resolves one catalog entry to its immutable manifest, the single
 // source for that version's assets and signatures.
 func (u *Updater) Manifest(ctx context.Context, e IndexEntry) (*Manifest, error) {
-	return FetchManifestAt(ctx, u.opts.HTTP, e.Manifest)
+	return FetchManifestAt(ctx, u.opts.HTTP, e.Manifest, u.opts.UserAgent)
 }

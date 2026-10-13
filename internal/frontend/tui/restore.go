@@ -22,11 +22,12 @@ func (t *Transcript) Restore(msgs []HistoryMessage) {
 			if m.Content != "" || m.Reasoning != "" {
 				t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemSay, Text: m.Content, Reasoning: m.Reasoning, Done: true, Framed: true, ThoughtMs: m.ThoughtMs})
 			}
+			t.addWorked(m.WorkDurationMs)
 			for _, c := range m.ToolCalls {
 				if c.ID != "" {
 					calls[c.ID] = len(t.Items)
 				}
-				t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemTool, Tool: &eventwire.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments}})
+				t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemTool, Tool: &eventwire.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ResolvedName: c.ResolvedName, CapabilityID: c.CapabilityID}})
 			}
 		case "tool":
 			at, ok := calls[m.ToolCallID]

@@ -30,7 +30,7 @@ func (c *Client) callOn(ctx context.Context, t transport, method string, params 
 }
 
 func (c *Client) callOnce(ctx context.Context, t transport, method string, params any) (json.RawMessage, error) {
-	params, unregisterProgress := c.withProgress(ctx, t, method, params)
+	params, unregisterProgress := c.withProgress(ctx, t, method, c.withHostContext(ctx, method, params))
 	defer unregisterProgress()
 	if router, ok := t.(elicitTransport); ok && method == "tools/call" {
 		defer router.registerElicitCall(ctx)()
@@ -229,6 +229,9 @@ func (c *Client) redial(lifeCtx, callCtx context.Context) (transport, error) {
 		return nil, err
 	}
 	s, err = resolveProjectLaunchAuthorization(callCtx, s)
+	if err == nil {
+		err = checkDeclaredLaunch(s)
+	}
 	if err != nil {
 		return nil, err
 	}

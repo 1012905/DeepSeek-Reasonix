@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -246,9 +247,9 @@ func TestZhipuDepthEffortByModel(t *testing.T) {
 			}
 		})
 	}
-	gateway := &ProviderEntry{Kind: "openai", BaseURL: "https://gateway.example/v1", Model: "glm-5.3", ReasoningProtocol: ReasoningProtocolGLM}
-	if got := strings.Join(EffortCapabilityForEntry(gateway).Levels, "|"); got != "auto|enabled|disabled" {
-		t.Fatalf("gateway inherited unverified Zhipu depth scale: %s", got)
+	gateway := &ProviderEntry{Kind: "openai", BaseURL: "https://gateway.example/v1", Model: "glm-5.3"}
+	if EffortCapabilityForEntry(gateway).Supported {
+		t.Fatal("a gateway that declared no protocol must not take the Zhipu contract by model name")
 	}
 }
 
@@ -257,7 +258,7 @@ func TestEffortCapabilityExplicitGLMProtocolOnGateway(t *testing.T) {
 		Name:              "glm-gateway",
 		Kind:              "openai",
 		BaseURL:           "https://gateway.example.com/v1",
-		Model:             "glm-5.2",
+		Model:             "glm-4.5",
 		ReasoningProtocol: ReasoningProtocolGLM,
 	}
 	cap := EffortCapabilityForEntry(e)
@@ -293,9 +294,12 @@ func TestGLMModelRegistryUpgradesLegacyGatewayConfig(t *testing.T) {
 				t.Fatalf("ReasoningProtocolForEntry() = %q, want %q", got, ReasoningProtocolGLM)
 			}
 			cap := EffortCapabilityForEntry(e)
-			want := []string{"auto", "enabled", "disabled"}
-			if !cap.Supported || cap.Default != "enabled" || !stringSlicesEqual(cap.Levels, want) {
-				t.Fatalf("legacy gateway GLM capability = %+v, want levels %v default enabled", cap, want)
+			want, def := []string{"auto", "enabled", "disabled"}, "enabled"
+			if model == "glm-5.2" {
+				want, def = []string{"auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"}, "max"
+			}
+			if !cap.Supported || cap.Default != def || !stringSlicesEqual(cap.Levels, want) {
+				t.Fatalf("legacy gateway GLM capability = %+v, want levels %v default %s", cap, want, def)
 			}
 		})
 	}
@@ -630,5 +634,18 @@ func TestCuratedAnthropicPresetKeepsItsDepthContract(t *testing.T) {
 	bare.PresetID = ""
 	if got := ReasoningProtocolForEntry(&bare); got != "" {
 		t.Fatalf("bare relay protocol = %q, want none", got)
+	}
+}
+
+func TestNormalizeEffortRefusalIsTyped(t *testing.T) {
+	e := &ProviderEntry{Name: "narrow", Kind: "openai", Model: "n", SupportedEfforts: []string{"low", "high"}}
+	if _, err := NormalizeEffort(e, "max"); !errors.Is(err, ErrEffortUnsupported) {
+		t.Fatalf("unsupported level err = %v, want ErrEffortUnsupported", err)
+	}
+	if _, err := NormalizeEffort(&ProviderEntry{Name: "opaque", Model: "m"}, "high"); !errors.Is(err, ErrEffortUnsupported) {
+		t.Fatalf("not configurable err = %v, want ErrEffortUnsupported", err)
+	}
+	if got, err := NormalizeEffort(e, "LOW"); err != nil || got != "low" {
+		t.Fatalf("supported level = %q/%v, want low", got, err)
 	}
 }

@@ -58,6 +58,13 @@ for (const { width, height } of [{ width: 1440, height: 900 }, { width: 640, hei
       primary: box(".ask-foot .btn"),
       secondary: box(".ask-foot .dismiss"),
       foot: box(".ask-foot"),
+      free: (() => {
+        const el = document.querySelector(".ask-pane[data-on] .other-wrap input");
+        const r = el?.getBoundingClientRect();
+        return r && r.width > 0 && r.height > 0 ? { top: r.top, bottom: r.bottom, left: r.left, right: r.right } : null;
+      })(),
+      view: { w: innerWidth, h: innerHeight },
+      runLabel: document.querySelector(".studio-runlabel")?.textContent ?? "",
       approvalRows: [...new Set(actions.map((r) => Math.round(r.y)))].length,
       approvalMainWidth: actions[0]?.width ?? 0,
       approvalWidth: apv?.getBoundingClientRect().width ?? 0,
@@ -66,6 +73,9 @@ for (const { width, height } of [{ width: 1440, height: 900 }, { width: 640, hei
   check(`${width}px：正文不横向溢出`, layout.proseOverflow <= 1, `${Math.round(layout.proseOverflow)}px`);
   check(`${width}px：提问卡不撑宽`, layout.askOverflow <= 1, `${Math.round(layout.askOverflow)}px`);
   check(`${width}px：转录不横向溢出`, layout.flowOverflow <= 1, `${Math.round(layout.flowOverflow)}px`);
+  check(`${width}px：只有选项的提问卡上，自由作答入口不点任何东西就可见`, !!layout.free);
+  check(`${width}px：作答入口完整落在可视区内`, !!layout.free && layout.free.top >= 0 && layout.free.bottom <= layout.view.h && layout.free.left >= 0 && layout.free.right <= layout.view.w);
+  check(`${width}px：状态行写明在等你回答`, layout.runLabel.includes("等待你回答"), layout.runLabel);
   check(`${width}px：问题标签可横向到达`, layout.tabsOverflow === "auto");
   if (width === 420) {
     check("420px：提问主次动作分行", layout.primary.bottom <= layout.secondary.top + 1);
@@ -155,7 +165,7 @@ const edges = () => col.evaluate(() => {
   };
 });
 const setMeasure = (full) => col.evaluate((f) => {
-  if (f) document.documentElement.dataset.measure = "full";
+  if (f) document.documentElement.dataset.measure = typeof f === "string" ? f : "full";
   else delete document.documentElement.dataset.measure;
 }, full);
 const composeAt = {};
@@ -186,6 +196,31 @@ check("全宽：转录比输入框宽", full.flow.r - full.flow.l > full.compose
   `转录 ${full.flow.r - full.flow.l}px，输入框 ${full.compose.r - full.compose.l}px`);
 check("全宽：卡片跟着转录到边", full.boxed.every((x) => Math.abs(x.l - full.flow.l) <= 1 && Math.abs(x.r - full.flow.r) <= 1),
   `转录 ${full.flow.l}–${full.flow.r}，卡片 ${JSON.stringify(full.boxed)}`);
+
+await col.setViewportSize({ width: 1440, height: 900 });
+await setMeasure("full-all");
+await col.waitForTimeout(300);
+const fullAll = await edges();
+for (const width of [1000, 720]) {
+  await col.setViewportSize({ width, height: 900 });
+  await setMeasure("full-all");
+  await col.waitForTimeout(300);
+  const n = await edges();
+  const inside = await col.evaluate(() => {
+    const b = document.querySelector(".compose").getBoundingClientRect();
+    const pane = document.querySelector(".compose").parentElement.getBoundingClientRect();
+    return { left: Math.round(b.left - pane.left), right: Math.round(pane.right - b.right), w: innerWidth };
+  });
+  check(`${width}px 连输入框一起铺满：输入框不超出所在栏`, inside.left >= 0 && inside.right >= 0, `左 ${inside.left}，右 ${inside.right}`);
+  check(`${width}px 连输入框一起铺满：输入框与转录左右对齐（容差一个槽）`, Math.abs(n.compose.l - n.flow.l) <= 40 && Math.abs(n.compose.r - n.flow.r) <= 40,
+    `转录 ${n.flow.l}–${n.flow.r}，输入框 ${n.compose.l}–${n.compose.r}`);
+}
+await col.setViewportSize({ width: 1440, height: 900 });
+await setMeasure(false);
+check("连输入框一起铺满：输入框与转录同宽", Math.abs(fullAll.compose.l - fullAll.flow.l) <= 40 && Math.abs(fullAll.compose.r - fullAll.flow.r) <= 40,
+  `转录 ${fullAll.flow.l}–${fullAll.flow.r}，输入框 ${fullAll.compose.l}–${fullAll.compose.r}`);
+check("连输入框一起铺满：输入框比适宜阅读宽", fullAll.compose.r - fullAll.compose.l > composeAt[1440].r - composeAt[1440].l + 100,
+  `适宜阅读 ${composeAt[1440].r - composeAt[1440].l}px，铺满 ${fullAll.compose.r - fullAll.compose.l}px`);
 
 await browser.close();
 if (fails.length) {

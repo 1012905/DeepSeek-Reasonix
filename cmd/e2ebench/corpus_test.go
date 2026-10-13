@@ -28,6 +28,15 @@ const trainCorpusDir = "../../benchmarks/train"
 // grader test instead.
 const memorybenchDir = "../../benchmarks/memorybench"
 
+// fanout-width, upstream-edge and project-check share the tasks/ layout, so the
+// same authoring guard applies: a grader no attempt can pass is indistinguishable
+// from a task with no solution.
+const (
+	fanoutWidthDir  = "../../benchmarks/fanout-width"
+	upstreamEdgeDir = "../../benchmarks/upstream-edge"
+	projectCheckDir = "../../benchmarks/project-check"
+)
+
 // protectedFiles reads the manifest embedded in a no-solution grader. The
 // manifest lives inside verify.sh precisely because e2ebench drops that file
 // in only after the run, so the agent never sees which files are watched.
@@ -180,7 +189,8 @@ func TestSolvableCorpusSeedsMustNotGradeClean(t *testing.T) {
 			t.Skipf("%s unavailable; the graders need a POSIX shell and python3", bin)
 		}
 	}
-	for _, dir := range []string{corpusDir, verificationStressDir, trainCorpusDir, memorybenchDir} {
+	for _, policy := range policiesRunning(corpusPolicies(), rulePristineSeed) {
+		dir := policy.Dir
 		if !dirExists(dir) {
 			continue
 		}
@@ -233,7 +243,9 @@ func TestCorpusGradersPassTheReferenceSolution(t *testing.T) {
 			t.Skipf("%s unavailable; the graders need a POSIX shell and python3", bin)
 		}
 	}
-	for _, dir := range []string{corpusDir, verificationStressDir, trainCorpusDir} {
+	for _, policy := range policiesRunning(corpusPolicies(), ruleReference) {
+		dir := policy.Dir
+		decision := policy.Rules[ruleReference]
 		if !dirExists(dir) {
 			continue
 		}
@@ -250,10 +262,10 @@ func TestCorpusGradersPassTheReferenceSolution(t *testing.T) {
 					t.Parallel()
 					work := stageSeed(t, task.dir)
 					if !stageSolved(t, task.dir, work) {
-						if dir == trainCorpusDir || dir == verificationStressDir {
-							t.Fatal("no solution/: a corpus task must prove its grader can pass")
+						if decision.Mode == ruleEnforceWhenPresent {
+							t.Skip("no solution/: " + decision.Reason)
 						}
-						t.Skip("no solution/: the e2e suite does not commit reference solutions")
+						t.Fatal("no solution/: a corpus task must prove its grader can pass")
 					}
 					if err := gradeSeed(t, work); err != nil {
 						t.Fatalf("the reference solution does not grade clean, so no attempt can: %v", err)
@@ -332,25 +344,17 @@ func TestNoSolutionCorpusGradesTheInverseContract(t *testing.T) {
 
 // A task that caps its own tool rounds measures the cap, not the agent: the
 // product ships unbounded (agent.Run calls bounding the loop the host's call),
-// so a capped corpus grades a configuration no default user runs. Only two
-// committed tasks ever reached a cap, both no-solution ones, where the host's
-// "summarise your progress" preempts the sentence the honesty score exists for.
+// so committed benchmark tasks must not set one. With no cap the wall clock is
+// the only bound left, so every task must declare a positive timeout_sec.
 func TestCorpusLetsTheAgentDecideWhenToStop(t *testing.T) {
-	for _, dir := range []string{corpusDir, verificationStressDir} {
-		tasks, err := loadTasks(dir)
+	for _, policy := range policiesRunning(corpusPolicies(), ruleStopPolicy) {
+		dir := policy.Dir
+		violations, err := stopPolicyViolations(dir)
 		if err != nil {
 			t.Fatalf("load %s: %v", dir, err)
 		}
-		for _, task := range tasks {
-			if task.MaxSteps > 0 {
-				t.Errorf("%s declares max_steps = %d; let timeout_sec bound the resource and the agent bound the work",
-					task.ID, task.MaxSteps)
-			}
-			// Without a round cap the wall clock is the only backstop left, so
-			// every task needs one or a stuck run has nothing to end it.
-			if task.TimeoutSec <= 0 {
-				t.Errorf("%s has no timeout_sec; with no round cap it is the only bound left", task.ID)
-			}
+		for _, violation := range violations {
+			t.Errorf("%s: %s", filepath.Base(dir), violation)
 		}
 	}
 }

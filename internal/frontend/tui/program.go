@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"golang.org/x/term"
 
 	"reasonix/internal/base/i18n"
 	"reasonix/internal/frontend/termrender"
@@ -34,12 +36,18 @@ type Options struct {
 	Inline bool
 	// HideTurnUsage keeps each request's token and cost receipt off the transcript.
 	HideTurnUsage bool
+	// ShowReceipt draws each turn's delivery receipt as a card; off, a turn that
+	// left something unproven gets one line.
+	ShowReceipt bool
 	// AutoSubmit commits a multi-question ask once its last question is
 	// answered, instead of showing the Submit tab.
 	AutoSubmit bool
 	// CommandMode gives the composer a vi command mode: Esc enters command
 	// mode, a running turn or not, and only Ctrl+C interrupts.
 	CommandMode bool
+	// QuitCommands are the slash names that end the session, from the
+	// command catalogue the completion menu offers.
+	QuitCommands []string
 	// Statusline, when set, turns the footer's context JSON into one line
 	// that replaces the telemetry row; "" keeps the built-in row.
 	Statusline func(ctx context.Context, stdin string) string
@@ -50,6 +58,10 @@ func Run(ctx context.Context, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	m := newModel(ctx, opts)
+	m.reportOn = term.IsTerminal(int(os.Stdout.Fd()))
+	if m.reportOn {
+		defer fmt.Fprint(os.Stdout, termrender.StatusClear)
+	}
 	p := tea.NewProgram(m, tea.WithContext(ctx))
 	if clusters, ok := clustersEmoji(); ok && clusters {
 		go p.Send(clusterReport)
@@ -77,6 +89,7 @@ type model struct {
 	client  *Client
 	opts    Options
 	updates <-chan Update
+	focus   focusState
 
 	tr        Transcript
 	committed map[int]bool
@@ -123,6 +136,10 @@ type model struct {
 	yoloRestore string
 	// verbose keeps an answer's thinking open as it settles; /verbose toggles it.
 	verbose bool
+	// reportOn is set when stdout is a terminal that can be told the state
+	// (OSC 7501); status7501 is the last state it was told.
+	reportOn   bool
+	status7501 reportedStatus
 }
 
 type (
@@ -182,6 +199,7 @@ func newModel(ctx context.Context, opts Options) *model {
 	}
 	termrender.SetCells(ansi.WcWidth)
 	m.verbose = storedVerbose()
+	m.tr.ReceiptLine = !opts.ShowReceipt
 	if !opts.Inline {
 		m.scr = &screen{follow: true, mouseOff: mouseCaptureOffByDefault()}
 	}
@@ -197,6 +215,7 @@ func (m *model) Init() tea.Cmd {
 	if m.opts.PickSession {
 		cmds = append(cmds, m.openPicker())
 	}
+	cmds = append(cmds, m.viewedAtStart())
 	if p := strings.TrimSpace(m.opts.Prompt); p != "" {
 		m.tr.AddUser(p)
 		cmds = append(cmds, m.commit(), m.call("submit", func(ctx context.Context) error { return m.client.Submit(ctx, p) }))
@@ -292,10 +311,17 @@ func tickStatus() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	return next, tea.Batch(cmd, m.reportStatus())
+}
+
+func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.resize(msg)
 		return m, nil
+	case tea.FocusMsg, tea.BlurMsg:
+		return m, m.focus.report(msg, m.markViewed)
 	case tea.ModeReportMsg:
 		noteCells(msg)
 		return m, nil
@@ -321,7 +347,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds := []tea.Cmd{m.commit(), rearm, m.noteRunning(was)}
 		if turnDone {
 			m.noteTurnEnd()
-			cmds = append(cmds, m.commit(), m.fetchMeters())
+			cmds = append(cmds, m.commit(), m.fetchMeters(), m.viewedOnTurnEnd())
 		}
 		if m.tr.TodosMoved {
 			m.tr.TodosMoved = false
@@ -395,6 +421,9 @@ func (m *model) onScreenMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return m.onSent(msg), true
 	case urlAnswerMsg:
 		return m.onURLAnswer(msg), true
+	case askEngagementMsg:
+		m.onAskEngagement(msg)
+		return nil, true
 	case clipImageMsg:
 		return m.onClipImage(msg), true
 	case clipTextMsg:

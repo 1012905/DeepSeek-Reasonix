@@ -221,15 +221,22 @@ func (c *Controller) ensureInbox() (*sessioninbox.Store, error) {
 	}
 	snap := st.Snapshot()
 	if snap.Recovered && snap.RecoveredN > 0 {
-		c.sink.Emit(event.Event{
-			Kind:  event.Notice,
-			Level: event.LevelWarn,
-			Code:  "inbox_recovered",
-			Text:  fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", snap.RecoveredN),
-		})
+		c.sink.Emit(inboxRecoveredNotice(snap.RecoveredN))
 		sessioninbox.NoteRecovered(snap.RecoveredN)
 	}
 	return st, nil
+}
+
+// inboxRecoveredNotice carries the count as a typed payload; the English text is
+// the fallback for a frontend that does not word the code itself.
+func inboxRecoveredNotice(n int) event.Event {
+	return event.Event{
+		Kind:   event.Notice,
+		Level:  event.LevelWarn,
+		Code:   event.NoticeCodeInboxRecovered,
+		Text:   fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", n),
+		Detail: event.InboxRecovered{Count: n}.Encode(),
+	}
 }
 
 // rebindInbox opens the inbox for the current session path. Safe across
@@ -260,12 +267,7 @@ func (c *Controller) rebindInbox() {
 	if snap.Recovered && snap.RecoveredN > 0 {
 		// Emit after unlock via deferred sink call would race; emit here.
 		go func(n int) {
-			c.sink.Emit(event.Event{
-				Kind:  event.Notice,
-				Level: event.LevelWarn,
-				Code:  "inbox_recovered",
-				Text:  fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", n),
-			})
+			c.sink.Emit(inboxRecoveredNotice(n))
 		}(snap.RecoveredN)
 		sessioninbox.NoteRecovered(snap.RecoveredN)
 	}
@@ -517,6 +519,7 @@ func (c *Controller) CancelWithInboxItems(ids []string, source string) error {
 		if err := st.SetPaused(false); err != nil {
 			return err
 		}
+		c.maybeDispatchInbox()
 	}
 	return nil
 }
@@ -642,6 +645,9 @@ func (c *Controller) TrySubmitInboxItem(id string) (sessioninbox.InboxReceipt, e
 			_ = st.ForcePause(true, 1)
 			return sessioninbox.InboxReceipt{}, err
 		}
+		if result == turnDroppedWorkspace {
+			c.resumeInboxAfterWorkspaceCheckout()
+		}
 		return c.receiptForAdmissionResult(id, st, result), nil
 	}
 	return sessioninbox.InboxReceipt{
@@ -735,7 +741,7 @@ func (c *Controller) onInboxSteerConsumed(itemID string) {
 
 // TryEnqueueAndSteer is a convenience for frontends: durable steer then TrySteer.
 // A steer is read as guidance and carries no invocation, so a line holding one
-// queues as the turn it asks for.
+// queues as the turn it asks for. A paused queue holds the line as a follow-up.
 func (c *Controller) TryEnqueueAndSteer(req InboxRequest) (sessioninbox.InboxReceipt, error) {
 	if len(req.Invocations) > 0 {
 		return c.TryEnqueueFollowup(req)
@@ -745,7 +751,7 @@ func (c *Controller) TryEnqueueAndSteer(req InboxRequest) (sessioninbox.InboxRec
 	if err != nil {
 		return rec, err
 	}
-	return c.TrySteerInboxItem(rec.ItemID)
+	return c.steerInboxItem(rec.ItemID, true)
 }
 
 // TryEnqueueFollowup durably queues a follow-up and may dispatch if idle.

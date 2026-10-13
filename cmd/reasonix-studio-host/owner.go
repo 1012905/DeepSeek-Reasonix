@@ -9,12 +9,25 @@ import (
 	"sync"
 )
 
-// The acts a handover asks of the shell. Only two travel: releasing the
-// application is this process's own hub, and the shell has nothing to do for it.
+// The acts this process asks of the shell. Releasing the application is this
+// process's own hub, so the shell has nothing to do for it; the other three are
+// what only the shell can do.
 const (
 	actRelaunch = "relaunch"
 	actQuit     = "quit"
+	actShow     = "show"
 )
+
+// showOnToastClick is what a clicked toast runs: ask the shell, which is the
+// only process that can bring its window forward, to do so.
+func showOnToastClick(o *shellOwner, log io.Writer) func() {
+	return func() {
+		fmt.Fprintln(log, "notify: toast clicked")
+		if err := o.ask(actShow); err != nil {
+			fmt.Fprintf(log, "notify: toast click could not reach the shell: %v\n", err)
+		}
+	}
+}
 
 // shellOwner is the application this process was spawned by, reached over the
 // pipe the handshake went out on -- the only channel pointing this way, since

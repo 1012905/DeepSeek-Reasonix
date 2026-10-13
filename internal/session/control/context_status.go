@@ -34,5 +34,9 @@ func (c *Controller) ModelVisibleMessages() []provider.Message {
 func (c *Controller) Balance(ctx context.Context) billing.Reading {
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
-	return c.balance.Read(ctx)
+	reading := c.balance.Read(ctx)
+	if reading.Balance != nil {
+		c.AdoptWalletCurrency(reading.Balance.PrimaryCurrency())
+	}
+	return reading
 }

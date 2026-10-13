@@ -40,60 +40,17 @@ function go(args, env) {
   }
 }
 
-// The Windows helper is C++ against the system's own UI Automation, input and
-// imaging APIs, built with whichever MSVC vswhere finds. The CRT is linked in
-// statically so the helper needs no redistributable on the person's machine.
-const VS_INSTALLER = path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Microsoft Visual Studio", "Installer");
-
-function msvcVars() {
-  const vswhere = path.join(VS_INSTALLER, "vswhere.exe");
-  if (!fs.existsSync(vswhere)) return "";
-  const found = spawnSync(vswhere, ["-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"], { encoding: "utf8" });
-  const root = (found.stdout || "").trim().split(/\r?\n/)[0];
-  const vars = root ? path.join(root, "VC", "Auxiliary", "Build", "vcvars64.bat") : "";
-  return vars && fs.existsSync(vars) ? vars : "";
-}
-
-function buildWindowsHelper() {
-  const vars = msvcVars();
-  if (!vars) {
-    // A release without the helper would ship computer use switched off with
-    // nothing saying why, so CI refuses; a dev build only loses the feature.
-    if (process.env.CI) {
-      console.error("MSVC with the x64 C++ tools is required to build reasonix-computer-helper.exe");
-      process.exit(1);
-    }
-    console.warn("MSVC not found: building without reasonix-computer-helper.exe, so computer use is unavailable in this build");
-    return;
-  }
-  const src = path.join(ROOT, "desktop", "computer-helper", "windows");
-  const objs = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "reasonix-helper-"));
-  const out = path.join(OUT, "reasonix-computer-helper.exe");
-  const libs = "user32.lib gdi32.lib ole32.lib oleaut32.lib uiautomationcore.lib windowscodecs.lib dwmapi.lib version.lib advapi32.lib uuid.lib gdiplus.lib";
-  const script = path.join(objs, "build.cmd");
-  fs.writeFileSync(script, [
-    "@echo off",
-    // vcvars looks for vswhere on PATH and complains when it is not there.
-    `set "PATH=%PATH%;${VS_INSTALLER}"`,
-    `call "${vars}" >nul || exit /b 1`,
-    `cd /d "${src}"`,
-    `cl /nologo /std:c++17 /EHsc /O2 /MT /utf-8 /W4 /DUNICODE /D_UNICODE /Fo"${objs}\\\\" /Fe"${out}" *.cpp /link ${libs}`,
-  ].join("\r\n"));
-  const built = spawnSync("cmd.exe", ["/d", "/c", script], { stdio: "inherit", env: { ...process.env, VSLANG: "1033" } });
-  fs.rmSync(objs, { recursive: true, force: true });
-  if (built.status !== 0) {
-    console.error("building reasonix-computer-helper.exe failed");
-    process.exit(built.status ?? 1);
-  }
-  console.log("built reasonix-computer-helper.exe");
-}
+const driver = spawnSync(process.execPath, [path.join(__dirname, "install-cua-driver.js")], { stdio: "inherit", windowsHide: true });
+if (driver.status !== 0) process.exit(driver.status ?? 1);
 
 if (process.platform !== "darwin") {
   // go build names the binary after the package and adds .exe where it belongs.
   // Without cgo, because with it the Linux kernel inherits the runner's glibc.
-  go(["build", "-ldflags", LDFLAGS, "-o", OUT + path.sep, PKG], { CGO_ENABLED: "0" });
+  // REASONIX_GOARCH names the architecture to build for; unset, Go's own is
+  // used, which is the runner's.
+  const goarch = (process.env.REASONIX_GOARCH || "").trim();
+  go(["build", "-ldflags", LDFLAGS, "-o", OUT + path.sep, PKG], goarch ? { CGO_ENABLED: "0", GOARCH: goarch } : { CGO_ENABLED: "0" });
   console.log("built reasonix-studio-host");
-  if (process.platform === "win32") buildWindowsHelper();
   process.exit(0);
 }
 
@@ -115,29 +72,3 @@ for (const slice of slices) {
   fs.rmSync(slice, { force: true });
 }
 console.log("built reasonix-studio-host (universal)");
-
-// The helper that operates other applications, universal for the same reason.
-// It targets macOS 12, the oldest this app runs on; what needs a later system
-// checks at run time and answers computer.unsupported.
-const HELPER = path.join(ROOT, "desktop", "computer-helper", "Sources");
-const sources = fs.readdirSync(HELPER).filter((f) => f.endsWith(".swift")).map((f) => path.join(HELPER, f));
-const helperSlices = [["x86_64", "amd64"], ["arm64", "arm64"]].map(([target, arch]) => {
-  const out = path.join(OUT, `reasonix-computer-helper-${arch}`);
-  const built = spawnSync("swiftc", ["-O", "-target", `${target}-apple-macos12`, ...sources, "-o", out], { stdio: "inherit" });
-  if (built.status !== 0) {
-    console.error(`swiftc for ${target} failed`);
-    process.exit(built.status ?? 1);
-  }
-  return out;
-});
-const helper = path.join(OUT, "reasonix-computer-helper");
-fs.rmSync(helper, { force: true });
-const helperMerged = spawnSync("lipo", ["-create", "-output", helper, ...helperSlices], { stdio: "inherit" });
-if (helperMerged.status !== 0) {
-  console.error("lipo failed for the computer-use helper");
-  process.exit(helperMerged.status ?? 1);
-}
-for (const slice of helperSlices) {
-  fs.rmSync(slice, { force: true });
-}
-console.log("built reasonix-computer-helper (universal)");
