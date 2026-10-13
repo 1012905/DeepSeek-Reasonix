@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"syscall"
 
 	"reasonix/internal/base/fileutil"
 	"reasonix/internal/contract/tool"
@@ -41,6 +42,9 @@ func (w Workspace) TargetAccessCheck() tool.TargetAccessCheck {
 			}
 			var err error
 			paths, err = writer.WritePaths(args)
+			if errors.Is(err, syscall.ENOTDIR) {
+				return nil
+			}
 			if err != nil && (!errors.Is(err, fileutil.ErrAmbiguousPath) || len(paths) == 0) {
 				return err
 			}

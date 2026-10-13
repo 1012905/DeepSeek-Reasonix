@@ -28,6 +28,12 @@ export const EN_KERNEL: Record<string, string> = {
   "尚未取得所需的写入范围，这次等待已结束": "The wait ended before the requested write claim was granted",
   "会话 {holder}（{session}）持有写入范围：{paths}": "Session {holder} ({session}) holds write claim: {paths}",
   "所需写入范围：{paths}": "Requested write claim: {paths}",
+  "请输入聊天标题": "Enter a chat title",
+  "该会话还没有可用于命名的用户消息": "This chat has no user message to name it from",
+  "未配置可用于自动命名的模型，请先配置模型": "Configure a model before using automatic naming",
+  "自动命名失败，原标题未更改，请重试": "Automatic naming failed. The original title is unchanged. Please try again",
+  "会话标题保存失败，请重试": "The session title could not be saved. Please try again",
+
   "参数不符合该工具的约定，本次调用没有执行；请按工具说明补全或更正参数后重试": "The arguments break this tool's contract, so the call did not run; complete or correct them per the tool description and retry",
   "另一个会话持有所需的写入范围。本次操作未执行；请结束当前轮次，待该范围释放后再重试": "Another session holds the requested write claim. This operation did not run; end the current turn and retry after the claim is released",
   "搜索模型「{model}」的格式应为 服务/模型": "Search model “{model}” must be written as service/model",

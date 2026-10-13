@@ -39,7 +39,7 @@ export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function
         <button role="menuitem" data-action="session.pin" data-target={target} onClick={onPin}>
           <StudioIcon name="pin" /><span>{pinned ? t("取消置顶") : t("置顶会话")}</span>
         </button>
-        <button role="menuitem" data-action="session.rename" data-target={target} onClick={onRename}>
+        <button role="menuitem" data-action="session.rename-start" data-target={target} onClick={onRename}>
           <StudioIcon name="edit" /><span>{t("重命名")}</span>
         </button>
         {session.runtimeId && live && (

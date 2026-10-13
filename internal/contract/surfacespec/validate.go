@@ -42,7 +42,7 @@ func validateNode(n Node, path string, depth int, budget *int, fields map[string
 	if err != nil {
 		return err
 	}
-	present := map[string]bool{"value": n.Value != "", "key": n.Key != "", "label": n.Label != "", "tone": n.Tone != "", "progress": n.Progress != nil, "actionId": n.ActionID != "", "children": len(n.Children) != 0, "field": n.Field != nil, "diff": n.Diff != nil}
+	present := map[string]bool{"value": n.Value != "", "key": n.Key != "", "label": n.Label != "", "tone": n.Tone != "", "progress": n.Progress != nil, "actionId": n.ActionID != "", "children": len(n.Children) != 0, "field": n.Field != nil, "diff": n.Diff != nil, "dataset": n.Dataset != nil}
 	for key, exists := range present {
 		if exists && !containsToken(allowed, key) {
 			return fail(CodeSchemaInvalid, path+"/"+key)
@@ -98,7 +98,9 @@ func nodeFields(n Node, path string, fields map[string]*Field) (string, error) {
 			return "", fail(CodeLimitExceeded, path+"/diff")
 		}
 		allowed = "label diff"
-	case "field", "choice_card", "editable_text":
+	case "dashboard":
+		return "label dataset", validateDataset(n.Dataset, path+"/dataset")
+	case "field", "choice_card", "editable_text", "map", "comparison":
 		return "key label field", validateInput(n, path, fields)
 	default:
 		return "", fail(CodeComponentUnknown, path+"/kind")
@@ -122,6 +124,9 @@ func validateInput(n Node, path string, fields map[string]*Field) error {
 	}
 	if n.Kind == "editable_text" && n.Field.Type != "string" {
 		return fail(CodeSchemaInvalid, path+"/field/type")
+	}
+	if err := validateRichInput(n, path); err != nil {
+		return err
 	}
 	return validateField(n.Field, path+"/field")
 }
@@ -178,6 +183,9 @@ func validateField(f *Field, path string) error {
 			return fail(CodeSchemaInvalid, p)
 		}
 		seen[o.Value] = true
+		if err := validateRichOption(o, p); err != nil {
+			return err
+		}
 		if len(o.Label) > MaxLabel || len(o.Description) > MaxText || len(o.Preview) > MaxText {
 			return fail(CodeLimitExceeded, p)
 		}

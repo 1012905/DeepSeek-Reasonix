@@ -1529,3 +1529,17 @@ what exists.
 - A scope filter shows its count only when it is above zero; the label stays at 12px.
 - The row actions (`+`, `…`, refresh) are revealed on hover or focus, 22px, outlined, and share one hover, press, expanded and busy state, whichever row they sit on. Remote host actions are always drawn and outline only on those states.
 - Every row's last action ends on the same edge: the machine row keeps a 15px right margin like a project row, so a machine's `+` sits over a project's `…`.
+
+## Session rename dialog
+
+- Double-clicking a sidebar session title or a tab starts inline editing.
+  Enter or blur saves; Escape cancels.
+- The rename menu on either surface opens the modal with the current title. Its
+  footer keeps automatic naming on the left and Cancel/Save on the right.
+- Empty or unchanged names finish editing without a write. The dialog closes;
+  an inline field exits editing. Escape and Cancel leave the title unchanged.
+- Automatic naming joins all user messages and uses the last 300 characters.
+  The result fills the input without saving or closing the modal. Save commits
+  the edited title; pending requests disable all editing and dismissal.
+- The native dialog owns focus containment and the backdrop. Its colours follow
+  the active light or dark palette.

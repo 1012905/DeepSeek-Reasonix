@@ -53,7 +53,7 @@ it("commits the new name on Enter and abandons it on Escape", async () => {
   await userEvent.dblClick(screen.getByRole("treeitem", { name: /first title/ }));
   await userEvent.clear(screen.getByRole("textbox", { name: "重命名该会话" }));
   await userEvent.type(screen.getByRole("textbox", { name: "重命名该会话" }), "renamed{Enter}");
-  expect(onRename).toHaveBeenCalledWith(SESSION, "renamed");
+  expect(onRename).toHaveBeenCalledWith(SESSION, "renamed", "inline");
 });
 
 it("a double-click inside the open field does not restart the edit", async () => {

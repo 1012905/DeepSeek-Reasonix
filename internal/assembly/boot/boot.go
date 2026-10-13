@@ -465,6 +465,7 @@ func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sand
 		writers[i] = builtin.BindFileWriteReceipt(writer, fileWriteReceipt)
 	}
 	confined := append(writers,
+		builtin.ConfineWebImage(writeRoots, sessionGuard, proxySpec, fileWriteReceipt),
 		bashTool,
 		searchTool,
 		builtin.ConfineWebFetch(proxySpec))

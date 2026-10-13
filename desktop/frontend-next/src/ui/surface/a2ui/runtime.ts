@@ -4,7 +4,7 @@ import type { ExtensionViewNode } from "../../../port/wire";
 import { validSurfaceValue } from "../spec";
 import { studioCatalog } from "./catalog";
 
-const components = { text: "Text", markdown: "Markdown", row: "Row", stack: "Stack", kv: "KV", meter: "Meter", pip: "Pip", divider: "Divider", button: "ExtensionButton", field: "Field", choice_card: "Field", editable_text: "Field", diff_preview: "DiffPreview" };
+const components = { text: "Text", markdown: "Markdown", row: "Row", stack: "Stack", kv: "KV", meter: "Meter", pip: "Pip", divider: "Divider", button: "ExtensionButton", field: "Field", choice_card: "Field", editable_text: "Field", diff_preview: "DiffPreview", map: "Field", comparison: "Field", dashboard: "Dashboard" };
 
 export function createSurfaceRuntime(body: ExtensionViewNode[], restored?: Record<string, unknown>) {
   const fields: { node: ExtensionViewNode; id: string }[] = [];
@@ -20,7 +20,8 @@ export function createSurfaceRuntime(body: ExtensionViewNode[], restored?: Recor
       const fieldId = `f${fields.length}`;
       fields.push({ node, id: fieldId });
       props = { node, value: { path: `/fields/${fieldId}` } };
-    } else if (node.diff) props = { ...node.diff, label: node.label };
+    } else if (node.dataset) props = { dataset: node.dataset, label: node.label };
+    else if (node.diff) props = { ...node.diff, label: node.label };
     else props = displayProps(node);
     if (component === "ExtensionButton") props = { label: node.label ?? "", actionId: node.actionId ?? "" };
     if (component === "Text" || component === "Markdown" || component === "KV") props.value ??= "";

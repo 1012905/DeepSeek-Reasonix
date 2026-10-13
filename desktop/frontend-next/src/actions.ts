@@ -155,7 +155,10 @@ export const ACTIONS: UIAction[] = [
   { id: "queue.edit", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   // Giving a session a name of your own. The sidebar's tree and the pane tabs
   // rename the same session through the same host call, so it is one id.
+  { id: "session.auto-name", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "session.rename-start", kind: "navigation", target: "entity", proof: "interaction" },
   { id: "session.rename", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "session.rename.title", kind: "view", target: "none", proof: "interaction" },
   { id: "queue.cancel", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "queue.send-now", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "queue.retry", kind: "repeatable", target: "entity", proof: "interaction" },
@@ -248,6 +251,7 @@ export const ACTIONS: UIAction[] = [
   { id: "surface.refresh", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "surface.action", kind: "interaction", target: "entity", proof: "authority-effect" },
   { id: "surface.delivery", kind: "view", target: "none", proof: "interaction" },
+  { id: "surface.explore", kind: "view", target: "none", proof: "interaction" },
   { id: "surface.edit", kind: "view", target: "entity", proof: "interaction" },
   { id: "ask.answer", kind: "interaction", target: "none", proof: "authority-effect" },
   { id: "ask.step", kind: "view", target: "none", proof: "interaction" },
@@ -279,6 +283,8 @@ export const ACTIONS: UIAction[] = [
   { id: "extensions.enabled", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "extensions.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
   { id: "extensions.tab", kind: "view", target: "none", proof: "interaction" },
+  { id: "extensions.search", kind: "view", target: "none", proof: "interaction" },
+  { id: "extensions.clear-search", kind: "view", target: "none", proof: "interaction" },
   // The community market: reads are views, and the one write is the install
   // its confirmation page answers with the plan the person just read.
   { id: "market.search", kind: "view", target: "none", proof: "interaction" },
