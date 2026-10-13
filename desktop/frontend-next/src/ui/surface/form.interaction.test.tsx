@@ -14,7 +14,7 @@ const item: Extract<Item, { t: "ask" }> = { t: "ask", id: "row-1", ask: { id: "a
 it("exposes a surface heading and required inputs to assistive technology", async () => {
   render(<SurfaceCard item={item} onAnswer={vi.fn(async () => {})} />);
   expect(await screen.findByRole("heading", { name: "Settings", level: 3 })).toBeTruthy();
-  expect(screen.getByLabelText("Count").getAttribute("aria-required")).toBe("true");
+  expect((await screen.findByLabelText("Count")).getAttribute("aria-required")).toBe("true");
 });
 
 it("submits typed fields and stable choice ids with existing controls and no rail", async () => {
