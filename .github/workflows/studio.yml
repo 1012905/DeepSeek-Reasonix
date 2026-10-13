@@ -138,6 +138,7 @@ jobs:
           node perf/intrinsic.mjs
           node perf/firstscreen-fonts.mjs
           node perf/contrast.mjs
+          node perf/sessionrows.mjs
           node perf/wheel.mjs
           node perf/branch-tooltip.mjs
           node perf/selfcheck.mjs branch-tooltip
