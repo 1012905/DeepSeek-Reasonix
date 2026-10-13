@@ -18,6 +18,16 @@ export class SseExtensions extends SseLook {
   reloadExtensions() {
     return this.post("/extensions/reload");
   }
+  extensionSurfaces() {
+    return this.get<import("./wire").ExtensionSurface[]>("/extensions/surfaces");
+  }
+  async invokeExtensionAction(name: string) {
+    const out = await this.post0<{ message?: string }>("/extensions/action", { name });
+    return out.message ?? "";
+  }
+  submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>) {
+    return this.post("/extensions/submit", { pluginId, surfaceId, values });
+  }
   setSkillEnabled(name: string, enabled: boolean, scope: ScopeLayer = "project", root?: string) {
     return this.post("/skills/enabled", { name, enabled, scope, root });
   }

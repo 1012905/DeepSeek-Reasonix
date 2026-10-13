@@ -125,25 +125,28 @@ type action struct {
 	// Runtime carries a plugin package's declared runtime process so
 	// frontends can render the full-trust implications before approval.
 	// Purely additive: older consumers ignore it.
-	Runtime  *RuntimePlanInfo `json:"runtime,omitempty"`
-	Warnings []string         `json:"warnings,omitempty"`
-	Error    string           `json:"error,omitempty"`
-	Next     string           `json:"next,omitempty"`
+	Runtime   *RuntimePlanInfo `json:"runtime,omitempty"`
+	Warnings  []string         `json:"warnings,omitempty"`
+	Error     string           `json:"error,omitempty"`
+	ErrorCode string           `json:"errorCode,omitempty"`
+	Next      string           `json:"next,omitempty"`
 	// PreviewTruncated is set when the projection cut any field or list above.
 	PreviewTruncated bool `json:"previewTruncated,omitempty"`
 
 	// Internal state used by apply. Stripped by publicActions before
 	// serializing to JSON.
-	entry      config.PluginEntry
-	skill      skillCandidate
-	skillFiles map[string][]string
-	disconnect func() // optional MCP rollback; nil when not connected
+	entry          config.PluginEntry
+	skill          skillCandidate
+	skillFiles     map[string][]string
+	disconnect     func() // optional MCP rollback; nil when not connected
+	resolvedSource string
 	// preparedRoot lets a multi-plugin marketplace apply reuse the exact clone
 	// that produced its approved plan instead of cloning the same repository
 	// once per plugin. cleanup is attached to one action and runs after all
 	// actions finish.
 	preparedRoot string
 	cleanup      func()
+	treeDigest   string
 	failure      error
 }
 
@@ -213,6 +216,7 @@ func publicActions(in []action) []action {
 		out[i].entry = config.PluginEntry{}
 		out[i].skill = skillCandidate{}
 		out[i].skillFiles = nil
+		out[i].resolvedSource = ""
 		out[i].preparedRoot = ""
 		out[i].cleanup = nil
 	}

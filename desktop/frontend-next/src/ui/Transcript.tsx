@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import type { Item, Waiting } from "../state/session";
 import type { ExtensionSurface } from "../port/wire";
 import type { AgentPort, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../port/port";
-import { RMark } from "./RMark";
+import { SymbolMark } from "./RMark";
 import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
 import { Boundary } from "./Boundary";
@@ -12,26 +12,30 @@ import { chartOfTool } from "./chart/spec";
 import { GuardianCard } from "./cards/GuardianCard";
 import { ApprovalCard, type PlanAction } from "./cards/ApprovalCard";
 import { AskCard } from "./cards/AskCard";
+import { SurfaceCard, surfaceTool } from "./surface/SurfaceCard";
 import { ElicitCard } from "./cards/ElicitCard";
 import { SayCard, type ReplyActions } from "./cards/SayCard";
 import { CompactionCard } from "./cards/CompactionCard";
-import { ReceiptCard } from "./cards/ReceiptCard";
+import { WorkedLine } from "./cards/WorkedLine";
 import { ReadsCard } from "./cards/ReadsCard";
 import { UserCard } from "./cards/UserCard";
 import { NoticeCard } from "./cards/NoticeCard";
 import { RememberCard } from "./cards/RememberCard";
 import { ExtensionCard } from "./cards/ExtensionCard";
 import { toolChangedFile, toolFailed } from "./cards/outcome";
-import { drawn, transcriptRows } from "./turnrows";
+import { drawn, foldStats, repeatedSpeakers, sameMembers, transcriptRows, type Shown } from "./turnrows";
+import { ReceiptSlot } from "./ReceiptSlot";
+import { WorkFold } from "./WorkFold";
 import { opensTurn, useBlocks } from "./blocks";
 import { Rail, type RailMark } from "./Rail";
 import { StudioIcon } from "./StudioIcon";
 import { LiveWork, useStartsOpen } from "../state/foldpref";
 import { landingBox, useFindLanding, useFindPaint } from "./findland";
+import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL">;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -49,7 +53,7 @@ interface Props {
   onApprove: (itemId: string, id: string, v: ApprovalVerdict) => Promise<void>;
   onFullAccess: (itemId: string) => Promise<void>;
   onPlan: (itemId: string, id: string, action: PlanAction) => Promise<void>;
-  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
+  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[]; value?: Record<string, unknown> }[]) => Promise<void>;
   onForget: (itemId: string, name: string) => void;
   // Takes a still-queued line back. Only rows the kernel has given an
   // item id can offer it, and only until the turn reads them.
@@ -63,18 +67,19 @@ interface Props {
   reply?: ReplyActions;
   // Rewriting a message: the turn it takes back, and what to send instead.
   onResend?: (turn: number, text: string) => Promise<void>;
-  onExtSubmit: (pluginId: string, surfaceId: string, values: Record<string, unknown>) => void;
+  onExtSubmit: (pluginId: string, surfaceId: string, values: Record<string, unknown>) => void | Promise<void>;
   // The checkpoint each user card can return to, keyed by item id. Absent for a
   // card whose turn could not be matched — see state/checkpoints.
   needsProject: boolean;
   onOpenProject: () => void;
   onKeepHere: () => void;
+  foldWork?: boolean;
+  turnRunning?: boolean;
   checkpoints: Map<string, Checkpoint>;
   onPrepareRewind: (turn: number, scope: RewindScope) => Promise<RewindPlan>;
   onPrepareFileRevert: (path: string) => Promise<RewindPlan>;
   onCommitFileRevert: (planId: string, resolution?: string) => Promise<RewindResult>;
   onCommitRewind: (planId: string, text?: string) => Promise<RewindResult>;
-  onUndoRewind: (transactionId: string) => Promise<void>;
   /** Cards that have not had their one entrance yet. Owed by the projection,
    *  spent by the first render that draws them — never by the animation, which
    *  may not run at all. */
@@ -82,12 +87,14 @@ interface Props {
   onEntered: (ids: string[]) => void;
 }
 
-export function Transcript({ items, port, entering, onEntered, revision, waiting, scroll, hidden, onPinned, jump, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere }: Props) {
+export function Transcript({ items, port, entering, onEntered, revision, waiting, scroll, hidden, onPinned, jump, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
   // A block the selection touches must not leave the DOM. Unmounting the node a
   // selection is anchored to makes the browser remap that selection onto
   // whatever is still mounted — which reads as "I selected up there and the
-  // bottom got selected too".
-  const [held, setHeld] = useState<Set<number>>(new Set());
+  // bottom got selected too". A block the selection merely passes through, with
+  // neither end inside it, is held as plain text from the data: mounting its
+  // cards in one synchronous render is what made a long drag freeze.
+  const [held, setHeld] = useState<Map<number, Held>>(new Map());
 
   // Stick to the bottom only while the reader is already there; scrolling up
   // must not be yanked back by incoming frames.
@@ -141,16 +148,13 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
       const sel = document.getSelection();
       const root = scroll.current;
       if (!root || !sel || sel.isCollapsed || sel.rangeCount === 0) {
-        setHeld((prev) => (prev.size ? new Set() : prev));
+        setHeld((prev) => (prev.size ? new Map() : prev));
         return;
       }
       const range = sel.getRangeAt(0);
       if (!root.contains(range.commonAncestorContainer)) return;
-      const next = new Set<number>();
-      root.querySelectorAll(".chunk").forEach((el, i) => {
-        if (range.intersectsNode(el)) next.add(i);
-      });
-      setHeld((prev) => (prev.size === next.size && [...next].every((i) => prev.has(i)) ? prev : next));
+      const next = heldBlocks(range, root.querySelectorAll(".chunk"));
+      setHeld((prev) => (prev.size === next.size && [...next].every(([i, how]) => prev.get(i) === how) ? prev : next));
     };
     document.addEventListener("selectionchange", onSelect);
     return () => document.removeEventListener("selectionchange", onSelect);
@@ -434,8 +438,14 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
     if (entering.length > 0) onEntered(entering);
   }, [entering, onEntered]);
   const owed = useMemo(() => new Set(entering), [entering]);
+  const kept = useRef<Set<string>>(new Set());
+  const echoes = useMemo(() => {
+    const next = repeatedSpeakers(items);
+    if (!sameMembers(kept.current, next)) kept.current = next;
+    return kept.current;
+  }, [items]);
 
-  const rowProps = { owed, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
+  const rowProps = { owed, echoes, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
 
   // What you said, and where it sits. Derived from the same blocks the
   // transcript renders, so a mark always knows which block holds it — that is
@@ -483,7 +493,9 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
             // The block a new card lands in has no measured height yet, so it
             // mounts without waiting for the observer's first callback.
             eager={i === blocks.length - 1}
-            keep={held.has(i)}
+            keep={held.get(i)}
+            foldWork={foldWork}
+            tail={turnRunning && i === blocks.length - 1}
             {...rowProps}
           />
         ))}
@@ -505,15 +517,22 @@ const Block = memo(function Block({
   watch,
   eager,
   keep,
+  foldWork,
+  tail,
   ...rowProps
 }: {
   items: Item[];
   checkpoints: Map<string, Checkpoint>;
   watch: (el: Element, cb: (near: boolean) => void) => () => void;
   eager: boolean;
-  // The selection reaches into this block, so it stays mounted however far
-  // off-screen it scrolls.
-  keep: boolean;
+  // The selection reaches into this block, so it stays in the DOM however far
+  // off-screen it scrolls: whole when a selection end is inside it, as plain
+  // text when the selection only passes through.
+  keep: Held | undefined;
+  // Whether a settled turn's work is folded under one line (the kernel's [ui] fold_turn_work).
+  foldWork: boolean;
+  // This block holds the end of a turn that is still being worked on, which stays open.
+  tail: boolean;
 } & RowHandlers) {
   const box = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(eager);
@@ -529,36 +548,49 @@ const Block = memo(function Block({
 
   // Tool traffic is evidence for the answer, not a stack of equally important
   // messages; transcriptRows folds it and keeps each sentence above its own.
-  const rows = transcriptRows(items);
+  const rows = transcriptRows(items, foldWork ? { running: tail } : undefined);
   // Which runs of work are open, held here so re-hosting one under its sentence
   // does not close it.
   const [opened, setOpened] = useState<Record<string, boolean>>({});
+  const drawRows = (list: Shown[]): ReactNode[] => list.map((row) => {
+    if ("fold" in row) {
+      const key = `fold:${row.id}`;
+      const stats = foldStats(row.fold, (item) => (item.t === "tool" ? Number(toolFailed(item.tool)) : item.t === "reads" ? item.tools.filter(toolFailed).length : 0));
+      return (
+        <WorkFold key={key} open={opened[key] ?? false} onOpen={(next) => setOpened((all) => (all[key] === next ? all : { ...all, [key]: next }))} {...stats}>
+          {drawRows(row.fold)}
+        </WorkFold>
+      );
+    }
+    return "item" in row ? (
+      <Fragment key={row.item.id}>
+        {opensTurn(row.item) && <hr className="turn-rule" />}
+        <Row
+          it={row.item}
+          {...rowProps}
+          cp={checkpoints.get(row.item.id)}
+          afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
+        />
+      </Fragment>
+    ) : (
+      <ActivityGroup key={`activity:${row.activity[0].id}`} items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} />
+    );
+  });
 
   return (
     <div
       className="chunk"
       ref={box}
-      style={near || keep ? undefined : { height: `${tall.current || items.length * 96}px` }}
+      style={near || keep === "full" ? undefined : { height: `${tall.current || items.length * 96}px`, overflow: keep ? "hidden" : undefined }}
     >
-      {(near || keep) && rows.map((row) => "item" in row ? (
-        <Fragment key={row.item.id}>
-          {opensTurn(row.item) && <hr className="turn-rule" />}
-          <Row
-            it={row.item}
-            {...rowProps}
-            cp={checkpoints.get(row.item.id)}
-            afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
-          />
-        </Fragment>
-      ) : (
-        <ActivityGroup key={`activity:${row.activity[0].id}`} items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} />
-      ))}
+      {near || keep === "full" ? drawRows(rows) : keep === "text" && chunkText(items)}
     </div>
   );
 });
 
 interface RowHandlers {
   owed: Set<string>;
+  echoes: Set<string>;
   port: Props["port"];
   onApprove: Props["onApprove"];
   onFullAccess: Props["onFullAccess"];
@@ -570,7 +602,6 @@ interface RowHandlers {
   onExtSubmit: Props["onExtSubmit"];
   onPrepareRewind: Props["onPrepareRewind"];
   onCommitRewind: Props["onCommitRewind"];
-  onUndoRewind: Props["onUndoRewind"];
   onPrepareFileRevert: Props["onPrepareFileRevert"];
   reply: Props["reply"];
   onResend: Props["onResend"];
@@ -635,6 +666,7 @@ const Row = memo(function Row({
   it,
   port,
   owed,
+  echoes,
   onApprove,
   onFullAccess,
   onPlan,
@@ -648,7 +680,6 @@ const Row = memo(function Row({
   cp,
   onPrepareRewind,
   onCommitRewind,
-  onUndoRewind,
   onPrepareFileRevert,
   onCommitFileRevert,
   afterAnswer,
@@ -674,7 +705,6 @@ const Row = memo(function Row({
           onResend={onResend}
           onPrepareRewind={onPrepareRewind}
           onCommitRewind={onCommitRewind}
-          onUndoRewind={onUndoRewind}
         />
       );
     case "say":
@@ -682,12 +712,13 @@ const Row = memo(function Row({
       // model. Gating the card on text meant all of it stayed invisible and
       // then landed at once. An empty card is still not a message, so a turn
       // that produced neither draws nothing.
-      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} reply={reply} /> : null;
+      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} reply={reply} quiet={echoes.has(it.id)} /> : null;
     case "tool":
       // The ask tool also raises ask_request, which carries the id /answer
       // needs. Drawing the tool call too put two copies of the same question on
       // screen, each answerable.
       if (it.tool.name === "ask") return null;
+      { const surface = surfaceTool(it.tool, it.running, port); if (surface !== undefined) return surface; }
       return (() => {
         const card = (
           <ToolCard
@@ -715,14 +746,16 @@ const Row = memo(function Row({
     case "approval":
       return <ApprovalCard item={it} onApprove={onApprove} onFullAccess={onFullAccess} onPlan={onPlan} />;
     case "ask":
-      return it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} />;
+      return it.ask.questions.some(q => q.surface) ? <SurfaceCard item={it} onAnswer={onAnswer} /> : it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} onEngage={port?.engageQuestion?.bind(port)} />;
     case "compaction":
       return <CompactionCard c={it.c} done={it.done} />;
 
     case "remember":
       return <RememberCard m={it.m} forgotten={it.forgotten} onForget={(name) => onForget(it.id, name)} />;
     case "receipt":
-      return <ReceiptCard r={it.r} />;
+      return <ReceiptSlot r={it.r} />;
+    case "worked":
+      return <WorkedLine ms={it.ms} />;
     case "extension":
       return <ExtensionCard ext={it.ext} onInvoke={onExtInvoke} onSubmit={onExtSubmit} />;
     case "notice":
@@ -742,7 +775,7 @@ interface HeroProps {
 function Hero({ needsProject, onOpen, onKeep }: HeroProps) {
   return (
     <div className="hero">
-      <RMark />
+      <SymbolMark />
       <div className="t">{needsProject ? t("先打开一个项目") : t("描述任务，其余交给 Reasonix")}</div>
       <div className="s">
         {needsProject

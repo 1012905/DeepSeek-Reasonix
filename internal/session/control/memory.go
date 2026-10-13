@@ -144,7 +144,11 @@ func newMemoryManager(set *memory.Set) memoryManager {
 // for the trajectory/telemetry channel.
 func memoryRecallAudit(result memory.RecallResult) event.MemoryRecallAudit {
 	audit := event.MemoryRecallAudit{
-		UsedChars: result.UsedChars, Omitted: result.OmittedByLimit + result.OmittedByBudget, Suppressed: result.Suppressed,
+		CharBudget: result.CharBudget, UsedChars: result.UsedChars,
+		Omitted:         result.OmittedByLimit + result.OmittedByBudget,
+		OmittedByLimit:  result.OmittedByLimit,
+		OmittedByBudget: result.OmittedByBudget,
+		Suppressed:      result.Suppressed,
 	}
 	for _, hit := range result.Hits {
 		audit.Hits = append(audit.Hits, event.MemoryRecallHit{

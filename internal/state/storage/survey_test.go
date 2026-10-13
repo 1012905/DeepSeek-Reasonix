@@ -135,6 +135,11 @@ func TestCancelledSurveyStops(t *testing.T) {
 	}
 }
 
+// stalledWalkBudget is the budget a test gives a walk that never returns: it
+// must outlast reaching the first entry on a loaded runner, and it is also how
+// long that test waits.
+const stalledWalkBudget = 500 * time.Millisecond
+
 // stallAfterWalk stands in for a filesystem whose walk reports what it found
 // and then never comes back, the way a huge or network-mounted tree does.
 func stallAfterWalk(t *testing.T) {
@@ -159,7 +164,7 @@ func TestSurveyReturnsPartialCountWhenAWalkStalls(t *testing.T) {
 	write(t, filepath.Join(home, "sessions", "a.jsonl"), 1200)
 	stallAfterWalk(t)
 	old := Budget
-	Budget = 50 * time.Millisecond
+	Budget = stalledWalkBudget
 	t.Cleanup(func() { Budget = old })
 
 	done := make(chan []Root, 1)
@@ -223,7 +228,7 @@ func TestTruncatedRootKeepsTheErrorFoundBeforeTheBudgetRanOut(t *testing.T) {
 		return nil
 	}
 	t.Cleanup(func() { walkDir = old })
-	_, _, _, truncated, errText := measureRoot(t.Context(), config.RootID("x"), dir, 50*time.Millisecond)
+	_, _, _, truncated, errText := measureRoot(t.Context(), config.RootID("x"), dir, stalledWalkBudget)
 	if !truncated || errText == "" {
 		t.Fatalf("truncated=%v err=%q: both must be reported", truncated, errText)
 	}

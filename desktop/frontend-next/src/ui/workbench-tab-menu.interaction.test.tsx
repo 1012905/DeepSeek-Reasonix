@@ -134,8 +134,10 @@ it("drops a menu whose browser disappears and leaves file context menus native",
 
 it("offers the same actions on manual browser tabs", async () => {
   const pane = draw([], true);
-  await userEvent.click(screen.getByRole("button", { name: "新建浏览器标签" }));
-  await userEvent.click(screen.getByRole("button", { name: "新建浏览器标签" }));
+  for (let n = 0; n < 2; n++) {
+    await userEvent.click(screen.getByRole("button", { name: "新建标签" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "浏览器" }).at(-1)!);
+  }
   const tabs = screen.getAllByRole("tab", { name: "浏览器" });
   fireEvent.contextMenu(within(tabs[1]!).getByRole("button", { name: "浏览器" }));
   await userEvent.click(screen.getByRole("menuitem", { name: "关闭其他浏览器标签" }));

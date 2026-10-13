@@ -86,6 +86,21 @@ The authoritative vocabulary is the kernel's [`Tokens` map](../internal/ext/them
 
 The frontend maps the vocabulary to CSS variables in [`theme.ts`](../desktop/frontend-next/src/ui/theme.ts). The kernel's [`TestThemeTokenVocabularyMatchesTheFrontend`](../internal/ext/theme/tokens_test.go) checks that both sides agree.
 
+`accent` paints filled controls; `accentFg` is text on that fill. Optional
+`accentInk` paints accent-coloured text on ordinary surfaces and tinted washes.
+
+When absent, Studio mixes 65% `accent` with 35% `fg` (or the current text colour).
+Choose these as separate contrast pairs. Older readers ignore `accentInk` and
+continue loading the other schema-version-1 tokens.
+
+The built-in **清白蓝 / Clear Blue** (`official-clear-blue`) and **茶绿 / Tea Green**
+(`official-tea-green`) are plain light/dark palettes. They use no wallpaper, sky,
+font or radius overrides. They are opt-in; an empty `desktop.theme_pack` still
+selects the unchanged default.
+
+Foundation palettes share the default reading
+surface and respect the reader's size, weight and contrast preferences.
+
 Status colours such as `ok`, `warn` and `err` belong to Studio and cannot be
 recoloured by a pack. `sidebar` and `chat` are not current token names.
 An unknown token or invalid value is dropped, while valid tokens still load;
@@ -114,6 +129,33 @@ The current `background` block controls `focusX`, `focusY`, `safeArea`
 
 Use a low task opacity so the image does not compete with a transcript.
 Check your image licence and avoid including workspace screenshots or secrets.
+
+### Transcript text glow
+
+Set `background.textGlow` to `"none"` to disable the transcript's wallpaper
+text shadow. Omit it, or use `"default"`, to retain the two existing shadows
+(1px offset with 2px blur, plus a 7px halo). For example:
+
+```json
+"background": { "textGlow": "none", "taskOpacity": 0.2 }
+```
+
+This choice applies in both schemes whenever a backdrop is active, including
+a sky or the reader's own wallpaper. It also works without a packaged image.
+
+The composer, navigation shadows and frosted transcript backing retain their
+own treatments. Reduced effects still overrides text shadows;
+reduced motion changes animation only.
+
+Switching or clearing a pack
+removes its glow choice, so older packs retain the default.
+
+Only `"default"` and `"none"` are accepted. An unknown string is dropped with
+a theme warning. Null behaves as omitted; booleans, numbers, arrays and objects
+fail manifest decoding. CSS values are not accepted.
+
+Check ordinary and muted text over bright and dark images in
+both schemes and at phone width before sharing a pack.
 
 ## Disable and clean up
 

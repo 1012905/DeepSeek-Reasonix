@@ -93,7 +93,7 @@ func TestRegistryRootIsFoundAndChosenOverPowerShell(t *testing.T) {
 	no := func(string) bool { return false }
 	cands := appendGitInstallRoots(nil, []string{`D:\Tools\Git`})
 	want := cands[0]
-	h := shellHost{"windows", fakePath("pwsh"), func(p string) bool { return p == want }, cands, []string{`C:\fake\pwsh.exe`}, yes, no, yes}
+	h := shellHost{"windows", fakePath("pwsh"), func(p string) bool { return p == want }, cands, []string{`C:\fake\pwsh.exe`}, yes, no, yes, nil}
 	var warn strings.Builder
 	sh := h.auto(&warn)
 	if sh.Kind != ShellBash || sh.Path != want || sh.Fallback != FallbackNone {
@@ -163,9 +163,9 @@ func TestFallbackToPowerShellIsTypedAndWarned(t *testing.T) {
 		want   FallbackReason
 		inWarn string
 	}{
-		{"no candidate exists", shellHost{"windows", fakePath(), yes, nil, ps, yes, no, yes}, nil, FallbackNotFound, "no Git Bash was found"},
-		{"candidate exists but did not run", shellHost{"windows", fakePath(), yes, gitBash, ps, no, no, yes}, nil, FallbackProbeFailed, "did not run a command"},
-		{"candidate timed out", shellHost{"windows", fakePath(), yes, gitBash, ps, no, no, yes}, func() { bashProbeFailures.Store(gitBash[0], FallbackProbeTimeout) }, FallbackProbeTimeout, "did not answer in time"},
+		{"no candidate exists", shellHost{"windows", fakePath(), yes, nil, ps, yes, no, yes, nil}, nil, FallbackNotFound, "no Git Bash was found"},
+		{"candidate exists but did not run", shellHost{"windows", fakePath(), yes, gitBash, ps, no, no, yes, nil}, nil, FallbackProbeFailed, "did not run a command"},
+		{"candidate timed out", shellHost{"windows", fakePath(), yes, gitBash, ps, no, no, yes, nil}, func() { bashProbeFailures.Store(gitBash[0], FallbackProbeTimeout) }, FallbackProbeTimeout, "did not answer in time"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -188,7 +188,7 @@ func TestFallbackToPowerShellIsTypedAndWarned(t *testing.T) {
 func TestBashThatRunsIsNotAFallback(t *testing.T) {
 	yes := func(string) bool { return true }
 	no := func(string) bool { return false }
-	h := shellHost{"windows", fakePath(), yes, []string{`C:\fake\Git\bin\bash.exe`}, nil, yes, no, yes}
+	h := shellHost{"windows", fakePath(), yes, []string{`C:\fake\Git\bin\bash.exe`}, nil, yes, no, yes, nil}
 	sh := h.auto(io.Discard)
 	if sh.Kind != ShellBash || sh.Fallback != FallbackNone {
 		t.Fatalf("got kind=%v fallback=%q, want plain bash", sh.Kind, sh.Fallback)
@@ -196,7 +196,61 @@ func TestBashThatRunsIsNotAFallback(t *testing.T) {
 }
 
 func TestProbeTimeoutAllowsAColdStart(t *testing.T) {
-	if bashProbeTimeout < 10*time.Second {
-		t.Fatalf("a bash probe that gives up before 10s drops the session's bash on a slow first launch: %v", bashProbeTimeout)
+	if bashProbeTimeout*bashProbeAttempts < 10*time.Second {
+		t.Fatalf("a bash probe that gives up before 10s drops the session's bash on a slow first launch: %v x %d", bashProbeTimeout, bashProbeAttempts)
+	}
+}
+
+func TestFallbackWarningPrintsThePathAsWritten(t *testing.T) {
+	var warn strings.Builder
+	warnBashFallback(&warn, Shell{Kind: ShellPowerShell, Path: `C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe`, Fallback: FallbackProbeTimeout})
+	if !strings.Contains(warn.String(), `at "C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe".`) || strings.Contains(warn.String(), `\\`) {
+		t.Fatalf("path is escaped in the warning: %q", warn.String())
+	}
+	warn.Reset()
+	warnBashFallback(&warn, Shell{Kind: ShellPowerShell, Path: "C:\\x\x1b[31m\npwsh.exe", Fallback: FallbackProbeTimeout})
+	if strings.ContainsAny(warn.String()[:len(warn.String())-1], "\x1b\n") {
+		t.Fatalf("a control character in the path reaches the notice: %q", warn.String())
+	}
+}
+
+func TestProbeRetriesOnlyAnAttemptThatTimedOut(t *testing.T) {
+	const p = `C:\fake\retry\bash.exe`
+	t.Cleanup(func() { bashProbeFailures.Delete(p) })
+	script := func(outcomes ...FallbackReason) (func(string) FallbackReason, *int) {
+		n := new(int)
+		return func(string) FallbackReason {
+			o := outcomes[min(*n, len(outcomes)-1)]
+			*n++
+			return o
+		}, n
+	}
+	cases := []struct {
+		name     string
+		outcomes []FallbackReason
+		wantOK   bool
+		wantRuns int
+		wantWhy  FallbackReason
+	}{
+		{"hang then answer", []FallbackReason{FallbackProbeTimeout, FallbackNone}, true, 2, FallbackNone},
+		{"hangs every time", []FallbackReason{FallbackProbeTimeout}, false, bashProbeAttempts, FallbackProbeTimeout},
+		{"exits non-zero", []FallbackReason{FallbackProbeFailed}, false, 1, FallbackProbeFailed},
+		{"answers at once", []FallbackReason{FallbackNone}, true, 1, FallbackNone},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bashProbeFailures.Delete(p)
+			attempt, runs := script(tc.outcomes...)
+			if got := probeWithRetry(p, attempt); got != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", got, tc.wantOK)
+			}
+			if *runs != tc.wantRuns {
+				t.Fatalf("launched %d times, want %d", *runs, tc.wantRuns)
+			}
+			v, _ := bashProbeFailures.Load(p)
+			if tc.wantWhy == FallbackNone && v != nil || tc.wantWhy != FallbackNone && v != tc.wantWhy {
+				t.Fatalf("recorded failure = %v, want %q", v, tc.wantWhy)
+			}
+		})
 	}
 }

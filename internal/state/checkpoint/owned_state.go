@@ -94,16 +94,18 @@ func (s *Store) finishOwnedUndo(undo, original *TransactionManifest, applier Con
 
 	s.cleanupCommittedBackups(undo.Targets)
 
-	// Mark original as undone; clear lastUndo.
+	// Mark original as undone; retire the undo offer.
+	s.mu.Lock()
 	original.State = TxUndone
 	original.UpdatedAt = time.Now()
+	s.mu.Unlock()
 	if err := s.persistTransaction(original); err != nil {
 		// The committed undo manifest durably names its parent, so startup will
 		// suppress the stale parent even if this secondary write failed.
 		slog.Warn("checkpoint: persist original transaction as undone", "err", err)
 	}
 	s.mu.Lock()
-	s.lastUndo = nil
+	s.undo.current = nil
 	s.mu.Unlock()
 
 	result.OK = true
@@ -151,7 +153,7 @@ func (s *Store) finishOwnedRewind(tx *TransactionManifest, applier ConversationA
 	}
 	s.cleanupCommittedBackups(tx.Targets)
 	s.mu.Lock()
-	s.lastUndo = tx
+	s.undo.current = tx
 	s.mu.Unlock()
 
 	result.OK = true

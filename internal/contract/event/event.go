@@ -18,6 +18,7 @@ import (
 
 	"reasonix/internal/contract/agentgraph"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/surfacespec"
 )
 
 // Kind tags an Event. Read the field(s) documented for that kind.
@@ -155,6 +156,8 @@ const (
 	// ProgressWatchEvent reports whether the run is still producing effects the
 	// host can observe (ProgressWatch). Said to the person, never to the model.
 	ProgressWatchEvent
+	// RewindChanged signals that the undo offer must be read again.
+	RewindChanged
 	// KindCount is a sentinel one past the last real Kind. New event kinds must
 	// be inserted above it so completeness tests cover them automatically.
 	KindCount
@@ -401,6 +404,8 @@ type AskQuestion struct {
 	Options []AskOption
 	Multi   bool     // allow selecting more than one option
 	Default []string // prefilled answer, for a form sent back to be corrected
+	Surface *surfacespec.Spec
+	CallID  string
 }
 
 // AskOrigin names the external party behind an AskRequest the agent did not
@@ -507,6 +512,7 @@ type GuardianResult struct {
 type AskAnswer struct {
 	QuestionID string
 	Selected   []string
+	Value      json.RawMessage `json:",omitempty"`
 }
 
 // FinalReadiness carries machine-readable recovery requirements on TurnDone.
@@ -573,6 +579,10 @@ type Event struct {
 	Readiness      *FinalReadiness          // TurnDone: structured final-readiness recovery state
 	Receipt        *CompletionReceipt       // TurnDone: what the host verified, and what it could not
 	CheckpointTurn *int                     // TurnDone: authoritative checkpoint for this turn's visible user message
+	// TurnDone: wall-clock ms the turn's runs took up to their final answers,
+	// approval and tool waits included, summed over goal continuations; 0 when the
+	// turn failed, was cancelled, or gave no final answer.
+	WorkDurationMs int64
 	// TurnStarted: which message this turn is about — the conversation's own
 	// turn number, and the session index that message takes. Both nil when the
 	// turn opened no authored message.
@@ -582,6 +592,9 @@ type Event struct {
 	// the window. Text carries the message itself, which a client that did not
 	// send it has no other way to draw.
 	Via *provider.Via
+	// TurnStarted / Steer: the stored attachments the message references, as
+	// the host resolved them.
+	Attachments []Attachment
 	// Steer: the host wrote this guidance, so no client draws it as the user's.
 	HostAuthored     bool
 	Compaction       Compaction          // Compaction

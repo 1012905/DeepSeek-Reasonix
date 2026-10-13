@@ -29,6 +29,7 @@ import (
 	"reasonix/internal/platform/lsp"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/delegation"
+	"reasonix/internal/safety/endpointclient"
 	"reasonix/internal/safety/permission"
 	"reasonix/internal/safety/sandbox"
 	"reasonix/internal/session/control"
@@ -49,6 +50,7 @@ type builder struct {
 	roots            config.Roots
 	cfg              *config.Config
 	sink             event.Sink
+	quoteContext     *event.QuoteContext
 	proxy            netclient.ProxySpec
 	ext              *extensionStage
 	pendingMgr       *sidecar.Manager // sidecars no RuntimeSet owns yet
@@ -57,6 +59,7 @@ type builder struct {
 	keep             agent.KeepPolicy
 	session          sessionRuntime
 	balanceClient    *http.Client
+	keyedClient      *http.Client // carries provider keys; refuses cross-origin redirects
 	execProv         provider.Provider
 	shell            sandbox.Shell
 	prompt           promptAssembly
@@ -108,6 +111,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// one), and its MCP servers and sidecars start on that context later.
 	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(context.WithoutCancel(ctx), opts)
 	defer b.retireUnownedSidecars()
+	delivered := false
+	if b.owner.Notices != nil && b.opts.Sink != nil {
+		window := b.owner.Notices.Begin(b.opts.Sink)
+		b.opts.Sink = window
+		defer func() { window.Close(delivered) }()
+	}
 	if err := b.load(); err != nil {
 		return nil, err
 	}
@@ -120,7 +129,17 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	}
 	b.tools.candidates.bind(ctrl)
 	b.tools.isolation.bind(ctrl)
-	return b.freeze(ctrl)
+	res, err := b.freeze(ctrl)
+	delivered = err == nil
+	return res, err
+}
+
+// workspaceExtraRoots is the one list of folders that count as the workspace
+// beside the root: the granted extra roots and this session's --add-dir folders.
+// The executor and every sub-agent it spawns read it, so a write in one is
+// observed the same way whoever made it.
+func (b *builder) workspaceExtraRoots() []string {
+	return appendUniquePaths(b.cfg.ExtraRoots(), b.additionalDirs...)
 }
 
 // retireUnownedSidecars restores adopted clients and closes fresh sidecars when
@@ -172,7 +191,9 @@ func (b *builder) load() error {
 	// One synchronized sink for every emitter: background jobs and sidecars
 	// emit from their own goroutines. The goal tee and the coalescer wrap it
 	// here, before the extension hub captures it, so agents emit through both.
-	b.sink = control.NewGoalUsageTee(event.Coalesce(quotedSink(cfg, opts), event.DefaultStreamDeltaWindow))
+	quoted, quoteContext := quotedSink(cfg, opts)
+	b.quoteContext = quoteContext
+	b.sink = control.NewGoalUsageTee(event.Coalesce(quoted, event.DefaultStreamDeltaWindow))
 	// Tag a shell result whose whole output is a diff, once, before the
 	// extension hub captures the sink — every emitter shares this one.
 	b.sink = event.MarkEmbeddedDiffs(b.sink, cfg.EmbeddedDiffDetectionEnabled())
@@ -208,6 +229,9 @@ func (b *builder) load() error {
 	if b.balanceClient, err = netclient.NewHTTPClient(b.proxy, netclient.TransportOptions{}); err != nil {
 		return err
 	}
+	if b.keyedClient, err = endpointclient.New(b.proxy, netclient.TransportOptions{}); err != nil {
+		return err
+	}
 	if b.execProv, err = resolveProvider(b.providers.effective, cfg, b.proxy, provider.Selection{Ref: b.model.ref, Effort: opts.EffortOverride}); err != nil {
 		return err
 	}
@@ -215,11 +239,12 @@ func (b *builder) load() error {
 	if opts.resolvedShell != nil {
 		b.shell = *opts.resolvedShell
 	} else {
-		b.shell = resolveShellWithNotice(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, b.stderr, b.sink)
+		b.shell = resolveShellWithNotice(opts, cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, b.stderr, b.sink)
 	}
 	// Record the resolved interpreter for diagnostics, staying at Debug because
 	// headless `run` must leave stderr empty unless --debug is passed. A launch
 	// failure emits an always-on Warn with the same kind/path/source fields.
+	b.timer.mark("shell")
 	slog.Debug("boot: shell tool interpreter resolved", "kind", b.shell.Kind.String(), "path", b.shell.Path, "prefer", cfg.Tools.Shell.Prefer)
 	b.prompt, err = buildPromptAssembly(b.ctx, opts, cfg, b.root, b.shell, b.sink, b.timer)
 	return err
@@ -228,9 +253,13 @@ func (b *builder) load() error {
 // resolveShellWithNotice keeps shell-discovery warnings on stderr for CLI
 // diagnostics and also reports them through the boot sink, where the settings
 // surface can show which interpreter actually runs.
-func resolveShellWithNotice(prefer, path string, stderr io.Writer, sink event.Sink) sandbox.Shell {
+func resolveShellWithNotice(opts Options, prefer, path string, stderr io.Writer, sink event.Sink) sandbox.Shell {
 	var warnings strings.Builder
-	shell := sandbox.ResolveShell(prefer, path, io.MultiWriter(stderr, &warnings))
+	d := sandbox.ShellDiscovery{Prefer: prefer, Path: path, Warn: io.MultiWriter(stderr, &warnings), ProofDir: opts.roots().CacheDir()}
+	if opts.tuneShell != nil {
+		opts.tuneShell(&d)
+	}
+	shell := d.Resolve()
 	if detail := strings.TrimSpace(warnings.String()); detail != "" {
 		report(sink, event.Event{Level: event.LevelWarn, Text: "Shell tool interpreter fallback.", Detail: detail})
 	}
@@ -253,6 +282,17 @@ func (b *builder) loadConfig() (*config.Config, error) {
 	return cfg, nil
 }
 
+// skippedDefaultDetail says why the saved default was passed over. A decision
+// source exists but answers system_one only, which is a different fix from a name
+// nothing declares.
+func (b *builder) skippedDefaultDetail() string {
+	var mismatch *config.AnswersMismatchError
+	if errors.As(b.cfg.RequireAnswers(b.model.skipped, config.AnswersChat), &mismatch) {
+		return fmt.Sprintf("default_model = %q is a decision source: it answers system_one's questions, not conversation; using %q. Choosing a default model replaces it; until then the file keeps it as written.", b.model.skipped, b.model.ref)
+	}
+	return fmt.Sprintf("default_model = %q names no configured provider or model; using %q. Choosing a default model replaces it; until then the file keeps it as written.", b.model.skipped, b.model.ref)
+}
+
 func (b *builder) reportModelNotices() {
 	cfg, entry := b.cfg, b.model.entry
 	if ignored := cfg.IgnoredProjectDefaultModel(); ignored != "" {
@@ -261,7 +301,7 @@ func (b *builder) reportModelNotices() {
 	if b.model.skipped != "" {
 		report(b.sink, event.Event{Level: event.LevelWarn, Code: event.NoticeCodeDefaultModelUnavailable,
 			Text:   "The saved default model is not configured, so another configured model is in use.",
-			Detail: fmt.Sprintf("default_model = %q names no configured provider or model; using %q. Choosing a default model replaces it; until then the file keeps it as written.", b.model.skipped, b.model.ref)})
+			Detail: b.skippedDefaultDetail()})
 	}
 	// Without RequireKey the UI stays reachable, so a missing key would
 	// otherwise surface only as a silently failing first request.
@@ -281,14 +321,15 @@ func (b *builder) wireTools() error {
 	// The full inventory registers for use_capability; the provider-visible surface narrows later.
 	addBuiltins(t.reg, cfg.Tools.Enabled, env.writeRoots, env.bash, env.bashTimeout, env.search, b.stderr, root, b.proxy, env.forbidReadRoots, env.readRoots, env.readPaths, env.sessionGuard, env.managedConfig, opts.FileOverlay, opts.TerminalRunner, env.sessionTemp, b.fileWriteReceipt)
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
-	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.balanceClient)
+	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
+	addWebSearch(t.reg, cfg, b.proxy, b.sink)
 	b.addBestOf()
 	if cfg.Agent.CodeMode {
 		t.reg.Add(script.New())
 	}
 	b.wireMCP()
-	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession)
+	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession, opts.ComputerDriver)
 	b.timer.mark("mcp")
 
 	t.maxSteps = max(opts.MaxSteps, 0)
@@ -320,9 +361,12 @@ func (b *builder) wireTools() error {
 	}
 	t.taskTool, t.skillRun = t.roles.delegation(delegationInputs{opts: opts, sub: t.sub, exec: b.execProv, entry: b.model.entry,
 		modelName: b.model.name, root: root, maxSteps: t.maxSteps, delivery: b.model.delivery, store: subagentStore,
-		session: b.session, bashEnforced: env.bash.Enforce})
+		session: b.session, bashEnforced: env.bash.Enforce, extraRoots: b.workspaceExtraRoots()})
 	b.addIsolation()
 	registerSessionTools(t.reg, opts.Ablation, b.roots, b.session.dir, b.prompt.memory.Store)
+	if opts.NativeSurfaces {
+		t.reg.Add(agent.NewRenderSurfaceTool())
+	}
 
 	t.runners = skillRunners{readOnly: t.skillRun.runReadOnly, run: t.skillRun.run, profile: skillProfile(cfg, t.sub.inheritedFor)}
 	t.cmds = loadCommands(opts, root)
@@ -436,11 +480,12 @@ func (b *builder) executor() *agent.Agent {
 		// Reserving writes at the executor entry covers every writer, late MCP
 		// adds included, without wrapping tool schemas.
 		WriteScheduler:     t.sub.scheduler,
-		WriteWorkspaceRoot: b.root, WorkspaceScanLimit: b.opts.WorkspaceScanLimit, WorkspaceVCS: b.prompt.workspaceVCS, RenderRoot: renderRoot(t.browser, entry, b.root),
+		WriteWorkspaceRoot: b.root, ExtraWorkspaceRoots: b.workspaceExtraRoots(), WorkspaceScanLimit: b.opts.WorkspaceScanLimit, WorkspaceVCS: b.prompt.workspaceVCS, RenderRoot: renderRoot(t.browser, entry, b.root),
 		ProjectChecks: b.prompt.projectChecks, ProjectSensitivePaths: b.prompt.sensitivePaths,
 		EvidenceSeal:                 t.env.evidenceSeal,
 		AgentPreset:                  b.model.preset,
 		DeliveryProfile:              b.model.delivery,
+		WaiveOwedChecks:              cfg.HostVerificationOff(),
 		Ablation:                     b.opts.Ablation,
 		WorkspaceLease:               b.session.lease,
 		CapabilityLedger:             t.caps.ledger,
@@ -455,7 +500,7 @@ func (b *builder) executor() *agent.Agent {
 		ReasoningLanguage:            cfg.ReasoningLanguage(),
 		SubagentDepth:                0,
 		MaxSubagentDepth:             t.sub.maxDepth,
-		MissingReasoningWarnStateDir: config.MissingReasoningWarnStateDir(),
+		MissingReasoningWarnStateDir: b.roots.MissingReasoningWarnStateDir(),
 	}, b.sink)
 }
 
@@ -481,6 +526,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		Runner:                         runner,
 		Executor:                       executor,
 		Sink:                           b.sink,
+		QuoteContext:                   b.quoteContext,
 		Policy:                         t.policy,
 		SubagentGate:                   t.gate,
 		Label:                          label,
@@ -497,6 +543,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		AllSkills:                      b.prompt.allSkills,
 		SkillStore:                     b.prompt.skillStore,
 		AllSkillStore:                  b.prompt.allSkillStore,
+		Clock:                          b.clock(),
 		DisableImplicitSkillInvocation: !b.prompt.implicitSkills || b.opts.Observe != nil,
 		SkillRunner:                    t.runners.run,
 		ReadOnlySkillRunner:            t.runners.readOnly,
@@ -505,7 +552,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		Memory:                         b.prompt.memory,
 		// Read at Close time: freeze chains the extension runtime set onto it.
 		Cleanup:               func() { b.cleanup() },
-		Balance:               opts.BalanceStore.Cache(b.balanceClient, entry.BalanceURL, entry.APIKey()),
+		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, entry.APIKey()),
 		Feedback:              control.FeedbackOptions{Service: feedbackService(b.roots.Home(), b.proxy), ProviderKind: feedbackProviderKind(entry), Surface: opts.FeedbackSurface},
 		Jobs:                  b.session.jobs,
 		TaskStore:             opts.TaskStore,
@@ -630,5 +677,14 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		Memory:                  b.prompt.memory,
 		ProjectChecks:           b.prompt.projectChecks, ProjectSensitivePaths: b.prompt.sensitivePaths,
 	}
-	return finalizeBuildResult(b.roots, &BuildResult{Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
+	return finalizeBuildResult(b.roots, &BuildResult{ComputerDriver: b.opts.ComputerDriver, Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
+}
+
+// clock is the one place the system clock enters the assembly: a host supplies
+// none, a test supplies its own.
+func (b *builder) clock() func() time.Time {
+	if b.opts.clock != nil {
+		return b.opts.clock
+	}
+	return time.Now
 }

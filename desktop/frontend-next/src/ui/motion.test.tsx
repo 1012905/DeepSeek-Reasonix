@@ -23,7 +23,7 @@ function draw(items: Item[], entering: string[], hidden = false, onPinned = () =
       jump={0} focus={null}
       onApprove={noop} onFullAccess={noop} onPlan={noop} onAnswer={noop} onForget={noop}
       onExtInvoke={() => {}} onExtSubmit={noop}
-      checkpoints={new Map()} onPrepareRewind={noop} onCommitRewind={noop} onUndoRewind={noop}
+      checkpoints={new Map()} onPrepareRewind={noop} onCommitRewind={noop}
       onPrepareFileRevert={noop} onCommitFileRevert={noop}
       needsProject={false} onOpenProject={() => {}} onKeepHere={() => {}}
     />,
@@ -93,7 +93,7 @@ describe("a card's one entrance", () => {
         onAnswer={(async () => undefined) as never} onForget={(async () => undefined) as never}
         onExtInvoke={() => {}} onExtSubmit={(async () => undefined) as never}
         checkpoints={new Map()} onPrepareRewind={(async () => undefined) as never}
-        onCommitRewind={(async () => undefined) as never} onUndoRewind={(async () => undefined) as never}
+        onCommitRewind={(async () => undefined) as never}
         onPrepareFileRevert={(async () => undefined) as never} onCommitFileRevert={(async () => undefined) as never}
         needsProject={false} onOpenProject={() => {}} onKeepHere={() => {}}
       />
@@ -114,6 +114,15 @@ describe("a card's one entrance", () => {
 // mount for a cause. Written here rather than left to review, because the
 // tempting line is one character short of the correct one.
 describe("mount is not a cause", () => {
+  it("keeps the empty-session brand still when its hero remounts", () => {
+    const rules = [...css.matchAll(/\.hero \.sym-mark\s*\{([^}]*)\}/g)];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const [, body] of rules) {
+      const animation = body.match(/animation:\s*([^;}]+)/)?.[1];
+      expect(animation == null || animation.startsWith("none")).toBe(true);
+    }
+  });
+
   /** Rules that give this selector an entrance animation, by exact term. */
   const entrances = (term: string) =>
     css

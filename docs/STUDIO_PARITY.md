@@ -32,6 +32,8 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Feature | Status | Studio location or tracking |
 | --- | --- | --- |
 | Pin a session | Have | `ui/Workspaces.tsx` (`session.pin`) |
+| Compact session rows / 紧凑会话列表 | Have | `styles/studio.css`: single-line ellipsis, 34px rows and full titles on hover. 单行省略、34px 行高，悬浮查看完整标题。 |
+| Batch selection of local sessions / 本机会话批量选择 | Have differently | `ui/LocalMachine.tsx`: “Select local sessions” is in this machine's More actions menu; `ui/SessionBatch.tsx` shows the batch toolbar only during selection. “选择本机会话”移至“这台机器”的更多菜单，仅在选择模式显示批量工具栏；保留批量归档与删除。 Refs #10651. |
 | Archive and restore a session | Have | `ui/Sidebar.tsx`, `ui/Workspaces.tsx`; the quick row action is #12318 (open PR) |
 | Recycle bin page for deleted sessions | Unverified | Studio has "delete session" in `ui/Workspaces.tsx`; no recycle-bin page was found, recovery not checked |
 | Manual rename | Have | `renameSession` in `ui/App.tsx` |
@@ -43,6 +45,7 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Session recovery versions dialog | Unverified | Not searched by name; see #12365 for the delete behaviour |
 | Remote (SSH) workspaces | Have | `ui/Remotes.tsx`, `ui/RemoteHosts.tsx` |
 | Session takeover when another window holds it | Have | `ui/App.tsx`, `ui/Pane.tsx` |
+| Workspace sidebar expansion, collapse and resizing | Have differently | Desktop uses the divider in `ui/Gutter.tsx`, including after collapse; the top button in `ui/RailToggle.tsx` is reserved for the narrow `scene` drawer layout (#12917) |
 
 ## Reference: composer and transcript
 
@@ -93,7 +96,8 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 
 | Feature | Status | Studio location |
 | --- | --- | --- |
+| Per-model display aliases | Have | Model service settings and chat picker; [configuration and scope](MODEL_DISPLAY_ALIASES.md); #11774 |
 | Icon rail with three display modes | Have | #12377, #12428; sidebar footer entries appear only when icon navigation is hidden (#12478) |
 | Usage, feedback, account and settings footer / 用量、反馈、账号与设置底部入口 | Have differently | `ui/Nav.tsx` when navigation is visible; `ui/Sidebar.tsx` otherwise, including the narrow-window drawer. 导航可见时使用图标栏入口，隐藏时保留侧栏入口 (#12478) |
 | Completed-unread marker on sessions | Have | #12218 |
-| Workbench browser-tab menu / 工作台浏览器标签菜单 | Have differently | `ui/WorkbenchTabs.tsx` and `ui/BrowserTabMenu.tsx`: close one, others, right or all through the controller; files are excluded from bulk closing. 控制器关闭页面，批量操作保留文件 (#12067, #12348, #11645) |
+| Workbench browser-tab menu / 工作台浏览器标签菜单 | Have differently | `ui/WorkbenchPanel.tsx` and `ui/BrowserTabMenu.tsx`: close one, others, right or all through the controller; files are excluded from bulk closing. 控制器关闭页面，批量操作保留文件 (#12067, #12348, #11645) |

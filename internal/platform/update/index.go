@@ -19,6 +19,28 @@ type Index struct {
 	SchemaVersion int          `json:"schemaVersion"`
 	UpdatedAt     string       `json:"updatedAt"`
 	Versions      []IndexEntry `json:"versions"`
+	// Withdrawn lists releases pulled after publication. A client that predates
+	// this field only reads Versions, so the publisher removes a withdrawn
+	// release from there as well: the field is what lets a newer client say why.
+	Withdrawn []WithdrawnEntry `json:"withdrawn,omitempty"`
+}
+
+// WithdrawnEntry is a release that must not be installed. It keeps the whole
+// catalog row so withdrawing is reversible without losing what was published.
+type WithdrawnEntry struct {
+	IndexEntry
+	Reason      string `json:"reason,omitempty"`
+	WithdrawnAt string `json:"withdrawnAt,omitempty"`
+}
+
+// WithdrawnVersion reports whether version was withdrawn.
+func (i *Index) WithdrawnVersion(version string) (WithdrawnEntry, bool) {
+	for _, w := range i.Withdrawn {
+		if SameVersion(w.Version, version) {
+			return w, true
+		}
+	}
+	return WithdrawnEntry{}, false
 }
 
 // IndexEntry is one published release, newest first in Index.Versions.
@@ -57,7 +79,15 @@ func FetchIndex(ctx context.Context, c *http.Client, url, userAgent string) (*In
 			kept = append(kept, e)
 		}
 	}
-	idx.Versions = kept
+	// Withdrawal wins over listing: a row the publisher left in both places is
+	// still not a release anyone may be moved onto.
+	listed := kept[:0]
+	for _, e := range kept {
+		if _, gone := idx.WithdrawnVersion(e.Version); !gone {
+			listed = append(listed, e)
+		}
+	}
+	idx.Versions = listed
 	return &idx, nil
 }
 

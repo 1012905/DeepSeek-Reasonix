@@ -76,7 +76,9 @@ printf '%s' "$base" | jq \
   --arg notes "$notes" \
   --argjson keep "$keep" '
   def semver: [splits("[.-]")] | map(select(test("^[0-9]+$")) | tonumber);
-  {
+  ([.withdrawn // [] | .[].version | ltrimstr("v")]) as $gone
+  | (.withdrawn // []) as $withdrawn
+  | {
     schemaVersion: 1,
     updatedAt: $publishedAt,
     versions: (
@@ -91,9 +93,12 @@ printf '%s' "$base" | jq \
       # Existing entries win: unique_by keeps the first of each group, so a
       # rerun cannot rewrite what was already published under that version.
       | unique_by(.version)
+      # A withdrawn release is never listed again, even by a rerun of its own
+      # publication: restoring is withdraw-version.sh --restore.
+      | map(select((.version | ltrimstr("v")) as $v | $gone | index($v) | not))
       | sort_by(.version | semver)
       | reverse
       | .[0:$keep]
     ),
-  }
+  } + (if ($withdrawn | length) == 0 then {} else {withdrawn: $withdrawn} end)
 '
