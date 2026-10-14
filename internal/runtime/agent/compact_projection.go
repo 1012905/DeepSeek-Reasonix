@@ -495,7 +495,7 @@ func (a *contextWindow) compactToProjection(ctx context.Context, trigger, instru
 	tele.ProjectionTokens = projTokens
 	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
 	a.emitCompactionTelemetry(tele)
-	if err := a.acceptCheckpointCandidate(trigger, scope, sourceTokens, projTokens, fixedPrefixTokens); err != nil {
+	if err := a.acceptAttributed(trigger, scope, sourceTokens, projTokens, fixedPrefixTokens, kept, summary); err != nil {
 		a.emitCompactionAborted(trigger, compactionFailureCode(err))
 		return CompactionNoop, "", err
 	}
