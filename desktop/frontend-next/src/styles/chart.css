@@ -15,6 +15,7 @@
 .chart .grid { stroke: var(--hair); stroke-width: 1 }
 .chart .base { stroke: var(--border); stroke-width: 1 }
 .chart .tick { fill: var(--faint); font: var(--w-reg) var(--fs-micro) var(--ui) }
+.chart .dl { fill: var(--muted); font: var(--w-reg) var(--fs-micro) var(--ui); pointer-events: none }
 .chart .cs0 { --c: var(--cat-1) }
 .chart .cs1 { --c: var(--cat-2) }
 .chart .cs2 { --c: var(--cat-3) }
