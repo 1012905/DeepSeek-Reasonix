@@ -85,6 +85,8 @@ const (
 	NoticeCodeCompactHeld = "compact_held"
 	// The context is over its compaction threshold and folding cannot help; Detail is a ContextComposition.
 	NoticeCodeContextComposition = "context_composition"
+	// A sub-agent is queued behind another's write claim; Detail is a SubagentWaiting.
+	NoticeCodeSubagentWaiting = "subagent_waiting"
 	// An optional extension was left out of an operation; Detail is the ExtensionSkipped payload.
 	NoticeCodeExtensionSkipped = "extension_skipped"
 	// A reopened session's inbox held unfinished instructions and came up paused; Detail is the InboxRecovered payload.
