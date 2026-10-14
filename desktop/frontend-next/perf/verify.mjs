@@ -78,7 +78,7 @@ await page.screenshot({ path: `${SHOTS}/1-跟随中.png` });
 await flow.evaluate((el) => el.scrollTo({ top: el.scrollHeight * 0.35 }));
 await page.waitForTimeout(400);
 const away = await geom();
-const jump = page.locator("button.jump").first();
+const jump = page.locator('.scrolljump button[data-value="down"]').first();
 check("向上滚后按钮出现", await jump.isVisible(), `scrollTop=${away.top.toFixed(0)}`);
 await page.evaluate(async () => {
   for (let i = 0; i < 30; i++) {
@@ -108,9 +108,12 @@ check("滚动时文档高度稳定", Math.abs(tallAfter - tallBefore) / tallBefo
 await page.screenshot({ path: `${SHOTS}/2b-滚到历史处.png` });
 
 // 5) 点「回到最新」回到底部并恢复跟随。
-await jump.click();
-await page.waitForTimeout(500);
-const back = await geom();
+let back = await geom();
+for (let n = 0; n < 8 && back.h - back.top - back.c >= 60; n++) {
+  await jump.click();
+  await page.waitForTimeout(500);
+  back = await geom();
+}
 check("回到最新可用", back.h - back.top - back.c < 60, `距底 ${(back.h - back.top - back.c).toFixed(0)}px`);
 
 // 6) Switching to another view and back keeps the transcript. The run's

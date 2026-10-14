@@ -1,0 +1,13 @@
+.scrolljump { position: sticky; bottom: 0; z-index: 4; height: 0; pointer-events: none; }
+.scrolljump > div { position: absolute; right: 14px; bottom: 12px; display: grid; gap: 6px; pointer-events: auto; }
+.scrolljump button {
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--overlay); color: var(--muted);
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, .3);
+  animation: card var(--t-card) var(--ease-out) both;
+}
+.scrolljump button:hover { color: var(--text); border-color: var(--faint); }
+.scrolljump button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.scrolljump svg { width: 14px; height: 14px; }
+.scrolljump button[data-value="up"] svg { rotate: 180deg; }
+@media (prefers-reduced-motion: reduce) { .scrolljump button { animation: none; } }

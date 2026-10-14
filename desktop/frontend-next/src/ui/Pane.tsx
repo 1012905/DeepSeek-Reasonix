@@ -88,8 +88,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const status = sessionRead.kind === "settled" ? sessionRead.status : null;
   const ready = sessionRead.kind === "settled";
   const [tab, showView] = useShowView(rt.id, onManualBrowser);
-  const [pinned, setPinned] = useState(true);
-  const [jump, setJump] = useState(0);
   const [mcp, setMcp] = useState<McpEntry[]>([]);
   const [askFocus, setAskFocus] = useState(0);
   const [tree, setTree] = useState<WorkspaceChanges | null>(null);
@@ -400,7 +398,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   // Where the bottom is moves as blocks mount under it, so this only asks the
   // transcript to follow again and lets it scroll itself into place.
-  const toLatest = () => setJump((n) => n + 1);
 
   // Who is waited on is the kernel's answer, read from the decision list it
   // already publishes. This used to compare the label on screen against two
@@ -471,8 +468,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         waiting={s.waiting}
         scroll={flow}
         hidden={tab !== "flow"}
-        onPinned={setPinned}
-        jump={jump}
         focus={null}
         find={find.at}
         query={find.query}
@@ -541,9 +536,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           analysis; hidden removes it from layout without throwing its state
           away. */}
       <div className="compose" hidden={tab !== "flow"}>
-        <button className="jump" hidden={pinned || tab !== "flow"} onClick={toLatest}>
-          {t("↓ 回到最新")}
-        </button>
         <span className="glowring" aria-hidden="true">
           <i />
         </span>
