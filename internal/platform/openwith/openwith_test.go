@@ -2,8 +2,11 @@ package openwith
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -35,6 +38,7 @@ func newFake(goos string, env map[string]string) *fake {
 		},
 		isFile: func(p string) bool { return f.files[p] },
 		isDir:  func(p string) bool { return f.dirs[p] },
+		eval:   func(p string) (string, error) { return p, nil },
 		start:  func(exe string, args []string) error { f.started = append(f.started, call{exe, args}); return nil },
 	}
 	return f
@@ -184,5 +188,67 @@ func TestMacApplicationsAreStartedThroughOpenWithTheBundle(t *testing.T) {
 	}
 	if !availability(f)["terminal"] || availability(f)["cursor"] {
 		t.Fatalf("availability = %v", availability(f))
+	}
+}
+
+// A link on PATH that points into a project is that project's program.
+func TestALinkIntoAProjectIsNeverStarted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating links needs a privilege Windows tests do not hold")
+	}
+	root := t.TempDir()
+	project := filepath.Join(root, "project")
+	bin := filepath.Join(root, "bin")
+	for _, d := range []string{filepath.Join(project, "node_modules", ".bin"), bin} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	planted := filepath.Join(project, "node_modules", ".bin", "code")
+	if err := os.WriteFile(planted, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(planted, filepath.Join(bin, "code")); err != nil {
+		t.Fatal(err)
+	}
+	m := system(func(k string) string {
+		if k == "PATH" {
+			return bin
+		}
+		return ""
+	})
+	m.goos = "linux"
+	m.forbidden = []string{project}
+	if _, ok := m.resolve(targets[1], filepath.Join(root, "x")); ok {
+		t.Fatal("a link pointing into the project was offered as VS Code")
+	}
+
+	// A project reached through a link is the same project.
+	alias := filepath.Join(root, "alias")
+	if err := os.Symlink(project, alias); err != nil {
+		t.Fatal(err)
+	}
+	m.forbidden = []string{alias}
+	if _, ok := m.resolve(targets[1], filepath.Join(root, "x")); ok {
+		t.Fatal("the project, named through a link, was not recognised")
+	}
+
+	// A link to somewhere outside every project is fine, and a dangling one is not.
+	elsewhere := filepath.Join(root, "installed", "code")
+	if err := os.MkdirAll(filepath.Dir(elsewhere), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(elsewhere, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(bin, "code")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(bin, "code")); err != nil {
+		t.Fatal(err)
+	}
+	m.forbidden = []string{project}
+	if c, ok := m.resolve(targets[1], filepath.Join(root, "x")); !ok || c.exe != filepath.Join(bin, "code") {
+		t.Fatalf("a link to an installed program was refused: %v %v", c, ok)
 	}
 }

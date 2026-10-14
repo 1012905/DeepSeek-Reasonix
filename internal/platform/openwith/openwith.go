@@ -33,7 +33,9 @@ type machine struct {
 	glob   func(string) ([]string, error)
 	isFile func(string) bool
 	isDir  func(string) bool
-	start  func(exe string, args []string) error
+	// eval resolves symlinks; a path it cannot resolve is not launchable.
+	eval  func(string) (string, error)
+	start func(exe string, args []string) error
 	// folders are directories no launched program may come from.
 	forbidden []string
 }
@@ -43,6 +45,7 @@ func system(getenv func(string) string) machine {
 		goos: runtime.GOOS, getenv: getenv, glob: filepath.Glob,
 		isFile: func(p string) bool { i, err := os.Stat(p); return err == nil && !i.IsDir() },
 		isDir:  func(p string) bool { i, err := os.Stat(p); return err == nil && i.IsDir() },
+		eval:   filepath.EvalSymlinks,
 		start:  startDetached,
 	}
 }
@@ -227,19 +230,35 @@ func (m machine) launchable(c candidate) bool {
 	if m.goos == "windows" && !strings.EqualFold(filepath.Ext(c.path), ".exe") {
 		return false
 	}
-	return !m.inside(c.path)
+	if m.inside(c.path) {
+		return false
+	}
+	// Where it really is: a link on PATH that points into a project is that
+	// project's program, whatever the link's own name says.
+	real, err := m.eval(c.path)
+	if err != nil || m.inside(real) {
+		return false
+	}
+	return true
 }
 
+// inside is whether c lies within a forbidden folder, compared against each
+// folder as named and as it resolves, since either may be reached through a link.
 func (m machine) inside(c string) bool {
 	clean := filepath.Clean(c)
 	for _, root := range m.forbidden {
-		root = filepath.Clean(root)
-		if root == "." || root == "" {
-			continue
+		roots := []string{filepath.Clean(root)}
+		if real, err := m.eval(root); err == nil {
+			roots = append(roots, filepath.Clean(real))
 		}
-		rel, err := filepath.Rel(root, clean)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
-			return true
+		for _, r := range roots {
+			if r == "." || r == "" {
+				continue
+			}
+			rel, err := filepath.Rel(r, clean)
+			if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+				return true
+			}
 		}
 	}
 	return false
