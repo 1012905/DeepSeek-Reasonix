@@ -166,6 +166,7 @@ const SAID: Record<string, string> = {
   "attachment.unsupported_image": "这个文件的格式暂不支持（{format}）。支持的图片格式：{supported}。可以先转换格式再添加。",
   "attachment.too_large": "这个文件超过 {limit_mb} MB 的上限，请压缩或拆分后再添加。",
   "attachment.empty": "这个文件是空的（0 字节），没有可添加的内容。",
+  "attachment.not_text": "这段内容不是纯文本，不能存为文本文件。",
   "attachment.unreadable": "无法读取这个文件：{detail}。它可能被其他程序占用、已被移动，或在云盘里尚未下载。",
   "attachment.write_failed": "附件未能保存到工作区的 .reasonix/attachments：{detail}。请检查该目录的写入权限和磁盘空间。",
   "complete.line_too_long": "该行过长，无法补全",

@@ -1,4 +1,4 @@
-import { HttpError, type Attachment, type DroppedRef } from "./port";
+import { HttpError, type Attachment, type DroppedRef, type KeptText } from "./port";
 import { SseHttp } from "./sse_http";
 import { SseTheme } from "./sse_theme";
 import { attachmentLimitMb, base64Of, guardUpload, tooLarge } from "./upload";
@@ -24,6 +24,17 @@ export class SseIntake extends SseTheme {
     });
     if (!res.ok) await SseHttp.fail("/attachments", res);
     return (await res.json()) as Attachment;
+  }
+
+  async keepText(text: string) {
+    const res = await fetch(this.base + "/attachments", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ kind: "text", text }),
+    });
+    if (!res.ok) await SseHttp.fail("/attachments", res);
+    return (await res.json()) as KeptText;
   }
 
   dropRefs(paths: string[]) {

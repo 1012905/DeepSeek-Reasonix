@@ -1,10 +1,10 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
-import type { Attachment, DroppedRef } from "./attachment";
+import type { Attachment, DroppedRef, KeptText } from "./attachment";
 export { DeliveryError, HttpError };
 export type { DeliveryFault };
-export type { Attachment, DroppedRef };
+export type { Attachment, DroppedRef, KeptText };
 
 import type { AccountState, AccountUser, DeviceGrant } from "./account";
 import type { Adjudications } from "./adjudication";
@@ -535,6 +535,9 @@ export interface AgentPort {
   // Naming the bytes is what stores them as that kind of file; unnamed bytes
   // must prove they are an image.
   attach(blob: Blob, name?: string): Promise<Attachment>;
+  // Keeps a pasted text as a file in the attachment directory and answers with
+  // the pointer that replaces it in the message. Only on a person's say-so.
+  keepText(text: string): Promise<KeptText>;
   // Names what dropped paths are called inside a turn, in the order given.
   dropRefs(paths: string[]): Promise<DroppedRef[]>;
   // onGap fires when frames were lost beyond what the stream can replay: the

@@ -247,6 +247,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.refresh", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "feedback.retry-env", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "feedback.retry-mine", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "paste.save", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "feedback.link", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.focus", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.expand", kind: "view", target: "none", proof: "interaction" },

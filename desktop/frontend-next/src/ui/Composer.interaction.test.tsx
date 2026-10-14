@@ -155,6 +155,65 @@ describe("composer submission", () => {
   });
 });
 
+describe("a long paste kept as a file", () => {
+  const body = Array.from({ length: 120 }, (_, i) => `log line ${i}`).join("\n");
+  const pointer = "[pasted text kept out of this message: 120 lines, 1.2 KB]\nSaved: .reasonix/attachments/clipboard-1.txt\nRead a window of it with read_file (offset/limit), or search it with grep. It is not in this message.\n";
+
+  it("saves only when asked, and sends the pointer in place of the text", async () => {
+    const port = new MockPort();
+    const keep = vi.spyOn(port, "keepText").mockResolvedValue({ path: ".reasonix/attachments/clipboard-1.txt", pointer });
+    const onSubmit = vi.fn(async () => true);
+    const { box } = draw({ port, onSubmit });
+    fireEvent.paste(box, { clipboardData: { files: [], getData: () => body } });
+    expect(keep).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "存为文件" }));
+    await waitFor(() => expect(keep).toHaveBeenCalledWith(body));
+    expect(await screen.findByText("已存为文件 · 模型按需读取")).toBeTruthy();
+
+    fireEvent.change(box, { target: { value: "看一下这段日志", selectionStart: 7 } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const sent = String((onSubmit.mock.calls[0] as unknown[])[0]);
+    expect(sent).toContain("看一下这段日志");
+    expect(sent).toContain(".reasonix/attachments/clipboard-1.txt");
+    expect(sent).not.toContain("log line 7");
+  });
+
+  it("sends the text itself when it was never saved", async () => {
+    const onSubmit = vi.fn(async () => true);
+    const { box } = draw({ onSubmit });
+    fireEvent.paste(box, { clipboardData: { files: [], getData: () => body } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(String((onSubmit.mock.calls[0] as unknown[])[0])).toContain("log line 7");
+  });
+
+  it("keeps the text in the chip and says why when saving fails", async () => {
+    const port = new MockPort();
+    vi.spyOn(port, "keepText").mockRejectedValue(new HttpError(500, "x", { code: "attachment.write_failed", error: "disk full", params: { detail: "disk full" } }));
+    const onSubmit = vi.fn(async () => true);
+    const { box } = draw({ port, onSubmit });
+    fireEvent.paste(box, { clipboardData: { files: [], getData: () => body } });
+    fireEvent.click(screen.getByRole("button", { name: "存为文件" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(String((onSubmit.mock.calls[0] as unknown[])[0])).toContain("log line 7");
+  });
+
+  it("can still expand a saved chip back into the box", async () => {
+    const port = new MockPort();
+    vi.spyOn(port, "keepText").mockResolvedValue({ path: ".reasonix/attachments/clipboard-1.txt", pointer });
+    const { box } = draw({ port });
+    fireEvent.paste(box, { clipboardData: { files: [], getData: () => body } });
+    fireEvent.click(screen.getByRole("button", { name: "存为文件" }));
+    await screen.findByText("已存为文件 · 模型按需读取");
+    fireEvent.click(screen.getByRole("button", { name: /展开到输入框/ }));
+    expect(box.value).toContain("log line 7");
+  });
+});
+
 describe("composer drafts", () => {
   it("restores unsent text when a session is reopened", () => {
     const first = draw({ st: status({ sessionPath: "/sessions/one.jsonl" }) });

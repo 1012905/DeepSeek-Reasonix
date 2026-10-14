@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
 import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
+import { keepPasteAsFile, PasteKeep, type PasteChip } from "./pastekeep";
 import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
 import { Picker } from "./Menu";
 import { BranchChip } from "./BranchChip";
@@ -80,7 +81,7 @@ type Chip =
       url?: string;
       error?: string;
     }
-  | { k: "paste"; id: string; body: string; lines: number; name?: string }
+  | PasteChip
   | { k: "quote"; id: string; body: string; turn?: number; source?: string; lines: number };
 
 function chipName(c: Chip): string {
@@ -239,12 +240,14 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   // the CLI — the host saved the bytes, the turn parser resolves the token. A
   // held-back paste follows the typed text, which is where it reads as the
   // material the message is about rather than as part of the sentence.
+  const keepPaste = (chip: PasteChip) => keepPasteAsFile(port, chip, setShots);
+
   const send = () => {
     if (submittingRef.current || shots.some((c) => c.k === "attachment" && c.state !== "ready")) return;
     const v = text.trim();
     if (!v && shots.length === 0) return;
     const refs = shots.flatMap((c) => (c.k === "attachment" && c.a ? [c.a.ref] : []));
-    const pastes = shots.flatMap((c) => (c.k === "paste" ? [c.body] : []));
+    const pastes = shots.flatMap((c) => (c.k === "paste" ? [c.saved ? c.saved.pointer.trim() : c.body] : []));
     // A quote is what the question is about, so it leads; a held-back paste is
     // the material the answer needs and follows what was typed.
     const quotes = shots.flatMap((c) => (c.k === "quote" ? [quoteBlock(c)] : []));
@@ -496,6 +499,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
                     >
                       {t("{n} 行 · 展开到输入框", { n: c.lines })}
                     </button>
+                    {c.k === "paste" && <PasteKeep chip={c} onKeep={keepPaste} />}
                   </span>
                 </>
               )}

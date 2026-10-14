@@ -372,6 +372,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这个文件的格式暂不支持（{format}）。支持的图片格式：{supported}。可以先转换格式再添加。": "This file's format is not supported ({format}). Supported image formats: {supported}. Convert it first, then add it again.",
   "这个文件超过 {limit_mb} MB 的上限，请压缩或拆分后再添加。": "This file is over the {limit_mb} MB limit. Compress or split it, then add it again.",
   "这个文件是空的（0 字节），没有可添加的内容。": "This file is empty (0 bytes), so there is nothing to add.",
+  "这段内容不是纯文本，不能存为文本文件。": "This is not plain text, so it cannot be kept as a text file.",
   "无法读取这个文件：{detail}。它可能被其他程序占用、已被移动，或在云盘里尚未下载。": "Could not read this file: {detail}. It may be open in another program, moved, or not yet downloaded from cloud storage.",
   "附件未能保存到工作区的 .reasonix/attachments：{detail}。请检查该目录的写入权限和磁盘空间。": "The attachment could not be saved to .reasonix/attachments in the workspace: {detail}. Check that folder's write permission and the free disk space.",
   "该行过长，无法补全": "That line is too long to complete",
