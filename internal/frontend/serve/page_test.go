@@ -2,6 +2,7 @@ package serve
 
 import (
 	"io"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -89,5 +90,39 @@ func TestFindPageRefusesADirectoryWithNoIndex(t *testing.T) {
 	got, err := FindPage(dir)
 	if err != nil || got == nil {
 		t.Fatalf("FindPage(%q) = %v, %v; want the directory", dir, got, err)
+	}
+}
+
+// A type another program registered for an extension (on Windows the standard
+// library reads them from the registry) must not decide what the page's own
+// files are served as: an SVG that is not image/svg+xml is a broken image.
+func TestThePagesFilesKeepTheirTypeWhateverTheMachineRegistered(t *testing.T) {
+	for ext, bad := range map[string]string{".svg": "application/octet-stream", ".js": "text/plain", ".css": "text/plain"} {
+		want := map[string]string{".svg": "image/svg+xml", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}[ext]
+		if err := mime.AddExtensionType(ext, bad); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = mime.AddExtensionType(ext, want) })
+	}
+	page := fstest.MapFS{
+		"assets/logo.svg": &fstest.MapFile{Data: []byte("<svg xmlns='http://www.w3.org/2000/svg'/>")},
+		"assets/app.js":   &fstest.MapFile{Data: []byte("//")},
+		"assets/app.css":  &fstest.MapFile{Data: []byte("a{}")},
+	}
+	srv := httptest.NewServer(withPage(http.NotFoundHandler(), page))
+	defer srv.Close()
+	for path, want := range map[string]string{
+		"/assets/logo.svg": "image/svg+xml",
+		"/assets/app.js":   "text/javascript; charset=utf-8",
+		"/assets/app.css":  "text/css; charset=utf-8",
+	} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if got := resp.Header.Get("Content-Type"); got != want {
+			t.Errorf("%s is served as %q, want %q", path, got, want)
+		}
 	}
 }
