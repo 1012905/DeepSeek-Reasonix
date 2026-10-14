@@ -740,7 +740,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   private surfaceActions = new Map<string,SurfaceActionRecord>();
   async surfaceActionState(callId: string):Promise<SurfaceActionRecord> {return this.surfaceActions.get(callId) ?? {active:true,action:{surfaceId:"mock",sessionId:"mock",callId,actionId:"",requestId:"",values:{}}};}
   async surfaceAction(request: SurfaceActionRequest) {const rec=await (request.delivery==="steer"?this.steer(JSON.stringify(request.action)):this.queueFollowup(JSON.stringify(request.action)));this.surfaceActions.set(request.action.callId,{active:true,action:request.action,itemId:rec.itemId,status:"accepted",canWithdraw:true});return rec;}
-  async extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]> { return []; }
+  async extensionSurfaces(): Promise<import("./surface_replay").ExtensionSurfaceReplay> { return { surfaces: [] }; }
   async invokeExtensionAction(name: string) {
     return `${name} 在 mock 里没有真实扩展可执行`;
   }

@@ -26,20 +26,38 @@ func surfaceMarker(raw []byte) ([]byte, bool) {
 	return raw, err == nil
 }
 
+// surfaceReplay is what a reopened window gets back: the surfaces the session
+// had, and whether it can say that is all of them. A log kept to its cap is
+// ordinary; Incomplete is set only when a surface frame was among those dropped.
+type surfaceReplay struct {
+	Surfaces   []*eventwire.ExtensionSurface `json:"surfaces"`
+	Incomplete string                        `json:"incomplete,omitempty"`
+}
+
+// replayDropped says a surface frame was refused after the log reached its cap.
+const replayDropped = "dropped"
+
+// codeSurfaceReplayUnreadable is a history that could not be read at all.
+const codeSurfaceReplayUnreadable = "surface.replay_unreadable"
+
 func (s *Server) extensionSurfaces(w http.ResponseWriter, r *http.Request) {
 	s.bindMu.Lock()
 	defer s.bindMu.Unlock()
 	ctl := s.ctl()
 	path := ctl.SessionPath()
 	found := map[string]*eventwire.ExtensionSurface{}
+	incomplete := ""
 	if path != "" {
 		s.wire.mu.Lock()
 		data, err := os.ReadFile(store.SessionWireLog(path))
-		truncated, witnessErr := truncationWitnessed(store.SessionWireLogMeta(path))
+		meta, metaErr := readWireLogMeta(store.SessionWireLogMeta(path))
 		s.wire.mu.Unlock()
-		if err != nil && !errors.Is(err, fs.ErrNotExist) || witnessErr != nil || truncated {
-			refuse(w, http.StatusConflict, "surface.replay_incomplete", "extension surface history is unavailable or incomplete", nil)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) || metaErr != nil {
+			refuse(w, http.StatusInternalServerError, codeSurfaceReplayUnreadable, "extension surface history is unreadable", nil)
 			return
+		}
+		if meta.SurfacesDropped {
+			incomplete = replayDropped
 		}
 		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.TrimSpace(line) == "" {
@@ -47,7 +65,7 @@ func (s *Server) extensionSurfaces(w http.ResponseWriter, r *http.Request) {
 			}
 			var ev eventwire.Event
 			if json.Unmarshal([]byte(line), &ev) != nil {
-				refuse(w, http.StatusConflict, "surface.replay_incomplete", "extension surface history is unreadable", nil)
+				refuse(w, http.StatusInternalServerError, codeSurfaceReplayUnreadable, "extension surface history is unreadable", nil)
 				return
 			}
 			if ev.Extension == nil || ev.Extension.Kind == event.ExtensionSurfaceNotification {
@@ -69,5 +87,5 @@ func (s *Server) extensionSurfaces(w http.ResponseWriter, r *http.Request) {
 	for _, key := range keys {
 		out = append(out, found[key])
 	}
-	writeJSON(w, out)
+	writeJSON(w, surfaceReplay{Surfaces: out, Incomplete: incomplete})
 }

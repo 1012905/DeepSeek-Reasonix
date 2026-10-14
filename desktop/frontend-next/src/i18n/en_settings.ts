@@ -872,7 +872,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "思考了 6 秒": "Thought for 6s",
   "3 项操作 · 1 项失败": "3 actions · 1 failed",
   "扩展界面已失效": "Extension surface expired",
-  "扩展界面恢复失败": "Could not restore extension surfaces",
+  "部分扩展界面可能没能恢复": "Some extension surfaces may not have been restored",
   "扩展 · {id}": "Extension · {id}",
   "极高风险": "Critical risk",
   "已拦截": "Blocked",

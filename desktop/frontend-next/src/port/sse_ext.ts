@@ -19,7 +19,7 @@ export class SseExtensions extends SseLook {
     return this.post("/extensions/reload");
   }
   extensionSurfaces() {
-    return this.get<import("./wire").ExtensionSurface[]>("/extensions/surfaces");
+    return this.get<import("./surface_replay").ExtensionSurfaceReplay>("/extensions/surfaces");
   }
   async invokeExtensionAction(name: string) {
     const out = await this.post0<{ message?: string }>("/extensions/action", { name });
