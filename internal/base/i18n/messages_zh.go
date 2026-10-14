@@ -235,7 +235,7 @@ var Chinese = Messages{
 
 	OutputStyleNone:           "没有可用的输出风格",
 	ThemeHeader:               "主题：",
-	ThemeHint:                 "使用 /theme <auto|light|dark|style> 切换",
+	ThemeHint:                 "用 /theme 选择，或用 /theme <auto|light|dark|style> 切换",
 	ThemeChangedFmt:           "已切换主题为 %s / %s",
 	ThemeUnknownFmt:           "未知主题 %q",
 	LanguageHeader:            "语言：",
