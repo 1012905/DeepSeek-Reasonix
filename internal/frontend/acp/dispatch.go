@@ -186,6 +186,7 @@ func (s *updateSink) Emit(e event.Event) {
 		s.send(toolCall{
 			SessionUpdate: "tool_call",
 			ToolCallID:    e.Tool.ID,
+			Name:          e.Tool.Name,
 			Title:         e.Tool.Name,
 			Kind:          toolKindFor(e.Tool.Name),
 			Status:        "pending",
@@ -376,6 +377,7 @@ func (s *updateSink) replay(msgs []provider.Message) {
 				s.send(toolCall{
 					SessionUpdate: "tool_call",
 					ToolCallID:    tc.ID,
+					Name:          tc.Name,
 					Title:         tc.Name,
 					Kind:          toolKindFor(tc.Name),
 					Status:        "completed",
