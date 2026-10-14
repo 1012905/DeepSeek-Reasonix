@@ -319,7 +319,7 @@ func (g *perseverationGuard) observe(delta string) bool {
 	}
 	g.sinceScan = 0
 	unit, _ := g.trailingLoop()
-	tripped := unit > 0
+	tripped := unit > 0 || g.collapsedToFewLines()
 	rising := tripped && !g.lastTripped
 	g.lastTripped = tripped
 	return rising
@@ -339,6 +339,43 @@ func (g *perseverationGuard) trailingLoop() (unit, repeats int) {
 		}
 	}
 	return 0, 0
+}
+
+// A stream can degrade without repeating any block byte for byte: a few tiny
+// sentences in no fixed order, one per line, which the periodicity scan cannot
+// see. It is judged by structure alone, on the tail: many short lines drawn
+// from very few distinct ones. The numbers are a tradeoff like the bounds above.
+const (
+	collapseWindow  = 4096 // bytes of the tail examined
+	collapseLines   = 80   // short lines needed before it can be called a collapse
+	collapseRatio   = 6    // at most one distinct short line per this many
+	collapseMaxLine = 48   // bytes: longest line that counts as a fragment
+)
+
+// collapsedToFewLines reports whether the tail is a collapse onto a few tiny
+// lines. Blank lines separate and say nothing; long lines are real writing and
+// count against the verdict.
+func (g *perseverationGuard) collapsedToFewLines() bool {
+	tail := g.tail
+	if len(tail) > collapseWindow {
+		tail = tail[len(tail)-collapseWindow:]
+	}
+	distinct := map[string]struct{}{}
+	short, shortBytes, writtenBytes := 0, 0, 0
+	for line := range bytes.SplitSeq(tail, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		writtenBytes += len(line)
+		if len(line) > collapseMaxLine {
+			continue
+		}
+		short++
+		shortBytes += len(line)
+		distinct[string(line)] = struct{}{}
+	}
+	return short >= collapseLines && len(distinct)*collapseRatio <= short && shortBytes*10 >= writtenBytes*6
 }
 
 // trailingRepeats counts how many times the final period-length block repeats
