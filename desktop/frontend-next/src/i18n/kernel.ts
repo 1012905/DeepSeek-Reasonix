@@ -16,6 +16,8 @@ import { t } from "./index";
 // its literal keys — the kernel's parity guard reads this file as text and can
 // only see those — so kernel.test.ts holds the two spellings together.
 export const PROVIDER_EDIT_DISABLED = "provider.editing_disabled";
+// The file a read asked for is not there, as opposed to being there and unreadable.
+export const WORKSPACE_FILE_MISSING = "workspace.file_missing";
 // A paired device answers this for every account route, votes included.
 export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 // The write landed and only applying it to the open conversation did not.

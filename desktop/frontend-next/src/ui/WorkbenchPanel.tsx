@@ -349,18 +349,22 @@ export function WorkbenchPanel({
   }, [filePath, readable, previewable]);
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
-  const { file, draft, diff, busy, error: fileFailed, setDraft, save } = useWorkbenchFiles({
+  const { file, draft, diff, busy, error: fileFailed, missing, setDraft, save } = useWorkbenchFiles({
     port, workspaceRoot, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
     poll: (readable && mode === "read") || (previewable && mode === "preview"),
   });
   const revision = file?.revision;
   useEffect(() => {
     if (mode !== "preview" || !previewable || !shown || showFiles || launcher || previewTab || (!revision && !fileFailed && !failed)) return;
+    if (missing) {
+      setMode("file");
+      return;
+    }
     openPreview(filePath, revision).catch((e) => {
       setFailed(reason(e));
       setMode("file");
     });
-  }, [mode, previewable, shown, showFiles, launcher, previewTab, revision, fileFailed, failed, filePath, openPreview, tabs]);
+  }, [mode, previewable, shown, showFiles, launcher, previewTab, revision, fileFailed, missing, failed, filePath, openPreview, tabs]);
   useEffect(() => {
     if (mode === "preview" && revision) syncPreview(filePath, revision);
   }, [mode, filePath, revision, syncPreview]);
