@@ -113,6 +113,7 @@ export function WorkbenchPanel({
   remote = false,
   workspaceRoot = "",
   revealChanges = 0,
+  toggleFiles = 0,
   onCloseManual,
   onSurfaces,
   onExternal,
@@ -139,6 +140,8 @@ export function WorkbenchPanel({
   remote?: boolean;
   workspaceRoot?: string;
   revealChanges?: number;
+  /** A press on the Files button: opens the explorer, or folds it when it is the open one. */
+  toggleFiles?: number;
   onCloseManual: () => void;
   // How many surfaces the strip holds, for the pane's own tab to count.
   onSurfaces: (n: number) => void;
@@ -158,7 +161,9 @@ export function WorkbenchPanel({
   const toggleLauncher = () => { supersede(); setLauncher((open) => !open); };
   const chooseFiles = () => { supersede(); setLauncher(false); setShowFiles(true); };
   const commit = useCommitCard(port, () => onTreeChanged?.());
+  const toggleExplorer = () => { supersede(); setLauncher(false); setShowFiles((on) => launcher || !on); };
   useOnBump(revealChanges, chooseFiles);
+  useOnBump(toggleFiles, toggleExplorer);
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
   // Docked, the file list hides the canvas a page is drawn in, so choosing any
@@ -521,7 +526,7 @@ export function WorkbenchPanel({
           aria-pressed={showFiles && !launcher}
           aria-label={t("文件")}
           title={t("文件")}
-          onClick={() => { supersede(); setLauncher(false); setShowFiles((on) => launcher || !on); }}
+          onClick={toggleExplorer}
         >
           <StudioIcon name="folder" />
         </button>
