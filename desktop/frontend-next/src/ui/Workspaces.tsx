@@ -609,22 +609,6 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                         {session.legacy && (
                           <span className="sesslegacy" title={t("由 Reasonix 1.x 创建：Studio 只读打开，继续对话会另存为新会话")} aria-label={t("由 Reasonix 1.x 创建：Studio 只读打开，继续对话会另存为新会话")}>{t("旧")}</span>
                         )}
-                        <span className="sessquick">
-                          <button
-                            data-action="session.archive" data-target={session.path}
-                            data-value={session.archived ? "restore" : "archive"}
-                            title={t(session.archived ? "取消归档" : "归档会话")}
-                            aria-label={t(session.archived ? "取消归档：{title}" : "归档会话：{title}", { title: rowLabel(session) })}
-                            disabled={!!session.runtimeId && liveIds([session.runtimeId]).length > 0}
-                            onClick={(ev) => { ev.stopPropagation(); archive(session); }}
-                          ><StudioIcon name="archive" /></button>
-                          <button
-                            className="danger" data-action="session.delete" data-target={session.path}
-                            title={t("删除会话")}
-                            aria-label={t("删除会话：{title}", { title: rowLabel(session) })}
-                            onClick={(ev) => { ev.stopPropagation(); askDelete(session.path); }}
-                          ><StudioIcon name="trash" /></button>
-                        </span>
                         {sessionMenu === session.path && (
                           <SessionMenu
                             ref={sessionMenuPortal}
@@ -644,7 +628,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             onArchive={() => archive(session)}
                             onCopyInfo={() => { void copyText(sessionInfoText(session, ws.root)).catch(onError); setSessionMenu(""); }}
                             onExport={() => void saveSession(session)}
-                            onDelete={() => { setConfirm(session.path); setSessionMenu(""); }}
+                            onDelete={() => { askDelete(session.path); setSessionMenu(""); }}
                           />
                         )}
                       </div>

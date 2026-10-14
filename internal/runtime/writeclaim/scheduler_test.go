@@ -216,7 +216,7 @@ func TestQueuedAcquireSaysWhichConstraintHeldIt(t *testing.T) {
 			}
 			causes := make(chan agentgraph.WaitCause, 1)
 			req := tc.queued
-			req.OnQueued = func(c agentgraph.WaitCause) error { causes <- c; return nil }
+			req.OnQueued = func(h Held) error { causes <- h.Cause; return nil }
 			var wg sync.WaitGroup
 			wg.Go(func() {
 				release, aerr := s.Acquire(context.Background(), req)
@@ -228,6 +228,73 @@ func TestQueuedAcquireSaysWhichConstraintHeldIt(t *testing.T) {
 			case got := <-causes:
 				if got != tc.want {
 					t.Errorf("queued on %q, want %q", got, tc.want)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("the acquire queued without saying what held it")
+			}
+			held()
+			wg.Wait()
+		})
+	}
+}
+
+// A request held back by a write claim learns whose claim it is and whether the
+// conflict is the two whole-workspace claims that neither writer chose to
+// narrow, because those are the cases with different remedies.
+func TestSchedulerNamesWhoseClaimHeldARequestBack(t *testing.T) {
+	root := testenv.TempDir(t)
+	whole, err := WholeWorkspaceWriteClaim(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, err := NormalizeWritePaths(root, []string{"a.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		holder, queued AcquireRequest
+		want           Held
+	}{
+		"two writers that declared nothing": {
+			holder: AcquireRequest{Writer: true, WritePaths: whole, Label: "refactor parser"},
+			queued: AcquireRequest{Writer: true, WritePaths: whole},
+			want:   Held{Cause: agentgraph.WaitClaim, By: "refactor parser", Whole: true},
+		},
+		"a declared path held by another": {
+			holder: AcquireRequest{Writer: true, WritePaths: mine, Label: "edit docs"},
+			queued: AcquireRequest{Writer: true, WritePaths: mine},
+			want:   Held{Cause: agentgraph.WaitClaim, By: "edit docs"},
+		},
+		"a whole-workspace claim in the way of a declared one": {
+			holder: AcquireRequest{Writer: true, WritePaths: whole, Label: "refactor parser"},
+			queued: AcquireRequest{Writer: true, WritePaths: mine},
+			want:   Held{Cause: agentgraph.WaitClaim, By: "refactor parser"},
+		},
+		"a holder with no label": {
+			holder: AcquireRequest{Writer: true, WritePaths: mine},
+			queued: AcquireRequest{Writer: true, WritePaths: mine},
+			want:   Held{Cause: agentgraph.WaitClaim},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := NewSubagentScheduler(4, 4)
+			held, err := s.Acquire(context.Background(), tc.holder)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := make(chan Held, 1)
+			req := tc.queued
+			req.OnQueued = func(h Held) error { got <- h; return nil }
+			var wg sync.WaitGroup
+			wg.Go(func() {
+				if release, aerr := s.Acquire(context.Background(), req); aerr == nil {
+					release()
+				}
+			})
+			select {
+			case h := <-got:
+				if h != tc.want {
+					t.Errorf("held = %+v, want %+v", h, tc.want)
 				}
 			case <-time.After(5 * time.Second):
 				t.Fatal("the acquire queued without saying what held it")

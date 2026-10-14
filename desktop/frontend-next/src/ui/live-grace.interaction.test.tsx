@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { Workspaces } from "./Workspaces";
@@ -40,7 +40,8 @@ it("leaves a session out of the running view once it is not listed", () => {
 
 it("keeps a listed but finished session deletable: the grace is a list rule, not a run state", () => {
   drawRunningList(true);
-  expect((screen.getByRole("button", { name: `删除会话：${TITLE}` }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.contextMenu(screen.getByRole("treeitem", { name: new RegExp(TITLE) }));
+  expect((screen.getByRole("menuitem", { name: "删除会话" }) as HTMLButtonElement).disabled).toBe(false);
 });
 
 it("offers the grace choices, starts off, and remembers a pick on this machine", async () => {
