@@ -38,7 +38,13 @@ func (p *notDigestProvider) Stream(_ context.Context, req provider.Request) (<-c
 	p.mu.Unlock()
 	ch := make(chan provider.Chunk, 3)
 	ch <- provider.Chunk{Type: provider.ChunkText, Text: text}
-	ch <- provider.Chunk{Type: provider.ChunkUsage, Usage: &provider.Usage{PromptTokens: 100, CompletionTokens: 10, TotalTokens: 110}}
+	// What a real provider counts for the prompt it was sent: the trigger follows
+	// the reported count, so a fixed small figure would never reach it.
+	prompt := 0
+	for _, m := range req.Messages {
+		prompt += len(m.Content) / 4
+	}
+	ch <- provider.Chunk{Type: provider.ChunkUsage, Usage: &provider.Usage{PromptTokens: prompt, CompletionTokens: 10, TotalTokens: prompt + 10}}
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
