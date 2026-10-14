@@ -112,3 +112,42 @@ it("does not replay a Files request into a newly focused session", async () => {
   fireEvent.click(document.querySelector('.ptab[data-pane="r2"]')!);
   expect(filesShown()).toBe(false);
 });
+
+const railFiles = () => within(document.querySelector<HTMLElement>(".nav")!).getByRole("button", { name: "文件" });
+
+it("folds the open files panel when the Files button is pressed again", async () => {
+  await mount();
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(true));
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(false));
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(true));
+});
+
+it("reads whether the panel is open from the workbench, so a panel closed elsewhere opens on the next press", async () => {
+  await mount();
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(true));
+  await userEvent.click(focused().querySelector<HTMLElement>("[data-action=\"workbench.files\"]")!);
+  expect(filesShown()).toBe(false);
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(true));
+});
+
+it("folds only the focused session's panel, and a press after switching session opens that session's", async () => {
+  localStorage.setItem("rx-show-session-tabs", "on");
+  await mount();
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(true));
+  const first = focused();
+  fireEvent.click(document.querySelector('.ptab[data-pane="r1"]')!);
+  expect(focused()).not.toBe(first);
+  expect(filesShown()).toBe(false);
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(true));
+  expect(filesShown(first)).toBe(true);
+  await userEvent.click(railFiles());
+  await waitFor(() => expect(filesShown()).toBe(false));
+  expect(filesShown(first)).toBe(true);
+});

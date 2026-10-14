@@ -316,7 +316,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     setRevealChanges((n) => n + 1);
     showView("browser");
   }, [showView]);
-  useOnBump(filesPulse, openChanges);
+  const [toggleFiles, setToggleFiles] = useState(0);
+  // The workbench knows whether its explorer is the open one, so a press on
+  // Files is handed to it to decide; a column that is not showing is opened.
+  const pressFiles = useCallback(() => {
+    if (visible && workbench) setToggleFiles((n) => n + 1);
+    else openChanges();
+  }, [visible, workbench, openChanges]);
+  useOnBump(filesPulse, pressFiles);
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   useEffect(() => { void loadFoldWorkPref(port); }, [port]);
   const foldWork = useFoldsTurnWork(port);
@@ -509,7 +516,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             shown={visible && workbench}
             onSurfaces={setSurfaces}
             scheme={theme === "light" ? "light" : "dark"}
-            changes={tree?.changes ?? []} onTreeChanged={refreshTree} revealChanges={revealChanges}
+            changes={tree?.changes ?? []} onTreeChanged={refreshTree} revealChanges={revealChanges} toggleFiles={toggleFiles}
             running={running}
             wrote={counts.wrote}
             remote={!!rt.host}
