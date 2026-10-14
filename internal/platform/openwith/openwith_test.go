@@ -20,7 +20,11 @@ type fake struct {
 	started []call
 }
 
-func newFake(goos string, env map[string]string) *fake {
+func newFake(t *testing.T, goos string, env map[string]string) *fake {
+	t.Helper()
+	if goos != "windows" && runtime.GOOS == "windows" {
+		t.Skip("fakes a POSIX disk; the code joins paths with the host separator")
+	}
 	f := &fake{files: map[string]bool{}, dirs: map[string]bool{}}
 	f.m = machine{
 		goos:   goos,
@@ -53,7 +57,7 @@ func availability(f *fake) map[string]bool {
 }
 
 func TestAvailabilityIsWhetherADeclaredExecutableExists(t *testing.T) {
-	f := newFake("linux", map[string]string{"PATH": "/usr/bin"})
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin"})
 	f.files["/usr/bin/xdg-open"] = true
 	f.files["/usr/bin/code"] = true
 	f.files["/usr/bin/gnome-terminal"] = true
@@ -65,7 +69,7 @@ func TestAvailabilityIsWhetherADeclaredExecutableExists(t *testing.T) {
 }
 
 func TestAProgramNamedLikeATargetButNotDeclaredIsNotOffered(t *testing.T) {
-	f := newFake("linux", map[string]string{"PATH": "/usr/bin"})
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin"})
 	f.files["/usr/bin/mycoolide"] = true
 	f.files["/usr/bin/Cursor-Installer"] = true
 	for id, ok := range availability(f) {
@@ -76,7 +80,7 @@ func TestAProgramNamedLikeATargetButNotDeclaredIsNotOffered(t *testing.T) {
 }
 
 func TestTheFolderIsOneArgumentWhateverItContains(t *testing.T) {
-	f := newFake("linux", map[string]string{"PATH": "/usr/bin"})
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin"})
 	f.files["/usr/bin/code"] = true
 	f.files["/usr/bin/gnome-terminal"] = true
 	for _, dir := range []string{"/home/a b/proj", "/home/x'; rm -rf ~; '/p", "/home/$(whoami)/p", "/home/`id`/p", "/home/a\\\"b/p", "/tmp/--help"} {
@@ -96,7 +100,7 @@ func TestTheFolderIsOneArgumentWhateverItContains(t *testing.T) {
 }
 
 func TestOnlyAnAbsoluteFolderThatIsADirectoryIsAccepted(t *testing.T) {
-	f := newFake("linux", map[string]string{"PATH": "/usr/bin"})
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin"})
 	f.files["/usr/bin/code"] = true
 	f.dirs["/work/p"] = true
 	for _, dir := range []string{"", "p", "./p", "-n", "--new-window", "//server/share", "/work/p\x00", "/work/missing"} {
@@ -110,7 +114,7 @@ func TestOnlyAnAbsoluteFolderThatIsADirectoryIsAccepted(t *testing.T) {
 }
 
 func TestUnknownAndMissingTargetsAreRefusedWithTheirOwnErrors(t *testing.T) {
-	f := newFake("linux", map[string]string{"PATH": "/usr/bin"})
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin"})
 	f.dirs["/work/p"] = true
 	if _, err := f.m.open("rm", "/work/p"); !errors.Is(err, ErrUnknown) {
 		t.Fatalf("unknown = %v", err)
@@ -121,7 +125,7 @@ func TestUnknownAndMissingTargetsAreRefusedWithTheirOwnErrors(t *testing.T) {
 }
 
 func TestAProgramInsideAProjectIsNeverStarted(t *testing.T) {
-	f := newFake("linux", map[string]string{"PATH": "/usr/bin"})
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin"})
 	f.m.getenv = func(k string) string { return map[string]string{"PATH": "/work/p/node_modules/.bin:/usr/bin"}[k] }
 	f.m.forbidden = []string{"/work/p"}
 	f.files["/work/p/node_modules/.bin/code"] = true
@@ -140,7 +144,7 @@ func TestAProgramInsideAProjectIsNeverStarted(t *testing.T) {
 
 func TestWindowsStartsOnlyRealExecutablesNeverScriptsOrShares(t *testing.T) {
 	env := map[string]string{"LOCALAPPDATA": `C:\Users\u\AppData\Local`, "ProgramFiles": `C:\Program Files`, "SystemRoot": `C:\Windows`}
-	f := newFake("windows", env)
+	f := newFake(t, "windows", env)
 	f.files[`C:\Users\u\AppData\Local\Programs\Microsoft VS Code\Code.exe`] = true
 	f.files[`C:\Program Files\JetBrains\IntelliJ IDEA 2026.1\bin\idea64.exe`] = true
 	f.files[`C:\Users\u\AppData\Local\Microsoft\WindowsApps\wt.exe`] = true
@@ -165,7 +169,7 @@ func TestWindowsStartsOnlyRealExecutablesNeverScriptsOrShares(t *testing.T) {
 }
 
 func TestWindowsRefusesAShimThatNeedsAShell(t *testing.T) {
-	f := newFake("windows", map[string]string{"ProgramFiles": `C:\Program Files`, "PATH": `C:\tools`})
+	f := newFake(t, "windows", map[string]string{"ProgramFiles": `C:\Program Files`, "PATH": `C:\tools`})
 	f.files[`C:\Program Files\Microsoft VS Code\Code.exe`] = true
 	f.files[`C:\tools\code.cmd`] = true
 	if c, ok := f.m.resolve(targets[1], `C:\p`); !ok || !strings.HasSuffix(c.exe, "Code.exe") {
@@ -174,7 +178,7 @@ func TestWindowsRefusesAShimThatNeedsAShell(t *testing.T) {
 }
 
 func TestMacApplicationsAreStartedThroughOpenWithTheBundle(t *testing.T) {
-	f := newFake("darwin", map[string]string{"HOME": "/Users/u"})
+	f := newFake(t, "darwin", map[string]string{"HOME": "/Users/u"})
 	f.files["/usr/bin/open"] = true
 	f.dirs["/Applications/Visual Studio Code.app"] = true
 	f.dirs["/Users/u/Applications/Terminal.app"] = true
