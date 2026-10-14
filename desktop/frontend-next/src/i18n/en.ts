@@ -114,6 +114,7 @@ export const EN: Record<string, string> = {
   "思考 {chars}": "Thought · {chars}",
   "耗时 {t}": "Worked for {t}",
   "提交历史": "Commit history",
+  "无法读取这个仓库的提交历史": "Could not read this repository's commit history",
   "重新读取": "Read again",
   "这个文件夹不是 git 仓库": "This folder is not a git repository",
   "还没有提交": "No commits yet",
