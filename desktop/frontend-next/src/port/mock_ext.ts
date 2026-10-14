@@ -168,4 +168,13 @@ export class MockExtensions extends MockMarket {
     download(name, content);
     return null;
   }
+
+  private sides = 0;
+  async openSide() {
+    return "side-" + ++this.sides;
+  }
+  async askSide(_id: string, question: string, quotes: string[]) {
+    return `（演示）${quotes.length ? `引用了 ${quotes.length} 段；` : ""}这是对「${question}」的只读回答。`;
+  }
+  async closeSide() {}
 }

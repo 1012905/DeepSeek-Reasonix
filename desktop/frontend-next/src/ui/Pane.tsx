@@ -55,6 +55,7 @@ import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
 import { PostureNote } from "./PostureNote";
+import { SidePanel } from "./SidePanel";
 import { ConnectNote } from "./ConnectNote";
 import { useStatusPoll } from "./useStatusPoll";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
@@ -89,6 +90,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const status = sessionRead.kind === "settled" ? sessionRead.status : null;
   const ready = sessionRead.kind === "settled";
   const [tab, showView] = useShowView(rt.id, onManualBrowser);
+  const [sideAsk, setSideAsk] = useState(false);
   const [mcp, setMcp] = useState<McpEntry[]>([]);
   const [askFocus, setAskFocus] = useState(0);
   const [tree, setTree] = useState<WorkspaceChanges | null>(null);
@@ -450,6 +452,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         onPick={showView}
         rows={traj.rows.length} plan={s.plan} goal={status?.goal}
         surfaces={surfaces}
+        side={sideAsk} onSide={() => setSideAsk((on) => !on)}
       />
 
       <Find find={find} />
@@ -633,6 +636,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           />,
           sideHost,
         )}
+      {sideAsk && <SidePanel port={port} onClose={() => setSideAsk(false)} />}
     </section>
   );
 }

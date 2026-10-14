@@ -329,6 +329,7 @@ type Options struct {
 	// Plan itself is a workflow instruction and uses SkillRunner with the shared
 	// Permissions/Sandbox gate. SkillProfile supplies model/effort display
 	// metadata for the synthetic top-level run_skill event.
+	SideFactory         SideFactory // opens a read-only side conversation; nil = none
 	SkillRunner         skill.SubagentRunner
 	ReadOnlySkillRunner skill.SubagentRunner
 	SkillProfile        skill.ProfileResolver

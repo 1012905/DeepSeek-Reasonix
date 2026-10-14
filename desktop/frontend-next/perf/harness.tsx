@@ -7,6 +7,7 @@ import "../src/styles/app.css";
 import "../src/styles/dock.css";
 import "../src/styles/studio.css";
 import "../src/styles/changedpill.css";
+import "../src/styles/sidepanel.css";
 import "../src/styles/scrolljump.css";
 import "../src/styles/chart.css";
 import "../src/styles/community.css";

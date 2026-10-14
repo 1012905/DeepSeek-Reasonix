@@ -401,6 +401,11 @@ export interface AgentPort {
   deleteBackup(id: string): Promise<void>;
   previewBackup(id: string, passphrase: string): Promise<BackupPlan>;
   applyBackup(planId: string, items: string[], consented: string[]): Promise<BackupApplyResult>;
+  // A read-only question beside the session: its own conversation, never the
+  // main transcript, billed to the session and gone when closed.
+  openSide(): Promise<string>;
+  askSide(id: string, question: string, quotes: string[]): Promise<string>;
+  closeSide(id: string): Promise<void>;
   // The same sealed envelope as a file the person saves and opens again. The
   // window only: a paired device is refused, and no account is needed.
   backupFileCatalog(): Promise<BackupFileCatalog>;
