@@ -37,6 +37,10 @@ for (const scheme of ["light", "dark"]) {
       FLOOR);
       for (const b of bad) squeezed.push(`${id}: ${b}`);
     }
+    const cut = await page.evaluate(() =>
+      [...document.querySelectorAll(".cfgbad .term")].map((t) => t.scrollWidth - t.clientWidth).filter((d) => d > 1),
+    );
+    check(`${scheme} ${width}px: the config error block shows its lines whole`, cut.length === 0, cut.map((d) => `${d}px hidden`).join(", "));
     check(`${scheme} ${width}px: no settings label is squeezed under ${FLOOR}px`, squeezed.length === 0, squeezed.slice(0, 4).join("; "));
     await page.close();
   }

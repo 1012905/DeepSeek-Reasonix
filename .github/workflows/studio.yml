@@ -158,6 +158,8 @@ jobs:
           node perf/search-toggle.mjs
           node perf/narrow.mjs
           node perf/settings-rows.mjs
+          node perf/narrow-steps.mjs
+          node perf/narrow-rail.mjs
           node perf/selfcheck.mjs branch-tooltip
 
   # A pull request with no platform-relevant change (scripts/ci-platform-scope.sh)

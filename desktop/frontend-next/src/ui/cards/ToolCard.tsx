@@ -327,7 +327,7 @@ export function NestedCall({ tool, whole = false }: { tool: Tool; whole?: boolea
         <div className="hl">
           <span className="nm" title={shown}>{labelFor(shown)}</span>
           {tag && <span className="tag" title={tagHint(tool)}>{tag}</span>}
-          {tool.args && <span className="arg">{shortArgs(tool.args)}</span>}
+          {tool.args && <span className="arg" title={prettyArgs(tool.args)}>{shortArgs(tool.args)}</span>}
           {bad && <span className="fail">{toolFailureLabel(tool)}</span>}
           <Cost tools={[tool]} />
         </div>

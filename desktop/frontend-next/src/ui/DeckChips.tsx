@@ -43,6 +43,8 @@ export function DeckChips({ tasks, jobs, open, onOpen, onCancelJob }: { tasks: T
             type="button"
             className="studio-deckchip"
             data-action="deck.agents"
+            aria-label={t("子代理")}
+            title={t("子代理")}
             data-live={liveAgents ? "" : undefined}
             aria-expanded={open === "agents"}
             aria-haspopup="dialog"
@@ -64,6 +66,8 @@ export function DeckChips({ tasks, jobs, open, onOpen, onCancelJob }: { tasks: T
             type="button"
             className="studio-deckchip"
             data-action="deck.jobs"
+            aria-label={t("后台任务")}
+            title={t("后台任务")}
             data-live={liveJobs ? "" : undefined}
             aria-expanded={open === "jobs"}
             aria-haspopup="dialog"

@@ -82,7 +82,7 @@ export function CompactionCard({ c, done }: { c: Compaction; done: boolean }) {
         <div className="hl">
           <span className={done ? "nm" : "nm shim"}>{t(!done ? "正在压缩…" : aborted ? "压缩未完成" : "压缩完成")}</span>
           <span className="tag">{t("主机")}</span>
-          {c.trigger && <span className="arg">{why(c)}</span>}
+          {c.trigger && <span className="arg" title={why(c)}>{why(c)}</span>}
         </div>
         {/* While it runs, the digest's own last line is the progress bar: a
             fold can take a minute, and a placeholder that says nothing for a
