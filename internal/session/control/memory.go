@@ -37,6 +37,9 @@ type memoryManager struct {
 	// the prefix naturally on the next session.
 	pending    []string
 	lastRecall memory.RecallResult
+	// recalled is the facts the last recall that returned any held, as indexed:
+	// what refreshRecalled compares with their files before the next one.
+	recalled   []memory.Memory
 	autoWrites map[[32]byte]int
 
 	// instructions is what the model has of the standing-instruction block. It
@@ -119,8 +122,18 @@ func (m *memoryManager) claimAutoRemember(args json.RawMessage) bool {
 }
 
 func (m *memoryManager) recall(query string) memory.RecallResult {
+	m.refreshRecalled()
 	result := m.current().AutoRecall(query, memory.RecallOptions{})
 	m.recordRecall(result)
+	if len(result.Hits) > 0 {
+		recalled := make([]memory.Memory, len(result.Hits))
+		for i, hit := range result.Hits {
+			recalled[i] = hit.Memory
+		}
+		m.mu.Lock()
+		m.recalled = recalled
+		m.mu.Unlock()
+	}
 	return result
 }
 
@@ -194,6 +207,7 @@ func (m *memoryManager) applyWrite(mem *memory.Set, note string) {
 		m.pending = append(m.pending, note)
 	}
 	m.set = reloaded
+	m.recalled = nil
 	m.mu.Unlock()
 }
 
