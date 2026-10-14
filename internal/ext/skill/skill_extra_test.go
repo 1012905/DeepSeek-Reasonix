@@ -3,6 +3,7 @@ package skill
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -123,6 +124,20 @@ func TestParseAllowedToolsExtraSpaces(t *testing.T) {
 	got := parseAllowedTools("  bash  ,  grep  ")
 	if len(got) != 2 || got[0] != "bash" || got[1] != "grep" {
 		t.Errorf("extra spaces = %v", got)
+	}
+}
+
+func TestParseAllowedToolsAcceptsTheSpecSpelling(t *testing.T) {
+	got := parseAllowedTools("Bash(git add:*) Read grep")
+	want := []string{"Bash(git add:*)", "Read", "grep"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("space separated = %q, want %q", got, want)
+	}
+	if got := parseAllowedTools("[read_file, grep]"); !reflect.DeepEqual(got, []string{"read_file", "grep"}) {
+		t.Errorf("bracketed list = %q", got)
+	}
+	if got := parseAllowedTools(`"Read" 'Grep'`); !reflect.DeepEqual(got, []string{"Read", "Grep"}) {
+		t.Errorf("quoted = %q", got)
 	}
 }
 

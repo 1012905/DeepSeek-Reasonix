@@ -54,6 +54,7 @@ var leaves = []string{
 	"internal/platform/releaseasset",
 	"internal/platform/wsl",
 	"internal/base/retrieval",
+	"internal/base/rulelist",
 	"internal/base/scratch",
 	"internal/base/shellparse",
 	"internal/state/store",
