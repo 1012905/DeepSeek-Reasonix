@@ -13,6 +13,8 @@ import { Nav } from "./Nav";
 import { useTreeWindow, type TreePaging } from "./treewindow";
 import { useNavRail } from "./navrail";
 import { feedbackEntryTab } from "./feedbackentry";
+import { ErrorBar } from "./ErrorBar";
+import { ToastStack } from "./ToastStack";
 import { useLinkRouting } from "./links";
 import { Pane, type PaneReport } from "./Pane";
 import { clearDraftForSession } from "./drafts";
@@ -471,12 +473,7 @@ export function App({ hub }: { hub: HubPort }) {
   // A failed request floats above the composer of the pane in front, where the
   // eye already is; with no pane on screen it takes the main area's corner.
   const activePaneShown = !!activeRuntime && panePorts.has(activeRuntime.id);
-  const errorBar = error ? (
-    <div className="errbar" role="alert">
-      <span>{error}</span>
-      <button onClick={() => setError("")}>{t("知道了")}</button>
-    </div>
-  ) : null;
+  const errorBar = error ? <ErrorBar text={error} onDismiss={() => setError("")} /> : null;
   const bar = errorBar ?? <AutoArchiveNotice tree={tree} />;
   const activeWorkspace = tree.find((ws) => ws.root === activeRuntime?.root) ?? tree[0];
   // The folder a new session opens in is the one the switcher above names —
@@ -756,8 +753,9 @@ export function App({ hub }: { hub: HubPort }) {
           onSaved={() => { setRenaming(null); void reloadTree().catch(fail); }} />
       )}
 
-      {feedback && activePort && (
+      <ToastStack onFeedback={() => setFeedback("send")} />
 
+      {feedback && activePort && (
         <Feedback port={machinePort} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />
       )}
 

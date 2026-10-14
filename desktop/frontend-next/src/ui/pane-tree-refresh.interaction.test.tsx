@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "./testkit";
 import { Pane } from "./Pane";
+import { ToastStack } from "./ToastStack";
 import { MockPort } from "../port/mock";
 import { boot, STORAGE } from "../i18n";
 import { reason } from "../i18n/kernel";
@@ -28,12 +29,13 @@ function open() {
     return subscribe(onEvent, onGap, bootstrap);
   });
   const changes = vi.spyOn(port, "changes");
-  render(
+  render(<>
+    <ToastStack onFeedback={() => {}} />
     <Pane port={port as AgentPort} rt={rt} title="w" active visible sideHost={null} side={false}
       onFocus={() => {}} onReport={() => {}} onSessionChanged={() => {}} pulse={0} findPulse={0}
       onSettings={() => {}} needsProject={false} onOpenProject={() => {}} onKeepHere={() => {}}
-      theme="dark" dockW={560} dockMax={880} onDockW={() => {}} />,
-  );
+      theme="dark" dockW={560} dockMax={880} onDockW={() => {}} />
+  </>);
   const send = (ev: object) => act(() => emit(ev as WireEvent));
   return { port, changes, send };
 }
