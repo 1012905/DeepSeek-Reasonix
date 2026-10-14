@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { boot as bootLang } from "../src/i18n";
 import { track as trackWidth } from "../src/ui/viewport";
+import { pushToast } from "../src/state/toasts";
 import "../src/styles/tokens.css";
 import "../src/styles/app.css";
 import "../src/styles/dock.css";
@@ -340,8 +341,11 @@ declare global {
     // Refuse the next calls to one hub method, so a guard can reach the
     // window's error bar through the path a real failure takes.
     __refuse: (method: string, message: string) => void;
+    // Put a notice in the window's corner the way a failed setting does.
+    __toast: (text: string) => void;
   }
 }
+window.__toast = pushToast;
 window.__feed = (ev) => hub.feeds.forEach((p) => p.feed(ev));
 window.__panes = () => hub.feeds.size;
 window.__refuse = (method, message) => {
