@@ -49,6 +49,8 @@ export const EN_FEEDBACK: Record<string, string> = {
   "请不要在文字或截图里写入密钥、账号密码、聊天记录或私有代码：一旦公开就收不回来。":
     "Do not put secrets, passwords, chats or private code in the text or in screenshots: once public it cannot be taken back.",
   "发现的是安全漏洞？请不要在这里提交，{link}。": "Found a security vulnerability? Do not post it here; {link}.",
+  "建议、想法和提问放在讨论区：{link}。bug 和错误请用下面的发送。": "Suggestions, ideas and questions belong in Discussions: {link}. For bugs and errors, use Send below.",
+  "想法与讨论": "Ideas and discussion",
   "按安全策略私下报告": "report it privately under the security policy",
   "反馈内容": "Feedback details",
   "反馈类别": "Feedback category",

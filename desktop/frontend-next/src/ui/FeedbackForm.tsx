@@ -13,6 +13,7 @@ import { admit, megabytes, payload, readShot, type Refused, type Shot } from "./
 import { useFileDrop } from "./filedrop";
 
 export const SECURITY_URL = "https://github.com/esengine/DeepSeek-Reasonix/security/policy";
+export const DISCUSSIONS_URL = "https://github.com/esengine/DeepSeek-Reasonix/discussions";
 
 const CATEGORY_LABEL: Record<FeedbackCategory, string> = {
   bug: "问题",
@@ -253,6 +254,15 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
               link: (
                 <a href={SECURITY_URL} data-action="feedback.link" onClick={(e) => { e.preventDefault(); onFile(SECURITY_URL); }}>
                   {t("按安全策略私下报告")}
+                </a>
+              ),
+            })}
+          </p>
+          <p>
+            {tx("建议、想法和提问放在讨论区：{link}。bug 和错误请用下面的发送。", {
+              link: (
+                <a href={DISCUSSIONS_URL} data-action="feedback.link" onClick={(e) => { e.preventDefault(); onFile(DISCUSSIONS_URL); }}>
+                  {t("想法与讨论")}
                 </a>
               ),
             })}
