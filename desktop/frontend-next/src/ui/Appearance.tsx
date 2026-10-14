@@ -13,6 +13,7 @@ import { Notifications } from "./Notifications";
 import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
 import { LiveGraceSection } from "./LiveGraceSection";
+import { LegacySessionsSection } from "./LegacySessionsSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { SendShortcut } from "./SendShortcut";
@@ -549,6 +550,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <WindowSection port={port} />
       <NavRailSection />
       <LiveGraceSection />
+      <LegacySessionsSection />
       <GraphicsSection />
       <SendShortcut />
       <EscStopSetting />
