@@ -131,6 +131,16 @@ message. Host-added provider context is not fed back into the query. The selecte
 facts are appended to that user turn as a bounded, low-authority suffix; they do
 not mutate the system prompt or tool schema.
 
+The search runs over the snapshot the session loaded; this session's own
+memory writes refresh it. Edits made outside the session are handled as follows:
+
+- Before each recall, the facts the previous recall returned are compared with
+  their files.
+- If one has changed or disappeared, the snapshot reloads, so the model reads
+  the edit.
+- A fact edited into relevance that was not a hit stays out of the index until
+  the session reloads: recall does no full scan.
+
 Recall is conservative:
 
 - generic turns such as "continue" do not trigger recall;
