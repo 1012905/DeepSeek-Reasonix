@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 
@@ -175,6 +175,17 @@ export class MockBoundary extends MockShell {
 
   async foldWorkSettings(): Promise<FoldWorkSettings> {
     return { ...this.foldWork };
+  }
+
+  private narration: TurnNarrationSettings = { level: "brief", path: "/Users/you/.reasonix/config.toml" };
+
+  async turnNarrationSettings(): Promise<TurnNarrationSettings> {
+    return { ...this.narration };
+  }
+
+  async saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings> {
+    this.narration = { ...this.narration, level };
+    return { ...this.narration };
   }
 
   async saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings> {

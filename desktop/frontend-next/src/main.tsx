@@ -26,6 +26,8 @@ import "./styles/sponsor.css";
 import "./styles/chart.css";
 import "./styles/versions.css";
 import "./styles/changedpill.css";
+import "./styles/ctxitems.css";
+import "./styles/sidepanel.css";
 import "./styles/scrolljump.css";
 import "./styles/sessionnotes.css";
 import "./styles/providerpresets.css";

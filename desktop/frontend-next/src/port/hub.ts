@@ -89,6 +89,12 @@ export interface HostCapabilities {
   addWorkspace: boolean;
 }
 
+export interface OpenWithTarget {
+  id: string;
+  name: string;
+  available: boolean;
+}
+
 export interface TreeWorkspace {
   root: string;
   name: string;
@@ -147,6 +153,10 @@ export interface HubPort extends SharePort {
   /** Show a listed project's folder in the system file manager. */
   revealWorkspace(path: string): Promise<void>;
   openWorkspace(path: string): Promise<void>;
+  /** The programs a project can be opened in, as this machine has them. */
+  openWithTargets(): Promise<OpenWithTarget[]>;
+  /** Open a listed project in one of those programs. */
+  openWith(path: string, target: string): Promise<void>;
   moveWorkspace(path: string, direction: -1 | 1): Promise<void>;
   /** Drop a project before another remembered one, or at the end when `before` is empty. */
   placeWorkspace(path: string, before: string): Promise<void>;
@@ -305,6 +315,14 @@ export class SseHub implements HubPort {
   async openWorkspace(path: string) {
     const why = await host().openWorkspace(path);
     if (why) throw new HttpError(0, why.error || "not opened", why, !!(why.code || why.error));
+  }
+
+  async openWithTargets() {
+    return (await this.get<{ targets: OpenWithTarget[] | null }>("/host/open-with")).targets ?? [];
+  }
+
+  async openWith(path: string, target: string) {
+    await this.post<void>("/host/open-with", { id: target, root: path });
   }
 
   async removeWorkspace(path: string) {

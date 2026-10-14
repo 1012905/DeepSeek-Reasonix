@@ -54,8 +54,21 @@ interface RemoteDevice {
   revokedAt?: string | null;
 }
 
+// Browsers older than Chromium 133, Firefox 130 and Safari 17 have no X25519 in
+// WebCrypto. They say so with a NotSupportedError, and retrying cannot help.
+async function agreementKeyPair() {
+  try {
+    return await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotSupportedError") {
+      throw new RemoteLinkError("ended", t("这个浏览器版本太旧，不支持远程控制需要的加密。请改用较新版本的 Chrome、Edge、Safari 或 Firefox 打开。"));
+    }
+    throw error;
+  }
+}
+
 async function encryptedChannel(device: RemoteDevice, socket: WebSocket) {
-  const pair = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+  const pair = await agreementKeyPair();
   const deviceKey = await crypto.subtle.importKey("raw", base64ToBytes(device.publicKey), { name: "X25519" }, false, []);
   const secret = await crypto.subtle.deriveBits({ name: "X25519", public: deviceKey }, pair.privateKey, 256);
   const salt = crypto.getRandomValues(new Uint8Array(16));

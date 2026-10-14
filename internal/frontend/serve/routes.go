@@ -34,6 +34,7 @@ func (s *Server) routes() http.Handler {
 	s.registerMarketPublishRoutes(mux)
 	s.registerSurfaceRoutes(mux)
 	s.registerInboxRoutes(mux)
+	s.registerSideRoutes(mux)
 	s.registerGitRoutes(mux)
 	s.registerJobRoutes(mux)
 	s.registerProviderRoutes(mux)

@@ -16,6 +16,8 @@ import { t } from "./index";
 // its literal keys — the kernel's parity guard reads this file as text and can
 // only see those — so kernel.test.ts holds the two spellings together.
 export const PROVIDER_EDIT_DISABLED = "provider.editing_disabled";
+// The file a read asked for is not there, as opposed to being there and unreadable.
+export const WORKSPACE_FILE_MISSING = "workspace.file_missing";
 // A paired device answers this for every account route, votes included.
 export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 // The write landed and only applying it to the open conversation did not.
@@ -98,6 +100,9 @@ const SAID: Record<string, string> = {
   "request.not_found": "找不到名为「{name}」的{kind}",
   "project.unknown": "该项目未在当前窗口中打开",
   "workspace.unknown": "该工作区未在当前窗口中打开",
+  "openwith.unknown": "列表里没有这个程序",
+  "openwith.unavailable": "这台电脑上没有安装这个程序",
+  "openwith.failed": "无法启动这个程序：{error}",
   "busy.session_in_use": "该会话正被其他位置占用：{detail}",
   "busy.session_running": "该会话正在运行，此消息已排入队列",
   "busy.session_active": "这是当前打开的会话，请先切换后再删除",
@@ -240,6 +245,13 @@ const SAID: Record<string, string> = {
   "provider.test_failed": "连接测试未通过",
 
   "memory.unavailable": "该会话未启用记忆",
+  "memory.directory_unreadable": "无法读取记忆目录，请检查权限或存储状态后重试",
+  "side.unavailable": "这个会话不支持辅助提问",
+  "side.unknown": "这个辅助提问已经关闭，请重新打开",
+  "side.busy": "上一个问题还在回答，请稍候再问",
+  "side.limit": "同时打开的辅助提问太多，请先关闭几个",
+  "side.empty": "请先写下要问的内容",
+  "side.failed": "辅助提问没能完成，请重试",
 
   // ── 来源：连不上时卡在哪一步 ─────────────────────────────────────
   // Each of these is a different next move, which is the whole reason the
@@ -392,6 +404,7 @@ const SAID: Record<string, string> = {
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "changed_files.save_failed": "文件改动显示设置未能保存：{detail}",
   "fold_work.save_failed": "折叠中间过程的设置未能保存：{detail}",
+  "turn_narration.save_failed": "回合间叙述的设置未能保存：{detail}",
   "ask_timeout.save_failed": "提问等待时长未能保存：{detail}",
   "ask_timeout.out_of_range": "等待时长超出允许范围，未做任何修改：{detail}",
   "receipt.save_failed": "交付验收卡片的设置未能保存：{detail}",
@@ -457,6 +470,8 @@ const SAID: Record<string, string> = {
   "theme.folder_failed": "无法打开主题目录：{detail}",
   "surface.too_many_slots": "记录的面板位置已达上限（最多 {limit} 个），请先清除一个",
   "sandbox.no_bubblewrap": "本机未安装 bubblewrap（bwrap），命令将不受限制地运行",
+  "sandbox.bwrap_namespace_denied": "已安装 bubblewrap，但当前环境无法创建命名空间（常见于容器或受限内核）。请给容器 bubblewrap 所需的权限，或在设置里关闭命令沙盒——关闭后命令不受限制地运行，容器或主机就是唯一的边界",
+  "sandbox.bwrap_unrunnable": "bubblewrap 在 PATH 里但无法启动（可能不可执行，或自检没在时限内完成）。请确认 bwrap --version 能运行，或在设置里关闭命令沙盒——关闭后命令不受限制地运行，容器或主机就是唯一的边界",
   "sandbox.no_sandbox_exec": "本机的 sandbox-exec 不可用，命令将不受限制地运行",
   "sandbox.unsupported_on_windows": "Windows 上尚无操作系统级沙箱，命令将不受限制地运行",
   "sandbox.unsupported_platform": "该平台尚无可用的沙箱后端，命令将不受限制地运行",

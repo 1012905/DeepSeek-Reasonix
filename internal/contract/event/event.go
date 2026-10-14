@@ -544,6 +544,8 @@ const (
 	UsageSourceAdvisor          = "advisor"
 	UsageSourceBestOf           = "best-of"
 	UsageSourceBestOfJudge      = "best-of-judge"
+	// UsageSourceSide is a side conversation: asked beside the session, billed to it.
+	UsageSourceSide = "side"
 )
 
 // Event is one increment in a turn's event stream. Read the field(s) documented

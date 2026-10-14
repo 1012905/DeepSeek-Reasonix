@@ -11,7 +11,7 @@ interface ProxyEvents {
 const ROUTES = [
   // The hub's own surface, plus /rt — every pane's requests carry that prefix,
   // so without it a second session's traffic answers with the SPA shell.
-  "/runtimes", "/tree", "/rt", "/remotes",
+  "/runtimes", "/tree", "/rt", "/remotes", "/side",
   "/appearance",
   "/events", "/history", "/status", "/balance", "/submit", "/cancel", "/approve", "/answer",
   "/adjudications", "/execution-graph", "/jobs",
@@ -22,7 +22,7 @@ const ROUTES = [
   "/changes", "/commit", "/attachments", "/drop", "/checkpoints", "/branches", "/compact", "/compaction", "/rewind", "/branch",
   "/extensions", "/themes", "/plugins", "/market", "/surfaces", "/feedback",
   "/fork", "/summarize", "/forget", "/bypass", "/auto-approve-tools",
-  "/permissions", "/sandbox", "/progress-watch", "/ask-timeout", "/changed-files-settings", "/fold-work-settings", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings",
+  "/permissions", "/sandbox", "/progress-watch", "/ask-timeout", "/changed-files-settings", "/fold-work-settings", "/turn-narration-settings", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings",
   "/host", "/notifications", "/share", "/pair", "/device",
   "/slash", "/workspaces", "/welcome", "/usage", "/config", "/studio",
 ];

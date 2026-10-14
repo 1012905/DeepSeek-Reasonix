@@ -188,7 +188,7 @@ type MemoryControl interface {
 	SaveMemory(m memory.Memory) (string, error)
 	ForgetMemory(name string) error
 	QueueMemory(note string)
-	MemoryRevisions(ref string) []memory.Memory
+	MemoryRevisions(ref string) ([]memory.Memory, error)
 	RestoreMemory(ref string, revision int) (memory.Memory, error)
 	RestoreArchivedMemory(archivePath string) (memory.Memory, error)
 	LastMemoryRecall() memory.RecallResult
@@ -291,6 +291,8 @@ type RuntimeSettings interface {
 	SaveChangedFilesSettings(show bool) error
 	FoldWorkSettings() FoldWorkSettings
 	SaveFoldWorkSettings(fold bool) error
+	TurnNarrationSettings() TurnNarrationSettings
+	SaveTurnNarrationSettings(level string) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
@@ -438,6 +440,15 @@ type Commits interface {
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 
+// SideSessions is a read-only question asked beside the session and discarded
+// with it: its own conversation, never the main transcript, billed to the
+// session. Only the full port names it; an editor has no panel to ask from.
+type SideSessions interface {
+	OpenSide() (string, error)
+	AskSide(ctx context.Context, id, question string, quotes []string) (string, error)
+	CloseSide(id string)
+}
+
 // SessionAPI is the full driving port — the composition of every sub-port, for
 // a frontend that drives all of it: the TUI does, and the HTTP server all but
 // one. A leaner frontend names EditorAPI instead.
@@ -470,6 +481,7 @@ type SessionAPI interface {
 	DiffRendering
 	Feedback
 	Commits
+	SideSessions
 }
 
 // EditorAPI is what an editor integration drives over ACP: turns, approvals and

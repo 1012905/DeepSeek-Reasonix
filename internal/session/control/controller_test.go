@@ -3778,7 +3778,11 @@ func TestLowRiskProjectMemoryCreateSkipsApprovalPrompt(t *testing.T) {
 	if err != nil || !strings.Contains(out, "Saved memory") {
 		t.Fatalf("auto-approved remember execution = %q, %v", out, err)
 	}
-	if got := store.List(); len(got) != 1 || got[0].Name != "release-target" {
+	got, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "release-target" {
 		t.Fatalf("saved memories = %+v", got)
 	}
 }

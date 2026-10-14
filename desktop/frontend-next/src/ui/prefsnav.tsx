@@ -196,6 +196,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "session", anchor: "ask-timeout", title: "提问等待超时", scope: "machine", apply: "immediate", keywords: ["ask", "跳过", "无人回答", "长任务", "超时", "自动继续"] },
   { section: "session", anchor: "progress-watch", title: "长时间无进展", scope: "machine", apply: "immediate", keywords: ["暂停", "无进展", "空转", "卡住", "循环", "轮次", "token"] },
   { section: "session", anchor: "changed-files", title: "文件改动", scope: "machine", apply: "immediate", keywords: ["改动", "变更", "文件", "已更改", "药丸", "输入框"] },
+  { section: "session", anchor: "turn-narration", title: "回合间叙述", scope: "machine", apply: "immediate", keywords: ["叙述", "总结", "小轮", "工具之间", "详细", "简短", "思路", "监控", "narration"] },
   { section: "session", anchor: "fold-work", title: "折叠中间过程", scope: "machine", apply: "immediate", keywords: ["折叠", "中间过程", "工具调用", "思考", "最后一句", "收起", "摘要"] },
   // Written to the user file only; the kernel's background sweep reads it on each pass.
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
@@ -258,6 +259,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "appearance", anchor: "language", title: "语言", scope: "machine", apply: "restart", keywords: ["中文", "english", "界面语言"] },
   { section: "appearance", anchor: "graphics", title: "图形渲染", scope: "machine", apply: "restart", keywords: ["硬件加速", "显卡", "gpu", "软件渲染", "占用", "卡顿"] },
   { section: "appearance", anchor: "navrail", title: "图标栏", scope: "machine", apply: "immediate", keywords: ["侧边栏", "导航", "图标", "sidebar", "nav"] },
+  { section: "appearance", anchor: "session-quick-actions", title: "会话行快捷按钮", scope: "machine", apply: "immediate", keywords: ["会话", "归档", "删除", "快捷", "按钮", "hover", "archive", "delete", "session", "row", "sidebar"] },
   { section: "appearance", anchor: "legacy-sessions", title: "1.x 旧会话", scope: "machine", apply: "immediate", keywords: ["1.x", "旧会话", "迁移", "隐藏", "legacy", "sessions", "sidebar"] },
   { section: "appearance", anchor: "live-grace", title: "进行中列表保留已完成会话", scope: "machine", apply: "immediate", keywords: ["进行中", "完成", "保留", "过滤", "running", "grace", "sidebar"] },
   { section: "appearance", anchor: "send-shortcut", title: "发送快捷键", scope: "machine", apply: "immediate", keywords: ["发送", "回车", "换行", "enter", "ctrl", "cmd"] },

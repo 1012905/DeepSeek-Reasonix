@@ -6,12 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
 	"reasonix/internal/contract/planmode"
 	"reasonix/internal/contract/tool"
 )
+
+// absRoot is a folder path that is absolute on this OS: the host drops any
+// root that is not, and on Windows that needs a drive.
+func absRoot(elem ...string) string {
+	return filepath.Join(append([]string{filepath.VolumeName(os.TempDir()) + string(filepath.Separator)}, elem...)...)
+}
 
 func metaOf(t *testing.T, params any) map[string]any {
 	t.Helper()
@@ -148,9 +156,10 @@ func TestHostContextSaysWhetherTheHostIsRefusingWrites(t *testing.T) {
 // to a local stdio server in one namespaced key; the workspace itself is the
 // cwd's business and a remote server is told neither.
 func TestHostContextCarriesTheExtraWritableFoldersToLocalServersOnly(t *testing.T) {
-	spec := Spec{Type: "stdio", WorkspaceRoot: "/work/space", WritableRoots: []string{"/work/space", "/data/shared", "/data/shared", "", "relative/dir", "/mnt/out"}}
+	work, shared, out := absRoot("work", "space"), absRoot("data", "shared"), absRoot("mnt", "out")
+	spec := Spec{Type: "stdio", WorkspaceRoot: work, WritableRoots: []string{work, shared, shared, "", "relative/dir", out}}
 	got := metaOf(t, (&Client{spec: spec}).withHostContext(context.Background(), "tools/call", map[string]any{"name": "t"}))[metaWritableRootsKey]
-	want := []string{"/data/shared", "/mnt/out"}
+	want := []string{shared, out}
 	roots, _ := got.([]string)
 	if !slices.Equal(roots, want) {
 		t.Fatalf("_meta[%s] = %v, want %v: workspace, duplicates, empties and relative paths stay out", metaWritableRootsKey, got, want)
@@ -162,7 +171,7 @@ func TestHostContextCarriesTheExtraWritableFoldersToLocalServersOnly(t *testing.
 }
 
 func TestHostContextSaysNothingOfWritableFoldersWhenThereAreNone(t *testing.T) {
-	client := &Client{spec: Spec{WorkspaceRoot: "/w", WritableRoots: []string{"/w"}}}
+	client := &Client{spec: Spec{WorkspaceRoot: absRoot("w"), WritableRoots: []string{absRoot("w")}}}
 	if _, has := metaOf(t, client.withHostContext(context.Background(), "tools/call", map[string]any{"name": "t"}))[metaWritableRootsKey]; has {
 		t.Fatal("an empty list was sent as a key")
 	}
@@ -179,10 +188,10 @@ func TestHostContextKeepsAWritableRootsKeyTheCallAlreadyCarries(t *testing.T) {
 func TestHostContextCapsHowManyWritableFoldersAreTold(t *testing.T) {
 	var many []string
 	for i := range 100 {
-		many = append(many, fmt.Sprintf("/data/%03d", i))
+		many = append(many, absRoot("data", fmt.Sprintf("%03d", i)))
 	}
 	got, _ := metaOf(t, (&Client{spec: Spec{WritableRoots: many}}).withHostContext(context.Background(), "tools/call", map[string]any{"name": "t"}))[metaWritableRootsKey].([]string)
-	if len(got) != maxMetaWritableRoots || got[0] != "/data/000" {
+	if len(got) != maxMetaWritableRoots || got[0] != absRoot("data", "000") {
 		t.Fatalf("told %d folders, want the first %d in order", len(got), maxMetaWritableRoots)
 	}
 }

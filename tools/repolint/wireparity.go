@@ -128,6 +128,9 @@ var mirroredWireTypes = []wireMirror{
 	// bound fires draws a fold point at 16% of the declared window with nothing
 	// on the screen that explains it, which is what it read as.
 	{"internal/frontend/serve/context_window.go", "contextView", tsShellFile, "ContextBreakdown"},
+	// The holders a class can be opened to; a field the panel cannot read is a
+	// heavy class it cannot explain.
+	{"internal/runtime/agent/context_breakdown.go", "ContextHolder", tsShellFile, "ContextHolder"},
 	// What sent one fold. Without the boundary and its size the card falls back
 	// to "a threshold was reached", and the reader supplies their own reason.
 	{"internal/contract/eventwire/wire.go", "Compaction", tsWireFile, "Compaction"},

@@ -2,6 +2,10 @@
 // touched outside the transcript. Split out for the same reason en_settings and
 // en_kernel were — one screen's worth of wording, read together.
 export const EN_METRICS: Record<string, string> = {
+  "最大项": "Largest",
+  "进行中的回合": "Running turn",
+  "展开{name}中最大的几项": "Show the largest items in {name}",
+  "{name}中最大的几项": "Largest items in {name}",
   "{n} 个运行中": "{n} running",
   "前缀缓存": "Prefix cache",
   "工作树改动": "Worktree changes",

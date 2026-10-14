@@ -34,6 +34,10 @@ type listChangedServer struct {
 	destructive map[string]bool
 	lists       atomic.Int64
 	calls       atomic.Int64
+	// ttlMs, when set, is the freshness hint every tools/list carries.
+	ttlMs *int64
+	// failList makes tools/list answer 500.
+	failList atomic.Bool
 }
 
 func newListChangedServer(t *testing.T, declare bool, tools ...string) (*listChangedServer, *httptest.Server) {
@@ -71,7 +75,16 @@ func (s *listChangedServer) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	case "tools/list":
 		s.lists.Add(1)
+		if s.failList.Load() {
+			http.Error(w, "down", http.StatusInternalServerError)
+			return
+		}
 		result = map[string]any{"tools": s.catalog()}
+		s.mu.Lock()
+		if s.ttlMs != nil {
+			result.(map[string]any)["ttlMs"] = *s.ttlMs
+		}
+		s.mu.Unlock()
 		if s.selfNotify {
 			s.mu.Lock()
 			s.notices++

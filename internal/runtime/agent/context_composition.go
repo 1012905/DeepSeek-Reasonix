@@ -17,6 +17,9 @@ const largestContextItems = 3
 // whether it belongs to the turn still running. Nothing here reads wording.
 func (a *contextWindow) contextComposition() event.ContextComposition {
 	visible := a.modelVisibleMessages()
+	// Measured first: estimating a slice of visible clears the creation stamps
+	// that mark the running turn.
+	items := a.largestMessages(visible)
 	var system, digest, user, reply, output []provider.Message
 	for _, m := range visible {
 		switch {
@@ -47,6 +50,16 @@ func (a *contextWindow) contextComposition() event.ContextComposition {
 	if active >= 0 {
 		out.Active = a.classTokens(visible[active:], false)
 	}
+	out.Largest = items[:min(largestContextItems, len(items))]
+	return out
+}
+
+// largestMessages is every conversation message the prompt holds, biggest
+// first, with the tool that produced a result and whether it belongs to the
+// turn still running. The system prompt and fold digests are classes of their
+// own, not messages a reader can act on one by one.
+func (a *contextWindow) largestMessages(visible []provider.Message) []event.ContextItem {
+	active := a.activeTurnStart(visible)
 	items := make([]event.ContextItem, 0, len(visible))
 	for i, m := range visible {
 		if m.Role == provider.RoleSystem || isCompactionSummary(m) {
@@ -61,8 +74,7 @@ func (a *contextWindow) contextComposition() event.ContextComposition {
 		items = append(items, item)
 	}
 	slices.SortStableFunc(items, func(x, y event.ContextItem) int { return cmp.Compare(y.Tokens, x.Tokens) })
-	out.Largest = items[:min(largestContextItems, len(items))]
-	return out
+	return items
 }
 
 func toolCallName(caller provider.Message, id string) string {

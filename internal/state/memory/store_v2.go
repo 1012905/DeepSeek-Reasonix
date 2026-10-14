@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,17 +48,7 @@ func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
 		if strings.TrimSpace(dir) == "" {
 			continue
 		}
-		info, err := os.Stat(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return report, err
-		}
-		if !info.IsDir() {
-			return report, fmt.Errorf("memory store path %q is not a directory", dir)
-		}
-		entries, err := os.ReadDir(dir)
+		entries, err := readMemoryDirectory(dir)
 		if err != nil {
 			return report, err
 		}
@@ -168,7 +156,11 @@ func (s Store) validatePinnedBudget(m Memory) error {
 		return nil
 	}
 	total := utf8.RuneCountInString(strings.TrimSpace(m.Body))
-	for _, pinned := range s.pinnedGuidance() {
+	guidance, err := s.pinnedGuidance()
+	if err != nil {
+		return err
+	}
+	for _, pinned := range guidance {
 		if pinned.ID == m.ID || (m.ID == "" && pinned.Name == m.Name) {
 			continue
 		}
@@ -190,16 +182,9 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 		NormalizeFactScope(string(m.Scope)) != inputRef.scope {
 		return SaveResult{}, fmt.Errorf("memory reference scope %q conflicts with explicit scope %q", inputRef.scope, m.Scope)
 	}
-	var existing Memory
-	var existingPath string
-	var exists bool
-	if inputID != "" {
-		existing, existingPath, exists = s.findActive(inputID)
-		if !exists {
-			return SaveResult{}, fmt.Errorf("memory id %q not found", m.ID)
-		}
-	} else if inputRef.raw != "" {
-		existing, existingPath, exists = s.findActive(m.Name)
+	existing, existingPath, exists, err := s.findSaveTarget(inputID, m.Name)
+	if err != nil {
+		return SaveResult{}, err
 	}
 	if opts.RequireExpectedRevision {
 		actual := 0
@@ -265,8 +250,14 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return SaveResult{}, err
 	}
-	if collision, _, ok := s.findActiveInDir(dir, m.Name); ok && (!exists || collision.ID != existing.ID) {
+	if collision, _, ok, err := s.findActiveInDir(dir, m.Name); err != nil {
+		return SaveResult{}, err
+	} else if ok && (!exists || collision.ID != existing.ID) {
 		return SaveResult{}, fmt.Errorf("memory name %q is already used by id %q", m.Name, collision.ID)
+	}
+	duplicates, err := s.legacyDuplicatePaths(dir, m, inputID == "" && !inputRef.qualified)
+	if err != nil {
+		return SaveResult{}, err
 	}
 	path, err := safeJoin(dir, m.Name+".md")
 	if err != nil {
@@ -283,16 +274,9 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 	// Legacy unqualified name updates keep the previous single-active-copy
 	// behavior. Stable IDs and scope-qualified references select one identity
 	// exactly, so they must not remove a same-named fact in the other scope.
-	if inputID == "" && !inputRef.qualified {
-		for _, otherDir := range s.dirs() {
-			if sameDir(otherDir, dir) {
-				continue
-			}
-			if duplicate, _, ok := s.findActiveInDir(otherDir, m.Name); ok && duplicate.ID != m.ID {
-				if _, err := archiveMemoryInDir(otherDir, duplicate.Name); err != nil {
-					return SaveResult{}, err
-				}
-			}
+	for _, duplicate := range duplicates {
+		if _, err := archiveMemoryInDir(filepath.Dir(duplicate), m.Name); err != nil {
+			return SaveResult{}, err
 		}
 	}
 	result := SaveResult{Path: path, Memory: m}
@@ -411,128 +395,24 @@ func (s Store) publishRename(dir, path, existingPath string, existing, m Memory,
 	return nil
 }
 
-func (s Store) Read(ref string) (Memory, bool) {
-	memory, _, ok := s.findActive(ref)
-	return memory, ok
-}
-
-func (s Store) findActive(ref string) (Memory, string, bool) {
-	parsed := parseMemoryReference(ref)
-	if parsed.raw == "" {
-		return Memory{}, "", false
-	}
-	if parsed.qualified {
-		return s.findActiveInDir(s.DirFor(parsed.scope), parsed.raw)
-	}
-	for _, v := range slices.Backward(s.dirs()) {
-		dir := v
-		if memory, path, ok := s.findActiveInDir(dir, parsed.raw); ok {
-			return memory, path, true
-		}
-	}
-	return Memory{}, "", false
-}
-
-func (s Store) findActiveInDir(dir, ref string) (Memory, string, bool) {
-	if strings.TrimSpace(dir) == "" {
-		return Memory{}, "", false
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return Memory{}, "", false
-	}
-	parsed := parseMemoryReference(ref)
-	wantName := parsed.name
-	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == indexFile || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name())
-		memory, ok := loadMemory(path)
-		if !ok {
-			continue
-		}
-		if memory.Scope == "" {
-			memory.Scope = s.scopeForDir(dir)
-		}
-		if memory.ID == parsed.raw || slug(memory.Name) == wantName {
-			memory.Name = slug(memory.Name)
-			return memory, path, true
-		}
-	}
-	return Memory{}, "", false
-}
-
-type memoryReference struct {
-	raw       string
-	name      string
-	scope     FactScope
-	qualified bool
-}
-
-// parseMemoryReference understands provider-visible references without ever
-// treating them as filesystem paths. Memory facts are flat files, so only one
-// fixed scope component plus one filename is accepted as a qualified form.
-func parseMemoryReference(ref string) memoryReference {
-	raw := strings.TrimSpace(ref)
-	parsed := memoryReference{raw: raw, name: slug(strings.TrimSuffix(raw, ".md"))}
-	for _, candidate := range []FactScope{FactScopeProject, FactScopeGlobal} {
-		prefix := string(candidate) + "/"
-		if !strings.HasPrefix(raw, prefix) {
-			continue
-		}
-		name := strings.TrimPrefix(raw, prefix)
-		if name == "" || strings.ContainsAny(name, `/\\`) {
-			return parsed
-		}
-		parsed.name = slug(strings.TrimSuffix(name, ".md"))
-		parsed.scope = candidate
-		parsed.qualified = true
-		return parsed
-	}
-	return parsed
-}
-
-func (s Store) Revisions(ref string) []Memory {
-	active, _, ok := s.findActive(ref)
-	if !ok {
-		return nil
-	}
-	seen := map[int]bool{}
-	var revisions []Memory
-	for _, dir := range s.dirs() {
-		revisionDir := filepath.Join(dir, ".revisions", active.ID)
-		entries, err := os.ReadDir(revisionDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-				continue
-			}
-			memory, ok := loadMemory(filepath.Join(revisionDir, entry.Name()))
-			if !ok || memory.ID != active.ID || seen[memory.Revision] {
-				continue
-			}
-			seen[memory.Revision] = true
-			revisions = append(revisions, memory)
-		}
-	}
-	sort.Slice(revisions, func(i, j int) bool { return revisions[i].Revision > revisions[j].Revision })
-	return revisions
-}
-
 func (s Store) Restore(ref string, revision int) (SaveResult, error) {
-	active, ok := s.Read(ref)
+	active, path, ok, err := s.findActive(ref)
+	if err != nil {
+		return SaveResult{}, err
+	}
 	if !ok {
 		return SaveResult{}, fmt.Errorf("memory %q not found", ref)
 	}
 	if revision == active.Revision {
-		return SaveResult{Path: s.Path(active.Name), Memory: active}, nil
+		return SaveResult{Path: path, Memory: active}, nil
 	}
 	var target Memory
 	found := false
-	for _, candidate := range s.Revisions(active.ID) {
+	revisions, err := s.Revisions(active.ID)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	for _, candidate := range revisions {
 		if candidate.Revision == revision {
 			target = candidate
 			found = true
@@ -555,14 +435,21 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 	defer memoryStoreMutationMu.Unlock()
 
 	archivePath = cleanMemoryPath(strings.TrimSpace(archivePath))
-	archived, base, ok := s.findArchivedByPath(archivePath)
+	archived, base, ok, err := s.findArchivedByPath(archivePath)
+	if err != nil {
+		return SaveResult{}, err
+	}
 	if !ok {
 		return SaveResult{}, fmt.Errorf("archived memory not found")
 	}
-	if active, _, exists := s.findActive(archived.ID); exists {
+	if active, _, exists, err := s.findActive(archived.ID); err != nil {
+		return SaveResult{}, err
+	} else if exists {
 		return SaveResult{}, fmt.Errorf("memory id %q is already active as %q", archived.ID, active.Name)
 	}
-	if active, _, exists := s.findActive(archived.Name); exists {
+	if active, _, exists, err := s.findActive(archived.Name); err != nil {
+		return SaveResult{}, err
+	} else if exists {
 		return SaveResult{}, fmt.Errorf("memory name %q is already active as id %q", archived.Name, active.ID)
 	}
 
@@ -580,11 +467,15 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 	if _, err := readIndexIn(base); err != nil {
 		return SaveResult{}, err
 	}
+	maxRevision, err := s.maxKnownRevision(archived.ID)
+	if err != nil {
+		return SaveResult{}, err
+	}
 	if err := snapshotMemoryRevisionInDir(base, archivePath, archived); err != nil {
 		return SaveResult{}, err
 	}
 	now := time.Now().UTC()
-	restored.Revision = s.maxKnownRevision(archived.ID) + 1
+	restored.Revision = maxRevision + 1
 	if restored.Revision <= archived.Revision {
 		restored.Revision = archived.Revision + 1
 	}
@@ -628,76 +519,6 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 		return drop(err)
 	}
 	return SaveResult{Path: path, Memory: restored}, nil
-}
-
-func (s Store) findArchivedByPath(want string) (Memory, string, bool) {
-	for _, base := range s.dirs() {
-		if strings.TrimSpace(base) == "" {
-			continue
-		}
-		dir := filepath.Join(base, ".archive")
-		info, err := os.Lstat(dir)
-		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			continue
-		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-				continue
-			}
-			path, err := safeJoin(dir, entry.Name())
-			if err != nil || cleanMemoryPath(path) != want {
-				continue
-			}
-			info, err := os.Lstat(path)
-			if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-				return Memory{}, "", false
-			}
-			archived, ok := loadMemory(path)
-			if !ok {
-				return Memory{}, "", false
-			}
-			if archived.Scope == "" {
-				archived.Scope = s.scopeForDir(base)
-			}
-			archived.Name = slug(archived.Name)
-			return archived, base, true
-		}
-	}
-	return Memory{}, "", false
-}
-
-func (s Store) maxKnownRevision(id string) int {
-	maxRevision := 0
-	for _, base := range s.dirs() {
-		if strings.TrimSpace(base) == "" {
-			continue
-		}
-		for _, dir := range []string{filepath.Join(base, ".archive"), filepath.Join(base, ".revisions", id)} {
-			entries, err := os.ReadDir(dir)
-			if err != nil {
-				continue
-			}
-			for _, entry := range entries {
-				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-					continue
-				}
-				path := filepath.Join(dir, entry.Name())
-				info, err := os.Lstat(path)
-				if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-					continue
-				}
-				candidate, ok := loadMemory(path)
-				if ok && candidate.ID == id && candidate.Revision > maxRevision {
-					maxRevision = candidate.Revision
-				}
-			}
-		}
-	}
-	return maxRevision
 }
 
 func snapshotMemoryRevision(path string, memory Memory) error {

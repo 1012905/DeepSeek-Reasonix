@@ -287,6 +287,22 @@ func TestViEscInTheMenuDoesNotStopARunningTurn(t *testing.T) {
 	}
 }
 
+// docs/GUIDE.md lists leaving ! shell mode among what Esc backs out of.
+func TestEscOnAnEmptyComposerLeavesShellMode(t *testing.T) {
+	m, k := testModel(t)
+	typeText(m, "!")
+	if !m.shell {
+		t.Fatal("setup: ! on an empty composer did not enter shell mode")
+	}
+	run(m, press(m, "esc"))
+	if m.shell {
+		t.Fatal("esc left shell mode on")
+	}
+	if calledWith(k, "POST /cancel") {
+		t.Fatal("esc on an idle composer sent a cancel")
+	}
+}
+
 func TestDoubleEscOnAnIdleEmptyComposerStillOpensRewind(t *testing.T) {
 	m, _ := testModel(t)
 	press(m, "esc")

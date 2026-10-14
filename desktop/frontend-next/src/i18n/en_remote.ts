@@ -126,6 +126,7 @@ export const EN_REMOTE: Record<string, string> = {
   "远程连接已断开": "Remote connection ended",
   "这台电脑已停止网页控制。重新连接需要再次验证设备状态。": "This computer has stopped web control. Reconnecting will verify the device again.",
   "重新连接": "Reconnect",
+  "这个浏览器版本太旧，不支持远程控制需要的加密。请改用较新版本的 Chrome、Edge、Safari 或 Firefox 打开。": "This browser is too old for the encryption remote control needs. Open it in a recent version of Chrome, Edge, Safari or Firefox.",
   "远程 Studio 暂无响应，请检查电脑是否在线后重试。": "Remote Studio did not respond. Check that the computer is online and try again.",
   "这次发送的内容太大：远程控制每次最多约 {kb} KB（上传文件时约为其四分之三）。请改在电脑上添加，或换一个更小的文件。": "That is too large to send: remote control carries about {kb} KB at a time (about three quarters of that for a file upload). Add it on the computer instead, or use a smaller file.",
   "这次发送的内容太大：远程控制最多只能传 {mb} MB。请换一个更小的文件。": "That is too large to send: remote control carries at most {mb} MB. Use a smaller file.",

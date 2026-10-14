@@ -14,6 +14,7 @@ import { Folding } from "./Folding";
 import { WindowSection } from "./WindowSection";
 import { LiveGraceSection } from "./LiveGraceSection";
 import { LegacySessionsSection } from "./LegacySessionsSection";
+import { SessionQuickSection } from "./SessionQuickSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { SendShortcut } from "./SendShortcut";
@@ -551,6 +552,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <NavRailSection />
       <LiveGraceSection />
       <LegacySessionsSection />
+      <SessionQuickSection />
       <GraphicsSection />
       <SendShortcut />
       <EscStopSetting />

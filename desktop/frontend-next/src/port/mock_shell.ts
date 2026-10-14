@@ -110,4 +110,12 @@ function bounds(window: number, soft: number) {
 const CONTEXT: ContextBreakdown = {
   used: 24800, window: 128000, ...bounds(128000, 0),
   system: 5200, tools: 7400, user: 1800, reply: 3100, output: 7300,
+  largest: [
+    { class: "output", tool: "read_file", tokens: 3900 },
+    { class: "output", tool: "grep", tokens: 2100, active: true },
+    { class: "output", tool: "bash", tokens: 800 },
+    { class: "user", tokens: 900, active: true },
+    { class: "user", tokens: 600 },
+    { class: "reply", tokens: 1400 },
+  ],
 };

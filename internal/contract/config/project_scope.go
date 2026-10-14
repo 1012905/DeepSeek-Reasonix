@@ -36,6 +36,9 @@ type heldScope struct {
 	// may not set it: a cloned repo must not be able to make a phone the person
 	// paired with stay trusted longer than they chose.
 	rememberDevices bool
+	// turnNarration is the user's [agent] turn_narration. It adds output tokens
+	// to every turn, so a cloned repo must not turn it on.
+	turnNarration string
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -61,6 +64,7 @@ func holdUserScope(c *Config) heldScope {
 		layaPython:      c.Tools.SystemOne.Laya.Python,
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
+		turnNarration:   c.TurnNarration(),
 	}
 }
 
@@ -163,6 +167,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("serve.remember_paired_devices", fmt.Sprintf("%t", c.Serve.RememberPairedDevices), ProjectUserOnly)
 	}
 	c.Serve.RememberPairedDevices = h.rememberDevices
+	if c.TurnNarration() != h.turnNarration {
+		c.ignoreProject("agent.turn_narration", c.TurnNarration(), ProjectUserOnly)
+	}
+	c.Agent.TurnNarration = h.turnNarration
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
 	if !maps.Equal(c.Agent.RoleEfforts, h.endpoints.agent.RoleEfforts) {

@@ -581,6 +581,7 @@ func (h *Hub) Handler() http.Handler {
 	h.registerUpdateRoutes(hostMux)
 	h.registerAskRoutes(hostMux)
 	h.registerShareRoutes(hostMux)
+	h.registerOpenWithRoutes(hostMux)
 	hostMux.HandleFunc("GET /studio/logs", h.readStudioLogs)
 	return logMiddleware(h.auth.middleware(h.auth.hostGuard(withPage(csrfGuard(h.auth.mutationGate(h.watchTreeWrites(hostOnly(hostMux, mux)))), h.opts.Page))))
 }

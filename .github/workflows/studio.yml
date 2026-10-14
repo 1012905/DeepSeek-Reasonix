@@ -144,6 +144,7 @@ jobs:
           node perf/modelrows.mjs
           node perf/explorersize.mjs
           node perf/rowhit.mjs
+          node perf/sessquick.mjs
           node perf/sessionrows.mjs
           node perf/wheel.mjs
           node perf/branch-tooltip.mjs
