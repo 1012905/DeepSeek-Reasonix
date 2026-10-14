@@ -31,4 +31,4 @@ func EgressSupported() bool { return false }
 func EgressNeedsSocket() bool { return false }
 
 // bwrapFault: bubblewrap is a Linux backend, so there is no such reason here.
-func bwrapFault() error { return nil }
+func bwrapFaultFor(Spec) error { return nil }
