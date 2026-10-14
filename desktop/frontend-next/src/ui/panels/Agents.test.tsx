@@ -64,3 +64,25 @@ describe("a delegation the host refused before it ran", () => {
     expect(out).toContain("已中断");
   });
 });
+
+describe("telling parallel sub-agents apart", () => {
+  const row = (name: string, label?: string) => [
+    { kind: "tool_dispatch", tool: { id: name, name: "use_capability", profile: { name: "task", count: 1, label } } },
+  ] as SessionEvent[];
+  const html = (evs: SessionEvent[]) => {
+    const s = evs.reduce(reduce, initialState);
+    return renderToStaticMarkup(<Agents tasks={railOf(s.items, s.executions, s.subagentPhase).tasks} />);
+  };
+
+  it("names each row by the kernel's task label, in full on hover", () => {
+    const out = html([...row("a", "Audit the retry backoff"), ...row("b", "Check the docs build")]);
+    expect(out).toContain('<span class="lbl" title="Audit the retry backoff">Audit the retry backoff</span>');
+    expect(out).toContain('title="Check the docs build"');
+  });
+
+  it("draws no label where the kernel sent none, and none for a batch", () => {
+    expect(html(row("a"))).not.toContain('class="lbl"');
+    const fleet = [{ kind: "tool_dispatch", tool: { id: "f", name: "use_capability", profile: { name: "fleet", count: 3 } } }] as SessionEvent[];
+    expect(html(fleet)).not.toContain('class="lbl"');
+  });
+});

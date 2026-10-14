@@ -24,6 +24,7 @@ import { usePromptRefine } from "./PromptRefine";
 import { useProviderOrder } from "../state/providerorder";
 import { useDraft } from "./useDraft";
 import { touchKeyboard } from "./touchKeyboard";
+import { ImagePreview } from "./ImagePreview";
 
 interface Props {
   port: AgentPort;
@@ -77,9 +78,10 @@ type Chip =
       error?: string;
     }
   | { k: "paste"; id: string; body: string; lines: number; name?: string }
-  | { k: "quote"; id: string; body: string; turn?: number; lines: number };
+  | { k: "quote"; id: string; body: string; turn?: number; source?: string; lines: number };
 
 function chipName(c: Chip): string {
+  if (c.k === "quote" && c.source) return t("引用 {name}", { name: c.source.split("/").at(-1) ?? c.source });
   if (c.k === "quote") return c.turn === undefined ? t("引用回复") : t("引用第 {n} 轮回复", { n: c.turn });
   return c.k === "paste" ? c.name ?? t("粘贴的文本") : c.name;
 }
@@ -90,9 +92,13 @@ function chipName(c: Chip): string {
 // guessing one. English like the kernel's other host-authored prefixes: the
 // line is addressed to the model, not to the reader.
 function quoteBlock(c: Extract<Chip, { k: "quote" }>): string {
-  const head = c.turn === undefined
-    ? "[Quoting an earlier assistant reply in this conversation.]"
-    : `[Quoting the assistant reply from turn ${c.turn}.]`;
+  // The path is a file name the workspace chose, so it cannot end the line or close the bracket.
+  const where = c.source?.replace(/[\u0000-\u001f\u007f\u2028\u2029[\]]/g, " ").trim();
+  const head = where
+    ? `[Quoting text selected in the workspace file ${where}.]`
+    : c.turn === undefined
+      ? "[Quoting an earlier assistant reply in this conversation.]"
+      : `[Quoting the assistant reply from turn ${c.turn}.]`;
   return [head, ...c.body.split("\n").map((line) => `> ${line}`)].join("\n");
 }
 
@@ -156,7 +162,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     if (!quote?.n) return;
     setShots((prev) => [
       ...prev,
-      { k: "quote", id: chipId(), body: quote.text, turn: quote.turn, lines: countLines(quote.text) },
+      { k: "quote", id: chipId(), body: quote.text, turn: quote.turn, source: quote.source, lines: countLines(quote.text) },
     ]);
     queueMicrotask(() => box.current?.focus());
   }, [quote?.n]);
@@ -441,11 +447,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
               {c.k === "attachment" ? (
                 <>
                   {isPicture(c) ? (
-                    <span
+                    <ImagePreview src={c.url} name={c.name}
                       className="thumb"
-                      aria-hidden="true"
-                      style={c.url ? { backgroundImage: `url(${c.url})` } : undefined}
-                    />
+                    >
+                      <span aria-hidden="true" style={c.url ? { backgroundImage: `url(${c.url})` } : undefined} />
+                    </ImagePreview>
                   ) : (
                     <span className="glyph" aria-hidden="true">{kindOf(c.a?.path ?? c.name)}</span>
                   )}

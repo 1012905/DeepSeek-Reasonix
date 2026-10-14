@@ -524,6 +524,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             onCloseManual={() => onManualBrowser?.(false)}
             onExternal={(url) => void port.openExternal(url).catch(fail)}
             onAddToChat={(reference) => setInserted((was) => ({ n: was.n + 1, text: reference }))}
+            onQuoteSelection={reply.onQuoteFile}
           />
       </div>
 

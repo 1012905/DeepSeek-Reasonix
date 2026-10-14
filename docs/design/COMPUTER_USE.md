@@ -31,6 +31,10 @@ CUA owns OS accessibility, capture, input delivery and cursor implementation.
 
 Windows/Linux executable identity is read from the OS so a display alias cannot hide a forbidden executable.
 
+Windows desktop identities use the OS executable basename even when CUA returns a full launch path; packaged-app identities remain unchanged. Existing full-path permission rules may require a new approval for the canonical identity.
+
+Application discovery joins one fresh window enumeration to the running-app catalogue by PID. A targeted observation or action queries only the selected process's windows after checking its unique identity; it never caches application authority.
+
 Installed-but-not-running apps are not operated.
 
 The model sees only computer_read and computer_act.
@@ -42,6 +46,8 @@ Every host-issued element reference is fresh and maps to a CUA token inside one 
 Screenshot coordinates are converted from the fitted model image to CUA capture pixels; point clicks require and consume the exact capture id.
 
 A refresh, malformed observation, cancellation or reconnect invalidates old observations.
+
+Text snapshots request only the accessibility tree; screenshots request only the captured image. Either refresh invalidates the previous refs and pixel frame. Image fitting and pixel binding still use the exact returned native capture dimensions.
 
 All ordinary actions request background delivery.
 

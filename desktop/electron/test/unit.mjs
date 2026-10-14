@@ -2304,8 +2304,12 @@ test("Windows uses a red dot overlay and removes it when all sessions are read",
   const nativeImage = { createFromBitmap: (buffer, size) => { pixels = buffer; assert.deepEqual(size, { width: 16, height: 16 }); return "dot"; } };
   setUnreadBadge(true, win, { nativeImage }, "win32");
   setUnreadBadge(false, win, { nativeImage }, "win32");
+  const at = (x, y) => [...pixels.subarray((y * 16 + x) * 4, (y * 16 + x) * 4 + 4)];
   assert.equal(pixels[3], 0);
-  assert.equal(pixels[(8 * 16 + 8) * 4 + 3], 255);
+  assert.deepEqual(at(8, 8), [64, 64, 224, 255]);
+  assert.equal(at(1, 8)[3], 0, "the dot stays well inside the 16px canvas");
+  assert.deepEqual(at(12, 10), [255, 255, 255, 255], "a white ring separates it from the icon");
+  assert.ok(at(13, 8)[3] > 0 && at(13, 8)[3] < 255, "the rim is smoothed, not jagged");
   assert.deepEqual(calls, [["dot", "Reasonix Studio"], [null, ""]]);
 });
 

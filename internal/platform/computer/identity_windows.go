@@ -17,7 +17,7 @@ func processIdentity(pid int32, bundle string) (string, string, error) {
 		return "", "", err
 	}
 	exe := filepath.Base(windows.UTF16ToString(buf[:n]))
-	if bundle == "" {
+	if bundle == "" || filepath.IsAbs(bundle) {
 		bundle = exe
 	}
 	return bundle, exe, nil

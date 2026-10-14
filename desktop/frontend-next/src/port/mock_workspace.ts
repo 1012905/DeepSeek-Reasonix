@@ -1,5 +1,5 @@
 import { HttpError } from "./http_error";
-import type { ChangeDiff, StageRequest, WorkspaceChange, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
+import type { ChangeDiff, GitHistory, StageRequest, WorkspaceChange, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
 import { MockFeedback } from "./mock_feedback";
 
 export class MockWorkspace extends MockFeedback {
@@ -11,6 +11,26 @@ export class MockWorkspace extends MockFeedback {
 
   async workspaceGit(): Promise<WorkspaceGit> {
     return { ...this.branchState };
+  }
+
+  // A small history with a side branch that merges back, so the graph has a
+  // fork, a merge and two lanes to draw.
+  async workspaceGitLog(): Promise<GitHistory> {
+    const now = Math.floor(Date.now() / 1000);
+    const c = (id: string, parents: string[], subject: string, mins: number, refs: string[] = [], author = "ada") =>
+      ({ id, parents, subject, author, at: now - mins * 60, refs });
+    return {
+      repo: true, truncated: false,
+      commits: [
+        c("a1", ["a2"], "feat(studio): show the commit graph", 4, ["HEAD -> main", "origin/main"]),
+        c("a2", ["a3", "b2"], "Merge branch 'retry-backoff'", 38),
+        c("b2", ["b1"], "fix(provider): honour Retry-After", 71, ["retry-backoff"], "grace"),
+        c("a3", ["a4"], "docs: describe the wire log", 95),
+        c("b1", ["a4"], "test(provider): cover 429 backoff", 130, [], "grace"),
+        c("a4", ["a5"], "refactor(config): split the loader", 260, ["tag: v2.38.0"]),
+        c("a5", [], "chore: initial import", 1440),
+      ],
+    };
   }
 
   async branches(): Promise<WorkspaceBranches> {

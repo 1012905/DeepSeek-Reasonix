@@ -19,6 +19,7 @@ import "../src/styles/stophint.css";
 import "../src/styles/dialogcenter.css";
 import "../src/styles/treerows.css";
 import "../src/styles/workbench-changes.css";
+import "../src/styles/gitgraph.css";
 import "../src/styles/vthumb.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
@@ -77,6 +78,12 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  async workspaceFile(path: string) {
+    if (!query.has("doc") || !path.endsWith(".md")) return super.workspaceFile(path);
+    const content = "# Install guide\n\nDownload the package for your system, then run the installer. It places the program in your user folder and does not need administrator rights.\n\nAfter the first start, open Settings and add a model service before you begin a conversation.";
+    return { path, content, revision: "r1" };
+  }
+
   async versions() {
     if (!query.has("versions")) return super.versions();
     const names = ["2.38.0", "2.37.0", "2.36.0", "2.35.0", "2.34.0", "2.33.0", "2.32.0", "2.31.0", "2.30.0", "2.29.0"];

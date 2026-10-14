@@ -43,6 +43,7 @@ export function Agents({ tasks, onOpen }: { tasks: Task[]; onOpen?: (taskId: str
               {agentName(x)}
               {(x.tool.profile?.count ?? 1) > 1 && <b className="mult">×{x.tool.profile?.count}</b>}
             </span>
+            {x.tool.profile?.label && <span className="lbl" title={x.tool.profile.label}>{x.tool.profile.label}</span>}
             <span className="rt">
               {status === "done" && x.tool.durationMs ? seconds(x.tool.durationMs, 0) : delegateStatusLabel(status)}
             </span>

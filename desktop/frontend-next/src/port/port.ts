@@ -488,6 +488,8 @@ export interface AgentPort {
   // commit when HEAD is detached. This is the composer's branch reading — the
   // capability scope's file-derived answer is for the picker's project name.
   workspaceGit(): Promise<WorkspaceGit>;
+  // The commit graph's newest page, read-only. `limit` bounds it (default 100).
+  workspaceGitLog(limit?: number): Promise<import("./workspace").GitHistory>;
   // The repository's local branches, the current one marked, for the composer's
   // branch menu. Re-read on open: a terminal or another window may have moved
   // HEAD since this pane last looked.
@@ -619,7 +621,7 @@ export interface AgentPort {
   // back — an action the card offered, or a published form's values.
   surfaceAction(request: SurfaceActionRequest): Promise<Queued>;
   surfaceActionState(callId: string): Promise<SurfaceActionRecord>;
-  extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]>;
+  extensionSurfaces(): Promise<import("./surface_replay").ExtensionSurfaceReplay>;
   invokeExtensionAction(name: string): Promise<string>;
   submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>): Promise<void>;
 

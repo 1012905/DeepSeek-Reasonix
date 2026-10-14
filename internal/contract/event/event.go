@@ -239,6 +239,8 @@ type Profile struct {
 	Count  int
 	Model  string
 	Effort string
+	// Label is the task's own short description, set only for a single sub-agent.
+	Label string
 }
 
 // Tool describes a tool call for ToolDispatch / ToolResult events. On dispatch

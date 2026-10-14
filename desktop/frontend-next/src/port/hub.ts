@@ -148,6 +148,8 @@ export interface HubPort extends SharePort {
   revealWorkspace(path: string): Promise<void>;
   openWorkspace(path: string): Promise<void>;
   moveWorkspace(path: string, direction: -1 | 1): Promise<void>;
+  /** Drop a project before another remembered one, or at the end when `before` is empty. */
+  placeWorkspace(path: string, before: string): Promise<void>;
   removeSession(path: string): Promise<void>;
   archiveSession(path: string, archived: boolean): Promise<void>;
   // Tells the kernel which conversations automatic archiving must leave alone.
@@ -311,6 +313,10 @@ export class SseHub implements HubPort {
 
   async moveWorkspace(path: string, direction: -1 | 1) {
     await this.post<void>("/tree/workspaces/move", { path, direction });
+  }
+
+  async placeWorkspace(path: string, before: string) {
+    await this.post<void>("/tree/workspaces/move", { path, before });
   }
 
   async removeSession(path: string) {

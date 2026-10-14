@@ -126,3 +126,26 @@ func moveWorkspace(ctx context.Context, dir string, direction int) error {
 		return nil
 	})
 }
+
+// placeWorkspace drops dir where a drag left it: before the remembered project
+// named by before, or at the end when before is empty. The launch project stays.
+func placeWorkspace(ctx context.Context, dir, before string) error {
+	return updateWorkspaceList(ctx, false, func(list *workspaceList) error {
+		if !slices.Contains(list.Paths, dir) {
+			return errWorkspaceNotRemembered
+		}
+		if before != "" && !slices.Contains(list.Paths, before) {
+			return errWorkspaceNotRemembered
+		}
+		if dir == before {
+			return nil
+		}
+		rest := slices.DeleteFunc(slices.Clone(list.Paths), func(path string) bool { return path == dir })
+		at := len(rest)
+		if before != "" {
+			at = slices.Index(rest, before)
+		}
+		list.Paths = slices.Insert(rest, at, dir)
+		return nil
+	})
+}
