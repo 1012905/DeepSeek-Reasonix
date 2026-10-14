@@ -21,7 +21,7 @@ function draw(over: Partial<TreeWorkspace> = {}) {
   const onFold = vi.fn();
   const onOpen = vi.fn().mockResolvedValue(undefined);
   const onError = vi.fn();
-  render(<Workspaces hub={{ revealWorkspace, moveWorkspace, removeWorkspace } as never} tree={tree} treeRead
+  render(<Workspaces hub={{ revealWorkspace, moveWorkspace, removeWorkspace, openWithTargets: async () => [] } as never} tree={tree} treeRead
     runtimes={[]} active="" folded={new Set()} onFold={onFold} reload={reload} onOpen={onOpen}
     onFocus={() => {}} onClose={async () => {}} liveIds={() => []} runs={{}} onRename={() => {}}
     onError={onError} adder={{ add: () => {}, close: () => {}, at: null } as never} />);

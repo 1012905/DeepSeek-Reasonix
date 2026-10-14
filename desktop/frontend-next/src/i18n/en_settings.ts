@@ -3,6 +3,7 @@
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
   "浏览器标签": "Browser tabs",
+  "用 {name} 打开": "Open with {name}",
   "首字时间": "Time to first token",
   "关闭其他浏览器标签": "Close other browser tabs",
   "关闭右侧浏览器标签": "Close browser tabs to the right",
