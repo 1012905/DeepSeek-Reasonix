@@ -92,8 +92,10 @@ function chipName(c: Chip): string {
 // guessing one. English like the kernel's other host-authored prefixes: the
 // line is addressed to the model, not to the reader.
 function quoteBlock(c: Extract<Chip, { k: "quote" }>): string {
-  const head = c.source
-    ? `[Quoting text selected in the workspace file ${c.source}.]`
+  // The path is a file name the workspace chose, so it cannot end the line or close the bracket.
+  const where = c.source?.replace(/[\u0000-\u001f\u007f\u2028\u2029[\]]/g, " ").trim();
+  const head = where
+    ? `[Quoting text selected in the workspace file ${where}.]`
     : c.turn === undefined
       ? "[Quoting an earlier assistant reply in this conversation.]"
       : `[Quoting the assistant reply from turn ${c.turn}.]`;
