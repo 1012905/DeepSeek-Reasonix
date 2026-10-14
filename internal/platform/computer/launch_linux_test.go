@@ -20,3 +20,22 @@ func TestCUALinuxLaunchRejectsArgumentsAndCommandExpansion(t *testing.T) {
 		t.Fatalf("native ELF launch: %+v %v", spec, err)
 	}
 }
+
+func TestCUALinuxInstalledApplicationIsListedAsLaunchableOnlyWhenItCanBe(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REASONIX_CUA_INSTALLED_APP", exe)
+	t.Setenv("REASONIX_CUA_INSTALLED_ID", "example.desktop")
+	t.Setenv("REASONIX_CUA_LAUNCH_PATH", exe)
+	apps, err := fakeSession(t).Apps(t.Context())
+	if err != nil || len(apps) != 1 || !apps[0].Launchable || apps[0].Bundle != "example.desktop" || apps[0].PID != 0 {
+		t.Fatalf("a launchable installed application: %+v %v", apps, err)
+	}
+	t.Setenv("REASONIX_CUA_LAUNCH_PATH", "app --flag")
+	apps, err = fakeSession(t).Apps(t.Context())
+	if err != nil || len(apps) != 1 || apps[0].Launchable {
+		t.Fatalf("an installed application that cannot be launched was offered: %+v %v", apps, err)
+	}
+}
