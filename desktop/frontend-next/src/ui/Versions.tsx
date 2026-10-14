@@ -1,10 +1,11 @@
 import { Fragment, useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import { bytes } from "../i18n/format";
-import { t } from "../i18n";
+import { current, t } from "../i18n";
 import type { UpdateProgress, VersionHub, VersionNotes } from "../port/port";
 import { reason } from "../i18n/kernel";
 import { HttpError } from "../port/http_error";
 import { LazyMarkdown } from "./LazyMarkdown";
+import { NOTES_LANGUAGE_NAMES, splitNotes } from "./notesLanguages";
 import { deltaSkippedCopy, failureCopy, releasePage } from "./versionFailure";
 
 // A shell that declared no install: a build run from source, not a failure.
@@ -404,12 +405,29 @@ export function Versions({ port }: { port: Port }) {
   );
 }
 
+// The notes in the language the window draws in, with a switch to the other one
+// when the document carries both.
+function NotesBody({ markdown }: { markdown: string }) {
+  const { first, english } = splitNotes(markdown);
+  const [shown, setShown] = useState<"first" | "english">(english !== null && current() === "en" ? "english" : "first");
+  if (english === null) return <LazyMarkdown text={first} images={false} />;
+  return (
+    <>
+      <div className="vnotes-lang seg" role="group" aria-label={t("更新内容的语言")}>
+        <button data-action="versions.notes-lang" data-value="first" aria-pressed={shown === "first"} onClick={() => setShown("first")}>{NOTES_LANGUAGE_NAMES.first}</button>
+        <button data-action="versions.notes-lang" data-value="english" aria-pressed={shown === "english"} onClick={() => setShown("english")}>{NOTES_LANGUAGE_NAMES.english}</button>
+      </div>
+      <LazyMarkdown text={shown === "english" ? english : first} images={false} />
+    </>
+  );
+}
+
 function NotesPanel({ id, version, state, retry, onKeyDown }: { id: string; version: string; state: NotesState | undefined; retry: () => void; onKeyDown: (e: KeyboardEvent<HTMLElement>) => void }) {
   const loading = !state || state.phase === "loading";
   return (
     <section id={id} className="vnotes" data-action="versions.notes-close" onKeyDown={onKeyDown} aria-label={t("{v} 的更新内容", { v: version })} aria-busy={loading}>
       {loading && <p className="acct-note">{t("正在读取更新内容…")}</p>}
-      {state?.phase === "ok" && <LazyMarkdown text={state.markdown} images={false} />}
+      {state?.phase === "ok" && <NotesBody markdown={state.markdown} />}
       {state?.phase === "err" && (
         <div className="find" data-lvl="warn" role="alert">
           <span className="t">{t("更新内容读取失败")}</span>

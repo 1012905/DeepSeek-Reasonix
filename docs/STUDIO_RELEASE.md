@@ -135,7 +135,7 @@ Verify a published package with `npm view reasonix dist.attestations`: the attes
 
 ## 6. Release note format
 
-File: `release-notes/studio/X.Y.Z.md`, without the tag's `v`. Language: Chinese. Enforced by `release-note` and `doc-prose`.
+File: `release-notes/studio/X.Y.Z.md`, without the tag's `v`. Language: Chinese, then English (R6). Enforced by `release-note` and `doc-prose`.
 
 | ID | Rule |
 | --- | --- |
@@ -144,6 +144,7 @@ File: `release-notes/studio/X.Y.Z.md`, without the tag's `v`. Language: Chinese.
 | R3 | One change is one list item within 200 display columns. |
 | R4 | Every item names its issue (`#123`), pull request or commit. |
 | R5 | Describe what the user observes. The explanation belongs in the linked commit. |
+| R6 | The same notes follow in English after a `---` line and the `<!-- lang:en -->` marker, under `## New`, `## Changed`, `## Fixed`, `## Removed`, `## Upgrade notes`, with the same items and references; R1 to R5 apply to each language. |
 
 The published body is rendered, not copied:
 
@@ -156,7 +157,7 @@ The published body is rendered, not copied:
 
 The repository owner and any login in `RELEASE_CREDIT_EXCLUDE` (comma separated) are treated like bots: never named in an item or in the list.
 
-A `## 贡献者` list of the credited authors closes the notes. A `#N` counts only at a line start or after whitespace, `(`, `（`, `、`, `，` or `,`, and never in code, an HTML comment or a link target. Write colours such as `#333` in a code span.
+A `## 贡献者` list of the credited authors closes the Chinese part, and a `## Contributors` list closes the English part. A `#N` counts only at a line start or after whitespace, `(`, `（`, `、`, `，` or `,`, and never in code, an HTML comment or a link target. Write colours such as `#333` in a code span.
 
 A lookup GitHub refuses, or cannot answer after retries, fails `publish` with a `release_credits.*` code. Preview with `node scripts/studio-release-notes.mjs release-notes/studio/X.Y.Z.md /tmp/notes.md`; it reads `GH_TOKEN`, else `gh auth token`.
 
