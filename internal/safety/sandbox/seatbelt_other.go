@@ -4,6 +4,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,26 +18,45 @@ import (
 	"reasonix/internal/base/hostwrite"
 )
 
-var bwrapUsability sync.Map // resolved executable path -> bool
+var bwrapUsability sync.Map // resolved executable path -> error (nil when usable)
 
 // usableBwrap distinguishes an installed binary from a usable sandbox backend.
 // Hardened Linux hosts (including some CI runners) may expose bwrap on PATH but
 // deny the user namespace it needs; treating that as available makes enforce
 // fail later with a misleading launch error and overstates MCP isolation.
 func usableBwrap() (string, bool) {
+	bwrap, err := probeBwrap()
+	return bwrap, err == nil
+}
+
+// probeBwrap is usableBwrap with its reason: ErrBwrapMissing when there is no
+// bwrap on PATH, ErrBwrapNamespaceDenied (wrapping the probe's own error) when
+// there is one that cannot enter a namespace here.
+func probeBwrap() (string, error) {
 	bwrap, err := exec.LookPath("bwrap")
 	if err != nil {
-		return "", false
+		return "", ErrBwrapMissing
 	}
 	if cached, ok := bwrapUsability.Load(bwrap); ok {
-		return bwrap, cached.(bool)
+		err, _ := cached.(error)
+		return bwrap, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err = exec.CommandContext(ctx, bwrap, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--", "true").Run()
-	usable := err == nil
-	actual, _ := bwrapUsability.LoadOrStore(bwrap, usable)
-	return bwrap, actual.(bool)
+	if err != nil {
+		err = fmt.Errorf("%w: %w", ErrBwrapNamespaceDenied, err)
+	}
+	actual, _ := bwrapUsability.LoadOrStore(bwrap, err)
+	got, _ := actual.(error)
+	return bwrap, got
+}
+
+// bwrapFault is why bubblewrap cannot confine a command on this platform, nil
+// when it can.
+func bwrapFault() error {
+	_, err := probeBwrap()
+	return err
 }
 
 // When spec.Mode is "enforce" and bubblewrap (bwrap) is available on PATH,

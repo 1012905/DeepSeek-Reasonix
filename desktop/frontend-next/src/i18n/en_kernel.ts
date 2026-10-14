@@ -145,6 +145,7 @@ export const EN_KERNEL: Record<string, string> = {
   "无法打开主题目录：{detail}": "The themes folder could not be opened: {detail}",
   "记录的面板位置已达上限（最多 {limit} 个），请先清除一个": "Too many panel placements are recorded (at most {limit}); clear one first",
   "本机未安装 bubblewrap（bwrap），命令将不受限制地运行": "This machine has no bubblewrap (bwrap), so commands run unconfined",
+  "已安装 bubblewrap，但当前环境无法创建命名空间（常见于容器或受限内核）。请给容器 bubblewrap 所需的权限，或在设置里关闭命令沙盒——关闭后命令不受限制地运行，容器或主机就是唯一的边界": "bubblewrap is installed but cannot create a namespace here (typical in a container or on a restricted kernel). Give the container the privileges bubblewrap needs, or turn the command sandbox off in Settings, after which commands run unconfined and the container or host is the only boundary",
   "本机的 sandbox-exec 不可用，命令将不受限制地运行": "sandbox-exec is unusable on this machine, so commands run unconfined",
   "Windows 上尚无操作系统级沙箱，命令将不受限制地运行": "Windows has no OS-level sandbox here yet, so commands run unconfined",
   "该平台尚无可用的沙箱后端，命令将不受限制地运行": "This platform has no usable sandbox backend yet, so commands run unconfined",

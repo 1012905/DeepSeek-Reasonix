@@ -29,3 +29,6 @@ func EgressSupported() bool { return false }
 
 // EgressNeedsSocket reports whether the proxy must also listen on a Unix socket.
 func EgressNeedsSocket() bool { return false }
+
+// bwrapFault: bubblewrap is a Linux backend, so there is no such reason here.
+func bwrapFault() error { return nil }

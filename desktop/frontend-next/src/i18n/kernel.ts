@@ -470,6 +470,7 @@ const SAID: Record<string, string> = {
   "theme.folder_failed": "无法打开主题目录：{detail}",
   "surface.too_many_slots": "记录的面板位置已达上限（最多 {limit} 个），请先清除一个",
   "sandbox.no_bubblewrap": "本机未安装 bubblewrap（bwrap），命令将不受限制地运行",
+  "sandbox.bwrap_namespace_denied": "已安装 bubblewrap，但当前环境无法创建命名空间（常见于容器或受限内核）。请给容器 bubblewrap 所需的权限，或在设置里关闭命令沙盒——关闭后命令不受限制地运行，容器或主机就是唯一的边界",
   "sandbox.no_sandbox_exec": "本机的 sandbox-exec 不可用，命令将不受限制地运行",
   "sandbox.unsupported_on_windows": "Windows 上尚无操作系统级沙箱，命令将不受限制地运行",
   "sandbox.unsupported_platform": "该平台尚无可用的沙箱后端，命令将不受限制地运行",
