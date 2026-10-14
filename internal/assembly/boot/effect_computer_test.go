@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -44,10 +45,21 @@ func runFakeComputerHelper(in io.Reader, out io.Writer) {
 			result = map[string]any{"tools": tools}
 		}
 		if req.Method == "tools/call" {
+			if path := os.Getenv("REASONIX_BOOT_CUA_REQUEST_LOG"); path != "" {
+				f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+				if err == nil {
+					_ = json.NewEncoder(f).Encode(req.Params)
+					_ = f.Close()
+				}
+			}
 			var data any = map[string]any{"effect": "confirmed", "route": "accessibility", "summary": "fixture field read back", "evidence": []any{map[string]any{"kind": "value_readback"}}}
 			switch req.Params.Name {
 			case "list_apps":
-				data = map[string]any{"apps": []any{map[string]any{"pid": os.Getpid(), "bundle_id": "com.example.Notes", "name": "Notes", "active": true, "running": true}}}
+				apps := []any{map[string]any{"pid": os.Getpid(), "bundle_id": "com.example.Notes", "name": "Notes", "active": true, "running": true}}
+				if os.Getenv("REASONIX_BOOT_CUA_REQUEST_LOG") != "" {
+					apps = append(apps, map[string]any{"pid": os.Getpid(), "bundle_id": "com.example.Other", "name": "Other", "running": true})
+				}
+				data = map[string]any{"apps": apps}
 			case "list_windows":
 				data = map[string]any{"windows": []any{map[string]any{"pid": os.Getpid(), "window_id": 1, "title": "Draft", "bounds": map[string]any{"width": 800, "height": 600}}}}
 			case "get_window_state":
@@ -69,6 +81,8 @@ func TestEffectComputerUseThroughTheRealAssembly(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(fakeComputerHelperEnv, "1")
+	log := filepath.Join(t.TempDir(), "native-requests.jsonl")
+	t.Setenv("REASONIX_BOOT_CUA_REQUEST_LOG", log)
 	driver := computer.NewDriver(exe, os.Environ())
 	t.Cleanup(driver.Close)
 
@@ -103,6 +117,37 @@ func TestEffectComputerUseThroughTheRealAssembly(t *testing.T) {
 	}
 	if !strings.Contains(results[2], "Completed 1 of 1 step(s).") || !strings.Contains(results[2], `value="hello"`) {
 		t.Fatalf("the act result did not show the application afterwards:\n%s", results[2])
+	}
+	assertComputerObservationWork(t, log)
+}
+
+func assertComputerObservationWork(t *testing.T, path string) {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windows, trees := 0, 0
+	for line := range strings.SplitSeq(strings.TrimSpace(string(body)), "\n") {
+		var req struct {
+			Name string         `json:"name"`
+			Args map[string]any `json:"arguments"`
+		}
+		if err := json.Unmarshal([]byte(line), &req); err != nil {
+			t.Fatal(err)
+		}
+		switch req.Name {
+		case "list_windows":
+			windows++
+		case "get_window_state":
+			trees++
+			if req.Args["include_screenshot"] != false || req.Args["include_accessibility_tree"] != true {
+				t.Errorf("text result performed unrequested work: %+v", req.Args)
+			}
+		}
+	}
+	if windows != 4 || trees != 2 {
+		t.Fatalf("native work: windows=%d trees=%d", windows, trees)
 	}
 }
 
