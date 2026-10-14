@@ -534,6 +534,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workbench.open-file", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.copy-path", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.add-to-chat", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.quote-selection", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.copy-ref", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.menu", kind: "view", target: "entity", proof: "interaction" },
   { id: "palette.pick", kind: "view", target: "entity", proof: "interaction" },
