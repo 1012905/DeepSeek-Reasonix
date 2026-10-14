@@ -266,67 +266,84 @@ export function setFoldModes(patch: Partial<FoldModes>): void {
   foldListeners.forEach((fn) => fn());
 }
 
-// Service order is a display choice, independent of the provider configuration.
-export const PROVIDER_ORDER_KEY = "rx-provider-order";
-let providerOrderRaw: string | null | undefined;
-let providerOrderValue: readonly string[] = [];
-const providerOrderListeners = new Set<() => void>();
+// A list of names this window remembers: the one place the read-through cache,
+// the write, the cross-window refresh and the change listeners are written, so
+// each list preference is one declaration rather than another copy of them.
+function stringListPref(key: string) {
+  let cachedRaw: string | null | undefined;
+  let cached: readonly string[] = [];
+  const listeners = new Set<() => void>();
 
-export function normalizeProviderOrder(value: unknown): string[] {
+  const read = (): readonly string[] => {
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(key);
+    } catch {
+      /* storage is unavailable; keep the default */
+    }
+    if (raw !== cachedRaw) {
+      cachedRaw = raw;
+      try {
+        cached = normalizeNames(JSON.parse(raw ?? "[]"));
+      } catch {
+        cached = [];
+      }
+    }
+    return cached;
+  };
+  const write = (list: readonly string[]): boolean => {
+    const next = normalizeNames(list);
+    const raw = JSON.stringify(next);
+    try {
+      localStorage.setItem(key, raw);
+    } catch {
+      return false;
+    }
+    if (raw !== cachedRaw) {
+      cachedRaw = raw;
+      cached = next;
+      listeners.forEach((fn) => fn());
+    }
+    return true;
+  };
+  const refresh = (event: StorageEvent): void => {
+    if (event.key !== key && event.key !== null) return;
+    const before = cachedRaw;
+    cachedRaw = undefined;
+    read();
+    if (cachedRaw !== before) listeners.forEach((fn) => fn());
+  };
+  const on = (fn: () => void): (() => void) => {
+    listeners.add(fn);
+    if (listeners.size === 1) window.addEventListener("storage", refresh);
+    return () => {
+      listeners.delete(fn);
+      if (listeners.size === 0) window.removeEventListener("storage", refresh);
+    };
+  };
+  return { read, write, on };
+}
+
+function normalizeNames(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((item): item is string => typeof item === "string" && item.trim() !== "").map((item) => item.trim()))];
 }
 
-export function readProviderOrder(): readonly string[] {
-  let raw: string | null = null;
-  try {
-    raw = localStorage.getItem(PROVIDER_ORDER_KEY);
-  } catch {
-    /* storage is unavailable; keep the default order */
-  }
-  if (raw !== providerOrderRaw) {
-    providerOrderRaw = raw;
-    try {
-      providerOrderValue = normalizeProviderOrder(JSON.parse(raw ?? "[]"));
-    } catch {
-      providerOrderValue = [];
-    }
-  }
-  return providerOrderValue;
-}
+// Service order is a display choice, independent of the provider configuration.
+export const PROVIDER_ORDER_KEY = "rx-provider-order";
+const providerOrder = stringListPref(PROVIDER_ORDER_KEY);
+export const normalizeProviderOrder = normalizeNames;
+export const readProviderOrder = providerOrder.read;
+export const writeProviderOrder = providerOrder.write;
+export const onProviderOrderChange = providerOrder.on;
 
-export function writeProviderOrder(order: readonly string[]): boolean {
-  const next = normalizeProviderOrder(order);
-  const raw = JSON.stringify(next);
-  try {
-    localStorage.setItem(PROVIDER_ORDER_KEY, raw);
-  } catch {
-    return false;
-  }
-  if (raw !== providerOrderRaw) {
-    providerOrderRaw = raw;
-    providerOrderValue = next;
-    providerOrderListeners.forEach((fn) => fn());
-  }
-  return true;
-}
-
-function refreshProviderOrder(event: StorageEvent): void {
-  if (event.key !== PROVIDER_ORDER_KEY && event.key !== null) return;
-  const before = providerOrderRaw;
-  providerOrderRaw = undefined;
-  readProviderOrder();
-  if (providerOrderRaw !== before) providerOrderListeners.forEach((fn) => fn());
-}
-
-export function onProviderOrderChange(fn: () => void): () => void {
-  providerOrderListeners.add(fn);
-  if (providerOrderListeners.size === 1) window.addEventListener("storage", refreshProviderOrder);
-  return () => {
-    providerOrderListeners.delete(fn);
-    if (providerOrderListeners.size === 0) window.removeEventListener("storage", refreshProviderOrder);
-  };
-}
+// Which accounts the model menu is narrowed to; empty shows them all. Keyed by
+// the account's own key, so a removed account simply stops matching.
+export const MODEL_FILTER_KEY = "rx-model-filter";
+const modelFilter = stringListPref(MODEL_FILTER_KEY);
+export const readModelFilter = modelFilter.read;
+export const writeModelFilter = modelFilter.write;
+export const onModelFilterChange = modelFilter.on;
 
 // Off unless this machine turned it on. Dot folders hold tool state and local
 // configuration, so the explorer lists them only for a reader who asked.

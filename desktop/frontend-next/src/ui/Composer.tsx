@@ -5,7 +5,8 @@ import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, Worksp
 import { Picker } from "./Menu";
 import { BranchChip } from "./BranchChip";
 import { Policy } from "./Policy";
-import { modelMenu } from "./modelmenu";
+import { chosenGroups, groupHeadings, modelMenu, narrowToGroups } from "./modelmenu";
+import { ModelGroupChips } from "./ModelGroupChips";
 import { effortMenu, effortReading, effortsFor, forcesThinkingFor, routeEffortPick } from "./effort";
 import { CompletionMenu, useCompletion } from "./Completion";
 import { ChipMirror, useSkillChips } from "./ChipMirror";
@@ -22,6 +23,7 @@ import type { Quote } from "./cards/SayCard";
 import { StudioIcon } from "./StudioIcon";
 import { usePromptRefine } from "./PromptRefine";
 import { useProviderOrder } from "../state/providerorder";
+import { useModelFilter, writeModelFilter } from "../state/modelfilter";
 import { useDraft } from "./useDraft";
 import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
@@ -116,6 +118,7 @@ const chipId = () => `c${++chipSeq}`;
 export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
+  const modelGroups = useModelFilter();
   const [submitting, setSubmitting] = useState(false);
   const { text, setText, beginSubmit, finishSubmit } = useDraft(draftKey, submitting);
   // The caret decides which token is being completed, so it is state here
@@ -127,6 +130,8 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const stoppingRef = useRef(false);
   const picker = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelEntry[]>([]);
+  const menuItems = modelMenu(models, providerOrder, status?.modelRef);
+  const chosenModelGroups = chosenGroups(menuItems, modelGroups);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const box = useRef<HTMLTextAreaElement>(null);
   const refine = usePromptRefine(port, text, (next) => {
@@ -694,7 +699,8 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             place="bottom"
             title={status?.modelRef ?? modelLb}
             current={status?.modelRef}
-            items={modelMenu(models, providerOrder, status?.modelRef)}
+            items={narrowToGroups(menuItems, chosenModelGroups)}
+            head={<ModelGroupChips headings={groupHeadings(menuItems)} chosen={chosenModelGroups} onChange={writeModelFilter} />}
             menuClassName="studio-model-menu"
             searchAlways
             searchPlaceholder={t("搜索模型或服务商…")}

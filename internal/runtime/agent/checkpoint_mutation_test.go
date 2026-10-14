@@ -178,3 +178,25 @@ func TestCheckpointRecordingFailureKeepsToolResultTruthful(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteOutsideTheCheckpointedWorkspaceRaisesNoRecordingFailure(t *testing.T) {
+	root, dir, outside := testenv.TempDir(t), testenv.TempDir(t), testenv.TempDir(t)
+	path := filepath.Join(outside, "scratch.py")
+	if err := os.WriteFile(path, []byte("before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := checkpoint.New(dir, root)
+	if err := s.Begin(0, "edit", 0); err != nil {
+		t.Fatal(err)
+	}
+	writer := &checkpointWriteTool{path: path, checkpointDir: dir}
+	_, events := runCheckpointTool(t, s, writer)
+	if !writer.executed {
+		t.Fatal("the write must run")
+	}
+	for _, e := range events {
+		if e.Code == event.NoticeCodeCheckpointRecordingFailed {
+			t.Fatalf("a write outside the workspace is a coverage gap, not a recording failure: %s", e.Detail)
+		}
+	}
+}

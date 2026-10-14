@@ -6,6 +6,7 @@ import {
   CLOSE_REVOKED,
   closeAction,
   linkCodec,
+  maxRequestBody,
   RemoteLink,
   RemoteLinkError,
   type RemoteConnection,
@@ -295,5 +296,36 @@ describe("remote link", () => {
     expect(dial).toHaveBeenCalledTimes(2);
     expect(ends[0]?.kind).toBe("ended");
     expect(ends[0]?.failure).toBeUndefined();
+  });
+});
+
+describe("a request too large for the desktop's read limit", () => {
+  const upload = (bytes: number, path = "/rt/one/attachments") =>
+    new Request(`${location.origin}${path}`, { method: "POST", body: "x".repeat(bytes) });
+
+  it("is refused here, says why, and leaves the link and later requests alone", async () => {
+    const { conn, socket } = connection();
+    const link = new RemoteLink(conn, async () => conn, (end) => ends.push(end));
+    const room = maxRequestBody("/rt/one/attachments");
+    expect(room).toBeGreaterThan(20_000);
+    await expect(link.fetch(upload(room + 1))).rejects.toThrow(/太大|too large/);
+    expect(socket.sent).toHaveLength(0);
+    expect(ends).toEqual([]);
+    const small = link.fetch(upload(100));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(socket.sent).toHaveLength(1);
+    socket.reply(String(socket.sent[0].id), "{}");
+    expect((await small).status).toBe(200);
+  });
+
+  it("is judged by what the sealed message would weigh, which the room stays well under", async () => {
+    const { conn, socket } = connection();
+    const link = new RemoteLink(conn, async () => conn, (end) => ends.push(end));
+    const room = maxRequestBody("/rt/one/attachments");
+    void link.fetch(upload(room)).catch(() => {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(socket.sent).toHaveLength(1);
+    const wire = JSON.stringify(socket.sent[0]).length;
+    expect(Math.ceil(((wire + 16 + 96) * 4) / 3) + 120).toBeLessThan(64 * 1024);
   });
 });
