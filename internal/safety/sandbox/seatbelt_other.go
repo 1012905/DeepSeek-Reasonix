@@ -4,6 +4,7 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -31,7 +32,8 @@ func usableBwrap() (string, bool) {
 
 // probeBwrap is usableBwrap with its reason: ErrBwrapMissing when there is no
 // bwrap on PATH, ErrBwrapNamespaceDenied (wrapping the probe's own error) when
-// there is one that cannot enter a namespace here.
+// there is one that ran and cannot enter a namespace here, ErrBwrapUnrunnable
+// when it could not be started or did not finish.
 func probeBwrap() (string, error) {
 	bwrap, err := exec.LookPath("bwrap")
 	if err != nil {
@@ -45,7 +47,14 @@ func probeBwrap() (string, error) {
 	defer cancel()
 	err = exec.CommandContext(ctx, bwrap, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--", "true").Run()
 	if err != nil {
-		err = fmt.Errorf("%w: %w", ErrBwrapNamespaceDenied, err)
+		// Only a bwrap that ran and exited non-zero got as far as asking for a
+		// namespace; one that never started, or was stopped at the deadline, did not.
+		var exited *exec.ExitError
+		if errors.As(err, &exited) && ctx.Err() == nil {
+			err = fmt.Errorf("%w: %w", ErrBwrapNamespaceDenied, err)
+		} else {
+			err = fmt.Errorf("%w: %w", ErrBwrapUnrunnable, err)
+		}
 	}
 	actual, _ := bwrapUsability.LoadOrStore(bwrap, err)
 	got, _ := actual.(error)

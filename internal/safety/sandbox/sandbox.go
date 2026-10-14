@@ -131,6 +131,10 @@ func UnavailableRemediation() string {
 				"Run the container with the privileges bubblewrap needs (typically CAP_SYS_ADMIN together with an unconfined seccomp profile; either widens the container itself), " +
 				"or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox; shell commands then run unconfined and the container or host is the only boundary."
 		}
+		if errors.Is(bwrapFault(), ErrBwrapUnrunnable) {
+			return "Bubblewrap is on PATH but could not be started (it may not be executable here, or did not finish its check in time). Check that `bwrap --version` runs, " +
+				"or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox; shell commands then run unconfined and the container or host is the only boundary."
+		}
 		return "Install bubblewrap (`bwrap`) or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox to restore pre-1.16 unconfined shell execution."
 	case "darwin":
 		return "Ensure `sandbox-exec` is installed and usable (the host must allow `sandbox_apply`), or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox to restore pre-1.16 unconfined shell execution."
@@ -141,11 +145,13 @@ func UnavailableRemediation() string {
 	}
 }
 
-// ErrBwrapMissing and ErrBwrapNamespaceDenied are why a Linux host has no usable
-// bash sandbox: no bubblewrap on PATH, or one that cannot enter a namespace.
+// ErrBwrapMissing, ErrBwrapNamespaceDenied and ErrBwrapUnrunnable are why a
+// Linux host has no usable bash sandbox: no bubblewrap on PATH, one that ran and
+// cannot enter a namespace, or one that could not be started at all.
 var (
 	ErrBwrapMissing         = errors.New("bubblewrap is not installed")
 	ErrBwrapNamespaceDenied = errors.New("bubblewrap cannot create a namespace here")
+	ErrBwrapUnrunnable      = errors.New("bubblewrap could not be started")
 )
 
 // UnavailableReason is the identity behind the unavailable state, for a caller
@@ -161,6 +167,9 @@ func UnavailableCode() string {
 	case "linux":
 		if errors.Is(bwrapFault(), ErrBwrapNamespaceDenied) {
 			return "sandbox.bwrap_namespace_denied"
+		}
+		if errors.Is(bwrapFault(), ErrBwrapUnrunnable) {
+			return "sandbox.bwrap_unrunnable"
 		}
 		return "sandbox.no_bubblewrap"
 	case "darwin":
