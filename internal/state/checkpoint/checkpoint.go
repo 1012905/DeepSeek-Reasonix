@@ -466,7 +466,8 @@ func (s *Store) CaptureBefore(path string, opts CaptureBeforeOpts) {
 }
 
 // CaptureAfter records completed writes; undo must be retired before writing.
-// Recording failures do not change whether the tool executed.
+// Recording failures do not change whether the tool executed. A path outside the
+// workspace is a coverage gap already on record, not a failure to report.
 func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) error {
 	if path == "" {
 		return nil
@@ -478,6 +479,9 @@ func (s *Store) CaptureAfter(path string, opts CaptureAfterOpts) error {
 	})
 	if gap != nil {
 		s.RecordGap(*gap)
+		if gap.Reason == GapOutsideWorkspace {
+			return nil
+		}
 	}
 	if err != nil {
 		return err
