@@ -14,6 +14,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -94,7 +95,12 @@ func runFakeCUA(in io.Reader, out io.Writer) {
 			structured := map[string]any{"effect": "confirmed", "route": "accessibility", "summary": "fixture readback", "evidence": []any{map[string]any{"kind": "value_readback"}}}
 			switch req.Params.Name {
 			case "list_apps":
-				structured = map[string]any{"apps": []any{map[string]any{"pid": pid, "bundle_id": "com.example.Notes", "name": "Notes", "running": true, "active": true}}}
+				apps := []any{map[string]any{"pid": pid, "bundle_id": "com.example.Notes", "name": "Notes", "running": true, "active": true}}
+				extra, _ := strconv.Atoi(os.Getenv("REASONIX_CUA_EXTRA_APPS"))
+				for i := range extra {
+					apps = append(apps, map[string]any{"pid": pid, "bundle_id": fmt.Sprintf("com.example.Other%d", i), "running": true})
+				}
+				structured = map[string]any{"apps": apps}
 			case "list_windows":
 				windows := []any{map[string]any{"pid": pid, "window_id": 1, "title": "Draft", "bounds": map[string]any{"x": 100, "y": 50, "width": 2000, "height": 1000}}}
 				if os.Getenv("REASONIX_CUA_TWO_WINDOWS") != "" {
