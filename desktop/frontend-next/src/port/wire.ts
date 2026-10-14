@@ -711,6 +711,8 @@ export interface WireEvent {
   thoughtMs?: number;
   // turn_done: ms the run took up to its final answer; absent when it gave none.
   workDurationMs?: number;
+  // turn_done: unix ms the turn began; sent only alongside workDurationMs.
+  workStartedAt?: number;
   level?: string;
   // "operator" means the notice is about the machine running this conversation,
   // not about the conversation. Only the latter belongs in a transcript.

@@ -755,7 +755,7 @@ const Row = memo(function Row({
     case "receipt":
       return <ReceiptSlot r={it.r} />;
     case "worked":
-      return <WorkedLine ms={it.ms} />;
+      return <WorkedLine ms={it.ms} startedAt={it.startedAt} />;
     case "extension":
       return <ExtensionCard ext={it.ext} onInvoke={onExtInvoke} onSubmit={onExtSubmit} />;
     case "notice":

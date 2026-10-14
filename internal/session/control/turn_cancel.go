@@ -100,6 +100,7 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 		Outcome:        turnOutcome(err),
 		CheckpointTurn: c.validatedCheckpointTurn(completion),
 		WorkDurationMs: turnWorkMs(err, cancelRequested, completion),
+		WorkStartedAt:  turnWorkStartedAt(err, cancelRequested, completion),
 		Receipt:        c.executor.CompletionReceipt(),
 		ItemID:         activeInboxID,
 	}
@@ -658,4 +659,13 @@ func turnWorkMs(err error, cancelled bool, completion *guardedTurnCompletion) in
 		return 0
 	}
 	return completion.workMs.Load()
+}
+
+// turnWorkStartedAt is when the turn that reports a run time began; it is
+// reported with that run time or not at all.
+func turnWorkStartedAt(err error, cancelled bool, completion *guardedTurnCompletion) int64 {
+	if turnWorkMs(err, cancelled, completion) == 0 {
+		return 0
+	}
+	return completion.startedAt
 }

@@ -583,6 +583,8 @@ type Event struct {
 	// approval and tool waits included, summed over goal continuations; 0 when the
 	// turn failed, was cancelled, or gave no final answer.
 	WorkDurationMs int64
+	// TurnDone: unix ms the turn began; set only alongside WorkDurationMs.
+	WorkStartedAt int64
 	// TurnStarted: which message this turn is about — the conversation's own
 	// turn number, and the session index that message takes. Both nil when the
 	// turn opened no authored message.
