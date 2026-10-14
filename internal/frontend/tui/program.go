@@ -400,8 +400,7 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.onCompletion(msg)
 		return m, nil
 	case tea.PasteMsg:
-		m.insertPaste(msg.Content)
-		return m, nil
+		return m, m.insertPaste(msg.Content)
 	case tea.KeyPressMsg:
 		return m.onKey(msg)
 	}
@@ -426,6 +425,8 @@ func (m *model) onScreenMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case clipImageMsg:
 		return m.onClipImage(msg), true
+	case pasteKeptMsg:
+		return m.onPasteKept(msg), true
 	case clipTextMsg:
 		return m.onClipText(msg), true
 	case helpMsg:
