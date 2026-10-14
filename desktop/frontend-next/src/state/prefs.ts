@@ -365,6 +365,40 @@ export function setShowsHiddenFiles(on: boolean): void {
   }
 }
 
+// Whether sessions Reasonix 1.x wrote stay out of the sidebar lists. Off unless
+// this machine turned it on; the lists show everything otherwise.
+const HIDE_LEGACY_KEY = "rx-hide-legacy-sessions";
+const hideLegacyListeners = new Set<() => void>();
+
+export function hidesLegacySessions(): boolean {
+  try {
+    return localStorage.getItem(HIDE_LEGACY_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function setHidesLegacySessions(on: boolean): void {
+  try {
+    localStorage.setItem(HIDE_LEGACY_KEY, on ? "on" : "off");
+  } catch {
+    /* the choice holds for this window and is forgotten on the next */
+  }
+  hideLegacyListeners.forEach((fn) => fn());
+}
+
+export function onHidesLegacySessionsChange(fn: () => void): () => void {
+  hideLegacyListeners.add(fn);
+  const storage = (event: StorageEvent) => {
+    if (event.key === HIDE_LEGACY_KEY || event.key === null) fn();
+  };
+  window.addEventListener("storage", storage);
+  return () => {
+    hideLegacyListeners.delete(fn);
+    window.removeEventListener("storage", storage);
+  };
+}
+
 // The send key is local to this machine, never read from project settings.
 export type SendShortcut = "enter" | "modifier_enter";
 const SEND_SHORTCUT_KEY = "rx-send-shortcut";

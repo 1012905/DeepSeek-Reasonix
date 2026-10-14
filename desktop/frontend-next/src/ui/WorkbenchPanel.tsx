@@ -105,7 +105,6 @@ export function WorkbenchPanel({
   port,
   tabs: allTabs,
   manual,
-  browserAsk = 0,
   shown,
   scheme,
   changes,
@@ -128,7 +127,6 @@ export function WorkbenchPanel({
   tabs: BrowserTab[];
   manual: boolean;
   /** Counts the title-bar Browser presses; a change asks for a browser, not just the column. */
-  browserAsk?: number;
   shown: boolean;
   scheme: "light" | "dark";
   changes: WorkspaceChange[];
@@ -277,7 +275,7 @@ export function WorkbenchPanel({
   const agentNow = useRef(agentTarget);
   agentNow.current = agentTarget;
   const filesAsk = useMemo(() => ({ revealChanges, fileRequest }), [revealChanges, fileRequest]);
-  useColumnOpening({ manual, browserAsk, filesAsk, port, agentNow, dropBlankStart, pick, follow, current, setFailed, setBrowsers, manualSelection: selected.startsWith("manual:") ? selected : `manual:${browsers[0] ?? "b0"}` });
+  useColumnOpening({ manual, filesAsk, port, agentNow, dropBlankStart, follow, current, setFailed });
   // A page that has just appeared is the one somebody wants to see, whoever
   // opened it: the agent's popup, or a link the person followed, which opens
   // beside the agent's tab without becoming the one it acts on.

@@ -497,8 +497,6 @@ body { background: var(--page) !important; }
 .chrome .thbtn:hover,
 .chrome .top-action:hover,
 .chrome .top-action[aria-pressed="true"] { color: var(--text); background: var(--float); border-color: var(--border); }
-.chrome .browser-action { color: var(--brand); }
-.chrome .browser-action[aria-pressed="true"] { color: #c8d3f0; background: var(--brand-wash); }
 .chrome-context-card {
   position: absolute; z-index: 80; top: calc(100% + 8px); right: 0; width: 326px;
   display: grid; gap: 10px; padding: 13px; border: 1px solid var(--border); border-radius: 10px;
@@ -2568,8 +2566,6 @@ body { font-size: 14px; line-height: 1.75; }
 :root[data-theme="light"] .studio-new-task > span,
 :root[data-theme="light"] .studio-search > span,
 :root[data-theme="light"] .studio-wallet > span { color: var(--brand); }
-:root[data-theme="light"] .chrome .browser-action { color: var(--brand); }
-:root[data-theme="light"] .chrome .browser-action[aria-pressed="true"] { color: #3f568b; background: var(--brand-wash); }
 :root[data-theme="light"] .studio-browser,
 :root[data-theme="light"] .studio-browser-frame { background: var(--page); color: var(--text); }
 :root[data-theme="light"] .studio-browser-toolbar,
@@ -2948,8 +2944,6 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-settings { color: var(--ghost); }
 .chrome .badge,
 .chrome .top-action[aria-pressed="true"] { background: var(--overlay); color: var(--muted); border-color: var(--border); }
-.chrome .browser-action { color: var(--accent); }
-.chrome .browser-action[aria-pressed="true"] { color: var(--accent); background: var(--accent-wash); }
 
 .studio-brand-sub { color: var(--faint); }
 .studio-settings:hover,
@@ -4203,7 +4197,6 @@ body { font-size: 14px; line-height: 1.75; }
   --pal-accent: var(--default-accent);
 }
 
-:root[data-pack] .chrome .browser-action[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent-wash); }
 :root[data-pack] .chrome-context-card section > button { color: var(--link); }
 :root[data-pack] .studio-brand-accent { color: var(--brand); }
 :root[data-pack] .navbtn[aria-current],

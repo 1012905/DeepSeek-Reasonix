@@ -29,8 +29,6 @@ async function draw(shell: Record<string, unknown>, host?: string) {
       title="会话"
       steer={0}
       onSettings={vi.fn()}
-      onBrowser={vi.fn()}
-      browser={false}
       account={null}
       theme="dark"
       onTheme={vi.fn()}
