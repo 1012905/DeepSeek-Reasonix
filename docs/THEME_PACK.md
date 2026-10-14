@@ -186,6 +186,12 @@ JSON Schema: [theme-pack.schema.json](./theme-pack.schema.json)
 
 Studio also reads `link`, `brand`, `halo` and `labelAgent` (hyperlinks, the product tint, hover emphasis, agent names). `net`, `deleg` and the other status colours are not tokens and are dropped with a warning.
 
+`shadowFloat` sets the shadow menus, popovers and dialogs cast; unset, it keeps the built-in one.
+
+- Value: `none`, or up to four comma-separated layers.
+- A layer is an optional `inset`, two to four `px` lengths (offsets, then blur, then spread) and a `#RRGGBB` or `#RRGGBBAA` colour.
+- Example: `0 0 0 1px #00000040, 0 8px 24px -8px #00000033`.
+
 `accentInk` optionally supplies accent-coloured text independently of the
 `accent` fill and `accentFg` button text. See the [current author guide](THEME_AUTHOR_GUIDE.md#current-token-vocabulary)
 for runtime vocabulary and fallback behaviour.
