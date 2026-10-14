@@ -8,7 +8,7 @@ export type { Attachment, DroppedRef };
 
 import type { AccountState, AccountUser, DeviceGrant } from "./account";
 import type { Adjudications } from "./adjudication";
-import type { BackupApplyResult, BackupCatalog, BackupCreated, BackupCreateRequest, BackupPlan } from "./backup";
+import type { BackupApplyResult, BackupCatalog, BackupCategory, BackupCreated, BackupCreateRequest, BackupFileCatalog, BackupFileExport, BackupPlan } from "./backup";
 export type * from "./backup";
 export type { AdjudicationEntry, AdjudicationState, Adjudications } from "./adjudication";
 import type { HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource } from "./hook";
@@ -399,6 +399,12 @@ export interface AgentPort {
   deleteBackup(id: string): Promise<void>;
   previewBackup(id: string, passphrase: string): Promise<BackupPlan>;
   applyBackup(planId: string, items: string[], consented: string[]): Promise<BackupApplyResult>;
+  // The same sealed envelope as a file the person saves and opens again. The
+  // window only: a paired device is refused, and no account is needed.
+  backupFileCatalog(): Promise<BackupFileCatalog>;
+  exportBackupFile(categories: BackupCategory[], passphrase: string): Promise<BackupFileExport>;
+  previewBackupFile(file: string, passphrase: string): Promise<BackupPlan>;
+  applyBackupFile(planId: string, items: string[], consented: string[]): Promise<BackupApplyResult>;
   // A report becomes public only if the maintainers file it as an issue.
   // Refusals carry feedback.* codes; only feedback.offline is safe to retry
   // with the same idempotencyKey. A reply has no key and is never retried by
