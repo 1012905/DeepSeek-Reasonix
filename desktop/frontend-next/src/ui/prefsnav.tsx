@@ -246,6 +246,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "remote", anchor: "phone", title: "手机访问", scope: "machine", apply: "immediate", keywords: ["手机", "扫码", "二维码", "局域网", "配对", "phone", "mobile", "qr"] },
   { section: "account", anchor: "account", title: "账号", scope: "account", apply: "immediate", keywords: ["登录", "社区"] },
   // Shown only while signed in; restoring writes through the ordinary config paths and reloads the runtime.
+  { section: "account", anchor: "backup-file", title: "导出与导入配置", scope: "machine", apply: "immediate", keywords: ["备份", "导出", "导入", "换机", "迁移", "文件"] },
   { section: "account", anchor: "backup", title: "云备份", scope: "account", apply: "immediate", keywords: ["备份", "恢复", "换机", "同步", "导出"] },
   { section: "versions", anchor: "versions", title: "版本", scope: "machine", apply: "immediate", keywords: ["更新", "升级"] },
   { section: "versions", anchor: "logs", title: "日志与异常退出记录", scope: "machine", apply: "none", keywords: ["日志", "崩溃", "闪退", "异常退出", "log", "logs", "crash", "路径"] },
@@ -260,6 +261,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "appearance", anchor: "language", title: "语言", scope: "machine", apply: "restart", keywords: ["中文", "english", "界面语言"] },
   { section: "appearance", anchor: "graphics", title: "图形渲染", scope: "machine", apply: "restart", keywords: ["硬件加速", "显卡", "gpu", "软件渲染", "占用", "卡顿"] },
   { section: "appearance", anchor: "navrail", title: "图标栏", scope: "machine", apply: "immediate", keywords: ["侧边栏", "导航", "图标", "sidebar", "nav"] },
+  { section: "appearance", anchor: "legacy-sessions", title: "1.x 旧会话", scope: "machine", apply: "immediate", keywords: ["1.x", "旧会话", "迁移", "隐藏", "legacy", "sessions", "sidebar"] },
   { section: "appearance", anchor: "live-grace", title: "进行中列表保留已完成会话", scope: "machine", apply: "immediate", keywords: ["进行中", "完成", "保留", "过滤", "running", "grace", "sidebar"] },
   { section: "appearance", anchor: "send-shortcut", title: "发送快捷键", scope: "machine", apply: "immediate", keywords: ["发送", "回车", "换行", "enter", "ctrl", "cmd"] },
   { section: "appearance", anchor: "esc-stop", title: "Esc 停止任务", scope: "machine", apply: "immediate", keywords: ["esc", "停止", "中断", "确认", "误触", "stop"] },

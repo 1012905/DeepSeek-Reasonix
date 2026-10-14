@@ -5,6 +5,7 @@ import { money } from "../i18n/format";
 import { pushToast } from "../state/toasts";
 import { reason } from "../i18n/kernel";
 import { noteFault } from "./fault";
+import { ErrorBar } from "./ErrorBar";
 import { t } from "../i18n";
 import { hasPendingDecision, posture, runState } from "./decisions";
 import { createPortal } from "react-dom";
@@ -81,15 +82,13 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
   const status = sessionRead.kind === "settled" ? sessionRead.status : null;
   const ready = sessionRead.kind === "settled";
   const [tab, showView] = useShowView(rt.id, onManualBrowser);
-  const [pinned, setPinned] = useState(true);
-  const [jump, setJump] = useState(0);
   const [mcp, setMcp] = useState<McpEntry[]>([]);
   const [askFocus, setAskFocus] = useState(0);
   const [tree, setTree] = useState<WorkspaceChanges | null>(null);
@@ -110,12 +109,17 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const flow = useRef<HTMLDivElement>(null);
   const running = s.running || !!status?.running; // A paired device can join after turn_started.
   const fail = useCallback((e: unknown, from?: string) => {
-    noteFault(e);
-    dispatch({ kind: "__error", text: reason(e), from } as never);
+    const shown = reason(e);
+    noteFault(e, shown);
+    dispatch({ kind: "__error", text: shown, from } as never);
   }, []);
   // What failed beside the work (a setting that did not apply, a link that would
   // not open) goes to the corner; only a refused send or a failed read keeps the bar.
-  const notify = useCallback((e: unknown) => pushToast(reason(e)), []);
+  const notify = useCallback((e: unknown) => {
+    const shown = reason(e);
+    noteFault(e, shown);
+    pushToast(shown);
+  }, []);
   const statusRead = useCallback(() => dispatch({ kind: "__error_clear", from: "status" } as never), []);
   const conversationFiles = useConversationFiles(port, status?.workspaceRoot ?? rt.root, !!rt.host, visible && tab === "flow", revealBrowser, notify);
   const compact = useCompactNow(port, running || s.items.some((item) => item.t === "compaction" && !item.done), notify);
@@ -400,7 +404,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   // Where the bottom is moves as blocks mount under it, so this only asks the
   // transcript to follow again and lets it scroll itself into place.
-  const toLatest = () => setJump((n) => n + 1);
 
   // Who is waited on is the kernel's answer, read from the decision list it
   // already publishes. This used to compare the label on screen against two
@@ -471,8 +474,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         waiting={s.waiting}
         scroll={flow}
         hidden={tab !== "flow"}
-        onPinned={setPinned}
-        jump={jump}
         focus={null}
         find={find.at}
         query={find.query}
@@ -540,9 +541,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           analysis; hidden removes it from layout without throwing its state
           away. */}
       <div className="compose" hidden={tab !== "flow"}>
-        <button className="jump" hidden={pinned || tab !== "flow"} onClick={toLatest}>
-          {t("↓ 回到最新")}
-        </button>
         <span className="glowring" aria-hidden="true">
           <i />
         </span>
@@ -596,10 +594,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             be on screen at once. */}
         <div className="composenotes">
           {s.error && (
-            <div className="errbar" role="alert">
-              <span>{s.error}</span>
-              <button onClick={() => dispatch({ kind: "__error", text: "" } as never)}>{t("知道了")}</button>
-            </div>
+            <ErrorBar text={s.error} onDismiss={() => dispatch({ kind: "__error", text: "" } as never)} onReport={onFeedback} />
           )}
           <RuntimeBar notices={s.runtime} onSettings={onSettings} onSeen={(id) => dispatch({ kind: "__runtime_seen", id } as never)} watch={s} onStall={(a) => a === "stop" ? void port.cancel().catch(fail) : a === "continue" ? void submit(t("继续")) : dispatch({ kind: a === "mute" ? "__stall_mute" : "__stall_dismiss" } as never)} />
         </div>

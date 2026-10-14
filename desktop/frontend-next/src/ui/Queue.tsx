@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Meter } from "./Meter";
 import type { Queue as QueueSnapshot, QueueItem } from "../port/port";
 import { t } from "../i18n";
 import { useFitHeight } from "./fitHeight";
@@ -93,7 +94,6 @@ function size(n: number): string {
   const m = n / (1 << 20);
   return `${m < 10 ? m.toFixed(1) : Math.round(m)}M`;
 }
-const fill = (n: number, max: number) => (max > 0 ? `${Math.min(100, Math.round((n / max) * 100))}%` : "0%");
 
 // The list scrolls inside a height `.composeaux` caps, so an editor taller than
 // what the list shows is cut off with no way to reach its edge.
@@ -197,15 +197,11 @@ export function Queue({ queue, running, onRead, onEdit, onMove, onCancel, onSend
         {capacityPressure && <span className="qcap" aria-label={t("队列容量")}>
           <span data-full={fullItems || undefined}>
             {t("条目")} {cap.items}/{cap.maxItems}
-            <span className="mtr">
-              <i style={{ width: fill(cap.items, cap.maxItems) }} />
-            </span>
+            <Meter value={cap.items} max={cap.maxItems} label={t("条目")} full={fullItems} />
           </span>
           <span data-full={fullBytes || undefined}>
             {t("字节")} {size(cap.bytes)}/{size(cap.maxBytes)}
-            <span className="mtr">
-              <i style={{ width: fill(cap.bytes, cap.maxBytes) }} />
-            </span>
+            <Meter value={cap.bytes} max={cap.maxBytes} label={t("字节")} full={fullBytes} />
           </span>
         </span>}
         <button className="qhold" data-action="queue.pause" onClick={() => onPause(!queue.paused)} disabled={queue.readonly}>

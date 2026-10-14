@@ -46,6 +46,8 @@ export interface PaneProps {
   findPulse: number;
   filesPulse?: number;
   onSettings: (section?: string) => void;
+  // Opens the feedback form; a notice in this pane can be reported from where it appeared.
+  onFeedback?: () => void;
   // Open a session this pane made, beside it: a branch is its own conversation.
   onOpenSession?: (path: string) => void;
   // 这个窗口还没有人选过的项目文件夹。空转录是唯一说得出这句话的地方 —— 那里
