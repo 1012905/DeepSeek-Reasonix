@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentPort, WorkspaceFile } from "../port/port";
-import { reason } from "../i18n/kernel";
+import { WORKSPACE_FILE_MISSING, reason } from "../i18n/kernel";
+import { HttpError } from "../port/port";
 
 type Entry = {
-  file: WorkspaceFile | null; draft: string; diff: string; error: string;
+  file: WorkspaceFile | null; draft: string; diff: string; error: string; missing: boolean;
   pending: "" | "read" | "save"; issued: number;
 };
-const blank = (): Entry => ({ file: null, draft: "", diff: "", error: "", pending: "", issued: 0 });
+const blank = (): Entry => ({ file: null, draft: "", diff: "", error: "", missing: false, pending: "", issued: 0 });
 const dirty = (entry: Entry) => !!entry.file && entry.draft !== entry.file.content;
 
 export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown, refresh, poll }: {
@@ -40,7 +41,7 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
     void (async () => {
       const valid = () => live && current.current === entries && ticket === entry.issued;
       entry.pending = "read";
-      if (!entry.file) entry.error = "";
+      if (!entry.file) { entry.error = ""; entry.missing = false; }
       if (changed) notify();
       try {
         const [file, patch] = await Promise.all([
@@ -52,9 +53,13 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
         entry.file = file;
         entry.draft = file.content;
         entry.error = "";
+        entry.missing = false;
         if (!quiet) entry.diff = patch?.diff ?? "";
       } catch (e) {
-        if (valid() && !quiet) entry.error = reason(e);
+        if (valid() && !quiet) {
+          entry.error = reason(e);
+          entry.missing = e instanceof HttpError && e.reason?.code === WORKSPACE_FILE_MISSING;
+        }
       } finally {
         if (valid()) { entry.pending = ""; if (changed) notify(); }
       }
