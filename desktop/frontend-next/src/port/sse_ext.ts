@@ -117,4 +117,13 @@ export class SseExtensions extends SseLook {
     download(name, content);
     return null;
   }
+  async openSide() {
+    return (await this.post0<{ id: string }>("/side", {})).id;
+  }
+  async askSide(id: string, question: string, quotes: string[]) {
+    return (await this.post0<{ answer: string }>("/side/" + encodeURIComponent(id) + "/ask", { question, quotes })).answer;
+  }
+  async closeSide(id: string) {
+    await this.del("/side/" + encodeURIComponent(id));
+  }
 }

@@ -440,6 +440,15 @@ type Commits interface {
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 
+// SideSessions is a read-only question asked beside the session and discarded
+// with it: its own conversation, never the main transcript, billed to the
+// session. Only the full port names it; an editor has no panel to ask from.
+type SideSessions interface {
+	OpenSide() (string, error)
+	AskSide(ctx context.Context, id, question string, quotes []string) (string, error)
+	CloseSide(id string)
+}
+
 // SessionAPI is the full driving port — the composition of every sub-port, for
 // a frontend that drives all of it: the TUI does, and the HTTP server all but
 // one. A leaner frontend names EditorAPI instead.
@@ -472,6 +481,7 @@ type SessionAPI interface {
 	DiffRendering
 	Feedback
 	Commits
+	SideSessions
 }
 
 // EditorAPI is what an editor integration drives over ACP: turns, approvals and

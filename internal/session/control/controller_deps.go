@@ -76,6 +76,7 @@ type controllerDeps struct {
 	skills              skillSet
 	date                dateAnchor
 	skillRunner         skill.SubagentRunner
+	side                sideSet // see side_session.go
 	readOnlySkillRunner skill.SubagentRunner
 	skillProfile        skill.ProfileResolver
 	hooks               *hook.Runner // session hook runner; nil-safe (no hooks configured)
@@ -164,6 +165,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		date:                   newDateAnchor(opts.Clock),
 		skills:                 newSkillSet(opts.Skills, opts.AllSkills, opts.SkillStore, opts.AllSkillStore, opts.DisableImplicitSkillInvocation, opts.WorkspaceRoot),
 		skillRunner:            opts.SkillRunner,
+		side:                   sideSet{factory: opts.SideFactory},
 		readOnlySkillRunner:    opts.ReadOnlySkillRunner,
 		skillProfile:           opts.SkillProfile,
 		hooks:                  opts.Hooks,

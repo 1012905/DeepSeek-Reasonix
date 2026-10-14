@@ -3,6 +3,16 @@
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
   "浏览器标签": "Browser tabs",
+  "辅助会话": "Side question",
+  "只读 · 不写入主会话 · 关闭即丢": "Read-only · not in the main session · gone when closed",
+  "关闭辅助会话": "Close the side question",
+  "移除引用 {n}": "Remove quote {n}",
+  "向辅助会话提问": "Ask the side question",
+  "向辅助会话提问（只读，不写入主会话）": "Ask a side question (read-only, kept out of the main session)",
+  "提问…": "Ask…",
+  "先在对话里选中一段文字": "Select some text in the conversation first",
+  "正在读取并回答…": "Reading and answering…",
+  "在这里问关于这段代码、这个报错的问题：它只能读文件和搜索，不会改动任何东西。": "Ask about this code or this error here: it can only read files and search, and changes nothing.",
   "用 {name} 打开": "Open with {name}",
   "回到会话顶部": "Back to top",
   "跳到最新": "Jump to latest",

@@ -12,7 +12,7 @@ export type PaneView = "flow" | "analysis" | "browser";
  *  purposes; it does not own them, and it never holds a selection of its own —
  *  a second piece of state saying which detail is open is a second answer to a
  *  question the pane has already answered. */
-export function PaneNav({ view, onPick, rows, surfaces, plan, goal }: {
+export function PaneNav({ view, onPick, rows, surfaces, plan, goal, side, onSide }: {
   view: PaneView;
   onPick: (to: PaneView) => void;
   rows: number;
@@ -24,6 +24,8 @@ export function PaneNav({ view, onPick, rows, surfaces, plan, goal }: {
   surfaces: number;
   plan?: PlanStep[];
   goal?: string;
+  side?: boolean;
+  onSide?: () => void;
 }) {
   const bar = useRef<HTMLDivElement>(null);
   const thumb = useRef<HTMLSpanElement>(null);
@@ -79,6 +81,7 @@ export function PaneNav({ view, onPick, rows, surfaces, plan, goal }: {
         </button>
       </div>
       {(plan?.length || goal) ? <PlanPeek steps={plan ?? []} goal={goal} /> : null}
+      {onSide && <button type="button" className="sidetoggle" data-action="side.toggle" aria-pressed={!!side} title={t("向辅助会话提问（只读，不写入主会话）")} onClick={onSide}>{t("辅助会话")}</button>}
     </div>
   );
 }
