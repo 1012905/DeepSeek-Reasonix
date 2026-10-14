@@ -56,6 +56,8 @@ const modelName = (ref: string) => ref.slice(ref.lastIndexOf("/") + 1);
 export interface Quote {
   text: string;
   turn?: number;
+  // The workspace file the text was selected in, when it did not come from a reply.
+  source?: string;
   n: number;
 }
 
@@ -64,6 +66,7 @@ export interface Quote {
 export interface ReplyActions {
   files?: LocalRefs;
   onQuote: (text: string, id: string) => void;
+  onQuoteFile?: (text: string, source: string) => void;
   canRegenerate: (id: string) => boolean;
   hasLaterTurns: (id: string) => boolean;
   onRegenerate: (id: string) => void;

@@ -24,6 +24,7 @@ import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
+import { WorkbenchSelectionMenu, type SelectionMenu } from "./WorkbenchSelectionMenu";
 import { WorkbenchChanges } from "./WorkbenchChanges";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
@@ -118,6 +119,7 @@ export function WorkbenchPanel({
   onSurfaces,
   onExternal,
   onAddToChat,
+  onQuoteSelection,
   wideMode,
   fileRequest,
 }: {
@@ -147,6 +149,8 @@ export function WorkbenchPanel({
   onSurfaces: (n: number) => void;
   onExternal: (url: string) => void;
   onAddToChat?: (reference: string) => void;
+  // Text selected in an open file, with the file it came from, on its way to the composer.
+  onQuoteSelection?: (text: string, path: string) => void;
   wideMode?: { wide: boolean; onToggle: () => void };
   fileRequest?: { path: string };
 }) {
@@ -325,6 +329,17 @@ export function WorkbenchPanel({
   // A document opens rendered: it is read far more often than edited, and the
   // source view is one click away.
   const filePath = active?.kind === "file" ? active.path : "";
+  const [selectionMenu, setSelectionMenu] = useState<SelectionMenu | null>(null);
+  // A right-click over text selected in an open file offers to bring that passage into the
+  // conversation; anywhere else, or with nothing selected, the browser's own menu stays.
+  const offerSelectionMenu = (e: MouseEvent<HTMLElement>) => {
+    if (!onQuoteSelection || !filePath) return;
+    const selection = document.getSelection();
+    const text = selection?.toString().trim() ?? "";
+    if (!selection || selection.isCollapsed || !text || !e.currentTarget.contains(selection.anchorNode)) return;
+    e.preventDefault();
+    setSelectionMenu({ text, x: e.clientX, y: e.clientY, anchor: e.currentTarget });
+  };
   const readable = /\.(md|markdown|mdx)$/i.test(filePath);
   const previewable = !!filePath && preview.can(filePath);
   useEffect(() => {
@@ -559,7 +574,7 @@ export function WorkbenchPanel({
               onBrowser={() => void addBrowser()}
             />
           )}
-          <div className="workbench-content" hidden={launcher || !active}>
+          <div className="workbench-content" hidden={launcher || !active} data-action-contextmenu="workbench.quote-selection" onContextMenu={offerSelectionMenu}>
           {browsers.map((id) => (
             <ManualBrowserPanel
               key={id}
@@ -732,6 +747,9 @@ export function WorkbenchPanel({
           )}
         </aside>
       </div>
+      {selectionMenu && shown && onQuoteSelection && filePath && (
+        <WorkbenchSelectionMenu menu={selectionMenu} onQuote={(text) => onQuoteSelection(text, filePath)} onClose={() => setSelectionMenu(null)} />
+      )}
       {tabMenu && <BrowserTabMenu menu={tabMenu} others={tabOthers.length > 0} right={tabRight.length > 0} onDismiss={dismissTabMenu} onClose={(mode) => {
         const target = tabMenu.surface;
         returning.current = keyOf(target);
