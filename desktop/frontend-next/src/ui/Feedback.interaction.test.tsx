@@ -96,6 +96,16 @@ describe("feedback form", () => {
     expect(port.openExternal).toHaveBeenCalledWith(expect.stringContaining("/security/policy"));
   });
 
+  it("sends ideas and questions to the discussions board through the shell's external opener, and says bugs go through Send", async () => {
+    const { port } = setup();
+    await ready();
+    expect(screen.getByText(/建议、想法和提问放在讨论区/)).toBeTruthy();
+    expect(screen.getByText(/bug 和错误请用下面的发送/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("link", { name: "想法与讨论" }));
+    expect(port.openExternal).toHaveBeenCalledWith("https://github.com/esengine/DeepSeek-Reasonix/discussions");
+    expect(port.openExternal).toHaveBeenCalledTimes(1);
+  });
+
   it("offers no window-capture control", async () => {
     setup();
     await ready();
