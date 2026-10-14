@@ -55,14 +55,14 @@ default = "title-test"
 func TestSessionTitleFallbackReusesProviderAndUsageSink(t *testing.T) {
 	h := fallbackTitleHub(t)
 	first := h.sessionTitleGenerator(testenv.TempDir(t))
-	if first.titleProv == nil || first.titleUsageSink == nil {
+	if first.titleModel.prov == nil || first.titleModel.sink == nil {
 		t.Fatal("fallback needs a provider and a usage recorder")
 	}
 	if err := os.WriteFile(config.UserConfigPath(), []byte("broken = ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	second := h.sessionTitleGenerator(testenv.TempDir(t))
-	if second != first || second.titleUsageSink != first.titleUsageSink {
+	if second != first || second.titleModel.sink != first.titleModel.sink {
 		t.Fatal("fallback reloaded config or replaced its provider/usage recorder")
 	}
 }
@@ -132,14 +132,14 @@ func TestSessionTitleFallbackRecoversAfterInitializationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := h.sessionTitleGenerator(testenv.TempDir(t))
-	if first.titleProv != nil {
+	if first.titleModel.prov != nil {
 		t.Fatal("broken config unexpectedly created a title provider")
 	}
 	if err := os.WriteFile(path, good, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	second := h.sessionTitleGenerator(testenv.TempDir(t))
-	if second.titleProv == nil || second.titleUsageSink == nil {
+	if second.titleModel.prov == nil || second.titleModel.sink == nil {
 		t.Fatal("fallback did not recover after the configuration was repaired")
 	}
 	if got := second.generateTitle(t.Context(), "hello"); got != "Short title" {

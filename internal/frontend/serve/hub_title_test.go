@@ -74,7 +74,7 @@ func TestAutoNameUsesUserMessagesSuffixAndWaitsForSave(t *testing.T) {
 		t.Fatal(err)
 	}
 	prov := &recordingTitleProvider{}
-	rt.Server.titleProv = prov
+	rt.Server.titleModel.prov = prov
 	h.workspacePage(rt.Root, "", nil, treeWindow{}, 0)
 	res := titlePost(t, h, "auto-name", path, "")
 	if res.Code != http.StatusOK {
@@ -154,7 +154,7 @@ func (failingRenameProvider) Stream(context.Context, provider.Request) (<-chan p
 
 func TestAutoNameFailurePreservesTitleAndCache(t *testing.T) {
 	h, rt, path, _ := titleSession(t)
-	rt.Server.titleProv = failingRenameProvider{}
+	rt.Server.titleModel.prov = failingRenameProvider{}
 	cachePath := filepath.Join(filepath.Dir(path), ".session-titles.json")
 	before, err := os.ReadFile(cachePath)
 	if err != nil {
@@ -177,7 +177,7 @@ func TestAutoNameFailurePreservesTitleAndCache(t *testing.T) {
 func TestAutoNameRefusesMissingUserMessageAndOutsidePath(t *testing.T) {
 	h, rt, path, _ := titleSession(t)
 	prov := &recordingTitleProvider{}
-	rt.Server.titleProv = prov
+	rt.Server.titleModel.prov = prov
 	path = filepath.Join(filepath.Dir(path), "20261001-120001.jsonl")
 	empty := sessionstore.NewSession("system only")
 	if err := empty.SaveSnapshot(path); err != nil {
@@ -204,8 +204,8 @@ func (stalledTitleProvider) Stream(context.Context, provider.Request) (<-chan pr
 func TestTitleRequestStopsAtDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	s := &Server{titleProv: stalledTitleProvider{}}
-	if got := s.requestTitle(ctx, "latest message"); got != "" {
+	s := &Server{titleModel: titleProviderState{prov: stalledTitleProvider{}}}
+	if got := s.requestTitle(ctx, "latest message", s.currentTitleProvider()); got != "" {
 		t.Fatalf("timed out request produced %q", got)
 	}
 }
@@ -259,7 +259,7 @@ func TestCorruptTitleCacheRecoversForRename(t *testing.T) {
 	for _, route := range []string{"rename", "auto-name"} {
 		t.Run(route, func(t *testing.T) {
 			h, rt, path, latest := titleSession(t)
-			rt.Server.titleProv = &recordingTitleProvider{}
+			rt.Server.titleModel.prov = &recordingTitleProvider{}
 			cachePath := filepath.Join(filepath.Dir(path), ".session-titles.json")
 			damaged := "broken cache"
 			if route == "auto-name" {
@@ -312,7 +312,7 @@ func TestCorruptTitleCacheRecoversForRename(t *testing.T) {
 func TestResetTitleRestoresCachedAutomaticTitle(t *testing.T) {
 	h, rt, path, _ := titleSession(t)
 	prov := &recordingTitleProvider{}
-	rt.Server.titleProv = prov
+	rt.Server.titleModel.prov = prov
 	before, _, err := sessionstore.LoadBranchMeta(path)
 	if err != nil {
 		t.Fatal(err)
@@ -335,7 +335,7 @@ func TestResetTitleRestoresCachedAutomaticTitle(t *testing.T) {
 func TestResetTitleRemovesFixedEntryAndResumesGeneration(t *testing.T) {
 	h, rt, path, _ := titleSession(t)
 	prov := &recordingTitleProvider{}
-	rt.Server.titleProv = prov
+	rt.Server.titleModel.prov = prov
 	cache := h.titleCacheFor(filepath.Dir(path))
 	name := filepath.Base(path)
 	if err := cache.putExplicit(name, "fixed title"); err != nil {
@@ -363,7 +363,7 @@ func TestResetTitleRemovesFixedEntryAndResumesGeneration(t *testing.T) {
 
 func TestResetTitleStillSucceedsWhenGenerationFails(t *testing.T) {
 	h, rt, path, _ := titleSession(t)
-	rt.Server.titleProv = failingRenameProvider{}
+	rt.Server.titleModel.prov = failingRenameProvider{}
 	cache := h.titleCacheFor(filepath.Dir(path))
 	if err := cache.putExplicit(filepath.Base(path), "fixed title"); err != nil {
 		t.Fatal(err)

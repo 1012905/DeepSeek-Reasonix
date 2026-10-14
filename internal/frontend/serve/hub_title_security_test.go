@@ -14,7 +14,7 @@ import (
 func TestTitleRoutesRejectUnownedPaths(t *testing.T) {
 	h, rt, path, _ := titleSession(t)
 	prov := &recordingTitleProvider{}
-	rt.Server.titleProv = prov
+	rt.Server.titleModel.prov = prov
 	dir := filepath.Dir(path)
 	before, err := os.ReadFile(path + ".meta")
 	if err != nil {
@@ -69,7 +69,7 @@ func TestTitleRoutesRejectUnownedPaths(t *testing.T) {
 func TestTitleRoutesRejectEscapingTranscriptSymlink(t *testing.T) {
 	h, rt, path, _ := titleSession(t)
 	prov := &recordingTitleProvider{}
-	rt.Server.titleProv = prov
+	rt.Server.titleModel.prov = prov
 	outside := filepath.Join(testenv.TempDir(t), "external.jsonl")
 	original := []byte("external file must remain unchanged\n")
 	if err := os.WriteFile(outside, original, 0o600); err != nil {

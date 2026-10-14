@@ -41,7 +41,7 @@ func newTitleFiller() *titleFiller {
 // scheduleTitle queues one generation, deduplicated by session name so a burst
 // of list requests cannot stack N copies of the same call.
 func (s *Server) scheduleTitle(name, source string, mod int64) {
-	if nilutil.IsNil(s.titleProv) || source == "" {
+	if nilutil.IsNil(s.currentTitleProvider().prov) || source == "" {
 		return
 	}
 	f := s.fill

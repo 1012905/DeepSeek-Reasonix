@@ -64,6 +64,14 @@ func renderAgentTail(buf *strings.Builder, c, d *Config) bool {
 		fmt.Fprintf(buf, "web_search_model = %q\n", c.Agent.WebSearchModel)
 		wrote = true
 	}
+	if c.Agent.TitleModel != "" && c.Agent.TitleModel != d.Agent.TitleModel {
+		fmt.Fprintf(buf, "title_model = %q\n", c.Agent.TitleModel)
+		wrote = true
+	}
+	if len(c.Agent.RoleEfforts) > 0 && !reflect.DeepEqual(c.Agent.RoleEfforts, d.Agent.RoleEfforts) {
+		fmt.Fprintf(buf, "role_efforts = %s\n", renderStringMap(c.Agent.RoleEfforts))
+		wrote = true
+	}
 	if c.Agent.PlannerModel != "" && c.Agent.PlannerModel != d.Agent.PlannerModel {
 		fmt.Fprintf(buf, "planner_model = %q\n", c.Agent.PlannerModel)
 		wrote = true

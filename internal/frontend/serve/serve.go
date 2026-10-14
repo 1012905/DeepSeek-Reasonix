@@ -16,7 +16,6 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"reasonix/internal/state/sessionstore"
 	"strings"
 	"sync"
 
@@ -27,7 +26,7 @@ import (
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/runtime/delegation"
 	"reasonix/internal/session/control"
-	"reasonix/internal/state/stats"
+	"reasonix/internal/state/sessionstore"
 	"reasonix/internal/state/store"
 	"reasonix/internal/tools/jobs"
 )
@@ -68,10 +67,7 @@ type Server struct {
 	lastBuild                *boot.BuildResult // serving generation, guarded by bindMu; see reuseFromLastBuild
 	grants                   hostGrants        // what the embedding host has opened up
 	moves                    moveTracker       // the one storage relocation this server may be running
-	titleProv                provider.Provider // best-effort provider for session titles
-	titlePrice               *provider.Pricing
-	titleModelRef            string
-	titleUsageSink           event.Sink
+	titleModel               titleProviderState
 	titles                   *titleCache
 	fill                     *titleFiller
 	wire                     *wireLog
@@ -112,7 +108,9 @@ func New(ctrl control.SessionAPI, bc *Broadcaster, serveCfg config.ServeConfig) 
 	if cfg, err := config.Load(); err == nil {
 		bc.SetDisplayCurrency(cfg.ExplicitDisplayCurrency())
 	}
-	s.initTitleProvider()
+	if err := s.initTitleProvider(); err != nil {
+		slog.Warn("title provider could not start", "err", err)
+	}
 	s.nameWorkspaceHolder(ctrl)
 	s.attachWireLog()
 	return s
@@ -150,48 +148,6 @@ func (s *Server) AuthMode() string {
 		return "none"
 	}
 	return s.auth.Mode()
-}
-
-// initTitleProvider builds the provider used solely to generate short session
-// titles. It follows the same model a new session would open with, so titles
-// work for whichever provider the user configured. Errors are silently
-// swallowed — title generation is best-effort, and the server works fine
-// without it.
-func (s *Server) initTitleProvider() {
-	cfg, err := config.Load()
-	if err != nil {
-		return
-	}
-	start, ok := cfg.ResolveStartupChatModel()
-	if !ok {
-		return
-	}
-	entry, ok := cfg.ResolveModel(start.Ref)
-	if !ok || !entry.Configured() {
-		return
-	}
-	prov, err := provider.New(entry.Kind, titleProviderConfig(entry))
-	if err != nil {
-		return
-	}
-	s.titleProv = prov
-	s.titlePrice = entry.Price
-	s.titleModelRef = entry.Name + "/" + entry.Model
-	// Title generation is accounting-only; do not inject its usage event into
-	// the shared chat SSE stream.
-	s.titleUsageSink = stats.NewRecorder(event.Discard, config.StatsDir(), "serve")
-}
-
-func titleProviderConfig(entry *config.ProviderEntry) provider.Config {
-	return provider.Config{
-		Name:    entry.Name,
-		BaseURL: entry.BaseURL,
-		Model:   entry.Model,
-		APIKey:  entry.APIKey(), APIKeyFunc: entry.APIKey,
-		// Title generation needs a short visible answer, not chain-of-thought.
-		// "off" is a retired DeepSeek effort value and now falls back to high.
-		Extra: map[string]any{"effort": "disabled"},
-	}
 }
 
 // switchModel rebuilds the controller with a new model, carrying over the
@@ -299,6 +255,9 @@ func (s *Server) switchModelLocked(ctx context.Context, ref string) error {
 	}
 	s.nameWorkspaceHolder(newCtrl)
 	s.refreshProviderSetup(currentModelRef(newCtrl))
+	if err := s.initTitleProvider(); err != nil {
+		slog.Warn("title provider could not refresh", "err", err)
+	}
 
 	// Off-lock: tear down the old controller. Close can block up to 15s.
 	if newCtrl.SharesJobsWith(prevCtrl) {
