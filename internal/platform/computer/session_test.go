@@ -45,6 +45,7 @@ func runFakeCUA(in io.Reader, out io.Writer) {
 	enc := json.NewEncoder(out)
 	value := ""
 	snapshot := 0
+	launched := false
 	for sc.Scan() {
 		var req struct {
 			ID     int64  `json:"id"`
@@ -71,6 +72,9 @@ func runFakeCUA(in io.Reader, out io.Writer) {
 					properties["delivery_mode"] = map[string]any{"type": "string"}
 				}
 				tools = append(tools, map[string]any{"name": name, "inputSchema": map[string]any{"type": "object", "properties": properties}})
+			}
+			if !driverTools["launch_app"] {
+				tools = append(tools, map[string]any{"name": "launch_app", "inputSchema": map[string]any{"type": "object"}})
 			}
 			result = map[string]any{"tools": tools}
 		}
@@ -101,6 +105,33 @@ func runFakeCUA(in io.Reader, out io.Writer) {
 					apps = append(apps, map[string]any{"pid": pid, "bundle_id": fmt.Sprintf("com.example.Other%d", i), "running": true})
 				}
 				structured = map[string]any{"apps": apps}
+				if path := os.Getenv("REASONIX_CUA_INSTALLED_APP"); path != "" {
+					app := map[string]any{"pid": 0, "bundle_id": path, "name": "Notes", "running": false, "launch_path": path}
+					if identity := os.Getenv("REASONIX_CUA_INSTALLED_ID"); identity != "" {
+						app["bundle_id"] = identity
+					}
+					if launcher := os.Getenv("REASONIX_CUA_LAUNCH_PATH"); launcher != "" {
+						app["launch_path"] = launcher
+					}
+					if launched {
+						app["pid"] = pid
+						app["running"] = true
+					}
+					entries := []any{app}
+					if os.Getenv("REASONIX_CUA_DUPLICATE_INSTALLED") != "" {
+						entries = append(entries, app)
+					}
+					if os.Getenv("REASONIX_CUA_INSTALLED_EXTRA_RUNNING") != "" {
+						entries = append(entries, map[string]any{"pid": pid, "bundle_id": "com.example.Other", "running": true, "name": "Other"})
+					}
+					structured = map[string]any{"apps": entries}
+				}
+			case "launch_app":
+				launched = true
+				structured = map[string]any{"pid": pid, "bundle_id": os.Getenv("REASONIX_CUA_INSTALLED_APP"), "name": "Notes"}
+				if identity := os.Getenv("REASONIX_CUA_INSTALLED_ID"); identity != "" {
+					structured["bundle_id"] = identity
+				}
 			case "list_windows":
 				windows := []any{map[string]any{"pid": pid, "window_id": 1, "title": "Draft", "bounds": map[string]any{"x": 100, "y": 50, "width": 2000, "height": 1000}}}
 				if os.Getenv("REASONIX_CUA_TWO_WINDOWS") != "" {
