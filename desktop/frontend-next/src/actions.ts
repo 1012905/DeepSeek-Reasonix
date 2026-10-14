@@ -376,6 +376,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "workspace.reorder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
 
   // ── Taking a change back ─────────────────────────────────────────────────
   // Planning a revert and performing one are two contracts: the first asks the
