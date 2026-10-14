@@ -121,7 +121,6 @@ func TestEachCommitRefusalHasItsOwnCode(t *testing.T) {
 
 	clean := repoWith(t, nil)
 	cleanSrv := commitServer(t, clean, messenger("x"))
-	noModel := commitServer(t, repoWith(t, map[string]string{"x.go": "package x\n"}), nil)
 	noRepo := commitServer(t, "", messenger("x"))
 
 	cases := []struct {
@@ -137,7 +136,6 @@ func TestEachCommitRefusalHasItsOwnCode(t *testing.T) {
 		{"empty message", secretSrv, "/commit", `{"message":" ","fingerprint":"` + fp + `"}`, http.StatusBadRequest, "commit.empty_message"},
 		{"bad json", secretSrv, "/commit", `not json`, http.StatusBadRequest, "commit.bad_request"},
 		{"nothing staged", cleanSrv, "/commit/propose", `{}`, http.StatusConflict, "commit.nothing_staged"},
-		{"no model", noModel, "/commit/propose", `{}`, http.StatusConflict, "commit.no_model"},
 		{"no repository", noRepo, "/commit/propose", `{}`, http.StatusConflict, "commit.no_repository"},
 	}
 	for _, c := range cases {
@@ -151,6 +149,18 @@ func TestEachCommitRefusalHasItsOwnCode(t *testing.T) {
 	files, _ := params["files"].([]any)
 	if status != http.StatusConflict || len(files) != 1 || files[0] != ".env" {
 		t.Errorf("secrets refusal params = %v", out["params"])
+	}
+}
+
+// A draft that cannot be made is a proposal without a message, not a refusal:
+// the staged set and its fingerprint still come back so the person can write
+// the message, and the reason is a code, never a sentence.
+func TestADraftThatCannotBeMadeStillOffersTheStagedSet(t *testing.T) {
+	srv := commitServer(t, repoWith(t, map[string]string{"x.go": "package x\n"}), nil)
+	status, prop := commitPost(t, srv, "/commit/propose", `{}`)
+	files, _ := prop["files"].([]any)
+	if status != http.StatusOK || prop["draftFailure"] != "no_model" || prop["message"] != "" || prop["fingerprint"] == "" || len(files) != 1 {
+		t.Fatalf("propose without a model = %d %v", status, prop)
 	}
 }
 

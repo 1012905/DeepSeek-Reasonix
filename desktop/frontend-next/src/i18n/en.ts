@@ -1395,6 +1395,10 @@ export const EN: Record<string, string> = {
     "The refine request was malformed",
   "提交…":
     "Commit…",
+  "当前会话没有可用的模型，不能起草。请手动填写提交说明。": "This session has no model to draft with. Write the commit message yourself.",
+  "起草超时了。请手动填写提交说明，或重新起草。": "Drafting timed out. Write the commit message yourself, or draft again.",
+  "模型没有给出提交说明。请手动填写，或重新起草。": "The model gave no commit message. Write it yourself, or draft again.",
+  "模型起草失败。请手动填写提交说明，或重新起草。": "The model failed to draft. Write the commit message yourself, or draft again.",
   "起草提交说明":
     "Draft commit message",
   "读取暂存区，起草提交说明…":
@@ -1450,12 +1454,6 @@ export const EN: Record<string, string> = {
     "git has no author name and email configured (user.name, user.email)",
   "git 没能记录这次提交":
     "git could not record the commit",
-  "当前会话没有可用的模型，无法起草提交说明":
-    "This session has no model to draft a commit message with",
-  "起草提交说明超时，请重试":
-    "Drafting the commit message timed out; try again",
-  "模型没有给出提交说明，请重试":
-    "The model returned no commit message; try again",
   "读取暂存区失败":
     "Reading the staged changes failed",
   "提交请求格式不正确":

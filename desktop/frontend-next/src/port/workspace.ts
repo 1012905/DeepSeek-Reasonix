@@ -108,7 +108,11 @@ export interface CommitProposal {
   files: CommitFile[];
   truncated: boolean;
   contentSecrets: boolean;
+  // Why message is empty when the model could not draft one; the staged set above is still real.
+  draftFailure?: CommitDraftFailure;
 }
+
+export type CommitDraftFailure = "no_model" | "timeout" | "no_answer" | "model_failed";
 
 export interface CommitRequest {
   message: string;
