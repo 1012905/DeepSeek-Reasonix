@@ -34,7 +34,8 @@ type toolRefreshWait func(context.Context, time.Duration) error
 
 // toolRefresh is one connection's catalog freshness: whether the server said it
 // would announce changes, how many announcements have arrived, and whether a
-// refresh cycle is draining them.
+// refresh cycle is draining them. mu is a leaf lock: a caller that needs both
+// takes toolsMu first, never the reverse.
 type toolRefresh struct {
 	mu        sync.Mutex
 	declared  bool
@@ -45,6 +46,7 @@ type toolRefresh struct {
 	onChanged func([]tool.Tool)
 	stop      func()
 	wait      toolRefreshWait
+	ttl       ttlRefresh
 }
 
 // declareToolListChanged records what the server advertised at initialize.
@@ -69,16 +71,17 @@ func (c *Client) setRefreshLifetime(lifeCtx context.Context) {
 // reports every catalog that differs from the one in hand. onChanged runs on
 // the refresh goroutine.
 func (c *Client) watchToolListChanges(onChanged func([]tool.Tool)) {
-	router, ok := c.t.(notificationTransport)
-	if !ok {
-		return
-	}
 	c.refresh.mu.Lock()
-	if c.refresh.closed || !c.refresh.declared || c.refresh.stop != nil {
+	if c.refresh.closed {
 		c.refresh.mu.Unlock()
 		return
 	}
 	c.refresh.onChanged = onChanged
+	router, ok := c.t.(notificationTransport)
+	if !ok || !c.refresh.declared || c.refresh.stop != nil {
+		c.refresh.mu.Unlock()
+		return
+	}
 	c.refresh.stop = router.registerNotification(toolListChangedMethod, func(json.RawMessage) {
 		c.requestToolsRefresh()
 	})
@@ -92,6 +95,7 @@ func (c *Client) stopToolListWatch() {
 	stop := c.refresh.stop
 	c.refresh.stop = nil
 	c.refresh.closed = true
+	c.stopToolListTTLLocked()
 	c.refresh.mu.Unlock()
 	if stop != nil {
 		stop()
@@ -154,6 +158,7 @@ func (c *Client) runToolRefreshes(ctx context.Context, wait toolRefreshWait, onC
 			c.refresh.mu.Unlock()
 			if ctx.Err() == nil && !closing {
 				slog.Warn("plugin: refresh tools after list_changed", "server", c.name, "err", err)
+				c.retryToolListTTL()
 			}
 			return
 		}

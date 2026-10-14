@@ -1375,7 +1375,11 @@ func schemaValidationError(err error) string {
 }
 
 func (c *Client) listToolsRaw(ctx context.Context) ([]mcpTool, error) {
-	return listAllPages[mcpTool](ctx, c, "tools/list", "tools")
+	tools, meta, err := listAllPagesMeta[mcpTool](ctx, c, "tools/list", "tools")
+	if err == nil {
+		c.noteToolListTTL(meta.ttlMs)
+	}
+	return tools, err
 }
 
 // listToolsRawSettled gives dynamically registering servers a bounded startup
