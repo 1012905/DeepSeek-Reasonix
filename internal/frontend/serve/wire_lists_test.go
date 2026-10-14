@@ -41,15 +41,13 @@ func TestSessionReadsNeverSendANullList(t *testing.T) {
 
 	var found []string
 	reads := map[string][]string{hubSrv.URL: {"/tree", "/runtimes", "/remotes", "/share", "/share/remember", "/host/capabilities", "/studio/versions", "/asks"}}
-	for _, path := range []string{
+	reads[srv.URL] = append(reads[srv.URL], []string{
 		"/history", "/status", "/trajectory", "/checkpoints", "/todos", "/changes", "/context", "/inbox",
 		"/mcp", "/extensions/surfaces", "/extensions/actions", "/surfaces", "/workspace/git", "/models",
 		"/rewind/undo", "/branches", "/execution-graph", "/adjudications", "/sessions", "/skills", "/hooks",
 		"/providers", "/browser/tabs", "/memory", "/workspaces", "/receipt-settings", "/fold-work-settings",
 		"/changed-files-settings", "/events/replay?lastEventId=0",
-	} {
-		reads[srv.URL] = append(reads[srv.URL], path)
-	}
+	}...)
 	for base, paths := range reads {
 		for _, path := range paths {
 			found = append(found, nullsOf(t, base, path)...)
