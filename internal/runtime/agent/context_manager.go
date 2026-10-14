@@ -120,8 +120,8 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 		est = policy.ObservedInputTokens
 		prepared.InputTokens = est
 		pressure = est
-	} else if floor, ok := a.providerReportedFloor(visibleShape, prepared.ProjectionVersion); ok {
-		pressure = max(pressure, floor)
+	} else {
+		pressure = a.promptPressure(visibleShape, prepared.ProjectionVersion, pressure)
 	}
 	inputHash := a.contextMaintenanceInputHash(visible)
 	if blocked, reason := a.contextMaintenanceBlocked(inputHash, ownEst, policy.Trigger == CompactionTriggerOverflow); blocked && policy.Trigger != CompactionTriggerManual {
