@@ -14,6 +14,7 @@ import { useTreeWindow, type TreePaging } from "./treewindow";
 import { useNavRail } from "./navrail";
 import { feedbackEntryTab } from "./feedbackentry";
 import { ErrorBar } from "./ErrorBar";
+import { noteFault } from "./fault";
 import { ToastStack } from "./ToastStack";
 import { useLinkRouting } from "./links";
 import { Pane, type PaneReport } from "./Pane";
@@ -140,7 +141,11 @@ export function App({ hub }: { hub: HubPort }) {
   const runsRef = useRef(runs);
   runsRef.current = runs;
 
-  const fail = useCallback((e: unknown) => setError(reason(e)), []);
+  const fail = useCallback((e: unknown) => {
+    const shown = reason(e);
+    noteFault(e, shown);
+    setError(shown);
+  }, []);
   // Asked at the moment a confirmation opens, never subscribed to: runs moves
   // on every usage round, and handing the sidebar that would rebuild a tree of
   // a few hundred sessions each frame — which is what its memo is there for.
@@ -472,7 +477,7 @@ export function App({ hub }: { hub: HubPort }) {
   // A failed request floats above the composer of the pane in front, where the
   // eye already is; with no pane on screen it takes the main area's corner.
   const activePaneShown = !!activeRuntime && panePorts.has(activeRuntime.id);
-  const errorBar = error ? <ErrorBar text={error} onDismiss={() => setError("")} /> : null;
+  const errorBar = error ? <ErrorBar text={error} onDismiss={() => setError("")} onReport={() => setFeedback("send")} /> : null;
   const bar = errorBar ?? <AutoArchiveNotice tree={tree} />;
   const activeWorkspace = tree.find((ws) => ws.root === activeRuntime?.root) ?? tree[0];
   // The folder a new session opens in is the one the switcher above names —
@@ -690,6 +695,7 @@ export function App({ hub }: { hub: HubPort }) {
                     setClaimed(true);
                   }}
                   onSettings={(section) => section ? showPrefs(section) : showPrefs()}
+                  onFeedback={() => setFeedback("send")}
                   onOpenSession={(path) => void openPane({ root: rt.root, sessionPath: path }).catch(fail)}
                   theme={scheme}
                   dockW={shownDockW}
