@@ -161,6 +161,11 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# reasoning_language = \"zh\"   # visible reasoning language: auto|zh|en\n")
 	}
+	if c.TurnNarration() != TurnNarrationBrief {
+		fmt.Fprintf(&b, "turn_narration = %q   # between tool calls: brief|detailed (detailed asks for a few lines per batch)\n", c.TurnNarration())
+	} else {
+		b.WriteString("# turn_narration = \"detailed\"   # between tool calls: brief|detailed (detailed asks for a few lines per batch)\n")
+	}
 	fmt.Fprintf(&b, "compact_ratio       = %s   # fold at this share of the model window (default 0.85)\n", formatFloat(c.Agent.CompactRatio))
 	if c.Agent.Keep != nil {
 		fmt.Fprintf(&b, "keep                = %s   # compaction keep policy: errors, user_marked\n", renderStringArray(c.Agent.Keep))

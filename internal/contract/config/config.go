@@ -1096,6 +1096,7 @@ type AgentConfig struct {
 	// text. Empty/auto follows the conversation language. Applied as transient
 	// turn context, not the stable prompt.
 	ReasoningLanguage string `toml:"reasoning_language"`
+	TurnNarration     string `toml:"turn_narration"` // brief|detailed: how much the model says between tool calls; a turn-tail instruction, user-level only
 	// Deprecated compatibility field paired with AutoPlan. Old TOML remains
 	// readable, but loading clears it and rendering omits it.
 	AutoPlanClassifier string `toml:"auto_plan_classifier"`

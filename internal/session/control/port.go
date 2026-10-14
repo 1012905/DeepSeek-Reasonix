@@ -291,6 +291,8 @@ type RuntimeSettings interface {
 	SaveChangedFilesSettings(show bool) error
 	FoldWorkSettings() FoldWorkSettings
 	SaveFoldWorkSettings(fold bool) error
+	TurnNarrationSettings() TurnNarrationSettings
+	SaveTurnNarrationSettings(level string) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings

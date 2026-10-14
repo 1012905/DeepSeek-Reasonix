@@ -378,6 +378,8 @@ type Options struct {
 	ResponseLanguage string
 	// ReasoningLanguage controls the visible reasoning language; empty/auto follows the conversation.
 	ReasoningLanguage string
+	// TurnNarration is brief (default) or detailed; see config.TurnNarration.
+	TurnNarration string
 	// DisableColdResumePrune suppresses the cold-resume cache-state notice.
 	// Resume never rewrites history regardless of this flag.
 	DisableColdResumePrune bool

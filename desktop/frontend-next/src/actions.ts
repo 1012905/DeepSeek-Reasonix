@@ -83,6 +83,7 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.reload", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.changed-files", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "chrome.fold-work", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "chrome.turn-narration", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "changes.open", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.receipt", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.receipt-line", kind: "view", target: "none", proof: "interaction" },
