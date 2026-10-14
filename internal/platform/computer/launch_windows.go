@@ -23,7 +23,20 @@ func nativeLaunchSpecification(app nativeApplication) (launchSpecification, erro
 	return spec, nil
 }
 
-func sameExecutablePath(actual, expected string) bool { return strings.EqualFold(actual, expected) }
+// A process started from a short (8.3) path reports that spelling while the
+// catalogue's executable is resolved to the long one, so both are normalized
+// before they are compared: the attestation is about which file, not how it is spelled.
+func sameExecutablePath(actual, expected string) bool {
+	if strings.EqualFold(actual, expected) {
+		return true
+	}
+	a, err := filepath.EvalSymlinks(actual)
+	if err != nil {
+		return false
+	}
+	e, err := filepath.EvalSymlinks(expected)
+	return err == nil && strings.EqualFold(a, e)
+}
 
 func attestNativeLaunchBinary(file string) error {
 	if !filepath.IsAbs(file) || strings.HasPrefix(file, `\\`) || !strings.EqualFold(filepath.Ext(file), ".exe") {
