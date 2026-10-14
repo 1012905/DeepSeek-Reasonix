@@ -445,9 +445,9 @@ func (a *contextWindow) compactToProjection(ctx context.Context, trigger, instru
 	fold, priorIndex := stripFoldIndexFromDigests(fold)
 	foldIndex := buildFoldIndex(msgs[head:start], policyKeep, a.toolFactsFor,
 		a.canonicalOriginFor(stateSnapshot, canonical, msgs, head))
-	fixedPrefixTokens := a.estimatedPromptTokens(a.providerProjectionMessages(msgs[:head]))
-	if a.effectiveContextWindow() > 0 && fixedPrefixTokens >= a.compactTrigger() {
-		return CompactionNoop, NoopFixedPrefixAboveTrigger, rejectCheckpoint(NoopFixedPrefixAboveTrigger, "fixed prefix (%d tokens) already exceeds trigger (%d)", fixedPrefixTokens, a.compactTrigger())
+	reason, err := a.foldCannotFit(trigger, msgs, head, start, policy)
+	if err != nil {
+		return CompactionNoop, reason, err
 	}
 
 	sourceTokens := a.announceCompaction(trigger, len(fold), msgs)
@@ -462,7 +462,6 @@ func (a *contextWindow) compactToProjection(ctx context.Context, trigger, instru
 			instructions += hookInstr
 		}
 	}
-	var err error
 	fold, instructions, err = a.interceptCompactionPrepare(ctx, fold, instructions)
 	if err != nil {
 		a.emitCompactionAborted(trigger, compactionFailureCode(err))
@@ -491,7 +490,7 @@ func (a *contextWindow) compactToProjection(ctx context.Context, trigger, instru
 	projMsgs, boundary := a.foldedProjection(stateSnapshot, fromProjection, msgs, kept, head, start, summary)
 	candidate := modelVisibleFromProjection(sessionstore.ContextProjection{Messages: projMsgs, CoveredCount: boundary.Covered}, canonical)
 	projTokens := a.estimatedPromptTokens(a.withTodoIdentityTail(candidate))
-	fixedPrefixTokens = a.estimatedPromptTokens(msgs[:head])
+	fixedPrefixTokens := a.estimatedPromptTokens(msgs[:head])
 	tele.ProjectionTokens = projTokens
 	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
 	a.emitCompactionTelemetry(tele)
