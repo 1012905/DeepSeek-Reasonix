@@ -3268,14 +3268,10 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-workspace-kind { color: var(--muted); }
 .studio-user-foot .acctrow:hover,
 .studio-settings:hover { background: var(--accent-wash); color: var(--text); }
-:root[data-bg] .railfoot {
-  background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
-}
 :root[data-theme="light"][data-bg] :is(.rail, .chrome) {
   background: color-mix(in srgb, var(--page) 86%, transparent) !important;
 }
 :root[data-theme="light"][data-bg] .railfoot {
-  background: color-mix(in srgb, var(--surface) 90%, transparent) !important;
   box-shadow: 0 -1px color-mix(in srgb, var(--border) 62%, transparent);
 }
 :root[data-theme="light"] .studio-user-foot .ini[data-off] {
