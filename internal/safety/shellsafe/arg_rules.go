@@ -7,9 +7,7 @@ import "strings"
 // the program itself accepts — a clustered short flag, an abbreviated long
 // one — is that option; the tables list programs, these list their escapes.
 var argRules = map[string]func(sub string, args []string) bool{
-	"find": func(_ string, args []string) bool {
-		return hasAnyArg(args, "-exec", "-execdir", "-delete", "-ok", "-okdir", "-fls", "-fprint", "-fprint0", "-fprintf")
-	},
+	"find": func(_ string, args []string) bool { return findRule(args) },
 	"sort": func(_ string, args []string) bool {
 		return hasShortFlag(args, 'o') || hasLongOpt(args, "--output", 3) || hasLongOpt(args, "--compress-program", 4)
 	},
