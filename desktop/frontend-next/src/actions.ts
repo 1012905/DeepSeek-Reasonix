@@ -217,6 +217,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.name", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.contact", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.shot.capture", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.shot.add", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.remove", kind: "view", target: "entity", proof: "interaction" },
   { id: "feedback.send", kind: "kernel-mutation", target: "none", proof: "interaction" },

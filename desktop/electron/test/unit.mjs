@@ -2413,3 +2413,31 @@ test("CUA layout resolves one canonical contract in development and packaging", 
  assert.deepEqual(JSON.parse(fs.readFileSync(source, "utf8")), cuaContract);
  assert.equal(computerDriverContract({ packaged: true, resourcesPath: "/res" }), path.join("/res", "bin", "cua-driver.lock.json"));
 });
+
+const { captureHandler, MAX_WIDTH } = require("../src/capture.js");
+
+function fakeImage(width, { empty = false } = {}) {
+  return {
+    isEmpty: () => empty,
+    getSize: () => ({ width, height: 10 }),
+    resize: (opts) => fakeImage(opts.width),
+    toPNG: () => Buffer.from(`png:${width}`),
+  };
+}
+
+test("the window capture answers only the studio window and takes no target", async () => {
+  let asked = 0;
+  const win = { webContents: { capturePage: async (...args) => (asked++, assert.equal(args.length, 0), fakeImage(800)) } };
+  const handle = captureHandler((event) => (event.sender === "studio" ? win : null));
+  const png = await handle({ sender: "studio" }, "some-other-window-id", { x: 0, y: 0 });
+  assert.equal(Buffer.from(png).toString(), "png:800");
+  assert.equal(await handle({ sender: "a browser page" }), null);
+  assert.equal(asked, 1);
+});
+
+test("the window capture is scaled down past the upload-friendly width and refuses an empty frame", async () => {
+  const wide = captureHandler(() => ({ webContents: { capturePage: async () => fakeImage(MAX_WIDTH * 2) } }));
+  assert.equal(Buffer.from(await wide({})).toString(), `png:${MAX_WIDTH}`);
+  const blank = captureHandler(() => ({ webContents: { capturePage: async () => fakeImage(0, { empty: true }) } }));
+  assert.equal(await blank({}), null);
+});
