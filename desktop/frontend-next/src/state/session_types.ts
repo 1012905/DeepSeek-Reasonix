@@ -178,6 +178,7 @@ export interface Stall {
 
 export interface SessionState {
   error: string;
+  errorFrom: string;
   // What the tool calls of this session did, keyed by wire id. Held apart from
   // items because the transcript folds, nests and replaces the cards drawing
   // them, and none of that is a change to what ran.

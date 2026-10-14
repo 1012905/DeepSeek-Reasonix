@@ -42,6 +42,7 @@ export const initialState: SessionState = {
   interactionIDs: { asked: [], answered: [] },
   interactions: { requests: 0, questions: 0, options: 0, answers: 0, customAnswers: 0 },
   error: "",
+  errorFrom: "",
   executions: {},
   terminal: null,
   runtime: [],
@@ -212,7 +213,9 @@ export type SessionEvent =
   | { kind: "__todos"; plan: PlanStep[] }
   | { kind: "__totals"; hit: number; miss: number; cost?: number; currency?: string; coverage?: CostCoverage; incompleteReason?: string }
   | { kind: "__running"; running: boolean }
-  | { kind: "__error"; text: string }
+  // `from` names the read that raised it, so a later success of that read can take it back.
+  | { kind: "__error"; text: string; from?: string }
+  | { kind: "__error_clear"; from: string }
   | { kind: "__user"; text: string; pending: boolean; id?: string }
   | { kind: "__unsent"; id: string }
   | { kind: "__queued"; id: string; itemId: string; queued: "steer" | "followup"; paused?: boolean }
@@ -228,7 +231,8 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
   if (ev.kind === "__extension_snapshot") return ev.surfaces.reduce(foldExtension, s);
   // A line the kernel holds for a retry waits in the queue panel, not here.
   if (ev.kind === "notice" && ev.code === "unapplied_steer" && ev.itemId) s = withoutPendingRow(s, ev.itemId);
-  if (ev.kind === "__error") return { ...s, error: ev.text };
+  if (ev.kind === "__error") return { ...s, error: ev.text, errorFrom: ev.text ? (ev.from ?? "") : "" };
+  if (ev.kind === "__error_clear") return s.error && s.errorFrom === ev.from ? { ...s, error: "", errorFrom: "" } : s;
   if (ev.kind === "__entered") {
     const spent = new Set(ev.ids);
     const left = s.entranceOwed.filter((id) => !spent.has(id));
