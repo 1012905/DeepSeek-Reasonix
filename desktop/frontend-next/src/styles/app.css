@@ -2518,7 +2518,7 @@
   }
 
   .prefs-nav .navsec {
-    padding: 15px 10px 5px; font: var(--w-semi) var(--fs-micro) var(--ui);
+    padding: 15px 10px 5px; font: var(--w-reg) var(--fs-micro) var(--ui);
     letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
   }
   .prefs-nav .navsec:first-child { padding-top: 2px }
@@ -2527,13 +2527,13 @@
     position: relative; overflow: hidden;
     display: flex; align-items: center; gap: 9px;
     min-height: 34px; text-align: left; padding: 7px 10px; border: 0; border-radius: var(--r-sm); cursor: pointer;
-    background: transparent; color: var(--muted); font: var(--w-reg) var(--fs-ui) var(--ui);
+    background: transparent; color: var(--text); font: var(--w-reg) var(--fs-ui) var(--ui);
     transition: background var(--m-line), color var(--m-line);
   }
   .prefs-nav button svg {
     width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
     stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round;
-    color: var(--faint); transition: color var(--m-line), transform var(--t-panel) var(--ease-out);
+    color: var(--muted); transition: color var(--m-line);
   }
 
   .prefs-nav .nm { flex: 1 1 auto; min-width: 6.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
@@ -2547,18 +2547,16 @@
   .prefs-nav button:not(:disabled):hover svg { color: var(--muted) }
   .prefs-nav button:disabled, .prefs-found button:disabled { opacity: .45; cursor: default }
   .prefs-nav button[aria-selected="true"] {
-    background: var(--overlay); color: var(--text); font-weight: var(--w-med);
-    box-shadow: inset 0 0 0 1px var(--border);
+    background: var(--overlay); font-weight: var(--w-med);
   }
-  .prefs-nav button[aria-selected="true"]::before { height: 17px }
-  .prefs-nav button[aria-selected="true"] svg { color: var(--text); transform: scale(1.06) }
+  .prefs-nav button[aria-selected="true"] svg { color: var(--text) }
   .prefs-nav button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
 
   .prefs-nav .nv {
     flex: 0 99 auto; min-width: 0; max-width: 74px; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint);
   }
-  .prefs-nav button[aria-selected="true"] .nv { color: var(--muted) }
+  .prefs-nav button[aria-selected="true"] .nv { color: var(--text) }
   .prefs-nav .nv[data-danger] { color: var(--err-ink) }
   @media (prefers-reduced-motion: reduce) {
     .prefs-nav button::before, .prefs-nav button svg { transition: none }
