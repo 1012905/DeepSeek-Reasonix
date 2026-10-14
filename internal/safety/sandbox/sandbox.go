@@ -56,6 +56,9 @@ type Spec struct {
 	Network bool
 	// HostAuthorities are the host services this command may call.
 	HostAuthorities []HostAuthority
+	// AllowDevices are globs under /dev for host device nodes bound into the
+	// Linux sandbox's private /dev (the GPU, for one). Other platforms ignore it.
+	AllowDevices []string
 	// Egress, set with Network where EgressSupported, confines external egress
 	// to the host egress proxy. Loopback itself stays open so a command can
 	// serve and reach its own listeners.

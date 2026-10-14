@@ -153,6 +153,7 @@ func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root 
 		ForbidReadRoots: forbidReadRoots,
 		Network:         cfg.Sandbox.Network,
 		HostAuthorities: sandbox.ParseAuthorities(cfg.Sandbox.HostAuthorities),
+		AllowDevices:    cfg.Sandbox.AllowDevices,
 	}
 	searchSpec := builtin.ResolveSearch(cfg.Tools.Search.Engine, cfg.Tools.Search.RgPath, os.Stderr)
 	confined := append(builtin.ConfineReaders(forbidReadRoots),

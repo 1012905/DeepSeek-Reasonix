@@ -45,6 +45,7 @@ func holdUserScope(c *Config) heldScope {
 	s, p := c.Sandbox, c.Permissions
 	s.AllowWrite, s.ForbidRead = slices.Clone(s.AllowWrite), slices.Clone(s.ForbidRead)
 	s.HostAuthorities, s.AllowedDomains, s.DeniedDomains = slices.Clone(s.HostAuthorities), slices.Clone(s.AllowedDomains), slices.Clone(s.DeniedDomains)
+	s.AllowDevices = slices.Clone(s.AllowDevices)
 	p.Allow, p.Ask, p.Deny = slices.Clone(p.Allow), slices.Clone(p.Ask), slices.Clone(p.Deny)
 	shell := c.Tools.Shell
 	shell.Env = maps.Clone(shell.Env)
@@ -252,7 +253,7 @@ func (h heldScope) narrowSandbox(c *Config, ws string) {
 	// A cloned repo must not hand itself the container daemon socket. An egress
 	// allow list only narrows open network, so a repo may set one the user has
 	// not, but never replace the user's; its denials only add to the user's.
-	s.HostAuthorities = u.HostAuthorities
+	s.HostAuthorities, s.AllowDevices = u.HostAuthorities, u.AllowDevices
 	if len(u.AllowedDomains) > 0 {
 		s.AllowedDomains = u.AllowedDomains
 	}
