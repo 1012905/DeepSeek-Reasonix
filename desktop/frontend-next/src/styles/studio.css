@@ -1613,6 +1613,17 @@ body { background: var(--page) !important; }
   color: var(--surface);
   font: 600 12px/1 var(--ui);
 }
+.onb-skip {
+  justify-self: center;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: 500 12px/1 var(--ui);
+  cursor: pointer;
+}
+.onb-skip:hover { color: var(--text); }
+.onb-skip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .onb-note { color: var(--ghost); font: 500 10px/1.65 var(--ui); }
 .onb-found { border-color: var(--border); background: var(--overlay); }
 .onb-found-hd { color: var(--text); }

@@ -151,6 +151,7 @@ jobs:
           node perf/image-preview.mjs
           node perf/toast-anchor.mjs
           node perf/addfolder-rest.mjs
+          node perf/setup-defer.mjs
           node perf/search-toggle.mjs
           node perf/selfcheck.mjs branch-tooltip
 

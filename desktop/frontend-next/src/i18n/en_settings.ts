@@ -596,6 +596,10 @@ export const EN_SETTINGS: Record<string, string> = {
 
   // ── 首次连接 ─────────────────────────────────────────────────────
   "开始设置": "Set up Reasonix",
+  "稍后再说": "Not now",
+  "还没连接模型服务": "No model service connected yet",
+  "当前模型还没有 API key": "The selected model has no API key yet",
+  "去连接": "Connect",
   "连接模型服务": "Connect a model service",
   "地址、协议与凭据": "Address, protocol, and credentials",
   "确认模型与能力": "Confirm the model and its capabilities",
