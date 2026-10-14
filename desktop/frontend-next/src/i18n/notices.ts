@@ -40,6 +40,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   compacted: "已压缩",
   compact_declined: "无需压缩：{why}",
   compact_failed: "压缩失败：{why}",
+  context_composition: "上下文约 {total}，已超过压缩阈值 {at}，没有更多可折叠的内容。占用最多：{top}。{active}",
   compact_held: "自动压缩暂缓，上次尝试没有完成：{why}",
   permission_rules_dormant: "有 {n} 条权限规则没有对应的工具，匹配不到任何调用，因此起不到限制作用（如「{list}」里的 {rule}）；到「设置 → 权限」里删除或改写，命令要写成 Bash(命令:*)",
   extension_skipped: "扩展 {ext} 的配套后台程序没有运行，该扩展本次（在 {point}）已被跳过；到「工具与集成」里查看并启动它，或停用该扩展",

@@ -83,6 +83,8 @@ const (
 	NoticeCodeCompactFailed = "compact_failed"
 	// Automatic compaction is due but an earlier attempt's failure still holds the retry; Detail is that failure's code.
 	NoticeCodeCompactHeld = "compact_held"
+	// The context is over its compaction threshold and folding cannot help; Detail is a ContextComposition.
+	NoticeCodeContextComposition = "context_composition"
 	// An optional extension was left out of an operation; Detail is the ExtensionSkipped payload.
 	NoticeCodeExtensionSkipped = "extension_skipped"
 	// A reopened session's inbox held unfinished instructions and came up paused; Detail is the InboxRecovered payload.
