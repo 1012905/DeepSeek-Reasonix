@@ -22,6 +22,7 @@ const fakeComputerHelperEnv = "REASONIX_BOOT_FAKE_COMPUTER_HELPER"
 
 func runFakeComputerHelper(in io.Reader, out io.Writer) {
 	value := ""
+	launched := false
 	enc := json.NewEncoder(out)
 	sc := bufio.NewScanner(in)
 	for sc.Scan() {
@@ -39,7 +40,7 @@ func runFakeComputerHelper(in io.Reader, out io.Writer) {
 		var result any = map[string]any{"serverInfo": map[string]any{"version": computer.Contract().Version}}
 		if req.Method == "tools/list" {
 			tools := []any{}
-			for _, name := range []string{"list_apps", "list_windows", "get_window_state", "set_value"} {
+			for _, name := range []string{"list_apps", "list_windows", "get_window_state", "set_value", "launch_app"} {
 				tools = append(tools, map[string]any{"name": name, "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"delivery_mode": map[string]any{"type": "string"}}}})
 			}
 			result = map[string]any{"tools": tools}
@@ -60,6 +61,17 @@ func runFakeComputerHelper(in io.Reader, out io.Writer) {
 					apps = append(apps, map[string]any{"pid": os.Getpid(), "bundle_id": "com.example.Other", "name": "Other", "running": true})
 				}
 				data = map[string]any{"apps": apps}
+				if path := os.Getenv("REASONIX_BOOT_CUA_INSTALLED_APP"); path != "" {
+					app := map[string]any{"pid": 0, "bundle_id": path, "launch_path": path, "name": "Notes", "running": false}
+					if launched {
+						app["pid"] = os.Getpid()
+						app["running"] = true
+					}
+					data = map[string]any{"apps": []any{app}}
+				}
+			case "launch_app":
+				launched = true
+				data = map[string]any{"pid": os.Getpid(), "bundle_id": os.Getenv("REASONIX_BOOT_CUA_INSTALLED_APP"), "name": "Notes"}
 			case "list_windows":
 				data = map[string]any{"windows": []any{map[string]any{"pid": os.Getpid(), "window_id": 1, "title": "Draft", "bounds": map[string]any{"width": 800, "height": 600}}}}
 			case "get_window_state":

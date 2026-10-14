@@ -45,7 +45,7 @@ type computerRead struct{ session *computer.Session }
 func (computerRead) Name() string { return "computer_read" }
 
 func (computerRead) Description() string {
-	return "See an approved application listed by what=apps. Select window by id when it has multiple windows. snapshot returns session-bound element refs in brackets for computer_act. screenshot captures that exact window; computer_act x/y use pixels of this latest displayed image. Old tokens and captures expire on refresh or reconnect."
+	return "See an approved application listed by what=apps. Installed entries without a targetable window provide an exact launch identity for a separate computer_act launch step. Select window by id when it has multiple windows. snapshot returns session-bound element refs in brackets for computer_act. screenshot captures that exact window; computer_act x/y use pixels of this latest displayed image. Old tokens and captures expire on refresh or reconnect."
 }
 
 func (computerRead) Schema() json.RawMessage {
@@ -118,12 +118,12 @@ type computerAct struct{ session *computer.Session }
 func (computerAct) Name() string { return "computer_act" }
 
 func (computerAct) Description() string {
-	return "Operate an approved application through CUA Driver. Select window when the app has multiple windows. Use refs from its latest snapshot or coordinates from its latest screenshot. Background clicks, set_value, type/paste, key and scroll never silently escalate. pointer_click explicitly takes foreground control and requires separate approval. wait is bounded. Inspect fresh state after an unverified effect; never assume an action landed. Returns a snapshot afterwards."
+	return "Operate an approved application through CUA Driver. launch must be one separate step using an exact installed identity from computer_read what=apps; no window selector or extra arguments. Select window when the app has multiple windows. Use refs from its latest snapshot or coordinates from its latest screenshot. Background clicks, set_value, type/paste, key and scroll never silently escalate. pointer_click explicitly takes foreground control and requires separate approval. wait is bounded. Inspect fresh state after an unverified effect; never assume an action landed. Returns a snapshot afterwards except launch, which returns the verified running identity for a separately approved read."
 
 }
 
 func (computerAct) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"app":{"type":"string"},"window":{"type":"integer","minimum":1},"steps":{"type":"array","maxItems":64,"items":{"type":"object","properties":{"action":{"type":"string","enum":["click","right_click","set_value","type","paste","key","scroll","wait","pointer_click"]},"ref":{"type":"string"},"text":{"type":"string"},"key":{"type":"string"},"x":{"type":"number"},"y":{"type":"number"},"amount":{"type":"number"},"ms":{"type":"integer"},"to_x":{"type":"number"},"to_y":{"type":"number"},"button":{"type":"string","enum":["left","right","middle"]},"times":{"type":"integer"},"seconds":{"type":"number"}},"required":["action"]}}},"required":["app","steps"]}`)
+	return json.RawMessage(`{"type":"object","properties":{"app":{"type":"string"},"window":{"type":"integer","minimum":1},"steps":{"type":"array","maxItems":64,"items":{"type":"object","properties":{"action":{"type":"string","enum":["launch","click","right_click","set_value","type","paste","key","scroll","wait","pointer_click"]},"ref":{"type":"string"},"text":{"type":"string"},"key":{"type":"string"},"x":{"type":"number"},"y":{"type":"number"},"amount":{"type":"number"},"ms":{"type":"integer"},"to_x":{"type":"number"},"to_y":{"type":"number"},"button":{"type":"string","enum":["left","right","middle"]},"times":{"type":"integer"},"seconds":{"type":"number"}},"required":["action"]}}},"required":["app","steps"]}`)
 }
 
 func (computerAct) ReadOnly() bool                                   { return false }
@@ -171,6 +171,10 @@ func (c computerAct) Execute(ctx context.Context, args json.RawMessage) (string,
 	if res.App.Bundle == "" {
 		return out.String(), stepErr
 	}
+	if len(p.Steps) == 1 && p.Steps[0].Action == "launch" {
+		out.WriteString("Launched application identity (read separately under its own approval):\n" + renderApps([]computer.App{res.App}))
+		return out.String(), stepErr
+	}
 	snap, err := c.session.Snapshot(ctx, res.App.Bundle, p.Window)
 	if err != nil {
 		fmt.Fprintf(&out, "The application could not be read afterwards: %v\n", err)
@@ -190,6 +194,13 @@ func renderApps(apps []computer.App) string {
 		fmt.Fprintf(&b, "%s %s — %s", mark, computer.ShownBundle(app.Bundle), computer.ShownName(app.Name))
 		if why := computer.Refused(app.Bundle); why != "" {
 			fmt.Fprintf(&b, " (never operated: %s)", why)
+		}
+		if app.PID == 0 && len(app.Windows) == 0 {
+			if app.Launchable {
+				b.WriteString(" (installed; no targetable window; launch separately)")
+			} else {
+				b.WriteString(" (installed; no targetable window; launch unsupported)")
+			}
 		}
 		b.WriteString("\n")
 		for _, w := range app.Windows {
