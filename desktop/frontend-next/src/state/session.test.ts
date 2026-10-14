@@ -904,3 +904,29 @@ describe("a running call's live output", () => {
     expect(tools(s)[0].tool.output).toBe("all done");
   });
 });
+
+// An error a read raised goes away when the same read next succeeds; one a
+// person's action raised, or another source's, stays until they dismiss it.
+describe("an error that names where it came from", () => {
+  it("is cleared by a later success of that same source only", () => {
+    const failed = run([{ kind: "__error", text: "status unreadable", from: "status" }]);
+    expect(failed.error).toBe("status unreadable");
+    expect(reduce(failed, { kind: "__error_clear", from: "extension" }).error).toBe("status unreadable");
+    expect(reduce(failed, { kind: "__error_clear", from: "status" }).error).toBe("");
+  });
+
+  it("does not clear an error with no source, or one that replaced it", () => {
+    const unnamed = run([{ kind: "__error", text: "send refused" }]);
+    expect(reduce(unnamed, { kind: "__error_clear", from: "status" }).error).toBe("send refused");
+    const replaced = run([
+      { kind: "__error", text: "status unreadable", from: "status" },
+      { kind: "__error", text: "send refused" },
+    ]);
+    expect(reduce(replaced, { kind: "__error_clear", from: "status" }).error).toBe("send refused");
+  });
+
+  it("is cleared by the person's dismissal whatever its source", () => {
+    const failed = run([{ kind: "__error", text: "status unreadable", from: "status" }]);
+    expect(reduce(failed, { kind: "__error", text: "" }).error).toBe("");
+  });
+});

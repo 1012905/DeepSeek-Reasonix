@@ -106,9 +106,10 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const workbench = docked || tab === "browser";
   const flow = useRef<HTMLDivElement>(null);
   const running = s.running || !!status?.running; // A paired device can join after turn_started.
-  const fail = useCallback((e: unknown) => {
-    dispatch({ kind: "__error", text: reason(e) } as never);
+  const fail = useCallback((e: unknown, from?: string) => {
+    dispatch({ kind: "__error", text: reason(e), from } as never);
   }, []);
+  const statusRead = useCallback(() => dispatch({ kind: "__error_clear", from: "status" } as never), []);
   const conversationFiles = useConversationFiles(port, status?.workspaceRoot ?? rt.root, !!rt.host, visible && tab === "flow", revealBrowser, fail);
   const compact = useCompactNow(port, running || s.items.some((item) => item.t === "compaction" && !item.done), fail);
   // Elapsed is a clock reading and belongs on the tick. Throughput is not: it
@@ -160,7 +161,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       ? prev : { kind: "settled", status: next }));
   }, []);
 
-  const refreshStatus = useCallback(() => port.status().then(applyStatus).catch(() => {}), [port, applyStatus]);
+  const refreshStatus = useCallback(() => port.status().then((st) => { applyStatus(st); statusRead(); }).catch(() => {}), [port, applyStatus, statusRead]);
 
   const [wallet, refreshWallet] = useWallet(port, accountOf(status?.modelRef));
   const hideAmounts = useHidesAmounts();
@@ -274,12 +275,13 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     port.status().then((st) => {
       if (!current()) return;
       applyStatus(st);
+      statusRead();
       dispatch(totalsOf(st) as never);
-    }).catch((e) => { if (current()) fail(e); });
+    }).catch((e) => { if (current()) fail(e, "status"); });
     refreshWallet();
     onSessionChanged();
     return history;
-  }, [port, applyStatus, refreshWallet, onSessionChanged, replayTrajectory, fail, surfaceReplay.refresh]);
+  }, [port, applyStatus, statusRead, refreshWallet, onSessionChanged, replayTrajectory, fail, surfaceReplay.refresh]);
 
   // Both of these read only the user and tool cards, so they key off the
   // revision rather than the items array: a streamed answer leaves every card
