@@ -722,6 +722,9 @@ func (s *Server) branches(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	if branches == nil {
+		branches = []sessionstore.BranchInfo{}
+	}
 	tree := s.ctl().BranchTreeText()
 	writeJSON(w, map[string]any{"branches": branches, "tree": tree})
 }

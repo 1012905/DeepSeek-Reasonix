@@ -69,6 +69,9 @@ func writeInboxError(w http.ResponseWriter, err error) {
 func (s *Server) inboxList(w http.ResponseWriter, r *http.Request) {
 	_ = r
 	snap := s.inboxAPI().InboxSnapshot()
+	if snap.Items == nil {
+		snap.Items = []sessioninbox.InboxItemMeta{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(snap)
 }

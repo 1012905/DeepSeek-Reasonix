@@ -28,6 +28,9 @@ func (s *Server) eventsReplay(w http.ResponseWriter, r *http.Request) {
 
 func writeEventsReplay(w http.ResponseWriter, r *http.Request, bc *Broadcaster) {
 	frames, complete := bc.Replay(lastEventID(r))
+	if frames == nil {
+		frames = []json.RawMessage{}
+	}
 	writeJSON(w, struct {
 		Frames    []json.RawMessage `json:"frames"`
 		Complete  bool              `json:"complete"`
