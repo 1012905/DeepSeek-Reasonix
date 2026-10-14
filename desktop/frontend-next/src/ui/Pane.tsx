@@ -54,6 +54,7 @@ import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
 import { PostureNote } from "./PostureNote";
+import { ConnectNote } from "./ConnectNote";
 import { useStatusPoll } from "./useStatusPoll";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
 import { LiveWork, useLiveWork } from "../state/foldpref";
@@ -80,7 +81,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onOpenSession, needsProject, onOpenProject, onKeepHere, theme, dockW, dockMax, onDockW, manualBrowser = false, browserAsk = 0, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, browserAsk = 0, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -563,6 +564,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             onRefresh={onQueueRefresh}
             onPause={onQueuePause}
           />
+          {connect && <ConnectNote offer={connect} />}
           <PostureNote port={port} status={status} onChanged={refreshStatus} />
         {/* Views the user (or the extension) put next to the composer. They sit
             above it rather than inside it: the input box is the one thing an

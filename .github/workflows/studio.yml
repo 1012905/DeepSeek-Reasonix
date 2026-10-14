@@ -152,6 +152,7 @@ jobs:
           node perf/toast-anchor.mjs
           node perf/addfolder-rest.mjs
           node perf/add-project-selects.mjs
+          node perf/setup-defer.mjs
           node perf/search-toggle.mjs
           node perf/selfcheck.mjs branch-tooltip
 

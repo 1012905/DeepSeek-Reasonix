@@ -45,7 +45,7 @@ import { PaneTabs } from "./PaneTabs";
 import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
 import { useLiveGrace } from "./useLiveGrace";
 import { isUnread, useViewed, useUnreadBadge } from "./unread";
-import { Onboarding } from "./Onboarding";
+import { useFirstRun } from "./useFirstRun";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
 import { singleFlight } from "./singleflight";
@@ -524,23 +524,10 @@ export function App({ hub }: { hub: HubPort }) {
     [closePanes, hub, reloadTree, unpinSession],
   );
 
+  const first = useFirstRun({ port: activePort, setup, welcomed, setSetup, setWelcomed, reloadPanes });
+
   if (setup === undefined || welcomed === undefined) return <div className="app" data-run="idle" />;
-  if (setup?.required && activePort) {
-    return (
-      <Onboarding
-        port={activePort}
-        setup={setup}
-        onDone={() => {
-          setSetup(null);
-          if (!welcomed) {
-            setWelcomed(true);
-            void activePort.markWelcomed().catch(() => {});
-          }
-          void reloadPanes();
-        }}
-      />
-    );
-  }
+  if (first.gate) return first.gate;
   if (!welcomed && activePort) {
     return (
       <Welcome
@@ -698,6 +685,7 @@ export function App({ hub }: { hub: HubPort }) {
                   findPulse={findPulse}
                   filesPulse={filesRequests[rt.id] ?? 0}
                   alert={rt.id === active ? bar : undefined}
+                  connect={first.connect}
                   needsProject={needsProject}
                   onOpenProject={() => {
                     setRail(true);
