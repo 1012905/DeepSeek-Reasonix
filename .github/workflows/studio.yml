@@ -147,6 +147,7 @@ jobs:
           node perf/sessionrows.mjs
           node perf/wheel.mjs
           node perf/branch-tooltip.mjs
+          node perf/branch-menu.mjs
           node perf/image-preview.mjs
           node perf/search-toggle.mjs
           node perf/selfcheck.mjs branch-tooltip

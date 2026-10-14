@@ -2284,8 +2284,8 @@ body { font-size: 14px; line-height: 1.75; }
   background: var(--hair);
   transform: translateY(-4px) rotate(45deg);
 }
-.studio-branch-pop:hover .studio-branch-card,
-.studio-branch-pop:focus-within .studio-branch-card {
+.studio-branch-pop:not(:has([aria-expanded="true"])):hover .studio-branch-card,
+.studio-branch-pop:not(:has([aria-expanded="true"])):focus-within .studio-branch-card {
   opacity: 1;
   visibility: visible;
   transition-delay: 0s;
