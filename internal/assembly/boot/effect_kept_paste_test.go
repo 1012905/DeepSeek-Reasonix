@@ -85,7 +85,7 @@ func TestEffectKeptPasteReachesTheProviderAsAPointerOnly(t *testing.T) {
 	home := statedBootHome(t)
 	dir := testenv.TempDir(t)
 	var lines []string
-	for i := 0; i < 600; i++ {
+	for i := range 600 {
 		lines = append(lines, fmt.Sprintf("LOG-%04d something noisy happened here", i))
 	}
 	pasted := strings.Join(lines, "\n") + "\n"
