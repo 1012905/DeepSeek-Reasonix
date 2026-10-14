@@ -897,6 +897,10 @@ type SandboxConfig struct {
 	// ssh_agent alone: signing is routine, a daemon socket is host-wide
 	// execution. User-global (LoadForRoot); a repo cannot grant itself one.
 	HostAuthorities []string `toml:"host_authorities"`
+	// AllowDevices lists host device nodes (globs under /dev, such as
+	// /dev/nvidia*) bound into the Linux bash sandbox, which otherwise shows a
+	// private /dev. User-global: a repo cannot grant itself a device.
+	AllowDevices []string `toml:"allow_devices"`
 	// AllowedDomains, when set with Network, limits bash egress (not MCP
 	// servers') to these hosts through the host's egress proxy; "*.x" names
 	// every host beneath x. A repo may set it only where the user has not.

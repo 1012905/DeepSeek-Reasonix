@@ -301,6 +301,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	fmt.Fprintf(&b, "bash    = %q\n", c.BashMode())
 	fmt.Fprintf(&b, "network = %v\n", c.Sandbox.Network)
 	fmt.Fprintf(&b, "host_authorities = %s   # host services bash may call; user-global\n", renderStringArray(c.Sandbox.HostAuthorities))
+	renderAllowDevices(&b, c.Sandbox.AllowDevices)
 	if len(c.Sandbox.AllowedDomains) > 0 {
 		fmt.Fprintf(&b, "allowed_domains = %s\n", renderStringArray(c.Sandbox.AllowedDomains))
 	} else {

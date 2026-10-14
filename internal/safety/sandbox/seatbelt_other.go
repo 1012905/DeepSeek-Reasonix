@@ -152,6 +152,7 @@ func bwrapBaseArgs(spec Spec) []string {
 		"--dev", "/dev",
 		"--proc", "/proc",
 	}
+	args = append(args, bwrapDeviceArgs(spec.AllowDevices)...)
 	args = append(args, bwrapTmpMountArgs(spec)...)
 	if spec.Network && !egressBridged(spec) {
 		// Re-allow network by removing the network namespace.
