@@ -126,7 +126,7 @@ class BenchPort extends MockPort {
   }
 
   async providerSetup() {
-    return ONBOARDING ? { required: true, provider: "", model: "" } : null;
+    return ONBOARDING ? { required: true, noProvider: true, provider: "", model: "" } : null;
   }
 
   async foldWorkSettings() {

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { AgentPort, ContextBreakdown, McpEntry, SessionStatus } from "../port/port";
 import type { RuntimeView } from "../port/hub";
+import type { ConnectOffer } from "./ConnectNote";
 
 // PaneReport is what the window's own chrome needs from whichever pane has
 // focus: everything else about a session stays inside the pane that owns it.
@@ -52,6 +53,7 @@ export interface PaneProps {
   needsProject: boolean;
   onOpenProject: () => void;
   onKeepHere: () => void;
+  connect?: ConnectOffer;
   // A prop, not a document read: this pane is memoised past an attribute flip.
   theme: string;
   // Rides on `.app`: that is where the divider writes while a drag is in flight.

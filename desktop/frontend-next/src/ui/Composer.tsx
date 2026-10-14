@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
+import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
 import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
 import { Picker } from "./Menu";
@@ -387,7 +388,8 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   // composer answering for an endpoint that never spoke.
   const declared = efforts.length > 0;
   const forcedThinking = forcesThinkingFor(models, status?.modelRef);
-  const modelLb = models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
+  const modelLb = status?.modelRef === UNCONFIGURED_REF ? t("未连接")
+    : models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
     || (status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—");
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole
