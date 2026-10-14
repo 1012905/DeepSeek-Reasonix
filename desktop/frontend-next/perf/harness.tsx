@@ -79,6 +79,11 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  async browserTabs() {
+    if (!query.has("agentpage")) return super.browserTabs();
+    return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
+  }
+
   async workspaceFile(path: string) {
     if (!query.has("doc") || !path.endsWith(".md")) return super.workspaceFile(path);
     const content = "# Install guide\n\nDownload the package for your system, then run the installer. It places the program in your user folder and does not need administrator rights.\n\nAfter the first start, open Settings and add a model service before you begin a conversation.";

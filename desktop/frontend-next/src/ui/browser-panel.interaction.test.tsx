@@ -96,6 +96,23 @@ afterEach(() => {
 });
 
 describe("which page the shell draws, and where", () => {
+  it("opens the page on screen in the default browser, and offers it only for a web address", async () => {
+    bridge.openExternal.mockClear();
+    await panel({ tabs, shown: true });
+    await userEvent.click(screen.getByRole("button", { name: "用默认浏览器打开此页" }));
+    expect(bridge.openExternal).toHaveBeenCalledWith("http://127.0.0.1:5173/");
+    await userEvent.click(screen.getByRole("tab", { name: "Docs" }));
+    await userEvent.click(screen.getByRole("button", { name: "用默认浏览器打开此页" }));
+    expect(bridge.openExternal).toHaveBeenLastCalledWith("https://example.com/");
+  });
+
+  it("does not offer to open a page that is not a web address", async () => {
+    bridge.openExternal.mockClear();
+    await panel({ tabs: [{ id: "t3", target: "view-c", url: "about:blank", title: "", active: true }], shown: true });
+    expect((screen.getByRole("button", { name: "用默认浏览器打开此页" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(bridge.openExternal).not.toHaveBeenCalled();
+  });
+
   it("draws the active page over the reserved rectangle, and the one picked after", async () => {
     await panel({ tabs, shown: true });
     expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", RECT);

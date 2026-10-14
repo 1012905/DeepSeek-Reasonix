@@ -109,6 +109,7 @@ export const EN: Record<string, string> = {
   "复制路径": "Copy path",
   "复制引用": "Copy reference",
   "加入对话": "Add to conversation",
+  "用默认浏览器打开此页": "Open this page in the default browser",
   "选中的内容": "Selected text",
   "引用 {name}": "Quote {name}",
   "此名称不能表示为 @ 引用": "This name cannot be represented as an @ reference",
