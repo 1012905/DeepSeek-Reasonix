@@ -144,6 +144,9 @@ func TestUpdateSinkMapsEvents(t *testing.T) {
 	if u["toolCallId"] != "call-1" {
 		t.Errorf("update 2 toolCallId = %v, want call-1", u["toolCallId"])
 	}
+	if u["name"] != "read_file" {
+		t.Errorf("update 2 name = %v, want the tool's own name read_file", u["name"])
+	}
 	if ri, _ := u["rawInput"].(map[string]any); ri["path"] != "a.go" {
 		t.Errorf("update 2 rawInput = %v", u["rawInput"])
 	}
@@ -758,5 +761,21 @@ func TestUpdateSinkDeclinesAServersFormWithoutPrompting(t *testing.T) {
 		}
 	case <-time.After(rpcCallBudget(t)):
 		t.Fatal("a server's form was never answered")
+	}
+}
+
+// A replayed call names its tool the way a live one does, so a client that
+// groups by name sees the same thing after a session is loaded.
+func TestUpdateSinkReplayNamesTheTool(t *testing.T) {
+	fn := &fakeNotifier{}
+	sink := newUpdateSink(fn, "sess-1")
+	sink.replay([]provider.Message{{
+		Role:      provider.RoleAssistant,
+		ToolCalls: []provider.ToolCall{{ID: "call-1", Name: "read_file", Arguments: `{"path":"a.go"}`}},
+	}})
+
+	u := fn.updateMap(t, 0)
+	if u["sessionUpdate"] != "tool_call" || u["name"] != "read_file" {
+		t.Fatalf("replayed call = %v, want a tool_call named read_file", u)
 	}
 }
