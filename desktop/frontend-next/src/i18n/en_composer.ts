@@ -66,6 +66,8 @@ export const EN_COMPOSER: Record<string, string> = {
   "文件": "Files",
   "粘贴的文本": "pasted text",
   "{n} 行 · 展开到输入框": "{n} lines · put it back in the box",
+  "存为文件": "Save as file",
+  "已存为文件 · 模型按需读取": "Saved as a file · the model reads it when needed",
   "添加附件": "Add an attachment",
   "也可直接拖入或粘贴": "You can also drop or paste files",
   "添加附件　也可直接拖入或粘贴": "Add an attachment　or drop or paste one in",
