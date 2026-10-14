@@ -33,6 +33,10 @@ func renderAgentDelta(buf *strings.Builder, c, d *Config) bool {
 			wrote = true
 		}
 	}
+	if c.TurnNarration() != d.TurnNarration() {
+		fmt.Fprintf(buf, "turn_narration = %q\n", c.TurnNarration())
+		wrote = true
+	}
 	if c.Agent.CompactRatio != d.Agent.CompactRatio {
 		fmt.Fprintf(buf, "compact_ratio = %s\n", formatFloat(c.Agent.CompactRatio))
 		wrote = true

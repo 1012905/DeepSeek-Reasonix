@@ -28,6 +28,7 @@ func TestTurnBlockOrderIsDeclared(t *testing.T) {
 		"background-jobs",
 		"memory-update",
 		"reasoning-language",
+		"turn-narration",
 		"response-language",
 		"", // the plan-mode marker, which is a line and not a block
 		"active-goal",

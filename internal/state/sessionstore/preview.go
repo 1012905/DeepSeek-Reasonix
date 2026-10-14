@@ -19,6 +19,7 @@ import (
 var TransientUserBlockTags = []string{
 	"response-language",
 	"reasoning-language",
+	"turn-narration",
 	"memory-update",
 	"background-jobs",
 	"active-goal",
@@ -45,6 +46,7 @@ var SupersededUserBlockTags = []string{
 	"active-goal",
 	"response-language",
 	"reasoning-language",
+	"turn-narration",
 	"workspace",
 	"project-instructions",
 	"scheduled-run",

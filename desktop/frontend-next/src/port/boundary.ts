@@ -123,6 +123,12 @@ export interface FoldWorkSettings {
   path: string;
 }
 
+// How much the model says between tool calls; the user file holds it.
+export interface TurnNarrationSettings {
+  level: "brief" | "detailed";
+  path: string;
+}
+
 export interface ChangedFilesSettings {
   show: boolean;
   path: string;

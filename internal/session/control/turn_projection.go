@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"reasonix/internal/contract/config"
 	"strings"
 
 	"reasonix/internal/contract/ablation"
@@ -63,6 +64,7 @@ func (c *Controller) turnBlocksFor(source string, includeOwed bool, notes []stri
 		turnBlock{"background-jobs", c.backgroundJobsBlock()},
 		turnBlock{"memory-update", memoryUpdateBlock(notes)},
 		turnBlock{"reasoning-language", langpref.ReasoningLanguageBlock(langpref.ResolveReasoningLanguage(reasoningLanguage, source))},
+		turnBlock{"turn-narration", langpref.TurnNarrationBlock(c.TurnNarration() == config.TurnNarrationDetailed, langpref.ResolveResponseLanguage(responseLanguage, source))},
 		turnBlock{"response-language", langpref.ResponseLanguageBlock(langpref.ResolveResponseLanguage(responseLanguage, source))},
 		turnBlock{"", planModeMarkerBlock(plan)},
 		turnBlock{"active-goal", c.activeGoalTurnBlock(goal, goalStatus)},
