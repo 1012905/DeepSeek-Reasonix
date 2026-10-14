@@ -149,7 +149,7 @@ export function Sidebar({
       onError(new Error(d.paths.length ? t("请一次拖入一个文件夹") : t("无法取得本机路径，请使用添加文件夹")));
       return;
     }
-    adder.addPath(d.paths[0], (workspace) => onOpen({ root: workspace.root }));
+    adder.addPath(d.paths[0]);
   }, (on, dt) => setOver(on && !!dt?.types.includes("Files")));
 
   // The shortcut the button prints. It was drawn and never bound, so the one

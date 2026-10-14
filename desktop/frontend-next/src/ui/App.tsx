@@ -382,7 +382,7 @@ export function App({ hub }: { hub: HubPort }) {
     [hub, reloadPanes],
   );
 
-  const adder = useAddWorkspace(hub, reloadTree, fail);
+  const adder = useAddWorkspace(hub, reloadTree, fail, (workspace) => openPane({ root: workspace.root }));
   // 每个窗口都有一个根 —— 没选过项目时那是它碰巧启动的地方。两者读起来一样，
   // 于是「从哪加项目」这句问题永远问不出口；只有内核说的 remembered 分得开。
   const [claimed, setClaimed] = useState(() => localStorage.getItem("rx-claim") === "off");
