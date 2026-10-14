@@ -20,6 +20,7 @@ type perseverationAbort struct {
 	collect         func(string, error) streamedTurn
 	reasoningBytes  int
 	thoughtMs       int64
+	firstTokenMs    int64
 }
 
 // perseverationStep watches one streamed chunk and does what the guard's
@@ -65,7 +66,7 @@ func (a *Agent) abortStreamOnPerseveration(s perseverationAbort) streamedTurn {
 	emitAssistantMessage(s.sink, text, reasoning, s.thoughtMs)
 	// Calls from an aborted stream never execute.
 	return streamedTurn{
-		text: text, reasoning: reasoning, signature: signature, thoughtMs: s.thoughtMs,
+		text: text, reasoning: reasoning, signature: signature, thoughtMs: s.thoughtMs, firstTokenMs: s.firstTokenMs,
 		reasoningID: reasoningID, reasoningStatus: reasoningStatus, usage: usage,
 		partialCalls: base.partialCalls, maxArgChars: base.maxArgChars, perseverationAborted: true,
 	}

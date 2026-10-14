@@ -43,7 +43,7 @@ func (a *Agent) handleSamplingError(
 	if provider.IsStreamInterrupted(result.err) && attempt < maxSamplingAttempts {
 		streamSink.Discard()
 		reason := provider.StreamInterruptReason(result.err)
-		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, reason, result.err)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, reason, result.err, 0)
 		delay := streamRetryDelay(attempt)
 		a.svc.sink.Emit(event.Event{
 			Kind: event.Retrying, RetryAttempt: attempt, RetryMax: maxStreamRecoveries,
@@ -57,7 +57,7 @@ func (a *Agent) handleSamplingError(
 	}
 	if attempt < maxSamplingAttempts && a.window().recoverContextOverflow(ctx, frozen, result.err) {
 		streamSink.Discard()
-		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, "context overflow", result.err)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, "context overflow", result.err, 0)
 		return true, streamedTurn{}
 	}
 	// Exhausted retries or non-retryable error: leave the last speculative UI

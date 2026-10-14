@@ -1252,14 +1252,14 @@ body { background: var(--page) !important; }
   translate: 0 0;
   pointer-events: auto;
 }
-.studio-speed-detail header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
-.studio-speed-detail header b { font: 650 12px/1.2 var(--ui); }
-.studio-speed-detail header small { color: var(--faint); font: 500 9.5px/1.2 var(--ui); }
-.studio-speed-detail dl { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0; overflow: hidden; border: 1px solid var(--hair); border-radius: 8px; background: var(--hair); }
-.studio-speed-detail dl > div { min-width: 0; padding: 8px 9px; background: var(--raised); }
-.studio-speed-detail dt { color: var(--muted); font: 500 9.5px/1.2 var(--ui); }
-.studio-speed-detail dd { margin: 4px 0 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); font: 600 11px/1.2 var(--mono); white-space: nowrap; }
-.studio-speed-detail p { margin: 9px 1px 0; color: var(--faint); font: 500 9px/1.5 var(--ui); }
+.studio-speed-detail header { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; margin-bottom: 9px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
+.studio-speed-detail header b { color: var(--text); font: 600 11px/1.3 var(--ui); }
+.studio-speed-detail header small { color: var(--ghost); font: 500 9px/1.3 var(--ui); }
+.studio-speed-detail dl { display: grid; gap: 6px; margin: 0; }
+.studio-speed-detail dl > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.studio-speed-detail dt { color: var(--muted); font: 500 10px/1.3 var(--ui); }
+.studio-speed-detail dd { margin: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); font: 550 10px/1.3 var(--mono); white-space: nowrap; }
+.studio-speed-detail p { margin: 9px 0 0; padding-top: 9px; border-top: 1px solid var(--border); color: var(--ghost); font: 500 9px/1.5 var(--ui); }
 :root[data-theme="light"] .studio-speed-detail { background: color-mix(in srgb, var(--float) 98%, transparent); }
 .studio-meter-mask { margin-left: auto; }
 .studio-meterrail > .studio-meter-mask { padding: 0 5px; }

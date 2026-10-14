@@ -1158,6 +1158,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	}
 	// Host stream cancels on generation drain (OpenAI/Anthropic HTTP reads).
 	defer TrackPublishedHostStream(ctx, cancel)()
+	thought := thoughtClock{begin: time.Now()}
 	ch, err := a.streamProviderRequest(ctx, req)
 	if err != nil {
 		return streamedTurn{usage: provider.UsageWithRequestAttemptCount(ctx, nil), err: err}
@@ -1180,12 +1181,11 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	var partialToolStarted bool
 	var maxArgChars int
 	var lastArgProgress time.Time
-	var thought thoughtClock
 	perseveration, perseverationDetected := newPerseverationGuards(), false
 	// collect packages the accumulated stream state; stored is the round-tripped reasoning.
 	collect := func(stored string, err error) streamedTurn {
 		return streamedTurn{
-			text: text.String(), reasoning: stored, signature: signature, thoughtMs: thought.ms(),
+			text: text.String(), reasoning: stored, signature: signature, thoughtMs: thought.ms(), firstTokenMs: thought.firstMs(),
 			reasoningID: reasoningID, reasoningStatus: reasoningStatus,
 			calls: calls, responsesItems: responsesItems, usage: usage,
 			partialToolStarted: partialToolStarted, partialCalls: partialCalls,
@@ -1251,7 +1251,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				// A clean terminal never reports partialToolStarted: the calls
 				// slice is now authoritative and the partial cards were merged.
 				return streamedTurn{
-					text: finalText, reasoning: finalReasoning, signature: signature, thoughtMs: thought.ms(),
+					text: finalText, reasoning: finalReasoning, signature: signature, thoughtMs: thought.ms(), firstTokenMs: thought.firstMs(),
 					reasoningID: reasoningID, reasoningStatus: reasoningStatus,
 					calls: calls, responsesItems: responsesItems, usage: usage,
 					partialCalls: partialCalls, maxArgChars: maxArgChars, perseverationDetected: perseverationDetected,
@@ -1344,7 +1344,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 			return collect(stored, chunk.Err)
 		}
 		if cut := a.perseverationStep(perseveration, chunk, sink, &perseverationDetected, perseverationAbort{ctx: ctx, sink: sink,
-			finishReasoning: finishReasoning, collect: collect, reasoningBytes: reasoningBytes, thoughtMs: thought.ms()}); cut != nil {
+			finishReasoning: finishReasoning, collect: collect, reasoningBytes: reasoningBytes, thoughtMs: thought.ms(), firstTokenMs: thought.firstMs()}); cut != nil {
 			return *cut
 		}
 	}

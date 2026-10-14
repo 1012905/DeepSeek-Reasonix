@@ -131,6 +131,8 @@ type StreamAttempt struct {
 	Attempt int    `json:"attempt,omitempty"`
 	Max     int    `json:"max,omitempty"`
 	Reason  string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
+	// FirstTokenMs rides a commit: request sent to first output, host-measured.
+	FirstTokenMs int64 `json:"firstTokenMs,omitempty"`
 }
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
@@ -207,11 +209,12 @@ func ToWire(e event.Event) Event {
 		w.setRetry(e)
 	case event.StreamAttempt:
 		w.StreamAttempt = &StreamAttempt{
-			ID:      e.StreamAttempt.ID,
-			Action:  string(e.StreamAttempt.Action),
-			Attempt: e.StreamAttempt.Attempt,
-			Max:     e.StreamAttempt.Max,
-			Reason:  e.StreamAttempt.Reason,
+			ID:           e.StreamAttempt.ID,
+			Action:       string(e.StreamAttempt.Action),
+			Attempt:      e.StreamAttempt.Attempt,
+			Max:          e.StreamAttempt.Max,
+			Reason:       e.StreamAttempt.Reason,
+			FirstTokenMs: e.StreamAttempt.FirstTokenMs,
 		}
 	case event.TurnPhase:
 		w.Phase = string(e.PhaseName)

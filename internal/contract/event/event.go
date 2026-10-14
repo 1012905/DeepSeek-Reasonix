@@ -199,6 +199,9 @@ type StreamAttemptInfo struct {
 	Attempt int // 1-based attempt number
 	Max     int // total attempts including the first (typically 6)
 	Reason  string
+	// FirstTokenMs is, on a commit, the host-measured time from sending the
+	// request to the first output; 0 = not measured.
+	FirstTokenMs int64
 }
 
 const TurnOutcomeFinalReadiness = "final_readiness"
