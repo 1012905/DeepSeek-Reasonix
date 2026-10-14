@@ -24,6 +24,12 @@ const coded = (message: string, code: string, params?: Record<string, string | n
 // upstream of this — dotted codes, sentinels, typed families — buys nothing if
 // the last hop prints the English that rode along for the log.
 describe("what a reader is told a refusal was", () => {
+  it("explains unreadable memory directories in both languages", () => {
+    const refusal = coded("fixture fallback", "memory.directory_unreadable");
+    expect(reason(refusal)).toBe("无法读取记忆目录，请检查权限或存储状态后重试");
+    localStorage.setItem(STORAGE, "en"); boot();
+    expect(reason(refusal)).toBe("Cannot read the memory directory; check permissions or storage and try again");
+  });
   it("asks for a currency retry when its runtime owner changed", () => {
     const refusal = coded("fixture fallback", "display_currency.runtime_changed");
     expect(reason(refusal)).toBe("运行时已更换，费用显示币种未保存，请重试");

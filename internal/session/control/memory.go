@@ -278,10 +278,10 @@ func (m *memoryManager) forget(name string) error {
 	return nil
 }
 
-func (m *memoryManager) revisions(ref string) []memory.Memory {
+func (m *memoryManager) revisions(ref string) ([]memory.Memory, error) {
 	mem := m.current()
 	if mem == nil {
-		return nil
+		return nil, nil
 	}
 	return mem.Store.Revisions(ref)
 }

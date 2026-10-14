@@ -238,6 +238,26 @@ Recovered content also becomes a new monotonic revision. Restore and recovery
 apply to the current session through a one-turn tail note, then join the stable
 prefix naturally on the next session.
 
+A missing memory directory is treated as empty. Permission denial and other
+directory I/O errors are reported instead of returning partial lists or
+calculating a revision from incomplete history.
+
+Recovery stops before creating
+a snapshot or an active fact when history cannot be read. Session loading keeps
+the read failure, omits incomplete pinned guidance, and reports recall as
+unavailable on relevant turns.
+
+These conditions require a permission change,
+sandbox denial, or storage fault; they do not establish data deletion.
+
+缺失的记忆目录按空目录处理；权限拒绝和其他目录 I/O 错误会明确报错，
+不会返回不完整的列表，也不会根据不完整的历史计算版本号。
+
+历史读取失败时，
+归档恢复会在创建快照或活动记忆前停止。会话加载保留读取错误，省略不完整的
+固定记忆，并在相关回合说明召回不可用。触发条件是权限变化、沙箱拒绝或存储
+故障；这些现象本身不能证明数据已被删除。
+
 ## Zero-configuration suggestions
 
 Opening the desktop Suggestions tab automatically scans recent local user turns.

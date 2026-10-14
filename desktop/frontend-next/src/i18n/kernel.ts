@@ -239,6 +239,7 @@ const SAID: Record<string, string> = {
   "provider.test_failed": "连接测试未通过",
 
   "memory.unavailable": "该会话未启用记忆",
+  "memory.directory_unreadable": "无法读取记忆目录，请检查权限或存储状态后重试",
 
   // ── 来源：连不上时卡在哪一步 ─────────────────────────────────────
   // Each of these is a different next move, which is the whole reason the

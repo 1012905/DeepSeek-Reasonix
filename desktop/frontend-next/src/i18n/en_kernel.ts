@@ -273,6 +273,7 @@ export const EN_KERNEL: Record<string, string> = {
   "该路径不属于任何已知的工作区": "That path is not inside any known workspace",
   "尚未打开任何会话": "No session is open yet",
   "该会话未启用记忆": "Memory is not enabled for this session",
+  "无法读取记忆目录，请检查权限或存储状态后重试": "Cannot read the memory directory; check permissions or storage and try again",
   "尚未填写服务地址": "No endpoint address yet",
   "该 key 未被接受。请检查是否复制完整，或在服务商控制台重新生成":
     "That key was refused. Check it copied in full, or generate a new one in the provider's console",

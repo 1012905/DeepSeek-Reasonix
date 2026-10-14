@@ -18,10 +18,14 @@ type RecallIndex struct {
 
 // BuildRecallIndex reads and tokenizes the recall pool once. A zero store
 // yields nil, which recall reports as an empty memory store.
-func BuildRecallIndex(store Store) *RecallIndex {
-	memories := recallMemories(store.ListAll())
+func BuildRecallIndex(store Store) (*RecallIndex, error) {
+	all, err := store.ListAll()
+	if err != nil {
+		return nil, err
+	}
+	memories := recallMemories(all)
 	if len(memories) == 0 {
-		return nil
+		return nil, nil
 	}
 	index := &RecallIndex{}
 	for _, memory := range memories {
@@ -41,7 +45,7 @@ func BuildRecallIndex(store Store) *RecallIndex {
 			length: len(terms),
 		})
 	}
-	return index
+	return index, nil
 }
 
 // AutoRecall runs automatic recall against this snapshot's prebuilt index —
@@ -57,11 +61,18 @@ func (s *Set) AutoRecall(query string, opts RecallOptions) RecallResult {
 		result.Suppressed = "memory store is empty"
 		return result
 	}
+	if s.StoreError != nil {
+		return recallReadFailure(result, s.StoreError)
+	}
 	index := s.recall
 	if index == nil {
 		// Hand-built sets (tests, embedders) carry no prebuilt index; the
 		// Load path always does, so per-turn recall stays disk-free there.
-		index = BuildRecallIndex(s.Store)
+		var err error
+		index, err = BuildRecallIndex(s.Store)
+		if err != nil {
+			return recallReadFailure(result, err)
+		}
 	}
 	return autoRecallIndexed(index, result, opts)
 }

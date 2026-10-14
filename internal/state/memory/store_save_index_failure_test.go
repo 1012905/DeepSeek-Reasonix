@@ -22,7 +22,7 @@ func failIndexPublishOnce(t *testing.T, dir string) {
 func activeFactsNamed(t *testing.T, store Store, name string) []Memory {
 	t.Helper()
 	var out []Memory
-	for _, m := range store.ListAll() {
+	for _, m := range mustStore(t, store).ListAll() {
 		if m.Name == name {
 			out = append(out, m)
 		}
