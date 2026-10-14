@@ -26,10 +26,12 @@ type Options struct {
 	ConfigSource          string
 	StateHome             string
 	WriterRoots           []string
-	ForbidReadRoots       []string
-	Network               bool
-	PackageOwners         map[string]string
-	OAuthHTTPClient       *http.Client
+	// WritableRoots are what the session lets tools write; a local server is told them.
+	WritableRoots   []string
+	ForbidReadRoots []string
+	Network         bool
+	PackageOwners   map[string]string
+	OAuthHTTPClient *http.Client
 }
 
 // ForRoot maps entries against a workspace root without runtime policy.
@@ -71,6 +73,7 @@ func FromEntry(e config.PluginEntry, workspaceRoot string, opts Options) plugin.
 		CallTimeout:                   secondsDuration(e.CallTimeoutSeconds),
 		ToolTimeouts:                  toolTimeoutDurations(e.ToolTimeoutSeconds),
 		WorkspaceRoot:                 strings.TrimSpace(workspaceRoot),
+		WritableRoots:                 append([]string(nil), opts.WritableRoots...),
 		LaunchManager:                 opts.LaunchManager,
 		ConfigSource:                  configSource,
 		Authorized:                    e.Source.UserAuthorized(),

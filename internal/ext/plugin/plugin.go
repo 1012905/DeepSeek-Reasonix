@@ -105,6 +105,9 @@ type Spec struct {
 	// stdio servers keep inheriting Reasonix's cwd while still receiving the
 	// explicit workspace root when they ask for roots/list.
 	WorkspaceRoot string
+	// WritableRoots are the folders the session lets tools write, the workspace
+	// among them. A local stdio server is told the others per call; runtime-only.
+	WritableRoots []string
 	// Stderr receives byte-count summaries because raw child logs can carry credentials.
 	Stderr io.Writer
 	// LaunchManager owns exact project launch grants and mutable launcher locks.

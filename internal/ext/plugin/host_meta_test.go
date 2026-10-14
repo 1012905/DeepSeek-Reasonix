@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"slices"
 	"testing"
 
 	"reasonix/internal/contract/planmode"
@@ -139,5 +141,48 @@ func TestHostContextSaysWhetherTheHostIsRefusingWrites(t *testing.T) {
 	remote := &Client{spec: Spec{Type: "http", WorkspaceRoot: "/w"}}
 	if meta := metaOf(t, remote.withHostContext(planmode.WithActive(context.Background(), true), "tools/call", map[string]any{"name": "t"})); meta != nil {
 		t.Errorf("a remote server was told the host's posture: %v", meta)
+	}
+}
+
+// The folders the user chose to let tools write, beside the workspace, are told
+// to a local stdio server in one namespaced key; the workspace itself is the
+// cwd's business and a remote server is told neither.
+func TestHostContextCarriesTheExtraWritableFoldersToLocalServersOnly(t *testing.T) {
+	spec := Spec{Type: "stdio", WorkspaceRoot: "/work/space", WritableRoots: []string{"/work/space", "/data/shared", "/data/shared", "", "relative/dir", "/mnt/out"}}
+	got := metaOf(t, (&Client{spec: spec}).withHostContext(context.Background(), "tools/call", map[string]any{"name": "t"}))[metaWritableRootsKey]
+	want := []string{"/data/shared", "/mnt/out"}
+	roots, _ := got.([]string)
+	if !slices.Equal(roots, want) {
+		t.Fatalf("_meta[%s] = %v, want %v: workspace, duplicates, empties and relative paths stay out", metaWritableRootsKey, got, want)
+	}
+	spec.Type = "http"
+	if meta := metaOf(t, (&Client{spec: spec}).withHostContext(context.Background(), "tools/call", map[string]any{"name": "t"})); meta != nil {
+		t.Fatalf("a remote server was told %v", meta)
+	}
+}
+
+func TestHostContextSaysNothingOfWritableFoldersWhenThereAreNone(t *testing.T) {
+	client := &Client{spec: Spec{WorkspaceRoot: "/w", WritableRoots: []string{"/w"}}}
+	if _, has := metaOf(t, client.withHostContext(context.Background(), "tools/call", map[string]any{"name": "t"}))[metaWritableRootsKey]; has {
+		t.Fatal("an empty list was sent as a key")
+	}
+}
+
+func TestHostContextKeepsAWritableRootsKeyTheCallAlreadyCarries(t *testing.T) {
+	client := &Client{spec: Spec{WritableRoots: []string{"/data"}}}
+	meta := metaOf(t, client.withHostContext(context.Background(), "tools/call", map[string]any{"name": "t", "_meta": map[string]any{metaWritableRootsKey: "server-set"}}))
+	if meta[metaWritableRootsKey] != "server-set" {
+		t.Fatalf("overwrote the call's own value: %v", meta)
+	}
+}
+
+func TestHostContextCapsHowManyWritableFoldersAreTold(t *testing.T) {
+	var many []string
+	for i := range 100 {
+		many = append(many, fmt.Sprintf("/data/%03d", i))
+	}
+	got, _ := metaOf(t, (&Client{spec: Spec{WritableRoots: many}}).withHostContext(context.Background(), "tools/call", map[string]any{"name": "t"}))[metaWritableRootsKey].([]string)
+	if len(got) != maxMetaWritableRoots || got[0] != "/data/000" {
+		t.Fatalf("told %d folders, want the first %d in order", len(got), maxMetaWritableRoots)
 	}
 }
