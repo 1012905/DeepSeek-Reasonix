@@ -6,7 +6,7 @@ import "encoding/json"
 // sentence is worded from, so a sink that prints Text must not append it again.
 func DetailIsPayload(code string) bool {
 	return code == NoticeCodeUnappliedSteer || code == NoticeCodeExtensionSkipped || code == NoticeCodeInboxRecovered ||
-		code == NoticeCodePermissionRulesDormant || code == NoticeCodeContextComposition || code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed
+		code == NoticeCodePermissionRulesDormant || code == NoticeCodeSubagentWaiting || code == NoticeCodeContextComposition || code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed
 }
 
 // ExtensionSkipReasonNoLiveSidecar: the extension's companion process is not running.
@@ -148,6 +148,25 @@ type ContextComposition struct {
 
 // Encode renders the payload as the notice's Detail.
 func (p ContextComposition) Encode() string {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// SubagentWaiting is the Detail payload of NoticeCodeSubagentWaiting: which
+// sub-agent is held back, whose write claim holds it (empty when that run gave
+// no name), and whether it is the two whole-workspace claims of writers that
+// declared no write_paths.
+type SubagentWaiting struct {
+	Task  string `json:"task,omitempty"`
+	By    string `json:"by,omitempty"`
+	Whole bool   `json:"whole,omitempty"`
+}
+
+// Encode renders the payload as the notice's Detail.
+func (p SubagentWaiting) Encode() string {
 	raw, err := json.Marshal(p)
 	if err != nil {
 		return ""

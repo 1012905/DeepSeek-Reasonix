@@ -12,6 +12,7 @@ const PAYLOAD: Record<string, string | undefined> = {
   job_killed: JSON.stringify({ id: "j", label: "build" }),
   job_failed: JSON.stringify({ id: "j", label: "build" }),
   context_composition: JSON.stringify({ total: 561061, at: 419430, active: 400000, parts: [{ name: "tool_output", tokens: 500000 }] }),
+  subagent_waiting: JSON.stringify({ task: "fix the typo", by: "rewrite the docs", whole: true }),
   display_currency: "USD",
   compact_declined: undefined,
   compact_failed: "summary_failed",

@@ -349,7 +349,7 @@ func (f *FleetTool) runFleet(ctx context.Context, sink event.Sink, specs []Profi
 		label := spec.Task.Description
 		subID := fleetNodeID(parentID, idx)
 		spec.Sched.Priority = plan.rank[idx]
-		spec.Sched.OnQueued, spec.Sched.OnStart = f.taskTool.itemHooks(ctx, sink, subID)
+		spec.Sched.OnQueued, spec.Sched.OnStart, spec.Sched.OnHeld = f.taskTool.itemHooks(ctx, sink, subID, label)
 		dispatchArgs, _ := json.Marshal(map[string]any{
 			"prompt":      spec.Task.Objective,
 			"description": label,
