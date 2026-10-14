@@ -120,7 +120,7 @@ export function ReadsCard({ tools }: { tools: Tool[] }) {
       <div className="c">
         <details className="tool-disclosure reads-disclosure" open={expanded} onToggle={(event) => event.currentTarget.open !== expanded && setExpanded(event.currentTarget.open)}>
           <summary className="hl">
-            <span className="nm">{headline}</span>
+            <span className="nm" title={headline}>{headline}</span>
             <span className="arg">{summarise(tools)}</span>
             {failed > 0 && <span className="fail">{tr("{n} 项失败", { n: failed })}</span>}
             <Cost tools={tools} />

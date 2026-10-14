@@ -94,7 +94,7 @@ export function ProviderDetail({
               aria-label={t("重命名 {name}（F2）", { name: a.label })} title={t("重命名 {name}（F2）", { name: a.label })}
               onClick={onRename}><StudioIcon name="edit" /></button>
           </span>
-          <small>{t(KIND_LABEL[entry.kind] ?? entry.kind)} · {a.host}</small>
+          <small title={`${t(KIND_LABEL[entry.kind] ?? entry.kind)} · ${a.host}`}>{t(KIND_LABEL[entry.kind] ?? entry.kind)} · {a.host}</small>
         </span>
         {inUse && <i className="pdetail-use">{t("正在用")}</i>}
         <button className="act" data-action="provider.probe" onClick={check} disabled={busy !== ""}>
