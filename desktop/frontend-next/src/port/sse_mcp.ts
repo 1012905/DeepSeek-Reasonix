@@ -6,8 +6,9 @@ import { rootQuery } from "./sse_http";
 // is installed, because a paste that will not parse is the normal case while
 // typing and its message is the whole feedback.
 export class SseMcp extends SseProvider {
-  mcp(root?: string) {
-    return this.get<McpCatalog>("/mcp" + rootQuery(root));
+  async mcp(root?: string) {
+    const catalog = await this.get<McpCatalog>("/mcp" + rootQuery(root));
+    return { ...catalog, servers: catalog.servers ?? [] };
   }
   capabilityScope() {
     return this.get<CapabilityScope>("/capability-scope");

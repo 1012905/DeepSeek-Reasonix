@@ -15,8 +15,9 @@ export class SseWorkspace extends SseFeedback {
     if (why) throw new HttpError(0, why.error || "not opened", why, !!(why.code || why.error));
   }
 
-  changes() {
-    return this.get<WorkspaceChanges>("/changes");
+  async changes() {
+    const read = await this.get<WorkspaceChanges>("/changes");
+    return { ...read, changes: read.changes ?? [] };
   }
 
   stageChanges(req: StageRequest) {
