@@ -139,6 +139,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # workspace_root = ""          # 文件写工具被限制在此目录；留空 = 当前目录
 # allow_write    = ["/tmp"]    # write_file/edit_file/multi_edit/move_file 额外可写的目录
 # forbid_read    = ["${HOME}/.ssh"]   # agent 不可读取或列出的路径
+# allow_devices  = ["/dev/nvidia*"]   # 放进 Linux bash 沙盒的宿主设备节点（只认用户级配置）
 
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌
@@ -801,6 +802,14 @@ Sandbox 是授权之后的第二层边界，不能替代命令解析，也不能
 OS 沙盒生效时也不能读取配置的 `forbid_read` roots，`[sandbox] network` 为真时才能联网。
 Reasonix 始终会从工具子进程环境中移除已保存的 provider 与 bot 凭据变量，并自动把
 全局凭据 `.env` 加入运行时禁读边界；项目 `.env` 仍保持现有的 workspace 范围行为。
+
+**设备节点（Linux）。**bubblewrap 沙盒里的 `/dev` 是私有的，宿主的显卡等设备默认不在里面。
+`[sandbox] allow_devices` 可以把一部分绑进去：
+
+- 列出 `/dev` 下的通配（如 `/dev/nvidia*`、`/dev/dri/*`）。
+- 只有真实存在的字符/块设备节点才算；符号链接、目录、普通文件都跳过，最多绑 64 个。
+- 默认为空。
+- 只读取用户级配置；项目自己的 `reasonix.toml` 不能设置，因为设备是宿主能力，不是工作区文件。
 
 **Git 元数据由宿主保护。**Bash 沙盒内，工作区仓库的 Git 配置和钩子保持只读，
 因为宿主自己的 git 会读取它们。

@@ -130,6 +130,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # workspace_root = ""          # file-writers confined here; empty = current dir
 # allow_write    = ["/tmp"]    # extra dirs write_file/edit_file/multi_edit/move_file may touch
 # forbid_read    = ["${HOME}/.ssh"]   # paths the agent must not read or list
+# allow_devices  = ["/dev/nvidia*"]   # host device nodes bound into the Linux bash sandbox (user config only)
 
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
@@ -1018,6 +1019,16 @@ Reasonix always removes saved provider and bot credential variables from tool
 subprocess environments and automatically adds its global credential `.env` to
 the runtime read-deny boundary. Project `.env` files keep their existing
 workspace-scoped behavior.
+
+**Device nodes (Linux).** The bubblewrap sandbox shows a private `/dev`, so host
+devices such as the GPU are not there. `[sandbox] allow_devices` binds some in:
+
+- It lists globs under `/dev` (for example `/dev/nvidia*`, `/dev/dri/*`).
+- Only existing character or block device nodes qualify; symlinks, directories
+  and files are skipped, and at most 64 are bound.
+- It is empty by default.
+- It is read from your user config only. A project's `reasonix.toml` cannot set
+  it, because a device is a host capability, not a workspace file.
 
 **Git metadata is host-protected.** Inside the bash sandbox, the Git
 configuration and hooks of the workspace repository stay read-only, because the
