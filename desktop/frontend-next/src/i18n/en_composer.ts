@@ -27,6 +27,7 @@ export const EN_COMPOSER: Record<string, string> = {
   "点按插话 · 回车换行": "Tap Steer · Enter for a new line",
   "{n} 字 · {lines} 行": "{n} characters · {lines} lines",
   "知道了": "Got it",
+  "报告此问题": "Report this problem",
   "按服务商筛选": "Filter by provider",
   "是否信任此文件夹": "Trust this folder",
   "是否信任此文件夹？": "Trust this folder?",

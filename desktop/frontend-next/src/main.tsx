@@ -36,6 +36,7 @@ import "./styles/workbench-changes.css";
 import "./styles/gitgraph.css";
 import "./styles/modelmenu.css";
 import "./styles/runsignals.css";
+import "./styles/toasts.css";
 import { App } from "./ui/App";
 import { SseHub } from "./port/hub";
 import { HttpError } from "./port/http_error";

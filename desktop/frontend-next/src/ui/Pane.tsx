@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } f
 import { loadReceiptPref, receiptPrefOf } from "../state/receiptpref";
 import { ReceiptPrefContext } from "../state/foldpref";
 import { money } from "../i18n/format";
+import { pushToast } from "../state/toasts";
 import { reason } from "../i18n/kernel";
 import { noteFault } from "./fault";
 import { t } from "../i18n";
@@ -111,9 +112,12 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     noteFault(e);
     dispatch({ kind: "__error", text: reason(e), from } as never);
   }, []);
+  // What failed beside the work (a setting that did not apply, a link that would
+  // not open) goes to the corner; only a refused send or a failed read keeps the bar.
+  const notify = useCallback((e: unknown) => pushToast(reason(e)), []);
   const statusRead = useCallback(() => dispatch({ kind: "__error_clear", from: "status" } as never), []);
-  const conversationFiles = useConversationFiles(port, status?.workspaceRoot ?? rt.root, !!rt.host, visible && tab === "flow", revealBrowser, fail);
-  const compact = useCompactNow(port, running || s.items.some((item) => item.t === "compaction" && !item.done), fail);
+  const conversationFiles = useConversationFiles(port, status?.workspaceRoot ?? rt.root, !!rt.host, visible && tab === "flow", revealBrowser, notify);
+  const compact = useCompactNow(port, running || s.items.some((item) => item.t === "compaction" && !item.done), notify);
   // Elapsed is a clock reading and belongs on the tick. Throughput is not: it
   // follows the deltas themselves, and expires rather than being re-derived.
   const tps = useRate(s.outWindow, running);
@@ -362,7 +366,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // not echo, so a live turn has to re-read it rather than infer from events.
   useStatusPoll(running && visible, refreshStatus);
 
-  const { slots, moveSurface, atComposer, inRail } = useSurfaceSlots(port, s.views, fail);
+  const { slots, moveSurface, atComposer, inRail } = useSurfaceSlots(port, s.views, notify);
 
   const submit = useSubmit({ port, running, dispatch, trajDispatch, refreshStatus, fail });
 
@@ -526,7 +530,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             remote={!!rt.host}
             workspaceRoot={status?.workspaceRoot ?? rt.root}
             onCloseManual={() => onManualBrowser?.(false)}
-            onExternal={(url) => void port.openExternal(url).catch(fail)}
+            onExternal={(url) => void port.openExternal(url).catch(notify)}
             onAddToChat={(reference) => setInserted((was) => ({ n: was.n + 1, text: reference }))}
             onQuoteSelection={reply.onQuoteFile}
           />
@@ -570,7 +574,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
                   key={slotKey(ext)}
                   ext={ext}
                   assigned={slots}
-                  onAction={(id) => void port.invokeExtensionAction(id).catch(fail)}
+                  onAction={(id) => void port.invokeExtensionAction(id).catch(notify)}
                   onMove={(slot) => void moveSurface(ext, slot)}
                 />
               ))}
@@ -579,11 +583,11 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
         </div>
         {alert && <div className="cmpalert">{alert}</div>}
         {pill && <ChangedFilesPill changes={tree?.changes ?? []} onOpen={openChanges} />}
-        <Composer port={port} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={fail} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
+        <Composer port={port} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={notify} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
         <MeterRail
           tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} compact={compact} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}
-          onCancelJob={(id) => port.cancelJob(id).then(refreshStatus, fail)}
+          onCancelJob={(id) => port.cancelJob(id).then(refreshStatus, notify)}
         />
         {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}
         {/* Below the box, under a ceiling of their own. Both arrive unbidden and
