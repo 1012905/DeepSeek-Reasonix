@@ -15,6 +15,7 @@
 package sandbox
 
 import (
+	"errors"
 	"os"
 	"runtime"
 )
@@ -125,6 +126,11 @@ func UnavailableMessage() string {
 func UnavailableRemediation() string {
 	switch runtime.GOOS {
 	case "linux":
+		if errors.Is(bwrapFault(), ErrBwrapNamespaceDenied) {
+			return "Bubblewrap is installed but cannot create a namespace here, which is typical inside a default container or on a kernel that restricts unprivileged user namespaces. " +
+				"Run the container with the privileges bubblewrap needs (typically CAP_SYS_ADMIN together with an unconfined seccomp profile; either widens the container itself), " +
+				"or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox; shell commands then run unconfined and the container or host is the only boundary."
+		}
 		return "Install bubblewrap (`bwrap`) or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox to restore pre-1.16 unconfined shell execution."
 	case "darwin":
 		return "Ensure `sandbox-exec` is installed and usable (the host must allow `sandbox_apply`), or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox to restore pre-1.16 unconfined shell execution."
@@ -135,12 +141,27 @@ func UnavailableRemediation() string {
 	}
 }
 
+// ErrBwrapMissing and ErrBwrapNamespaceDenied are why a Linux host has no usable
+// bash sandbox: no bubblewrap on PATH, or one that cannot enter a namespace.
+var (
+	ErrBwrapMissing         = errors.New("bubblewrap is not installed")
+	ErrBwrapNamespaceDenied = errors.New("bubblewrap cannot create a namespace here")
+)
+
+// UnavailableReason is the identity behind the unavailable state, for a caller
+// that branches on it with errors.Is. Nil when the sandbox is usable or the
+// platform names no finer reason than its UnavailableCode.
+func UnavailableReason() error { return bwrapFault() }
+
 // UnavailableCode is that explanation's identity. A frontend says it in the
 // reader's language from this; matching the English sentence above would be a
 // second copy of this switch, in a place that cannot see when it changes.
 func UnavailableCode() string {
 	switch runtime.GOOS {
 	case "linux":
+		if errors.Is(bwrapFault(), ErrBwrapNamespaceDenied) {
+			return "sandbox.bwrap_namespace_denied"
+		}
 		return "sandbox.no_bubblewrap"
 	case "darwin":
 		return "sandbox.no_sandbox_exec"
