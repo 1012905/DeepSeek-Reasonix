@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +26,8 @@ type recordingKernel struct {
 	git   bool
 	// keyless makes the kernel refuse a turn the way it does with no key set.
 	keyless bool
+	// refuseText makes the attachment route refuse a kept paste.
+	refuseText bool
 }
 
 func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +73,15 @@ func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"itemId": "q-7"})
 	case "/provider-setup":
 		_ = json.NewEncoder(w).Encode(map[string]any{"required": true, "provider": "beta", "model": "b1"})
+	case "/attachments":
+		if k.refuseText {
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": "attachment.not_text", "message": "not text"})
+			return
+		}
+		var in struct{ Kind, Text string }
+		_ = json.Unmarshal(body, &in)
+		_ = json.NewEncoder(w).Encode(map[string]any{"path": ".reasonix/attachments/p.txt", "pointer": "[pasted text kept out of this message: " + strconv.Itoa(len(in.Text)) + " bytes]\nSaved: .reasonix/attachments/p.txt\n"})
 	case "/submit":
 		if k.keyless {
 			w.WriteHeader(http.StatusConflict)
@@ -177,6 +189,7 @@ func press(m *model, k string) tea.Cmd {
 		"ctrl+s":       {Code: 's', Mod: tea.ModCtrl},
 		"ctrl+c":       {Code: 'c', Mod: tea.ModCtrl},
 		"ctrl+o":       {Code: 'o', Mod: tea.ModCtrl},
+		"ctrl+g":       {Code: 'g', Mod: tea.ModCtrl},
 		"y":            {Code: 'y', Text: "y"},
 		"a":            {Code: 'a', Text: "a"},
 		"n":            {Code: 'n', Text: "n"},
