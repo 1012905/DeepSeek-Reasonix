@@ -3,6 +3,7 @@ import { loadReceiptPref, receiptPrefOf } from "../state/receiptpref";
 import { ReceiptPrefContext } from "../state/foldpref";
 import { money } from "../i18n/format";
 import { reason } from "../i18n/kernel";
+import { noteFault } from "./fault";
 import { t } from "../i18n";
 import { hasPendingDecision, posture, runState } from "./decisions";
 import { createPortal } from "react-dom";
@@ -107,6 +108,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const flow = useRef<HTMLDivElement>(null);
   const running = s.running || !!status?.running; // A paired device can join after turn_started.
   const fail = useCallback((e: unknown, from?: string) => {
+    noteFault(e);
     dispatch({ kind: "__error", text: reason(e), from } as never);
   }, []);
   const statusRead = useCallback(() => dispatch({ kind: "__error_clear", from: "status" } as never), []);
