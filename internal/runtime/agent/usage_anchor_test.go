@@ -97,7 +97,7 @@ func TestProviderReportedUsageTriggersFoldWhenLocalEstimateRunsLow(t *testing.T)
 	if a.sess.output.promptCalibration.Load() != nil {
 		t.Fatal("setup: an image request must not calibrate")
 	}
-	if a.ContextUsedTokens() >= a.CompactTrigger() {
+	if a.window().estimatedVisibleRequestTokens(a.window().modelVisibleMessages()) >= a.CompactTrigger() {
 		t.Fatal("setup: local estimate must still read low after the usage")
 	}
 	foldPass(t, a)
@@ -237,5 +237,26 @@ func TestUnfoldableReportedUsageDoesNotRepeatTheAttempt(t *testing.T) {
 	}
 	if prov.calls.Load() != 0 {
 		t.Fatalf("summary calls = %d with nothing foldable", prov.calls.Load())
+	}
+}
+
+func TestGaugeReadsTheProviderReportedSizeWhenTheEstimateRunsLow(t *testing.T) {
+	a, _ := newAnchorAgent(t)
+	before := a.ContextUsedTokens()
+	sendWithUsage(t, a, &provider.Usage{PromptTokens: 92_000})
+	if got := a.ContextUsedTokens(); got < 92_000 {
+		t.Fatalf("gauge = %d after the provider reported 92000 (estimate before: %d); it reads lower than the size the fold trigger acts on", got, before)
+	}
+	if budget := a.ContextBudget(); budget.TokensUsed < 92_000 {
+		t.Fatalf("the budget the model is told counts %d used, below the 92000 the provider reported", budget.TokensUsed)
+	}
+}
+
+func TestGaugeFallsBackToTheEstimateAfterAFold(t *testing.T) {
+	a, _ := newAnchorAgent(t)
+	sendWithUsage(t, a, &provider.Usage{PromptTokens: 92_000})
+	foldPass(t, a)
+	if got := a.ContextUsedTokens(); got >= 92_000 {
+		t.Fatalf("gauge = %d after a fold: the pre-fold 92000 describes a context that no longer exists", got)
 	}
 }
