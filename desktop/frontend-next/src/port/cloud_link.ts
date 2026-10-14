@@ -52,7 +52,10 @@ export interface RemoteConnection {
 interface Pending {
   id: string;
   method: string;
-  command: Record<string, unknown>;
+  // How many commands make up this request and how to build one: a request too
+  // large for a message crosses as numbered parts, built as they are sent.
+  count: number;
+  command: (index: number) => Record<string, unknown>;
   sentTo: RemoteConnection | null;
   chunks: Map<number, string>;
   status?: number;
@@ -85,6 +88,13 @@ export function maxRequestBody(path: string): number {
   const fixed = 160 + path.length;
   return Math.max(0, Math.floor(((plain - fixed) * 3) / 4));
 }
+
+// A body larger than one message crosses as parts of this many bytes, to a
+// desktop that says it can put them back together ("upload" in its features),
+// up to the most it will hold. Both numbers are the desktop's own limits.
+const UPLOAD_PART = 24 * 1024;
+const MAX_UPLOAD = 16 * 1024 * 1024;
+const BUFFER_HIGH = 1024 * 1024;
 
 const DEFAULTS: RemoteLinkOptions = {
   requestTimeoutMs: 30_000,
@@ -146,16 +156,28 @@ export class RemoteLink {
     const body = new Uint8Array(await request.arrayBuffer());
     const path = request.url.slice(location.origin.length);
     const room = maxRequestBody(path);
+    const method = request.method;
+    let count = 1;
+    let command: Pending["command"] = () => ({ v: 1, type: "desktop.request", id, method, path, body: bytesToBase64(body) });
     if (body.length > room) {
-      throw new Error(t("这次发送的内容太大：远程控制每次最多约 {kb} KB（上传文件时约为其四分之三）。请改在电脑上添加，或换一个更小的文件。", { kb: Math.floor(room / 1024) }));
+      if (!this.current?.features.includes("upload")) {
+        throw new Error(t("这次发送的内容太大：远程控制每次最多约 {kb} KB（上传文件时约为其四分之三）。请改在电脑上添加，或换一个更小的文件。", { kb: Math.floor(room / 1024) }));
+      }
+      if (body.length > MAX_UPLOAD) {
+        throw new Error(t("这次发送的内容太大：远程控制最多只能传 {mb} MB。请换一个更小的文件。", { mb: MAX_UPLOAD / (1024 * 1024) }));
+      }
+      const parts = Math.ceil(body.length / UPLOAD_PART);
+      count = parts;
+      command = (index) => ({
+        v: 1, type: "desktop.request.part", id, index, total: parts,
+        ...(index === 0 ? { method, path } : {}),
+        body: bytesToBase64(body.subarray(index * UPLOAD_PART, (index + 1) * UPLOAD_PART)),
+      });
     }
-    const command = {
-      v: 1, type: "desktop.request", id, method: request.method,
-      path, body: bytesToBase64(body),
-    };
     return new Promise<Response>((resolve, reject) => {
       const entry: Pending = {
-        id, method: request.method.toUpperCase(), command, sentTo: null, chunks: new Map(), resolve, reject,
+        id, method: method.toUpperCase(), count, command,
+        sentTo: null, chunks: new Map(), resolve, reject,
       };
       this.pending.set(id, entry);
       void this.send(entry);
@@ -183,13 +205,21 @@ export class RemoteLink {
   private async sendNow(entry: Pending) {
     const connection = this.current;
     if (!connection || connection.socket.readyState !== WebSocket.OPEN || !this.pending.has(entry.id)) return;
-    const wire = await connection.channel.seal(entry.command);
-    if (this.current !== connection || connection.socket.readyState !== WebSocket.OPEN || !this.pending.has(entry.id)) return;
-    entry.chunks.clear();
-    entry.sentTo = connection;
+    const live = () => this.current === connection && connection.socket.readyState === WebSocket.OPEN && this.pending.has(entry.id);
     clearTimeout(entry.timer);
+    for (let index = 0; index < entry.count; index++) {
+      const wire = await connection.channel.seal(entry.command(index));
+      if (!live()) return;
+      if (index === 0) {
+        entry.chunks.clear();
+        entry.sentTo = connection;
+      }
+      connection.socket.send(wire);
+      // A large upload would otherwise queue all of itself in the socket at once.
+      while (connection.socket.bufferedAmount > BUFFER_HIGH && live()) await new Promise((resolve) => setTimeout(resolve, 20));
+      if (!live()) return;
+    }
     entry.timer = setTimeout(() => this.timedOut(entry), this.options.requestTimeoutMs);
-    connection.socket.send(wire);
   }
 
   // A desktop that has said nothing at all for a whole request timeout has lost

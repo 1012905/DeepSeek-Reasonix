@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	cloudDesktopRequestLimit  = 48 << 10
+	cloudDesktopRequestLimit  = 16 << 20
 	cloudDesktopResponseLimit = 8 << 20
 )
 

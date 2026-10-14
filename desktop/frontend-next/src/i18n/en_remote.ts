@@ -128,6 +128,7 @@ export const EN_REMOTE: Record<string, string> = {
   "重新连接": "Reconnect",
   "远程 Studio 暂无响应，请检查电脑是否在线后重试。": "Remote Studio did not respond. Check that the computer is online and try again.",
   "这次发送的内容太大：远程控制每次最多约 {kb} KB（上传文件时约为其四分之三）。请改在电脑上添加，或换一个更小的文件。": "That is too large to send: remote control carries about {kb} KB at a time (about three quarters of that for a file upload). Add it on the computer instead, or use a smaller file.",
+  "这次发送的内容太大：远程控制最多只能传 {mb} MB。请换一个更小的文件。": "That is too large to send: remote control carries at most {mb} MB. Use a smaller file.",
   "远程连接已断开，请重新连接。": "The remote connection ended. Reconnect to continue.",
   "远程 Studio 拒绝了这次请求。": "Remote Studio refused this request.",
   "请先登录 Reasonix，再打开 Web Studio。": "Sign in to Reasonix before opening Web Studio.",

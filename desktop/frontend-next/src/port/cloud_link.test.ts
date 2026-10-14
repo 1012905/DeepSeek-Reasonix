@@ -329,3 +329,58 @@ describe("a request too large for the desktop's read limit", () => {
     expect(Math.ceil(((wire + 16 + 96) * 4) / 3) + 120).toBeLessThan(64 * 1024);
   });
 });
+
+describe("a request too large for one message", () => {
+  const upload = (bytes: number) => new Request(`${location.origin}/rt/one/attachments`, { method: "POST", body: new Uint8Array(bytes).fill(7) });
+  const partsOf = (socket: FakeSocket) => socket.sent.filter((m) => m.type === "desktop.request.part");
+
+  it("crosses as numbered parts to a desktop that can put them back together, and resolves on its answer", async () => {
+    const { conn, socket } = connection(["replay", "upload"]);
+    const link = new RemoteLink(conn, async () => conn, (end) => ends.push(end));
+    const size = 24 * 1024 * 5 + 321;
+    const sent = link.fetch(upload(size));
+    await vi.advanceTimersByTimeAsync(0);
+    const parts = partsOf(socket);
+    expect(parts).toHaveLength(6);
+    expect(socket.sent.filter((m) => m.type === "desktop.request")).toHaveLength(0);
+    expect(parts.map((p) => p.index)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(new Set(parts.map((p) => p.id)).size).toBe(1);
+    expect(parts.every((p) => p.total === 6)).toBe(true);
+    expect(parts[0]).toMatchObject({ method: "POST", path: "/rt/one/attachments" });
+    expect(parts.slice(1).every((p) => p.method === undefined && p.path === undefined)).toBe(true);
+    const bytes = parts.flatMap((p) => [...linkCodec.base64ToBytes(String(p.body))]);
+    expect(bytes).toHaveLength(size);
+    expect(bytes.every((b) => b === 7)).toBe(true);
+    for (const p of parts) expect(JSON.stringify(p).length).toBeLessThan(40 * 1024);
+    socket.reply(String(parts[0].id), "{}");
+    expect((await sent).status).toBe(200);
+  });
+
+  it("is refused here, with nothing sent, by a desktop that does not say it can reassemble", async () => {
+    const { conn, socket } = connection(["replay"]);
+    const link = new RemoteLink(conn, async () => conn, (end) => ends.push(end));
+    await expect(link.fetch(upload(200 * 1024))).rejects.toThrow(/太大|too large/);
+    expect(socket.sent).toHaveLength(0);
+  });
+
+  it("is refused here past what the desktop would hold", async () => {
+    const { conn, socket } = connection(["upload"]);
+    const link = new RemoteLink(conn, async () => conn, (end) => ends.push(end));
+    await expect(link.fetch(upload(16 * 1024 * 1024 + 1))).rejects.toThrow(/16 MB|16 MB/);
+    expect(socket.sent).toHaveLength(0);
+  });
+
+  it("starts again from the first part, under the same id, when the link is lost midway", async () => {
+    const first = connection(["replay", "upload"], "desktop-1");
+    const second = connection(["replay", "upload"], "desktop-1");
+    const link = new RemoteLink(first.conn, async () => second.conn, (end) => ends.push(end), { retryDelaysMs: [10] });
+    void link.fetch(upload(24 * 1024 * 3)).catch(() => {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(partsOf(first.socket)).toHaveLength(3);
+    first.socket.close(1006, "gone");
+    await vi.advanceTimersByTimeAsync(50);
+    const again = partsOf(second.socket);
+    expect(again.map((p) => p.index)).toEqual([0, 1, 2]);
+    expect(again[0].id).toBe(partsOf(first.socket)[0].id);
+  });
+});
