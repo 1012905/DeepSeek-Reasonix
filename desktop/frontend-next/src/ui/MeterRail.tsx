@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useId, useRef, useState, type CSSProperties } from "react";
 import { t } from "../i18n";
 import type { ContextBreakdown, JobEntry, McpEntry } from "../port/port";
 import type { Metrics } from "../state/session_types";
@@ -31,6 +31,7 @@ export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compa
   onSettings: (section?: string) => void;
   onCancelJob: (id: string) => Promise<void>;
 }) {
+  const speedDetailId = useId();
   const [meterOpen, setMeterOpen] = useState(false);
   const meterRef = useRef<HTMLDivElement>(null);
   const closeMeter = useCallback(() => setMeterOpen(false), []);
@@ -45,13 +46,13 @@ export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compa
         <button
           className="studio-meter-static studio-meter-speed"
           type="button"
-          aria-describedby="studio-speed-detail"
+          aria-describedby={speedDetailId}
           aria-label={t("查看生成速度详情")}
         >
           <Spark points={trail} w={44} h={13} />
           <b>{tps > 0 ? tps.toFixed(1) : "—"}</b><span>tok/s</span><i data-live={running ? "" : undefined} aria-hidden="true" />
         </button>
-        <div className="studio-speed-detail" id="studio-speed-detail" role="tooltip">
+        <div className="studio-speed-detail" id={speedDetailId} role="tooltip">
           <header><b>{t("生成速度")}</b><small>{running ? t("实时更新") : t("最近一轮")}</small></header>
           <dl>
             <div><dt>{t("当前速度")}</dt><dd>{tps > 0 ? `${tps.toFixed(1)} tok/s` : "—"}</dd></div>

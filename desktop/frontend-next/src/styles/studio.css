@@ -204,7 +204,7 @@ body { background: var(--page); }
 .panes,
 .app { --pane-bar-h: 41px; }
 .tabs { background: var(--surface); }
-.tabs { height: var(--pane-bar-h); padding-block: 7px; border-bottom-color: var(--hair); }
+.tabs { min-height: var(--pane-bar-h); padding-block: 7px; border-bottom-color: var(--hair); }
 .flow {
   width: min(840px, calc(100% - var(--srail-w) - 28px));
   max-width: none;

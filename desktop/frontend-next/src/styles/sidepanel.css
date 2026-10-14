@@ -1,7 +1,7 @@
 .sidetoggle {
   margin-left: auto; padding: 4px 10px; cursor: pointer; align-self: center;
   border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--muted);
-  font: var(--w-med) var(--fs-meta)/1.4 var(--ui);
+  font: var(--w-med) var(--fs-meta)/1.4 var(--ui); flex: none; white-space: nowrap;
 }
 .sidetoggle:hover, .sidetoggle[aria-pressed="true"] { color: var(--text); background: var(--overlay); }
 .sidetoggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
