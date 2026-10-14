@@ -99,7 +99,8 @@ func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 }
 
 // tree answers the whole sidebar in one request: every remembered workspace
-// with the sessions saved under it. Titles come from each project's cache and
+// with the sessions saved under it, and a folder only a pane was opened in once
+// something was said there. Titles come from each project's cache and
 // are never generated here — the pane that opens a session does that.
 func (h *Hub) tree(w http.ResponseWriter, r *http.Request) {
 	window, ok := parseTreeWindow(w, r)
@@ -122,6 +123,9 @@ func (h *Hub) tree(w http.ResponseWriter, r *http.Request) {
 			node.Missing = true
 		}
 		page := h.workspacePage(ref.dir, node.Name, open, window, window.limitFor(ref.dir))
+		if !ref.remembered && !page.Said {
+			continue
+		}
 		node.Sessions, node.Total, node.Archived, node.Remaining = page.Sessions, page.Total, page.Archived, page.Remaining
 		out = append(out, node)
 	}

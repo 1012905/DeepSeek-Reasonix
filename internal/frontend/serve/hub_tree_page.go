@@ -12,6 +12,9 @@ import (
 type sessionPage struct {
 	Sessions                   []treeSession
 	Total, Archived, Remaining int
+	// Said is whether any conversation here has had a turn, or a first turn is
+	// in flight: what separates a folder with history from one only opened.
+	Said bool
 }
 
 // workspacePage lists one folder's conversations, hiding what the pickers
@@ -89,7 +92,11 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 	unlisted := h.unlistedOpenSessions(root, out)
 	// Never nil: the frontend iterates rows, and a null blanks the window.
 	rows := append(append([]treeSession{}, unlisted...), out...)
-	return sessionPage{Sessions: rows, Total: total + len(unlisted), Archived: archived, Remaining: remaining}
+	said := len(unlisted) > 0
+	for _, si := range listed {
+		said = said || si.Turns > 0
+	}
+	return sessionPage{Sessions: rows, Total: total + len(unlisted), Archived: archived, Remaining: remaining, Said: said}
 }
 
 // rowTitle reads a row's title once, on first use: a name the user typed
