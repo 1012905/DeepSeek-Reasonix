@@ -37,6 +37,23 @@ export interface WorkspaceGit {
   untracked: number;
 }
 
+// GET /workspace/git/log: the newest commits of every branch, newest first. A
+// commit names its parents, which is all a reader needs to draw the lanes.
+export interface GitCommit {
+  id: string;
+  parents: string[];
+  author: string;
+  at: number; // unix seconds
+  refs: string[]; // branches and tags pointing here, as git decorates them
+  subject: string;
+}
+
+export interface GitHistory {
+  repo: boolean; // false for a workspace that is not under git: no commits, nothing wrong
+  commits: GitCommit[];
+  truncated: boolean; // the history goes on past these
+}
+
 // One local branch, as the composer's branch menu lists it.
 export interface WorkspaceBranch {
   name: string;

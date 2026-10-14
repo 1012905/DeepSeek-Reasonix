@@ -517,6 +517,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workbench.launch-files", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.launch-changes", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.launch-browser", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.history-reload", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "workbench.tab", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.browser-menu", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.browser-close", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },

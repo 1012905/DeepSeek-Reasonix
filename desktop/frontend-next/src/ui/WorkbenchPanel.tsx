@@ -25,6 +25,7 @@ import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
 import { WorkbenchChanges } from "./WorkbenchChanges";
+import { WorkbenchHistory } from "./WorkbenchHistory";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { useHtmlPreview } from "./useHtmlPreview";
@@ -673,6 +674,7 @@ export function WorkbenchPanel({
               commit={commit}
             />
           )}
+          {!remote && <WorkbenchHistory port={port} />}
           <div className="workbench-filelist">
             {rows.map((row) =>
               row.kind === "folder" ? (
