@@ -1,10 +1,16 @@
 import { HttpError } from "./http_error";
+import type { KeptText } from "./attachment";
 import type { ChangeDiff, GitHistory, StageRequest, WorkspaceChange, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
 import { MockFeedback } from "./mock_feedback";
 
 export class MockWorkspace extends MockFeedback {
   opensFiles() { return false; }
   async openFile() {}
+
+  async keepText(text: string): Promise<KeptText> {
+    const path = ".reasonix/attachments/mock.txt";
+    return { path, pointer: `[pasted text kept out of this message: ${text.split("\n").length} lines]\nSaved: ${path}\nRead it with read_file.\n` };
+  }
 
   // Held in a field so a switch is visible to the next read, as the kernel's endpoints keep.
   branchState: WorkspaceGit = { repo: true, name: "reasonix", branch: "main", detached: false, added: 2, removed: 1, untracked: 3 };

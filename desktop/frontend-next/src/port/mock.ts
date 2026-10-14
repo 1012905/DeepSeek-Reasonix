@@ -1,7 +1,7 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import type { PlanAction } from "./session";
 import { HttpError } from "./port";
-import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, KeptText, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
+import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import { MockWorkspace } from "./mock_workspace";
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
@@ -371,11 +371,6 @@ export class MockPort extends MockWorkspace implements AgentPort {
   // No host behind the fixture, so a paste resolves to a token nothing reads.
   async attach(): Promise<Attachment> {
     return { path: ".reasonix/attachments/mock.png", ref: "@.reasonix/attachments/mock.png" };
-  }
-
-  async keepText(text: string): Promise<KeptText> {
-    const path = ".reasonix/attachments/mock.txt";
-    return { path, pointer: `[pasted text kept out of this message: ${text.split("\n").length} lines]\nSaved: ${path}\nRead it with read_file.\n` };
   }
 
   async dropRefs(paths: string[]): Promise<DroppedRef[]> {

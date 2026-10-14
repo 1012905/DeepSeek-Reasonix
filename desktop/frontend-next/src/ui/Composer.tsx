@@ -2,7 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
 import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
-import type { AgentPort, ChipCall, KeptText, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
+import { keepPasteAsFile, PasteKeep, type PasteChip } from "./pastekeep";
+import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
 import { Picker } from "./Menu";
 import { BranchChip } from "./BranchChip";
 import { Policy } from "./Policy";
@@ -80,18 +81,7 @@ type Chip =
       url?: string;
       error?: string;
     }
-  | {
-      k: "paste";
-      id: string;
-      body: string;
-      lines: number;
-      name?: string;
-      // Set once a person has had the host keep the text as a file: what the
-      // message carries from then on is the pointer, not the text.
-      saved?: KeptText;
-      saving?: boolean;
-      error?: string;
-    }
+  | PasteChip
   | { k: "quote"; id: string; body: string; turn?: number; source?: string; lines: number };
 
 function chipName(c: Chip): string {
@@ -250,15 +240,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   // the CLI — the host saved the bytes, the turn parser resolves the token. A
   // held-back paste follows the typed text, which is where it reads as the
   // material the message is about rather than as part of the sentence.
-  // Saving is a choice made per paste; nothing is moved on its own. A failure
-  // leaves the text in the chip, so the paste can still be sent as it is.
-  const keepPaste = (chip: Extract<Chip, { k: "paste" }>) => {
-    setShots((prev) => prev.map((x) => (x.id === chip.id && x.k === "paste" ? { ...x, saving: true, error: "" } : x)));
-    port.keepText(chip.body).then(
-      (saved) => setShots((prev) => prev.map((x) => (x.id === chip.id && x.k === "paste" ? { ...x, saving: false, saved } : x))),
-      (e: unknown) => setShots((prev) => prev.map((x) => (x.id === chip.id && x.k === "paste" ? { ...x, saving: false, error: reason(e) } : x))),
-    );
-  };
+  const keepPaste = (chip: PasteChip) => keepPasteAsFile(port, chip, setShots);
 
   const send = () => {
     if (submittingRef.current || shots.some((c) => c.k === "attachment" && c.state !== "ready")) return;
@@ -517,13 +499,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
                     >
                       {t("{n} 行 · 展开到输入框", { n: c.lines })}
                     </button>
-                    {c.k === "paste" && c.saved && <span className="sz" title={c.saved.path}>{t("已存为文件 · 模型按需读取")}</span>}
-                    {c.k === "paste" && !c.saved && (
-                      <button className="save" data-action="paste.save" disabled={c.saving} onClick={() => keepPaste(c)}>
-                        {c.saving ? t("正在保存…") : t("存为文件")}
-                      </button>
-                    )}
-                    {c.k === "paste" && c.error && <span className="why" role="alert" title={c.error}>{c.error}</span>}
+                    {c.k === "paste" && <PasteKeep chip={c} onKeep={keepPaste} />}
                   </span>
                 </>
               )}
