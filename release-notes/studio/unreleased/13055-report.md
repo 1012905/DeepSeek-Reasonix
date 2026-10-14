@@ -1,0 +1,2 @@
+- 报错条与右下角提示的「报告此问题」现在会把页面自身错误的名称和出错位置（仅文件名与行列号）一并填进反馈草稿，便于定位。关联 #13055。
+- The "Report this problem" entry on error bars and corner notices now also writes a page defect's error name and where it came from (file name and line only) into the feedback draft. Refs #13055.

@@ -219,6 +219,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.capture", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "toast.report", kind: "view", target: "none", proof: "interaction" },
+  { id: "errbar.report", kind: "view", target: "none", proof: "interaction" },
   { id: "toast.dismiss", kind: "view", target: "entity", proof: "interaction" },
   { id: "model.group", kind: "view", target: "entity", proof: "interaction" },
   { id: "model.group-clear", kind: "view", target: "none", proof: "interaction" },
