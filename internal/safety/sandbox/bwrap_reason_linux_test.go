@@ -81,3 +81,32 @@ func TestADeniedNamespaceStillLeavesTheCommandUnwrapped(t *testing.T) {
 		t.Fatalf("a command was wrapped by an unusable bwrap: %v", argv)
 	}
 }
+
+// A bwrap that cannot even be started (a bad interpreter, a failed exec) never
+// reached the point of creating a namespace, so it is not a denied one.
+func TestABwrapThatCannotBeStartedIsNotReportedAsADeniedNamespace(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "bwrap"), []byte("#!/no/such/interpreter\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	if Available() {
+		t.Fatal("a bwrap that cannot start was reported available")
+	}
+	err := UnavailableReason()
+	if !errors.Is(err, ErrBwrapUnrunnable) || errors.Is(err, ErrBwrapNamespaceDenied) || errors.Is(err, ErrBwrapMissing) {
+		t.Fatalf("reason = %v, want the unrunnable identity alone", err)
+	}
+	if got := UnavailableCode(); got != "sandbox.bwrap_unrunnable" {
+		t.Fatalf("code = %q", got)
+	}
+	hint := UnavailableRemediation()
+	if strings.Contains(hint, "Install bubblewrap") || strings.Contains(hint, "cannot create a namespace") {
+		t.Fatalf("the hint names a cause this is not: %q", hint)
+	}
+	for _, want := range []string{"could not be started", `[sandbox] bash = "off"`} {
+		if !strings.Contains(hint, want) {
+			t.Fatalf("hint = %q, want it to say %q", hint, want)
+		}
+	}
+}
