@@ -193,7 +193,7 @@ func Collect(opts Options) Report {
 			Bash:              cfg.BashMode(),
 			Network:           cfg.Sandbox.Network,
 			WriteRoots:        redactHomeAll(cfg.WriteRoots()),
-			Available:         sandbox.Available(),
+			Available:         sandbox.AvailableFor(sandbox.Spec{Network: cfg.Sandbox.Network}),
 			Shell:             resolvedShellSummary(cfg),
 			BashConfigIgnored: bashConfigIgnored,
 		},
@@ -290,7 +290,7 @@ func RenderText(r Report) string {
 	fmt.Fprintf(&b, "\nsandbox\n")
 	bashLine := r.Sandbox.Bash
 	if r.Sandbox.Bash == "enforce" && !r.Sandbox.Available {
-		bashLine += " (unavailable: no OS sandbox on this host; bash execution is refused. " + sandbox.UnavailableRemediation() + ")"
+		bashLine += " (unavailable: no OS sandbox on this host; bash execution is refused. " + sandbox.UnavailableRemediationFor(sandbox.Spec{Network: r.Sandbox.Network}) + ")"
 	}
 	if r.Sandbox.BashConfigIgnored {
 		bashLine += ` (config requests "enforce", ignored: Windows has no OS-level Bash sandbox and fixes this setting to "off")`

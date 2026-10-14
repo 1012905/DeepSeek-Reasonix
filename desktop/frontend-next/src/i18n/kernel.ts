@@ -473,6 +473,7 @@ const SAID: Record<string, string> = {
   "surface.too_many_slots": "记录的面板位置已达上限（最多 {limit} 个），请先清除一个",
   "sandbox.no_bubblewrap": "本机未安装 bubblewrap（bwrap），命令将不受限制地运行",
   "sandbox.bwrap_namespace_denied": "已安装 bubblewrap，但当前环境无法创建命名空间（常见于容器或受限内核）。请给容器 bubblewrap 所需的权限，或在设置里关闭命令沙盒——关闭后命令不受限制地运行，容器或主机就是唯一的边界",
+  "sandbox.bwrap_network_denied": "bubblewrap 能启动，但无法为命令创建独立的网络命名空间（需要 CAP_NET_ADMIN，默认容器没有）。请给容器 CAP_NET_ADMIN，或在设置里开启沙盒网络让命令共用主机网络，或关闭命令沙盒——关闭后命令不受限制地运行，容器或主机就是唯一的边界",
   "sandbox.bwrap_unrunnable": "bubblewrap 在 PATH 里但无法启动（可能不可执行，或自检没在时限内完成）。请确认 bwrap --version 能运行，或在设置里关闭命令沙盒——关闭后命令不受限制地运行，容器或主机就是唯一的边界",
   "sandbox.no_sandbox_exec": "本机的 sandbox-exec 不可用，命令将不受限制地运行",
   "sandbox.unsupported_on_windows": "Windows 上尚无操作系统级沙箱，命令将不受限制地运行",

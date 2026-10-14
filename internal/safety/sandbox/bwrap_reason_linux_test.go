@@ -32,7 +32,7 @@ func TestAnInstalledBwrapThatCannotEnterANamespaceIsNotReportedMissing(t *testin
 	if err := UnavailableReason(); !errors.Is(err, ErrBwrapNamespaceDenied) || errors.Is(err, ErrBwrapMissing) {
 		t.Fatalf("reason = %v, want the namespace-denied identity", err)
 	}
-	if got := UnavailableCode(); got != "sandbox.bwrap_namespace_denied" {
+	if got := UnavailableCodeFor(Spec{Network: true}); got != "sandbox.bwrap_namespace_denied" {
 		t.Fatalf("code = %q", got)
 	}
 	hint := UnavailableRemediation()
@@ -54,7 +54,7 @@ func TestNoBwrapOnPathIsReportedMissing(t *testing.T) {
 	if err := UnavailableReason(); !errors.Is(err, ErrBwrapMissing) || errors.Is(err, ErrBwrapNamespaceDenied) {
 		t.Fatalf("reason = %v, want the missing identity", err)
 	}
-	if got := UnavailableCode(); got != "sandbox.no_bubblewrap" {
+	if got := UnavailableCodeFor(Spec{Network: true}); got != "sandbox.no_bubblewrap" {
 		t.Fatalf("code = %q", got)
 	}
 	if !strings.Contains(UnavailableRemediation(), "Install bubblewrap") {
@@ -97,7 +97,7 @@ func TestABwrapThatCannotBeStartedIsNotReportedAsADeniedNamespace(t *testing.T) 
 	if !errors.Is(err, ErrBwrapUnrunnable) || errors.Is(err, ErrBwrapNamespaceDenied) || errors.Is(err, ErrBwrapMissing) {
 		t.Fatalf("reason = %v, want the unrunnable identity alone", err)
 	}
-	if got := UnavailableCode(); got != "sandbox.bwrap_unrunnable" {
+	if got := UnavailableCodeFor(Spec{Network: true}); got != "sandbox.bwrap_unrunnable" {
 		t.Fatalf("code = %q", got)
 	}
 	hint := UnavailableRemediation()

@@ -19,52 +19,78 @@ import (
 	"reasonix/internal/base/hostwrite"
 )
 
-var bwrapUsability sync.Map // resolved executable path -> error (nil when usable)
+type bwrapProbe struct {
+	path    string
+	denyNet bool
+}
+
+var bwrapUsability sync.Map // bwrapProbe -> error (nil when usable)
 
 // usableBwrap distinguishes an installed binary from a usable sandbox backend.
 // Hardened Linux hosts (including some CI runners) may expose bwrap on PATH but
 // deny the user namespace it needs; treating that as available makes enforce
 // fail later with a misleading launch error and overstates MCP isolation.
-func usableBwrap() (string, bool) {
-	bwrap, err := probeBwrap()
+// spec decides whether the probe must also unshare the network, as its launch will.
+func usableBwrap(spec Spec) (string, bool) {
+	bwrap, err := probeBwrap(unsharesNet(spec))
 	return bwrap, err == nil
 }
 
+// unsharesNet is whether a launch for spec gives the command a network
+// namespace of its own: always, unless the spec leaves the host network open.
+func unsharesNet(spec Spec) bool { return !spec.Network || spec.Egress != nil }
+
 // probeBwrap is usableBwrap with its reason: ErrBwrapMissing when there is no
 // bwrap on PATH, ErrBwrapNamespaceDenied (wrapping the probe's own error) when
-// there is one that ran and cannot enter a namespace here, ErrBwrapUnrunnable
-// when it could not be started or did not finish.
-func probeBwrap() (string, error) {
+// there is one that ran and cannot enter a namespace here, ErrBwrapNetworkDenied
+// when it enters one but not a network namespace, ErrBwrapUnrunnable when it
+// could not be started or did not finish.
+func probeBwrap(denyNet bool) (string, error) {
 	bwrap, err := exec.LookPath("bwrap")
 	if err != nil {
 		return "", ErrBwrapMissing
 	}
-	if cached, ok := bwrapUsability.Load(bwrap); ok {
+	if base := runBwrapProbe(bwrap, false); base != nil || !denyNet {
+		return bwrap, base
+	}
+	return bwrap, runBwrapProbe(bwrap, true)
+}
+
+func runBwrapProbe(bwrap string, denyNet bool) error {
+	key := bwrapProbe{bwrap, denyNet}
+	if cached, ok := bwrapUsability.Load(key); ok {
 		err, _ := cached.(error)
-		return bwrap, err
+		return err
+	}
+	args := []string{"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--", "true"}
+	if denyNet {
+		args = append([]string{"--unshare-net"}, args...)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err = exec.CommandContext(ctx, bwrap, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--", "true").Run()
+	err := exec.CommandContext(ctx, bwrap, args...).Run()
 	if err != nil {
 		// Only a bwrap that ran and exited non-zero got as far as asking for a
 		// namespace; one that never started, or was stopped at the deadline, did not.
 		var exited *exec.ExitError
-		if errors.As(err, &exited) && ctx.Err() == nil {
-			err = fmt.Errorf("%w: %w", ErrBwrapNamespaceDenied, err)
-		} else {
+		switch {
+		case !errors.As(err, &exited) || ctx.Err() != nil:
 			err = fmt.Errorf("%w: %w", ErrBwrapUnrunnable, err)
+		case denyNet:
+			err = fmt.Errorf("%w: %w", ErrBwrapNetworkDenied, err)
+		default:
+			err = fmt.Errorf("%w: %w", ErrBwrapNamespaceDenied, err)
 		}
 	}
-	actual, _ := bwrapUsability.LoadOrStore(bwrap, err)
+	actual, _ := bwrapUsability.LoadOrStore(key, err)
 	got, _ := actual.(error)
-	return bwrap, got
+	return got
 }
 
-// bwrapFault is why bubblewrap cannot confine a command on this platform, nil
-// when it can.
-func bwrapFault() error {
-	_, err := probeBwrap()
+// bwrapFaultFor is why bubblewrap cannot confine a command launched for spec on
+// this platform, nil when it can.
+func bwrapFaultFor(spec Spec) error {
+	_, err := probeBwrap(unsharesNet(spec))
 	return err
 }
 
@@ -77,7 +103,7 @@ func Command(spec Spec, sh Shell, command string) ([]string, bool) {
 	if !spec.Enforce() {
 		return sh.argv(command), false
 	}
-	if bwrap, ok := usableBwrap(); ok {
+	if bwrap, ok := usableBwrap(spec); ok {
 		argv := append([]string{bwrap}, bwrapArgs(spec, sh, command)...)
 		return argv, true
 	}
@@ -94,7 +120,7 @@ func CommandArgs(spec Spec, args []string) ([]string, bool) {
 	if !spec.Enforce() {
 		return args, false
 	}
-	if bwrap, ok := usableBwrap(); ok {
+	if bwrap, ok := usableBwrap(spec); ok {
 		argv := append([]string{bwrap}, bwrapArgsForArgs(spec, args)...)
 		return argv, true
 	}
@@ -105,7 +131,7 @@ func CommandArgs(spec Spec, args []string) ([]string, bool) {
 // On Linux, this verifies that bubblewrap can actually enter its namespace;
 // binary presence alone is insufficient on hardened hosts.
 func Available() bool {
-	_, ok := usableBwrap()
+	_, ok := usableBwrap(Spec{Network: true})
 	return ok
 }
 

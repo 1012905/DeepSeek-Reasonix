@@ -93,8 +93,8 @@ func resolveToolEnvironment(opts Options, cfg *config.Config, roots config.Roots
 	}
 	env.sessionGuard = builtin.NewSessionDataGuard(roots.MemoryUserDir(), allowWriteRoots)
 	env.evidenceSeal = openEvidenceSeal(roots.MemoryUserDir(), root, env.bash)
-	if env.bash.Mode == "enforce" && !sandbox.Available() {
-		fmt.Fprintln(stderr, "warning: "+sandbox.UnavailableMessage())
+	if env.bash.Mode == "enforce" && !sandbox.AvailableFor(env.bash) {
+		fmt.Fprintln(stderr, "warning: "+sandbox.UnavailableMessageFor(env.bash))
 	}
 	env.routeEgress(cfg, stderr)
 	env.search = builtin.ResolveSearch(cfg.Tools.Search.Engine, cfg.Tools.Search.RgPath, stderr)

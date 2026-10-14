@@ -199,13 +199,13 @@ func (c *Controller) SandboxSettings() SandboxSettings {
 		WorkspaceRoot:       strings.TrimSpace(cfg.Sandbox.WorkspaceRoot),
 		AllowWrite:          append([]string{}, cfg.Sandbox.AllowWrite...),
 		ProtectChangedFiles: cfg.Tools.ChangedFilesProtected(),
-		Available:           sandbox.Available(),
+		Available:           sandbox.AvailableFor(sandbox.Spec{Network: cfg.Sandbox.Network}),
 		Platform:            runtime.GOOS,
 		Path:                path,
 		ShadowedBy:          shadowingConfig(path, c.WorkspaceRoot()),
 	}
 	if !out.Available {
-		out.Why, out.WhyCode = sandbox.UnavailableMessage(), sandbox.UnavailableCode()
+		out.Why, out.WhyCode = sandbox.UnavailableMessageFor(sandbox.Spec{Network: cfg.Sandbox.Network}), sandbox.UnavailableCodeFor(sandbox.Spec{Network: cfg.Sandbox.Network})
 	}
 	effective := cfg
 	if merged, err := config.LoadForRootReadOnly(c.WorkspaceRoot()); err == nil {
