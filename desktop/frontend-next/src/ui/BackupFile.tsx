@@ -77,6 +77,9 @@ export function BackupFile({ port }: { port: AgentPort }) {
         name: file.name,
         preview: (passphrase) => port.previewBackupFile(text, passphrase),
         apply: (planId, items, consented) => port.applyBackupFile(planId, items, consented),
+        // A file from elsewhere starts by adding what this machine lacks; what it
+        // would replace is the person's to tick.
+        preselect: (item) => item.recommended && item.status === "new",
       });
     } catch (e) {
       setError(reason(e));

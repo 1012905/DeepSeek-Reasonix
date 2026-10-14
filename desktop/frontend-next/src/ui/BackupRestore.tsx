@@ -36,6 +36,8 @@ export interface RestoreSource {
   name: string;
   preview: (passphrase: string) => Promise<BackupPlan>;
   apply: (planId: string, items: string[], consented: string[]) => Promise<BackupApplyResult>;
+  // Which rows start ticked; the kernel's recommendation when absent.
+  preselect?: (item: BackupPlanItem) => boolean;
 }
 
 export function accountBackupSource(port: AgentPort, backup: BackupEntry): RestoreSource {
@@ -62,7 +64,7 @@ export function BackupRestore({ port, source, onClose }: { port: AgentPort; sour
     try {
       const p = await source.preview(pass);
       setPlan(p);
-      setPicked(new Set(p.items.filter((i) => i.recommended).map((i) => i.id)));
+      setPicked(new Set(p.items.filter(source.preselect ?? ((i) => i.recommended)).map((i) => i.id)));
       setAllowed(new Set());
       setPass("");
     } catch (e) {

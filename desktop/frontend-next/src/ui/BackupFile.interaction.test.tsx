@@ -68,8 +68,9 @@ describe("backup to a file", () => {
     await userEvent.click(screen.getByRole("button", { name: "预览差异" }));
 
     await waitFor(() => expect(preview).toHaveBeenCalledWith("U0VBTEVE", "a long passphrase"));
-    await userEvent.click(await screen.findByRole("button", { name: /恢复所选/ }));
-    await waitFor(() => expect(apply).toHaveBeenCalled());
+    await userEvent.click(await screen.findByRole("checkbox", { name: /docs\/REASONIX\.md/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /恢复所选 1 项/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledWith("demo", ["memory:docs/REASONIX.md"], []));
   });
 
   it("says nothing when the kernel does not offer files to this client", async () => {
@@ -79,5 +80,24 @@ describe("backup to a file", () => {
     await waitFor(() => expect(port.backupFileCatalog).toHaveBeenCalled());
     await waitFor(() => expect(view.container.textContent).toContain("本机窗口"));
     expect(screen.queryByRole("button", { name: "导出到文件…" })).toBeNull();
+  });
+
+  it("starts an import by ticking only what this machine lacks, never what it would replace", async () => {
+    const port = new MockPort() as unknown as AgentPort;
+    vi.spyOn(port, "previewBackupFile").mockResolvedValue({
+      planId: "p", createdAt: "2026-10-14T00:00:00Z", platform: "darwin/arm64", samePlatform: true, categories: ["settings"],
+      items: [
+        { id: "provider:new", category: "settings", kind: "provider", name: "brand-new", status: "new", recommended: true },
+        { id: "provider:work", category: "settings", kind: "provider", name: "same-name", status: "changed", recommended: true },
+      ],
+    });
+    render(<BackupFile port={port} />);
+    await screen.findByRole("button", { name: "导出到文件…" });
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, new File(["QQ=="], "x.rxcb"));
+    await userEvent.type(await screen.findByLabelText("加密口令"), "a long passphrase");
+    await userEvent.click(screen.getByRole("button", { name: "预览差异" }));
+
+    const picks = await screen.findAllByRole("checkbox", { name: /brand-new|same-name/ });
+    expect(picks.map((c) => (c as HTMLInputElement).checked)).toEqual([true, false]);
   });
 });
