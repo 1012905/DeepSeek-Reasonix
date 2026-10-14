@@ -43,11 +43,6 @@ export function LocalMachine({ shut, count, adder, canSelect, selecting, onToggl
       <span className="rowswap">
         {count !== undefined && <span className="rowcount" data-words="">{t("{n} 个项目", { n: count })}</span>}
         <span className="rowbtns">
-          <button className="machpick" data-busy={adder.busy ? "" : undefined}
-            title={t("打开或新建项目…")} aria-label={t("打开或新建项目…")}
-            data-action="workspace.add" onClick={() => adder.add()}>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.7v8.6M3.7 8h8.6" /></svg>
-          </button>
           <button ref={more} className="wsmore" title={t("更多操作")}
             aria-label={t("这台机器的更多操作")} aria-haspopup="menu" aria-expanded={open}
             data-action="machine.menu" onClick={() => setOpen((v) => !v)}>
@@ -55,6 +50,11 @@ export function LocalMachine({ shut, count, adder, canSelect, selecting, onToggl
           </button>
         </span>
       </span>
+      <button className="machpick" data-busy={adder.busy ? "" : undefined}
+        title={t("打开或新建项目…")} aria-label={t("打开或新建项目…")}
+        data-action="workspace.add" onClick={() => adder.add()}>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.7v8.6M3.7 8h8.6" /></svg>
+      </button>
       {open && createPortal(
         <div ref={menu} className="session-pop" role="menu" aria-label={t("这台机器的更多操作")}
           data-action-keydown="machine.menu" onKeyDown={workspaceMenuKeys}>
