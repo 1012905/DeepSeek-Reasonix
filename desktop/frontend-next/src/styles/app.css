@@ -4294,7 +4294,7 @@
   @keyframes oobefill { to { width: 100% } }
   @keyframes oobegone { to { opacity: 0; visibility: hidden } }
   .oobe-skip { position: absolute; right: 18px; bottom: 16px; z-index: 3;
-               font: var(--w-reg) var(--fs-meta) var(--mono); color: rgb(255 255 255 / .28) }
+               font: var(--w-reg) var(--fs-meta) var(--mono); color: rgb(255 255 255 / .56) }
 
   @media (prefers-reduced-motion: reduce) {
     .oobe[data-play] * { animation: none !important }
