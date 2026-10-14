@@ -35,6 +35,7 @@ import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
+import { BackupFile } from "./BackupFile";
 import { Providers } from "./Providers";
 import { activeKind, groupVendors } from "./Models";
 import { ModelUsage } from "./ModelUsage";
@@ -749,6 +750,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <Account port={port} state={acct} unread={accountUnread} reload={reloadAccount} />
             </Group>
           )}
+          {at === "account" && <Group id="backup-file" title={t("导出与导入配置")} hint={t("不用账号：把本机的模型、扩展、记忆等配置加密导出成一个文件，换机器时再导入。")}><BackupFile port={port} /></Group>}
           {at === "account" && acct?.signedIn && acct.user && (
             <Group id="backup" title={t("云备份")} hint={t("把本机的模型、扩展、记忆等配置加密保存到账号，换机器或重装后按项恢复。")}>
               <Backup port={port} />
