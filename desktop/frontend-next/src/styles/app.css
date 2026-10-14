@@ -439,9 +439,9 @@
   }
   .qcap > span { display: flex; align-items: center; gap: 5px }
   .qcap > span[data-full] { color: var(--warn-ink) }
-  .qcap .mtr { width: 40px; height: 3px; border-radius: 2px; background: var(--overlay); overflow: hidden }
-  .qcap .mtr i { display: block; height: 100%; border-radius: 2px; background: var(--faint); transition: width var(--t-card) var(--ease) }
-  .qcap > span[data-full] .mtr i { background: var(--warn-ink) }
+  .mtr { display: inline-block; width: 40px; height: 3px; border-radius: 2px; background: var(--overlay); overflow: hidden }
+  .mtr i { display: block; height: 100%; border-radius: 2px; background: var(--faint); transition: width var(--t-card) var(--ease) }
+  .mtr[data-full] i { background: var(--warn-ink) }
   .qhold {
     flex: none; margin-left: auto; padding: 3px 8px; border: 1px solid var(--hair); border-radius: var(--r-pill);
     background: color-mix(in srgb, var(--raised) 72%, transparent); color: var(--muted); font: inherit; cursor: pointer;
