@@ -839,6 +839,7 @@ export const EN: Record<string, string> = {
   "更新内容": "What's new",
   "收起更新内容": "Hide what's new",
   "{v} 的更新内容": "What's new in {v}",
+  "更新内容的语言": "Language of the notes",
   "正在读取更新内容…": "Loading what's new…",
   "更新内容读取失败": "What's new could not be read",
   "在 GitHub 查看": "View on GitHub",
