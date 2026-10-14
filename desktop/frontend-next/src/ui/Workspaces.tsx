@@ -27,6 +27,7 @@ import { UnreadCount, UnreadDot } from "./UnreadMark";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
 import { LocalMachine } from "./LocalMachine";
+import { useWorkspaceDrag } from "./useWorkspaceDrag";
 
 const parentOf = (root: string) => root.replace(/[/\\]+$/, "").split(/[/\\]/).slice(-2, -1)[0] ?? "";
 
@@ -187,6 +188,16 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
       setBusy("");
     }
   };
+
+  // Dragging reorders the whole remembered list, so a search that hides rows turns it off.
+  const drag = useWorkspaceDrag(needle ? [] : tree.filter((w) => w.remembered).map((w) => w.root), async (root, before) => {
+    try {
+      await hub.placeWorkspace(root, before);
+      await reload();
+    } catch (e) {
+      onError(e);
+    }
+  });
 
   const panesOf = (root: string) => runtimes.filter((rt) => rt.root === root).map((rt) => rt.id);
 
@@ -356,7 +367,20 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                     ref={sessionMenu === ws.root ? sessionMenuBox : undefined}
                     data-action-contextmenu="workspace.menu"
                     data-action-keydown="workspace.menu"
+                    data-action-dragstart="workspace.reorder"
+                    data-action-dragover="workspace.reorder"
+                    data-action-dragleave="workspace.reorder"
+                    data-action-drop="workspace.reorder"
+                    data-action-dragend="workspace.reorder"
                     data-target={ws.root}
+                    data-drop={drag.over?.root === ws.root ? drag.over.edge : undefined}
+                    data-dragging={drag.dragging === ws.root ? "" : undefined}
+                    draggable={ws.remembered && !needle}
+                    onDragStart={(ev) => drag.start(ev, ws.root)}
+                    onDragOver={(ev) => drag.hover(ev, ws.root)}
+                    onDragLeave={() => drag.leave(ws.root)}
+                    onDrop={(ev) => drag.drop(ev, ws.root)}
+                    onDragEnd={drag.end}
                     className="wsrow"
                     role="treeitem"
                     aria-haspopup="menu"
