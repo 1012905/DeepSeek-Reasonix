@@ -28,6 +28,7 @@ export const EN_KERNEL: Record<string, string> = {
   "尚未取得所需的写入范围，这次等待已结束": "The wait ended before the requested write claim was granted",
   "会话 {holder}（{session}）持有写入范围：{paths}": "Session {holder} ({session}) holds write claim: {paths}",
   "所需写入范围：{paths}": "Requested write claim: {paths}",
+  "扩展界面的历史记录读不出来，已有的界面可能没有恢复": "The extension surface history could not be read, so existing surfaces may not have been restored",
   "请输入聊天标题": "Enter a chat title",
   "该会话还没有可用于命名的用户消息": "This chat has no user message to name it from",
   "未配置可用于自动命名的模型，请先配置模型": "Configure a model before using automatic naming",

@@ -20,6 +20,7 @@ const (
 	tsVersionFile   = "desktop/frontend-next/src/port/version.ts"
 	tsModelFile     = "desktop/frontend-next/src/port/model.ts"
 	tsMcpFile       = "desktop/frontend-next/src/port/mcp.ts"
+	tsReplayFile    = "desktop/frontend-next/src/port/surface_replay.ts"
 	tsShellFile     = "desktop/frontend-next/src/port/shell.ts"
 	tsShareFile     = "desktop/frontend-next/src/port/share.ts"
 	tsProviderFile  = "desktop/frontend-next/src/port/provider.ts"
@@ -55,6 +56,7 @@ var mirroredWireTypes = []wireMirror{
 
 	{"internal/contract/eventwire/extension.go", "ExtensionViewNode", tsWireFile, "ExtensionViewNode"},
 	{"internal/contract/eventwire/extension.go", "ExtensionSurface", tsWireFile, "ExtensionSurface"},
+	{"internal/frontend/serve/surface_history.go", "surfaceReplay", tsReplayFile, "ExtensionSurfaceReplay"},
 	{"internal/contract/event/notice_payload.go", "DormantPermissionRule", tsBoundaryFile, "DormantPermissionRule"},
 	{"internal/frontend/serve/branch.go", "workspaceBranchesView", tsWorkspaceFile, "WorkspaceBranches"},
 	{"internal/platform/gitstatus/branches.go", "Branch", tsWorkspaceFile, "WorkspaceBranch"},

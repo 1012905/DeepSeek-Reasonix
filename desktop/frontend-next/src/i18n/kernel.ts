@@ -31,7 +31,7 @@ const SAID: Record<string, string> = {
   "surface.spec_version_unsupported": "界面版本暂不支持",
   "surface.limit_exceeded": "界面内容超过限制",
   "surface.component_unknown": "界面包含不支持的组件",
-  "surface.replay_incomplete": "扩展界面恢复失败",
+  "surface.replay_unreadable": "扩展界面的历史记录读不出来，已有的界面可能没有恢复",
   "shell.destructive_target": "递归删除目标受保护或超出授权范围；请使用工作区或授权目录内的字面路径",
   "shell.analysis_unknown": "无法确定递归删除范围；请使用字面命令名、路径和解释器内容",
   "shell.delete_sequence": "请拆分命令；递归删除前只能使用字面路径切换目录，不能依赖变量赋值",

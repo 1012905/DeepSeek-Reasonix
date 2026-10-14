@@ -619,7 +619,7 @@ export interface AgentPort {
   // back — an action the card offered, or a published form's values.
   surfaceAction(request: SurfaceActionRequest): Promise<Queued>;
   surfaceActionState(callId: string): Promise<SurfaceActionRecord>;
-  extensionSurfaces(): Promise<import("./wire").ExtensionSurface[]>;
+  extensionSurfaces(): Promise<import("./surface_replay").ExtensionSurfaceReplay>;
   invokeExtensionAction(name: string): Promise<string>;
   submitExtensionForm(pluginId: string, surfaceId: string, values: Record<string, unknown>): Promise<void>;
 
