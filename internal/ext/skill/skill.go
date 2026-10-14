@@ -874,6 +874,7 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 	if unreadable {
 		sk.Invalid = append(sk.Invalid, "frontmatter is not valid YAML; read line by line (quote values that contain [ ] : or #)")
 	}
+	sk.Invalid = append(sk.Invalid, specIssues(path, stem, fm)...)
 	sk.Profiles, sk.InvalidProfiles = parseProfilesFrontmatter(fm[skillFrontmatterProfiles])
 	sk.Paths, sk.InvalidPaths = parsePathsFrontmatter(fm[skillFrontmatterPaths])
 	return sk, true
