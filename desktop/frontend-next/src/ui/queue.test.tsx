@@ -159,6 +159,13 @@ describe("what the pending strip says back", () => {
     expect(html).toContain("3.1k/64M");
   });
 
+  it("draws each capacity limit as a labelled meter with its own value and maximum", () => {
+    const html = draw(snapshot({ capacity: { items: 64, maxItems: 64, bytes: 3174, maxBytes: 64 << 20 } }));
+    expect(html).toMatch(/role="meter" aria-label="条目" aria-valuemin="0" aria-valuemax="64" aria-valuenow="64" data-full="true"/);
+    expect(html).toMatch(/role="meter" aria-label="字节" aria-valuemin="0" aria-valuemax="67108864" aria-valuenow="3174"/);
+    expect(html).not.toMatch(/aria-label="字节"[^>]*data-full/);
+  });
+
   it("renders nothing when there is nothing waiting and the queue is not held", () => {
     expect(draw(snapshot({ items: [], capacity: { items: 0, maxItems: 64, bytes: 0, maxBytes: 64 << 20 } }))).toBe("");
   });
