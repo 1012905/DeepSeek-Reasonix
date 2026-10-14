@@ -53,8 +53,8 @@ export class MockWorkspace extends MockFeedback {
   // The scripted transcript's tree facts, without a repository behind the fixture.
   // Held in a field so staging is visible to the next read, as the index is.
   changeList: WorkspaceChange[] = [
-    { path: "internal/provider/retry.go", status: "M", unstaged: true },
-    { path: "internal/config/credentials.go", status: "M", staged: true },
+    { path: "internal/provider/retry.go", status: "M", unstaged: true, insertions: 14, deletions: 3 },
+    { path: "internal/config/credentials.go", status: "M", staged: true, insertions: 6, deletions: 2 },
     { path: "internal/provider/openai/streaming/chunk_decoder.go", status: "A", staged: true, unstaged: true },
     { path: "docs/notes.md", status: "??", unstaged: true },
   ];
