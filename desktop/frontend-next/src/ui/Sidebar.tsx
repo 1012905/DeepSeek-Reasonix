@@ -1,5 +1,6 @@
 import { FeedbackBadge, feedbackEntryTab } from "./feedbackentry";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { listenAction } from "./listen";
 import { t } from "../i18n";
 import logoWordmark from "../assets/logo-wordmark.svg";
 import type { AccountState } from "../port/port";
@@ -114,6 +115,23 @@ export function Sidebar({
 }: Props) {
   const [railScope, setRailScope] = useState<"all" | "live" | "pinned" | "archived">("all");
   const [palette, setPalette] = useState(false);
+  // The press itself takes focus off the find box, so whether it was open is
+  // read when the press starts, and a second press closes it instead of reopening.
+  const findWasOpen = useRef(false);
+  const magnifier = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const button = magnifier.current;
+    if (!button) return;
+    return listenAction(button, "pointerdown", {
+      action: "workspace.search",
+      listener: () => { findWasOpen.current = !!document.querySelector(".wsfind:focus-within"); },
+    });
+  }, []);
+  const toggleFind = () => {
+    const wasOpen = findWasOpen.current;
+    findWasOpen.current = false;
+    if (!wasOpen) document.querySelector<HTMLInputElement>(".wsfind input")?.focus();
+  };
   const [folded, setFolded] = useState<Set<string>>(new Set());
   const hideAmounts = useHidesAmounts();
   const hiddenHosts = useHiddenHosts();
@@ -249,7 +267,7 @@ export function Sidebar({
             <button data-action="session.filter" data-value="pinned" aria-pressed={railScope === "pinned"} onClick={() => setRailScope("pinned")}><span>{t("置顶")}</span>{pinned.size > 0 && <b>{pinned.size}</b>}</button>
             <button data-action="session.filter" data-value="archived" aria-pressed={railScope === "archived"} onClick={() => setRailScope("archived")}><span>{t("归档")}</span>{archivedCount > 0 && <b>{archivedCount}</b>}</button>
           </div>
-          <button className="studio-filter-search" data-action="workspace.search" onClick={() => document.querySelector<HTMLInputElement>(".wsfind input")?.focus()} aria-label={t("按名称筛选会话")}><StudioIcon name="search" /></button>
+          <button className="studio-filter-search" data-action="workspace.search" ref={magnifier} onClick={toggleFind} aria-label={t("按名称筛选会话")}><StudioIcon name="search" /></button>
         </div>
       </div>
       <RailSearch>

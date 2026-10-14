@@ -64,6 +64,9 @@ export const EN_FEEDBACK: Record<string, string> = {
     "Screenshots (optional, public if filed as an issue)",
   "移除截图 {name}": "Remove screenshot {name}",
   "添加截图…": "Add screenshots…",
+  "截取当前窗口": "Capture this window",
+  "没能截取窗口，请改用「添加截图…」。": "Could not capture the window; use \"Add screenshots…\" instead.",
+  "「截取当前窗口」的图会包含窗口里看到的内容（钱包余额、会话等），发送前可在上方删除。": "A \"Capture this window\" image includes everything visible in the window (wallet balance, sessions, …). You can remove it above before sending.",
   "选择截图文件": "Choose screenshot files",
   "也可以直接粘贴或拖进来。PNG 或 JPEG，最多 {n} 张，每张不超过 {size} MB，较大的图会自动缩小。":
     "You can also paste or drop them here. PNG or JPEG, up to {n} images, {size} MB each; large images are shrunk automatically.",

@@ -1,5 +1,6 @@
 import { t } from "./index";
 import { FOLD_WHY, NO_CODE_WHY } from "./compaction_why";
+import { CONTEXT_COMPOSITION, contextCompositionVars } from "./context_composition";
 import { EXTENSION_SKIPPED, extensionSkippedVars } from "./extension_skipped";
 import { INBOX_RECOVERED, inboxRecoveredVars } from "./inbox_recovered";
 import { JOB_FAILED, JOB_FINISHED, JOB_KILLED, jobErrorText, jobNoticeVars } from "./job_notice";
@@ -22,6 +23,7 @@ const VARS: Record<string, (detail: string | undefined) => NoticeVars | undefine
   [JOB_FINISHED]: jobNoticeVars,
   [JOB_KILLED]: jobNoticeVars,
   [JOB_FAILED]: jobNoticeVars,
+  [CONTEXT_COMPOSITION]: contextCompositionVars,
   display_currency: (detail) => ({ mode: detail || "auto" }),
   compact_declined: compactReason("compact_declined"),
   compact_failed: compactReason("compact_failed"),

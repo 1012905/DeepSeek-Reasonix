@@ -4,7 +4,7 @@
 .machrow[data-group] .rmtpip { background: none; box-shadow: inset 0 0 0 1.5px var(--faint); }
 .machrow[data-group] .rowcount { opacity: 1; }
 .rmts > .rmt { padding-left: 8px; }
-.rowcount { padding-inline: 4px; font: var(--w-reg) var(--fs-micro)/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); }
+.rowcount { pointer-events: none; padding-inline: 4px; font: var(--w-reg) var(--fs-micro)/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); }
 .rowbtns { display: flex; align-items: center; gap: 2px; }
 .rowbtns, .rowswap > .machpick { opacity: 0; }
 :is(.wsrow, .machrow):is(:hover, :focus-within) :is(.rowbtns, .rowswap > .machpick),

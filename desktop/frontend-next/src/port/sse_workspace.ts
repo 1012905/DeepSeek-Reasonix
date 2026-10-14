@@ -1,4 +1,5 @@
 import type { ChangeDiff, StageRequest, WorkspaceBranches, WorkspaceChanges, WorkspaceGit } from "./port";
+import type { GitHistory } from "./workspace";
 import { SseFeedback } from "./sse_feedback";
 import { host } from "./host";
 import { HttpError } from "./http_error";
@@ -24,6 +25,10 @@ export class SseWorkspace extends SseFeedback {
 
   workspaceGit() {
     return this.get<WorkspaceGit>("/workspace/git");
+  }
+
+  workspaceGitLog(limit?: number) {
+    return this.get<GitHistory>("/workspace/git/log" + (limit ? `?limit=${limit}` : ""));
   }
 
   branches() {

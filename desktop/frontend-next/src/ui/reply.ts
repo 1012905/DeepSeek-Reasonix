@@ -103,6 +103,7 @@ export function useReplyActions({ port, items, checkpoints, running, model, subm
   const reply = useMemo<ReplyActions>(
     () => ({
       onQuote: (text: string, id: string) => setQuote((q) => ({ text, turn: turnOf(id), n: q.n + 1 })),
+      onQuoteFile: (text: string, source: string) => setQuote((q) => ({ text, source, n: q.n + 1 })),
       canRegenerate: (id: string) => !running && replyTurns.has(id),
       hasLaterTurns: (id: string) => replyTurns.get(id)?.hasLaterTurns ?? false,
       onRegenerate: (id: string) => {

@@ -69,6 +69,13 @@ var refusedApps = map[string]string{
 	"reasonix studio":                             "Reasonix Studio itself",
 	"reasonix-studio":                             "Reasonix Studio itself",
 	"gnome-terminal-server":                       "a terminal",
+	"gnome-terminal":                              "a terminal",
+	"x-terminal-emulator":                         "a terminal",
+	"bash":                                        "a shell",
+	"sh":                                          "a shell",
+	"dash":                                        "a shell",
+	"zsh":                                         "a shell",
+	"fish":                                        "a shell",
 	"konsole":                                     "a terminal",
 	"xterm":                                       "a terminal",
 	"kitty":                                       "a terminal",
@@ -104,10 +111,11 @@ type App struct {
 	Bundle string `json:"bundle"`
 	// Exe is a Windows application's file name when Bundle is its package
 	// family name; a refusal holds under either.
-	Exe     string   `json:"exe,omitempty"`
-	Name    string   `json:"name"`
-	Active  bool     `json:"active"`
-	Windows []Window `json:"windows"`
+	Exe        string   `json:"exe,omitempty"`
+	Name       string   `json:"name"`
+	Active     bool     `json:"active"`
+	Launchable bool     `json:"launchable,omitempty"`
+	Windows    []Window `json:"windows"`
 }
 
 // Window is one of an application's windows on screen, in global points.
@@ -233,6 +241,11 @@ func (s *Session) Act(ctx context.Context, bundle string, steps []Step, windows 
 	s.driver.desktop.Lock()
 	defer s.driver.desktop.Unlock()
 	res := ActResult{FailedAt: -1}
+	for _, step := range steps {
+		if step.Action == "launch" {
+			return s.launch(ctx, bundle, steps, windows)
+		}
+	}
 	app, err := s.app(ctx, bundle)
 	if err != nil {
 		res.FailedAt = 0

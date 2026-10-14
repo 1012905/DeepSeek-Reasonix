@@ -31,6 +31,11 @@ export interface HostPort {
   toggleMaximiseWindow(): void;
   isWindowMaximised(): Promise<boolean>;
   closeWindow(): void;
+  /** Whether this shell can hand back a picture of its own window. */
+  capturesWindow(): boolean;
+  /** A PNG of this window as drawn now; null when the shell cannot or the
+   *  window has nothing to show. It names no window: only the asker's own. */
+  captureWindow(): Promise<Uint8Array | null>;
   /** How the shell draws this launch; null where it has no say, as in a tab. */
   graphics(): Promise<GraphicsInfo | null>;
   openExternal(url: string): void | Promise<void>;
@@ -155,6 +160,7 @@ interface ElectronBridge {
   toggleMaximiseWindow(): Promise<void>;
   isWindowMaximised(): Promise<boolean>;
   closeWindow(): Promise<void>;
+  captureWindow?(): Promise<Uint8Array | null>;
   graphics?(): Promise<GraphicsInfo | null>;
   openExternal(url: string): Promise<void>;
   setUnreadBadge?(unread: boolean): Promise<void>;
@@ -210,6 +216,12 @@ class ElectronHost implements HostPort {
   }
   closeWindow() {
     void this.api.closeWindow();
+  }
+  capturesWindow() {
+    return typeof this.api.captureWindow === "function";
+  }
+  captureWindow() {
+    return this.api.captureWindow?.().then((b) => (b?.byteLength ? new Uint8Array(b) : null)).catch(() => null) ?? Promise.resolve(null);
   }
   graphics() {
     return this.api.graphics?.().catch(() => null) ?? Promise.resolve(null);
@@ -307,6 +319,12 @@ class BrowserHost implements HostPort {
     return Promise.resolve(false);
   }
   closeWindow() {}
+  capturesWindow() {
+    return false;
+  }
+  captureWindow() {
+    return Promise.resolve(null);
+  }
   graphics() {
     return Promise.resolve(null);
   }

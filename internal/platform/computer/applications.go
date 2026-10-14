@@ -2,6 +2,7 @@ package computer
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 )
 
@@ -12,38 +13,66 @@ type nativeWindow struct {
 	Bounds Rect   `json:"bounds"`
 }
 
+type nativeApplication struct {
+	PID        int32  `json:"pid"`
+	Bundle     string `json:"bundle_id"`
+	Name       string `json:"name"`
+	Active     bool   `json:"active"`
+	Running    bool   `json:"running"`
+	LaunchPath string `json:"launch_path"`
+}
+
 func (s *Session) Apps(ctx context.Context) ([]App, error) {
 	s.driver.desktop.Lock()
 	defer s.driver.desktop.Unlock()
-	apps, err := s.runningApps(ctx)
-	if err != nil || len(apps) == 0 {
-		return apps, err
-	}
-	windows, err := s.windows(ctx, 0)
+	catalogue, err := s.catalogue(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for i := range apps {
-		attachWindows(&apps[i], windows)
+	apps := runningApplications(catalogue)
+	if len(apps) > 0 {
+		windows, err := s.windows(ctx, 0)
+		if err != nil {
+			return nil, err
+		}
+		for i := range apps {
+			attachWindows(&apps[i], windows)
+		}
+	}
+	for _, a := range catalogue {
+		if a.Running || a.Bundle == "" {
+			continue
+		}
+		installed := App{Bundle: a.Bundle, Name: a.Name}
+		if spec, err := catalogueLaunchSpecification(a); err == nil {
+			installed.Bundle, installed.Launchable = spec.identity, true
+		}
+		apps = append(apps, installed)
 	}
 	return apps, nil
 }
 
-func (s *Session) runningApps(ctx context.Context) ([]App, error) {
+func (s *Session) catalogue(ctx context.Context) ([]nativeApplication, error) {
 	var response struct {
-		Apps []struct {
-			PID     int32  `json:"pid"`
-			Bundle  string `json:"bundle_id"`
-			Name    string `json:"name"`
-			Active  bool   `json:"active"`
-			Running bool   `json:"running"`
-		} `json:"apps"`
+		Apps []nativeApplication `json:"apps"`
 	}
 	if _, err := s.read(ctx, "list_apps", map[string]any{}, &response); err != nil {
 		return nil, err
 	}
+	return response.Apps, nil
+}
+
+func (s *Session) runningApps(ctx context.Context) ([]App, error) {
+	catalogue, err := s.catalogue(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return runningApplications(catalogue), nil
+}
+
+func runningApplications(catalogue []nativeApplication) []App {
 	var apps []App
-	for _, a := range response.Apps {
+	for _, a := range catalogue {
 		if !a.Running || a.PID <= 0 {
 			continue
 		}
@@ -53,7 +82,7 @@ func (s *Session) runningApps(ctx context.Context) ([]App, error) {
 		}
 		apps = append(apps, App{PID: a.PID, Bundle: bundle, Exe: exe, Name: a.Name, Active: a.Active})
 	}
-	return apps, nil
+	return apps
 }
 
 func (s *Session) windows(ctx context.Context, pid int32) ([]nativeWindow, error) {
@@ -79,6 +108,10 @@ func attachWindows(app *App, windows []nativeWindow) {
 }
 
 func (s *Session) app(ctx context.Context, bundle string) (App, error) {
+	return s.appForPID(ctx, bundle, 0)
+}
+
+func (s *Session) appForPID(ctx context.Context, bundle string, expectedPID int32) (App, error) {
 	bundle = strings.TrimSpace(bundle)
 	if why := Refused(bundle); why != "" {
 		return App{}, fail(CodeAppRefused, "%s is %s", bundle, why)
@@ -97,16 +130,46 @@ func (s *Session) app(ctx context.Context, bundle string) (App, error) {
 		}
 	}
 	if len(found) == 0 {
+		installed, err := s.installedIdentity(ctx, bundle)
+		if err != nil {
+			return App{}, err
+		}
+		if installed {
+			return App{}, fail(CodeNoWindow, "application is installed but has no targetable window; inspect what=apps for an explicit launch or manual recovery")
+		}
 		return App{}, fail(CodeNoApp, "no running application has identity %q; use the exact identity returned by computer_read what=apps", bundle)
 	}
 	if len(found) > 1 {
 		return App{}, fail(CodeNoApp, "application identity %q resolves to multiple processes", bundle)
 	}
 	app := found[0]
+	if expectedPID > 0 && app.PID != expectedPID {
+		return App{}, fail(CodeNoApp, "application identity no longer belongs to the launched process")
+	}
 	windows, err := s.windows(ctx, app.PID)
 	if err != nil {
 		return App{}, err
 	}
 	attachWindows(&app, windows)
 	return app, nil
+}
+
+func (s *Session) installedIdentity(ctx context.Context, identity string) (bool, error) {
+	catalogue, err := s.catalogue(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, app := range catalogue {
+		if app.Running {
+			continue
+		}
+		if app.Bundle == identity {
+			return true, nil
+		}
+		spec, err := catalogueLaunchSpecification(app)
+		if err == nil && (spec.identity == identity || (spec.executable != "" && filepath.Base(spec.executable) == identity)) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
