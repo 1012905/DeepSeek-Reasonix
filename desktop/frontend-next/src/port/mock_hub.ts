@@ -189,6 +189,12 @@ export class MockHub implements HubPort {
 
   async openWorkspace() {}
 
+  async openWithTargets() {
+    return [{ id: "vscode", name: "Visual Studio Code", available: true }, { id: "terminal", name: "Terminal", available: true }];
+  }
+
+  async openWith() {}
+
   removeWorkspace(path: string) {
     const at = this.roots.indexOf(path);
     if (at >= 0) this.roots.splice(at, 1);

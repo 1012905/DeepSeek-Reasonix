@@ -18,7 +18,7 @@ function draw(over: Partial<TreeWorkspace> = {}, reveals = true) {
   shell.reveals = reveals;
   render(
     <Workspaces
-      hub={{ revealWorkspace } as never}
+      hub={{ revealWorkspace, openWithTargets: async () => [] } as never}
       tree={tree}
       treeRead
       runtimes={[]}
