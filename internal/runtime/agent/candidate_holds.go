@@ -24,3 +24,28 @@ func (a *contextWindow) acceptAttributed(trigger string, scope compactionScope, 
 	}
 	return attribute(err, a.candidateHolds(candidateTokens, fixedPrefixTokens, kept, summary))
 }
+
+// foldCannotFit refuses, before any summary is paid for, a fold whose
+// candidate cannot get under the trigger whatever the summary says: the fixed
+// prefix, the messages the keep policy protects and the recent tail already
+// reach it.
+func (a *contextWindow) foldCannotFit(trigger string, msgs []provider.Message, head, start int, policy KeepPolicy) (CompactionNoopReason, error) {
+	prefix := a.estimatedPromptTokens(a.providerProjectionMessages(msgs[:head]))
+	limit := a.compactTrigger()
+	if a.effectiveContextWindow() <= 0 || limit <= 0 {
+		return "", nil
+	}
+	if prefix >= limit {
+		return NoopFixedPrefixAboveTrigger, rejectCheckpoint(NoopFixedPrefixAboveTrigger, "fixed prefix (%d tokens) already exceeds trigger (%d)", prefix, limit)
+	}
+	if trigger == CompactionTriggerManual && a.estimatedPromptTokens(msgs) < limit {
+		return "", nil
+	}
+	kept, _, _, _ := a.partitionFoldWith(msgs[head:start], policy)
+	held := candidateHolds{Prefix: prefix, Kept: a.estimatedPromptTokens(kept), Tail: a.estimatedPromptTokens(msgs[start:])}
+	if held.Prefix+held.Kept+held.Tail < limit {
+		return "", nil
+	}
+	err := rejectCheckpoint(NoopCandidateAboveTrigger, "candidate cannot get under trigger %d even with an empty summary", limit)
+	return NoopCandidateAboveTrigger, attribute(err, held)
+}
