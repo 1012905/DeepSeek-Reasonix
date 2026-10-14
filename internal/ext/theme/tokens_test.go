@@ -322,6 +322,10 @@ func TestShadowTokenRefusesWhatCouldLeaveItsDeclaration(t *testing.T) {
 		"0 0 0 #000, , 0 0 0 #000",
 		"0 0 0 #000, 0 0 0 #000, 0 0 0 #000, 0 0 0 #000, 0 0 0 #000",
 		"1em 1em #000",
+		"0\u00a00 0 #000000",
+		"0 0\u20280 #000000",
+		"0\u30000 4px #000000",
+		"0\t0 4px #000000",
 	} {
 		if validToken("shadowFloat", v) {
 			t.Errorf("validToken(shadowFloat, %q) accepted a value that is not a plain shadow", v)

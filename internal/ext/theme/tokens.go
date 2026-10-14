@@ -134,12 +134,19 @@ func isShadow(v string) bool {
 	if v == "" || len(v) > 240 {
 		return false
 	}
+	// Fields would split on any Unicode space and the stored value is the
+	// original string, which CSS does not read as a separator: ASCII only.
+	for _, r := range v {
+		if r < ' ' || r > '~' {
+			return false
+		}
+	}
 	layers := strings.Split(v, ",")
 	if len(layers) > maxShadowLayers {
 		return false
 	}
 	for _, layer := range layers {
-		if !isShadowLayer(strings.Fields(layer)) {
+		if !isShadowLayer(strings.FieldsFunc(layer, func(r rune) bool { return r == ' ' })) {
 			return false
 		}
 	}
