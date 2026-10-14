@@ -1,5 +1,6 @@
 import { inScope } from "./sessionScope";
-import { Fragment, type ReactNode, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { hidesLegacySessions, onHidesLegacySessionsChange } from "../state/prefs";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import { seconds } from "../i18n/format";
@@ -98,6 +99,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
   // Renaming is a pencil, not a double-click: a single click already opens the
   // session, so a double one would open it twice on the way to the edit.
   const [editing, setEditing] = useState("");
+  const hideLegacy = useSyncExternalStore(onHidesLegacySessionsChange, hidesLegacySessions, hidesLegacySessions);
   const [sessionMenu, setSessionMenu] = useState("");
   const [sessionMenuAt, setSessionMenuAt] = useState({ x: 0, y: 0 });
   const sessionMenuBox = useRef<HTMLDivElement>(null);
@@ -307,7 +309,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
     .map((ws) => ({
       ...ws,
       sessions: pinnedFirst(ws.sessions.filter((session) =>
-        inScope(session, scope, !!needle, !!session.runtimeId && listedIds([session.runtimeId]).length > 0, pinned.has(session.path))), pinned),
+        inScope(session, scope, !!needle, !!session.runtimeId && listedIds([session.runtimeId]).length > 0, pinned.has(session.path), hideLegacy)), pinned),
     }))
     .filter((ws) => scope === "all" || ws.sessions.length > 0);
   // A fold is a resting-state preference: while a word is being typed it would
