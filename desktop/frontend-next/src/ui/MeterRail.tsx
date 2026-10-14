@@ -56,6 +56,7 @@ export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compa
           <dl>
             <div><dt>{t("当前速度")}</dt><dd>{tps > 0 ? `${tps.toFixed(1)} tok/s` : "—"}</dd></div>
             <div><dt>{t("整轮平均")}</dt><dd>{speed.average > 0 ? `${speed.average.toFixed(1)} tok/s` : "—"}</dd></div>
+            <div><dt>{t("首字时间")}</dt><dd>{speed.firstToken > 0 ? `${speed.firstToken.toFixed(2)}s` : "—"}</dd></div>
             <div><dt>{t("本轮输出")}</dt><dd>{speed.output > 0 ? t("{n} tokens", { n: speed.output.toLocaleString() }) : "—"}</dd></div>
             <div><dt>{t("模型耗时")}</dt><dd>{speed.modelSeconds > 0 ? `${speed.modelSeconds.toFixed(1)}s` : "—"}</dd></div>
           </dl>

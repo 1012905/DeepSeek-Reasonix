@@ -118,3 +118,24 @@ describe("a retry row names why", () => {
     expect(line(run([retrying({})]), 0)).toBe("retry 1/10 · scope=headers");
   });
 });
+
+describe("a round's time to first token", () => {
+  const committed = (id: string, firstTokenMs?: number): WireEvent =>
+    ({ kind: "stream_attempt", streamAttempt: { id, action: "commit", firstTokenMs } }) as WireEvent;
+
+  it("is kept on the round as seconds, the way the kernel measured it", () => {
+    const s = run([begin("a"), committed("a", 1250)]);
+    expect(s.rows[0].ttft).toBe(1.25);
+  });
+
+  it("is absent when the kernel did not measure one", () => {
+    expect(run([begin("a"), committed("a")]).rows[0].ttft).toBeUndefined();
+    expect(run([begin("a"), committed("a", 0)]).rows[0].ttft).toBeUndefined();
+  });
+
+  it("belongs to the round that settled, not to the next one", () => {
+    const s = run([begin("a"), committed("a", 800), begin("b"), commit("b")]);
+    expect(s.rows.map((row) => row.ttft)).toEqual([0.8, undefined]);
+  });
+});
+
