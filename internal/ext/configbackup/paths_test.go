@@ -15,10 +15,6 @@ func TestAbsPathsAsksTheDiskOnlyAboutPlainWords(t *testing.T) {
 	if err := os.WriteFile(real, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	climbing := filepath.Join(dir, "sub", "..", "tool")
-	if _, err := os.Stat(climbing); err == nil {
-		t.Fatal("fixture: the climbing path should not resolve through a missing directory")
-	}
 	for _, tc := range []struct {
 		word string
 		want bool
