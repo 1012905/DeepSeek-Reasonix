@@ -2170,7 +2170,7 @@
 
   .agents { display: flex; flex-direction: column; gap: 7px; min-height: 18px }
   .ag { display: flex; align-items: center; gap: 9px; font: var(--w-reg) var(--fs-ui) var(--mono); color: var(--muted); animation: card var(--t-card) var(--ease-out) both }
-  .ag .nm { color: var(--text) }
+  .ag .nm { color: var(--text); flex: none } .ag .lbl { display: block; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .ag .rt { margin-left: auto; font-size: var(--fs-meta); color: var(--ghost); font-variant-numeric: tabular-nums }
 
   .jobs { display: flex; flex-direction: column; gap: 7px; min-height: 18px }

@@ -52,7 +52,7 @@ export interface Profile {
   name?: string;
   count?: number;
   model?: string;
-  effort?: string;
+  effort?: string; label?: string; // label: the task's own short description, one sub-agent only
 }
 
 // Present on shell tools. A non-zero exit was invisible before: the card only
