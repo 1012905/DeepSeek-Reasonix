@@ -6,7 +6,7 @@ import "encoding/json"
 // sentence is worded from, so a sink that prints Text must not append it again.
 func DetailIsPayload(code string) bool {
 	return code == NoticeCodeUnappliedSteer || code == NoticeCodeExtensionSkipped || code == NoticeCodeInboxRecovered ||
-		code == NoticeCodePermissionRulesDormant || code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed
+		code == NoticeCodePermissionRulesDormant || code == NoticeCodeContextComposition || code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed
 }
 
 // ExtensionSkipReasonNoLiveSidecar: the extension's companion process is not running.
@@ -112,6 +112,42 @@ type PermissionRulesDormant struct {
 
 // Encode renders the payload as the notice's Detail.
 func (p PermissionRulesDormant) Encode() string {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// ContextPart is one class of what the prompt holds and the tokens it costs.
+type ContextPart struct {
+	Name   string `json:"name"`
+	Tokens int    `json:"tokens"`
+}
+
+// ContextItem is one message among the largest the prompt holds. Tool is the
+// producing tool's name for a tool result; Active says it belongs to the turn
+// still running, which a fold cannot take.
+type ContextItem struct {
+	Role   string `json:"role"`
+	Tool   string `json:"tool,omitempty"`
+	Tokens int    `json:"tokens"`
+	Active bool   `json:"active,omitempty"`
+}
+
+// ContextComposition is the Detail payload of NoticeCodeContextComposition: what
+// holds the tokens of a prompt that is over its compaction threshold. Parts are
+// the six classes by size, largest first; Largest is the biggest single messages.
+type ContextComposition struct {
+	Total   int           `json:"total"`
+	At      int           `json:"at"`
+	Active  int           `json:"active"`
+	Parts   []ContextPart `json:"parts"`
+	Largest []ContextItem `json:"largest,omitempty"`
+}
+
+// Encode renders the payload as the notice's Detail.
+func (p ContextComposition) Encode() string {
 	raw, err := json.Marshal(p)
 	if err != nil {
 		return ""

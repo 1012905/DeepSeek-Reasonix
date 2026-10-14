@@ -172,6 +172,7 @@ func (a *contextWindow) noteMaintenanceHeld() {
 		Kind: event.Notice, Level: event.LevelWarn, Code: event.NoticeCodeCompactHeld, Detail: string(reason),
 		Text: fmt.Sprintf("Automatic compaction is paused: the last attempt did not finish (%s).", reason),
 	})
+	a.noteContextComposition()
 }
 
 // recordContextMaintenanceBlocked persists a generation-scoped blocked receipt.
