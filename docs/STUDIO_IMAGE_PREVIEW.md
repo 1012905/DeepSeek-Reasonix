@@ -31,21 +31,11 @@ button. This viewer does not add zoom or a 1:1 size mode.
 
 ## Visual verification / 视觉验证
 
-The before images use Studio `ffd136f463524e1ff275a4f1407dc053073c34ce`.
-Both sets show the same 1600 × 1000 fixture after double clicking its user-message
-thumbnail. The browser guard also exercises composer and tool entrances, focus,
-closing, aspect ratio, and 150% interface zoom.
+The browser guard drives a 1600 × 1000 fixture through the user-message, composer
+and tool entrances: double click, focus, closing, aspect ratio, and 150% interface zoom.
 
-修改前截图来自 Studio `ffd136f463524e1ff275a4f1407dc053073c34ce`。两组截图均在双击
-同一张 1600 × 1000 测试图片后拍摄。浏览器回归还覆盖输入框和工具入口、焦点、关闭、
-宽高比及 150% 界面缩放。
-
-| Theme and width / 主题与宽度 | Before / 修改前 | After / 修改后 |
-| --- | --- | --- |
-| Light / 浅色 · 1100px | ![Before light wide](assets/studio-image-preview/before-light-1100.png) | ![After light wide](assets/studio-image-preview/after-light-1100.png) |
-| Dark / 深色 · 1100px | ![Before dark wide](assets/studio-image-preview/before-dark-1100.png) | ![After dark wide](assets/studio-image-preview/after-dark-1100.png) |
-| Light / 浅色 · 390px | ![Before light narrow](assets/studio-image-preview/before-light-390.png) | ![After light narrow](assets/studio-image-preview/after-light-390.png) |
-| Dark / 深色 · 390px | ![Before dark narrow](assets/studio-image-preview/before-dark-390.png) | ![After dark narrow](assets/studio-image-preview/after-dark-390.png) |
+浏览器回归用一张 1600 × 1000 测试图片依次走用户消息、输入框和工具入口：双击、焦点、
+关闭、宽高比及 150% 界面缩放。
 
 Run `node perf/image-preview.mjs` against the built performance harness; set
 `PERF_URL` to its served `perf.html` address. CI runs this guard in the Studio
