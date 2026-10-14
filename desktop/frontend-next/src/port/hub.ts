@@ -38,6 +38,8 @@ export interface TreeSession {
   name: string;
   title?: string;
   turns?: number;
+  // Unix ms of the last write to this conversation; absent when unknown.
+  lastActiveAt?: number;
   // Set when a pane already drives this transcript: the sidebar focuses that
   // pane rather than opening a second writer for one file.
   runtimeId?: string;

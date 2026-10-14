@@ -61,6 +61,9 @@ type treeSession struct {
 	RuntimeID string `json:"runtimeId,omitempty"`
 	Archived  bool   `json:"archived,omitempty"`
 	Pinned    bool   `json:"pinned,omitempty"`
+	// LastActiveAt is unix milliseconds of the last write to the conversation,
+	// which is what a recency-ordered list sorts by; absent when unknown.
+	LastActiveAt int64 `json:"lastActiveAt,omitempty"`
 	// AutoArchivedAt is unix milliseconds of an automatic archive, else absent.
 	AutoArchivedAt int64 `json:"autoArchivedAt,omitempty"`
 	// Unread is a turn that finished since the person last looked. The kernel
