@@ -288,6 +288,7 @@ function AgentBrowserView({ tabs, shown, showTabs = true }: { tabs: BrowserTab[]
           <button className="bbtn" data-action="browser.control" data-target={current?.id} data-value="back" aria-label={t("后退")} onClick={() => control("back")}>←</button>
           <button className="bbtn" data-action="browser.control" data-target={current?.id} data-value="forward" aria-label={t("前进")} onClick={() => control("forward")}>→</button>
           <button className="bbtn" data-action="browser.control" data-target={current?.id} data-value="reload" aria-label={t("重新加载")} onClick={() => control("reload")}>↻</button>
+          <button className="bbtn" data-action="browser.external" disabled={!/^https?:\/\//i.test(current?.url ?? "")} aria-label={t("用默认浏览器打开此页")} title={t("用默认浏览器打开此页")} onClick={() => current && void host().openExternal(current.url)}>↗</button>
           <form className="baddr" data-action="browser.navigate" data-target={current?.id} onSubmit={go}>
             <input data-action="browser.navigate" data-target={current?.id} value={address} spellCheck={false} aria-label={t("网址")} onChange={(event) => { setAddress(event.target.value); setRefused(""); }} />
           </form>

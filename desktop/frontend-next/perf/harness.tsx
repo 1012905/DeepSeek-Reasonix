@@ -77,6 +77,11 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  async browserTabs() {
+    if (!query.has("agentpage")) return super.browserTabs();
+    return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
+  }
+
   async versions() {
     if (!query.has("versions")) return super.versions();
     const names = ["2.38.0", "2.37.0", "2.36.0", "2.35.0", "2.34.0", "2.33.0", "2.32.0", "2.31.0", "2.30.0", "2.29.0"];
