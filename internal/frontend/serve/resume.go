@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -50,10 +51,7 @@ func (s *Server) resumeInto(path string) (int, error) {
 	if err != nil {
 		return http.StatusBadRequest, refusal(http.StatusBadRequest, codeSessionBadPath, errors.New("invalid session dir"), nil)
 	}
-	realDir, err := filepath.EvalSymlinks(absDir)
-	if err != nil {
-		return http.StatusBadRequest, refusal(http.StatusBadRequest, codeSessionBadPath, errors.New("invalid session dir"), nil)
-	}
+	realDir, dirErr := filepath.EvalSymlinks(absDir)
 	absPath, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil || !store.IsSessionTranscriptName(filepath.Base(absPath)) {
 		return http.StatusBadRequest, refusal(http.StatusBadRequest, codeSessionBadPath, errors.New("invalid session path"), nil)
@@ -68,7 +66,14 @@ func (s *Server) resumeInto(path string) (int, error) {
 	// list the click came from was drawn before it did.
 	realPath, err := filepath.EvalSymlinks(absPath)
 	if err != nil {
-		return http.StatusBadRequest, refusal(http.StatusBadRequest, codeSessionBadPath, errors.New("invalid session path"), nil)
+		return pathUnresolved(err)
+	}
+	// A transcript that exists cannot be inside a directory that does not.
+	if errors.Is(dirErr, fs.ErrNotExist) {
+		return http.StatusForbidden, refusal(http.StatusForbidden, codeSessionOutside, errors.New("path outside session dir"), nil)
+	}
+	if dirErr != nil {
+		return pathUnresolved(dirErr)
 	}
 	if realPath == realDir || !strings.HasPrefix(realPath, realDir+string(os.PathSeparator)) {
 		return http.StatusForbidden, refusal(http.StatusForbidden, codeSessionOutside, errors.New("path outside session dir"), nil)
@@ -118,6 +123,17 @@ func (s *Server) resumeInto(path string) (int, error) {
 	s.adoptSessionModelLocked(realPath)
 	s.resetSessionView()
 	return http.StatusNoContent, nil
+}
+
+// pathUnresolved tells a path that is not there from one the host could not
+// read. The host is the only party that saw which it was, so it says so: a
+// transcript that is gone is "no such session", anything else carries the
+// operating system's own reason for the person or support to read.
+func pathUnresolved(err error) (int, error) {
+	if errors.Is(err, fs.ErrNotExist) {
+		return http.StatusNotFound, refusal(http.StatusNotFound, codeSessionUnknown, err, nil)
+	}
+	return http.StatusBadRequest, refusal(http.StatusBadRequest, codeSessionPathUnreadable, err, map[string]any{"detail": err.Error()})
 }
 
 // adoptSessionModelLocked rebuilds the runtime on the model the target session

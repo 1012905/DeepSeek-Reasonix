@@ -109,6 +109,7 @@ const SAID: Record<string, string> = {
   "request.bad_value": "「{field}」只能为以下值之一：{allowed}",
   "session.bad_name": "会话名不能是路径",
   "session.bad_path": "无法解析该会话路径",
+  "session.path_unreadable": "读不了该会话的路径：{detail}",
   "session.open_failed": "打不开这个会话",
   "session.outside_dir": "该路径位于会话目录之外",
   "session.unknown": "没有这个会话",
