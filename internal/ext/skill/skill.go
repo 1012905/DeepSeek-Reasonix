@@ -1216,12 +1216,6 @@ func isScriptExt(ext string) bool {
 	}
 }
 
-// parseAllowedTools splits a comma-separated `allowed-tools` value into trimmed,
-// non-empty tool names; nil when absent.
-func parseAllowedTools(raw string) []string {
-	return parseCSVFrontmatter(raw)
-}
-
 // parseCSVFrontmatter splits simple comma-separated frontmatter values. Full
 // YAML lists are intentionally out of scope for the existing frontmatter parser.
 func parseCSVFrontmatter(raw string) []string {
