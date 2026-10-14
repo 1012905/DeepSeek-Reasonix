@@ -70,6 +70,22 @@ export interface RemoteLinkOptions {
 
 const MAX_RETRY_AFTER_MS = 2 * 60 * 1000;
 
+// The desktop reads at most 64 KiB from the relay in one message and closes the
+// link on a larger one, taking every other request on it down too. A request
+// that would seal past this is refused here instead of being sent. The budget
+// leaves the relay's own wrapping room under that limit.
+const WIRE_BUDGET = 62 * 1024;
+// What sealing adds around the command: the session name and sequence it is
+// stamped with, the AES-GCM tag, and the envelope's own keys.
+const SEAL_OVERHEAD = 16 + 96 + 120;
+
+/** The most body bytes a request to this path can carry over the link. */
+export function maxRequestBody(path: string): number {
+  const plain = Math.floor(((WIRE_BUDGET - SEAL_OVERHEAD) * 3) / 4);
+  const fixed = 160 + path.length;
+  return Math.max(0, Math.floor(((plain - fixed) * 3) / 4));
+}
+
 const DEFAULTS: RemoteLinkOptions = {
   requestTimeoutMs: 30_000,
   retryDelaysMs: [500, 1_000, 2_000, 4_000, 8_000, 15_000],
@@ -128,9 +144,14 @@ export class RemoteLink {
     if (this.ended) throw new Error(t("远程连接已断开，请重新连接。"));
     const id = crypto.randomUUID();
     const body = new Uint8Array(await request.arrayBuffer());
+    const path = request.url.slice(location.origin.length);
+    const room = maxRequestBody(path);
+    if (body.length > room) {
+      throw new Error(t("这次发送的内容太大：远程控制每次最多约 {kb} KB（上传文件时约为其四分之三）。请改在电脑上添加，或换一个更小的文件。", { kb: Math.floor(room / 1024) }));
+    }
     const command = {
       v: 1, type: "desktop.request", id, method: request.method,
-      path: request.url.slice(location.origin.length), body: bytesToBase64(body),
+      path, body: bytesToBase64(body),
     };
     return new Promise<Response>((resolve, reject) => {
       const entry: Pending = {
