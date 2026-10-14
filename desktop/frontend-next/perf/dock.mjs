@@ -33,7 +33,7 @@ for (const scheme of ["light", "dark"]) {
     for (const round of ["first open", "after a reload"]) {
       await page.goto(`${BASE}?pref=en&turns=3`, { waitUntil: "networkidle" });
       await page.waitForSelector(".app");
-      await page.locator('[data-action="browser.open"]').first().click();
+      await page.locator('[data-action="pane.view"][data-value="browser"]').first().click();
       await page.waitForTimeout(700);
       const open = await geometry(page);
       docked = open;
@@ -51,7 +51,7 @@ for (const scheme of ["light", "dark"]) {
       }
       if (SHOTS && round === "first open") await page.screenshot({ path: `${SHOTS}/${process.env.DOCK_TAG ?? "shot"}-${tag.replace("/", "-")}.png` });
     }
-    await page.locator('[data-action="browser.open"]').first().click();
+    await page.locator('[data-action="pane.view"][data-value="flow"]').first().click();
     await page.waitForTimeout(700);
     const shut = await geometry(page);
     check(`${tag} undocked: the column is gone and the navigation row is as wide as the pane's body again`, (!shut.side || shut.side.left >= shut.pane.right - 1) && !!shut.tabs && shut.tabs.right - shut.tabs.left >= shut.pane.right - shut.pane.left - 24, JSON.stringify([shut.side, shut.tabs, shut.pane]));
@@ -67,7 +67,7 @@ for (const scheme of ["light", "dark"]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto(`${BASE}?pref=en&turns=3`, { waitUntil: "networkidle" });
     await page.waitForSelector(".app");
-    await page.locator('[data-action="browser.open"]').first().click();
+    await page.locator('[data-action="pane.view"][data-value="browser"]').first().click();
     await page.waitForTimeout(400);
     const g = await page.evaluate(() => {
       const tabs = document.querySelector(".pane > .tabs");

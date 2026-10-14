@@ -260,18 +260,6 @@ describe("WorkbenchPanel", () => {
     } finally { views.mockRestore(); hide.mockRestore(); vi.unstubAllGlobals(); }
   });
 
-  it("dismisses the launcher when the title-bar Browser is reopened on an iframe host", async () => {
-    const user = userEvent.setup();
-    const props = { port: new MockPort(), tabs: [], manual: true, shown: true, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
-    const { rerender } = render(<WorkbenchPanel {...props} browserAsk={0} />);
-    await user.click(screen.getByRole("button", { name: "新建标签" }));
-    rerender(<WorkbenchPanel {...props} manual={false} browserAsk={1} />);
-    rerender(<WorkbenchPanel {...props} browserAsk={2} />);
-    expect(screen.queryByRole("group", { name: "开始" })).toBeNull();
-    expect(screen.getByRole("tab", { name: "浏览器" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("region", { name: "内置 Browser" })).toBeTruthy();
-  });
-
   it.each(["escape", "plus"])("restores the explorer when new-tab choice is cancelled with %s", async (cancel) => {
     const user = userEvent.setup();
     const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={[]} manual shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
@@ -283,7 +271,7 @@ describe("WorkbenchPanel", () => {
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
   });
 
-  it.each([[false, false], [true, false], [false, true]])("respects newer Files choices (reopen: %s, title bar: %s)", async (reopen, titleBar) => {
+  it.each([false, true])("respects newer Files choices (reopen: %s)", async (reopen) => {
     const user = userEvent.setup();
     const port = new MockPort();
     const views = vi.spyOn(hostModule.host(), "drawsBrowserViews").mockReturnValue(true);
@@ -291,12 +279,9 @@ describe("WorkbenchPanel", () => {
     vi.spyOn(port, "browserOpen").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     try {
       const props = { port, tabs: [], manual: true, shown: true, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
-      const { container, rerender } = render(<WorkbenchPanel {...props} browserAsk={0} />);
-      if (titleBar) rerender(<WorkbenchPanel {...props} browserAsk={1} />);
-      else {
-        await user.click(screen.getByRole("button", { name: "新建标签" }));
-        await user.click(screen.getByRole("button", { name: "浏览器" }));
-      }
+      const { container } = render(<WorkbenchPanel {...props} />);
+      await user.click(screen.getByRole("button", { name: "新建标签" }));
+      await user.click(screen.getByRole("button", { name: "浏览器" }));
       await user.click(container.querySelector('[data-action="workbench.launch-files"]')!);
       if (reopen) {
         await user.click(screen.getByRole("button", { name: "新建标签" }));
