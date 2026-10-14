@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -46,6 +47,14 @@ func hasIndex(dir string) bool {
 	return err == nil && !st.IsDir()
 }
 
+// pageContentTypes is the type of every kind of file the built page ships.
+var pageContentTypes = map[string]string{
+	".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
+	".css": "text/css; charset=utf-8", ".json": "application/json", ".map": "application/json", ".svg": "image/svg+xml",
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".ico": "image/x-icon",
+	".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf", ".wasm": "application/wasm", ".webmanifest": "application/manifest+json", ".txt": "text/plain; charset=utf-8",
+}
+
 // withPage serves the files the built page brought with it and leaves every
 // other path to the kernel. Which paths are the page's is asked of the page
 // itself, never of a list of kernel routes. A path naming no file is the
@@ -63,6 +72,11 @@ func withPage(kernel http.Handler, page fs.FS) http.Handler {
 			return
 		}
 		if st, err := fs.Stat(page, name); err == nil && !st.IsDir() {
+			// On Windows the library reads types from the registry, where another
+			// program's entry can turn the SVG logo into a broken image.
+			if kind, ok := pageContentTypes[strings.ToLower(path.Ext(name))]; ok {
+				w.Header().Set("Content-Type", kind)
+			}
 			files.ServeHTTP(w, r)
 			return
 		}
