@@ -1,6 +1,7 @@
 // The transcript's two jump buttons: absent where nothing scrolls or within 48px
 // of their end, present and clear of the composer elsewhere, taking no layout
-// height, and landing on the end when no expanded block lies that way.
+// height, clear of the scroll rail, the dock's tab and the composer at every
+// width, and landing on the end when no expanded block lies that way.
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -14,8 +15,49 @@ const check = (name, ok, detail = "") => {
   if (!ok) fails.push(name);
 };
 
+const SIZES = [[1280, 800], [1000, 700], [800, 700], [640, 700]];
 const browser = await chromium.launch();
 for (const scheme of ["light", "dark"]) {
+  for (const [width, height] of SIZES) {
+    const ctx = await browser.newContext({ locale: "zh-CN", viewport: { width, height }, colorScheme: scheme });
+    const page = await ctx.newPage();
+    page.on("pageerror", (e) => fails.push("page error: " + e.message));
+    await page.goto(PAGE, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-pane="flow"] .flow');
+    await page.waitForTimeout(1200);
+    const root = page.locator('[data-pane="flow"]').first();
+    await root.evaluate((el) => el.scrollTo({ top: el.scrollHeight * 0.4 }));
+    await page.waitForTimeout(600);
+    const clash = await page.evaluate(() => {
+      const box = (name, el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 ? { name, left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+      };
+      const items = [
+        ...[...document.querySelectorAll(".scrolljump button")].map((b) => box("jump-" + b.dataset.value, b)),
+        box("rail", document.querySelector(".srail")),
+        box("tab", document.querySelector(".gutter-r .grip")),
+        box("compose", document.querySelector(".compose")),
+        box("send", document.querySelector(".go .send, .go button")),
+      ].filter(Boolean);
+      const out = [];
+      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        const w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        const inside = (x, y) => x.left >= y.left && x.right <= y.right && x.top >= y.top && x.bottom <= y.bottom;
+        if (w > 0.5 && h > 0.5 && !inside(a, b) && !inside(b, a)) out.push(`${a.name} x ${b.name}: ${w.toFixed(0)}x${h.toFixed(0)}`);
+      }
+      return { out, names: items.map((it) => it.name) };
+    });
+    check(`${scheme} ${width}x${height}: the buttons, rail, dock tab and composer do not overlap`, clash.out.length === 0, clash.out.join("; "));
+    check(`${scheme} ${width}x${height}: the right edge shows the rail, the tab and the buttons`, (width >= 800 ? ["rail", "tab", "jump-up", "jump-down"] : ["rail", "jump-up", "jump-down"]).every((n) => clash.names.includes(n)), clash.names.join(","));
+    if (SHOTS) {
+      await page.screenshot({ path: join(SHOTS, `${scheme}-edge-${width}.png`), clip: { x: Math.max(0, width - 220), y: 0, width: Math.min(220, width), height: Math.min(height, 640) } });
+    }
+    await ctx.close();
+  }
+
   const ctx = await browser.newContext({ locale: "zh-CN", viewport: { width: 1280, height: 800 }, colorScheme: scheme });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => fails.push("page error: " + e.message));
