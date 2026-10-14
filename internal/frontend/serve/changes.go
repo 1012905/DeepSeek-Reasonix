@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"reasonix/internal/platform/gitcmd"
 	"reasonix/internal/platform/gitstatus"
@@ -50,6 +51,37 @@ func (s *Server) workspaceGit(w http.ResponseWriter, r *http.Request) {
 		Repo: ok, Name: info.Name, Branch: info.Branch, Detached: info.Detached,
 		Added: info.Added, Removed: info.Removed, Untracked: info.Untracked,
 	})
+}
+
+// gitHistoryView is the commit graph's newest page. Repo is false for a
+// workspace that is not version-controlled, with no commits and nothing wrong.
+type gitHistoryView struct {
+	Repo      bool               `json:"repo"`
+	Commits   []gitstatus.Commit `json:"commits"`
+	Truncated bool               `json:"truncated"`
+}
+
+// gitHistory answers with the newest commits of every branch, newest first,
+// bounded by ?limit (default 100). Reading it changes nothing in the repository.
+func (s *Server) gitHistory(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			refuse(w, http.StatusBadRequest, "request.bad_value", "limit must be a positive number", nil)
+			return
+		}
+		limit = n
+	}
+	page, ok, err := gitstatus.History(r.Context(), workspaceRepo(s.ctl()), limit)
+	if err != nil {
+		refuse(w, http.StatusInternalServerError, "git.history_failed", err.Error(), nil)
+		return
+	}
+	if page.Commits == nil {
+		page.Commits = []gitstatus.Commit{}
+	}
+	writeJSON(w, gitHistoryView{Repo: ok, Commits: page.Commits, Truncated: page.Truncated})
 }
 
 // changeDiff answers with one path's working-tree diff, so a reader can see a

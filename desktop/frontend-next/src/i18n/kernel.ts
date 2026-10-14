@@ -61,6 +61,7 @@ const SAID: Record<string, string> = {
   "workspace.has_open_panes": "该文件夹仍有 {n} 个打开的面板，请先关闭再移除",
   "workspace.file_invalid": "文件保存请求格式不正确",
   "workspace.file_changed": "文件已在打开后被其他操作修改，请重新载入",
+  "git.history_failed": "无法读取这个仓库的提交历史",
   "workspace.file_missing": "找不到该文件，它可能已被移动或删除",
   "workspace.file_failed": "文件操作失败，请重试",
   "workspace.path_outside_tree": "该路径不在当前工作区内",
