@@ -3350,15 +3350,11 @@ body { font-size: 14px; line-height: 1.75; }
   background: color-mix(in srgb, var(--page) 70%, var(--surface)) !important;
   border-color: var(--hair) !important;
 }
-.prefs-nav button { color: var(--muted); }
+.prefs-nav button { color: var(--text); }
 .prefs-nav button:not(:disabled):hover { background: var(--overlay); color: var(--text); }
-.prefs-nav button[aria-selected="true"] {
-  background: var(--accent-wash);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, var(--hair));
-}
-.prefs-nav button[aria-selected="true"]::before { background: var(--accent); }
-.prefs-nav button[aria-selected="true"] svg { color: var(--accent); }
+.prefs-nav button[aria-selected="true"] { background: var(--overlay); color: var(--text); }
+.prefs-nav button[aria-selected="true"]::before { background: var(--text); }
+.prefs-nav button[aria-selected="true"] svg { color: var(--text); }
 .prefs-main {
   background: color-mix(in srgb, var(--page) 82%, var(--float)) !important;
   scrollbar-color: color-mix(in srgb, var(--muted) 34%, transparent) transparent;
@@ -3393,16 +3389,6 @@ body { font-size: 14px; line-height: 1.75; }
 :root[data-theme="light"] .prefs-nav button:not(:disabled):hover {
   background: var(--overlay);
   color: var(--text);
-}
-:root[data-theme="light"] .prefs-nav button[aria-selected="true"] {
-  background: var(--accent-wash);
-  color: var(--text);
-}
-:root[data-theme="light"] .prefs-nav button[aria-selected="true"]::before {
-  background: var(--accent);
-}
-:root[data-theme="light"] .prefs-nav button[aria-selected="true"] svg {
-  color: var(--accent);
 }
 
 /* Run analysis is the readable front door to the existing trajectory. Raw
