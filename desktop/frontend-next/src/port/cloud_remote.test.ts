@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { onRemoteConnectionEnded, RemoteEventSource, remoteCodec, remoteConnectionEnded, remoteHub } from "./cloud_remote";
-import { RemoteLinkError } from "./cloud_link";
+import { onRemoteConnectionEnded, RemoteEventSource, remoteCodec, remoteConnectionEnded } from "./cloud_remote";
 import { openLiveStream, STREAM_SILENCE_MS } from "./livestream";
 
 describe("remote Studio binary framing", () => {
@@ -136,27 +135,53 @@ describe("remote Studio binary framing", () => {
     vi.useRealTimers();
   });
 
-  it("says the browser is too old, and does not offer a retry, when it has no X25519", async () => {
-    class OpenSocket extends EventTarget {
-      constructor() {
-        super();
-        queueMicrotask(() => this.dispatchEvent(new Event("open")));
-      }
-      close() {}
-      send() {}
-    }
-    vi.stubGlobal("WebSocket", OpenSocket);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-      grant: { ticket: "t" },
-      device: { id: "dev-1", publicKey: remoteCodec.bytesToBase64(new Uint8Array(32)), capabilities: ["desktop"] },
-    }), { status: 200 }));
-    vi.spyOn(crypto.subtle, "generateKey").mockRejectedValue(new DOMException("Algorithm: Unrecognized name", "NotSupportedError"));
+  it("agrees the same secret with the device through the software curve when WebCrypto has no X25519", async () => {
+    const device = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+    const devicePublic = new Uint8Array(await crypto.subtle.exportKey("raw", device.publicKey));
+    const spy = vi.spyOn(crypto.subtle, "generateKey").mockRejectedValueOnce(new DOMException("Algorithm: Unrecognized name", "NotSupportedError"));
 
-    const failure = await remoteHub("dev-1").catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(RemoteLinkError);
-    expect((failure as RemoteLinkError).kind).toBe("ended");
-    expect((failure as RemoteLinkError).reason).toContain("浏览器版本太旧");
-    vi.unstubAllGlobals();
+    const ours = await remoteCodec.agreement(devicePublic);
+    expect(spy).toHaveBeenCalledOnce();
+    spy.mockRestore();
+
+    // The device derives from our public key with its own private key, as the desktop does.
+    const peer = await crypto.subtle.importKey("raw", ours.publicKey, { name: "X25519" }, false, []);
+    const theirs = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peer }, device.privateKey, 256));
+    expect(ours.secret).toEqual(theirs);
+    expect(ours.publicKey).toHaveLength(32);
+  });
+
+  it("uses WebCrypto and never loads the software curve when the browser has X25519", async () => {
+    const device = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+    const devicePublic = new Uint8Array(await crypto.subtle.exportKey("raw", device.publicKey));
+    const ours = await remoteCodec.agreement(devicePublic);
+    const peer = await crypto.subtle.importKey("raw", ours.publicKey, { name: "X25519" }, false, []);
+    const theirs = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peer }, device.privateKey, 256));
+    expect(ours.secret).toEqual(theirs);
+  });
+
+  it("does not hide a failure that is not a missing algorithm", async () => {
+    vi.spyOn(crypto.subtle, "generateKey").mockRejectedValueOnce(new Error("quota exceeded"));
+    await expect(remoteCodec.agreement(new Uint8Array(32).fill(9))).rejects.toThrow("quota exceeded");
     vi.restoreAllMocks();
   });
+
+  // A relay or a hostile device can send any 32 bytes as its key. A weak point
+  // must be refused by the software curve exactly as WebCrypto refuses it.
+  const weakPoints: Record<string, Uint8Array> = {
+    "all zeros": new Uint8Array(32),
+    "order 4 (u = 1)": Uint8Array.from([1, ...new Array(31).fill(0)]),
+    "order 8": Uint8Array.from([
+      0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4, 0x6a,
+      0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00,
+    ]),
+    "wrong length": new Uint8Array(31).fill(7),
+  };
+  for (const [name, point] of Object.entries(weakPoints)) {
+    it(`refuses a device key that is ${name} through the software curve`, async () => {
+      vi.spyOn(crypto.subtle, "generateKey").mockRejectedValueOnce(new DOMException("Algorithm: Unrecognized name", "NotSupportedError"));
+      await expect(remoteCodec.agreement(point as Uint8Array<ArrayBuffer>)).rejects.toThrow();
+      vi.restoreAllMocks();
+    });
+  }
 });

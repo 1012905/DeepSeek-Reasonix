@@ -55,22 +55,33 @@ interface RemoteDevice {
 }
 
 // Browsers older than Chromium 133, Firefox 130 and Safari 17 have no X25519 in
-// WebCrypto. They say so with a NotSupportedError, and retrying cannot help.
-async function agreementKeyPair() {
+// WebCrypto and say so with a NotSupportedError. Those take the audited
+// software curve, loaded only then; every other step of the channel still runs
+// in WebCrypto.
+type Bytes = Uint8Array<ArrayBuffer>;
+
+async function agreement(devicePublic: Bytes): Promise<{ secret: Bytes; publicKey: Bytes }> {
   try {
-    return await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+    const pair = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+    const deviceKey = await crypto.subtle.importKey("raw", devicePublic, { name: "X25519" }, false, []);
+    const secret = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: deviceKey }, pair.privateKey, 256));
+    return { secret, publicKey: new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey)) };
   } catch (error) {
-    if (error instanceof DOMException && error.name === "NotSupportedError") {
-      throw new RemoteLinkError("ended", t("这个浏览器版本太旧，不支持远程控制需要的加密。请改用较新版本的 Chrome、Edge、Safari 或 Firefox 打开。"));
-    }
-    throw error;
+    if (!(error instanceof DOMException && error.name === "NotSupportedError")) throw error;
+    return softwareAgreement(devicePublic);
   }
 }
 
+async function softwareAgreement(devicePublic: Bytes): Promise<{ secret: Bytes; publicKey: Bytes }> {
+  const { x25519 } = await import("@noble/curves/ed25519.js").catch(() => {
+    throw new RemoteLinkError("transient", t("无法加载这个浏览器需要的加密组件，请检查网络后重试。"));
+  });
+  const keys = x25519.keygen();
+  return { secret: new Uint8Array(x25519.getSharedSecret(keys.secretKey, devicePublic)), publicKey: new Uint8Array(keys.publicKey) };
+}
+
 async function encryptedChannel(device: RemoteDevice, socket: WebSocket) {
-  const pair = await agreementKeyPair();
-  const deviceKey = await crypto.subtle.importKey("raw", base64ToBytes(device.publicKey), { name: "X25519" }, false, []);
-  const secret = await crypto.subtle.deriveBits({ name: "X25519", public: deviceKey }, pair.privateKey, 256);
+  const { secret, publicKey } = await agreement(base64ToBytes(device.publicKey));
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const material = await crypto.subtle.importKey("raw", secret, "HKDF", false, ["deriveKey"]);
   const info = new TextEncoder().encode(`reasonix-remote-v1|${device.id}`);
@@ -81,7 +92,6 @@ async function encryptedChannel(device: RemoteDevice, socket: WebSocket) {
     false,
     ["encrypt", "decrypt"],
   );
-  const publicKey = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
   socket.send(JSON.stringify({
     v: 1, type: "hello", publicKey: bytesToBase64(publicKey), salt: bytesToBase64(salt),
   }));
@@ -315,6 +325,6 @@ export async function remoteHub(deviceId: string): Promise<HubPort> {
 }
 
 export const remoteCodec = {
-  bytesToBase64, base64ToBytes, concatChunks, announceClosed,
+  bytesToBase64, base64ToBytes, concatChunks, announceClosed, agreement,
   waitForSocketOpen, handshakeTimeoutMS: HANDSHAKE_TIMEOUT_MS,
 };
