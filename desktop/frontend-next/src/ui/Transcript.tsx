@@ -31,6 +31,8 @@ import { Rail, type RailMark } from "./Rail";
 import { StudioIcon } from "./StudioIcon";
 import { LiveWork, useStartsOpen } from "../state/foldpref";
 import { landingBox, useFindLanding, useFindPaint } from "./findland";
+import { ScrollJump } from "./ScrollJump";
+import { landing as landingOf, type Direction } from "./jumpreach";
 import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
@@ -41,9 +43,6 @@ interface Props {
   waiting: Waiting;
   scroll: RefObject<HTMLDivElement | null>;
   hidden: boolean;
-  onPinned: (v: boolean) => void;
-  // Bumped to ask for the bottom back — see the effect that consumes it.
-  jump: number;
   // A request from outside to show one tool call — the run graph asking for the
   // node you clicked. The nonce, not the id, is what makes asking twice land
   // twice; null while nothing has been asked for.
@@ -87,7 +86,7 @@ interface Props {
   onEntered: (ids: string[]) => void;
 }
 
-export function Transcript({ items, port, entering, onEntered, revision, waiting, scroll, hidden, onPinned, jump, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
+export function Transcript({ items, port, entering, onEntered, revision, waiting, scroll, hidden, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
   // A block the selection touches must not leave the DOM. Unmounting the node a
   // selection is anchored to makes the browser remap that selection onto
   // whatever is still mounted — which reads as "I selected up there and the
@@ -114,10 +113,6 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
   // only resumes the follow if they are the one who went there.
   const gesture = useRef(0);
   const wasAt = useRef(0);
-  // Following and offering a shortcut back are deliberately separate. A tiny
-  // upward wheel gesture should stop live content from pulling the reader
-  // down, but it should not immediately flash a "back to latest" pill.
-  const jumpVisible = useRef(false);
   // Scroll events before this moment are the browser's, not the reader's.
   const quiet = useRef(0);
 
@@ -178,16 +173,6 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
     setPinned(false);
   }, []);
 
-  const revealJumpIfFar = useCallback(() => {
-    const root = scroll.current;
-    if (!root || jumpVisible.current) return;
-    const away = root.scrollHeight - root.scrollTop - root.clientHeight;
-    const revealAt = Math.min(280, Math.max(160, root.clientHeight * 0.24));
-    if (away < revealAt) return;
-    jumpVisible.current = true;
-    onPinned(false);
-  }, [scroll, onPinned]);
-
   useEffect(() => {
     const root = scroll.current;
     if (!root) return;
@@ -207,7 +192,6 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
       const up = top < wasAt.current - 2;
       wasAt.current = top;
       const away = root.scrollHeight - top - root.clientHeight;
-      revealJumpIfFar();
       if (!up || self.current || !at.current || performance.now() < quiet.current) return;
       if (away <= 48) return;
       release();
@@ -224,7 +208,7 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
       root.removeEventListener("touchmove", mark);
       root.removeEventListener("scroll", onScroll);
     };
-  }, [scroll, onPinned, release, revealJumpIfFar]);
+  }, [scroll, release]);
 
   // One observer for every block, not one per block. Hundreds of separate
   // observers did not reliably report a block leaving — blocks stayed mounted
@@ -284,14 +268,12 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
         if (performance.now() - gesture.current > 400 && performance.now() > quiet.current) return;
         at.current = true;
         setPinned(true);
-        jumpVisible.current = false;
-        onPinned(true);
       },
       { root, rootMargin: "0px 0px 48px 0px" },
     );
     io.observe(marker);
     return () => io.disconnect();
-  }, [scroll, hidden, onPinned]);
+  }, [scroll, hidden]);
 
   // A hidden container scrolls nothing: scrollIntoView is a no-op there, and
   // every block unmounts because nothing intersects a display:none root. So
@@ -329,8 +311,6 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
       gesture.current = 0;
       at.current = false;
       setPinned(false);
-      jumpVisible.current = true;
-      onPinned(false);
       // Measured against the scroller, not offsetTop: the nearest positioned
       // ancestor is .pane, which does not scroll, so offsetTop answers "where
       // in the window" — writing that back as scrollTop barely moves anything.
@@ -362,7 +342,7 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
       };
       requestAnimationFrame(() => settle(20));
     },
-    [scroll, flow, onPinned],
+    [scroll, flow],
   );
 
   const jumpTo = useCallback(
@@ -373,14 +353,29 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
   // "Back to latest" cannot just write scrollTop once: where the bottom is
   // changes as blocks mount under it. Turning the follow back on lets the same
   // correction that tracks a live answer carry it the rest of the way.
-  useEffect(() => {
-    if (!jump) return;
+  const resume = useCallback(() => {
+    landing.current++;
     at.current = true;
     setPinned(true);
-    jumpVisible.current = false;
-    onPinned(true);
     follow();
-  }, [jump, follow, onPinned]);
+  }, [follow]);
+
+  // The nearest expanded call or thought in that direction, else the very end:
+  // one jump should not cross a whole stretch of context the reader has opened.
+  const jumpToward = useCallback(
+    (dir: Direction) => {
+      const root = scroll.current;
+      if (!root) return;
+      const base = root.getBoundingClientRect().top - root.scrollTop;
+      const tops = [...root.querySelectorAll<HTMLElement>("details.tool-disclosure[open], details.think[open]")].map((el) => el.getBoundingClientRect().top - base);
+      const to = landingOf(dir, tops, root.scrollTop, root.clientHeight, root.scrollHeight);
+      if (to === "end") return resume();
+      landing.current++;
+      release();
+      root.scrollTop = to;
+    },
+    [scroll, release, resume],
+  );
 
   // Blocks mounting and unmounting move the bottom out from under a follow that
   // only fires on events — which left the viewport stranded half a transcript
@@ -391,11 +386,10 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
     if (!el) return;
     const ro = new ResizeObserver(() => {
       if (at.current) follow();
-      else revealJumpIfFar();
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [follow, revealJumpIfFar]);
+  }, [follow]);
 
   // Only a message still being written can grow; anything else is final the
   // moment it lands, so the split is exactly one card wide.
@@ -503,6 +497,7 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
         {waiting.ttftSince && <Await since={waiting.ttftSince} retry={waiting.retry} />}
         <div ref={end} className="flow-end" aria-hidden="true" />
       </div>
+      <ScrollJump scroll={scroll} flow={flow} active={!hidden} onJump={jumpToward} />
     </div>
   );
 }

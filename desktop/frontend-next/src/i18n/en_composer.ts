@@ -1,7 +1,6 @@
 // The turn starts here: drafting, attachments, run posture, and the two actions
 // that remain available while an agent is live.
 export const EN_COMPOSER: Record<string, string> = {
-  "↓ 回到最新": "↓ Back to latest",
   "不思考": "No reasoning",
   "最轻量": "Minimal",
   "比快速档更轻；GLM-5.2 会跳过思考": "Lighter than Fast; GLM-5.2 skips thinking",

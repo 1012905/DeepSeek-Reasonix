@@ -357,6 +357,7 @@ export const ACTIONS: UIAction[] = [
   { id: "model.select", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "network.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "onboarding.connect", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "transcript.scroll", kind: "view", target: "none", proof: "interaction" },
   { id: "onboarding.protocol", kind: "view", target: "none", proof: "interaction" },
   { id: "onboarding.skip", kind: "view", target: "none", proof: "interaction" },
   { id: "onboarding.reopen", kind: "view", target: "none", proof: "interaction" },

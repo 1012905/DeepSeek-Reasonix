@@ -688,18 +688,6 @@
 
   .main { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--surface) }
 
-  .jump {
-    position: absolute; left: 50%; bottom: calc(100% + 9px); transform: translateX(-50%);
-    z-index: 5; padding: 5px 13px; border-radius: var(--r-pill);
-    border: 1px solid var(--border); background: var(--overlay); color: var(--muted);
-    font: var(--w-med) var(--fs-ui) var(--ui); cursor: pointer; white-space: nowrap;
-    box-shadow: 0 4px 14px -4px rgba(0, 0, 0, .3);
-    animation: card var(--t-card) var(--ease-out) both;
-  }
-  .jump:hover { color: var(--text); border-color: var(--faint) }
-  .jump:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
-  .jump[hidden] { display: none }
-
   .tabs {
     position: relative;
     display: flex; align-items: center; gap: 2px; flex: none;
@@ -754,7 +742,7 @@
     width: 11px; margin-left: -6px; z-index: 6;
   }
   .pane:has(> .pbody[data-dock]) > .pbody { padding-right: 6px }
-  .pane:has(> .pbody[data-dock]) > .gutter-r[data-shut] { width: 14px; margin: 0 0 0 -30px; align-self: center }
+  .pane:has(> .pbody[data-dock]) > .gutter-r[data-shut] { width: 14px; margin: 0 0 0 -15px; align-self: center }
   .app[data-browser="off"] .pane:has(> .pbody[data-dock]) > .scroll[data-pane="browser"] { visibility: hidden; transition-property: visibility; transition-duration: 0s; transition-delay: var(--t-panel) }
   .pane:has(> .pbody[data-dock]) .workbench-body:not([data-files]) { grid-template-columns: minmax(0, 1fr) }
   .pane:has(> .pbody[data-dock]) .workbench-body:not([data-files]) .workbench-explorer { display: none }
@@ -2250,7 +2238,7 @@
     .pane[data-run="running"] .compose::after { border-color: var(--net) }
     .pane[data-run="halt"] .compose::after { border-color: var(--accent) }
     .call, .nest, .ask, .hits > *, .steps > *, .term-l, .dl, .plan .s, .find,
-    .ag, .file, .jump, .menu, .nest-ret, .hl .cost, .sym, .pip[data-settled],
+    .ag, .file, .menu, .nest-ret, .hl .cost, .sym, .pip[data-settled],
     .plan .s[data-done] .b,
     .rmark, .rmark path, .await i, .apv, .guard, .rrow, .shot, .intake { animation: none !important }
     .pane[data-intake] .compose { transform: none !important }

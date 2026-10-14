@@ -386,8 +386,9 @@ rules are written in.
   one has a ceiling, scrolls itself, and its text can be selected. Its position
   is measured by `place.ts` and written inline. `[data-cut]` takes the help
   cursor: a mark only where there is something to read.
-- `.jump` hangs off the composer's top edge rather than a written `bottom`,
-  because the textarea grows to 96px.
+- `.scrolljump` is a zero-height sticky host at the end of the transcript
+  scroller, so its two pills ride the scroller's bottom edge and take no height
+  from the flow; each end's pill is absent within 48px of that end.
 - `.flow-edge` fades content cut off under the tab strip. It rides a scroll
   timeline, not a scroll listener; without one it stays at opacity 0, which is
   today's hard edge. The `@supports` guard is load-bearing — a zero-duration
