@@ -1,14 +1,12 @@
 package serve
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
 	"reasonix/internal/platform/gitcommit"
-	"reasonix/internal/runtime/commitmsg"
 	"reasonix/internal/session/control"
 )
 
@@ -98,12 +96,6 @@ func refuseCommit(w http.ResponseWriter, r *http.Request, err error) {
 		refuse(w, http.StatusConflict, "commit.identity_missing", err.Error(), nil)
 	case errors.Is(err, gitcommit.ErrCommitFailed):
 		refuse(w, http.StatusInternalServerError, "commit.failed", err.Error(), nil)
-	case errors.Is(err, commitmsg.ErrUnavailable):
-		refuse(w, http.StatusConflict, "commit.no_model", err.Error(), nil)
-	case errors.Is(err, context.DeadlineExceeded):
-		refuse(w, http.StatusGatewayTimeout, "commit.timeout", err.Error(), nil)
-	case errors.Is(err, commitmsg.ErrNoAnswer):
-		refuse(w, http.StatusBadGateway, "commit.no_answer", err.Error(), nil)
 	default:
 		refuse(w, http.StatusInternalServerError, "commit.git_failed", err.Error(), nil)
 	}

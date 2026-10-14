@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 
 	"reasonix/internal/platform/gitcommit"
@@ -21,6 +22,30 @@ type CommitProposal struct {
 	Files          []gitcommit.File `json:"files"`
 	Truncated      bool             `json:"truncated"`
 	ContentSecrets bool             `json:"contentSecrets"`
+	// DraftFailure says why Message is empty when the model could not draft one:
+	// the staged set above is still real, and the person writes the message.
+	DraftFailure string `json:"draftFailure,omitempty"`
+}
+
+// Why a draft failed, named by the code that knows: the drafter's own sentinels,
+// a deadline, or the model call failing for any other reason.
+const (
+	CommitDraftNoModel     = "no_model"
+	CommitDraftTimeout     = "timeout"
+	CommitDraftNoAnswer    = "no_answer"
+	CommitDraftModelFailed = "model_failed"
+)
+
+func commitDraftFailure(err error) string {
+	switch {
+	case errors.Is(err, commitmsg.ErrUnavailable):
+		return CommitDraftNoModel
+	case errors.Is(err, context.DeadlineExceeded):
+		return CommitDraftTimeout
+	case errors.Is(err, commitmsg.ErrNoAnswer):
+		return CommitDraftNoAnswer
+	}
+	return CommitDraftModelFailed
 }
 
 // CommitRequest is a commit the person confirmed. AcknowledgeSecrets answers
@@ -74,13 +99,18 @@ func (c *Controller) ProposeCommit(ctx context.Context) (CommitProposal, error) 
 	msg, err := c.committer.Generate(ctx, commitmsg.Input{
 		Files: files, Diff: snap.Diff, Truncated: snap.Truncated, Recent: snap.Recent, Workspace: workspace,
 	})
-	if err != nil {
-		return CommitProposal{}, err
-	}
-	return CommitProposal{
+	proposal := CommitProposal{
 		Message: msg, Fingerprint: snap.Fingerprint, Files: snap.Files,
 		Truncated: snap.Truncated || len(snap.Diff) > commitmsg.MaxDiffBytes, ContentSecrets: snap.ContentSecrets,
-	}, nil
+	}
+	if err != nil {
+		// The person leaving is not a failed draft: nobody is left to read it.
+		if ctx.Err() != nil {
+			return CommitProposal{}, err
+		}
+		proposal.DraftFailure = commitDraftFailure(err)
+	}
+	return proposal, nil
 }
 
 // CommitStaged records the confirmed message as one local commit of exactly the

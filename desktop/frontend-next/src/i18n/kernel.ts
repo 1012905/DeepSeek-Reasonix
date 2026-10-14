@@ -290,9 +290,6 @@ const SAID: Record<string, string> = {
   "commit.message_too_long": "提交说明超过 {max_bytes} 字节",
   "commit.identity_missing": "git 没有配置提交者姓名和邮箱（user.name、user.email）",
   "commit.failed": "git 没能记录这次提交",
-  "commit.no_model": "当前会话没有可用的模型，无法起草提交说明",
-  "commit.timeout": "起草提交说明超时，请重试",
-  "commit.no_answer": "模型没有给出提交说明，请重试",
   "commit.git_failed": "读取暂存区失败",
   "commit.bad_request": "提交请求格式不正确",
 

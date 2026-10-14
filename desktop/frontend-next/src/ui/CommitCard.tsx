@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentPort, CommitProposal, CommitResult } from "../port/port";
+import type { CommitDraftFailure } from "../port/workspace";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 
@@ -9,6 +10,15 @@ type Phase =
   | { phase: "ready"; proposal: CommitProposal; message: string; ack: boolean; committing: boolean; error?: string }
   | { phase: "done"; result: CommitResult }
   | { phase: "failed"; error: string };
+
+// Why there is no drafted message. The staged set is still shown, so the person
+// writes it themselves; each reason says what to expect from drafting again.
+const DRAFT_NOTE: Record<CommitDraftFailure, string> = {
+  no_model: "当前会话没有可用的模型，不能起草。请手动填写提交说明。",
+  timeout: "起草超时了。请手动填写提交说明，或重新起草。",
+  no_answer: "模型没有给出提交说明。请手动填写，或重新起草。",
+  model_failed: "模型起草失败。请手动填写提交说明，或重新起草。",
+};
 
 // A proposal, not an action: the model drafts for what is staged, the person
 // edits, and only the confirm button records a local commit. Nothing here stages
@@ -134,8 +144,10 @@ export function useCommitCard(port: AgentPort, onCommitted: () => void) {
           </label>
         </div>
       )}
+      {proposal.draftFailure && <p className="refine-error" role="status" data-draft={proposal.draftFailure}>{t(DRAFT_NOTE[proposal.draftFailure])}</p>}
       <textarea
         className="commit-message"
+        autoFocus={!!proposal.draftFailure}
         data-action="commit.edit"
         aria-label={t("提交说明")}
         value={message}
