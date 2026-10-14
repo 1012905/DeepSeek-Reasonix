@@ -31,7 +31,7 @@ function draw(collapsed = false) {
   const reload = vi.fn(async () => {});
   function Harness() {
     const [error, setError] = useState("");
-    const adder = useAddWorkspace(hub, reload, (e) => setError(String(e)));
+    const adder = useAddWorkspace(hub, reload, (e) => setError(String(e)), (workspace) => open({ root: workspace.root }));
     return <>
       {error && <div role="alert">{error}</div>}
       <Sidebar
@@ -158,12 +158,12 @@ it("shows a folder-drop hint only while hovering a visible, idle sidebar", async
   expect(screen.queryByText("松开以添加项目文件夹")).toBeNull();
 });
 
-it("preserves the existing Add folder picker path", async () => {
+it("opens a session in the folder the picker added, the same as a drop does", async () => {
   const { add, pick, open } = draw();
   pick.mockResolvedValueOnce("/work/picked");
   await userEvent.click(screen.getByRole("button", { name: "打开或新建项目…" }));
   await waitFor(() => expect(add).toHaveBeenCalledWith("/work/picked"));
-  expect(open).not.toHaveBeenCalled();
+  await waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith({ root: folder.root }));
 });
 
 it("draws the official wordmark with the Studio subtitle", () => {

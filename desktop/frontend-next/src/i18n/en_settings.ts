@@ -5,6 +5,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "浏览器标签": "Browser tabs",
   "回到会话顶部": "Back to top",
   "跳到最新": "Jump to latest",
+  "首字时间": "Time to first token",
   "关闭其他浏览器标签": "Close other browser tabs",
   "关闭右侧浏览器标签": "Close browser tabs to the right",
   "关闭全部浏览器标签": "Close all browser tabs",

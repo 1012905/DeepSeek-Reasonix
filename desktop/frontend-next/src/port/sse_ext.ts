@@ -18,8 +18,9 @@ export class SseExtensions extends SseLook {
   reloadExtensions() {
     return this.post("/extensions/reload");
   }
-  extensionSurfaces() {
-    return this.get<import("./surface_replay").ExtensionSurfaceReplay>("/extensions/surfaces");
+  async extensionSurfaces() {
+    const replay = await this.get<import("./surface_replay").ExtensionSurfaceReplay>("/extensions/surfaces");
+    return { ...replay, surfaces: replay.surfaces ?? [] };
   }
   async invokeExtensionAction(name: string) {
     const out = await this.post0<{ message?: string }>("/extensions/action", { name });

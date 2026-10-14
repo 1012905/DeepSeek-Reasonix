@@ -1290,14 +1290,27 @@ func (s Spec) ServerAuthorized() bool {
 func newTransport(ctx context.Context, s Spec) (transport, error) {
 	switch strings.ToLower(strings.TrimSpace(s.Type)) {
 	case "", "stdio":
-		return newStdioTransport(ctx, s)
+		t, err := newStdioTransport(ctx, s)
+		return transportOrNil(t, err)
 	case "http", "streamable-http", "streamable_http":
-		return newHTTPTransport(s)
+		t, err := newHTTPTransport(s)
+		return transportOrNil(t, err)
 	case "sse":
-		return newSSETransport(ctx, s)
+		t, err := newSSETransport(ctx, s)
+		return transportOrNil(t, err)
 	default:
 		return nil, fmt.Errorf("unknown transport type %q (want stdio|http|sse)", s.Type)
 	}
+}
+
+// transportOrNil hands back a nil interface on failure. A nil concrete pointer
+// returned through the interface is not nil, so a caller's `next != nil` guard
+// would pass and close() would run on a nil receiver.
+func transportOrNil[T transport](t T, err error) (transport, error) {
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 type mcpTool struct {

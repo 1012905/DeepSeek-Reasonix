@@ -31,6 +31,7 @@ type streamedTurn struct {
 	text               string
 	reasoning          string
 	thoughtMs          int64 // see thoughtClock
+	firstTokenMs       int64 // see thoughtClock; 0 = not measured
 	signature          string
 	reasoningID        string
 	reasoningStatus    string
@@ -439,7 +440,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 
 	for attempt := 1; attempt <= maxSamplingAttempts; attempt++ {
 		attemptID := newStreamAttemptID(attempt)
-		a.emitStreamAttempt(attemptID, event.StreamAttemptBegin, attempt, "", nil)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptBegin, attempt, "", nil, 0)
 
 		var streamSink *deferredStreamSink
 		attemptSink := a.svc.sink
@@ -482,7 +483,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 					retrySink.Discard()
 					if ctx.Err() != nil {
 						streamSink.Discard()
-						a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, provider.StreamInterruptReason(retry.err), retry.err)
+						a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, provider.StreamInterruptReason(retry.err), retry.err, 0)
 						// Use the cancelled retry as the "latest" shape so
 						// FinishReason=interrupted is preserved for accounting.
 						return streamedTurn{usage: finalizeSamplingUsage(billable, retry.usage), attemptID: attemptID, err: retry.err}
@@ -492,7 +493,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 					a.storeLatestRequestUsage(result.usage)
 					result.usage = finalizeSamplingUsage(billable, result.usage)
 					event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningFallback})
-					a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil)
+					a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil, result.firstTokenMs)
 					return result
 				}
 				streamSink.Discard()
@@ -508,7 +509,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 				} else {
 					event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetryRecovered})
 				}
-				a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil)
+				a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil, retry.firstTokenMs)
 				return retry
 			}
 			if observed != reasoningLostReplay || strings.TrimSpace(result.text) != "" {
@@ -520,21 +521,21 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 		}
 
 		streamSink.Flush()
-		a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil, result.firstTokenMs)
 		result.usage = finalizeSamplingUsage(billable, result.usage)
 		return result
 	}
 	return last
 }
 
-func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error) {
+func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error, firstTokenMs int64) {
 	if reason == "" && err != nil {
 		reason = provider.StreamInterruptReason(err)
 	}
 	a.svc.sink.Emit(event.Event{
 		Kind: event.StreamAttempt,
 		StreamAttempt: event.StreamAttemptInfo{
-			ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts, Reason: reason,
+			ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts, Reason: reason, FirstTokenMs: firstTokenMs,
 		},
 	})
 }

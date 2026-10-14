@@ -248,9 +248,8 @@ export interface DecisionReceipt {
   via?: Via;
 }
 
-// An image the host stored under .reasonix/attachments that a message
-// references. Mirrors eventwire.Attachment: the host resolved it, so a client
-// draws a preview from this rather than from how the reference was spelled.
+// An image the host stored under .reasonix/attachments that a message references.
+// Mirrors eventwire.Attachment: a client previews this, not how it was spelled.
 export interface StoredAttachment {
   path: string;
 }
@@ -541,6 +540,7 @@ export interface StreamAttempt {
   attempt?: number;
   max?: number;
   reason?: string;
+  firstTokenMs?: number; // commit only: request sent to first output, host-measured
 }
 
 export interface CompletionSummary {
