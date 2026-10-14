@@ -57,6 +57,17 @@ and at every contrast step, so nothing paints differently until a pack sets one.
 - The running compose ring, call lines, pips, carets and the delegated nest keep
   `net` and `deleg`.
 
+## Elevation
+
+| Pack key | Variable | Default | Job |
+| --- | --- | --- | --- |
+| `shadowFloat` | `--shadow-float`, `--shadow-pack` | per scheme, as in `tokens.css` | What menus, popovers and dialogs cast |
+
+- The kernel accepts `none`, or up to four layers of an optional `inset`, two to four `px` lengths and a hex colour.
+- The blur cannot be negative.
+- Nothing paints differently until a pack sets it.
+- `--shadow-pack` is for the light menus that keep their own default; they read it and fall back to that default.
+
 ## Faces
 
 The interface ships its own faces. On Windows it otherwise resolved to Segoe UI

@@ -176,6 +176,15 @@ describe("decorative roles are themeable and the status hues are not", () => {
     expect(read("--link")).toBe("#eeeeee");
   });
 
+  it("carries a pack's own shadow onto the one variable menus, popovers and dialogs cast", () => {
+    const shadow = "0 0 0 1px #00000040, 0 8px 24px -8px #00000033";
+    apply({ ...pack, tokens: { light: { ...pack.tokens.light, shadowFloat: shadow }, dark: pack.tokens.dark } }, "light");
+    expect(read("--shadow-float")).toBe(shadow);
+    expect(read("--shadow-pack")).toBe(shadow);
+    apply({ ...pack, tokens: { light: { ...pack.tokens.light, shadowFloat: shadow }, dark: pack.tokens.dark } }, "dark");
+    expect(read("--shadow-float")).toBe("");
+  });
+
   it("tints the washes from the decorative colour on the pack's own ground", () => {
     apply(decorated, "light");
     expect(read("--brand-wash")).toBe("color-mix(in srgb, #222222 12%, #FFFFFF)");

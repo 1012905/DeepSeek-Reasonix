@@ -2583,7 +2583,7 @@ body { font-size: 14px; line-height: 1.75; }
 :root[data-theme="light"] .studio-user-foot { border-top-color: var(--border); }
 :root[data-theme="light"] .studio-branch-card,
 :root[data-theme="light"] .portmenu,
-:root[data-theme="light"] .polmenu { background: var(--surface); border-color: var(--border); box-shadow: 0 18px 44px -20px #596057; }
+:root[data-theme="light"] .polmenu { background: var(--surface); border-color: var(--border); box-shadow: var(--shadow-pack, 0 18px 44px -20px #596057); }
 :root[data-theme="light"] .studio-branch-card { color: var(--text); }
 :root[data-theme="light"] .studio-attach:hover,
 :root[data-theme="light"] .studio-attach:focus-visible { background: var(--overlay) !important; border-color: transparent !important; color: var(--text) !important; }

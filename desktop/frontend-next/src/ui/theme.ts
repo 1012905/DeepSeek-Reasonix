@@ -26,6 +26,7 @@ const SURFACE: Record<string, string[]> = {
   labelAgent: ["--label-agent"],
   float: ["--float"],
   floatHi: ["--float-hi"],
+  shadowFloat: ["--shadow-float", "--shadow-pack"],
   codeBg: ["--face-code"],
   sunkBg: ["--face-sunk"],
   synKeyword: ["--syn-key"],
