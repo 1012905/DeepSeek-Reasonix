@@ -126,10 +126,10 @@ func TestListAllPreservesBothScopesWithoutChangingLegacyList(t *testing.T) {
 		Scope: FactScopeProject, Type: TypeProject, Body: "project",
 	})
 
-	if got := store.List(); len(got) != 1 || got[0].Scope != FactScopeGlobal {
+	if got := mustStore(t, store).List(); len(got) != 1 || got[0].Scope != FactScopeGlobal {
 		t.Fatalf("legacy List behavior changed: %+v", got)
 	}
-	if got := store.ListAll(); len(got) != 2 {
+	if got := mustStore(t, store).ListAll(); len(got) != 2 {
 		t.Fatalf("ListAll = %+v, want both scoped facts", got)
 	}
 }

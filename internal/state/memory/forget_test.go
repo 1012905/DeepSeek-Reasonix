@@ -35,8 +35,8 @@ func TestForgetToolDeletes(t *testing.T) {
 	if strings.Contains(out, store.Dir) {
 		t.Fatalf("forget output exposed the absolute store path: %q", out)
 	}
-	if len(store.List()) != 0 {
-		t.Fatalf("memory not deleted: %+v", store.List())
+	if len(mustStore(t, store).List()) != 0 {
+		t.Fatalf("memory not deleted: %+v", mustStore(t, store).List())
 	}
 }
 
@@ -57,10 +57,10 @@ func TestForgetToolArchivesOnlyQualifiedScope(t *testing.T) {
 	if !strings.Contains(out, "archived from global/shared.md") || strings.Contains(out, root) {
 		t.Fatalf("qualified forget output = %q", out)
 	}
-	if _, ok := store.Read("global/shared.md"); ok {
+	if _, ok := mustStore(t, store).Read("global/shared.md"); ok {
 		t.Fatal("global fact remained active")
 	}
-	if project, ok := store.Read("project/shared.md"); !ok || project.Body != "project body" {
+	if project, ok := mustStore(t, store).Read("project/shared.md"); !ok || project.Body != "project body" {
 		t.Fatalf("project fact was disturbed: %+v, ok=%v", project, ok)
 	}
 }

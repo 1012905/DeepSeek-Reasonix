@@ -60,6 +60,7 @@ type RecallResult struct {
 	CharBudget      int
 	UsedChars       int
 	Suppressed      string
+	StoreError      error `json:"-"`
 	// ShadowHits is the Retrieval V2 ranking over the same pool, telemetry
 	// only: it never reaches the model and never affects Hits.
 	ShadowHits []ShadowHit
@@ -141,7 +142,18 @@ func AutoRecall(store Store, query string, opts RecallOptions) RecallResult {
 		return result
 	}
 
-	return autoRecallIndexed(BuildRecallIndex(store), result, opts)
+	index, err := BuildRecallIndex(store)
+	if err != nil {
+		return recallReadFailure(result, err)
+	}
+	return autoRecallIndexed(index, result, opts)
+}
+
+func recallReadFailure(result RecallResult, err error) RecallResult {
+	result.StoreError = err
+	result.Suppressed = "memory store unreadable"
+	result.block = "Background memory could not be read. Saved facts may exist; recall is unavailable for this turn."
+	return result
 }
 
 // autoRecallIndexed is AutoRecall's scoring core over a prebuilt index. The
