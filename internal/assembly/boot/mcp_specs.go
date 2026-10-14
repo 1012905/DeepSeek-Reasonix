@@ -43,6 +43,9 @@ func resolveMCPSpecs(opts Options, cfg *config.Config, root string, specOptions 
 		if strings.TrimSpace(extra[i].WorkspaceRoot) == "" {
 			extra[i].WorkspaceRoot = root
 		}
+		if len(extra[i].WritableRoots) == 0 {
+			extra[i].WritableRoots = append([]string(nil), specOptions.WritableRoots...)
+		}
 		if extra[i].LaunchManager == nil {
 			extra[i].LaunchManager = specOptions.LaunchManager
 		}

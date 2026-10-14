@@ -400,6 +400,7 @@ func (b *builder) wireMCP() {
 		ConfigSource:          "workspace_config",
 		StateHome:             b.roots.Home(),
 		WriterRoots:           t.env.writeRoots,
+		WritableRoots:         t.env.writeRoots,
 		ForbidReadRoots:       t.env.forbidReadRoots,
 		Network:               t.env.network,
 		PackageOwners:         pluginspec.PackageOwners(cfg),
