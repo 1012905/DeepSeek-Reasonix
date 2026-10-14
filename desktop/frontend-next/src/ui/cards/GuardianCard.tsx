@@ -16,7 +16,7 @@ export function GuardianCard({ g }: { g: Guardian }) {
           {/* The tag names who is speaking; the event name belongs to the trajectory. */}
           <span className="nm">{t("守卫复核")}</span>
           <span className="tag">{t("主机")}</span>
-          <span className="arg">{g.subject}</span>
+          <span className="arg" title={g.subject}>{g.subject}</span>
         </div>
         <div className="out">
           <div className="guard" data-risk={risk}>

@@ -1196,6 +1196,7 @@
 
   .cfgbad { margin: 10px 16px 0 }
   .cfgbad .term { margin-top: 8px }
+  .cfgbad .term-l { white-space: pre-wrap; overflow-wrap: anywhere }
   .cfgbad .acts { display: flex; gap: 8px; margin-top: 10px; align-items: center }
 
   .finds { margin-top: 7px; display: flex; flex-direction: column; gap: 5px }
