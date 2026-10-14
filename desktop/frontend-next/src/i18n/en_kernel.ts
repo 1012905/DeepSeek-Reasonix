@@ -324,6 +324,7 @@ export const EN_KERNEL: Record<string, string> = {
   "「{field}」只能为以下值之一：{allowed}": "“{field}” must be one of: {allowed}",
   "会话名不能是路径": "A conversation name cannot be a path",
   "无法解析该会话路径": "That conversation path does not resolve",
+  "读不了该会话的路径：{detail}": "The conversation path could not be read: {detail}",
   "打不开这个会话": "Could not open that conversation",
   "该路径位于会话目录之外": "That path is outside the conversations directory",
   "没有这个会话": "No such conversation",

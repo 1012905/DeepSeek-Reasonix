@@ -24,6 +24,7 @@ const (
 	codeSessionBusy            = "busy.session_running"
 	codeSessionBadName         = "session.bad_name"
 	codeSessionBadPath         = "session.bad_path"
+	codeSessionPathUnreadable  = "session.path_unreadable"
 	codeSessionUnknown         = "session.unknown"
 	codeSessionOutside         = "session.outside_dir"
 	codeSessionActive          = "busy.session_active"
