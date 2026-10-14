@@ -492,7 +492,12 @@ reasonix -p "同时更新两个项目" \
 设定值会跟随 `/language`。
 
 使用 `/theme auto|light|dark` 选择终端背景模式，也可以从 `/theme` 列出的命名配色中选择
-强调色。输入框上下边线、插入光标、选区、滚动条和底栏都会使用当前 CLI 主题。Transcript
+强调色。
+
+- 单独输入 `/theme` 会打开选择器，光标移到哪一行就即时预览。
+- Enter 保留，Esc 还原；`/theme list` 列出名称。
+
+输入框上下边线、插入光标、选区、滚动条和底栏都会使用当前 CLI 主题。Transcript
 导航、多行输入、rewind 和剪贴板操作见[快捷键](./GUIDE.zh-CN.md#快捷键)。
 
 剪贴板操作按内容类型明确分开。本地 transcript 和输入框选区写入系统剪贴板，并且只有写入
@@ -515,7 +520,7 @@ SSH 下远端进程无法读取本机剪贴板，请使用终端粘贴快捷键�
 | `/resume [n]` | 搜索最近会话并切换；`/resume <n>` 直接切换到列表中第 n 个会话。 |
 | `/status` | 显示模型、effort、cache、Git、后台任务，以及执行设定或余额信息。 |
 | `/preset [balanced\|delivery]` | 查看或切换 Agent 执行设定（不重建 Controller）；`/work-mode` 与 `/profile` 为兼容别名，`economy`、`light` 都解析为 `balanced`。 |
-| `/theme [auto\|light\|dark\|style]` | 查看或切换 CLI 背景模式和强调色。 |
+| `/theme [auto\|light\|dark\|style\|list]` | 打开选择器预览并切换 CLI 背景模式和强调色。 |
 | `/currency [auto\|CNY\|USD]` | 查看或切换用户全局费用展示币种，并刷新当前运行时。 |
 | `/paste-image` | 读取剪贴板图片并插入可编辑的附件标记。 |
 | `/mouse` | 切换应用内鼠标选区、滚动条和滚轮处理。 |

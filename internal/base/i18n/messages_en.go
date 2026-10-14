@@ -235,7 +235,7 @@ var English = Messages{
 
 	OutputStyleNone:           "no output styles available",
 	ThemeHeader:               "themes:",
-	ThemeHint:                 "switch with /theme <auto|light|dark|style>",
+	ThemeHint:                 "pick with /theme, or switch with /theme <auto|light|dark|style>",
 	ThemeChangedFmt:           "theme switched to %s / %s",
 	ThemeUnknownFmt:           "unknown theme %q",
 	LanguageHeader:            "languages:",

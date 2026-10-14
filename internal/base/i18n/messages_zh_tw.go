@@ -232,7 +232,7 @@ var ChineseTraditional = Messages{
 
 	OutputStyleNone:           "沒有可用的輸出風格",
 	ThemeHeader:               "主題：",
-	ThemeHint:                 "使用 /theme <auto|light|dark|style> 切換",
+	ThemeHint:                 "用 /theme 選擇，或用 /theme <auto|light|dark|style> 切換",
 	ThemeChangedFmt:           "已切換主題為 %s / %s",
 	ThemeUnknownFmt:           "未知主題 %q",
 	LanguageHeader:            "語言：",

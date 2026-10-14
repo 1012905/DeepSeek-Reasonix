@@ -573,7 +573,12 @@ groups instead of cutting labels in half. Visible labels and execution-setting v
 follow `/language`.
 
 Use `/theme auto|light|dark` to select the terminal background mode, or choose a
-named accent from `/theme`. Both composer borders, the insertion cursor,
+named accent from `/theme`.
+
+- `/theme` alone opens a picker that previews each row as the cursor reaches it.
+- Enter keeps the row, Esc restores the original, and `/theme list` prints the names.
+
+Both composer borders, the insertion cursor,
 selection, scrollbar, and footer use the active CLI theme. See
 [Keyboard shortcuts](./GUIDE.md#keyboard-shortcuts) for transcript navigation,
 multiline input, rewind, and clipboard controls.
