@@ -36,7 +36,7 @@ type driverSnapshot struct {
 	} `json:"elements"`
 }
 
-func (s *Session) observe(ctx context.Context, bundle string, ids []int) (Snapshot, string, error) {
+func (s *Session) observe(ctx context.Context, bundle string, ids []int, capture bool) (Snapshot, string, error) {
 	s.state = observation{}
 	app, err := s.app(ctx, bundle)
 	if err != nil {
@@ -47,7 +47,7 @@ func (s *Session) observe(ctx context.Context, bundle string, ids []int) (Snapsh
 		return Snapshot{}, "", err
 	}
 	var data driverSnapshot
-	result, err := s.read(ctx, "get_window_state", map[string]any{"pid": app.PID, "window_id": window.ID, "max_elements": 500, "max_depth": 25, "max_image_dimension": 0}, &data)
+	result, err := s.read(ctx, "get_window_state", map[string]any{"pid": app.PID, "window_id": window.ID, "max_elements": 500, "max_depth": 25, "max_image_dimension": 0, "include_screenshot": capture, "include_accessibility_tree": !capture}, &data)
 	if err != nil {
 		return Snapshot{}, "", err
 	}
@@ -77,7 +77,7 @@ func (s *Session) observe(ctx context.Context, bundle string, ids []int) (Snapsh
 	}
 	var shot string
 	for _, content := range result.Content {
-		if content.Type != "image" {
+		if !capture || content.Type != "image" {
 			continue
 		}
 		raw, err := base64.StdEncoding.DecodeString(content.Data)
@@ -110,14 +110,14 @@ func (s *Session) observe(ctx context.Context, bundle string, ids []int) (Snapsh
 func (s *Session) Snapshot(ctx context.Context, bundle string, windows ...int) (Snapshot, error) {
 	s.driver.desktop.Lock()
 	defer s.driver.desktop.Unlock()
-	snap, _, err := s.observe(ctx, bundle, windows)
+	snap, _, err := s.observe(ctx, bundle, windows, false)
 	return snap, err
 }
 
 func (s *Session) Screenshot(ctx context.Context, bundle string, windows ...int) (string, App, error) {
 	s.driver.desktop.Lock()
 	defer s.driver.desktop.Unlock()
-	snap, shot, err := s.observe(ctx, bundle, windows)
+	snap, shot, err := s.observe(ctx, bundle, windows, true)
 	if err == nil && shot == "" {
 		err = fail(CodeCaptureFailed, "CUA returned no screenshot")
 	}

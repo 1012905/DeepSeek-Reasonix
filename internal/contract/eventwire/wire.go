@@ -405,6 +405,7 @@ type Profile struct {
 	Count  int    `json:"count,omitempty"`
 	Model  string `json:"model,omitempty"`
 	Effort string `json:"effort,omitempty"`
+	Label  string `json:"label,omitempty"`
 }
 
 // Bound is the JSON form of event.OutputBound, present only when the result did
@@ -445,7 +446,7 @@ func toWireTool(t event.Tool) *Tool {
 		}
 	}
 	if t.Profile != nil {
-		wt.Profile = &Profile{Name: t.Profile.Name, Count: t.Profile.Count, Model: t.Profile.Model, Effort: t.Profile.Effort}
+		wt.Profile = &Profile{Name: t.Profile.Name, Count: t.Profile.Count, Model: t.Profile.Model, Effort: t.Profile.Effort, Label: t.Profile.Label}
 	}
 	if t.Execution != nil {
 		wt.Execution = toWireShellExecution(t.Execution)

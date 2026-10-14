@@ -204,6 +204,15 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
+  placeWorkspace(path: string, before: string) {
+    const at = this.roots.indexOf(path);
+    if (at < 0) return Promise.resolve();
+    this.roots.splice(at, 1);
+    const to = before ? this.roots.indexOf(before) : this.roots.length;
+    this.roots.splice(to < 0 ? this.roots.length : to, 0, path);
+    return Promise.resolve();
+  }
+
   removeSession(_path: string) {
     return Promise.resolve();
   }

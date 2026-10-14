@@ -115,8 +115,9 @@ export const ACTIONS: UIAction[] = [
   { id: "permissions.revoke-session", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "permissions.revoke-remembered", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
 
-  { id: "tool.image-open", kind: "view", target: "none", proof: "interaction" },
-  { id: "tool.image-close", kind: "view", target: "none", proof: "interaction" },
+  { id: "image.open", kind: "view", target: "none", proof: "interaction" },
+  { id: "image.close", kind: "view", target: "none", proof: "interaction" },
+  { id: "image.focus-trap", kind: "navigation", target: "none", proof: "interaction" },
   { id: "tool.show-all", kind: "view", target: "none", proof: "interaction" },
   { id: "agent.open", kind: "view", target: "entity", proof: "interaction" },
   { id: "agent.focus-trap", kind: "navigation", target: "none", proof: "interaction" },
@@ -216,6 +217,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.name", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.contact", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.shot.capture", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.shot.add", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.remove", kind: "view", target: "entity", proof: "interaction" },
   { id: "feedback.send", kind: "kernel-mutation", target: "none", proof: "interaction" },
@@ -376,6 +378,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "workspace.reorder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
 
   // ── Taking a change back ─────────────────────────────────────────────────
   // Planning a revert and performing one are two contracts: the first asks the
@@ -515,6 +518,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workbench.launch-files", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.launch-changes", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.launch-browser", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.history-reload", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "workbench.tab", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.browser-menu", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.browser-close", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
@@ -532,6 +536,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workbench.open-file", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.copy-path", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.add-to-chat", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.quote-selection", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.copy-ref", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.menu", kind: "view", target: "entity", proof: "interaction" },
   { id: "palette.pick", kind: "view", target: "entity", proof: "interaction" },

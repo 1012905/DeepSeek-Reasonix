@@ -191,7 +191,7 @@ func (h *Driver) rpc(ctx context.Context, method string, params, out any) error 
 }
 
 var driverTools = map[string]bool{
-	"list_apps": true, "list_windows": true, "get_window_state": true,
+	"list_apps": true, "list_windows": true, "get_window_state": true, "launch_app": true,
 	"click": true, "right_click": true, "set_value": true, "type_text": true, "press_key": true, "hotkey": true, "scroll": true, "drag": true, "move_cursor": true,
 	"get_cursor_position": true, "end_session": true,
 }

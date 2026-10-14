@@ -31,7 +31,23 @@ CUA owns OS accessibility, capture, input delivery and cursor implementation.
 
 Windows/Linux executable identity is read from the OS so a display alias cannot hide a forbidden executable.
 
-Installed-but-not-running apps are not operated.
+Windows desktop identities use the OS executable basename even when CUA returns a full launch path; packaged-app identities remain unchanged. Existing full-path permission rules may require a new approval for the canonical identity.
+
+Application discovery joins one fresh window enumeration to the running-app catalogue by PID. A targeted observation or action queries only the selected process's windows after checking its unique identity; it never caches application authority.
+
+Installed apps without targetable processes remain in application discovery. They never receive reads or input until a fresh process/window binding exists.
+
+computer_act launch is one explicit step under the exact installed identity's approval. It uses only the native catalogue and CUA launch_app; no parameters, URL opens, mixed input batches or implicit launch-on-read are accepted.
+
+Only a uniquely selected launcher receives filesystem verification. Windows requires an existing local executable, resolves links and checks the final PE image.
+
+Linux requires one absolute executable without arguments or command syntax and verifies the resolved ELF image. Scripts and forbidden actual executables are refused before launch.
+
+macOS uses the registered native bundle identity. Windows package launch is unsupported until its executable can be attested before activation; running packaged apps remain readable under their existing scope.
+
+Launch invalidates old refs/captures. Its delivered request remains effect-unverified; the returned process must attest the exact executable or native bundle, and its PID must match before windows are read.
+
+Launch returns the verified running identity without automatically taking a snapshot under a different identity's approval.
 
 The model sees only computer_read and computer_act.
 
@@ -42,6 +58,8 @@ Every host-issued element reference is fresh and maps to a CUA token inside one 
 Screenshot coordinates are converted from the fitted model image to CUA capture pixels; point clicks require and consume the exact capture id.
 
 A refresh, malformed observation, cancellation or reconnect invalidates old observations.
+
+Text snapshots request only the accessibility tree; screenshots request only the captured image. Either refresh invalidates the previous refs and pixel frame. Image fitting and pixel binding still use the exact returned native capture dimensions.
 
 All ordinary actions request background delivery.
 

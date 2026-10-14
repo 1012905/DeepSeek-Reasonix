@@ -2304,8 +2304,12 @@ test("Windows uses a red dot overlay and removes it when all sessions are read",
   const nativeImage = { createFromBitmap: (buffer, size) => { pixels = buffer; assert.deepEqual(size, { width: 16, height: 16 }); return "dot"; } };
   setUnreadBadge(true, win, { nativeImage }, "win32");
   setUnreadBadge(false, win, { nativeImage }, "win32");
+  const at = (x, y) => [...pixels.subarray((y * 16 + x) * 4, (y * 16 + x) * 4 + 4)];
   assert.equal(pixels[3], 0);
-  assert.equal(pixels[(8 * 16 + 8) * 4 + 3], 255);
+  assert.deepEqual(at(8, 8), [64, 64, 224, 255]);
+  assert.equal(at(1, 8)[3], 0, "the dot stays well inside the 16px canvas");
+  assert.deepEqual(at(12, 10), [255, 255, 255, 255], "a white ring separates it from the icon");
+  assert.ok(at(13, 8)[3] > 0 && at(13, 8)[3] < 255, "the rim is smoothed, not jagged");
   assert.deepEqual(calls, [["dot", "Reasonix Studio"], [null, ""]]);
 });
 
@@ -2408,4 +2412,32 @@ test("CUA layout resolves one canonical contract in development and packaging", 
  const source = computerDriverContract({ packaged: false, dirname: path.join(dirname, "../src") });
  assert.deepEqual(JSON.parse(fs.readFileSync(source, "utf8")), cuaContract);
  assert.equal(computerDriverContract({ packaged: true, resourcesPath: "/res" }), path.join("/res", "bin", "cua-driver.lock.json"));
+});
+
+const { captureHandler, MAX_WIDTH } = require("../src/capture.js");
+
+function fakeImage(width, { empty = false } = {}) {
+  return {
+    isEmpty: () => empty,
+    getSize: () => ({ width, height: 10 }),
+    resize: (opts) => fakeImage(opts.width),
+    toPNG: () => Buffer.from(`png:${width}`),
+  };
+}
+
+test("the window capture answers only the studio window and takes no target", async () => {
+  let asked = 0;
+  const win = { webContents: { capturePage: async (...args) => (asked++, assert.equal(args.length, 0), fakeImage(800)) } };
+  const handle = captureHandler((event) => (event.sender === "studio" ? win : null));
+  const png = await handle({ sender: "studio" }, "some-other-window-id", { x: 0, y: 0 });
+  assert.equal(Buffer.from(png).toString(), "png:800");
+  assert.equal(await handle({ sender: "a browser page" }), null);
+  assert.equal(asked, 1);
+});
+
+test("the window capture is scaled down past the upload-friendly width and refuses an empty frame", async () => {
+  const wide = captureHandler(() => ({ webContents: { capturePage: async () => fakeImage(MAX_WIDTH * 2) } }));
+  assert.equal(Buffer.from(await wide({})).toString(), `png:${MAX_WIDTH}`);
+  const blank = captureHandler(() => ({ webContents: { capturePage: async () => fakeImage(0, { empty: true }) } }));
+  assert.equal(await blank({}), null);
 });

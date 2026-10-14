@@ -69,6 +69,13 @@ var refusedApps = map[string]string{
 	"reasonix studio":                             "Reasonix Studio itself",
 	"reasonix-studio":                             "Reasonix Studio itself",
 	"gnome-terminal-server":                       "a terminal",
+	"gnome-terminal":                              "a terminal",
+	"x-terminal-emulator":                         "a terminal",
+	"bash":                                        "a shell",
+	"sh":                                          "a shell",
+	"dash":                                        "a shell",
+	"zsh":                                         "a shell",
+	"fish":                                        "a shell",
 	"konsole":                                     "a terminal",
 	"xterm":                                       "a terminal",
 	"kitty":                                       "a terminal",
@@ -104,10 +111,11 @@ type App struct {
 	Bundle string `json:"bundle"`
 	// Exe is a Windows application's file name when Bundle is its package
 	// family name; a refusal holds under either.
-	Exe     string   `json:"exe,omitempty"`
-	Name    string   `json:"name"`
-	Active  bool     `json:"active"`
-	Windows []Window `json:"windows"`
+	Exe        string   `json:"exe,omitempty"`
+	Name       string   `json:"name"`
+	Active     bool     `json:"active"`
+	Launchable bool     `json:"launchable,omitempty"`
+	Windows    []Window `json:"windows"`
 }
 
 // Window is one of an application's windows on screen, in global points.
@@ -163,83 +171,6 @@ func (s *Session) read(ctx context.Context, name string, args map[string]any, ou
 		}
 	}
 	return result, nil
-}
-
-func (s *Session) Apps(ctx context.Context) ([]App, error) {
-	s.driver.desktop.Lock()
-	defer s.driver.desktop.Unlock()
-	return s.apps(ctx)
-}
-
-func (s *Session) apps(ctx context.Context) ([]App, error) {
-	var response struct {
-		Apps []struct {
-			PID     int32  `json:"pid"`
-			Bundle  string `json:"bundle_id"`
-			Name    string `json:"name"`
-			Active  bool   `json:"active"`
-			Running bool   `json:"running"`
-		} `json:"apps"`
-	}
-	if _, err := s.read(ctx, "list_apps", map[string]any{}, &response); err != nil {
-		return nil, err
-	}
-	var apps []App
-	for _, a := range response.Apps {
-		if !a.Running || a.PID <= 0 {
-			continue
-		}
-		bundle, exe, err := processIdentity(a.PID, a.Bundle)
-		if err != nil {
-			continue
-		}
-		var windows struct {
-			Windows []struct {
-				ID     int    `json:"window_id"`
-				PID    int32  `json:"pid"`
-				Title  string `json:"title"`
-				Bounds Rect   `json:"bounds"`
-			} `json:"windows"`
-		}
-		if _, err := s.read(ctx, "list_windows", map[string]any{"pid": a.PID}, &windows); err != nil {
-			return nil, err
-		}
-		app := App{PID: a.PID, Bundle: bundle, Exe: exe, Name: a.Name, Active: a.Active}
-		for _, w := range windows.Windows {
-			if w.PID == a.PID && w.ID > 0 {
-				app.Windows = append(app.Windows, Window{ID: w.ID, Title: w.Title, Bounds: w.Bounds})
-			}
-		}
-		apps = append(apps, app)
-	}
-	return apps, nil
-}
-
-func (s *Session) app(ctx context.Context, bundle string) (App, error) {
-	bundle = strings.TrimSpace(bundle)
-	if why := Refused(bundle); why != "" {
-		return App{}, fail(CodeAppRefused, "%s is %s", bundle, why)
-	}
-	apps, err := s.apps(ctx)
-	if err != nil {
-		return App{}, err
-	}
-	var found []App
-	for _, app := range apps {
-		if app.Bundle == bundle {
-			if why := Refused(app.Exe); why != "" {
-				return App{}, fail(CodeAppRefused, "%s is %s", bundle, why)
-			}
-			found = append(found, app)
-		}
-	}
-	if len(found) == 0 {
-		return App{}, fail(CodeNoApp, "no running application has identity %q", bundle)
-	}
-	if len(found) > 1 {
-		return App{}, fail(CodeNoApp, "application identity %q resolves to multiple processes", bundle)
-	}
-	return found[0], nil
 }
 
 func exactWindow(app App, ids []int) (Window, error) {
@@ -310,6 +241,11 @@ func (s *Session) Act(ctx context.Context, bundle string, steps []Step, windows 
 	s.driver.desktop.Lock()
 	defer s.driver.desktop.Unlock()
 	res := ActResult{FailedAt: -1}
+	for _, step := range steps {
+		if step.Action == "launch" {
+			return s.launch(ctx, bundle, steps, windows)
+		}
+	}
 	app, err := s.app(ctx, bundle)
 	if err != nil {
 		res.FailedAt = 0
