@@ -31,6 +31,7 @@ const { groundFor, themeSourceFor } = require("./ground");
 const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
 const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
+const { captureHandler } = require("./capture");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
 const { raise } = require("./raise");
@@ -406,6 +407,7 @@ ipcMain.handle("window:toggle-maximise", (event) => {
   else target.maximize();
 });
 ipcMain.handle("window:is-maximised", (event) => fromWindow(event)?.isMaximized() ?? false);
+ipcMain.handle("window:capture", (event) => captureHandler(fromWindow)(event));
 ipcMain.handle("window:close", (event) => {
   fromWindow(event)?.close();
 });

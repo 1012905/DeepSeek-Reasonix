@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("reasonixHost", {
   toggleMaximiseWindow: () => ipcRenderer.invoke("window:toggle-maximise"),
   isWindowMaximised: () => ipcRenderer.invoke("window:is-maximised"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
+  // A PNG of this window's own page, taking nothing: there is no way to name another.
+  captureWindow: () => ipcRenderer.invoke("window:capture"),
   // What the shell's graphics are running as this launch.
   graphics: () => ipcRenderer.invoke("shell:graphics"),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", String(url)),

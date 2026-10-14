@@ -39,9 +39,10 @@ interface Props {
   onMine: () => void;
   onClose: () => void;
   onFile: (url: string) => void;
+  onConceal: (hidden: boolean) => void;
 }
 
-export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
+export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props) {
   const [env, setEnv] = useState<FeedbackEnv | null>(null);
   const [envFailure, setEnvFailure] = useState<FeedbackFailure | null>(null);
   const [category, setCategory] = useState<FeedbackCategory>(() => heldDraft().category);
@@ -62,6 +63,8 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
   const submit = useRef<HTMLButtonElement>(null);
   const done = useRef<HTMLHeadingElement>(null);
   const shotEpoch = useRef(0);
+  const captureButton = useRef<HTMLButtonElement>(null);
+  const [capture, setCapture] = useState<"idle" | "taking" | "failed">("idle");
   const heldShots = useRef(shots);
   heldShots.current = shots;
 
@@ -118,6 +121,18 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
     },
     [limits],
   );
+
+  const takeWindow = async () => {
+    if (capture === "taking") return;
+    setCapture("taking");
+    onConceal(true);
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 60))));
+    const bytes = await host().captureWindow();
+    onConceal(false);
+    setCapture(bytes ? "idle" : "failed");
+    if (bytes) await add([new File([bytes as BlobPart], "window.png", { type: "image/png" })]);
+    requestAnimationFrame(() => captureButton.current?.focus());
+  };
 
   const zone = useFileDrop((d) => void add(d.files), setOver);
 
@@ -335,6 +350,11 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
                 <StudioIcon name="plus" />
                 {t("添加截图…")}
               </button>
+              {host().capturesWindow() && (
+                <button ref={captureButton} type="button" className="btn sm" data-action="feedback.shot.capture" disabled={room <= 0 || capture === "taking"} onClick={() => void takeWindow()}>
+                  {t("截取当前窗口")}
+                </button>
+              )}
               <span className="fbk-hint">
                 {limits
                   ? t("也可以直接粘贴或拖进来。PNG 或 JPEG，最多 {n} 张，每张不超过 {size} MB，较大的图会自动缩小。", { n: limits.images, size: megabytes(limits.uploadBytes) })
@@ -356,6 +376,11 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
               }}
             />
           </div>
+          {host().capturesWindow() && (
+            <span className="fbk-hint">
+              {capture === "failed" ? t("没能截取窗口，请改用「添加截图…」。") : t("「截取当前窗口」的图会包含窗口里看到的内容（钱包余额、会话等），发送前可在上方删除。")}
+            </span>
+          )}
           <span className="fbk-hint" data-tone="warn">{t("如果这份反馈被登记为公开议题，截图会和文字一起公开。发送前请确认没有露出密钥、聊天记录或私有代码。")}</span>
           {refused.length > 0 && (
             <ul className="fbk-refused" role="status">
