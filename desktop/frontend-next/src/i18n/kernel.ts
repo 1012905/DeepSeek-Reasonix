@@ -244,6 +244,12 @@ const SAID: Record<string, string> = {
 
   "memory.unavailable": "该会话未启用记忆",
   "memory.directory_unreadable": "无法读取记忆目录，请检查权限或存储状态后重试",
+  "side.unavailable": "这个会话不支持辅助提问",
+  "side.unknown": "这个辅助提问已经关闭，请重新打开",
+  "side.busy": "上一个问题还在回答，请稍候再问",
+  "side.limit": "同时打开的辅助提问太多，请先关闭几个",
+  "side.empty": "请先写下要问的内容",
+  "side.failed": "辅助提问没能完成，请重试",
 
   // ── 来源：连不上时卡在哪一步 ─────────────────────────────────────
   // Each of these is a different next move, which is the whole reason the
