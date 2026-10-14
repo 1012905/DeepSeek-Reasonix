@@ -546,7 +546,8 @@
    {
     "kind": "turn_done",
     "checkpointTurn": 0,
-    "workDurationMs": 1
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ],
   "replay": [
@@ -655,7 +656,8 @@
    {
     "kind": "turn_done",
     "checkpointTurn": 0,
-    "workDurationMs": 1
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ]
  },
@@ -718,7 +720,8 @@
    {
     "kind": "turn_done",
     "checkpointTurn": 0,
-    "workDurationMs": 1
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ],
   "replay": [
@@ -768,7 +771,8 @@
    {
     "kind": "turn_done",
     "checkpointTurn": 0,
-    "workDurationMs": 1
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ]
  },
@@ -923,7 +927,8 @@
    {
     "kind": "turn_done",
     "checkpointTurn": 0,
-    "workDurationMs": 1
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ],
   "replay": [
@@ -1053,7 +1058,8 @@
    {
     "kind": "turn_done",
     "checkpointTurn": 0,
-    "workDurationMs": 1
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ]
  }

@@ -68,6 +68,7 @@ func stabilize(in []eventwire.Event) []eventwire.Event {
 			r.ID = name(barriers, "b", r.ID)
 			e.DecisionReceipt = &r
 		}
+		e.WorkStartedAt = min(e.WorkStartedAt, 1) // a wall-clock reading; only whether the turn reported one is structure
 		if e.Tool != nil {
 			t := *e.Tool
 			t.AttemptID = name(rounds, "r", t.AttemptID)

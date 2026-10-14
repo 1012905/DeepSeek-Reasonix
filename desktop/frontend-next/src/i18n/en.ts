@@ -111,6 +111,7 @@ export const EN: Record<string, string> = {
   "此名称可能被识别为 MCP 资源": "This name could resolve to an MCP resource",
   "思考 {chars}": "Thought · {chars}",
   "耗时 {t}": "Worked for {t}",
+  "{at} 开始 · 耗时 {t}": "Started {at} · worked for {t}",
   "思考 {secs} 秒 · {chars}": "Thought for {secs}s · {chars}",
   "{n} 字": "{n} chars",
   "{n} 张图片": "{n} images",

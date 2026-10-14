@@ -53,6 +53,9 @@ type historyMessage struct {
 	// different fact that has usually moved on.
 	ModelRef  string `json:"modelRef,omitempty"`
 	ThoughtMs int64  `json:"thoughtMs,omitempty"` // host-measured, so a reopened turn keeps it
+	// CreatedAt is when a user message landed (unix ms); on the one that opens a
+	// turn it is the turn's start.
+	CreatedAt int64 `json:"createdAt,omitempty"`
 	// WorkDurationMs is the turn's run time, set only on the message that closed it.
 	WorkDurationMs int64             `json:"workDurationMs,omitempty"`
 	ToolCalls      []historyToolCall `json:"toolCalls,omitempty"`
@@ -112,6 +115,7 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 			hm.Content = sessionstore.UserMessageText(m)
 			hm.Images = len(m.Images)
 			hm.Via = eventwire.ToWireVia(m.Via)
+			hm.CreatedAt = m.CreatedAt
 			if !m.HostAuthored {
 				hm.Attachments = attached(hm.Content)
 			}

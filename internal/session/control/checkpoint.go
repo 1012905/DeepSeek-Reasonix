@@ -107,12 +107,14 @@ type guardedTurnCompletion struct {
 	checkpoint *guardedTurnCheckpoint
 	// workMs sums what each run of the turn reports up to its final answer.
 	workMs atomic.Int64
+	// startedAt is the wall-clock unix ms the turn was admitted.
+	startedAt int64
 }
 
 type guardedTurnCompletionKey struct{}
 
 func withGuardedTurnCompletion(ctx context.Context) (context.Context, *guardedTurnCompletion) {
-	completion := &guardedTurnCompletion{}
+	completion := &guardedTurnCompletion{startedAt: time.Now().UnixMilli()}
 	return context.WithValue(ctx, guardedTurnCompletionKey{}, completion), completion
 }
 
