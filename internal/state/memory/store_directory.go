@@ -3,6 +3,7 @@ package memory
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // DirectoryReadError identifies an incomplete store read and preserves its OS cause.
@@ -27,6 +28,13 @@ func readMemoryDirectory(path string) ([]os.DirEntry, error) {
 		entries, err = os.ReadDir(path)
 	}
 	if os.IsNotExist(err) {
+		// Windows answers "not found" for a regular file where a directory
+		// should be, or beneath one; only the entry itself tells that from a missing path.
+		for _, at := range []string{path, filepath.Dir(path)} {
+			if info, statErr := os.Stat(at); statErr == nil && !info.IsDir() {
+				return nil, &DirectoryReadError{Path: at, Err: err}
+			}
+		}
 		return nil, nil
 	}
 	if err != nil {

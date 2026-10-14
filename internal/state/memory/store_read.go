@@ -169,6 +169,10 @@ func (s Store) findArchivedByPath(want string) (Memory, string, bool, error) {
 		dir := filepath.Join(base, ".archive")
 		info, err := os.Lstat(dir)
 		if os.IsNotExist(err) {
+			// Windows reports "not found" beneath a regular file as well.
+			if parent, statErr := os.Stat(base); statErr == nil && !parent.IsDir() {
+				return Memory{}, "", false, &DirectoryReadError{Path: base, Err: err}
+			}
 			continue
 		}
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -123,6 +124,9 @@ func TestAllMemoryDirectoryReadsReportFailures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, mode := range []string{"permissions", "permission-fault", "io-fault", "not-directory"} {
 				t.Run(mode, func(t *testing.T) {
+					if mode == "not-directory" && runtime.GOOS == "windows" {
+						t.Skip("syscall.ENOTDIR is ERROR_PATH_NOT_FOUND on Windows; a real file in a directory's place is covered by readMemoryDirectory's stat")
+					}
 					s, m, archive := directoryErrorStore(t)
 					path := tc.path(s, m)
 					cause := error(os.ErrPermission)
