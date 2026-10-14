@@ -27,6 +27,7 @@ export const EN_COMPOSER: Record<string, string> = {
   "点按插话 · 回车换行": "Tap Steer · Enter for a new line",
   "{n} 字 · {lines} 行": "{n} characters · {lines} lines",
   "知道了": "Got it",
+  "按服务商筛选": "Filter by provider",
   "是否信任此文件夹": "Trust this folder",
   "是否信任此文件夹？": "Trust this folder?",
   "信任后，在此文件夹里的编辑和命令不再逐条询问（桌面端和终端都是）。系统沙盒把命令的写入限制在此文件夹、你额外允许写入的目录、临时目录和工具链缓存内；网络与拒绝规则照常生效。":

@@ -63,13 +63,16 @@ interface Props {
   // list is searched for by name however few entries it has.
   searchAlways?: boolean;
   searchPlaceholder?: string;
+  // Drawn under the field and above the rows: whatever the caller offers for
+  // narrowing the list, owned by the caller so its inputs stay its own.
+  head?: ReactNode;
 }
 
 // data-* rides through to the item that raises the pick, the way Switch and Seg
 // carry theirs: the action's identity is written at the call site, and the
 // answer this menu gives is the item's own value.
 export function Picker({
-  label, items, current, onPick, place, align = "start", className, title, pending, triggerAction, ariaPressed, ariaLabel, ariaDescribedBy, wrapClassName, menuClassName, menuTitle, onOpen, searchAlways, searchPlaceholder, ...id
+  label, items, current, onPick, place, align = "start", className, title, pending, triggerAction, ariaPressed, ariaLabel, ariaDescribedBy, wrapClassName, menuClassName, menuTitle, onOpen, searchAlways, searchPlaceholder, head, ...id
 }: Props & { [K in `data-${string}`]?: string }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -233,6 +236,7 @@ export function Picker({
               }}
             />
           )}
+          {head}
           {none && <div className="mnone">{t("没有匹配的项")}</div>}
           {shown.map((it, i) => (
             <Fragment key={it.value}>

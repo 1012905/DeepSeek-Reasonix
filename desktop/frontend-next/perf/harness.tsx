@@ -29,6 +29,7 @@ import "../src/styles/narrow.css";
 import "../src/styles/workfold.css";
 import "../src/styles/workbench-launcher.css";
 import "../src/styles/feedback.css";
+import "../src/styles/modelmenu.css";
 import "../src/styles/runsignals.css";
 import "../src/styles/themes.css";
 import { App } from "../src/ui/App";
