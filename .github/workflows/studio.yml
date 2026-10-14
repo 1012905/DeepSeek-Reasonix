@@ -142,6 +142,7 @@ jobs:
           node perf/crumb.mjs
           node perf/hoverradius.mjs
           node perf/modelrows.mjs
+          node perf/explorersize.mjs
           node perf/sessionrows.mjs
           node perf/wheel.mjs
           node perf/branch-tooltip.mjs
