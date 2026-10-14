@@ -34,6 +34,7 @@ import "./styles/sessionpin.css";
 import "./styles/treerows.css";
 import "./styles/workbench-changes.css";
 import "./styles/gitgraph.css";
+import "./styles/runsignals.css";
 import { App } from "./ui/App";
 import { SseHub } from "./port/hub";
 import { HttpError } from "./port/http_error";
