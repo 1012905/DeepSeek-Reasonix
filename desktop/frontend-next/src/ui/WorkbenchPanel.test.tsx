@@ -714,3 +714,19 @@ describe("WorkbenchPanel", () => {
     expect(view.state.doc.toString()).toBe("# First\n\n## Saved");
   });
 });
+
+describe("opening the project in other programs from the file panel", () => {
+  it("offers the menu in the explorer head and on an open file, and not on a remote workspace", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    const hub = { openWith: vi.fn().mockResolvedValue(undefined), openWithTargets: vi.fn().mockResolvedValue([{ id: "terminal", name: "终端", available: true }]) };
+    vi.spyOn(hostModule, "host").mockReturnValue({ revealsFiles: () => true, describe: async () => ({ platform: "darwin" }) } as never);
+    const props = { port, tabs: [], manual: false, shown: true, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn(), workspaceRoot: "/w", hub };
+    const view = render(<WorkbenchPanel {...props} />);
+    await user.click(screen.getAllByRole("button", { name: "用其他程序打开项目" })[0]!);
+    await user.click(await screen.findByRole("menuitem", { name: "用 终端 打开" }));
+    expect(hub.openWith).toHaveBeenCalledWith("/w", "terminal");
+    view.rerender(<WorkbenchPanel {...props} remote />);
+    expect(screen.queryByRole("button", { name: "用其他程序打开项目" })).toBeNull();
+  });
+});

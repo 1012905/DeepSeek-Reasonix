@@ -385,6 +385,7 @@ export const ACTIONS: UIAction[] = [
   { id: "remote-host.remove", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "workspace.reveal", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workspace.open-with", kind: "shell-native", target: "entity", proof: "interaction" },
+  { id: "workbench.open-with-menu", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.remove", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "extensions.invoke", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
 

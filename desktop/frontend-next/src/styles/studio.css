@@ -4214,3 +4214,12 @@ body { font-size: 14px; line-height: 1.75; }
   box-shadow: 0 0 0 1px var(--accent-wash);
 }
 :root[data-pack] .flow .opt .mark { border-color: var(--accent); }
+
+.openwith { position: relative; display: inline-flex; }
+.openwith-btn { display: inline-flex; align-items: center; gap: 2px; min-height: 25px; padding: 0 6px; border: 1px solid var(--hair); border-radius: 5px; background: transparent; color: var(--muted); }
+.openwith-btn:hover, .openwith-btn[aria-expanded="true"] { color: var(--text); background: var(--overlay); }
+.openwith-btn .studio-icon { width: 13px; height: 13px; }
+.openwith-menu { position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 40; min-width: 190px; padding: 4px; display: grid; gap: 1px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); box-shadow: var(--shadow-lg); }
+.openwith-menu button { text-align: start; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font: 500 12px/1.3 var(--ui); }
+.openwith-menu button:hover, .openwith-menu button:focus-visible { background: var(--overlay); }
+.openwith-menu small { padding: 7px 10px; color: var(--muted); }

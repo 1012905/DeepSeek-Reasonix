@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { t } from "../i18n";
 import { StudioIcon } from "./StudioIcon";
 
@@ -14,6 +15,7 @@ export function WorkbenchFileBar({
   previewable,
   canSave,
   onSave,
+  openWith,
   onReveal,
 }: {
   path: string;
@@ -23,6 +25,7 @@ export function WorkbenchFileBar({
   previewable: boolean;
   canSave: boolean;
   onSave: () => void;
+  openWith?: ReactNode;
   // Present only where the kernel's own machine can show the file.
   onReveal?: () => void;
 }) {
@@ -45,6 +48,7 @@ export function WorkbenchFileBar({
         {view("file", readable || previewable ? t("编辑") : t("文件"))}
         {view("diff", "Diff")}
       </div>
+      {openWith}
       <button className="workbench-save" data-action="workbench.save" data-target={path} disabled={!canSave} onClick={onSave}>
         <StudioIcon name="check" />
         {t("保存")}

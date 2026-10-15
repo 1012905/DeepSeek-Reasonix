@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { AgentPort, ContextBreakdown, McpEntry, SessionStatus } from "../port/port";
-import type { RuntimeView } from "../port/hub";
+import type { HubPort, RuntimeView } from "../port/hub";
 import type { ConnectOffer } from "./ConnectNote";
 
 // PaneReport is what the window's own chrome needs from whichever pane has
@@ -23,6 +23,8 @@ export interface PaneReport {
 
 export interface PaneProps {
   port: AgentPort;
+  // Kernel-wide calls the window owns; the file panel uses them to open the project elsewhere.
+  hub?: Pick<HubPort, "openWith" | "openWithTargets">;
   rt: RuntimeView;
   title: string;
   active: boolean;
