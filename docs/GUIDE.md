@@ -943,7 +943,7 @@ Mode and display shortcuts:
 | `--yolo`, `--dangerously-skip-permissions` | Starts chat in YOLO | Same runtime mode as `Ctrl+Y`. |
 | `[ui].commandmode = "vi"` | Opts the composer into a vi command mode | User/global only; a project `reasonix.toml` cannot set it, so a cloned repo never rebinds the user's keys. `Esc` enters command mode, a running turn or not; only `Ctrl+C` interrupts. `Ctrl+C` with a non-empty prompt clears it and leaves shell mode, in vi mode and out; in vi mode it first saves the trimmed draft to the prompt history, so `Up` recalls it. Unset or `""` keeps the default, where `Esc` stops a running turn. The footer names the current input mode, `NORMAL` in command mode and `INSERT` otherwise. |
 | `auto_submit = true` | Commits a multi-question ask once its last question is answered | Top-level config; user/global only, so a project `reasonix.toml` cannot set it; default `false`. The ask card drops its Submit tab: answering a question moves on to the next unanswered one, answering the last with nothing left unanswered commits the batch at once, and a skipped question pulls the panel back to it. Unset keeps the Submit tab and its explicit `Enter`. |
-| `/preset [balanced|delivery]` | Shows or switches the current session's execution setting (执行设定) | `/work-mode` and `/profile` are compatibility aliases (`economy` → `light`). Switching updates the execution setting in place without rebuilding the controller; blocked while a turn, approval, or background job is active. |
+| `/preset [balanced|delivery]` | Shows or switches the current session's execution setting (执行设定) | `/work-mode` and `/profile` are compatibility aliases; the retired `light` and `economy` select `balanced`. Switching updates the execution setting in place without rebuilding the controller; blocked while a turn, approval, or background job is active. |
 | `/theme [auto|light|dark|style]` | Shows or switches the CLI theme | Bare `/theme` lists background modes and named accent palettes. The choice is saved to the user config; `REASONIX_THEME` and `REASONIX_THEME_STYLE` can override it for one run. |
 | `Ctrl+O` | Toggles verbose reasoning display | Also available through `/verbose`. |
 | `Ctrl+B` | Expands or collapses long shell output | Long shell-output hint lines can also be clicked in the transcript; text selection is handled in-app while the full-screen TUI has mouse reporting enabled. |
@@ -1887,7 +1887,7 @@ never exposes writers at all.
 Choose the startup execution setting with
 `--preset balanced|delivery` (for example, `reasonix run --preset
 delivery "fix and verify this bug"`). Legacy `--profile economy|balanced|delivery`
-still works (`economy` maps to `light`). All three execution settings share the same
+still works (`economy` maps to `balanced`). Both execution settings share the same
 provider-visible core tool surface: direct read/bash/edit/write, background-shell
 lifecycle tools, `ask`/`compress`/`recall` when registered, and the stable
 `use_capability` proxy for optional tools (search, MCP, skills, subagents, docs,
@@ -1898,8 +1898,6 @@ settings.
 What differs by execution setting is host policy (planning route, verification
 intensity, independent review floor), not the tool list:
 
-- **Light** — direct-first planning, targeted verification, independent review only
-  on high-risk/security class work; optional capabilities stay on-demand.
 - **Balanced** (default) — auto light/full planning by risk, risk-tiered
   verification, conditional independent review on medium-risk multi-file work.
 - **Delivery** — full acceptance criteria, full verification, forced independent

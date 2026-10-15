@@ -268,7 +268,7 @@ func parseRuntimeProfile(value string) (string, error) {
 	case boot.TokenModeDelivery, "deliver", "quality":
 		return boot.TokenModeDelivery, nil
 	default:
-		return "", fmt.Errorf("unknown execution setting %q (want light, balanced, or delivery; legacy: economy, full)", value)
+		return "", fmt.Errorf("unknown execution setting %q (want %s; legacy: economy, full)", value, livePresets(" or "))
 	}
 }
 
@@ -366,7 +366,7 @@ func runAgent(args []string, version string) int {
 	}
 	profileRaw := strings.TrimSpace(*f.profileFlag)
 	if profileRaw != "" {
-		fmt.Fprintln(os.Stderr, "warning: --profile is deprecated; use --preset light|balanced|delivery")
+		warnProfileDeprecated()
 	} else {
 		profileRaw = strings.TrimSpace(*f.presetFlag)
 	}

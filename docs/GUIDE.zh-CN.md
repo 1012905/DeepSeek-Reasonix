@@ -746,7 +746,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | `--yolo`、`--dangerously-skip-permissions` | 启动时进入 YOLO | 和 `Ctrl+Y` 是同一个运行时模式。 |
 | `[ui].commandmode = "vi"` | 让输入框进入 vi 命令模式 | 仅限用户全局配置；项目 `reasonix.toml` 无法设置，克隆的仓库因此不会改写用户的按键。无论回合是否在运行，`Esc` 都进入命令模式；只有 `Ctrl+C` 会中断。`Ctrl+C` 在提示符非空时会清空输入框并退出 shell 模式，vi 模式与默认模式一致；vi 模式下会先把去掉首尾空白的草稿存入提示历史，可用 `Up` 召回。未设置或 `""` 保持默认，即 `Esc` 中止正在运行的回合。页脚会显示当前的输入模式：命令模式为 `NORMAL`，否则为 `INSERT`。 |
 | `auto_submit = true` | 最后一题作答后直接提交多题问询 | 顶层配置；仅限用户全局，项目 `reasonix.toml` 无法设置；默认 `false`。问询卡片会隐藏 Submit 标签页：作答一题后跳到下一道未作答的问题；作答最后一题且再无未作答时立即提交整批；若有问题被跳过则跳回该题。未设置时保留 Submit 标签页及其显式 `Enter`。 |
-| `/preset [light|balanced|delivery]` | 查看或切换当前会话的执行设定 | `/work-mode` 与 `/profile` 是兼容别名（`economy` → `light`）。切换就地更新执行设定、不重建 Controller；有回合、审批或后台任务时会拒绝。 |
+| `/preset [balanced|delivery]` | 查看或切换当前会话的执行设定 | `/work-mode` 与 `/profile` 是兼容别名；已退役的 `light` 与 `economy` 会选中 `balanced`。切换就地更新执行设定、不重建 Controller；有回合、审批或后台任务时会拒绝。 |
 | `/theme [auto|light|dark|style]` | 查看或切换 CLI 主题 | 不带参数会列出背景模式和命名配色。选择会保存到用户配置；单次运行可用 `REASONIX_THEME` 和 `REASONIX_THEME_STYLE` 覆盖。 |
 | `Ctrl+O` | 切换详细 reasoning 显示 | 也可通过 `/verbose` 使用。 |
 | `Ctrl+B` | 展开或收起较长 shell 输出 | 较长 shell 输出的提示行也可点击；全屏 TUI 开启鼠标接管时，文本选区由应用内处理。 |
@@ -1472,9 +1472,9 @@ enable、授权与完整连接身份，因此共享 Host 中另一个项目/tab 
 server 无法在这里提升权限。严格只读边界比独立 Planner 更窄：Planner 接受已授权的 opaque
 非 destructive MCP，而严格只读子会话必须有明确 reader hint，且根本不暴露 writer。
 
-启动会话时可以用 `--preset light|balanced|delivery` 选择执行设定，例如
+启动会话时可以用 `--preset balanced|delivery` 选择执行设定，例如
 `reasonix run --preset delivery "修复并验证这个 bug"`。兼容的 `--profile
-economy|balanced|delivery` 仍可用（`economy` → `light`）。三种执行设定共享同一套
+economy|balanced|delivery` 仍可用（`economy` → `balanced`）。两种执行设定共享同一套
 provider 可见核心工具面（直接读/bash/编辑/写入、后台 shell 生命周期工具，以及稳定的
 `use_capability` 代理）。可选工具（搜索、MCP、skills、subagents、docs、web_fetch 等）
 通过 `use_capability` 调度，不会扩展 top-level provider schema，因此执行设定切换不会
@@ -1482,13 +1482,12 @@ provider 可见核心工具面（直接读/bash/编辑/写入、后台 shell 生
 
 执行设定差异在宿主策略，不在工具列表：
 
-- **Light（轻量）**：优先直接执行，定向验证，仅在高风险/安全类任务上强制独立复审。
 - **Balanced（均衡，默认）**：按风险自动轻/全规划，分档验证，中风险多文件变更可条件触发独立复审。
 - **Delivery（交付）**：完整验收标准、完整验证、中风险及以上强制独立复审；没有具体
   `todo_write` 验收清单时会阻止变更和验证；变更后须复查、验证并以 `complete_step` 签收。
 
 交互式 TUI 会话内可用 `/preset` 查看当前执行设定，或用
-`/preset light|balanced|delivery` 热切换；`/work-mode` 与 `/profile` 是兼容别名。切换就地
+`/preset balanced|delivery` 热切换；`/work-mode` 与 `/profile` 是兼容别名。切换就地
 更新执行设定、不重建 Controller，同时保留 history、session 路径、Lease 和 Ask/Auto/Yolo
 审批姿态；当前 turn、审批/询问、后台任务或另一场运行时切换尚未结束时会拒绝切换。该命令只
 修改当前会话，不持久化新的全局默认值。
