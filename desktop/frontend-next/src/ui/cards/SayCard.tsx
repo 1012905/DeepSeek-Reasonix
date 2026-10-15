@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useStartsOpen } from "../../state/foldpref";
+import { useFoldModes, useStartsOpen } from "../../state/foldpref";
+import { firstSentence } from "../thoughtPeek";
 import { StudioIcon } from "../StudioIcon";
 import { t } from "../../i18n";
 import { count, decimals } from "../../i18n/format";
@@ -29,6 +30,7 @@ function ThoughtLabel({ item }: { item: Extract<Item, { t: "say" }> }) {
 }
 
 const LIVE_TICK_MS = 100;
+const PEEK_CHARS = 80;
 
 // While the model is still thinking the reader sees the clock run, not a bare
 // ellipsis; a card this window did not watch begin has no start to count from.
@@ -99,6 +101,8 @@ export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Ite
   const start = useStartsOpen("thinking", !item.done && !item.text);
   const [touched, setOpen] = useState<boolean | null>(null);
   const open = touched ?? start;
+  const peeks = useFoldModes().thinking === "peek" && !open && item.done;
+  const peek = useMemo(() => (peeks ? firstSentence(item.reasoning ?? "", PEEK_CHARS) : ""), [peeks, item.reasoning]);
   const [menu, setMenu] = useState<"" | "retry" | "more">("");
   const shut = useCallback(() => setMenu(""), []);
   const retry = useRef<HTMLButtonElement>(null);
@@ -146,6 +150,7 @@ export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Ite
             <details className="think" open={open} onToggle={(e) => e.currentTarget.open !== open && setOpen(e.currentTarget.open)}>
               <summary>
                 <span className="fold">{item.done || item.thoughtMs !== undefined ? <ThoughtLabel item={item} /> : <LiveThought id={item.id} />}</span>
+                {peek && <span className="peek">{peek}</span>}
               </summary>
               <div className="tk">
                 {thought}
