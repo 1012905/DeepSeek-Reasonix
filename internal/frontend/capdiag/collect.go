@@ -277,7 +277,7 @@ func collectHooks(root, home, reasonixHome string, cfg *config.Config, disp func
 	})
 	runtimeOptions := hook.RuntimeOptions{}
 	if cfg != nil {
-		runtimeOptions = hook.RuntimeOptionsForShell(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path)
+		runtimeOptions = hook.RuntimeOptionsForShell(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, cfg.Tools.Shell.Args...)
 	}
 	rep := HookReport{
 		// Retained in schema v1 for compatibility; project hooks are enabled by

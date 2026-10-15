@@ -717,12 +717,16 @@ export const EN: Record<string, string> = {
   "指定一个可执行文件": "Point at an executable",
   "取消指定": "Clear it",
   "可执行文件路径": "Path to the executable",
+  "启动命令": "Launch command",
+  "保存的启动参数现在无法运行，已回退到自动检测。": "The saved launcher arguments no longer run, so auto-detection is in use.",
+  "启动参数（可选，每行一项）": "Launcher arguments (optional, one per line)",
+  "例如 wsl.exe 需要 -d <发行版> -- /bin/bash 才会进入 shell。参数按原样传给程序，不经过任何 shell；保存前会带着它们运行一次来验证。": "For example wsl.exe needs -d <distro> -- /bin/bash to reach a shell. Arguments are passed to the program as written, through no shell; they are run once to verify before saving.",
   "自行编译的 bash、MSYS2，或安装在其他位置的 pwsh 均可填写于此。保存前会实际执行一条命令进行验证，无法运行则不会写入配置。":
     "A bash you built yourself, MSYS2, a pwsh installed elsewhere — all go here. Before saving, one command is really run through it; if that fails, nothing is written to the config.",
   "切换失败": "Not changed",
   "够不着这个工作目录。": "cannot reach this working directory.",
-  "本机没有 bash，因此命令只能按 PowerShell 语法编写。安装 Git for Windows 后会增加 Git Bash 选项 —— WSL 中的 bash 不适用，它看到的是 /mnt 下的另一套路径，无法访问当前工作目录。":
-    "There is no bash on this machine, so commands can only be written for PowerShell. Installing Git for Windows adds Git Bash here — the one inside WSL does not count: it sees a different set of paths under /mnt and cannot reach this working directory.",
+  "本机没有 bash，因此命令只能按 PowerShell 语法编写。安装 Git for Windows 后会增加 Git Bash 选项。要用 WSL，请在下方指定 wsl.exe 并填写启动参数；其中的路径是 Linux 写法。":
+    "There is no bash on this machine, so commands can only be written for PowerShell. Installing Git for Windows adds Git Bash here. To use WSL, point at wsl.exe below and add its launcher arguments; paths inside it are Linux paths.",
   "无法读取 shell 配置。": "Could not read the shell config.",
 
   // ── 卡片：批准、还原、收工 ───────────────────────────────────────
