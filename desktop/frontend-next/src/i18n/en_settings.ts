@@ -16,6 +16,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "用 {name} 打开": "Open with {name}",
   "回到会话顶部": "Back to top",
   "跳到最新": "Jump to latest",
+  "回到会话顶部（Shift+点击：上一个展开的块）": "Back to top (Shift+click: previous expanded block)",
+  "跳到最新（Shift+点击：下一个展开的块）": "Jump to latest (Shift+click: next expanded block)",
   "首字时间": "Time to first token",
   "关闭其他浏览器标签": "Close other browser tabs",
   "关闭右侧浏览器标签": "Close browser tabs to the right",

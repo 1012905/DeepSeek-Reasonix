@@ -141,6 +141,7 @@ jobs:
           node perf/stickyfold.mjs
           node perf/crumb.mjs
           node perf/hoverradius.mjs
+          node perf/jump-ends.mjs
           node perf/modelrows.mjs
           node perf/explorersize.mjs
           node perf/rowhit.mjs
