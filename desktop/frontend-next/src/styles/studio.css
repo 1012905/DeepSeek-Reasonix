@@ -1412,6 +1412,9 @@ body { background: var(--page) !important; }
 .workbench-filebar [role="group"] { display: flex; padding: 2px; background: var(--page); border: 1px solid var(--hair); border-radius: 5px; }
 .workbench-filebar button { min-height: 25px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--muted); font: 600 10px/1 var(--ui); }
 .workbench-filebar button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.workbench-filebar .workbench-reveal { display: grid; place-items: center; width: 25px; padding: 0; }
+.workbench-filebar .workbench-reveal:hover { color: var(--text); background: var(--overlay); }
+.workbench-filebar .workbench-reveal .studio-icon { width: 14px; height: 14px; }
 .workbench-filebar .workbench-save { display: flex; align-items: center; gap: 5px; }
 .workbench-filebar .workbench-save { background: var(--accent); color: white; }
 .workbench-filebar .workbench-save:disabled { opacity: .35; }
