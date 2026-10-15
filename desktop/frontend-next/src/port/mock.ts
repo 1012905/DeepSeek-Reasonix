@@ -243,7 +243,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     await this.newSession();
   }
 
-  async isolateWorkspace() {
+  async isolateWorkspace(_base?: string) {
     await this.setWorkspace((this.state.workspaceRoot ?? "") + " (隔离副本)");
   }
 

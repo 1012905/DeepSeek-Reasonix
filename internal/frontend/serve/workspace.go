@@ -3,6 +3,7 @@ package serve
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,8 @@ import (
 )
 
 const workspaceRecentMax = workspacelist.MaxPaths
+
+const codeIsolateBaseUnknown = "workspace.isolate_base_unknown"
 
 // AllowWorkspaceSwitch grants POST /workspace. It is off until a host asks for
 // it, and no config file can turn it on: a server reachable over the network
@@ -76,6 +79,7 @@ func (s *Server) workspace(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Path    string `json:"path"`
 		Isolate bool   `json:"isolate"`
+		Base    string `json:"base"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		badBody(w)
@@ -87,7 +91,11 @@ func (s *Server) workspace(w http.ResponseWriter, r *http.Request) {
 
 	dir := strings.TrimSpace(body.Path)
 	if body.Isolate {
-		res, err := worktree.Create(r.Context(), workspaceRepo(s.ctl()), config.DeliveryWorktreeDir())
+		res, err := worktree.CreateFrom(r.Context(), workspaceRepo(s.ctl()), config.DeliveryWorktreeDir(), body.Base)
+		if errors.Is(err, worktree.ErrBaseUnknown) {
+			refuse(w, http.StatusUnprocessableEntity, codeIsolateBaseUnknown, err.Error(), nil)
+			return
+		}
 		if err != nil {
 			writeErr(w, http.StatusUnprocessableEntity, err)
 			return

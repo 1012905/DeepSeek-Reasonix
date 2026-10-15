@@ -399,8 +399,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.post("/workspace", { path });
   }
 
-  isolateWorkspace() {
-    return this.post("/workspace", { isolate: true });
+  isolateWorkspace(base?: string) {
+    return this.post("/workspace", base ? { isolate: true, base } : { isolate: true });
   }
 
   async openInEditor(): Promise<{ editor: string; root: string }> {
