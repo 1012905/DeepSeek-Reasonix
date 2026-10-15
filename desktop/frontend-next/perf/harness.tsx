@@ -11,6 +11,7 @@ import "../src/styles/askskip.css";
 import "../src/styles/pastekeep.css";
 import "../src/styles/ctxitems.css";
 import "../src/styles/sidepanel.css";
+import "../src/styles/planpeek.css";
 import "../src/styles/scrolljump.css";
 import "../src/styles/chart.css";
 import "../src/styles/community.css";
