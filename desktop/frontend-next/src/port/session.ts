@@ -256,6 +256,7 @@ export interface SessionStatus {
   cacheHit: number;
   cacheMiss: number;
   sessionCostQuote?: import("./wire").CostQuote;
+  sessionUsage?: SessionUsage;
   jobs?: JobEntry[];
 }
 
@@ -296,4 +297,30 @@ export interface SessionEntry {
   title?: string;
   turns?: number;
   current?: boolean;
+}
+
+// What one usage source has spent since this session was opened in this run.
+// cacheUnknown is prompt the endpoint did not split into cached and uncached.
+export interface SourceUsage {
+  source: string;
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheHit: number;
+  cacheMiss: number;
+  cacheUnknown?: number;
+  cost: import("./wire").CostQuote;
+}
+
+// The session's usage grouped by source, read from the ledger the cost total is.
+// workMs is the answered work time of turns that gave a final answer.
+export interface SessionUsage {
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheHit: number;
+  cacheMiss: number;
+  cacheUnknown?: number;
+  workMs: number;
+  sources: SourceUsage[];
 }
