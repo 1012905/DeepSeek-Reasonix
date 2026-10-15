@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { current, t } from "../i18n";
 import { tx } from "../i18n/rich";
-import { FEEDBACK_NEXT_VERSION, FEEDBACK_REPO_ISSUES, isUnderReview, type FeedbackItem, type FeedbackMine as Mine, type FeedbackStatus } from "../port/feedback";
+import { FEEDBACK_NEXT_VERSION, FEEDBACK_REPO_ISSUES, isUnderReview, type FeedbackItem, type FeedbackLimits, type FeedbackMine as Mine, type FeedbackStatus } from "../port/feedback";
 import type { AgentPort } from "../port/port";
 import { CopyButton } from "./CopyButton";
 import { FeedbackLevel } from "./FeedbackLevel";
@@ -115,7 +115,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
   const [failure, setFailure] = useState<FeedbackFailure | null>(null);
   const [loading, setLoading] = useState(true);
   const [fresh, setFresh] = useState<Record<string, number>>({});
-  const [replyBytes, setReplyBytes] = useState<number | null>(null);
+  const [limits, setLimits] = useState<FeedbackLimits | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const [said, setSaid] = useState("");
   const report = useRef(onUnread);
@@ -169,7 +169,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
 
   useEffect(() => {
     let live = true;
-    port.feedbackEnv(document.documentElement.lang).then((e) => live && setReplyBytes(e.limits.replyBytes)).catch(() => {});
+    port.feedbackEnv(document.documentElement.lang).then((e) => live && setLimits(e.limits)).catch(() => {});
     return () => {
       live = false;
     };
@@ -277,7 +277,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
               </ol>}
               <FeedbackReviewNote item={item} />
               <FeedbackThread item={item} fresh={fresh[item.receipt] ?? 0} onView={view} />
-              <FeedbackReplyBox port={port} item={item} limit={replyBytes} offline={mine.offline} onSent={sent} onFile={onFile} onStale={load} />
+              <FeedbackReplyBox port={port} item={item} limit={limits?.replyBytes ?? null} limits={limits} offline={mine.offline} onSent={sent} onFile={onFile} onStale={load} />
             </li>
           ))}
         </ul>

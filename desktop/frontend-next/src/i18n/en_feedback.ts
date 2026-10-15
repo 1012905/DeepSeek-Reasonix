@@ -144,6 +144,8 @@ export const EN_FEEDBACK: Record<string, string> = {
   "{n} 项待查看": "{n} to review",
   "有 {n} 份反馈收到了新回复。": "{n} of your reports have new replies.",
   "回复已发送。": "Reply sent.",
+  "也可以直接粘贴。PNG 或 JPEG，最多 {n} 张，每张不超过 {size} MB。": "You can also paste. PNG or JPEG, up to {n}, each up to {size} MB.",
+  "截图先只发给维护者，由维护者决定是否公开。": "Screenshots go to the maintainers only, who decide whether to make them public.",
   "反馈等级": "Feedback level",
   "升级进度": "Progress to the next level",
   "新种": "New seed",

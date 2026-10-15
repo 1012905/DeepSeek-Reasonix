@@ -1,6 +1,6 @@
 import { HttpError } from "./http_error";
 import { MockCommit } from "./mock_commit";
-import { FEEDBACK_CODE, type FeedbackEnv, type FeedbackItem, type FeedbackLinkedInstall, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
+import { FEEDBACK_CODE, type FeedbackEnv, type FeedbackImage, type FeedbackItem, type FeedbackLinkedInstall, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
 
 const LIMITS = { bodyBytes: 8192, nameChars: 40, contactChars: 120, images: 3, imageBytes: 2 << 20, uploadBytes: 10 << 20, replyBytes: 4096 };
 
@@ -136,7 +136,10 @@ export class MockFeedback extends MockCommit {
     this.announced += 1;
   }
 
-  async replyFeedback(receipt: string, body: string): Promise<FeedbackReplyReceipt> {
+  readonly replyImages: number[] = [];
+
+  async replyFeedback(receipt: string, body: string, images: FeedbackImage[] = []): Promise<FeedbackReplyReceipt> {
+    this.replyImages.push(images.length);
     const code = fault(REPLY_FAULT);
     if (code === "feedback.invalid") {
       throw new HttpError(400, "invalid", { code, error: "invalid", params: { field: "body", reason: "empty" } });

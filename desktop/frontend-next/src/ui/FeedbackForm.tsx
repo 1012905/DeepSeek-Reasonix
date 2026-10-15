@@ -9,7 +9,7 @@ import { CopyButton } from "./CopyButton";
 import { StudioIcon } from "./StudioIcon";
 import { dropDraft, heldDraft, holdDraft } from "./feedbackdraft";
 import { feedbackFailure, type FeedbackFailure } from "./feedbackfailure";
-import { admit, megabytes, payload, readShot, type Refused, type Shot } from "./feedbackshots";
+import { admit, megabytes, payload, readShot, REFUSED_LABEL, type Refused, type Shot } from "./feedbackshots";
 import { useFileDrop } from "./filedrop";
 
 export const SECURITY_URL = "https://github.com/esengine/DeepSeek-Reasonix/security/policy";
@@ -21,12 +21,6 @@ const CATEGORY_LABEL: Record<FeedbackCategory, string> = {
   question: "疑问",
   other: "其他",
 };
-
-const REFUSED_LABEL = {
-  format: "{name}：只支持 PNG 或 JPEG",
-  too_large: "{name}：超过 {size} MB，没有添加",
-  too_many: "{name}：最多 {n} 张，没有添加",
-} as const;
 
 const encoder = new TextEncoder();
 
