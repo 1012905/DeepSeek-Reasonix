@@ -50,9 +50,9 @@ interface ChipHost {
   touches: (caret: number) => boolean;
 }
 
-function ask(port: AgentPort, text: string, caret: number, mid: ReturnType<typeof midSlash>): Promise<Completion> {
-  if (!mid) return port.complete(text, caret);
-  return port.complete(mid.token, mid.token.length).then((r) => ({
+function ask(port: AgentPort, text: string, caret: number, mid: ReturnType<typeof midSlash>, signal: AbortSignal): Promise<Completion> {
+  if (!mid) return port.complete(text, caret, signal);
+  return port.complete(mid.token, mid.token.length, signal).then((r) => ({
     kind: "slash",
     from: mid.from,
     to: mid.to,
@@ -123,7 +123,8 @@ export function useCompletion(
     const timer = slashy && !compatible
       ? window.setTimeout(() => { if (id === asked.current) setLoading(true); }, 180)
       : undefined;
-    ask(port, text, caret, mid)
+    const asking = new AbortController();
+    ask(port, text, caret, mid, asking.signal)
       .then((r) => {
         if (id === asked.current) {
           window.clearTimeout(timer);
@@ -138,7 +139,10 @@ export function useCompletion(
           setLoading(false);
         }
       });
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      asking.abort();
+    };
   }, [port, text, caret]);
 
   // A keystroke changed the list under the pointer, so its claim on the

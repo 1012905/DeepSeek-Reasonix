@@ -169,7 +169,7 @@ export interface AgentPort {
   // What the line being typed can still become, asked once per keystroke. The
   // answer depends on the caret, so it cannot be cached into a static list the
   // way slash() is.
-  complete(line: string, cursor: number): Promise<Completion>;
+  complete(line: string, cursor: number, signal?: AbortSignal): Promise<Completion>;
   // The draft rewritten by the session's model, for the person to take or
   // leave; nothing is sent. Aborting the signal abandons the rewrite.
   refinePrompt(draft: string, signal?: AbortSignal): Promise<string>;
