@@ -51,7 +51,7 @@ func devServerPIDs(t *testing.T, dir string) []int {
 	for time.Now().Before(deadline) {
 		if b, err := os.ReadFile(filepath.Join(dir, "pids.txt")); err == nil && strings.Contains(string(b), ",") {
 			var pids []int
-			for _, s := range strings.Split(strings.TrimSpace(string(b)), ",") {
+			for s := range strings.SplitSeq(strings.TrimSpace(string(b)), ",") {
 				n, _ := strconv.Atoi(s)
 				pids = append(pids, n)
 			}
