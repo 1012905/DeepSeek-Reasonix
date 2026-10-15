@@ -137,6 +137,8 @@ type providerView struct {
 	// ones it inherits when it declares none.
 	ModelLimits     map[string]modelLimitsView `json:"modelLimits,omitempty"`
 	InheritedLimits map[string]modelLimitsView `json:"inheritedLimits,omitempty"`
+	// Per chat model: the price per million tokens it declares for itself.
+	ModelPrices map[string]modelPriceView `json:"modelPrices,omitempty"`
 }
 
 func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
@@ -181,6 +183,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			ModelProtocols:     modelProtocolsOf(p),
 			ModelLimits:        modelLimitsOf(p),
 			InheritedLimits:    inheritedLimitsOf(p),
+			ModelPrices:        modelPricesOf(p),
 			ContextWindow:      p.ContextWindow,
 			MaxOutputTokens:    p.MaxOutputTokens,
 			IdleTimeoutSeconds: p.IdleTimeoutSeconds,

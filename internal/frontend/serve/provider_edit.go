@@ -56,6 +56,7 @@ func (s *Server) editProvider(w http.ResponseWriter, r *http.Request) {
 		// Per-model window and output cap, with the same listed-models-are-the-
 		// whole-answer rule; a model sent empty inherits the connection's.
 		ModelLimits  *map[string]modelLimitsView `json:"modelLimits"`
+		ModelPrices  *map[string]*modelPriceView `json:"modelPrices"`
 		ModelAliases *map[string]string          `json:"modelAliases"`
 	}
 	if !decodeProviderBody(w, r, &body) {
@@ -97,7 +98,7 @@ func (s *Server) editProvider(w http.ResponseWriter, r *http.Request) {
 	if !applyNumericFields(w, entry, body.ContextWindow, body.MaxOutputTokens, body.IdleTimeoutSeconds) {
 		return
 	}
-	if bad := applyModelLimits(entry, models, body.ModelLimits); bad != nil {
+	if bad := applyModelDeclarations(entry, models, body.ModelLimits, body.ModelPrices); bad != nil {
 		refuse(w, http.StatusBadRequest, bad.code, bad.message, bad.detail)
 		return
 	}
@@ -187,6 +188,7 @@ func assemblyShape(e *config.ProviderEntry) string {
 		orNil(len(e.ModelOverrides), e.ModelOverrides), e.ContextWindow, e.MaxOutputTokens,
 		orNil(len(e.Headers), e.Headers), orNil(len(e.ExtraBody), e.ExtraBody), e.ReasoningProtocol,
 		orNil(len(e.SupportedEfforts), e.SupportedEfforts), e.DefaultEffort, e.IdleTimeoutSeconds,
+		orNil(len(e.Prices), e.Prices),
 	}
 	b, err := json.Marshal(shape)
 	if err != nil {

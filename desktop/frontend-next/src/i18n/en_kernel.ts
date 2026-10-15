@@ -373,6 +373,8 @@ export const EN_KERNEL: Record<string, string> = {
   "备份数量已达上限，请先删除一份旧备份": "The backup limit is reached; delete an older backup first",
   "有会在本机运行程序或改变密钥去向的项目，需要逐项确认后才能恢复": "Some items run programs here or change where a key is sent; confirm each one before restoring",
   "项目列表已满（32 个），请先移除一个项目再添加": "The project list is full (32 projects); remove one before adding another",
+  "{model} 的价格必须是不小于 0 的数字，并选择货币": "The price for {model} must be a number not below 0, with a currency chosen",
+  "{model} 不在已选模型中，未保存价格": "{model} is not one of the selected models, so no price was saved",
   "这台服务器不支持切换工作区": "This server cannot switch workspaces",
   "没有找到这个分支，没有创建隔离副本": "That branch was not found, so no isolated copy was created",
   "不存在该预设": "There is no such preset",

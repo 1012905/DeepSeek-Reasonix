@@ -1,6 +1,7 @@
 import type {
   ModelEffort,
   ModelLimit,
+  ModelRate,
   Protocol,
   ProviderCheck,
   ProviderRemoval,
@@ -178,6 +179,7 @@ export class MockProvider extends MockBoundary {
             defaultEffort: edit.defaultEffort,
             modelEfforts: edit.modelEfforts ? mockModelEfforts(edit.modelEfforts) : p.modelEfforts,
             modelLimits: edit.modelLimits ? mockModelLimits(edit.modelLimits) : p.modelLimits,
+            modelPrices: edit.modelPrices ? mockModelPrices(edit.modelPrices, edit.models, p.modelPrices) : p.modelPrices,
           }
         : p,
     );
@@ -222,4 +224,16 @@ function mockModelEfforts(sent: Record<string, ModelEffort>): Record<string, Mod
 function mockModelLimits(sent: Record<string, ModelLimit>): Record<string, ModelLimit> | undefined {
   const kept = Object.entries(sent).filter(([, v]) => v.contextWindow || v.maxOutputTokens);
   return kept.length ? Object.fromEntries(kept) : undefined;
+}
+
+// A listed model sent null has none of its own; one left out of the answer keeps
+// what it had, as the kernel does.
+function mockModelPrices(sent: Record<string, ModelRate | null>, models: string[], was: Record<string, ModelRate> | undefined): Record<string, ModelRate> | undefined {
+  const next: Record<string, ModelRate> = { ...(was ?? {}) };
+  for (const model of models) {
+    const rate = sent[model];
+    if (rate) next[model] = rate;
+    else delete next[model];
+  }
+  return Object.keys(next).length ? next : undefined;
 }
