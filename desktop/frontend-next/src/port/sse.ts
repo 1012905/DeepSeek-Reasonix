@@ -47,11 +47,11 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return r.models ?? [];
   }
 
-  complete(line: string, cursor: number) {
+  complete(line: string, cursor: number, signal?: AbortSignal) {
     // The kernel renders the built-in verbs, and the language it would pick is
     // the process's. Only this window knows what it is drawing in.
     const q = new URLSearchParams({ line, cursor: String(cursor), lang: current() });
-    return this.get<Completion>("/complete?" + q);
+    return signal ? this.getUntil<Completion>("/complete?" + q, signal) : this.get<Completion>("/complete?" + q);
   }
 
   async refinePrompt(draft: string, signal?: AbortSignal) {
