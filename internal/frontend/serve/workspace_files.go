@@ -33,6 +33,18 @@ func workspacePath(raw string) (string, error) {
 	return path, nil
 }
 
+// refuseOpen answers a failed open by its cause: only a file that is not there
+// is "missing". A permission, a lock or a path the root refuses is a different
+// thing to do next, and saying "not found" sends the person looking for a file
+// that exists.
+func refuseOpen(w http.ResponseWriter, err error) {
+	if errors.Is(err, fs.ErrNotExist) {
+		refuse(w, http.StatusNotFound, "workspace.file_missing", err.Error(), nil)
+		return
+	}
+	refuse(w, http.StatusInternalServerError, "workspace.file_failed", err.Error(), nil)
+}
+
 func (s *Server) workspaceFiles(w http.ResponseWriter, r *http.Request) {
 	root := s.ctl().WorkspaceRoot()
 	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
@@ -83,7 +95,7 @@ func (s *Server) workspaceFileRead(w http.ResponseWriter, r *http.Request) {
 	defer root.Close()
 	file, err := root.Open(path)
 	if err != nil {
-		refuse(w, http.StatusNotFound, "workspace.file_missing", err.Error(), nil)
+		refuseOpen(w, err)
 		return
 	}
 	defer file.Close()
@@ -124,7 +136,7 @@ func (s *Server) workspaceFileWrite(w http.ResponseWriter, r *http.Request) {
 	defer root.Close()
 	current, err := root.ReadFile(path)
 	if err != nil {
-		refuse(w, http.StatusNotFound, "workspace.file_missing", err.Error(), nil)
+		refuseOpen(w, err)
 		return
 	}
 	if fileRevision(current) != in.Revision {

@@ -46,7 +46,7 @@ func (s *Server) workspaceImage(w http.ResponseWriter, r *http.Request) {
 	defer root.Close()
 	file, err := root.Open(path)
 	if err != nil {
-		refuse(w, http.StatusNotFound, "workspace.file_missing", err.Error(), nil)
+		refuseOpen(w, err)
 		return
 	}
 	defer file.Close()
