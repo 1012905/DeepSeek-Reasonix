@@ -123,6 +123,7 @@ type Skill struct {
 	// InvalidPaths keeps rejected globs for doctor.
 	Paths        []string
 	InvalidPaths []string
+	SpecFields   // the Agent Skills descriptive fields, shown and never acted on
 }
 
 // SlashName returns the user-facing slash identifier. Plugin skills use a
@@ -875,6 +876,7 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 		sk.Invalid = append(sk.Invalid, "frontmatter is not valid YAML; read line by line (quote values that contain [ ] : or #)")
 	}
 	sk.Invalid = append(sk.Invalid, specIssues(path, stem, fm)...)
+	applySpecFields(&sk, doc)
 	sk.Profiles, sk.InvalidProfiles = parseProfilesFrontmatter(fm[skillFrontmatterProfiles])
 	sk.Paths, sk.InvalidPaths = parsePathsFrontmatter(fm[skillFrontmatterPaths])
 	return sk, true

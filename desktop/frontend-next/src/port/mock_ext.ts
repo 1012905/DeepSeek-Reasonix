@@ -22,6 +22,7 @@ export class MockExtensions extends MockMarket {
     {
       name: "release-notes", description: "从提交历史起草发布说明",
       scope: "global", path: "~/.reasonix/skills/release-notes/SKILL.md", enabled: false,
+      license: "Apache-2.0", compatibility: "需要 git，并能访问网络", metadata: { author: "example-org", version: "1.0" },
     },
     {
       name: "deploy-runbook", slashName: "deploy-runbook", description: "只在你点名时跑的部署清单",
