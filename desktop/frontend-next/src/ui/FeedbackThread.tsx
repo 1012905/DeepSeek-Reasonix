@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import { current, t } from "../i18n";
-import { FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, FEEDBACK_REPLYABLE, isUnderReview, type FeedbackItem, type FeedbackReply } from "../port/feedback";
+import { FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, FEEDBACK_REPLYABLE, isUnderReview, type FeedbackItem, type FeedbackLimits, type FeedbackReply } from "../port/feedback";
 import type { AgentPort } from "../port/port";
 import { replyFailure, type FeedbackFailure } from "./feedbackfailure";
+import { admit, megabytes, payload, readShot, REFUSED_LABEL, type Refused, type Shot } from "./feedbackshots";
 import { StudioIcon } from "./StudioIcon";
 
 const SHOWN = 4;
@@ -91,19 +92,36 @@ interface ReplyProps {
   port: AgentPort;
   item: FeedbackItem;
   limit: number | null;
+  limits?: Pick<FeedbackLimits, "images" | "uploadBytes"> | null;
   offline: boolean;
   onSent: (receipt: string) => void;
   onFile: (url: string) => void;
   onStale: () => void;
 }
 
-export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, onStale }: ReplyProps) {
+export function FeedbackReplyBox({ port, item, limit, limits = null, offline, onSent, onFile, onStale }: ReplyProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<FeedbackFailure | null>(null);
   const opener = useRef<HTMLButtonElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const [shots, setShots] = useState<Shot[]>([]);
+  const [refused, setRefused] = useState<Refused[]>([]);
+  const held = useRef(shots);
+  held.current = shots;
+  const add = useCallback(
+    async (files: File[]) => {
+      if (!limits || files.length === 0) return;
+      const { taken, refused: no } = admit(held.current.length, files, limits);
+      setRefused(no);
+      const read = await Promise.allSettled(taken.map(readShot));
+      const ok = read.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      if (ok.length > 0) setShots((prev) => [...prev, ...ok].slice(0, limits.images));
+    },
+    [limits],
+  );
   const replyable = !item.statusUnavailable && FEEDBACK_REPLYABLE.includes(item.status);
   if (!replyable) return null;
   const reopens = item.status === "fixed";
@@ -120,8 +138,10 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
     setSending(true);
     setFailure(null);
     try {
-      await port.replyFeedback(item.receipt, text.trim());
+      await (shots.length > 0 ? port.replyFeedback(item.receipt, text.trim(), payload(shots)) : port.replyFeedback(item.receipt, text.trim()));
       setText("");
+      setShots([]);
+      setRefused([]);
       setOpen(false);
       onSent(item.receipt);
     } catch (e) {
@@ -149,6 +169,12 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
       data-needs={item.needsInput ? "" : undefined}
       aria-busy={sending}
       noValidate
+      onPaste={(e: ClipboardEvent<HTMLFormElement>) => {
+        const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+        if (files.length === 0 || !limits) return;
+        e.preventDefault();
+        void add(files);
+      }}
       data-action-submit="feedback.reply.send"
       onSubmit={(e) => { e.preventDefault(); void send(); }}
     >
@@ -175,6 +201,41 @@ export function FeedbackReplyBox({ port, item, limit, offline, onSent, onFile, o
           {t("{n} / {max} 字节", { n: bytes.toLocaleString(), max: max.toLocaleString() })}
         </span>
       </div>
+      {limits && (
+        <div className="fbk-reply-shots">
+          {shots.length > 0 && (
+            <ul className="fbk-shots">
+              {shots.map((s) => (
+                <li key={s.id}>
+                  <img src={s.preview} alt={s.name} />
+                  <span className="fbk-shot-name">{s.name}</span>
+                  <button type="button" className="fbk-shot-x" data-action="feedback.shot.remove" data-target={s.id} disabled={sending} aria-label={t("移除截图 {name}", { name: s.name })} onClick={() => setShots((prev) => prev.filter((x) => x.id !== s.id))}>
+                    <StudioIcon name="close" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="fbk-drop-line">
+            <button type="button" className="btn sm" data-action="feedback.shot.pick" disabled={sending || shots.length >= limits.images} onClick={() => picker.current?.click()}>
+              <StudioIcon name="plus" />
+              {t("添加截图…")}
+            </button>
+            <span className="fbk-hint">
+              {t("也可以直接粘贴。PNG 或 JPEG，最多 {n} 张，每张不超过 {size} MB。", { n: limits.images, size: megabytes(limits.uploadBytes) })}{" "}
+              {t("截图先只发给维护者，由维护者决定是否公开。")}
+            </span>
+          </div>
+          <input ref={picker} className="sr-only" type="file" accept="image/png,image/jpeg" multiple tabIndex={-1} aria-label={t("选择截图文件")} data-action="feedback.shot.pick" onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = ""; }} />
+          {refused.length > 0 && (
+            <ul className="fbk-refused" role="status">
+              {refused.map((r, i) => (
+                <li key={i}>{t(REFUSED_LABEL[r.why], { name: r.name, size: megabytes(limits.uploadBytes), n: limits.images })}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {failure && (
         <div className="fbk-note" role="alert" data-tone="error" data-code={failure.code}>
           <StudioIcon name="warning" />

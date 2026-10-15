@@ -1,5 +1,5 @@
 import { SseBackup } from "./sse_backup";
-import type { FeedbackEnv, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 
 export class SseFeedback extends SseBackup {
   feedbackEnv(locale?: string) {
@@ -11,8 +11,8 @@ export class SseFeedback extends SseBackup {
   myFeedback() {
     return this.get<FeedbackMine>("/feedback/mine");
   }
-  replyFeedback(receipt: string, body: string) {
-    return this.post0<FeedbackReplyReceipt>("/feedback/" + encodeURIComponent(receipt) + "/reply", { body });
+  replyFeedback(receipt: string, body: string, images: FeedbackImage[] = []) {
+    return this.post0<FeedbackReplyReceipt>("/feedback/" + encodeURIComponent(receipt) + "/reply", images.length > 0 ? { body, images } : { body });
   }
   announceFeedbackReply() {
     return this.post("/notifications/feedback-reply", {});

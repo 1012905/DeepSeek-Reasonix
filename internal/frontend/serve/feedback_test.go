@@ -418,3 +418,30 @@ func TestFeedbackSeenNeedsTheReplyItWasShownUpTo(t *testing.T) {
 		t.Fatalf("a mark up to 3 cleared reply 7: %+v", got.Items[0])
 	}
 }
+
+func TestFeedbackReplyImagesReachTheWorkerAndBadOnesAreRefused(t *testing.T) {
+	stub := &feedbackStub{mine: feedbackThread}
+	srv := feedbackServer(t, stub, true)
+	feedbackPost(t, srv.URL+"/feedback", map[string]any{"category": "bug", "body": "x", "displayName": "kim"})
+	feedbackGetMine(t, srv.URL)
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 4, 4)))
+	resp, out := feedbackPost(t, srv.URL+"/feedback/FB-7K3M-9QX2/reply", map[string]any{
+		"body": "here", "images": []map[string]string{{"name": "a.png", "dataBase64": base64.StdEncoding.EncodeToString(buf.Bytes())}},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("reply with image: %d %s", resp.StatusCode, out)
+	}
+	stub.mu.Lock()
+	last := stub.posts[len(stub.posts)-1]
+	stub.mu.Unlock()
+	if atts, _ := last["attachments"].([]any); len(atts) != 1 {
+		t.Fatalf("upstream saw %v", last)
+	}
+	_, out = feedbackPost(t, srv.URL+"/feedback/FB-7K3M-9QX2/reply", map[string]any{
+		"body": "x", "images": []map[string]string{{"name": "a.png", "dataBase64": "!!not base64!!"}},
+	})
+	if r := reasonOf(t, out); r.Code != "feedback.invalid" || r.Params["field"] != "images" || r.Params["reason"] != "undecodable" {
+		t.Fatalf("bad base64: %s", out)
+	}
+}

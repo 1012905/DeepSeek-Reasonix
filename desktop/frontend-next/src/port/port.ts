@@ -46,7 +46,7 @@ import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, Fol
 import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
-import type { FeedbackEnv, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 
 export type * from "./plugin";
 export type * from "./market";
@@ -419,7 +419,7 @@ export interface AgentPort {
   feedbackEnv(locale?: string): Promise<FeedbackEnv>;
   sendFeedback(req: FeedbackRequest): Promise<FeedbackReceipt>;
   myFeedback(): Promise<FeedbackMine>;
-  replyFeedback(receipt: string, body: string): Promise<FeedbackReplyReceipt>;
+  replyFeedback(receipt: string, body: string, images?: FeedbackImage[]): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
   // Tying this install to the signed-in account is always the person's own

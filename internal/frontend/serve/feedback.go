@@ -111,14 +111,11 @@ func (s *Server) feedbackSubmit(w http.ResponseWriter, r *http.Request) {
 		DisplayName: req.DisplayName, Contact: req.Contact, TurnstileToken: req.TurnstileToken,
 		Env: feedback.EnvContext{Surface: feedback.SurfaceStudio, Locale: req.Locale},
 	}
-	for _, img := range req.Images {
-		raw, err := base64.StdEncoding.DecodeString(img.DataBase64)
-		if err != nil {
-			refuseFeedback(w, &feedback.InvalidError{Field: feedback.FieldImages, Reason: feedback.ReasonUndecodable})
-			return
-		}
-		d.Images = append(d.Images, feedback.Image{Name: img.Name, Data: raw})
+	images, ok := decodeFeedbackImages(w, req.Images)
+	if !ok {
+		return
 	}
+	d.Images = images
 	got, err := s.ctl().SubmitFeedback(r.Context(), d)
 	if err != nil {
 		refuseFeedback(w, err)
@@ -137,15 +134,27 @@ func (s *Server) feedbackMine(w http.ResponseWriter, r *http.Request) {
 }
 
 type feedbackReplyBody struct {
-	Body string `json:"body"`
+	Body   string              `json:"body"`
+	Images []feedbackImageBody `json:"images"`
 }
 
 func (s *Server) feedbackReply(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, uploadCeiling)
 	var req feedbackReplyBody
-	if !decodeBody(w, r, &req) {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			refuseFeedback(w, feedback.ErrTooLarge)
+			return
+		}
+		badBody(w)
 		return
 	}
-	got, err := s.ctl().ReplyFeedback(r.Context(), r.PathValue("receipt"), req.Body)
+	images, ok := decodeFeedbackImages(w, req.Images)
+	if !ok {
+		return
+	}
+	got, err := s.ctl().ReplyFeedback(r.Context(), r.PathValue("receipt"), req.Body, images...)
 	if err != nil {
 		refuseFeedback(w, err)
 		return
@@ -253,4 +262,19 @@ func limitParams(err error) map[string]any {
 		return nil
 	}
 	return params
+}
+
+// decodeFeedbackImages reads the base64 images of a submit or reply body; an
+// undecodable one is refused here, before the kernel sees the request.
+func decodeFeedbackImages(w http.ResponseWriter, in []feedbackImageBody) ([]feedback.Image, bool) {
+	var out []feedback.Image
+	for _, img := range in {
+		raw, err := base64.StdEncoding.DecodeString(img.DataBase64)
+		if err != nil {
+			refuseFeedback(w, &feedback.InvalidError{Field: feedback.FieldImages, Reason: feedback.ReasonUndecodable})
+			return nil, false
+		}
+		out = append(out, feedback.Image{Name: img.Name, Data: raw})
+	}
+	return out, true
 }

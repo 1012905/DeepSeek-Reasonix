@@ -279,3 +279,4 @@
 .fbk-level-limits, .fbk-level-note, .fbk-level-stale { margin: 0; font: var(--w-reg) var(--fs-meta)/1.55 var(--ui); color: var(--muted); }
 .fbk-level-limits { color: var(--text); }
 .fbk-level-gone { margin: 0; }
+.fbk-reply-shots { display: grid; gap: 6px; margin-top: 8px; }
