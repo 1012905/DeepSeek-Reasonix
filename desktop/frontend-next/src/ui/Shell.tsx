@@ -32,6 +32,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState<{ text: string; unapplied: boolean } | null>(null);
   const [custom, setCustom] = useState("");
+  const [launcher, setLauncher] = useState("");
 
   const load = useCallback(() => {
     port
@@ -39,6 +40,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
       .then((v) => {
         setS(v);
         setCustom(v.path ?? "");
+        setLauncher((v.args ?? []).join("\n"));
       })
       .catch(() => setS(null));
   }, [port]);
@@ -51,13 +53,14 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
   // Two bashes on one machine are two different programs, so picking one has to
   // pin its path. With only one, the name alone survives a PATH that moves.
   const pin = (o: ShellOption) => options.filter((x) => x.prefer === o.prefer).length > 1;
-  const save = async (what: string, prefer: string, path: string) => {
+  const save = async (what: string, prefer: string, path: string, args?: string[]) => {
     setBusy(what);
     setNote(null);
     try {
-      const next = await port.saveShell(prefer, path);
+      const next = await (args && args.length > 0 ? port.saveShell(prefer, path, args) : port.saveShell(prefer, path));
       setS(next);
       setCustom(next.path ?? "");
+      setLauncher((next.args ?? []).join("\n"));
       onChanged?.();
     } catch (e) {
       setNote({ text: reason(e), unapplied: savedNotApplied(e) });
@@ -71,6 +74,10 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
   // A Windows host without bash is the case worth naming: the model's POSIX
   // habits are wrong there, and one install is what changes that.
   const noBash = s.platform === "windows" && !options.some((o) => o.prefer === "bash");
+  // One argument per line: an argument may hold spaces (a distro name), and the
+  // kernel runs the list as written, with no shell in between.
+  const launcherArgs = launcher.split("\n").map((a) => a.trim()).filter((a) => a !== "");
+  const fellBack = (s.args?.length ?? 0) > 0 && !s.argv;
 
   return (
     <div className="shell">
@@ -81,6 +88,14 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
           {s.effective.version ? ` ${s.effective.version}` : ""} · {s.effective.path || "—"}
         </span>
       </div>
+
+      {s.argv && (
+        <div className="kv">
+          <span className="k">{t("启动命令")}</span>
+          <span className="v"><code>{s.argv.join(" ")} -c …</code></span>
+        </div>
+      )}
+      {fellBack && <p className="note" data-tone="warn">{t("保存的启动参数现在无法运行，已回退到自动检测。")}</p>}
 
       {/* One shape for "pick one of a few", the same as every other such choice
           in this pane. The executable's path is too long for a segment, and it
@@ -113,7 +128,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
 
       {noBash && (
         <p className="note">
-          {t("本机没有 bash，因此命令只能按 PowerShell 语法编写。安装 Git for Windows 后会增加 Git Bash 选项 —— WSL 中的 bash 不适用，它看到的是 /mnt 下的另一套路径，无法访问当前工作目录。")}
+          {t("本机没有 bash，因此命令只能按 PowerShell 语法编写。安装 Git for Windows 后会增加 Git Bash 选项。要用 WSL，请在下方指定 wsl.exe 并填写启动参数；其中的路径是 Linux 写法。")}
         </p>
       )}
 
@@ -134,6 +149,21 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
             />
           </label>
         </div>
+        {s.platform === "windows" && (
+          <div className="fields">
+            <label className="grow full">
+              <span>{t("启动参数（可选，每行一项）")}</span>
+              <textarea
+                data-action="shell.custom-args"
+                rows={4}
+                value={launcher}
+                placeholder={"-d\nUbuntu\n--\n/bin/bash"}
+                onChange={(e) => setLauncher(e.target.value)}
+              />
+              <small className="note">{t("例如 wsl.exe 需要 -d <发行版> -- /bin/bash 才会进入 shell。参数按原样传给程序，不经过任何 shell；保存前会带着它们运行一次来验证。")}</small>
+            </label>
+          </div>
+        )}
         <div className="acts">
           {s.path && (
             <button className="act" data-action="shell.custom-path" disabled={!!busy} onClick={() => void save("clear", s.prefer, "")}>
@@ -141,7 +171,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
             </button>
           )}
           <button className="act" data-action="shell.custom-path" data-primary disabled={!!busy || !custom.trim()}
-            onClick={() => void save("custom", kindOf(custom), custom.trim())}>
+            onClick={() => void save("custom", launcherArgs.length > 0 ? "bash" : kindOf(custom), custom.trim(), launcherArgs)}>
             {t(busy === "custom" ? "验证中…" : "保存该路径")}
           </button>
         </div>

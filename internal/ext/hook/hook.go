@@ -1016,21 +1016,6 @@ type SpawnInput struct {
 	Timeout time.Duration
 }
 
-// RuntimeOptions carries resolved host dependencies into Hook execution.
-// It is runtime-only and never changes persisted Hook configuration.
-type RuntimeOptions struct {
-	BashPath string
-}
-
-// RuntimeOptionsForShell carries an explicitly configured Bash path into Hook
-// execution while leaving other interpreter preferences independent.
-func RuntimeOptionsForShell(prefer, path string) RuntimeOptions {
-	if !strings.EqualFold(strings.TrimSpace(prefer), "bash") {
-		return RuntimeOptions{}
-	}
-	return RuntimeOptions{BashPath: strings.TrimSpace(path)}
-}
-
 // RuntimeIssue identifies one plugin Hook whose host dependency is unavailable.
 type RuntimeIssue struct {
 	Event       Event

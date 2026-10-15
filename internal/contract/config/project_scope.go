@@ -50,6 +50,7 @@ func holdUserScope(c *Config) heldScope {
 	p.Allow, p.Ask, p.Deny = slices.Clone(p.Allow), slices.Clone(p.Ask), slices.Clone(p.Deny)
 	shell := c.Tools.Shell
 	shell.Env = maps.Clone(shell.Env)
+	shell.Args = slices.Clone(shell.Args)
 	return heldScope{
 		sandbox:         s,
 		permissions:     p,
@@ -145,6 +146,7 @@ func (c *Config) ignoreProject(key, value string, reason IgnoredProjectReason) {
 func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.MetaData) {
 	ws := workspaceDir(root)
 	c.Tools.Shell.Env = h.shell.Env
+	c.Tools.Shell.Args = h.shell.Args
 	warnShellEnvProblems(c, projectMeta)
 	// Auto-submit commits a user's ask answers without a confirmation, so it is
 	// the user's alone: a cloned repo must not turn it on.
@@ -224,6 +226,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	}
 	store := NewProjectProgramStore(r.Home())
 	h.gatePrograms(c, store, ws)
+	// Launcher arguments belong to the program the user chose them for.
+	if c.Tools.Shell.Path != h.shell.Path {
+		c.Tools.Shell.Args = nil
+	}
 	h.endpoints.gateEndpoints(c, store, ws)
 }
 
