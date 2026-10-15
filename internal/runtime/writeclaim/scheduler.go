@@ -248,12 +248,12 @@ func (s *SubagentScheduler) conflictLocked(paths WritePathSet) error {
 	}
 	for _, active := range s.activeClaims {
 		if active.paths.Overlaps(paths) {
-			return fmt.Errorf("write path is claimed by a running background subagent; wait for it to finish before writing the same path")
+			return fmt.Errorf("%w: it is claimed by a running background sub-agent; write a different path, or wait for that sub-agent to finish", ErrWritePathBusy)
 		}
 	}
 	for _, active := range s.parentClaims {
 		if active.paths.Overlaps(paths) {
-			return fmt.Errorf("write path is claimed by another parent write in progress")
+			return fmt.Errorf("%w: another write to it is in progress; retry in a moment", ErrWritePathBusy)
 		}
 	}
 	return nil
@@ -384,7 +384,7 @@ func removeClaim(claims []claim, target WritePathSet) []claim {
 }
 
 func writeClaimEqual(a, b WritePathSet) bool {
-	if a.WholeWorkspace != b.WholeWorkspace || a.WorkspaceRoot != b.WorkspaceRoot {
+	if a.WholeWorkspace != b.WholeWorkspace || a.Optimistic != b.Optimistic || a.WorkspaceRoot != b.WorkspaceRoot {
 		return false
 	}
 	if len(a.Paths) != len(b.Paths) {

@@ -81,6 +81,7 @@ type TaskTool struct {
 	resolveProvider               func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error)
 	transcripts                   *SubagentStore
 	workspaceRoot                 string
+	optimisticClaims              bool
 	extraRoots                    []string
 	baseModel, baseEffort         string
 	identityProfile               func(modelRef, effort string) (string, string)
@@ -203,6 +204,22 @@ func NewTaskTool(prov provider.Provider, pricing *provider.Pricing, parentReg *t
 		SubagentEffort:    subagentEffort,
 		ResolveProvider:   resolveProvider,
 	})
+}
+
+// WithOptimisticClaims makes a writer that declared no write_paths take an
+// optimistic claim: it reserves nothing up front and holds only the path of the
+// write in progress. The default is the strict whole-workspace claim.
+func (t *TaskTool) WithOptimisticClaims(on bool) *TaskTool {
+	t.optimisticClaims = on
+	return t
+}
+
+// UndeclaredWriteClaim is the claim a writer takes when it names no paths.
+func (t *TaskTool) UndeclaredWriteClaim() (writeclaim.WritePathSet, error) {
+	if t.optimisticClaims {
+		return writeclaim.OptimisticWorkspaceClaim(t.workspaceRoot)
+	}
+	return writeclaim.WholeWorkspaceWriteClaim(t.workspaceRoot)
 }
 
 // WithTranscripts enables persisted sub-agent transcript continuation for this
@@ -481,7 +498,7 @@ func (t *TaskTool) resolveWriterClaims(writePaths []string, requireClaim bool) (
 	if !requireClaim {
 		return writeclaim.WritePathSet{}, nil
 	}
-	return writeclaim.WholeWorkspaceWriteClaim(t.workspaceRoot)
+	return t.UndeclaredWriteClaim()
 }
 
 // settleSpecPrompts rejects a run with nothing to do and fills in the system

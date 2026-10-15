@@ -1,5 +1,5 @@
 import { SseShell } from "./sse_shell";
-import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
@@ -40,6 +40,12 @@ export class SseBoundary extends SseShell {
   }
   saveBrowserTools(enabled: boolean) {
     return this.post0<BrowserToolsSettings>("/browser-tools", { enabled });
+  }
+  subagentClaims() {
+    return this.get<SubagentClaimsSettings>("/subagent-claims");
+  }
+  saveSubagentClaims(optimistic: boolean) {
+    return this.post0<SubagentClaimsSettings>("/subagent-claims", { optimistic });
   }
   displayCurrency() {
     return this.get<DisplayCurrencySettings>("/display-currency");

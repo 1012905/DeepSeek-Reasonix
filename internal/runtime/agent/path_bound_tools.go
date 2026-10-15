@@ -104,7 +104,7 @@ func (w pathBoundWriter) Execute(ctx context.Context, args json.RawMessage) (str
 	for _, p := range paths {
 		// Inside what was declared: the scheduler proved non-overlap before
 		// anything started, and there is nothing left to ask or to reserve.
-		if declared.AllowsPath(p) {
+		if declared.AllowsPath(p) && !declared.Optimistic {
 			continue
 		}
 		if !w.grant.Allows(p) {
@@ -116,7 +116,7 @@ func (w pathBoundWriter) Execute(ctx context.Context, args json.RawMessage) (str
 		// grant says this run may be here, never that another may not.
 		release, err := w.sched.ReserveWrite(writeclaim.WritePathSet{Paths: []string{p}})
 		if err != nil {
-			return "", fmt.Errorf("%w: %s", writeclaim.ErrWritePathBusy, p)
+			return "", fmt.Errorf("%w: %s", err, p)
 		}
 		held = append(held, release)
 	}
@@ -195,6 +195,7 @@ func BindWritePaths(reg *tool.Registry, grant *writeclaim.WriteGrant, gate Gate,
 		return bound, nil
 	}
 	roots := claims.Roots()
+	optimistic := claims.Optimistic
 	for _, name := range reg.Names() {
 		tl, ok := reg.Get(name)
 		if !ok {
@@ -211,6 +212,13 @@ func BindWritePaths(reg *tool.Registry, grant *writeclaim.WriteGrant, gate Gate,
 				continue
 			}
 			bound.Add(rebound)
+			continue
+		}
+		if optimistic && !pathBoundWriterNames[name] {
+			// An optimistic run is the user's choice to trade the fence for
+			// concurrency: MCP, custom and capability writers stay available and
+			// are observed after the fact, never reserved.
+			bound.Add(tl)
 			continue
 		}
 		if name == "use_capability" {
