@@ -22,14 +22,10 @@ import (
 // uniformly.
 func SetProcessGroupKill(*exec.Cmd) {}
 
-// KillTree terminates cmd and every descendant it spawned. Process.Kill only
-// signals the direct child, so a launcher (cmd.exe → node.exe) leaves the
-// grandchild alive holding the inherited stdout/stderr pipes — which makes
-// cmd.Wait block forever. taskkill /T walks the live tree and kills it all.
-//
-// It runs inside exec.Cmd's cancel hook, and Wait does not return until that
-// hook has, so a taskkill that never answers would hold every stop behind it.
-// It is given killTreeTimeout; after that the direct child is killed alone.
+// KillTree terminates cmd and every descendant. taskkill /T walks the live tree,
+// which a launcher's grandchild holding the output pipe needs (Wait blocks on
+// it). It runs in exec.Cmd's cancel hook that Wait waits for, so it is bounded
+// by killTreeTimeout; after that only the direct child is killed.
 func KillTree(cmd *exec.Cmd) {
 	if cmd == nil || cmd.Process == nil {
 		return
