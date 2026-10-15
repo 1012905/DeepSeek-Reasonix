@@ -81,6 +81,19 @@ describe("the version panel", () => {
     expect(line.getAttribute("aria-describedby")).toBeNull();
   });
 
+  it("says why the bar stopped when the connection was dropped for going quiet", async () => {
+    const port = portAt({ version: "2.21.0", phase: "downloading", received: 1024, total: 4096, stalls: 2 });
+    render(<Versions port={port} />);
+    expect(await screen.findByText("下载暂停了：连接长时间没有数据，已重连 2 次…")).toBeTruthy();
+  });
+
+  it("explains a download that stayed stuck by its code, with the way out", async () => {
+    const port = portAt({ version: "2.21.0", phase: "error", received: 0, total: 0, code: "update.download_stalled", stalls: 3, err: "update: the download stalled" });
+    render(<Versions port={port} />);
+    expect(await screen.findByText("2.21.0 下载卡住了")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "下载完整安装包" })).toBeTruthy();
+  });
+
   it("explains a move that did not land by its code, with the way out", async () => {
     const port = portAt({ version: "2.21.0", phase: "error", received: 0, total: 0, code: "update.not_applied", err: "update: set aside app.exe: access denied" });
     render(<Versions port={port} />);
