@@ -399,6 +399,7 @@ type Input interface {
 	// text for a spelling.
 	StoredAttachments(text string) []event.Attachment
 	CompletionData(lang string) CompletionData
+	CompletionDataFor(lang, line string, cursor int) CompletionData
 	ImageInputEnabled() bool
 	DroppedRef(path string) (token, displayPath string, err error)
 	RefinePrompt(ctx context.Context, draft string) (string, error)

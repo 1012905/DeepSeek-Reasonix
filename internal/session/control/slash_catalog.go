@@ -54,10 +54,22 @@ func SubmitSlashCommands(m i18n.Messages) []SlashItem {
 	}
 }
 
-// CompletionData assembles what the composer's menu needs from the live
-// session. Frontends read it from the controller rather than gathering it
+// CompletionData assembles everything the composer's menu can need from the
+// live session. Frontends read it from the controller rather than gathering it
 // themselves, so the same session answers every one of them identically.
 func (c *Controller) CompletionData(lang string) CompletionData {
+	return c.completionData(lang, true)
+}
+
+// CompletionDataFor assembles only what completing this line reads. Naming a
+// command needs the catalogue and nothing else; the arguments of a command and
+// an @-reference need models, servers, memory and installed packages, each of
+// which is a disk read that every keystroke would otherwise repeat.
+func (c *Controller) CompletionDataFor(lang, line string, cursor int) CompletionData {
+	return c.completionData(lang, CompletionNeedsArgData(line, cursor))
+}
+
+func (c *Controller) completionData(lang string, withArgs bool) CompletionData {
 	m := i18n.M
 	if lang != "" {
 		m = i18n.Catalog(lang)
@@ -65,18 +77,21 @@ func (c *Controller) CompletionData(lang string) CompletionData {
 	commands := c.Commands()
 	skills := c.SlashSkills()
 	d := CompletionData{
-		ArgData: ArgData{
-			Skills:          skills,
-			DisabledSkills:  c.DisabledSkills(),
-			ConfiguredMCP:   c.ConfiguredMCPNames(),
-			DisconnectedMCP: c.DisconnectedMCPNames(),
-			ModelRefs:       configuredModelRefs(),
-			CurrentModel:    c.ModelRef(),
-			ProviderNames:   configuredProviderNames(),
-			PluginNames:     installedPluginNames(),
-		},
 		Names:         c.completionNames(commands, skills, m),
 		WorkspaceRoot: c.WorkspaceRoot(),
+	}
+	if !withArgs {
+		return d
+	}
+	d.ArgData = ArgData{
+		Skills:          skills,
+		DisabledSkills:  c.DisabledSkills(),
+		ConfiguredMCP:   c.ConfiguredMCPNames(),
+		DisconnectedMCP: c.DisconnectedMCPNames(),
+		ModelRefs:       configuredModelRefs(),
+		CurrentModel:    c.ModelRef(),
+		ProviderNames:   configuredProviderNames(),
+		PluginNames:     installedPluginNames(),
 	}
 	d.CurrentProvider, _, _ = strings.Cut(d.CurrentModel, "/")
 	d.MemoryRefs, d.MemoryArchives = MemoryCompletionData(c.Memory())
