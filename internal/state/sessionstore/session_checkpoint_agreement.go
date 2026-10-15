@@ -3,7 +3,9 @@
 package sessionstore
 
 import (
+	"encoding/json"
 	"log/slog"
+	"os"
 
 	"reasonix/internal/contract/provider"
 )
@@ -27,13 +29,42 @@ func resolveReplayedMessages(sessionPath string, replay sessionEventReplay) ([]p
 // caught up; one that contradicts what survived is another writer's file.
 func checkpointExtendingReplay(sessionPath string, replayed []provider.Message) ([]provider.Message, bool) {
 	msgs, err := loadSessionMessagesFromJSONL(sessionPath)
-	if err != nil || len(msgs) <= len(replayed) {
+	if err != nil {
+		// The checkpoint's tail is torn. Keep what decodes rather than reading
+		// the tear as "a stranger's file": that fold returned the shorter replay
+		// as a clean success and let the next save rewrite it from that.
+		msgs = loadSessionMessagesFromJSONLKeepingDecodedTail(sessionPath)
+	}
+	if len(msgs) <= len(replayed) {
 		return nil, false
 	}
 	if !messagesHavePrefix(msgs, replayed) && !messagesHavePrefixWithCompatibleSystem(msgs, replayed) {
 		return nil, false
 	}
 	return msgs, true
+}
+
+// loadSessionMessagesFromJSONLKeepingDecodedTail reads the checkpoint as far as
+// its records decode, so a torn final line — the half-written in-place append a
+// crash leaves — costs only the record it truncated. Whether the result is
+// usable is the caller's call; this only refuses to discard the intact lines.
+func loadSessionMessagesFromJSONLKeepingDecodedTail(path string) []provider.Message {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var msgs []provider.Message
+	dec := json.NewDecoder(f)
+	for {
+		var m provider.Message
+		if err := dec.Decode(&m); err != nil {
+			break
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs
 }
 
 // settleDisplayReadModel republishes the read model whole when the in-place
