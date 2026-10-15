@@ -105,3 +105,10 @@ const (
 	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
 	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
 )
+
+// A saved fold was not reused when its session was bound: the whole history is
+// sent instead.
+const (
+	NoticeCodeFoldNotReusedHistory = "fold_not_reused_history"
+	NoticeCodeFoldNotReusedLineage = "fold_not_reused_lineage"
+)
