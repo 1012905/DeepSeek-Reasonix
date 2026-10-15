@@ -116,5 +116,5 @@ func workspaceLeaseNotice(w workspacelease.Wait) event.Event {
 
 func workspaceLeaseScope(w workspacelease.Wait) *event.WorkspaceLease {
 	return &event.WorkspaceLease{Holder: w.Holder, HolderSessionID: w.HolderSessionID,
-		Paths: w.Paths, RequestedPaths: w.RequestedPaths}
+		Paths: w.Paths, RequestedPaths: w.RequestedPaths, Repository: w.Repository}
 }
