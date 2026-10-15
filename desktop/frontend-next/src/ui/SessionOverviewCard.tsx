@@ -108,7 +108,7 @@ function ContextWindow({ ctx, onContext }: { ctx: ContextBreakdown; onContext?: 
       <div className="chrome-context-total"><span>{t("已使用")} <b>{tokens(ctx.used)}</b></span><span>{t("模型容量")} <b>{tokens(ctx.window)}</b></span></div>
       <div className="chrome-context-bar">{PARTS.map(([key, field]) => <i key={key} data-part={key} style={{ width: `${ctx.used ? Math.max(1, (ctx[field] / ctx.used) * 100) : 0}%` }} />)}</div>
       {ctx.compact_at > 0 && <small>{t("自动压缩于 {n}", { n: tokens(ctx.compact_at) })}</small>}
-      {onContext && <button type="button" data-action="metrics.details" data-value="context" onClick={onContext}>{t("上下文详情")}</button>}
+      {onContext && <button type="button" data-action="metrics.details" data-value="context-from-overview" onClick={onContext}>{t("上下文详情")}</button>}
     </section>
   );
 }
