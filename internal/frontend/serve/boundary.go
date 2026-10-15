@@ -24,6 +24,8 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /sandbox", s.saveSandboxSettings)
 	mux.HandleFunc("GET /browser-tools", s.browserToolsSettings)
 	mux.HandleFunc("POST /browser-tools", s.saveBrowserToolsSettings)
+	mux.HandleFunc("GET /subagent-claims", s.subagentClaimsSettings)
+	mux.HandleFunc("POST /subagent-claims", s.saveSubagentClaimsSettings)
 	// The file every one of these is written to, for when it is the thing that
 	// is wrong: each save above refuses with the same code, and this is where a
 	// surface reads it before trying, and repairs it after.
@@ -186,4 +188,38 @@ func (s *Server) saveBrowserToolsSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, s.ctl().BrowserToolsSettings())
+}
+
+func (s *Server) subagentClaimsSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, s.ctl().SubagentClaimsSettings())
+}
+
+// saveSubagentClaimsSettings rides the provider-edit grant: choosing optimistic
+// claims lets sub-agents write beside each other without a fence, so a networked
+// client must not make that choice for the machine's owner.
+func (s *Server) saveSubagentClaimsSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "subagent_claims.editing_disabled", "sub-agent claim editing is not enabled on this server", nil)
+		return
+	}
+	var body struct {
+		Optimistic *bool `json:"optimistic"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
+		badBody(w)
+		return
+	}
+	if body.Optimistic == nil {
+		refuse(w, http.StatusBadRequest, "subagent_claims.no_choice", "optimistic is required", nil)
+		return
+	}
+	if err := s.ctl().SaveSubagentClaimsSettings(*body.Optimistic); err != nil {
+		saveFailed(w, http.StatusInternalServerError, "subagent_claims.save_failed", err)
+		return
+	}
+	if err := s.rebuildInPlace(r.Context()); err != nil {
+		rebuildFailed(w, err)
+		return
+	}
+	writeJSON(w, s.ctl().SubagentClaimsSettings())
 }

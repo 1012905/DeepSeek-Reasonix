@@ -18,20 +18,21 @@ import (
 // may narrow these grants and never widen them. The slices are copies because
 // decoding the project file writes into the arrays the user's decode left.
 type heldScope struct {
-	sandbox      SandboxConfig
-	permissions  PermissionsConfig
-	approvalMode string
-	autoSubmit   bool
-	writeLease   string
-	hostVerif    string
-	shell        ShellConfig
-	rgPath       string
-	lsp          map[string]LSPServer
-	browser      BrowserConfig
-	network      NetworkConfig
-	endpoints    heldEndpoints
-	layaPython   string
-	layaLocal    bool
+	sandbox        SandboxConfig
+	permissions    PermissionsConfig
+	approvalMode   string
+	autoSubmit     bool
+	writeLease     string
+	subagentClaims string
+	hostVerif      string
+	shell          ShellConfig
+	rgPath         string
+	lsp            map[string]LSPServer
+	browser        BrowserConfig
+	network        NetworkConfig
+	endpoints      heldEndpoints
+	layaPython     string
+	layaLocal      bool
 	// rememberDevices is the user's [serve] remember_paired_devices. A project
 	// may not set it: a cloned repo must not be able to make a phone the person
 	// paired with stay trusted longer than they chose.
@@ -55,6 +56,7 @@ func holdUserScope(c *Config) heldScope {
 		approvalMode:    c.Desktop.DefaultToolApprovalMode,
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
+		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
 		shell:           shell,
 		rgPath:          c.Tools.Search.RgPath,
@@ -155,6 +157,12 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Agent.WriteLease != h.writeLease {
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
 		c.Agent.WriteLease = h.writeLease
+	}
+	// How a sub-agent's write claim is held decides whether another writer can
+	// work beside it, so a cloned repo cannot loosen it either.
+	if c.Agent.SubagentClaims != h.subagentClaims {
+		c.ignoreProject("agent.subagent_claims", c.Agent.SubagentClaims, ProjectUserOnly)
+		c.Agent.SubagentClaims = h.subagentClaims
 	}
 	// What the host asks of a turn before it may finish is the user's own call,
 	// so a cloned repo can neither switch it off nor undo the user's choice.

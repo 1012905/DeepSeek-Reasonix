@@ -104,7 +104,7 @@ func TestBoundaryWritesRefusedWithoutGrant(t *testing.T) {
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
-	for _, path := range []string{"/permissions", "/sandbox", "/browser-tools"} {
+	for _, path := range []string{"/permissions", "/sandbox", "/browser-tools", "/subagent-claims"} {
 		resp := postProvider(t, srv.URL, path, `{}`)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusForbidden {
@@ -376,5 +376,40 @@ func TestPermissionsListsRulesAlreadyInTheFileThatNameNoTool(t *testing.T) {
 	defer same.Body.Close()
 	if same.StatusCode != http.StatusOK {
 		t.Fatalf("changing the mode with the old rule kept = %d", same.StatusCode)
+	}
+}
+
+// The default is strict and changing it is a deliberate write to the user file;
+// a body that does not say which changes nothing.
+func TestSaveSubagentClaimsPersists(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	if got := readJSON[control.SubagentClaimsSettings](t, srv.URL, "/subagent-claims"); got.Optimistic {
+		t.Fatalf("unset choice reads %+v, want the strict default", got)
+	}
+	empty := postProvider(t, srv.URL, "/subagent-claims", `{}`)
+	empty.Body.Close()
+	if empty.StatusCode != http.StatusBadRequest {
+		t.Fatalf("POST /subagent-claims without a choice = %d, want 400", empty.StatusCode)
+	}
+	resp := postProvider(t, srv.URL, "/subagent-claims", `{"optimistic":true}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		got, _ := readAllString(resp)
+		t.Fatalf("POST /subagent-claims = %d: %s", resp.StatusCode, got)
+	}
+	if !config.LoadForEdit(config.UserConfigPath()).SubagentClaimsOptimistic() {
+		t.Fatal("choosing optimistic did not reach the config file")
+	}
+	if got := readJSON[control.SubagentClaimsSettings](t, srv.URL, "/subagent-claims"); !got.Optimistic {
+		t.Fatalf("read back = %+v, want optimistic", got)
+	}
+	back := postProvider(t, srv.URL, "/subagent-claims", `{"optimistic":false}`)
+	back.Body.Close()
+	if config.LoadForEdit(config.UserConfigPath()).SubagentClaimsOptimistic() {
+		t.Fatal("returning to strict did not reach the config file")
 	}
 }

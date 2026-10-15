@@ -90,7 +90,8 @@ func (w roleWiring) taskTool(in delegationInputs) *delegation.TaskTool {
 		WithScheduler(in.sub.scheduler).
 		WithProfileLookup(in.sub.profileLookup).
 		WithProfileConfigResolvers(in.sub.profileModel, in.sub.profileEffort).
-		WithBashSandboxEnforced(in.bashEnforced)
+		WithBashSandboxEnforced(in.bashEnforced).
+		WithOptimisticClaims(w.cfg.SubagentClaimsOptimistic())
 }
 
 // skillRunOptions is the one place skill sub-agent options are built, so the

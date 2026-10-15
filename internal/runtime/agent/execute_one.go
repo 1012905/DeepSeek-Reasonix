@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reasonix/internal/runtime/usecap"
+	"reasonix/internal/runtime/writeclaim"
 	"strings"
 
 	"reasonix/internal/contract/event"
@@ -580,11 +582,15 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// here after registry lookup without schema-changing wrappers.
 	// executeOne defers plan.releaseParentWrite so every return path releases.
 	if releaseParentWrite, perr := a.reserveParentWrite(plan.runTool, plan.runArgs, plan.readOnly, a.declareWritePaths(ctx, plan)); perr != nil {
-		return toolOutcome{
+		out := toolOutcome{
 			output:  "blocked: " + perr.Error(),
 			blocked: true,
 			errMsg:  "blocked: write path claimed by background subagent",
-		}, true
+		}
+		if errors.Is(perr, writeclaim.ErrWritePathBusy) {
+			out.refusalCode = writeclaim.CodeWritePathBusy
+		}
+		return out, true
 	} else if releaseParentWrite != nil {
 		plan.releaseParentWrite = releaseParentWrite
 	}

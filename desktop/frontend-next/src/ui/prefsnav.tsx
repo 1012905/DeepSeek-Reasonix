@@ -222,6 +222,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "tools", anchor: "shell", title: "命令执行程序", scope: "machine", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
   // The tools are bound while a runtime is assembled, and the save rebuilds this
   // one. The shared [browser] enabled key belongs to the 1.x command line.
+  { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
   { section: "tools", anchor: "browser-tools", title: "内置浏览器", scope: "machine", apply: "runtime-rebuild", keywords: ["browser", "网页", "chrome", "浏览器工具"] },
 
   // The four blocks below carry a scope control of their own, and the kernel

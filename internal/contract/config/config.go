@@ -1087,6 +1087,7 @@ type AgentConfig struct {
 	// declare non-overlapping write_paths. 0 means the default (3). Must not
 	// exceed MaxSubagentConcurrency after normalization.
 	MaxParallelWriters int    `toml:"max_parallel_writers"`
+	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
@@ -1414,6 +1415,7 @@ func Default() *Config {
 			MaxSubagentDepth:       2,
 			MaxSubagentConcurrency: 6,
 			MaxParallelWriters:     3,
+			SubagentClaims:         "strict",
 			WriteLease:             "strict",
 			HostVerification:       "on",
 		},

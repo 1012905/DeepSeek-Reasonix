@@ -29,6 +29,7 @@ import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
+import { SubagentClaims } from "./SubagentClaims";
 import { AskTimeout } from "./AskTimeout";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
@@ -600,6 +601,12 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 hint={t("agent 用来打开和操作网页的工具。该开关单独保存，不受命令行版本浏览器设置的影响。修改会重建运行时，任务运行期间无法变更。")}
               >
                 <BrowserTools port={port} onChanged={onChanged} />
+              </Group>
+              <Group id="subagent-claims"
+                title={t("子代理的写入范围")}
+                hint={t("后台子代理写文件时如何占用工作区。默认严格：没有声明 write_paths 的子代理占住整个工作区，其他写入要等它结束。修改会重建运行时，任务运行期间无法变更。")}
+              >
+                <SubagentClaims port={port} onChanged={onChanged} />
               </Group>
             </>
           )}

@@ -283,6 +283,8 @@ type RuntimeSettings interface {
 	SaveSandboxSettings(in SandboxSettings) error
 	BrowserToolsSettings() BrowserToolsSettings
 	SaveBrowserToolsSettings(enabled bool) error
+	SubagentClaimsSettings() SubagentClaimsSettings
+	SaveSubagentClaimsSettings(optimistic bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
