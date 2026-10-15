@@ -89,7 +89,7 @@ type fakeAutoWriteQueue struct {
 	claim bool
 }
 
-func (q *fakeAutoWriteQueue) QueueMemory(note string) { q.notes = append(q.notes, note) }
+func (q *fakeAutoWriteQueue) QueueMemory(note string, _ ...Memory) { q.notes = append(q.notes, note) }
 func (q *fakeAutoWriteQueue) ClaimAutoMemoryWrite(json.RawMessage) bool {
 	claimed := q.claim
 	q.claim = false
