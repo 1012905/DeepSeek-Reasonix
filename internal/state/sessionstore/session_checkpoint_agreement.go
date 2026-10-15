@@ -3,6 +3,7 @@
 package sessionstore
 
 import (
+	"bytes"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -45,22 +46,33 @@ func checkpointExtendingReplay(sessionPath string, replayed []provider.Message) 
 }
 
 // loadSessionMessagesFromJSONLKeepingDecodedTail reads the checkpoint as far as
-// its records decode, so a torn final line — the half-written in-place append a
-// crash leaves — costs only the record it truncated. Whether the result is
-// usable is the caller's call; this only refuses to discard the intact lines.
+// its records decode, so a torn FINAL line — the half-written in-place append a
+// crash leaves — costs only the record it truncated.
 func loadSessionMessagesFromJSONLKeepingDecodedTail(path string) []provider.Message {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
-
+	lines := bytes.Split(data, []byte("\n"))
+	last := -1
+	for i, line := range lines {
+		if len(bytes.TrimSpace(line)) > 0 {
+			last = i
+		}
+	}
 	var msgs []provider.Message
-	dec := json.NewDecoder(f)
-	for {
+	for i, line := range lines {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
 		var m provider.Message
-		if err := dec.Decode(&m); err != nil {
-			break
+		if err := json.Unmarshal(line, &m); err != nil {
+			// Damage before the end means every later record is about to be
+			// dropped: nothing here can stand in for the checkpoint.
+			if i != last {
+				return nil
+			}
+			return msgs
 		}
 		msgs = append(msgs, m)
 	}
