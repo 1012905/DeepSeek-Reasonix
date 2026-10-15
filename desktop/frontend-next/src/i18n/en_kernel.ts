@@ -370,6 +370,7 @@ export const EN_KERNEL: Record<string, string> = {
   "有会在本机运行程序或改变密钥去向的项目，需要逐项确认后才能恢复": "Some items run programs here or change where a key is sent; confirm each one before restoring",
   "项目列表已满（32 个），请先移除一个项目再添加": "The project list is full (32 projects); remove one before adding another",
   "这台服务器不支持切换工作区": "This server cannot switch workspaces",
+  "没有找到这个分支，没有创建隔离副本": "That branch was not found, so no isolated copy was created",
   "不存在该预设": "There is no such preset",
   "没有找到这个模型，默认模型没有改动": "That model was not found, so the default model is unchanged",
   "这个窗格的默认模型由模型所在的那台机器决定，请在本机的窗格里设置": "This pane's default model is decided by the machine its models come from; set it from a pane on this machine",

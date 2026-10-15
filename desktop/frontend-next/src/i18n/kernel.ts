@@ -159,6 +159,7 @@ const SAID: Record<string, string> = {
   "backup.consent_required": "有会在本机运行程序或改变密钥去向的项目，需要逐项确认后才能恢复",
   "workspace.limit_reached": "项目列表已满（32 个），请先移除一个项目再添加",
   "workspace.changing_disabled": "这台服务器不支持切换工作区",
+  "workspace.isolate_base_unknown": "没有找到这个分支，没有创建隔离副本",
   "settings.unknown_preset": "不存在该预设",
   "settings.unknown_model": "没有找到这个模型，默认模型没有改动",
   "settings.default_model_brokered": "这个窗格的默认模型由模型所在的那台机器决定，请在本机的窗格里设置",
