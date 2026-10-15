@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { MeterRail } from "./MeterRail";
 import { boot, STORAGE } from "../i18n";
-import type { SessionUsage } from "../port/port";
+import type { ContextBreakdown, SessionUsage } from "../port/port";
 import type { CostQuote } from "../port/wire";
 
 beforeEach(() => {
@@ -24,11 +24,13 @@ const usage: SessionUsage = {
   ],
 };
 
-function rail(over: { usage?: SessionUsage; quote?: CostQuote; hideAmounts?: boolean } = {}) {
+const context = { used: 42_000, window: 128_000, system: 3000, tools: 9000, user: 6000, reply: 12000, output: 12000, compact_at: 96_000, boundary: "window", capacity_at: 128_000 } as ContextBreakdown;
+
+function rail(over: { usage?: SessionUsage; quote?: CostQuote; hideAmounts?: boolean; ctx?: ContextBreakdown | null } = {}) {
   return render(
     <MeterRail
       tps={0} trail={[]} running={false} speed={{ output: 0, modelSeconds: 0, average: 0, firstToken: 0 }}
-      metrics={{ hit: 0, miss: 0 }} ctx={null} mcp={[]} compact={{ phase: "idle" } as never} cost="" wallet={{} as never}
+      metrics={{ hit: 0, miss: 0 }} ctx={"ctx" in over ? (over.ctx ?? null) : context} mcp={[]} compact={{ phase: "idle" } as never} cost="" wallet={{} as never}
       hideAmounts={over.hideAmounts ?? false} tasks={[]} jobs={[]} onSettings={vi.fn()} onCancelJob={vi.fn(async () => {})}
       usage={"usage" in over ? over.usage : usage} quote={"quote" in over ? over.quote : quote()}
     />,
@@ -118,5 +120,40 @@ describe("the session overview behind the cache meter", () => {
   it("agrees with the card about the number it shows on the meter", () => {
     rail();
     expect(button().textContent).toContain("77%");
+  });
+
+  it("shows the context window in the same card, as the next request's content and not a running total", () => {
+    rail();
+    const section = within(card()).getByRole("region", { name: "上下文窗口" });
+    expect(section.textContent).toContain("42k");
+    expect(section.textContent).toContain("128k");
+    expect(section.textContent).toContain("33%");
+    expect(section.textContent).toContain("下一次请求会带上的内容，是当前值，不是累计");
+    expect(section.querySelectorAll("[data-part]").length).toBe(5);
+  });
+
+  it("states the automatic fold line only when the kernel has one", () => {
+    rail();
+    expect(within(card()).getByRole("region", { name: "上下文窗口" }).textContent).toContain("自动压缩于 96k");
+    cleanup();
+    rail({ ctx: { ...context, compact_at: 0 } });
+    expect(within(card()).getByRole("region", { name: "上下文窗口" }).textContent).not.toContain("自动压缩于");
+  });
+
+  it("keeps the window section when no request was billed, and omits it when the kernel sent none", () => {
+    rail({ usage: { ...usage, requests: 0, sources: [] } });
+    expect(within(card()).getByRole("region", { name: "上下文窗口" })).toBeTruthy();
+    cleanup();
+    rail({ ctx: null });
+    expect(within(card()).queryByRole("region", { name: "上下文窗口" })).toBeNull();
+  });
+
+  it("hands over to the context details without leaving both cards open", async () => {
+    const user = userEvent.setup();
+    rail();
+    await user.click(button());
+    await user.click(within(card()).getByRole("button", { name: "上下文详情" }));
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: "查看上下文与压缩" }).getAttribute("aria-expanded")).toBe("true");
   });
 });

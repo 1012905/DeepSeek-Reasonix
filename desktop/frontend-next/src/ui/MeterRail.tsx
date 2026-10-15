@@ -79,7 +79,7 @@ export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compa
         <button className="studio-meter-cache" type="button" data-action="metrics.details" data-value="overview" aria-expanded={overviewOpen} aria-haspopup="dialog" aria-label={t("查看会话概览")} title={cacheRate === null ? t("尚无缓存数据") : t("命中 {hit} · 未命中 {miss}", { hit: metrics.hit.toLocaleString(), miss: metrics.miss.toLocaleString() })} onClick={() => { setMeterOpen(false); setOverviewOpen((open) => !open); }}>
           <span>{t("缓存")}</span><b>{cacheRate === null ? "—" : `${cacheRate}%`}</b>
         </button>
-        <SessionOverviewCard className="studio-overview-popover" usage={usage} quote={quote} hideAmounts={hideAmounts} />
+        <SessionOverviewCard className="studio-overview-popover" usage={usage} quote={quote} ctx={ctx} hideAmounts={hideAmounts} onContext={ctx && ctx.window > 0 ? () => { setOverviewOpen(false); setMeterOpen(true); } : undefined} />
       </div>
       {ctx && ctx.window > 0 && (
         <div className="studio-context-anchor" data-open={meterOpen ? "" : undefined}>
