@@ -41,6 +41,8 @@ type foldSummary struct {
 	Spans      int
 	// Coverage is what this digest kept of the facts its fold produced.
 	Coverage foldCoverage
+	// Input is what the summarizer was shown; nil means the whole fold.
+	Input []provider.Message
 	// CoverageBackstopped marks a digest the host had to complete itself.
 	CoverageBackstopped bool
 }
@@ -108,6 +110,7 @@ func (a *contextWindow) foldToSummary(ctx context.Context, fold []provider.Messa
 	if res.FoldTokens > budget {
 		return res, fmt.Errorf("%w after shortening (%d > %d)", errSummaryInputTooLarge, res.FoldTokens, budget)
 	}
+	res.Input = input
 	return a.singleCallSummary(ctx, res, input, instructions)
 }
 
@@ -124,7 +127,11 @@ func (a *contextWindow) foldOrDegrade(ctx context.Context, trigger string, mustF
 	spend := compactionSpendFrom(ctx)
 	res, err := a.foldToSummary(ctx, fold, instructions)
 	if err == nil {
-		res.Coverage = measureFoldCoverage(fold, a.toolFactsFor, res.Text)
+		shown := res.Input
+		if shown == nil {
+			shown = fold
+		}
+		res.Coverage = measureShownCoverage(fold, shown, a.toolFactsFor, res.Text)
 		if err = rejectDigestThatCarriedNothing(res, mustFree); err == nil {
 			res = backstopFoldCoverage(res)
 		}
