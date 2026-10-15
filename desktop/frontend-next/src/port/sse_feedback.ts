@@ -1,5 +1,5 @@
 import { SseBackup } from "./sse_backup";
-import type { FeedbackEnv, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { FeedbackEnv, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 
 export class SseFeedback extends SseBackup {
   feedbackEnv(locale?: string) {
@@ -19,5 +19,17 @@ export class SseFeedback extends SseBackup {
   }
   feedbackSeen(receipt: string, upTo: number) {
     return this.post("/feedback/" + encodeURIComponent(receipt) + "/seen", { upTo });
+  }
+  async feedbackLinks() {
+    return (await this.get<{ installs: FeedbackLinkedInstall[] }>("/feedback/links")).installs;
+  }
+  linkFeedbackAccount() {
+    return this.post("/feedback/link");
+  }
+  unlinkFeedbackAccount() {
+    return this.del("/feedback/link");
+  }
+  unlinkFeedbackInstall(id: string) {
+    return this.del("/feedback/links/" + encodeURIComponent(id));
   }
 }

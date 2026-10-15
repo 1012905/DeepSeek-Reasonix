@@ -5,6 +5,7 @@ import { FEEDBACK_NEXT_VERSION, FEEDBACK_REPO_ISSUES, isUnderReview, type Feedba
 import type { AgentPort } from "../port/port";
 import { CopyButton } from "./CopyButton";
 import { FeedbackLevel } from "./FeedbackLevel";
+import { FeedbackLink } from "./FeedbackLink";
 import { feedbackFailure, type FeedbackFailure } from "./feedbackfailure";
 import { FeedbackReplyBox, FeedbackReviewNote, FeedbackThread, foldedUnread } from "./FeedbackThread";
 import { StudioIcon, type StudioIconName } from "./StudioIcon";
@@ -206,6 +207,8 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
       ) : (
         mine !== null && mine.items.length > 0 && <p className="fbk-hint fbk-level-gone">{t("等级暂时无法显示。")}</p>
       )}
+
+      {mine && <FeedbackLink port={port} hasReport={mine.items.length > 0} />}
 
       {mine?.offline && (
         <div className="fbk-note" role="status" data-tone="info">

@@ -1,6 +1,6 @@
 import { HttpError } from "./http_error";
 import { MockCommit } from "./mock_commit";
-import { FEEDBACK_CODE, type FeedbackEnv, type FeedbackItem, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
+import { FEEDBACK_CODE, type FeedbackEnv, type FeedbackItem, type FeedbackLinkedInstall, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
 
 const LIMITS = { bodyBytes: 8192, nameChars: 40, contactChars: 120, images: 3, imageBytes: 2 << 20, uploadBytes: 10 << 20, replyBytes: 4096 };
 
@@ -80,6 +80,7 @@ const STATUS: Record<string, number> = {
   [FEEDBACK_CODE.tooLarge]: 413, [FEEDBACK_CODE.rateLimited]: 429, [FEEDBACK_CODE.disabled]: 503,
   [FEEDBACK_CODE.duplicate]: 409, [FEEDBACK_CODE.badToken]: 409, [FEEDBACK_CODE.offline]: 502, [FEEDBACK_CODE.unavailable]: 502, [FEEDBACK_CODE.internal]: 500, [FEEDBACK_CODE.busy]: 503, [FEEDBACK_CODE.imageMetadata]: 400,
   [FEEDBACK_CODE.replyLimit]: 429, [FEEDBACK_CODE.notReplyable]: 409, [FEEDBACK_CODE.challengeRequired]: 403,
+  [FEEDBACK_CODE.accountRequired]: 401, [FEEDBACK_CODE.linkConflict]: 409, [FEEDBACK_CODE.linkLimit]: 409, [FEEDBACK_CODE.noInstall]: 409,
 };
 
 // A fault is a code, optionally followed by "@" and the window it names:
@@ -151,6 +152,33 @@ export class MockFeedback extends MockCommit {
     row.needsInput = false;
     if (row.status === "needs_info") row.status = "received";
     return { replyId, createdAt };
+  }
+
+  // The demo keeps its links in the tab: signed-in is the same switch account() reads.
+  private links: FeedbackLinkedInstall[] = [{ id: "ba9876543210", linkedAt: ago(9), current: false }];
+
+  private requireAccount(): void {
+    if (!localStorage.getItem("reasonix.mock.account")) throw refusal(FEEDBACK_CODE.accountRequired);
+  }
+
+  async feedbackLinks(): Promise<FeedbackLinkedInstall[]> {
+    this.requireAccount();
+    return this.links.map((l) => ({ ...l }));
+  }
+
+  async linkFeedbackAccount(): Promise<void> {
+    this.requireAccount();
+    if (!this.links.some((l) => l.current)) this.links = [...this.links, { id: "0123456789ab", linkedAt: new Date().toISOString(), current: true }];
+  }
+
+  async unlinkFeedbackAccount(): Promise<void> {
+    this.requireAccount();
+    this.links = this.links.filter((l) => !l.current);
+  }
+
+  async unlinkFeedbackInstall(id: string): Promise<void> {
+    this.requireAccount();
+    this.links = this.links.filter((l) => l.id !== id);
   }
 
   async feedbackSeen(receipt: string, upTo: number): Promise<void> {

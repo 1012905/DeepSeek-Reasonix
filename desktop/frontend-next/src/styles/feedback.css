@@ -257,6 +257,16 @@
   display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
   border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised);
 }
+.fbk-link {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised);
+}
+.fbk-link-hd { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fbk-link-name { font: var(--w-semi) var(--fs-lead)/1.35 var(--ui); color: var(--text); }
+.fbk-link-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.fbk-link-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.fbk-link-list li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fbk-link .fbk-hint[data-tone="error"] { color: var(--err-ink); }
 .fbk-level[data-stale] { border-style: dashed; }
 .fbk-level-hd { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .fbk-level-id { display: flex; flex-direction: column; min-width: 0; }

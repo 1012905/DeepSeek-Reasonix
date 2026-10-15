@@ -46,7 +46,7 @@ import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, Fol
 import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
-import type { FeedbackEnv, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { FeedbackEnv, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 
 export type * from "./plugin";
 export type * from "./market";
@@ -422,6 +422,12 @@ export interface AgentPort {
   replyFeedback(receipt: string, body: string): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
+  // Tying this install to the signed-in account is always the person's own
+  // request. Linking changes no quota; unlinking only removes the join.
+  feedbackLinks(): Promise<FeedbackLinkedInstall[]>;
+  linkFeedbackAccount(): Promise<void>;
+  unlinkFeedbackAccount(): Promise<void>;
+  unlinkFeedbackInstall(id: string): Promise<void>;
   // Asks the window to raise the neutral "new reply" notification; the kernel
   // answers for the switches. Rejects where there is no window to raise it.
   announceFeedbackReply(): Promise<void>;

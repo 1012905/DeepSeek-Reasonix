@@ -448,6 +448,7 @@ func runtimeOptions(root string, sink event.Sink, logs io.Writer, phases *startu
 		OnPhase:         phases.boot,
 		StatsSource:     surface.Desktop,
 		FeedbackSurface: feedback.SurfaceStudio,
+		AccountsURL:     os.Getenv("REASONIX_ACCOUNTS_URL"),
 		// A stale default_model must not keep the window from opening to fix it.
 		OpenOnFallbackModel: true,
 
