@@ -1,2 +1,0 @@
-- 修复两处对比度不达 AA：开场页的「按任意键跳过」提示，和输入框上方「已更改文件」胶囊里的 +/− 数字（深浅两种主题）。整机审查于 f8c262da0。
-- Fixed two contrast shortfalls: the intro "press any key to skip" hint and the +/− counts in the changed-files pill (both themes). Found by the audit at f8c262da0.
