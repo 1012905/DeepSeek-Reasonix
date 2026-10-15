@@ -66,7 +66,7 @@ func TestNamingACommandReadsNoPackageOrConfig(t *testing.T) {
 	}
 	parses.Store(0)
 	_ = c.CompletionDataFor("", "/model ", len("/model "))
-	if parses.Load() == 0 {
-		t.Error("completing a command's arguments read no package data: the lazy path never loads what it needs")
+	if got := parses.Load(); got == 0 || got > 3 {
+		t.Errorf("completing a command's arguments parsed the installed packages %d times, want between 1 and 3 (user config, workspace config, skill switches)", got)
 	}
 }

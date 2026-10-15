@@ -83,14 +83,24 @@ func (c *Controller) completionData(lang string, withArgs bool) CompletionData {
 	if !withArgs {
 		return d
 	}
+	// Each load parses every enabled plugin package, so the two the arguments
+	// need (the user's and this workspace's) are read once and shared.
+	userCfg, err := config.Load()
+	if err != nil {
+		userCfg = nil
+	}
+	rootCfg, err := config.LoadForRootReadOnly(c.workspaceRoot)
+	if err != nil {
+		rootCfg = nil
+	}
 	d.ArgData = ArgData{
 		Skills:          skills,
 		DisabledSkills:  c.DisabledSkills(),
-		ConfiguredMCP:   c.ConfiguredMCPNames(),
-		DisconnectedMCP: c.DisconnectedMCPNames(),
-		ModelRefs:       configuredModelRefs(),
+		ConfiguredMCP:   configuredMCPNamesOf(rootCfg),
+		DisconnectedMCP: c.disconnectedMCPNamesOf(rootCfg),
+		ModelRefs:       configuredModelRefs(userCfg),
 		CurrentModel:    c.ModelRef(),
-		ProviderNames:   configuredProviderNames(),
+		ProviderNames:   configuredProviderNames(userCfg),
 		PluginNames:     installedPluginNames(),
 	}
 	d.CurrentProvider, _, _ = strings.Cut(d.CurrentModel, "/")
@@ -204,9 +214,8 @@ func sourcedHint(plugin, description string) string {
 	return "plugin " + plugin + " · " + description
 }
 
-func configuredModelRefs() []string {
-	cfg, err := config.Load()
-	if err != nil {
+func configuredModelRefs(cfg *config.Config) []string {
+	if cfg == nil {
 		return nil
 	}
 	var out []string
@@ -222,9 +231,8 @@ func configuredModelRefs() []string {
 	return out
 }
 
-func configuredProviderNames() []string {
-	cfg, err := config.Load()
-	if err != nil {
+func configuredProviderNames(cfg *config.Config) []string {
+	if cfg == nil {
 		return nil
 	}
 	var out []string
