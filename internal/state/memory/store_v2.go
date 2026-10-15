@@ -148,6 +148,11 @@ func (s Store) validateSave(m Memory) error {
 // so wrapping it leaves the user-visible message byte-identical.
 var ErrPinnedBudget = errors.New("memory.pinned_budget_chars")
 
+// ErrNameActiveInTwoScopes is the identity of a save refused because an
+// unqualified name resolves to a fact in more than one scope, so there is no
+// single identity to update.
+var ErrNameActiveInTwoScopes = errors.New("memory.name_active_in_two_scopes")
+
 // validatePinnedBudget rejects a save that would push the total pinned-body
 // runes over the user's configured ceiling. Legacy virtually-pinned guidance
 // counts — it occupies the same prefix. Unset (the default) means no ceiling.
@@ -270,8 +275,10 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 			if !ok || duplicate.ID == m.ID {
 				continue
 			}
-			return SaveResult{}, fmt.Errorf("memory name %q is active in two scopes as %q and %q; save it by stable id or a scope-qualified name",
-				m.Name, duplicate.ID, m.ID)
+			scope := NormalizeFactScope(string(m.Scope))
+			return SaveResult{}, fmt.Errorf("memory name %q is active in two scopes: id %q (scope %s) and id %q (scope %s) (%w); update the fact you meant by its stable id, or save with a scope-qualified name such as %q",
+				m.Name, m.ID, scope, duplicate.ID, NormalizeFactScope(string(duplicate.Scope)), ErrNameActiveInTwoScopes,
+				string(scope)+"/"+m.Name)
 		}
 	}
 	path, err := safeJoin(dir, m.Name+".md")

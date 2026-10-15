@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,6 +117,36 @@ func TestRememberToolUpdatesScopeQualifiedReference(t *testing.T) {
 	project, ok := mustStore(t, store).Read("project/shared.md")
 	if !ok || project.Revision != 1 || project.Body != "project body" {
 		t.Fatalf("project fact changed = %+v, ok=%v", project, ok)
+	}
+}
+
+// A name active in two scopes must come back to the model carrying the
+// refusal's identity, both candidate ids, and the two ways to say which fact
+// was meant. The tool returns the store's error, which the agent renders into
+// the tool result the model reads.
+func TestRememberToolReturnsCrossScopeNameIdentity(t *testing.T) {
+	store, global, project := crossScopeNameStore(t)
+
+	out, err := NewRememberTool(store).Execute(context.Background(), []byte(`{"name":"shared","description":"updated","body":"v2"}`))
+	if err == nil {
+		t.Fatalf("remember reported success for a name active in two scopes: %q", out)
+	}
+	if out != "" {
+		t.Fatalf("a refused remember returned an output body: %q", out)
+	}
+	if !errors.Is(err, ErrNameActiveInTwoScopes) {
+		t.Fatalf("errors.Is(err, ErrNameActiveInTwoScopes) = false (err = %v)", err)
+	}
+	for _, want := range []string{
+		"memory.name_active_in_two_scopes",
+		global.Memory.ID,
+		project.Memory.ID,
+		"stable id",
+		"scope-qualified",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("the model-facing refusal does not render %q:\n%s", want, err)
+		}
 	}
 }
 
