@@ -23,9 +23,14 @@ func (c *Client) promoteTask(ctx context.Context, t transport, params any, task 
 	if !ok {
 		return nil, false
 	}
+	releaseSlot, ok := c.tasks.reserveBackground()
+	if !ok {
+		return nil, false
+	}
 	label := c.name + "." + rawToolNameFromCallParams(params)
 	origin := tool.ProvenanceHeader(tool.Provenance{Kind: tool.ProvenanceMCP, Source: c.name})
 	id := start("mcp_task", label, func(jobCtx context.Context, out io.Writer) (string, error) {
+		defer releaseSlot()
 		runCtx, stop := context.WithTimeout(jobCtx, taskJobCeiling)
 		defer stop()
 		fmt.Fprintf(out, "following the task on server %s\n", c.name)

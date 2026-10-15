@@ -43,9 +43,13 @@ var (
 // taskState is a client's task bookkeeping: the poll clock (nil is the real
 // one) and the slots that cap concurrent tasks per server.
 type taskState struct {
-	sleep func(context.Context, time.Duration) error
-	once  sync.Once
-	slots chan struct{}
+	sleep          func(context.Context, time.Duration) error
+	once           sync.Once
+	backgroundOnce sync.Once
+	slots          chan struct{}
+	// background caps the promoted jobs one server is polled for; they outlive
+	// the call, so they must not hold the inline slots.
+	background chan struct{}
 }
 
 // acquire takes a slot, waiting for one, and returns its release.
@@ -56,6 +60,19 @@ func (s *taskState) acquire(ctx context.Context) (func(), error) {
 		return func() { <-s.slots }, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// reserveBackground takes a slot for a promoted job without waiting, and
+// returns its release; false when the server already has the most it may.
+func (s *taskState) reserveBackground() (func(), bool) {
+	s.once.Do(func() { s.slots = make(chan struct{}, maxConcurrentTasks) })
+	s.backgroundOnce.Do(func() { s.background = make(chan struct{}, maxConcurrentTasks) })
+	select {
+	case s.background <- struct{}{}:
+		return func() { <-s.background }, true
+	default:
+		return nil, false
 	}
 }
 
@@ -114,7 +131,13 @@ func (c *Client) awaitTask(ctx context.Context, t transport, params any, created
 	if stop != nil {
 		defer stop()
 	}
+	release, err := c.tasks.acquire(waitCtx)
+	if err != nil {
+		c.cancelTask(t, task.TaskID)
+		return nil, err
+	}
 	res, err := c.followTask(waitCtx, t, &task)
+	release()
 	switch {
 	case err == nil || ctx.Err() == nil && !errors.Is(err, context.DeadlineExceeded):
 		return res, err
@@ -135,11 +158,6 @@ func (c *Client) awaitTask(ctx context.Context, t transport, params any, created
 // It never cancels on the context ending: whether that is the caller giving up,
 // the budget running out or a job being killed is the caller's to say.
 func (c *Client) followTask(ctx context.Context, t transport, task *mcpTask) (json.RawMessage, error) {
-	release, err := c.tasks.acquire(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
 	id := task.TaskID
 	errs, inputRounds := 0, 0
 	for {
