@@ -62,6 +62,16 @@ type CompletionData struct {
 	Resources []plugin.Resource
 }
 
+// CompletionNeedsArgData says whether completing line reads anything beyond the
+// command catalogue: an @-reference under the cursor, or the arguments after a
+// command name. It follows the branches of Complete.
+func CompletionNeedsArgData(line string, cursor int) bool {
+	if _, _, _, ok := ActiveRefToken(line, cursor); ok {
+		return true
+	}
+	return strings.HasPrefix(line, "/") && strings.ContainsAny(line, " \t\n")
+}
+
 // Complete is the single source of the composer's completion grammar: which
 // token the cursor is in, what may replace it, and what span to replace. Every
 // frontend calls this rather than parsing the line itself.
