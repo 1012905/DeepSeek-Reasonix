@@ -22,13 +22,18 @@ try {
       bar.className = "panetabs";
       bar.style.cssText = "position:fixed;left:0;top:0;opacity:0;pointer-events:none";
       bar.innerHTML = ["idle", "running", "halt", "done"].map((r) => `<div class="ptab" data-run="${r}"><i class="pip"></i></div>`).join("");
+      bar.innerHTML += `<div class="ptab" data-run="done"><i class="pip" data-unread></i></div>`;
       document.body.appendChild(bar);
       const out = {};
       for (const r of ["idle", "running", "halt", "done"]) out[r] = getComputedStyle(bar.querySelector(`[data-run="${r}"] .pip`)).animationName;
+      const read = getComputedStyle(bar.querySelector('[data-run="done"] .pip:not([data-unread])'));
+      const unread = getComputedStyle(bar.querySelector('[data-run="done"] .pip[data-unread]'));
+      out.unreadDiffers = unread.backgroundColor !== read.backgroundColor && unread.backgroundColor !== "rgba(0, 0, 0, 0)";
       return out;
     });
     check(`${label}: a running session's dot ${reduced === "reduce" ? "does not move" : "breathes"}`, reduced === "reduce" ? names.running === "none" : names.running === "breathe", names.running);
     check(`${label}: idle, halted and finished dots stay still`, names.idle === "none" && names.halt === "none" && names.done === "none", JSON.stringify(names));
+    check(`${label}: an unread finished session is told apart by its own dot, not an extra one`, names.unreadDiffers === true);
     await ctx.close();
   }
 } finally {
