@@ -25,6 +25,14 @@ export interface SkillEntry {
   // Where the decision behind enabled lives, or absent when nothing overrides
   // what the skill itself declares.
   switchScope?: ScopeLayer;
+  // Where an installed copy came from, and whether it still matches that folder.
+  source?: SkillSource;
+}
+
+export interface SkillSource {
+  path: string;
+  mode: string;
+  state: "synced" | "source_changed" | "local_edited" | "diverged" | "source_missing" | "unknown";
 }
 
 // implicit is the session-wide switch for model-initiated discovery. With it

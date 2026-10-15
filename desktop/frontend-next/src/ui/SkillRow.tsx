@@ -40,6 +40,21 @@ function triggerNote(sk: SkillEntry, implicit: boolean): { text: string; reachab
   return { text: "调不到", reachable: false };
 }
 
+// Only the states worth interrupting a list for: in step and "cannot tell" draw nothing.
+function driftNote(source: SkillEntry["source"]): { text: string; says: string } | null {
+  switch (source?.state) {
+    case "source_changed":
+      return { text: t("源文件夹有更新"), says: t("来源文件夹里的内容比已安装的副本新：{path}", { path: source.path }) };
+    case "local_edited":
+      return { text: t("副本被改过"), says: t("已安装的副本与安装时不同，来源文件夹没有变化：{path}", { path: source.path }) };
+    case "diverged":
+      return { text: t("两边都改过"), says: t("已安装的副本和来源文件夹各自都改过：{path}", { path: source.path }) };
+    case "source_missing":
+      return { text: t("源文件夹不见了"), says: t("找不到来源文件夹：{path}", { path: source.path }) };
+  }
+  return null;
+}
+
 export function SkillRow({
   sk, implicit, port, onDone, root, onFailed,
 }: {
@@ -59,6 +74,7 @@ export function SkillRow({
     return () => { currentOwner.current = { ...owner }; };
   }, [owner]);
   const note = triggerNote(sk, implicit);
+  const drift = driftNote(sk.source);
   const local = sk.switchScope === "project";
   const command = sk.slashName ? "/" + sk.slashName : "";
   const act = async (fn: () => Promise<void>) => {
@@ -87,6 +103,7 @@ export function SkillRow({
       <span className="face">
         {sk.subagent && <i className="sa">{t("子代理")}</i>}
         {sk.readOnly && <i className="ro">{t("只读")}</i>}
+        {drift && <i className="w" data-drift={sk.source?.state} title={drift.says} aria-label={`${drift.text}. ${drift.says}`}>{drift.text}</i>}
       </span>
       <span className="sc" title={sk.path}>
         {sk.plugin || t(SCOPE[sk.scope ?? ""] ?? "") || sk.scope}
