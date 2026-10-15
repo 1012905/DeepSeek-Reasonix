@@ -100,21 +100,9 @@ func (c *Client) sleepFor(ctx context.Context, d time.Duration) error {
 // awaitTask follows a CreateTaskResult to the result the call would have
 // returned, so callers see a plain CallToolResult. The wait has its own
 // call-timeout budget on top of the create call's, so up to twice the tool's
-// timeout in all; when the caller or the budget ends first, the server is asked
-// to stop.
+// timeout in all. When the budget runs out the task moves to a background job
+// if the turn carries a job manager, else the server is asked to stop.
 func (c *Client) awaitTask(ctx context.Context, t transport, params any, created json.RawMessage) (json.RawMessage, error) {
-	waitCtx, stop, timeout := c.contextWithCallTimeout(ctx, "tools/call", params)
-	if stop != nil {
-		defer stop()
-	}
-	res, err := c.followTask(waitCtx, t, created)
-	if timeout > 0 && errors.Is(err, context.DeadlineExceeded) && waitCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-		return nil, c.timeoutError("tools/call", params, timeout)
-	}
-	return res, err
-}
-
-func (c *Client) followTask(ctx context.Context, t transport, created json.RawMessage) (json.RawMessage, error) {
 	task, err := decodeTask(created)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %q: unreadable task: %w", c.name, err)
@@ -122,9 +110,33 @@ func (c *Client) followTask(ctx context.Context, t transport, created json.RawMe
 	if task.TaskID == "" {
 		return nil, fmt.Errorf("plugin %q: task result without a taskId", c.name)
 	}
+	waitCtx, stop, timeout := c.contextWithCallTimeout(ctx, "tools/call", params)
+	if stop != nil {
+		defer stop()
+	}
+	res, err := c.followTask(waitCtx, t, &task)
+	switch {
+	case err == nil || ctx.Err() == nil && !errors.Is(err, context.DeadlineExceeded):
+		return res, err
+	case ctx.Err() != nil:
+		c.cancelTask(t, task.TaskID)
+		return nil, err
+	case timeout > 0 && waitCtx.Err() == context.DeadlineExceeded:
+		if res, ok := c.promoteTask(ctx, t, params, task); ok {
+			return res, nil
+		}
+		c.cancelTask(t, task.TaskID)
+		return nil, c.timeoutError("tools/call", params, timeout)
+	}
+	return res, err
+}
+
+// followTask polls task, updated in place as the server reports, to its end.
+// It never cancels on the context ending: whether that is the caller giving up,
+// the budget running out or a job being killed is the caller's to say.
+func (c *Client) followTask(ctx context.Context, t transport, task *mcpTask) (json.RawMessage, error) {
 	release, err := c.tasks.acquire(ctx)
 	if err != nil {
-		c.cancelTask(t, task.TaskID)
 		return nil, err
 	}
 	defer release()
@@ -151,12 +163,13 @@ func (c *Client) followTask(ctx context.Context, t transport, created json.RawMe
 				return nil, fmt.Errorf("plugin %q: task still needed input after %d rounds: %w", c.name, maxInputRounds, ErrMCPInputRequired)
 			}
 			if err := c.answerTask(ctx, t, id, task.InputRequests); err != nil {
-				c.cancelTask(t, id)
+				if ctx.Err() == nil {
+					c.cancelTask(t, id)
+				}
 				return nil, err
 			}
 		case "working", "":
 			if err := c.sleepFor(ctx, clampTaskPoll(task.PollMs)); err != nil {
-				c.cancelTask(t, id)
 				return nil, err
 			}
 		default:
@@ -165,7 +178,6 @@ func (c *Client) followTask(ctx context.Context, t transport, created json.RawMe
 		raw, err := c.taskCall(ctx, t, "tasks/get", id, nil)
 		if err != nil {
 			if ctx.Err() != nil {
-				c.cancelTask(t, id)
 				return nil, err
 			}
 			var rpc *rpcError
@@ -176,7 +188,6 @@ func (c *Client) followTask(ctx context.Context, t transport, created json.RawMe
 				return nil, fmt.Errorf("plugin %q: task polling failed %d times in a row: %w", c.name, errs, err)
 			}
 			if err := c.sleepFor(ctx, clampTaskPoll(task.PollMs)); err != nil {
-				c.cancelTask(t, id)
 				return nil, err
 			}
 			continue
@@ -187,7 +198,7 @@ func (c *Client) followTask(ctx context.Context, t transport, created json.RawMe
 			return nil, fmt.Errorf("plugin %q: unreadable task: %w", c.name, err)
 		}
 		next.TaskID = id
-		task = next
+		*task = next
 	}
 }
 
