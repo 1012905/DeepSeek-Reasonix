@@ -52,6 +52,7 @@ import { settled } from "./boot/gate";
 import { failureView, type FailureView } from "./port/cloud_failure";
 import { RemoteLinkError } from "./port/cloud_link";
 import { RemoteNotice } from "./ui/RemoteNotice";
+import { useStalePage } from "./ui/stale_page";
 import { onRemoteConnectionEnded, remoteConnectionEnded, openRemoteHome, remoteHub, signInAgain, type RemoteEnd } from "./port/cloud_remote";
 
 const failureAction = (view: FailureView) => (view.action === "home" ? openRemoteHome : () => location.reload());
@@ -63,11 +64,21 @@ function RemoteAwareApp({ hub, remote }: { hub: HubPort; remote: string | null }
     if (!remote) return;
     return onRemoteConnectionEnded(setEnded);
   }, [remote]);
+  const stale = useStalePage(!!remote);
   const reauth = ended?.kind === "reauth";
   const specific = !reauth && ended?.failure ? failureView(ended.failure) : null;
   return (
     <>
       <App hub={hub} />
+      {stale && !ended && (
+        <RemoteNotice
+          title={t("这个页面不是最新版")}
+          body={t("它是之前打开的旧版本，继续用可能出现莫名的报错。刷新一下就能换成最新版。")}
+          action={t("刷新页面")}
+          info
+          onAction={() => location.reload()}
+        />
+      )}
       {ended && remote && (
         <RemoteNotice
           title={reauth ? t("需要重新登录") : specific?.title ?? t("远程连接已断开")}
