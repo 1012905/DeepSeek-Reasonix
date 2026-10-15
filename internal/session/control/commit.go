@@ -76,15 +76,15 @@ func (c *Controller) StageChanges(ctx context.Context, req StageRequest) error {
 	c.commitMu.Lock()
 	defer c.commitMu.Unlock()
 	if req.Unstage {
-		return gitcommit.Unstage(ctx, c.workspaceRepo, req.Paths, req.All)
+		return gitcommit.Unstage(ctx, c.WorkspaceRepo(), req.Paths, req.All)
 	}
-	return gitcommit.Stage(ctx, c.workspaceRepo, req.Paths, req.All)
+	return gitcommit.Stage(ctx, c.WorkspaceRepo(), req.Paths, req.All)
 }
 
 // ProposeCommit reads the staged changes and has the session's model propose a
 // message. Nothing is staged or committed: the person edits the text first.
 func (c *Controller) ProposeCommit(ctx context.Context) (CommitProposal, error) {
-	snap, err := gitcommit.Staged(ctx, c.workspaceRepo)
+	snap, err := gitcommit.Staged(ctx, c.WorkspaceRepo())
 	if err != nil {
 		return CommitProposal{}, err
 	}
@@ -123,7 +123,7 @@ func (c *Controller) CommitStaged(ctx context.Context, req CommitRequest) (Commi
 		return CommitResult{}, err
 	}
 	defer releaseWorkspace.release()
-	res, err := gitcommit.Commit(ctx, c.workspaceRepo, req.Message, req.Fingerprint, req.AcknowledgeSecrets)
+	res, err := gitcommit.Commit(ctx, c.WorkspaceRepo(), req.Message, req.Fingerprint, req.AcknowledgeSecrets)
 	if err != nil {
 		return CommitResult{}, err
 	}

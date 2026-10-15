@@ -34,7 +34,8 @@ func workspaceRepo(ctx context.Context, carried gitcmd.Repo, root string) gitcmd
 		// The folder carries a marker, so a failure here is not "no repository":
 		// the identity stays empty, and says which of two things happened.
 		absent, detail := gitcmd.AbsenceOf(err)
-		return gitcmd.Repo{Dir: abs, Absent: absent, AbsentDetail: detail}
+		marker := environment.MarkerOf(abs)
+		return gitcmd.Repo{Dir: abs, Absent: absent, AbsentDetail: detail, MarkerPath: marker.Path, MarkerDir: marker.Dir}
 	}
 	return repo
 }

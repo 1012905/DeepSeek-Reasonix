@@ -13,7 +13,6 @@ import (
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
-	"reasonix/internal/platform/gitcmd"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/goaleval"
 	"reasonix/internal/runtime/guardian"
@@ -126,9 +125,9 @@ type controllerDeps struct {
 	// discovery, and the guard root for checkpoint restore writes. Frontends read
 	// it through WorkspaceRoot().
 	workspaceRoot string
-	// workspaceRepo is workspaceRoot's git identity, resolved before any turn ran.
-	workspaceRepo gitcmd.Repo
-	posture       PostureEvidence
+	// repo is workspaceRoot's git identity, resolved before any turn ran.
+	repo    repoSlot
+	posture PostureEvidence
 	// refused owes the model the calls the host refused, once.
 	refused promptFailureDebt
 
@@ -186,7 +185,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		capabilityRuntime:      opts.CapabilityRuntime,
 		ablation:               opts.Ablation,
 		workspaceRoot:          opts.WorkspaceRoot,
-		workspaceRepo:          opts.WorkspaceRepo,
+		repo:                   repoSlot{repo: opts.WorkspaceRepo},
 		posture:                opts.Posture,
 		runtimeOwner:           runtimeOwner,
 		approval:               newApprovalManager(opts.Policy, ToolApprovalAsk, opts.ApprovalTimeout, opts.OnRemember != nil),
@@ -202,7 +201,6 @@ func (c *Controller) publishPerProjectContext(opts Options) {
 // WorkspaceRepo is the workspace's git identity as the session resolved it when
 // it opened. Host git reads the workspace through it rather than rediscovering
 // the repository from files the session's own commands may have written.
-func (c *Controller) WorkspaceRepo() gitcmd.Repo { return c.workspaceRepo }
 
 // Executor returns the underlying agent when present (nil for pure runners).
 func (c *Controller) Executor() *agent.Agent {
