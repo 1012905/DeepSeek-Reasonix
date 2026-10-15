@@ -4426,7 +4426,8 @@
   .ptab .pip { flex: none; background: var(--ghost) }
   .ptab-unread { flex: none; width: 6px; height: 6px; margin-inline-start: -3px; border-radius: 50%; background: var(--accent-ink) }
 
-  .ptab[data-run="running"] .pip { background: var(--net) }
+  .ptab[data-run="running"] .pip { background: var(--net); animation: breathe 1.4s ease-in-out infinite }
+  @media (prefers-reduced-motion: reduce) { .ptab[data-run="running"] .pip { animation: none } }
   .ptab[data-run="halt"] .pip { background: var(--accent-ink) }
   .ptab[data-run="done"] .pip { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ok) }
   .ptab-x {
