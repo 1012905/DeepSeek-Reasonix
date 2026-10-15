@@ -25,26 +25,6 @@ func (s Store) findSaveTarget(id, name string) (Memory, string, bool, error) {
 	return active, path, found, err
 }
 
-func (s Store) legacyDuplicatePaths(dir string, m Memory, enabled bool) ([]string, error) {
-	if !enabled {
-		return nil, nil
-	}
-	var paths []string
-	for _, otherDir := range s.dirs() {
-		if sameDir(otherDir, dir) {
-			continue
-		}
-		duplicate, path, found, err := s.findActiveInDir(otherDir, m.Name)
-		if err != nil {
-			return nil, err
-		}
-		if found && duplicate.ID != m.ID {
-			paths = append(paths, path)
-		}
-	}
-	return paths, nil
-}
-
 func (s Store) findActive(ref string) (Memory, string, bool, error) {
 	parsed := parseMemoryReference(ref)
 	if parsed.raw == "" {

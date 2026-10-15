@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"io"
 	"reasonix/internal/runtime/langpref"
 
 	"reasonix/internal/contract/event"
@@ -43,6 +44,10 @@ func (a *Agent) toolCallContext(ctx context.Context, plan *toolCallPlan) context
 	}
 	if a.svc.jobs != nil {
 		cctx = jobs.WithManager(cctx, a.svc.jobs)
+		session, manager := jobs.SessionFromContext(cctx), a.svc.jobs
+		cctx = tool.WithBackgroundStarter(cctx, func(kind, label string, run func(context.Context, io.Writer) (string, error)) string {
+			return manager.StartForSession(session, kind, label, run).ID
+		})
 	}
 	if a.svc.sandboxEscape != nil {
 		cctx = sandbox.WithEscapeApprover(cctx, a.svc.sandboxEscape)

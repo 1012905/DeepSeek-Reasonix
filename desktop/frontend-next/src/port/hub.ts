@@ -290,7 +290,12 @@ export class SseHub implements HubPort {
   }
 
   async close(id: string) {
-    await this.post<void>(`/runtimes/${encodeURIComponent(id)}/close`);
+    try {
+      await this.post<void>(`/runtimes/${encodeURIComponent(id)}/close`);
+    } catch (e) {
+      // A pane the kernel no longer holds is already closed.
+      if (!(e instanceof HttpError && e.reason?.code === "request.not_found")) throw e;
+    }
     this.ports.delete(id);
     this.settings.delete(id);
   }

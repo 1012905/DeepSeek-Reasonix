@@ -16,6 +16,10 @@ export interface SkillEntry {
   model?: string;
   effort?: string;
   allowedTools?: string[];
+  // The specification's descriptive fields, as the skill wrote them.
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
   manual?: boolean;
   enabled: boolean;
   // Where the decision behind enabled lives, or absent when nothing overrides

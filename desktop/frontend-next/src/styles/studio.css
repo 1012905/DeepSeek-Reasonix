@@ -3264,6 +3264,8 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-wallet { color: var(--muted); }
 .studio-wallet b { color: var(--muted); }
 .studio-wallet small { color: var(--text); font-variant-numeric: tabular-nums; }
+.studio-wallet.studio-feedback > span, .studio-wallet.studio-feedback b { color: var(--accent-ink); }
+.studio-wallet.studio-feedback b { font-weight: 600; }
 .studio-wallet:hover { background: var(--accent-wash); color: var(--text); }
 .studio-user-foot { border-top-color: var(--hair); }
 .studio-workspace-kind { color: var(--muted); }

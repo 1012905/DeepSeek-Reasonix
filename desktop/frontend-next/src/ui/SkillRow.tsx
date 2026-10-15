@@ -4,6 +4,7 @@ import type { AgentPort, SkillEntry } from "../port/port";
 import { Exception } from "./CapabilityScope";
 import { Switch } from "./Switch";
 import { SkillDeclarations } from "./SkillDeclarations";
+import { SkillSpecInfo } from "./SkillSpecInfo";
 import { reason } from "../i18n/kernel";
 import { CopyButton } from "./CopyButton";
 
@@ -93,6 +94,7 @@ export function SkillRow({
       {local && <Exception onClear={() => act(() => port.clearSkillOverride(sk.name, root || undefined))} busy={busy} />}
       <Switch data-action="skill.enabled" data-target={sk.name} on={sk.enabled} busy={busy} label={t(sk.enabled ? "关闭 {name}" : "启用 {name}", { name: sk.name })} onClick={toggle} />
       <SkillDeclarations sk={sk} />
+      <SkillSpecInfo sk={sk} />
     </div>
   );
 }

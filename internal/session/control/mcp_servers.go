@@ -171,6 +171,13 @@ func (c *Controller) ConfiguredMCPNames() []string {
 	if err != nil {
 		return nil
 	}
+	return configuredMCPNamesOf(cfg)
+}
+
+func configuredMCPNamesOf(cfg *config.Config) []string {
+	if cfg == nil {
+		return nil
+	}
 	names := make([]string, 0, len(cfg.Plugins))
 	for _, p := range cfg.Plugins {
 		names = append(names, p.Name)
@@ -181,6 +188,13 @@ func (c *Controller) ConfiguredMCPNames() []string {
 func (c *Controller) DisconnectedMCPNames() []string {
 	cfg, err := config.LoadForRootReadOnly(c.workspaceRoot)
 	if err != nil {
+		return nil
+	}
+	return c.disconnectedMCPNamesOf(cfg)
+}
+
+func (c *Controller) disconnectedMCPNamesOf(cfg *config.Config) []string {
+	if cfg == nil {
 		return nil
 	}
 	connected := map[string]bool{}

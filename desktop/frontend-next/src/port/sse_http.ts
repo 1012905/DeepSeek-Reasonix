@@ -138,6 +138,14 @@ export class SseHttp {
     return slot.next as Promise<T>;
   }
 
+  // A read the caller can abandon: it is not shared with another caller's, so
+  // abandoning it frees its connection instead of leaving it to run out.
+  protected async getUntil<T>(path: string, signal: AbortSignal): Promise<T> {
+    const res = await fetch(this.base + path, { credentials: "same-origin", signal });
+    if (!res.ok) await SseHttp.fail(path, res);
+    return (await res.json()) as T;
+  }
+
   private startRead<T>(path: string): Promise<T> {
     const flight = this.fetchRead<T>(path);
     const slot: ReadSlot = { flight };

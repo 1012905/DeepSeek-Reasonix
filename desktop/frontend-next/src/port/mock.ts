@@ -299,7 +299,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     return `目标：${draft.trim()}\n\n约束：不改变现有行为。\n\n完成标准：相关测试通过。`;
   }
 
-  async complete(line: string, cursor: number): Promise<Completion> {
+  async complete(line: string, cursor: number, _signal?: AbortSignal): Promise<Completion> {
     const before = line.slice(0, cursor);
     const at = before.lastIndexOf("@");
     if (at >= 0 && !/\s/.test(before.slice(at + 1)) && (at === 0 || /\s/.test(line[at - 1]))) {

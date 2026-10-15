@@ -54,10 +54,22 @@ func SubmitSlashCommands(m i18n.Messages) []SlashItem {
 	}
 }
 
-// CompletionData assembles what the composer's menu needs from the live
-// session. Frontends read it from the controller rather than gathering it
+// CompletionData assembles everything the composer's menu can need from the
+// live session. Frontends read it from the controller rather than gathering it
 // themselves, so the same session answers every one of them identically.
 func (c *Controller) CompletionData(lang string) CompletionData {
+	return c.completionData(lang, true)
+}
+
+// CompletionDataFor assembles only what completing this line reads. Naming a
+// command needs the catalogue and nothing else; the arguments of a command and
+// an @-reference need models, servers, memory and installed packages, each of
+// which is a disk read that every keystroke would otherwise repeat.
+func (c *Controller) CompletionDataFor(lang, line string, cursor int) CompletionData {
+	return c.completionData(lang, CompletionNeedsArgData(line, cursor))
+}
+
+func (c *Controller) completionData(lang string, withArgs bool) CompletionData {
 	m := i18n.M
 	if lang != "" {
 		m = i18n.Catalog(lang)
@@ -65,18 +77,31 @@ func (c *Controller) CompletionData(lang string) CompletionData {
 	commands := c.Commands()
 	skills := c.SlashSkills()
 	d := CompletionData{
-		ArgData: ArgData{
-			Skills:          skills,
-			DisabledSkills:  c.DisabledSkills(),
-			ConfiguredMCP:   c.ConfiguredMCPNames(),
-			DisconnectedMCP: c.DisconnectedMCPNames(),
-			ModelRefs:       configuredModelRefs(),
-			CurrentModel:    c.ModelRef(),
-			ProviderNames:   configuredProviderNames(),
-			PluginNames:     installedPluginNames(),
-		},
 		Names:         c.completionNames(commands, skills, m),
 		WorkspaceRoot: c.WorkspaceRoot(),
+	}
+	if !withArgs {
+		return d
+	}
+	// Each load parses every enabled plugin package, so the two the arguments
+	// need (the user's and this workspace's) are read once and shared.
+	userCfg, err := config.Load()
+	if err != nil {
+		userCfg = nil
+	}
+	rootCfg, err := config.LoadForRootReadOnly(c.workspaceRoot)
+	if err != nil {
+		rootCfg = nil
+	}
+	d.ArgData = ArgData{
+		Skills:          skills,
+		DisabledSkills:  c.DisabledSkills(),
+		ConfiguredMCP:   configuredMCPNamesOf(rootCfg),
+		DisconnectedMCP: c.disconnectedMCPNamesOf(rootCfg),
+		ModelRefs:       configuredModelRefs(userCfg),
+		CurrentModel:    c.ModelRef(),
+		ProviderNames:   configuredProviderNames(userCfg),
+		PluginNames:     installedPluginNames(),
 	}
 	d.CurrentProvider, _, _ = strings.Cut(d.CurrentModel, "/")
 	d.MemoryRefs, d.MemoryArchives = MemoryCompletionData(c.Memory())
@@ -189,9 +214,8 @@ func sourcedHint(plugin, description string) string {
 	return "plugin " + plugin + " · " + description
 }
 
-func configuredModelRefs() []string {
-	cfg, err := config.Load()
-	if err != nil {
+func configuredModelRefs(cfg *config.Config) []string {
+	if cfg == nil {
 		return nil
 	}
 	var out []string
@@ -207,9 +231,8 @@ func configuredModelRefs() []string {
 	return out
 }
 
-func configuredProviderNames() []string {
-	cfg, err := config.Load()
-	if err != nil {
+func configuredProviderNames(cfg *config.Config) []string {
+	if cfg == nil {
 		return nil
 	}
 	var out []string

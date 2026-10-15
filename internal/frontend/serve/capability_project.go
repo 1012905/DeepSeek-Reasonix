@@ -64,8 +64,9 @@ func (s *Server) skillsForProject(w http.ResponseWriter, root string) {
 			Model:       row.Skill.Model,
 			Effort:      row.Skill.Effort,
 			AllowedURI:  row.Skill.AllowedTools,
-			Manual:      row.Skill.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(row.Skill.Invocation), "manual"),
-			Enabled:     row.Enabled,
+			License:     row.Skill.License, Compatibility: row.Skill.Compatibility, Metadata: row.Skill.Metadata,
+			Manual:  row.Skill.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(row.Skill.Invocation), "manual"),
+			Enabled: row.Enabled,
 		})
 	}
 	writeJSON(w, map[string]any{
