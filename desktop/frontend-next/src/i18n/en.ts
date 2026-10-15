@@ -604,6 +604,7 @@ export const EN: Record<string, string> = {
   "在系统文件管理器中显示工作区": "Show the workspace in the system file manager",
   "用其他程序打开项目": "Open the project in another program",
   "没有找到可用的程序": "No supported program found",
+  "在系统文件管理器中显示此文件": "Show this file in the system file manager",
   "显示隐藏文件": "Show hidden files",
   "在访达中显示": "Reveal in Finder",
   "在文件资源管理器中显示": "Reveal in File Explorer",

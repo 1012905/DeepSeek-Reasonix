@@ -438,7 +438,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                               >
                                 <i className="pip" />
                                 <span className="sesstitle" title={name}><span>{name}</span></span>
-                                {session.unread && <UnreadDot kind="row" />}
+                                {session.unread && <UnreadDot />}
                                 <span className="sessmeta">{session.turns ? t("{n} 轮", { n: session.turns }) : t("空会话")}</span>
                                 <button
                                   className="session-more sessdel"

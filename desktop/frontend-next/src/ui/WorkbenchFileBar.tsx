@@ -16,6 +16,7 @@ export function WorkbenchFileBar({
   canSave,
   onSave,
   openWith,
+  onReveal,
 }: {
   path: string;
   mode: FileMode;
@@ -25,6 +26,8 @@ export function WorkbenchFileBar({
   canSave: boolean;
   onSave: () => void;
   openWith?: ReactNode;
+  // Present only where the kernel's own machine can show the file.
+  onReveal?: () => void;
 }) {
   const view = (value: FileMode, label: string) => (
     <button data-action="workbench.mode" data-value={value} aria-pressed={mode === value} onClick={() => onMode(value)}>
@@ -34,6 +37,11 @@ export function WorkbenchFileBar({
   return (
     <div className="workbench-filebar">
       <strong>{path}</strong>
+      {onReveal && (
+        <button className="workbench-reveal" data-action="workbench.reveal" data-target={path} aria-label={t("在系统文件管理器中显示此文件")} title={t("在系统文件管理器中显示此文件")} onClick={onReveal}>
+          <StudioIcon name="reveal" />
+        </button>
+      )}
       <div role="group">
         {readable && view("read", t("阅读"))}
         {previewable && view("preview", t("预览"))}

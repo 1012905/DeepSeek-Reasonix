@@ -109,10 +109,11 @@ func (s *Service) get(ctx context.Context, id, token string, out any) error {
 
 // postReply sends one reply. It is never retried: replies carry no idempotency
 // key, so a request that may have arrived must not be sent twice.
-func (s *Service) postReply(ctx context.Context, id, token, receipt, body string) (ReplyReceipt, error) {
+func (s *Service) postReply(ctx context.Context, id, token, receipt, body string, attachments ...wireAttachment) (ReplyReceipt, error) {
 	raw, err := json.Marshal(struct {
-		Body string `json:"body"`
-	}{body})
+		Body        string           `json:"body"`
+		Attachments []wireAttachment `json:"attachments,omitempty"`
+	}{body, attachments})
 	if err != nil {
 		return ReplyReceipt{}, err
 	}

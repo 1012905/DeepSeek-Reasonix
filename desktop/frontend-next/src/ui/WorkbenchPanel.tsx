@@ -610,6 +610,7 @@ export function WorkbenchPanel({
                 canSave={!busy && file?.path === active.path && draft !== file.content}
                 onSave={() => void save()}
                 openWith={hub && !remote ? <OpenWithMenu hub={hub} root={workspaceRoot} onError={(e) => setFailed(reason(e))} /> : undefined}
+                onReveal={revealable ? () => { setFailed(""); port.revealInFileManager(active.path).catch((e) => setFailed(reason(e))); } : undefined}
               />
               {(fileFailed || failed) && !(mode === "preview" && previewTab) && (
                 <div className="workbench-error" role="alert">

@@ -546,6 +546,37 @@ describe("WorkbenchPanel", () => {
     expect(reveal).toHaveBeenLastCalledWith("README.md");
   });
 
+  it("shows the open file in the system file manager from the file's own toolbar", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    const reveal = vi.spyOn(port, "revealInFileManager");
+    render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+    await user.click(await screen.findByRole("button", { name: "在系统文件管理器中显示此文件" }));
+    expect(reveal).toHaveBeenLastCalledWith("README.md");
+  });
+
+  it("says why showing the open file was refused, next to the file", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    vi.spyOn(port, "revealInFileManager").mockRejectedValue(
+      new HttpError(403, "no window", { code: "workspace.locate_no_window", error: "no window" }),
+    );
+    render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+    await user.click(await screen.findByRole("button", { name: "在系统文件管理器中显示此文件" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("这个内核不在本机，没法在系统文件管理器中显示它的文件。");
+  });
+
+  it("offers no file-manager button on a remote workspace's file", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    render(<WorkbenchPanel port={port} tabs={[]} manual={false} shown scheme="light" changes={[]} remote onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+    await screen.findByRole("button", { name: "保存" });
+    expect(screen.queryByRole("button", { name: "在系统文件管理器中显示此文件" })).toBeNull();
+  });
+
   it("offers no way to reveal a remote workspace's paths on this machine", async () => {
     const port = new MockPort();
     const reveal = vi.spyOn(port, "revealInFileManager");

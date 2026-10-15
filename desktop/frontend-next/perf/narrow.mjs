@@ -107,6 +107,28 @@ const browser = await chromium.launch();
   check("at every room from 190 to 460 the title keeps its 4em floor", bad.length === 0, bad.join(" "));
   await page.close();
 }
+// A running turn swaps Send for Stop, which is wider; the toolbar must still sit on one line at every column width.
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.goto(`${BASE}?pref=zh&turns=2`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".compose");
+  await page.fill('textarea[role="combobox"]', "hello");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".btn.stop");
+  const bad = [];
+  for (let room = 420; room <= 760; room += 20) {
+    await page.setViewportSize({ width: room, height: 800 });
+    await page.waitForTimeout(150);
+    const lines = await page.evaluate(() => {
+      const seen = [...document.querySelectorAll(".compose .row button")].filter((el) => el.getBoundingClientRect().width > 0 && el.checkVisibility());
+      const mids = seen.map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; }).sort((a, b) => a - b);
+      return mids.filter((m, i) => i === 0 || m - mids[i - 1] > 6).length;
+    });
+    if (lines !== 1) bad.push(`${room}:${lines}`);
+  }
+  check("while a turn runs, the composer toolbar stays on one line from 420 to 760", bad.length === 0, bad.join(" "));
+  await page.close();
+}
 for (const scheme of ["light", "dark"]) {
   for (const [width, zoom] of [[390, 1.8], [390, 1.3], [320, 1.8], [320, 1], [1280, 1]]) {
     const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: scheme, reducedMotion: "reduce" });
