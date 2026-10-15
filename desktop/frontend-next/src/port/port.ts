@@ -22,7 +22,7 @@ import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelM
 import type { NetworkProbe, NetworkSettings } from "./network";
 import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
-import type { SkillCatalog, SkillEntry } from "./skill";
+import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
 import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
@@ -35,7 +35,7 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, MemoryCatalog,
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus,
-  ShellOption, ShellSettings, SkillCatalog, SkillEntry, UpdateProgress, VersionEntry,
+  ShellOption, ShellSettings, SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan, UpdateProgress, VersionEntry,
   StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
@@ -180,6 +180,8 @@ export interface AgentPort {
   // row by default: the user answered for this folder, and two projects may
   // hold different skills of one name.
   setSkillEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
+  planSkillUpdate(name: string): Promise<SkillUpdatePlan>;
+  applySkillUpdate(name: string, planId: string, overwriteLocal: boolean): Promise<void>;
   // Drops this project's exception so the skill inherits again.
   clearSkillOverride(name: string, root?: string): Promise<void>;
   plugins(): Promise<PluginPackage[]>;

@@ -38,3 +38,15 @@ it("draws nothing for a skill the installer never recorded", () => {
   draw(sk());
   expect(document.querySelector("[data-drift]")).toBeNull();
 });
+
+it.each([
+  ["source_changed", "copy", true],
+  ["local_edited", "copy", true],
+  ["diverged", "copy", true],
+  ["synced", "copy", false],
+  ["source_missing", "copy", false],
+  ["source_changed", "link", false],
+] as const)("offers the update for a %s %s install: %s", (state, mode, offered) => {
+  draw(sk({ path: "/p", mode, state }));
+  expect(screen.queryByRole("button", { name: "从源文件夹更新…" }) !== null).toBe(offered);
+});

@@ -1,5 +1,5 @@
 import { SseLook } from "./sse_look";
-import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote, PluginExport, PluginInstallRequest, PluginPackage, PluginPlan, ScopeLayer, SkillCatalog } from "./port";
+import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote, PluginExport, PluginInstallRequest, PluginPackage, PluginPlan, ScopeLayer, SkillCatalog, SkillUpdatePlan } from "./port";
 import { rootQuery } from "./sse_http";
 import { download } from "./download";
 import { host } from "./host";
@@ -31,6 +31,12 @@ export class SseExtensions extends SseLook {
   }
   setSkillEnabled(name: string, enabled: boolean, scope: ScopeLayer = "project", root?: string) {
     return this.post("/skills/enabled", { name, enabled, scope, root });
+  }
+  planSkillUpdate(name: string) {
+    return this.post0<SkillUpdatePlan>("/skills/" + encodeURIComponent(name) + "/update/plan", {});
+  }
+  applySkillUpdate(name: string, planId: string, overwriteLocal: boolean) {
+    return this.post("/skills/" + encodeURIComponent(name) + "/update/apply", { planId, overwriteLocal });
   }
   clearSkillOverride(name: string, root?: string) {
     return this.post("/skills/enabled", { name, clear: true, scope: "project", root });
