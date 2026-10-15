@@ -134,12 +134,20 @@ not mutate the system prompt or tool schema.
 The search runs over the snapshot the session loaded; this session's own
 memory writes refresh it. Edits made outside the session are handled as follows:
 
-- Before each recall, the facts the previous recall returned are compared with
-  their files.
-- If one has changed or disappeared, the snapshot reloads, so the model reads
-  the edit.
-- A fact edited into relevance that was not a hit stays out of the index until
-  the session reloads: recall does no full scan.
+- Before each recall, the facts the previous turn handed the model — its recall
+  hits, plus any fact an update note carried — are re-read from their own files,
+  one file each, and compared by content.
+- A recall that returns no hits keeps the previous set: those facts are still the
+  ones the model holds, so they are still the ones re-checked.
+- Content that no longer matches, or a file that is gone, reloads the snapshot,
+  so the model reads the edit. Size and modification time decide nothing: a
+  rewrite can preserve both.
+- A fact whose own file no longer parses to the very body the turn delivered —
+  the file changed between the snapshot load and its first recall — is checked by
+  its identity instead of its bytes, so the next turn still sees the edit. A fact
+  whose file is not where its name says is checked the same way.
+- A fact edited into relevance without ever having been a hit stays invisible
+  until the session reloads: recall does no full scan.
 
 Recall is conservative:
 

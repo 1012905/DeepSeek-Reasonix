@@ -37,9 +37,10 @@ type memoryManager struct {
 	// the prefix naturally on the next session.
 	pending    []string
 	lastRecall memory.RecallResult
-	// recalled is the facts the last recall that returned any held, as indexed:
-	// what refreshRecalled compares with their files before the next one.
-	recalled   []memory.Memory
+	// delivered is the facts the last turn handed the model as memory context —
+	// its recall hits, plus the facts a turn-tail note carried — with the file
+	// stamp each had then. The next recall re-stats them; a moved stamp reloads.
+	delivered  []deliveredFact
 	autoWrites map[[32]byte]int
 
 	// instructions is what the model has of the standing-instruction block. It
@@ -122,18 +123,10 @@ func (m *memoryManager) claimAutoRemember(args json.RawMessage) bool {
 }
 
 func (m *memoryManager) recall(query string) memory.RecallResult {
-	m.refreshRecalled()
+	m.refreshDelivered()
 	result := m.current().AutoRecall(query, memory.RecallOptions{})
 	m.recordRecall(result)
-	if len(result.Hits) > 0 {
-		recalled := make([]memory.Memory, len(result.Hits))
-		for i, hit := range result.Hits {
-			recalled[i] = hit.Memory
-		}
-		m.mu.Lock()
-		m.recalled = recalled
-		m.mu.Unlock()
-	}
+	m.recordDelivered(result)
 	return result
 }
 
@@ -196,18 +189,21 @@ func (m *memoryManager) drainPending() []string {
 }
 
 // applyWrite re-discovers memory from disk (off-lock, the expensive part) then,
-// under a brief mu, swaps the fresh snapshot in and queues the turn-tail note so a
-// later current() reflects the just-applied write. mem is the snapshot taken at
-// the start of the writeMu-serialized write and supplies the discovery roots.
-// Callers hold writeMu.
-func (m *memoryManager) applyWrite(mem *memory.Set, note string) {
+// under a brief mu, swaps the fresh snapshot in, queues the turn-tail note so a
+// later current() reflects the just-applied write, and baselines the facts that
+// note handed the model. Callers hold writeMu.
+func (m *memoryManager) applyWrite(mem *memory.Set, note string, delivered ...memory.Memory) {
 	reloaded := memory.Load(mem.LoadOptions())
+	held := make([]deliveredFact, 0, len(delivered))
+	for _, fact := range delivered {
+		held = append(held, stampFact(reloaded.Store, fact))
+	}
 	m.mu.Lock()
 	if note != "" {
 		m.pending = append(m.pending, note)
 	}
 	m.set = reloaded
-	m.recalled = nil
+	m.delivered = appendDelivered(m.delivered, held)
 	m.mu.Unlock()
 }
 
@@ -263,13 +259,14 @@ func (m *memoryManager) saveMemory(fact memory.Memory) (string, error) {
 	if mem == nil {
 		return "", nil
 	}
-	path, err := mem.Store.Save(fact)
+	result, err := mem.Store.SaveWithOptions(fact, memory.SaveOptions{})
 	if err != nil {
 		return "", err
 	}
 	m.applyWrite(mem,
-		"Saved memory \""+fact.Name+"\": "+strings.Join(strings.Fields(fact.Description), " ")+"\n"+strings.TrimSpace(fact.Body))
-	return path, nil
+		"Saved memory \""+fact.Name+"\": "+strings.Join(strings.Fields(fact.Description), " ")+"\n"+strings.TrimSpace(fact.Body),
+		result.Memory)
+	return result.Path, nil
 }
 
 // forget removes a saved auto-memory by name — the panel/TUI forget action, the
@@ -312,7 +309,7 @@ func (m *memoryManager) restore(ref string, revision int) (memory.Memory, error)
 		return memory.Memory{}, err
 	}
 	m.applyWrite(mem, fmt.Sprintf("Restored memory %q as revision %d: %s\n%s",
-		result.Memory.Name, result.Memory.Revision, strings.Join(strings.Fields(result.Memory.Description), " "), strings.TrimSpace(result.Memory.Body)))
+		result.Memory.Name, result.Memory.Revision, strings.Join(strings.Fields(result.Memory.Description), " "), strings.TrimSpace(result.Memory.Body)), result.Memory)
 	return result.Memory, nil
 }
 
@@ -328,7 +325,7 @@ func (m *memoryManager) restoreArchived(archivePath string) (memory.Memory, erro
 		return memory.Memory{}, err
 	}
 	m.applyWrite(mem, fmt.Sprintf("Recovered archived memory %q as revision %d: %s\n%s",
-		result.Memory.Name, result.Memory.Revision, strings.Join(strings.Fields(result.Memory.Description), " "), strings.TrimSpace(result.Memory.Body)))
+		result.Memory.Name, result.Memory.Revision, strings.Join(strings.Fields(result.Memory.Description), " "), strings.TrimSpace(result.Memory.Body)), result.Memory)
 	return result.Memory, nil
 }
 
