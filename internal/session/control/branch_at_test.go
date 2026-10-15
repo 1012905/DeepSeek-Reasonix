@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -117,13 +118,10 @@ func startLaterTurn(t *testing.T, c *Controller, ag interface {
 	Session() *sessionstore.Session
 }) {
 	t.Helper()
-	sess := ag.Session()
-	start := len(sess.Messages)
-	sess.Add(provider.Message{Role: provider.RoleUser, Content: "third prompt"})
-	c.checkpoints.mu.Lock()
-	c.checkpoints.bound[c.checkpoints.turn] = start
-	c.checkpoints.turn++
-	c.checkpoints.mu.Unlock()
+	if err := c.beginCheckpoint(context.Background(), "third prompt"); err != nil {
+		t.Fatal(err)
+	}
+	ag.Session().Add(provider.Message{Role: provider.RoleUser, Content: "third prompt", RawContent: "third prompt"})
 	c.mu.Lock()
 	c.gate.begin(func() {})
 	c.mu.Unlock()
@@ -151,5 +149,26 @@ func TestBranchAtClosedTurnWhileALaterTurnRuns(t *testing.T) {
 	}
 	if _, err := c.BranchAt(turns[1]+1, ""); !errors.Is(err, ErrTurnRunning) {
 		t.Fatalf("the running turn itself: err = %v, want ErrTurnRunning", err)
+	}
+}
+
+func TestBranchAtClosedTurnRefusesABoundaryThatNamesAnotherMessage(t *testing.T) {
+	c, ag, _ := runTwoTurns(t)
+	turns := orderedTurns(t, c)
+	startLaterTurn(t, c, ag)
+	at, _ := c.checkpoints.boundary(turns[1] + 1)
+
+	msgs := ag.Session().Snapshot()
+	msgs[at] = provider.Message{Role: provider.RoleUser, Content: "someone else's prompt", RawContent: "someone else's prompt"}
+	ag.Session().Rewrite(msgs, "")
+
+	if _, err := c.BranchAt(turns[1], ""); !errors.Is(err, ErrBranchStale) || !errors.Is(err, ErrBranchUnavailable) {
+		t.Fatalf("a boundary now holding another prompt: err = %v, want ErrBranchStale", err)
+	}
+
+	shifted := append([]provider.Message{{Role: provider.RoleUser, Content: "inserted", RawContent: "inserted"}}, ag.Session().Snapshot()...)
+	ag.Session().Rewrite(shifted, "")
+	if _, err := c.BranchAt(turns[0], ""); !errors.Is(err, ErrBranchStale) {
+		t.Fatalf("a boundary shifted by an earlier rewrite: err = %v, want ErrBranchStale", err)
 	}
 }

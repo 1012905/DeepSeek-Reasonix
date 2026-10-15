@@ -13,6 +13,11 @@ import (
 // has no live boundary for (a resumed session), or one compaction has moved past.
 var ErrBranchUnavailable = errors.New("control: this point cannot be branched")
 
+// ErrBranchStale is a cut whose recorded boundary no longer names the turn that
+// was asked for. It is an ErrBranchUnavailable: the answer is the same, only the
+// reason is typed.
+var ErrBranchStale = fmt.Errorf("%w: the recorded boundary no longer names that turn", ErrBranchUnavailable)
+
 // seedBranch writes messages into a new session file beside the current one and
 // records the current session as its parent. A non-empty name becomes the title
 // the sidebar shows, so the branch never reads as a second copy of its source.
@@ -78,16 +83,20 @@ func (c *Controller) BranchAt(turn int, name string) (string, error) {
 
 // branchClosedTurn cuts a turn that is already closed while a later one runs.
 // The running turn is partial (a tool call may have no result yet), so only a
-// cut that lands before a user message is a conversation boundary; the latest
-// turn, whose end is still moving, is refused.
+// cut whose end is the start of the next recorded turn, and whose message there
+// is that turn's own prompt, is a conversation boundary. The latest turn, whose
+// end is still moving, is refused; a boundary that no longer matches is stale.
 func (c *Controller) branchClosedTurn(turn int, name string) (string, error) {
 	if c.executor == nil || c.sessionDir == "" {
 		return "", fmt.Errorf("%w: sessions are not persisted here", ErrBranchUnavailable)
 	}
 	src := c.executor.Session().Snapshot()
 	end, ok := c.checkpoints.endOfTurn(turn, len(src))
-	if !ok || end >= len(src) || src[end].Role != provider.RoleUser {
+	if !ok || end >= len(src) {
 		return "", fmt.Errorf("cannot branch this point while a turn is running: %w", ErrTurnRunning)
+	}
+	if !c.checkpoints.namesUserMessage(end, src[end]) {
+		return "", ErrBranchStale
 	}
 	_, path, err := c.seedBranch(src[:end], name)
 	return path, err
