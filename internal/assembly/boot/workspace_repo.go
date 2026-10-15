@@ -31,7 +31,10 @@ func workspaceRepo(ctx context.Context, carried gitcmd.Repo, root string) gitcmd
 	defer cancel()
 	repo, err := gitcmd.Open(ctx, abs)
 	if err != nil {
-		return gitcmd.Repo{Dir: abs}
+		// The folder carries a marker, so a failure here is not "no repository":
+		// the identity stays empty, and says which of two things happened.
+		absent, detail := gitcmd.AbsenceOf(err)
+		return gitcmd.Repo{Dir: abs, Absent: absent, AbsentDetail: detail}
 	}
 	return repo
 }

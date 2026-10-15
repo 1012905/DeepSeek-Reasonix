@@ -35,6 +35,9 @@ export interface WorkspaceGit {
   added: number;
   removed: number;
   untracked: number;
+  // Why a folder that carries a .git has no repository: git refused it, or did not answer.
+  absent?: "refused" | "unavailable";
+  detail?: string;
 }
 
 // GET /workspace/git/log: the newest commits of every branch, newest first. A
