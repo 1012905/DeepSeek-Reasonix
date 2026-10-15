@@ -51,6 +51,7 @@ function when(iso: string): string {
 function say(p: UpdateProgress): string {
   switch (p.phase) {
     case "downloading":
+      if (p.stalls) return t("下载暂停了：连接长时间没有数据，已重连 {n} 次…", { n: p.stalls });
       if (p.delta_skipped) {
         return p.total > 0 ? t("下载完整安装包 {got} / {all}", { got: bytes(p.received), all: bytes(p.total) }) : t("下载完整安装包 {got}", { got: bytes(p.received) });
       }

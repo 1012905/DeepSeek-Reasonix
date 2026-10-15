@@ -48,6 +48,7 @@ export interface UpdateProgress {
   total: number;
   err?: string;
   code?: string;
+  stalls?: number;
   delta_skipped?: string;
 }
 
