@@ -74,3 +74,15 @@ describe("host capabilities", () => {
     expect(calls).toEqual([["GET", "/host/capabilities"]]);
   });
 });
+
+describe("closing a pane the kernel no longer has", () => {
+  it("counts as closed, so a stale pane id never reaches the person as an error", async () => {
+    answer(404, JSON.stringify({ code: "request.not_found", error: "no runtime named r1", params: { kind: "runtime", name: "r1" } }));
+    await expect(new SseHub().close("r1")).resolves.toBeUndefined();
+  });
+
+  it("still surfaces every other refusal", async () => {
+    answer(500, JSON.stringify({ code: "internal", error: "teardown failed" }));
+    await expect(new SseHub().close("r1")).rejects.toBeInstanceOf(HttpError);
+  });
+});

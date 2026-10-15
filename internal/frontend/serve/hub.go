@@ -401,6 +401,9 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	return rt, nil
 }
 
+// errRuntimeGone is Close's answer for an id the hub does not hold.
+var errRuntimeGone = errors.New("no such runtime")
+
 // Close retires a runtime: the conversation is persisted, the assembly torn
 // down, and the session file released for another window to open.
 func (h *Hub) Close(id string) error {
@@ -408,7 +411,7 @@ func (h *Hub) Close(id string) error {
 	rt := h.runtimes[id]
 	if rt == nil {
 		h.mu.Unlock()
-		return fmt.Errorf("no runtime %s", id)
+		return fmt.Errorf("%w: %s", errRuntimeGone, id)
 	}
 	delete(h.runtimes, id)
 	h.order = removeString(h.order, id)
@@ -608,8 +611,13 @@ func (h *Hub) openRuntime(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Hub) closeRuntime(w http.ResponseWriter, r *http.Request) {
-	if err := h.Close(r.PathValue("id")); err != nil {
-		writeErr(w, http.StatusNotFound, err)
+	id := r.PathValue("id")
+	if err := h.Close(id); err != nil {
+		if errors.Is(err, errRuntimeGone) {
+			notFound(w, "runtime", id)
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
