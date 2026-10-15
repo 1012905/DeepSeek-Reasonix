@@ -14,3 +14,7 @@
 @container conversation (max-width: 520px) { .studio-deckchip > span { display: none; } }
 .chrome .thbtn.r-more { color: var(--muted); }
 .chrome .thbtn.r-more svg { stroke-width: 2.6; }
+@container conversation (max-width: 480px) {
+  .studio-overview-anchor { position: static; }
+  .studio-overview-anchor .studio-overview-popover { left: 0; right: 0; width: auto; }
+}
