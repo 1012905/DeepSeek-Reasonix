@@ -71,7 +71,13 @@ export const replyMarker = (id) => `<!-- reasonix-feedback-reply: ${id} -->`;
 
 export function renderReply(reply) {
   const text = String(reply.body ?? "").replace(/\r\n?/g, "\n").slice(0, MAX_REPLY_CHARS);
-  return [`Reply from the reporter (receipt ${reply.receipt})`, fence(text), replyMarker(reply.id)].join("\n\n");
+  const shots = attachmentUrls(reply).map((a, i) => `![image ${i + 1}](${a.url})`);
+  const attached = (reply.attachments ?? []).length;
+  const held = attached - shots.length;
+  const parts = [`Reply from the reporter (receipt ${reply.receipt})`, fence(text)];
+  if (shots.length) parts.push(shots.join("\n\n"));
+  if (held > 0) parts.push(`${held} image${held === 1 ? "" : "s"} attached, not public: awaiting maintainer review.`);
+  return [...parts, replyMarker(reply.id)].join("\n\n");
 }
 
 export function renderBody(item) {
@@ -214,10 +220,21 @@ async function mirrorOne(reply, deps, dry) {
     return;
   }
   const comments = await deps.gh.recentComments(number, issue.comments ?? 0);
-  if (comments.some((c) => isReplyComment(c, reply.id))) deps.log(`found comment for reply ${reply.id}`);
+  const written = comments.find((c) => isReplyComment(c, reply.id));
+  const wanted = renderReply(reply);
+  if (written && (written.body ?? "").trimEnd() !== wanted) {
+    // A reply the converter sees again with its comment already written is one
+    // whose images changed: the comment is brought up to date in place, and the
+    // issue is not reopened a second time for the same reply.
+    if (dry) return deps.log(`[dry-run] would update the comment on #${number} for reply ${reply.id}`);
+    await deps.gh.updateComment(written.id, wanted);
+    deps.log(`updated the comment on #${number} for reply ${reply.id}`);
+    return deps.worker.ackReply(reply.id);
+  }
+  if (written) deps.log(`found comment for reply ${reply.id}`);
   else if (dry) return deps.log(`[dry-run] would comment on #${number} for reply ${reply.id}`);
   else {
-    await deps.gh.comment(number, renderReply(reply));
+    await deps.gh.comment(number, wanted);
     deps.log(`commented on #${number} for reply ${reply.id}`);
   }
   // A reply to a fix means it did not hold. A maintainer's decision (not planned,
@@ -360,6 +377,7 @@ export function liveDeps(env) {
         return pages.flatMap((p) => gh(["api", `repos/${REPO}/issues/${n}/comments?per_page=100&page=${p}`]) ?? []);
       },
       comment: async (n, body) => gh(["api", "-X", "POST", `repos/${REPO}/issues/${n}/comments`, "--input", "-"], JSON.stringify({ body })),
+      updateComment: async (id, body) => gh(["api", "-X", "PATCH", `repos/${REPO}/issues/comments/${encodeURIComponent(id)}`, "--input", "-"], JSON.stringify({ body })),
       reopen: async (n) => gh(["api", "-X", "PATCH", `repos/${REPO}/issues/${n}`, "--input", "-"], JSON.stringify({ state: "open", state_reason: "reopened" })),
       getPull: async (n) => gh(["api", `repos/${REPO}/pulls/${n}`]),
     },
