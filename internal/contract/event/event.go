@@ -468,6 +468,9 @@ type Compaction struct {
 	Boundary            string // "capacity" | "economic": which threshold sent this fold
 	TriggerTokens       int    // ...and its size, so a card need not say only "a threshold"
 	Code                string // Done with nothing folded: the class of refusal or failure, empty when none applies
+	// Done: what the prompt still holds after the fold, set only when that is a
+	// large share of the window, so a card can say what the rest is made of.
+	Remains *ContextComposition
 }
 
 // ContextMaintenance is the typed wire-safe receipt for snip/prune/noop/

@@ -367,6 +367,8 @@ type Compaction struct {
 	Boundary      string `json:"boundary,omitempty"`
 	TriggerTokens int    `json:"triggerTokens,omitempty"`
 	Code          string `json:"code,omitempty"` // why a fold installed nothing
+	// What the prompt still holds after a fold that left a large share of the window.
+	Remains *event.ContextComposition `json:"remains,omitempty"`
 }
 
 func toWireCompaction(c event.Compaction) *Compaction {
@@ -376,7 +378,7 @@ func toWireCompaction(c event.Compaction) *Compaction {
 		SourceTokens: c.SourceTokens, ProjectionTokens: c.ProjectionTokens,
 		CoverageRequired: c.CoverageRequired, CoverageMissing: c.CoverageMissing,
 		CoverageBackstopped: c.CoverageBackstopped,
-		Boundary:            c.Boundary, TriggerTokens: c.TriggerTokens, Code: c.Code,
+		Boundary:            c.Boundary, TriggerTokens: c.TriggerTokens, Code: c.Code, Remains: c.Remains,
 	}
 }
 
