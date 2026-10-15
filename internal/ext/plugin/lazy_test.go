@@ -510,6 +510,17 @@ func TestLazyCacheMissAsyncSpawn(t *testing.T) {
 	// Execute call.
 	waitForServer(t, host, "mock", 5*time.Second)
 
+	// The server is in the host before the registry is swapped, so the swap is
+	// waited for as well rather than read at the instant the server appears.
+	swapped := func() bool {
+		_, stub := reg.Get("mcp__mock__connect")
+		_, echo := reg.Get("mcp__mock__echo")
+		_, zed := reg.Get("mcp__mock__zed")
+		return !stub && echo && zed
+	}
+	for deadline := time.Now().Add(5 * time.Second); !swapped() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if _, found := reg.Get("mcp__mock__connect"); found {
 		t.Errorf("connect stub should be removed after swap, names=%v", reg.Names())
 	}
