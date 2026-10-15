@@ -3,12 +3,14 @@
 package proc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -24,15 +26,24 @@ func SetProcessGroupKill(*exec.Cmd) {}
 // signals the direct child, so a launcher (cmd.exe → node.exe) leaves the
 // grandchild alive holding the inherited stdout/stderr pipes — which makes
 // cmd.Wait block forever. taskkill /T walks the live tree and kills it all.
+//
+// It runs inside exec.Cmd's cancel hook, and Wait does not return until that
+// hook has, so a taskkill that never answers would hold every stop behind it.
+// It is given killTreeTimeout; after that the direct child is killed alone.
 func KillTree(cmd *exec.Cmd) {
 	if cmd == nil || cmd.Process == nil {
 		return
 	}
-	kill := exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(cmd.Process.Pid))
+	ctx, cancel := context.WithTimeout(context.Background(), killTreeTimeout)
+	defer cancel()
+	kill := exec.CommandContext(ctx, "taskkill", "/F", "/T", "/PID", strconv.Itoa(cmd.Process.Pid))
 	HideWindow(kill)
 	_ = kill.Run()
 	_ = cmd.Process.Kill()
 }
+
+// killTreeTimeout is how long taskkill may take to walk and end a tree.
+const killTreeTimeout = 10 * time.Second
 
 // StartTracked starts cmd inside a new Job Object whose KILL_ON_JOB_CLOSE flag
 // fells the whole tree — including a launcher's detached grandchild (cmd.exe →
