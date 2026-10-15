@@ -251,6 +251,17 @@ pack states a shape, never a number the layout has to agree with.
 
 ## Type
 
+- Composer menus share `composer-menu.css`: 380px surfaces with a viewport cap,
+  20px corners and 12px insets. Primary labels use 15px medium type, descriptions
+  13px regular type, and quiet headings 14px. Neutral selection and a check mark
+  keep choices readable; permission warnings retain semantic colour.
+- The composer scope covers work mode, workspace, permissions, model and effort.
+  Search results wrap long names; large lists scroll within the viewport. Other
+  pickers retain their own density.
+- Workspace controls sit below the input card beside runtime statistics. Below
+  720px they occupy separate footer rows, keeping branch names readable without
+  competing with the send, permission and model controls.
+
 - The scale carried 24 sizes, 442 uses of them inside the four steps between 10
   and 11.5px. Half a pixel is not a level; it reads as nothing quite matching.
   Six steps now, widening as they go. The floor is 11px: dense Han strokes lose

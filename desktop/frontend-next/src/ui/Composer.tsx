@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { t } from "../i18n";
 import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
@@ -6,6 +6,8 @@ import { keepPasteAsFile, PasteKeep, type PasteChip } from "./pastekeep";
 import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
 import { Picker } from "./Menu";
 import { BranchChip } from "./BranchChip";
+import { WorktreeChip } from "./WorktreeChip";
+import { useWorktreeSetup } from "./useWorktreeSetup";
 import { Policy } from "./Policy";
 import { chosenGroups, groupHeadings, modelMenu, narrowToGroups } from "./modelmenu";
 import { ModelGroupChips } from "./ModelGroupChips";
@@ -31,6 +33,8 @@ import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
 
 interface Props {
+  children?: ReactNode;
+  fresh?: boolean;
   port: AgentPort;
   status: SessionStatus | null;
   running: boolean;
@@ -116,11 +120,12 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "" }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false, children }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const modelGroups = useModelFilter();
   const [submitting, setSubmitting] = useState(false);
+  const worktree = useWorktreeSetup(port, fresh && !!git?.repo, status?.workspaceRoot ?? "", onChanged, onTreeChanged);
   const { text, setText, beginSubmit, finishSubmit } = useDraft(draftKey, submitting);
   // The caret decides which token is being completed, so it is state here
   // rather than something read off the element when a menu happens to open.
@@ -261,6 +266,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     setShots([]);
     void (async () => {
       try {
+        if (worktree.selection) await worktree.prepare(draft.shots.flatMap((chip) => chip.k === "attachment" && chip.a ? [chip.a.path] : chip.k === "paste" && chip.saved ? [chip.saved.path] : []));
         const sent = await (call ? onSubmit(line, call) : onSubmit(line));
         if (sent) {
           finishSubmit(true);
@@ -416,8 +422,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const warnPictures = status?.vision === false && shots.some((c) => c.k === "attachment" && c.state === "ready" && isPicture(c));
 
   return (
-    // display:contents, so the box looks exactly as it did and the drop layer
-    // still has one node to ask which pane a drop landed in.
+    // display:contents retains one drop target across the input and footer.
     <div className="dropzone" ref={dropzone}>
       {menu.open && (
         <CompletionMenu
@@ -673,6 +678,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             ariaPressed={status?.plan ?? false}
             place="bottom"
             title={t("工作模式")}
+            menuClassName="composer-menu"
             current={status?.plan ? "plan" : "agent"}
             pending={busy["plan"]}
             items={[
@@ -685,7 +691,6 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             label={<><StudioIcon name="agent" /><span className="studio-sr-label">{t("计划")}</span><span>{status?.plan ? "Plan" : "Agent"}</span><StudioIcon name="down" /></>}
           />
         </div>
-        <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />
         {/* The toggle keeps its legacy meaning: it follows `plan`, which the
             kernel turns off the moment a plan is approved. The lifecycle is a
             separate reading — an approved plan is still running, and saying so
@@ -706,7 +711,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             current={status?.modelRef}
             items={narrowToGroups(menuItems, chosenModelGroups)}
             head={<ModelGroupChips headings={groupHeadings(menuItems)} chosen={chosenModelGroups} onChange={writeModelFilter} />}
-            menuClassName="studio-model-menu"
+            menuClassName="studio-model-menu composer-menu"
             searchAlways
             searchPlaceholder={t("搜索模型或服务商…")}
             menuTitle={<><b>{t("选择模型")}</b><small>{t("用于后续任务")}</small></>}
@@ -723,7 +728,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
                 data-action="reasoning.effort"
                 place="bottom"
                 align="end"
-                menuClassName="studio-effort-menu"
+                menuClassName="studio-effort-menu composer-menu"
                 onOpen={loadModels}
                 title={t("推理强度")}
                 current={declared ? status.effort || "auto" : ""}
@@ -785,6 +790,10 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             <span>{t(submitting ? "正在发送…" : running ? "插话" : "发送")}</span>
           </button>}
         </span>
+      </div>
+      <div className="compose-footer">
+        <div className="compose-workspace">{fresh && worktree.sources?.available ? <WorktreeChip changeCount={countElsewhere ? 0 : changeCount} sources={worktree.sources} selection={worktree.selection} branch={git?.branch ?? "HEAD"} busy={submitting || running} onSelect={worktree.setSelection} refresh={worktree.refresh} /> : <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />}</div>
+        {children}
       </div>
     </div>
   );
