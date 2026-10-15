@@ -360,12 +360,20 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
     follow();
   }, [follow]);
 
-  // The nearest expanded call or thought in that direction, else the very end:
-  // one jump should not cross a whole stretch of context the reader has opened.
+  // The button goes to the end it names. Held with Shift it steps to the nearest
+  // expanded call or thought in that direction instead, else the end: a jump
+  // that should not cross a whole stretch of context the reader has opened.
   const jumpToward = useCallback(
-    (dir: Direction) => {
+    (dir: Direction, step: boolean) => {
       const root = scroll.current;
       if (!root) return;
+      if (!step) {
+        if (dir === "down") return resume();
+        landing.current++;
+        release();
+        root.scrollTop = 0;
+        return;
+      }
       const base = root.getBoundingClientRect().top - root.scrollTop;
       const tops = [...root.querySelectorAll<HTMLElement>("details.tool-disclosure[open], details.think[open]")].map((el) => el.getBoundingClientRect().top - base);
       const to = landingOf(dir, tops, root.scrollTop, root.clientHeight, root.scrollHeight);

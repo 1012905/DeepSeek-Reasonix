@@ -68,22 +68,36 @@ describe("the transcript's jump buttons", () => {
     expect(down()).toBeNull();
   });
 
-  it("goes to the nearest expanded call or thought before it goes to the end", async () => {
+  it("goes straight to the end the button names, past any expanded block", async () => {
+    const { geometry, settle, expanded } = draw();
+    expanded("tool-disclosure", 1900);
+    expanded("think", 2700);
+    geometry.top = 1000;
+    await settle();
+    fireEvent.click(down()!);
+    expect(geometry.top).toBe(5000);
+    geometry.top = 3000;
+    await settle();
+    fireEvent.click(up()!);
+    expect(geometry.top).toBe(0);
+  });
+
+  it("steps to the nearest expanded call or thought when Shift is held", async () => {
     const { geometry, settle, expanded } = draw();
     expanded("tool-disclosure", 1900);
     expanded("think", 2700);
     geometry.top = 1000;
     await settle();
 
-    fireEvent.click(down()!);
+    fireEvent.click(down()!, { shiftKey: true });
     expect(geometry.top).toBe(1900 - 8);
     await settle();
 
-    fireEvent.click(down()!);
+    fireEvent.click(down()!, { shiftKey: true });
     expect(geometry.top).toBe(2700 - 8);
     await settle();
 
-    fireEvent.click(up()!);
+    fireEvent.click(up()!, { shiftKey: true });
     expect(geometry.top).toBe(1900 - 8);
   });
 
