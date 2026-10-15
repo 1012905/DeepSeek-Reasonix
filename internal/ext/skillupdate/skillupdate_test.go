@@ -292,3 +292,49 @@ func TestAPlanKeepsWhatItShowsBounded(t *testing.T) {
 		t.Fatalf("an oversized file must be marked truncated and not shown cut: %+v", c)
 	}
 }
+
+func TestARecordWriteThatFailsOnceIsRetriedAndOneThatKeepsFailingIsHealedByTheNextApply(t *testing.T) {
+	u, src, installed := install(t)
+	put(t, filepath.Join(src, "SKILL.md"), "---\nname: mine\ndescription: d\n---\nv2\n")
+	p, _ := u.Plan("mine")
+
+	recordRetryPause = 0
+	real := recordEntry
+	t.Cleanup(func() { recordEntry = real })
+	calls := 0
+	recordEntry = func(home string, e skilllock.Entry) error {
+		calls++
+		if calls == 1 {
+			return errors.New("disk busy")
+		}
+		return real(home, e)
+	}
+	if err := u.Apply("mine", p.PlanID, false); err != nil {
+		t.Fatalf("a record that fails once: %v", err)
+	}
+	if e, _, _ := skilllock.Find(u.Home, "mine", "global"); skilllock.Assess(e, installed) != skilllock.Synced {
+		t.Fatal("the retried record did not leave the skill in step")
+	}
+
+	put(t, filepath.Join(src, "SKILL.md"), "---\nname: mine\ndescription: d\n---\nv3\n")
+	p, _ = u.Plan("mine")
+	recordEntry = func(string, skilllock.Entry) error { return errors.New("disk gone") }
+	if err := u.Apply("mine", p.PlanID, false); !errors.Is(err, ErrFailed) || !strings.Contains(err.Error(), "the copy is updated") {
+		t.Fatalf("a record that keeps failing = %v, want ErrFailed saying the copy is updated", err)
+	}
+	if !strings.Contains(read(t, filepath.Join(installed, "SKILL.md")), "v3") {
+		t.Fatal("the copy was not updated")
+	}
+
+	recordEntry = real
+	healed, _ := u.Plan("mine")
+	if len(healed.Changes) != 0 {
+		t.Fatalf("the copy already matches the source: %+v", healed.Changes)
+	}
+	if err := u.Apply("mine", healed.PlanID, true); err != nil {
+		t.Fatal(err)
+	}
+	if e, _, _ := skilllock.Find(u.Home, "mine", "global"); skilllock.Assess(e, installed) != skilllock.Synced {
+		t.Fatal("applying again did not bring the record up to date")
+	}
+}
