@@ -352,6 +352,8 @@ export const EN: Record<string, string> = {
   "删除主题「{name}」": "Delete theme \"{name}\"",
   "删除这份恢复副本？": "Delete this recovery copy?",
   "连同其记录一并删除": "Deletes it together with its record",
+  "还有 {n} 份恢复副本带着这个会话没有的内容，直接删除会保留它们": "{n} recovery copies hold content this conversation lacks; a plain delete keeps them",
+  "连同 {n} 份副本删除": "Delete with {n} copies",
   "恢复副本": "Recovery",
   "早先版本 · {n} 轮": "Earlier version · {n} turns",
   "删除这个早先版本？": "Delete this earlier version?",
