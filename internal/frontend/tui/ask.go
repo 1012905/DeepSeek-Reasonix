@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -344,7 +345,19 @@ func (m *model) askPanel(it *Item) []string {
 		termrender.Dim(strings.Repeat("─", min(m.width-2, 40))),
 		rowLine(st.cursor == typed+1, typed+2, "", i18n.M.AskChatInstead, false),
 	)
+	if left := time.Until(it.AskSkipAt); !it.AskSkipAt.IsZero() && m.ask.engagement == askIdle && it.Verdict == "" {
+		lines = append(lines, termrender.Dim(fmt.Sprintf(i18n.M.AskSkipFmt, skipSpan(left))))
+	}
 	return panel(lines, m.width, accentEdge)
+}
+
+// skipSpan is a countdown in the shortest form that reads at a glance.
+func skipSpan(d time.Duration) string {
+	secs := max(int((d+time.Second-1)/time.Second), 0)
+	if secs >= 60 {
+		return fmt.Sprintf("%d:%02d", secs/60, secs%60)
+	}
+	return fmt.Sprintf("%ds", secs)
 }
 
 // selected is what question i answers: its picks, then a typed answer or the

@@ -16,7 +16,7 @@ import { splitProviderSearch } from "./providersearch";
 
 export type { Item, Metrics, PlanStep, RememberedFact, RuntimeNotice, SessionState, TodoStatus, TurnTerminal, Waiting };
 export { currentStep, stepDone, stepLabel };
-import { askFromCall, promptOpen, prompted, sealByReceipt } from "./prompts";
+import { askAnnounced, askEngaged, askFromCall, promptOpen, prompted, sealByReceipt } from "./prompts";
 import { nameTurnStart, othersSteer } from "./turn_start";
 import { appendText, foldMessage, sealSay } from "./say";
 import { nextId } from "./ids";
@@ -456,8 +456,10 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       return ev.approval ? prompted(s, "等待批准", { t: "approval", id: nextId(), a: ev.approval }) : s;
 
     case "ask_request":
-      if (!ev.ask || s.items.some(i => i.t === "ask" && i.ask.id === ev.ask!.id && !i.surfaceExpired)) return s;
-      return prompted(s, "等待你回答", { t: "ask", id: nextId(), ask: ev.ask });
+      return ev.ask ? askAnnounced(s, ev.ask) : s;
+
+    case "ask_engaged":
+      return ev.ask ? askEngaged(s, ev.ask.id) : s;
 
     case "compaction_started":
       return { ...s, items: [...s.items, { t: "compaction", id: nextId(), c: ev.compaction ?? {}, done: false }] };

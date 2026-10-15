@@ -71,6 +71,9 @@ var wireLogSkipped = map[string]bool{
 	"rewind_changed": true,
 	// The agent's tabs are read from the session that owns them.
 	"browser_tabs_changed": true,
+	// A takeover only stops a pending question's countdown; a reopened window is
+	// told what is left by the pending ask itself, not by a replayed frame.
+	"ask_engaged": true,
 }
 
 // codeTrajectoryUnreadable refuses a read that could not establish coverage.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
@@ -303,14 +304,21 @@ func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, ori
 	}
 	defer c.approval.promptMu.Unlock()
 
+	// The wait is read once, before the card is shown, so what the card says and
+	// what the host does are the same number.
+	after := c.askSkipDelay(origin)
+	shown := event.Ask{ID: id, Questions: questions, Origin: origin, SkipInMs: after.Milliseconds()}
 	c.approval.promptEmitMu.Lock()
 	c.approval.markAskEmitted(id)
-	c.sink.Emit(event.Event{Kind: event.AskRequest, Ask: event.Ask{ID: id, Questions: questions, Origin: origin}})
+	if after > 0 {
+		c.approval.setAskSkipAt(id, time.Now().Add(after))
+	}
+	c.sink.Emit(event.Event{Kind: event.AskRequest, Ask: shown})
 	c.approval.promptEmitMu.Unlock()
 	// A question blocks the run on the user exactly like an approval prompt.
 	go c.hooks.Notification(ctx, askNotificationText(questions, origin), "question_prompt")
 
-	return c.waitForAsk(ctx, id, reply, origin)
+	return c.waitForAsk(ctx, id, reply, after)
 }
 
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.

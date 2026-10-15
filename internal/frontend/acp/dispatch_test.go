@@ -779,3 +779,28 @@ func TestUpdateSinkReplayNamesTheTool(t *testing.T) {
 		t.Fatalf("replayed call = %v, want a tool_call named read_file", u)
 	}
 }
+
+// Taking a question over is not a new question: the client is asked once.
+func TestUpdateSinkAskEngagedDoesNotAskTheClientAgain(t *testing.T) {
+	var mu sync.Mutex
+	asked := 0
+	fn := &fakeNotifier{onReq: func(method string, _ any) (json.RawMessage, error) {
+		if method == "session/request_permission" {
+			mu.Lock()
+			asked++
+			mu.Unlock()
+		}
+		return json.RawMessage(`{"outcome":{"outcome":"cancelled"}}`), nil
+	}}
+	sink := newUpdateSink(fn, "sess-1")
+	sink.bindAnswer(func(string, []event.AskAnswer) error { return nil })
+	ask := event.Ask{ID: "ask-1", Questions: []event.AskQuestion{{ID: "q1", Prompt: "Pick", Options: []event.AskOption{{Label: "A"}}}}}
+	sink.Emit(event.Event{Kind: event.AskRequest, Ask: ask})
+	sink.Emit(event.Event{Kind: event.AskEngaged, Ask: event.Ask{ID: "ask-1"}})
+	time.Sleep(300 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if asked != 1 {
+		t.Fatalf("the client was asked %d times, want 1", asked)
+	}
+}

@@ -7,6 +7,7 @@
 import type { Item, SessionState } from "./session_types";
 import type { Ask, AskQuestion, DecisionReceipt } from "../port/wire";
 import { IDLE, RUNNING } from "./chip";
+import { nextId } from "./ids";
 
 // The id the kernel correlates an answer by, which is what makes two frames one
 // prompt. Local item ids cannot: a replay mints a new one every time.
@@ -122,4 +123,27 @@ export function askFromCall(id: string, args: string | undefined): Ask | null {
     });
   }
   return { id, questions };
+}
+
+// askAnnounced folds an ask_request. One already open only moves its deadline:
+// the same question announced again says how long is left, or that it is no
+// longer skipped.
+export function askAnnounced(s: SessionState, ask: Ask): SessionState {
+  const skipAt = ask.skipInMs ? Date.now() + ask.skipInMs : undefined;
+  const shown = s.items.findIndex((i) => i.t === "ask" && i.ask.id === ask.id && !i.surfaceExpired);
+  if (shown < 0) return prompted(s, "等待你回答", { t: "ask", id: nextId(), ask, skipAt });
+  const was = s.items[shown] as Extract<Item, { t: "ask" }>;
+  if (was.skipAt === skipAt || was.answered !== undefined) return s;
+  const items = s.items.slice();
+  items[shown] = { ...was, skipAt };
+  return { ...s, items };
+}
+
+// askEngaged stops the countdown of a question the person has taken over.
+export function askEngaged(s: SessionState, id: string): SessionState {
+  const at = s.items.findIndex((i) => i.t === "ask" && i.ask.id === id && i.skipAt !== undefined);
+  if (at < 0) return s;
+  const items = s.items.slice();
+  items[at] = { ...(items[at] as Extract<Item, { t: "ask" }>), skipAt: undefined };
+  return { ...s, items };
 }
