@@ -58,6 +58,12 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
   const submit = useRef<HTMLButtonElement>(null);
   const done = useRef<HTMLHeadingElement>(null);
   const shotEpoch = useRef(0);
+  const mounted = useRef(true);
+  const focusFrame = useRef(0);
+  useEffect(() => () => {
+    mounted.current = false;
+    cancelAnimationFrame(focusFrame.current);
+  }, []);
   const captureButton = useRef<HTMLButtonElement>(null);
   const [capture, setCapture] = useState<"idle" | "taking" | "failed">("idle");
   const heldShots = useRef(shots);
@@ -124,9 +130,10 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 60))));
     const bytes = await host().captureWindow();
     onConceal(false);
+    if (!mounted.current) return;
     setCapture(bytes ? "idle" : "failed");
     if (bytes) await add([new File([bytes as BlobPart], "window.png", { type: "image/png" })]);
-    requestAnimationFrame(() => captureButton.current?.focus());
+    if (mounted.current) focusFrame.current = requestAnimationFrame(() => captureButton.current?.focus());
   };
 
   const zone = useFileDrop((d) => void add(d.files), setOver);

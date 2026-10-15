@@ -110,3 +110,26 @@ func compositionSentence(c event.ContextComposition) string {
 	}
 	return s
 }
+
+// remainsFloorTokens and remainsWindowShare decide when a fold's card says what
+// is left: a quarter of the window, or this many tokens when no window is declared.
+const (
+	remainsFloorTokens = 100_000
+	remainsWindowShare = 4
+)
+
+// remainsAfterFold reports what the prompt still holds once a fold has been
+// installed, when that is still a large share of the window. A person looking at
+// "607k to 316k" is otherwise left to wonder whether the rest is normal, and
+// only the host knows what it is made of. Nil when the remainder is small.
+func (a *contextWindow) remainsAfterFold() *event.ContextComposition {
+	c := a.contextComposition()
+	if window := a.effectiveContextWindow(); window > 0 {
+		if c.Total*remainsWindowShare < window {
+			return nil
+		}
+	} else if c.Total < remainsFloorTokens {
+		return nil
+	}
+	return &c
+}

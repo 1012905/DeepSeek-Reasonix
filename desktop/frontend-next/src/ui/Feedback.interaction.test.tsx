@@ -661,6 +661,25 @@ describe("capturing the window", () => {
     expect(heldDraft().shots).toEqual([]);
   });
 
+  it("finishes quietly when the shell answers after the page is torn down", async () => {
+    vi.spyOn(host(), "capturesWindow").mockReturnValue(true);
+    let finish: (b: Uint8Array) => void = () => {};
+    const taking = vi.spyOn(host(), "captureWindow").mockImplementation(() => new Promise((r) => { finish = r; }));
+    const unhandled = vi.fn();
+    const proc = (globalThis as unknown as { process: { on(e: string, f: () => void): void; off(e: string, f: () => void): void } }).process;
+    proc.on("unhandledRejection", unhandled);
+    setup();
+    await ready();
+    await userEvent.click(button());
+    await waitFor(() => expect(taking).toHaveBeenCalled());
+    cleanup();
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => { throw new ReferenceError("window is not defined"); });
+    await act(async () => { finish(new Uint8Array([137, 80, 78, 71])); });
+    await new Promise((r) => setTimeout(r, 30));
+    proc.off("unhandledRejection", unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+
   it("offers no button where the shell cannot capture", async () => {
     vi.spyOn(host(), "capturesWindow").mockReturnValue(false);
     setup();

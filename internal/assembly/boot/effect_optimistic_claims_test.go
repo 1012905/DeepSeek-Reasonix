@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/runtime/writeclaim"
@@ -103,7 +104,13 @@ default_model = "test-model"
 [agent]
 system_prompt = "BASE"
 `)
-	writeFile(t, home, ".reasonix/config.toml", "[agent]\nsubagent_claims = \""+claims+"\"\n")
+	userConfig := config.UserConfigPath()
+	if err := os.MkdirAll(filepath.Dir(userConfig), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userConfig, []byte("[agent]\nsubagent_claims = \""+claims+"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
 

@@ -249,7 +249,7 @@ export interface AgentPort {
   // assembling and hands it to the shell tool, so a choice cannot reach a
   // runtime that is already up. Refused mid-turn, like every other rebuild.
   // An empty path leaves the executable to detection.
-  saveShell(prefer: string, path: string): Promise<ShellSettings>;
+  saveShell(prefer: string, path: string, args?: string[]): Promise<ShellSettings>;
   permissions(): Promise<PermissionRules>;
   // Replaces all three lists at once, then rebuilds — the gate is assembled
   // with the runtime, so a rule cannot reach one that is already up. Every rule

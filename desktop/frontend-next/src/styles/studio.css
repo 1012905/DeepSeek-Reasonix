@@ -1412,9 +1412,6 @@ body { background: var(--page) !important; }
 .workbench-filebar [role="group"] { display: flex; padding: 2px; background: var(--page); border: 1px solid var(--hair); border-radius: 5px; }
 .workbench-filebar button { min-height: 25px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--muted); font: 600 10px/1 var(--ui); }
 .workbench-filebar button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
-.workbench-filebar .workbench-reveal { display: grid; place-items: center; width: 25px; padding: 0; }
-.workbench-filebar .workbench-reveal:hover { color: var(--text); background: var(--overlay); }
-.workbench-filebar .workbench-reveal .studio-icon { width: 14px; height: 14px; }
 .workbench-filebar .workbench-save { display: flex; align-items: center; gap: 5px; }
 .workbench-filebar .workbench-save { background: var(--accent); color: white; }
 .workbench-filebar .workbench-save:disabled { opacity: .35; }
@@ -4214,3 +4211,16 @@ body { font-size: 14px; line-height: 1.75; }
   box-shadow: 0 0 0 1px var(--accent-wash);
 }
 :root[data-pack] .flow .opt .mark { border-color: var(--accent); }
+
+.openwith { position: relative; display: inline-flex; }
+.openwith-btn { display: inline-flex; align-items: center; gap: 2px; min-height: 25px; padding: 0 6px; border: 1px solid var(--hair); border-radius: 5px; background: transparent; color: var(--muted); }
+.openwith-btn:hover, .openwith-btn[aria-expanded="true"] { color: var(--text); background: var(--overlay); }
+.openwith-btn .studio-icon { width: 13px; height: 13px; }
+.openwith-menu { position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 40; min-width: 190px; padding: 4px; display: grid; gap: 1px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); box-shadow: var(--shadow-lg); }
+.openwith-menu button { text-align: start; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font: 500 12px/1.3 var(--ui); }
+.openwith-menu button:hover, .openwith-menu button:focus-visible { background: var(--overlay); }
+.openwith-menu small { padding: 7px 10px; color: var(--muted); }
+.shell .pinpath .fields { display: grid; gap: 10px; margin-top: 6px; }
+.shell .pinpath .fields label { display: grid; gap: 4px; }
+.shell .pinpath .fields input, .shell .pinpath .fields textarea { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--hair); border-radius: 6px; background: var(--page); color: var(--text); font-family: var(--mono); }
+.shell .pinpath .fields small { color: var(--muted); line-height: 1.5; }

@@ -70,8 +70,15 @@ const (
 // (so callers can adapt prompts) and the executable to invoke. Fallback is set
 // only when bash was wanted and could not be used.
 type Shell struct {
-	Kind     ShellKind
-	Path     string
+	Kind ShellKind
+	Path string
+	// launcherArgs, NUL-joined so Shell stays comparable, come between Path and
+	// -c for a launcher such as wsl.exe, which needs them to reach a shell at
+	// all. They are the user's own and run by argv.
+	launcherArgs string
+	// Drives says where the Windows drives appear inside a WSL launcher's Linux
+	// side, as the distro itself reports it ("C:\ is /mnt/host/c/").
+	Drives   string
 	Fallback FallbackReason
 }
 
@@ -712,7 +719,7 @@ func (s Shell) argv(command string) []string {
 	if s.Kind == ShellPowerShell {
 		return []string{path, "-NoProfile", "-NonInteractive", "-Command", powerShellToolScript(normalizeNullRedirects(command, "$null"))}
 	}
-	return []string{path, "-c", normalizeNullRedirects(command, "/dev/null")}
+	return append(append([]string{path}, s.Args()...), "-c", normalizeNullRedirects(command, "/dev/null"))
 }
 
 // SupportsChaining reports whether the shell parses '&&' / '||'. bash does;
@@ -729,4 +736,18 @@ func (s Shell) SupportsChaining() bool {
 // escaped, while Windows separators read as the path is written.
 func quotedPath(p string) string {
 	return strings.ReplaceAll(strconv.Quote(p), `\\`, `\`)
+}
+
+// Args are the launcher arguments this shell is started with, if any.
+func (s Shell) Args() []string {
+	if s.launcherArgs == "" {
+		return nil
+	}
+	return strings.Split(s.launcherArgs, "\x00")
+}
+
+// WithArgs is s started through the given launcher arguments.
+func (s Shell) WithArgs(args []string) Shell {
+	s.launcherArgs = strings.Join(args, "\x00")
+	return s
 }

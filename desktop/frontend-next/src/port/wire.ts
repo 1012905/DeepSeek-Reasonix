@@ -1,3 +1,4 @@
+import type { ContextComposition } from "./context_composition";
 import type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset } from "./surface-rich";
 export type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset, SurfaceSeries } from "./surface-rich";
 // Mirrors internal/contract/eventwire. Field names and kind strings must match exactly;
@@ -516,22 +517,21 @@ export interface Compaction {
   trigger?: string;
   messages?: number;
   summary?: string;
-  // What the fold cost, and what the digest kept of it. coverageRequired counts
-  // the changes and failures the folded work produced; coverageMissing is how
-  // many the digest did not carry.
+  // What the fold cost; coverageRequired counts the changes and failures it
+  // folded and coverageMissing how many the digest did not carry.
   sourceTokens?: number;
   projectionTokens?: number;
   coverageRequired?: number;
   coverageMissing?: number;
   // The host wrote the dropped facts in itself, because the digest did not.
   coverageBackstopped?: boolean;
-  // Which threshold sent this fold and how big it is. "Reached a threshold"
-  // is all the card can say without them, and a fold at 16% of the declared
-  // window is exactly the one that needs saying.
+  // Which threshold sent this fold and how big it is.
   boundary?: string;
   triggerTokens?: number;
   // Why a fold that installed nothing did not; the host's class, not a sentence.
   code?: string;
+  // What the prompt still holds when a fold left a large share of the window.
+  remains?: ContextComposition;
 }
 
 export interface StreamAttempt {

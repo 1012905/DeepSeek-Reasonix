@@ -271,7 +271,7 @@ type RuntimeSettings interface {
 	SaveNetworkSettings(in NetworkSettings, password string, clearPassword bool) error
 	DiagnoseNetwork(ctx context.Context) []NetworkProbe
 	ShellSettings() ShellSettings
-	SaveShellSettings(prefer, path string) error
+	SaveShellSettings(prefer, path string, args ...string) error
 	PermissionRules() PermissionRules
 	SavePermissionRules(in PermissionLists) error
 	RevokeSessionGrant(rule string) int

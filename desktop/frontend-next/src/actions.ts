@@ -385,6 +385,7 @@ export const ACTIONS: UIAction[] = [
   { id: "remote-host.remove", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "workspace.reveal", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workspace.open-with", kind: "shell-native", target: "entity", proof: "interaction" },
+  { id: "workbench.open-with-menu", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.remove", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "extensions.invoke", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
 
@@ -485,6 +486,7 @@ export const ACTIONS: UIAction[] = [
   { id: "versions.notes-lang", kind: "view", target: "none", proof: "interaction" },
   { id: "shell.executor", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "shell.custom-path", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "shell.custom-args", kind: "view", target: "none", proof: "interaction" },
   { id: "hooks.recipe", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "hooks.remove", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "hooks.run-once", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
