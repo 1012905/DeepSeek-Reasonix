@@ -756,6 +756,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "替换「我的」里已安装的副本，所有项目均可使用": "Replaces the installed copy under Mine, available to every project",
   "重新查看": "Review again",
   "修改": "Changed",
+  "{name} 的内容已与来源文件夹一致，只是安装记录还停在旧版本": "{name} already matches its source folder; only its install record is behind",
   "{v} 下载中断": "Downloading {v} was interrupted",
   "更新方式": "Update mode",
   "后台检查新版本": "Check for new versions in the background",

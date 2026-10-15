@@ -76,9 +76,17 @@ it("offers to review again when the plan went stale, and loads the new one", asy
 });
 
 it("says there is nothing to update when the copy already matches", async () => {
-  draw(plan({ changes: [] }));
+  draw(plan({ changes: [], state: "synced" }));
   expect(await screen.findByText("mine 与来源文件夹的内容一致，没有可更新的内容")).toBeTruthy();
   expect(update().disabled).toBe(true);
+});
+
+it("lets the person bring the record up to date when the copy already matches but the record is behind", async () => {
+  const { apply } = draw(plan({ changes: [], state: "diverged", overwritesLocal: true }));
+  expect(await screen.findByText("mine 的内容已与来源文件夹一致，只是安装记录还停在旧版本")).toBeTruthy();
+  await userEvent.click(screen.getByRole("checkbox", { name: "我知道会覆盖本地改动" }));
+  await userEvent.click(update());
+  expect(apply).toHaveBeenCalledExactlyOnceWith("mine", "p1", true);
 });
 
 it("shows why it could not read the plan, with a way to close", async () => {

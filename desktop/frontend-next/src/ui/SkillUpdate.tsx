@@ -37,7 +37,8 @@ export function SkillUpdate({ port, name, onClose, onDone }: { port: AgentPort; 
   const text = plan.changes.filter((c) => !c.code);
   const hidden = plan.changes.filter((c) => c.truncated || c.binary);
   const unread = code.filter((c) => !c.truncated && !c.binary && !opened.has(c.path)).length;
-  const ready = plan.changes.length > 0 && unread === 0 && (hidden.length === 0 || sureTruncated) && (!plan.overwritesLocal || sureOverwrite);
+  const record = plan.changes.length === 0 && plan.state !== "synced";
+  const ready = (plan.changes.length > 0 || record) && unread === 0 && (hidden.length === 0 || sureTruncated) && (!plan.overwritesLocal || sureOverwrite);
 
   const apply = async () => {
     setBusy(true);
@@ -68,7 +69,7 @@ export function SkillUpdate({ port, name, onClose, onDone }: { port: AgentPort; 
   return (
     <div className="skupd mkt addpkg" data-stage="confirm" aria-busy={busy}>
       <div className="find">
-        <span className="t">{plan.changes.length > 0 ? t("更新 {name}：来源文件夹有 {n} 处变化", { name: plan.name, n: plan.changes.length }) : t("{name} 与来源文件夹的内容一致，没有可更新的内容", { name: plan.name })}</span>
+        <span className="t">{plan.changes.length > 0 ? t("更新 {name}：来源文件夹有 {n} 处变化", { name: plan.name, n: plan.changes.length }) : record ? t("{name} 的内容已与来源文件夹一致，只是安装记录还停在旧版本", { name: plan.name }) : t("{name} 与来源文件夹的内容一致，没有可更新的内容", { name: plan.name })}</span>
         <span className="why">{t("来源：{path}。更新后，已安装的副本会与来源文件夹完全一致。只有你点击“更新”才会执行，AI 不能触发。", { path: plan.source })}</span>
       </div>
       {plan.overwritesLocal && (

@@ -72,6 +72,11 @@ type Updater struct{ Home string }
 // rename is a variable so a test can make the swap fail part way.
 var rename = os.Rename
 
+var (
+	recordRetryPause = 150 * time.Millisecond
+	recordEntry      = skilllock.Record
+)
+
 func (u Updater) installedDir(name string) string {
 	return filepath.Join(u.Home, skill.SkillsDirname, name)
 }
@@ -268,7 +273,7 @@ func (u Updater) Apply(name, planID string, overwriteLocal bool) error {
 		return ErrNeedsConfirm
 	}
 	if len(current.Changes) == 0 {
-		return nil
+		return u.healRecord(r)
 	}
 	return u.swap(r)
 }
@@ -302,12 +307,33 @@ func (u Updater) swap(r *reading) error {
 		return fmt.Errorf("%w: %w", ErrFailed, err)
 	}
 	_ = os.RemoveAll(aside)
+	return u.record(r)
+}
+
+// record notes the new digest, once more after a short pause: the copy is
+// already in place, so a record left behind would make it read as edited.
+func (u Updater) record(r *reading) error {
 	entry := r.entry
 	entry.Digest, entry.InstalledAt = r.srcDigest, time.Now().UTC()
-	if err := skilllock.Record(u.Home, entry); err != nil {
-		return fmt.Errorf("%w: updated, but the record of it could not be written: %w", ErrFailed, err)
+	err := recordEntry(u.Home, entry)
+	if err != nil {
+		time.Sleep(recordRetryPause)
+		err = recordEntry(u.Home, entry)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: the copy is updated, but the record of it could not be written: %w", ErrFailed, err)
 	}
 	return nil
+}
+
+// healRecord is an Apply with nothing to change: when the copy already equals
+// the source but the record still holds an older digest (an update whose record
+// write failed), it brings the record up to date and the skill reads as in step.
+func (u Updater) healRecord(r *reading) error {
+	if r.instDigest != r.srcDigest || r.entry.Digest == r.srcDigest {
+		return nil
+	}
+	return u.record(r)
 }
 
 // materialise writes one file the way an install does: new, with ordinary
