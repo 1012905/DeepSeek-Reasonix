@@ -550,6 +550,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "确认（还有 {n} 个没答）": "Confirm ({n} left)",
   "确认": "Confirm",
   "先不选择，直接回复": "Skip the choice and reply instead",
+  "{time} 后自动跳过这个问题，点任意处保留": "This question is skipped in {time}; click anywhere to keep it",
   "需要你决定": "Need your decision",
   "需要你补充信息": "Need more information from you",
   "MCP 服务器 {name} 请求信息": "MCP server {name} is asking for information",

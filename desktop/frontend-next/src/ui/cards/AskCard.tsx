@@ -8,6 +8,7 @@ import { answerSource } from "../source";
 import { useViewer } from "../../state/viewer";
 import { useIme } from "../ime";
 import { LazyMarkdown } from "../LazyMarkdown";
+import { clock, useAskCountdown } from "./useAskCountdown";
 
 const ADVANCE_MS = 220;
 
@@ -41,11 +42,14 @@ export function AskCard({ item, onAnswer, onEngage }: Props) {
   const sealed = item.answered !== undefined;
   const engagement = useRef<"idle" | "pending" | "engaged">("idle");
   const [engagementError, setEngagementError] = useState("");
+  const [kept, setKept] = useState(false);
+  const skipIn = useAskCountdown(item.skipAt, !sealed && !kept);
   const engage = () => {
     if (sealed || !onEngage || engagement.current !== "idle") return;
     engagement.current = "pending";
     void onEngage(item.ask.id).then(() => {
       engagement.current = "engaged";
+      setKept(true);
       setEngagementError("");
     }).catch((err: unknown) => {
       engagement.current = "idle";
@@ -284,6 +288,11 @@ export function AskCard({ item, onAnswer, onEngage }: Props) {
             )}
             {!sealed && (
               <div className="ask-foot">
+                {skipIn !== null && (
+                  <span className="ask-skip" role="timer" aria-live="off">
+                    {t("{time} 后自动跳过这个问题，点任意处保留", { time: skipIn < 60 ? t("{n} 秒", { n: skipIn }) : clock(skipIn) })}
+                  </span>
+                )}
                 {/* An answer batch with nothing selected is the kernel's explicit
                     "don't decide for me" path: it ends the turn rather than
                     feeding a prose dismissal back to the model. */}

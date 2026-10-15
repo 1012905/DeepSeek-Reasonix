@@ -158,6 +158,10 @@ const (
 	ProgressWatchEvent
 	// RewindChanged signals that the undo offer must be read again.
 	RewindChanged
+	// AskEngaged says the person has taken the question Ask.ID over, so the host
+	// will no longer skip it. It never asks anything: AskRequest stays the only
+	// kind that puts a question on screen.
+	AskEngaged
 	// KindCount is a sentinel one past the last real Kind. New event kinds must
 	// be inserted above it so completeness tests cover them automatically.
 	KindCount
@@ -440,6 +444,8 @@ type Ask struct {
 	ID        string
 	Questions []AskQuestion
 	Origin    *AskOrigin
+	// SkipInMs is the wait left before the host skips this question, 0 if it never will.
+	SkipInMs int64
 }
 
 // Compaction carries a context-compaction pass for the CompactionStarted /

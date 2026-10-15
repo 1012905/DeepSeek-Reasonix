@@ -19,4 +19,5 @@ type AskTimeoutMessages struct {
 	AskTimeoutFmt    string // status line, one %s state
 	AskTimeoutOff    string // the word for the timeout being off
 	AskTimeoutBadFmt string // argument that is neither a number nor off, one %s
+	AskSkipFmt       string // the open question's countdown, one %s span
 }

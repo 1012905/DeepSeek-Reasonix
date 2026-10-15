@@ -4,7 +4,7 @@ package i18n
 
 var notifyEN = NotifyMessages{
 	AskTimeoutMessages: AskTimeoutMessages{
-		CmdAskTimeout: "skip a question nobody answers after a wait", AskTimeoutFmt: "ask timeout: %s — set it with /ask-timeout <seconds|off>", AskTimeoutOff: "off", AskTimeoutBadFmt: "ask-timeout: %q is neither a number of seconds nor off",
+		CmdAskTimeout: "skip a question nobody answers after a wait", AskTimeoutFmt: "ask timeout: %s — set it with /ask-timeout <seconds|off>", AskTimeoutOff: "off", AskTimeoutBadFmt: "ask-timeout: %q is neither a number of seconds nor off", AskSkipFmt: "skipped in %s — press any key to keep it",
 	},
 	NotifyTitle:         "Reasonix",
 	NotifyTurnDone:      "The turn finished",
@@ -17,7 +17,7 @@ var notifyEN = NotifyMessages{
 
 var notifyZH = NotifyMessages{
 	AskTimeoutMessages: AskTimeoutMessages{
-		CmdAskTimeout: "设置提问无人回答多久后自动跳过", AskTimeoutFmt: "提问等待超时：%s — 用 /ask-timeout <秒数|off> 修改", AskTimeoutOff: "关闭", AskTimeoutBadFmt: "ask-timeout：%q 既不是秒数也不是 off",
+		CmdAskTimeout: "设置提问无人回答多久后自动跳过", AskTimeoutFmt: "提问等待超时：%s — 用 /ask-timeout <秒数|off> 修改", AskTimeoutOff: "关闭", AskTimeoutBadFmt: "ask-timeout：%q 既不是秒数也不是 off", AskSkipFmt: "%s 后自动跳过 — 按任意键保留",
 	},
 	NotifyTitle:         "Reasonix",
 	NotifyTurnDone:      "这一轮结束了",
@@ -30,7 +30,7 @@ var notifyZH = NotifyMessages{
 
 var notifyZHTW = NotifyMessages{
 	AskTimeoutMessages: AskTimeoutMessages{
-		CmdAskTimeout: "設定提問無人回答多久後自動跳過", AskTimeoutFmt: "提問等待逾時：%s — 用 /ask-timeout <秒數|off> 修改", AskTimeoutOff: "關閉", AskTimeoutBadFmt: "ask-timeout：%q 既不是秒數也不是 off",
+		CmdAskTimeout: "設定提問無人回答多久後自動跳過", AskTimeoutFmt: "提問等待逾時：%s — 用 /ask-timeout <秒數|off> 修改", AskTimeoutOff: "關閉", AskTimeoutBadFmt: "ask-timeout：%q 既不是秒數也不是 off", AskSkipFmt: "%s 後自動跳過 — 按任意鍵保留",
 	},
 	NotifyTitle:         "Reasonix",
 	NotifyTurnDone:      "這一輪結束了",
