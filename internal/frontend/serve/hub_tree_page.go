@@ -28,6 +28,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		return sessionPage{Sessions: []treeSession{}}
 	}
 	titles := h.titleCacheFor(dir).snapshot()
+	heldBy := openLookup(open)
 	byID := make(map[string]sessionstore.SessionInfo, len(listed))
 	for _, si := range listed {
 		byID[sessionstore.BranchID(si.Path)] = si
@@ -44,7 +45,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		if store.IsSubagentTranscriptName(base) {
 			continue
 		}
-		runtimeID := open[sessionstore.CanonicalSessionPath(si.Path)]
+		runtimeID := heldBy(si.Path)
 		if runtimeID == "" && hiddenRecoveryCopy(si, "") {
 			continue
 		}
@@ -97,6 +98,23 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		said = said || si.Turns > 0
 	}
 	return sessionPage{Sessions: rows, Total: total + len(unlisted), Archived: archived, Remaining: remaining, Said: said}
+}
+
+// openLookup answers which pane holds a listed path. Canonicalising a path costs
+// a stat per ancestor, so it is only paid for a file name some pane holds; on a
+// folder of thousands of conversations that is the difference between one
+// request and a second of disk.
+func openLookup(open map[string]string) func(path string) string {
+	names := make(map[string]bool, len(open))
+	for held := range open {
+		names[filepath.Base(held)] = true
+	}
+	return func(path string) string {
+		if !names[filepath.Base(path)] {
+			return ""
+		}
+		return open[sessionstore.CanonicalSessionPath(path)]
+	}
 }
 
 // rowTitle reads a row's title once, on first use: a name the user typed
