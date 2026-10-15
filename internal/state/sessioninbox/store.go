@@ -325,6 +325,11 @@ func (s *Store) Enqueue(req EnqueueRequest) (InboxReceipt, error) {
 	if receipt, found, err := s.idempotentReceiptLocked(idem, requestHash); err != nil || found {
 		return receipt, err
 	}
+	if idem == "" && !req.Origin.IsHost() {
+		if receipt, found, err := s.heldDuplicateLocked(checksum, req.Origin); err != nil || found {
+			return receipt, err
+		}
+	}
 	if byteSize > s.limits.MaxItemBytes {
 		return InboxReceipt{}, ErrItemTooLarge
 	}
