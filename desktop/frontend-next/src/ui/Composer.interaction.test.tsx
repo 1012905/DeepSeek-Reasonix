@@ -560,6 +560,19 @@ describe("composer menus", () => {
     expect(screen.getByRole("img", { name: "非 Git 仓库" })).toBeTruthy();
   });
 
+  it("says git refused a folder that has a repository, with what git printed, and not 'no repository'", () => {
+    draw({ git: git({ repo: false, absent: "refused", detail: "fatal: detected dubious ownership in repository" }) });
+    expect(screen.queryByRole("img", { name: "非 Git 仓库" })).toBeNull();
+    expect(screen.getByRole("img", { name: "Git 拒绝打开" })).toBeTruthy();
+    expect(document.body.textContent).toContain("Git 说：fatal: detected dubious ownership in repository");
+  });
+
+  it("says git did not answer, which is a different thing from refusing", () => {
+    draw({ git: git({ repo: false, absent: "unavailable" }) });
+    expect(screen.getByRole("img", { name: "Git 未响应" })).toBeTruthy();
+    expect(document.body.textContent).toContain("Git 没有及时响应");
+  });
+
   // Not answered yet is not the same fact as not a repository, and the two
   // must not render as one word.
   it("renders nothing before git has answered", () => {

@@ -40,17 +40,26 @@ type workspaceGitView struct {
 	Added     int    `json:"added"`
 	Removed   int    `json:"removed"`
 	Untracked int    `json:"untracked"`
+	// Absent says why a marked folder has no repository: "refused" (git said no) or
+	// "unavailable" (git did not answer); Detail is what git printed.
+	Absent string `json:"absent,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // workspaceGit answers with the work tree's one-line identity. Repo is false
 // for a workspace that is not version-controlled, as for /changes.
 func (s *Server) workspaceGit(w http.ResponseWriter, r *http.Request) {
-	info, ok := gitstatus.Summary(r.Context(), workspaceRepo(s.ctl()))
+	repo := workspaceRepo(s.ctl())
+	info, ok := gitstatus.Summary(r.Context(), repo)
 	w.Header().Set("content-type", "application/json")
-	_ = json.NewEncoder(w).Encode(workspaceGitView{
+	view := workspaceGitView{
 		Repo: ok, Name: info.Name, Branch: info.Branch, Detached: info.Detached,
 		Added: info.Added, Removed: info.Removed, Untracked: info.Untracked,
-	})
+	}
+	if !ok {
+		view.Absent, view.Detail = string(repo.Absent), repo.AbsentDetail
+	}
+	_ = json.NewEncoder(w).Encode(view)
 }
 
 // gitHistoryView is the commit graph's newest page. Repo is false for a
