@@ -514,7 +514,7 @@ func (a *contextWindow) compactToProjection(ctx context.Context, trigger, instru
 		Trigger: trigger, Messages: len(fold), Summary: summary,
 		SourceTokens: sourceTokens, ProjectionTokens: projTokens,
 		CoverageRequired: tele.CoverageRequired, CoverageMissing: tele.CoverageMissing,
-		CoverageBackstopped: tele.CoverageBackstopped,
+		CoverageBackstopped: tele.CoverageBackstopped, Remains: a.remainsAfterFold(),
 	})})
 	// Only once the checkpoint is committed: a rejected candidate folded nothing.
 	a.sess.win.compaction.lastUserTurns = retention
