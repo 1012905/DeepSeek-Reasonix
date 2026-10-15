@@ -451,3 +451,30 @@ func TestAFailedCheckIsNamedBackToTheTurn(t *testing.T) {
 		t.Fatalf("a check that passed is reported as failing: %q", gap)
 	}
 }
+
+// Where the cause is a change the host could not read, a verification command
+// is not what discharges it, so the ask says what does: making the change again
+// through a tool that reports what it touched.
+func TestAnUnprovenWriteIsToldACheckCannotSettleIt(t *testing.T) {
+	unproven := evidence.Receipt{
+		ToolName: "bash", Success: true, Write: true, Mutation: true,
+		MutationEvidence: evidence.MutationUnknown,
+		Command:          `printf '\n' >> skills/role/SKILL.md`,
+	}
+	read := evidence.Receipt{ToolName: "read_file", Success: true, Paths: []string{"skills/role/SKILL.md"}}
+	reg := tool.NewRegistry()
+	reg.Add(fakeTool{name: "bash"})
+	reg.Add(fakeTool{name: "conclude_blocked"})
+	a := &Agent{task: taskRuntime{ledger: readinessLedger(unproven, read)}, svc: agentServices{tools: reg}}
+
+	gap, owed := a.verificationGap(0)
+	if !owed {
+		t.Fatal("an unproven write still owes the turn something")
+	}
+	if !strings.Contains(gap, "a check cannot settle a change the host could not read") {
+		t.Fatalf("the turn is left to think a check settles it: %q", gap)
+	}
+	if !strings.Contains(gap, "make the change again through a tool that reports what it touched") {
+		t.Fatalf("the discharge is not named: %q", gap)
+	}
+}

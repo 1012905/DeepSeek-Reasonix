@@ -478,9 +478,14 @@ func (a *Agent) appendUnprovenMutationGap(out *finalReadinessCheck, missing []st
 	if !a.deliveryProfile {
 		return missing
 	}
-	return append(missing, "a change ran whose extent the host could not establish, and no check can establish it: "+
-		"make the change again through a tool that reports what it touched, or call conclude_blocked with what cannot be established")
+	return append(missing, unprovenMutationAsk)
 }
+
+// unprovenMutationAsk is what discharges a change the host could not read: no
+// check can, since observation proves effects and a check only the state.
+const unprovenMutationRedo = "make the change again through a tool that reports what it touched, or call conclude_blocked with what cannot be established"
+
+const unprovenMutationAsk = "a change ran whose extent the host could not establish, and no check can establish it: " + unprovenMutationRedo
 
 // appendUnseenRenderGap owes a look at each page or image the turn wrote and no
 // screenshot has shown since. It holds wherever verification is asked for, and
@@ -530,6 +535,9 @@ func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string
 // shape whose status answers for the check.
 func (a *Agent) verificationGap(writer int) (string, bool) {
 	ask := "run a relevant verification command after the latest write for the current role setting" + a.verificationCause()
+	if _, unproven := a.task.ledger.LatestUnprovenMutationIndex(); unproven {
+		ask += " — but a check cannot settle a change the host could not read: " + unprovenMutationRedo
+	}
 	if unreadable, ok := a.task.ledger.LatestUnreadableVerificationAfter(writer); ok && strings.TrimSpace(unreadable.Command) != "" {
 		return fmt.Sprintf("%s — %q ran, but its exit status is the last stage's, not the check's, "+
 			"so it proves nothing either way; re-run the check on its own", ask, strings.TrimSpace(unreadable.Command)), true
