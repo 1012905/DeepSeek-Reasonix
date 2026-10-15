@@ -4101,6 +4101,7 @@ body { font-size: 14px; line-height: 1.75; }
   animation: remote-toast-in 180ms ease-out both;
 }
 .remote-closed > span { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--err); box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 14%, transparent); }
+.remote-closed.info > span { background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); }
 .remote-closed > div { min-width: 0; flex: 1; }
 .remote-closed b { display: block; font: 600 13px/1.4 var(--ui); color: var(--text); }
 .remote-closed p { margin: 2px 0 0; color: var(--muted); font: 400 11px/1.45 var(--ui); }
