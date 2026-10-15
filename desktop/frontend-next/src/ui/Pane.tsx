@@ -56,6 +56,7 @@ import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
 import { PostureNote } from "./PostureNote";
 import { SidePanel } from "./SidePanel";
+import { cancelJob } from "./jobcancel";
 import { ConnectNote } from "./ConnectNote";
 import { useStatusPoll } from "./useStatusPoll";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
@@ -594,7 +595,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         <MeterRail
           tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} compact={compact} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}
-          onCancelJob={(id) => port.cancelJob(id).then(refreshStatus, notify)}
+          onCancelJob={(id) => cancelJob(port, id, notify, refreshStatus).then(() => {})}
         />
         {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}
         {/* Below the box, under a ceiling of their own. Both arrive unbidden and
