@@ -179,6 +179,47 @@ func TestRememberToolQueuesNote(t *testing.T) {
 	}
 }
 
+// TestRememberToolQueuesTheTypedFact pins the queue contract: the fact the tool
+// wrote rides the queue as a typed Memory, so the controller records what was
+// written rather than parsing the note's prose back into memory.
+func TestRememberToolQueuesTheTypedFact(t *testing.T) {
+	store := Store{Dir: testenv.TempDir(t)}
+	q := &fakeQueue{}
+	ctx := WithQueue(context.Background(), q)
+	if _, err := NewRememberTool(store).Execute(ctx, []byte(`{"name":"uses-rmb","description":"balance is RMB","type":"user","body":"b"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if len(q.delivered) != 1 {
+		t.Fatalf("remember queued %d typed facts, want exactly 1", len(q.delivered))
+	}
+	saved, ok := mustStore(t, store).Read("uses-rmb")
+	if !ok {
+		t.Fatal("the tool wrote no fact")
+	}
+	got := q.delivered[0]
+	if got.ID != saved.ID || got.Revision != saved.Revision || got.Body != saved.Body ||
+		got.Name != saved.Name || got.Scope != saved.Scope {
+		t.Fatalf("queued typed fact %+v does not describe the saved fact %+v", got, saved)
+	}
+}
+
+// TestForgetToolQueuesNoTypedFact: a delete has nothing left to re-check, so it
+// must not hand the controller a delivered fact to chase.
+func TestForgetToolQueuesNoTypedFact(t *testing.T) {
+	store := Store{Dir: testenv.TempDir(t)}
+	if _, err := store.Save(Memory{Name: "old-fact", Description: "d", Type: TypeProject, Body: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	q := &fakeQueue{}
+	ctx := WithQueue(context.Background(), q)
+	if _, err := NewForgetTool(store).Execute(ctx, []byte(`{"name":"old-fact"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if len(q.delivered) != 0 {
+		t.Fatalf("forget queued %d typed facts, want none: %+v", len(q.delivered), q.delivered)
+	}
+}
+
 func TestRememberToolQueuesResolvedNameWhenUpdatingByID(t *testing.T) {
 	store := Store{Dir: testenv.TempDir(t)}
 	first, err := store.SaveWithOptions(Memory{Name: "stable-name", Description: "before", Body: "before"}, SaveOptions{})

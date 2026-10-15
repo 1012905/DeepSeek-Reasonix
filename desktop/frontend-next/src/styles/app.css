@@ -5144,6 +5144,8 @@
     background: var(--overlay); border-left: 2px solid var(--accent);
     animation: card var(--m-line) both;
   }
+  .wsconfirm[data-wide] { flex-direction: column; align-items: stretch; gap: 6px }
+  .wsconfirm[data-wide] .wsconfirm-a { flex-wrap: wrap; justify-content: flex-end }
   .wsconfirm-t { flex: 1; min-width: 0; display: grid; gap: 1px }
   .wsconfirm-t .q {
     font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text);

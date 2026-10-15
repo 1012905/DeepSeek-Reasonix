@@ -164,6 +164,8 @@ func ToWire(e event.Event) Event {
 	case event.AskRequest:
 		w.Ask = ToWireAsk(e.Ask)
 		w.NonPersistable = urlAsk(e.Ask)
+	case event.AskEngaged:
+		w.Ask = ToWireAsk(event.Ask{ID: e.Ask.ID})
 	case event.CompactionStarted, event.CompactionDone:
 		w.Compaction = toWireCompaction(e.Compaction)
 	case event.ContextMaintenanceEvent:
@@ -400,6 +402,7 @@ type Ask struct {
 	ID        string        `json:"id"`
 	Questions []AskQuestion `json:"questions"`
 	Origin    *AskOrigin    `json:"origin,omitempty"`
+	SkipInMs  int64         `json:"skipInMs,omitempty"`
 }
 
 // Profile carries the subagent model/effort resolved for a tool call.
@@ -667,7 +670,7 @@ func ToWireAsk(a event.Ask) *Ask {
 		}
 		qs[i] = AskQuestion{ID: q.ID, Header: q.Header, Prompt: q.Prompt, Reason: q.Reason, Options: opts, Multi: q.Multi, Default: q.Default, Surface: q.Surface, CallID: q.CallID}
 	}
-	out := &Ask{ID: a.ID, Questions: qs}
+	out := &Ask{ID: a.ID, Questions: qs, SkipInMs: a.SkipInMs}
 	if o := a.Origin; o != nil {
 		out.Origin = &AskOrigin{Kind: o.Kind, Source: o.Source, Message: o.Message, Note: o.Note, URL: o.URL}
 		if o.URL != "" {

@@ -85,6 +85,9 @@ type Options struct {
 	// FeedbackSurface is the frontend a report from this session names. Empty
 	// leaves /feedback unavailable: a headless run or an editor has no form.
 	FeedbackSurface feedback.Surface
+	// AccountsURL is the identity service a feedback link proves the account
+	// against. Empty takes the shared default.
+	AccountsURL string
 	// BalanceStore lets a host that builds several runtimes — a window with more
 	// than one pane — read one wallet through one cache. Nil gives each runtime
 	// a private one.

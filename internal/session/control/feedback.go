@@ -18,6 +18,10 @@ type Feedback interface {
 	ListFeedback(ctx context.Context) (feedback.Mine, error)
 	ReplyFeedback(ctx context.Context, receipt, body string) (feedback.ReplyReceipt, error)
 	MarkFeedbackSeen(receipt string, upTo feedback.ReplyID) error
+	LinkFeedbackAccount(ctx context.Context) error
+	UnlinkFeedbackAccount(ctx context.Context) error
+	UnlinkFeedbackInstall(ctx context.Context, shortID string) error
+	FeedbackLinks(ctx context.Context) ([]feedback.LinkedInstall, error)
 }
 
 // FeedbackOptions is what assembly hands the controller for Feedback: the
@@ -78,4 +82,34 @@ func (c *Controller) MarkFeedbackSeen(receipt string, upTo feedback.ReplyID) err
 		return feedback.ErrDisabled
 	}
 	return c.feedback.Service.MarkSeen(receipt, upTo)
+}
+
+// LinkFeedbackAccount ties this install to the signed-in account. It is only
+// ever the answer to a person asking: nothing links at sign-in.
+func (c *Controller) LinkFeedbackAccount(ctx context.Context) error {
+	if c.feedback.Service == nil {
+		return feedback.ErrDisabled
+	}
+	return c.feedback.Service.Link(ctx)
+}
+
+func (c *Controller) UnlinkFeedbackAccount(ctx context.Context) error {
+	if c.feedback.Service == nil {
+		return feedback.ErrDisabled
+	}
+	return c.feedback.Service.Unlink(ctx)
+}
+
+func (c *Controller) UnlinkFeedbackInstall(ctx context.Context, shortID string) error {
+	if c.feedback.Service == nil {
+		return feedback.ErrDisabled
+	}
+	return c.feedback.Service.UnlinkInstall(ctx, shortID)
+}
+
+func (c *Controller) FeedbackLinks(ctx context.Context) ([]feedback.LinkedInstall, error) {
+	if c.feedback.Service == nil {
+		return nil, feedback.ErrDisabled
+	}
+	return c.feedback.Service.Links(ctx)
 }

@@ -17,7 +17,7 @@ interface Props {
   // Called when a switch lands (status refresh) and when it moved the tree
   // (the change list, the branch reading and the workspace view re-read).
   onChanged: () => void;
-  onSwitched?: () => void;
+  onSwitched?: (git: WorkspaceGit) => void;
   onError: (e: unknown) => void;
 }
 
@@ -74,11 +74,26 @@ export function BranchChip({ port, git, changeCount, countElsewhere = false, onC
     if (busy) return;
     setBusy(true);
     void port.switchBranch(name)
-      .then(() => { onChanged(); onSwitched?.(); })
+      .then((git) => { onChanged(); onSwitched?.(git); })
       .catch(onError)
       .finally(() => setBusy(false));
   };
 
+  if (git && !git.repo && git.absent) {
+    const refused = git.absent === "refused";
+    return (
+      <div className="studio-branch-pop" onMouseEnter={(e) => fitCard(e.currentTarget)} onFocusCapture={(e) => fitCard(e.currentTarget)}>
+        <div className="mode plain studio-branch" data-norepo="" data-absent={git.absent} role="img" aria-label={refused ? t("Git 拒绝打开") : t("Git 未响应")} tabIndex={0} aria-describedby={branchTipId}>
+          <span className="ic" aria-hidden="true"><StudioIcon name="branch" /></span>
+          <span className="lb">{refused ? t("Git 拒绝打开") : t("Git 未响应")}</span>
+        </div>
+        <div className="studio-branch-card" style={cardStyle} id={branchTipId} role="tooltip">
+          <b>{refused ? t("这个文件夹有 Git 仓库，但 Git 拒绝打开它") : t("这个文件夹有 Git 仓库，但 Git 没有及时响应")}</b>
+          <span>{refused ? (git.detail ? t("Git 说：{detail}", { detail: git.detail }) : t("请在终端里运行 git status 查看原因")) : t("分支暂时无法显示。重新打开这个文件夹，或重启 Studio 后再试")}</span>
+        </div>
+      </div>
+    );
+  }
   if (git && !git.repo) {
     return (
       <div className="studio-branch-pop" onMouseEnter={(e) => fitCard(e.currentTarget)} onFocusCapture={(e) => fitCard(e.currentTarget)}>

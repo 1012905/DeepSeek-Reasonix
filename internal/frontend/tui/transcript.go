@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"reasonix/internal/contract/eventwire"
 )
@@ -64,6 +65,8 @@ type Item struct {
 	Approval *eventwire.Approval
 	Ask      *eventwire.Ask
 	Verdict  string
+	// AskSkipAt is when the host skips an open question; zero when it never will.
+	AskSkipAt time.Time
 
 	// ItemNotice. Count folds a repeated notice into the row already there.
 	Level  string
@@ -235,10 +238,8 @@ func (t *Transcript) Apply(ev eventwire.Event) {
 		if ev.Approval != nil {
 			t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemApproval, Approval: ev.Approval})
 		}
-	case "ask_request":
-		if ev.Ask != nil {
-			t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemAsk, Ask: ev.Ask})
-		}
+	case "ask_request", "ask_engaged":
+		t.foldAsk(ev)
 	case "compaction_started":
 		t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemCompaction, Compaction: ev.Compaction})
 	case "compaction_done":
@@ -274,6 +275,19 @@ func (t *Transcript) Apply(ev eventwire.Event) {
 			t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemReceipt, Receipt: ev.Receipt, ReceiptLine: t.ReceiptLine})
 		}
 	}
+}
+
+// foldAsk lands an ask or the moment it was engaged on: a request opens the card,
+// engagement ends its countdown.
+func (t *Transcript) foldAsk(ev eventwire.Event) {
+	if ev.Ask == nil {
+		return
+	}
+	if ev.Kind == "ask_request" {
+		t.noteAsk(ev.Ask)
+		return
+	}
+	t.endAskCountdown(ev.Ask.ID)
 }
 
 // addWorked keeps a turn's run time under its answer. A run shorter than the
@@ -615,4 +629,30 @@ func (t *Transcript) foldUsage(u *eventwire.Usage) {
 // above them, under the answer that asked for them, where the request ended.
 func isCallRow(k ItemKind) bool {
 	return k == ItemTool || k == ItemApproval || k == ItemAsk
+}
+
+// noteAsk shows a question, or, when the same one is announced again, only moves
+// the deadline its card counts down to.
+func (t *Transcript) noteAsk(ask *eventwire.Ask) {
+	var skipAt time.Time
+	if ask.SkipInMs > 0 {
+		skipAt = time.Now().Add(time.Duration(ask.SkipInMs) * time.Millisecond)
+	}
+	for i, it := range slices.Backward(t.Items) {
+		if it.Kind == ItemAsk && it.Verdict == "" && it.Ask != nil && it.Ask.ID == ask.ID {
+			t.Items[i].AskSkipAt = skipAt
+			return
+		}
+	}
+	t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemAsk, Ask: ask, AskSkipAt: skipAt})
+}
+
+// endAskCountdown stops the countdown of a question the person has taken over.
+func (t *Transcript) endAskCountdown(id string) {
+	for i, it := range slices.Backward(t.Items) {
+		if it.Kind == ItemAsk && it.Ask != nil && it.Ask.ID == id {
+			t.Items[i].AskSkipAt = time.Time{}
+			return
+		}
+	}
 }

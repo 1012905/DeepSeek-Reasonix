@@ -294,3 +294,55 @@ describe("the Delete key on a focused conversation", () => {
     expect(renameSession).not.toHaveBeenCalled();
   });
 });
+
+describe("deleting a conversation that has recovery copies", () => {
+  const COPY_A = "/w/.reasonix/sessions/20260901-120000.recovered-1.jsonl";
+  const COPY_B = "/w/.reasonix/sessions/20260901-120000.recovered-2.jsonl";
+  const withCopies = () => tree({
+    sessions: [{
+      path: SESSION, name: "20260901-120000", title: "the one to delete",
+      copies: [
+        { path: COPY_A, name: "a", title: "", turns: 3 },
+        { path: COPY_B, name: "b", title: "", turns: 4 },
+      ],
+    }] as never,
+  });
+
+  const askToDelete = async () => {
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "删除会话" }));
+    return screen.getByRole("alertdialog");
+  };
+
+  it("offers to take the copies along, and says what plain Delete leaves behind", async () => {
+    draw({ workspaces: withCopies() });
+    const ask = await askToDelete();
+    expect(ask.textContent).toContain("2");
+    expect(within(ask).getByRole("button", { name: /连同 2 份副本/ })).toBeTruthy();
+  });
+
+  it("removes the copies and then the conversation when asked to take them along", async () => {
+    const { removeSession } = draw({ workspaces: withCopies() });
+    const ask = await askToDelete();
+    await userEvent.click(within(ask).getByRole("button", { name: /连同 2 份副本/ }));
+    await vi.waitFor(() => expect(removeSession).toHaveBeenCalledTimes(3));
+    expect(removeSession.mock.calls.map((c) => c[0])).toEqual([COPY_A, COPY_B, SESSION]);
+  });
+
+  it("plain Delete removes only the conversation", async () => {
+    const { removeSession } = draw({ workspaces: withCopies() });
+    const ask = await askToDelete();
+    await userEvent.click(within(ask).getByRole("button", { name: "删除" }));
+    await vi.waitFor(() => expect(removeSession).toHaveBeenCalledTimes(1));
+    expect(removeSession).toHaveBeenCalledWith(SESSION);
+  });
+
+  it("stops at a copy the kernel refuses and leaves the conversation in place", async () => {
+    const { removeSession, onError } = draw({ workspaces: withCopies() });
+    removeSession.mockRejectedValueOnce(new Error("copy is open"));
+    const ask = await askToDelete();
+    await userEvent.click(within(ask).getByRole("button", { name: /连同 2 份副本/ }));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(removeSession).toHaveBeenCalledTimes(1);
+  });
+});

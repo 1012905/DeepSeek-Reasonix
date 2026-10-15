@@ -24,8 +24,15 @@ var (
 	ErrReplyLimit        = errors.New("feedback: reply limit reached")
 	ErrNotReplyable      = errors.New("feedback: report takes no reply")
 	ErrChallengeRequired = errors.New("feedback: verification required")
-	ErrOffline           = errors.New("feedback: service unreachable")
-	ErrUnavailable       = errors.New("feedback: service failed")
+	// The account-link sentinels: ErrAccountRequired is a missing, expired or
+	// refused sign-in assertion, ErrLinkConflict an install another account holds,
+	// ErrLinkLimit an account at its cap, ErrNoInstall an install with no report yet.
+	ErrAccountRequired = errors.New("feedback: account sign-in required")
+	ErrLinkConflict    = errors.New("feedback: install linked to another account")
+	ErrLinkLimit       = errors.New("feedback: account link limit reached")
+	ErrNoInstall       = errors.New("feedback: this install has not sent a report")
+	ErrOffline         = errors.New("feedback: service unreachable")
+	ErrUnavailable     = errors.New("feedback: service failed")
 )
 
 // Field names an InvalidError can carry.
@@ -37,6 +44,7 @@ const (
 	FieldImages      = "images"
 	FieldReceipt     = "receipt"
 	FieldReplyID     = "replyId"
+	FieldInstall     = "install"
 )
 
 // Reasons an InvalidError can carry.

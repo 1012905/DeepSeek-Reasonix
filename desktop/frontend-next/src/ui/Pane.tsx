@@ -342,7 +342,11 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   useEffect(() => { void loadFoldWorkPref(port); }, [port]);
   const foldWork = useFoldsTurnWork(port);
-  const refreshTree = useCallback(() => { void port.changes().then(setTree).catch(() => setTree(null)); void port.workspaceGit().then(setGit).catch(() => setGit(null)); }, [port]);
+  const refreshTree = useCallback((git?: WorkspaceGit) => {
+    void port.changes().then(setTree).catch(() => setTree(null));
+    if (git) setGit(git);
+    else void port.workspaceGit().then(setGit).catch(() => setGit(null));
+  }, [port]);
   useEffect(() => { if (ready || counts.wrote) refreshTree(); }, [ready, refreshTree, status?.sessionPath, running, counts.wrote]);
 
   // One turn can be dozens of model round trips — the session this was measured

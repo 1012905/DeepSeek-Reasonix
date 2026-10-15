@@ -17,6 +17,7 @@ export type Kind =
   | "turn_phase"
   | "approval_request"
   | "ask_request"
+  | "ask_engaged"
   | "turn_done"
   | "compaction_started"
   | "compaction_progress"
@@ -60,8 +61,7 @@ export interface Profile {
 export interface Execution {
   kind?: string;
   shell?: string;
-  /** PowerShell 5.1 and 7 are two different languages to write a command in,
-   *  and the shell name alone cannot say which one answered. */
+  /** PowerShell 5.1 and 7 are different languages; the shell name alone cannot say which answered. */
   shellVersion?: string;
   platform?: string;
   /** False on Windows PowerShell 5.1, where `&&` is a syntax error. */
@@ -70,8 +70,7 @@ export interface Execution {
   failurePhase?: string;
   exitCode?: number;
   outputTail?: string;
-  /** The command with its leading environment assignments dropped, when
-   *  dropping them changed it. What a row names; never what authorised it. */
+  /** The command without its leading environment assignments, when that changed it; never what authorised it. */
   subject?: string;
   mutationRisk?: string;
   verification?: string;
@@ -303,6 +302,7 @@ export interface Ask {
   id: string;
   questions: AskQuestion[];
   origin?: AskOrigin;
+  skipInMs?: number;
 }
 
 export interface Guardian {

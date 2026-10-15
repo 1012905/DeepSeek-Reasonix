@@ -69,6 +69,9 @@ var codeSentinels = map[string]error{
 	"feedback.reply_limit":        ErrReplyLimit,
 	"feedback.not_replyable":      ErrNotReplyable,
 	"feedback.challenge_required": ErrChallengeRequired,
+	"feedback.account_required":   ErrAccountRequired,
+	"feedback.link_conflict":      ErrLinkConflict,
+	"feedback.link_limit":         ErrLinkLimit,
 }
 
 func (s *Service) post(ctx context.Context, body wireSubmit, token string) (wireReceipt, error) {

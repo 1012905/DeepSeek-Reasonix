@@ -82,3 +82,13 @@ func TestSummaryOfANonRepositoryIsNotOK(t *testing.T) {
 		t.Fatal("a directory outside any work tree has no summary")
 	}
 }
+
+func TestSummaryCanceledContextDoesNotPublishPartialCounts(t *testing.T) {
+	dir := repoWithCommit(t)
+	repo := opened(t, dir)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if info, ok := Summary(ctx, repo); ok || info != (Info{}) {
+		t.Fatalf("canceled summary = %+v ok=%v", info, ok)
+	}
+}

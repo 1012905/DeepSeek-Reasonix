@@ -314,6 +314,8 @@ type pendingAsk struct {
 	reply     chan []event.AskAnswer
 	queued    bool // registered but not yet shown; replay must skip it
 	origin    *event.AskOrigin
+	// skipAt is when the host will skip the question; zero when it never will.
+	skipAt time.Time
 }
 
 // registerAsk records the pending question batch under an identity already
@@ -351,6 +353,30 @@ func (a *approvalManager) markAskEmitted(id string) {
 		p.queued = false
 		a.asks[id] = p
 	}
+}
+
+// setAskSkipAt records when an emitted question will be skipped.
+func (a *approvalManager) setAskSkipAt(id string, at time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if p, ok := a.asks[id]; ok {
+		p.skipAt = at
+		a.asks[id] = p
+	}
+}
+
+// skipInMs is what is left of the wait a frontend should show: zero when the
+// question is never skipped or the person has taken it over.
+func (p pendingAsk) skipInMs(now time.Time) int64 {
+	if p.skipAt.IsZero() {
+		return 0
+	}
+	select {
+	case <-p.engaged:
+		return 0
+	default:
+	}
+	return max(p.skipAt.Sub(now).Milliseconds(), 1)
 }
 
 // queuedAsks reports asks registered but not yet shown.
@@ -494,7 +520,7 @@ func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 		if p.queued {
 			continue
 		}
-		asks = append(asks, event.Ask{ID: id, Questions: p.questions, Origin: p.origin})
+		asks = append(asks, event.Ask{ID: id, Questions: p.questions, Origin: p.origin, SkipInMs: p.skipInMs(time.Now())})
 	}
 	return approvals, asks
 }
