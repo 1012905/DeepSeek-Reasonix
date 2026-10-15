@@ -60,6 +60,9 @@ export interface ProviderEntry {
   // it inherits when it declares none.
   modelLimits?: Record<string, ModelLimit>;
   inheritedLimits?: Record<string, ModelLimit>;
+  // Per model: the price per million tokens it declares for itself. A model
+  // with none is absent, which means unknown, not zero.
+  modelPrices?: Record<string, ModelRate>;
   // Removing the one in use would leave the session on a model that no longer
   // resolves, so the row offers no delete.
   inUse: boolean;
@@ -247,6 +250,17 @@ export interface ProviderEdit {
   // The whole per-model answer for the listed models: a model left out, or sent
   // empty, inherits the connection's limits again. Omitted leaves every model alone.
   modelLimits?: Record<string, ModelLimit>;
+  // The whole per-model answer for the listed models: a model sent null has no
+  // price of its own again. Omitted leaves every model alone.
+  modelPrices?: Record<string, ModelRate | null>;
+}
+
+// One model's price per million tokens, zeros included: free is a price.
+export interface ModelRate {
+  input: number;
+  output: number;
+  cacheHit: number;
+  currency: string;
 }
 
 // One model's own context window and output cap; an absent field inherits.

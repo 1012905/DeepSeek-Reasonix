@@ -158,6 +158,8 @@ const SAID: Record<string, string> = {
   "backup.limit_reached": "备份数量已达上限，请先删除一份旧备份",
   "backup.consent_required": "有会在本机运行程序或改变密钥去向的项目，需要逐项确认后才能恢复",
   "workspace.limit_reached": "项目列表已满（32 个），请先移除一个项目再添加",
+  "provider.bad_model_price": "{model} 的价格必须是不小于 0 的数字，并选择货币",
+  "provider.model_prices_unlisted": "{model} 不在已选模型中，未保存价格",
   "workspace.changing_disabled": "这台服务器不支持切换工作区",
   "workspace.isolate_base_unknown": "没有找到这个分支，没有创建隔离副本",
   "settings.unknown_preset": "不存在该预设",
