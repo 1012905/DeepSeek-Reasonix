@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MockPort } from "../port/mock";
 import { HttpError } from "../port/port";
 import * as hostModule from "../port/host";
@@ -728,5 +728,62 @@ describe("opening the project in other programs from the file panel", () => {
     expect(hub.openWith).toHaveBeenCalledWith("/w", "terminal");
     view.rerender(<WorkbenchPanel {...props} remote />);
     expect(screen.queryByRole("button", { name: "用其他程序打开项目" })).toBeNull();
+  });
+});
+
+describe("naming a built-in browser tab", () => {
+  beforeEach(() => vi.restoreAllMocks());
+  const page = { id: "p", target: "tp", url: "https://example.com/a/very/long/path?x=1", title: "", active: true };
+  const draw = () => {
+    const port = new MockPort();
+    const props = { port, manual: false, shown: true, scheme: "light" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    return render(<WorkbenchPanel {...props} tabs={[page]} />);
+  };
+
+  it("shows the address until the person names the tab, and keeps the name across a title change", async () => {
+    const user = userEvent.setup();
+    const view = draw();
+    const tab = screen.getByRole("tab", { name: page.url });
+    await user.dblClick(within(tab).getByText(page.url));
+    const field = screen.getByRole("textbox", { name: "重命名页签" });
+    await user.clear(field);
+    await user.type(field, "文档{Enter}");
+    expect(screen.getByRole("tab", { name: "文档" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "重命名页签" })).toBeNull();
+    // The page's own title arriving later does not take the name back.
+    view.rerender(<WorkbenchPanel port={new MockPort()} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} tabs={[{ ...page, title: "Example Domain" }]} />);
+    expect(screen.getByRole("tab", { name: "文档" })).toBeTruthy();
+  });
+
+  it("opening the field and leaving it unchanged does not freeze the page's title", async () => {
+    const user = userEvent.setup();
+    const view = draw();
+    await user.dblClick(within(screen.getByRole("tab", { name: page.url })).getByText(page.url));
+    await user.keyboard("{Enter}");
+    view.rerender(<WorkbenchPanel port={new MockPort()} manual={false} shown scheme="light" changes={[]} onCloseManual={vi.fn()} onSurfaces={vi.fn()} onExternal={vi.fn()} tabs={[{ ...page, title: "Example Domain" }]} />);
+    expect(screen.getByRole("tab", { name: "Example Domain" })).toBeTruthy();
+  });
+
+  it("F2 on a focused browser tab opens the same field from the keyboard", async () => {
+    const user = userEvent.setup();
+    draw();
+    within(screen.getByRole("tab", { name: page.url })).getByRole("button", { name: page.url }).focus();
+    await user.keyboard("{F2}");
+    expect(screen.getByRole("textbox", { name: "重命名页签" })).toBeTruthy();
+  });
+
+  it("Escape keeps the old label, and an emptied name gives the page's own label back", async () => {
+    const user = userEvent.setup();
+    draw();
+    await user.dblClick(within(screen.getByRole("tab", { name: page.url })).getByText(page.url));
+    await user.type(screen.getByRole("textbox", { name: "重命名页签" }), "x{Escape}");
+    expect(screen.getByRole("tab", { name: page.url })).toBeTruthy();
+    await user.dblClick(within(screen.getByRole("tab", { name: page.url })).getByText(page.url));
+    await user.clear(screen.getByRole("textbox", { name: "重命名页签" }));
+    await user.type(screen.getByRole("textbox", { name: "重命名页签" }), "名字{Enter}");
+    await user.dblClick(within(screen.getByRole("tab", { name: "名字" })).getByText("名字"));
+    await user.clear(screen.getByRole("textbox", { name: "重命名页签" }));
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("tab", { name: page.url })).toBeTruthy();
   });
 });

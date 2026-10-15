@@ -21,6 +21,7 @@ import { docRef } from "./docrefs";
 import { useGlance } from "./glance";
 import { useWorkbenchFiles } from "./useWorkbenchFiles";
 import { keyOf, labelOf, type Surface } from "./workbench_tabs";
+import { useTabNames } from "./useTabNames";
 import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
@@ -194,6 +195,7 @@ export function WorkbenchPanel({
     [hosts, setHosts] = useState<Record<string, string>>({});
   const minted = useRef(0);
   const [mode, setMode] = useState<FileMode>("file");
+  const { renaming, setRenaming, labelFor, nameTab } = useTabNames((surface) => labelOf(surface, hosts));
   const [failed, setFailed] = useState("");
   // Showing a file where it lives needs a shell on the kernel's own machine.
   const revealable = !remote && port.revealsFiles();
@@ -508,6 +510,24 @@ export function WorkbenchPanel({
             data-action-contextmenu="workbench.browser-menu" data-target={keyOf(surface)}
             onContextMenu={(e) => offerTabMenu(e, surface)}
           >
+            {renaming === keyOf(surface) ? (
+              <span className="workbench-tab-pick">
+                <StudioIcon name="globe" />
+                <input
+                  className="workbench-tab-in"
+                  aria-label={t("重命名页签")}
+                  autoFocus
+                  defaultValue={labelFor(surface)}
+                  ref={(el) => el?.select()}
+                  data-action-blur="workbench.rename-tab" data-action-keydown="workbench.rename-tab" data-target={keyOf(surface)}
+                  onBlur={(e) => nameTab(surface, e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+                    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); e.currentTarget.value = labelFor(surface); setRenaming(""); }
+                  }}
+                />
+              </span>
+            ) : (
             <button
               className="workbench-tab-pick"
               data-action-click="workbench.tab"
@@ -517,21 +537,27 @@ export function WorkbenchPanel({
                 surface.kind === "browser"
                   ? `${surface.tab.active ? `${t("模型正在操作这个页面")}
 ` : ""}${surface.tab.url}`
-                  : labelOf(surface, hosts)
+                  : labelFor(surface)
               }
               aria-haspopup={surface.kind === "file" ? undefined : "menu"}
               aria-expanded={surface.kind === "file" ? undefined : tabMenu !== null && keyOf(tabMenu.surface) === keyOf(surface)}
               onClick={() => pick(keyOf(surface))}
-              onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) offerTabMenu(e, surface); }}
+              onDoubleClick={surface.kind === "browser" ? () => setRenaming(keyOf(surface)) : undefined}
+              data-action-dblclick="workbench.rename-tab"
+              onKeyDown={(e) => {
+                if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) offerTabMenu(e, surface);
+                else if (e.key === "F2" && surface.kind === "browser") { e.preventDefault(); setRenaming(keyOf(surface)); }
+              }}
             >
               <StudioIcon name={surface.kind === "file" ? "file" : "globe"} />
-              <span>{labelOf(surface, hosts)}</span>
+              <span>{labelFor(surface)}</span>
             </button>
+            )}
             <button
               className="workbench-tab-close"
               data-action="workbench.close"
               data-target={keyOf(surface)}
-              aria-label={t("关闭 {name}", { name: labelOf(surface, hosts) })}
+              aria-label={t("关闭 {name}", { name: labelFor(surface) })}
               title={t("关闭")}
               disabled={closing}
               onClick={() => void close([surface])}
