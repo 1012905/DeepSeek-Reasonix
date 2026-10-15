@@ -121,6 +121,7 @@ type DesktopConfig struct {
 	ReasoningDisplayMode    string           `toml:"reasoning_display_mode"`
 	ConversationWidth       string           `toml:"conversation_width"` // standard|full|full-all; how far prose (and the composer, for full-all) runs; empty = standard
 	PinnedVersion           string           `toml:"pinned_version"`     // release pinned by a rollback; empty follows the channel
+	UpdateMode              string           `toml:"update_mode"`        // manual (default) | notify; user file only
 	Appearance              AppearanceConfig `toml:"appearance"`
 }
 

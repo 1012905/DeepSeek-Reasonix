@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
@@ -262,4 +262,8 @@ export class MockBoundary extends MockShell {
     this.broken = null;
     return { backup, problem: null };
   }
+
+  private mode: UpdateMode = "manual";
+  async updateMode(): Promise<UpdateMode> { return this.mode; }
+  async setUpdateMode(mode: UpdateMode): Promise<UpdateMode> { this.mode = mode; return mode; }
 }

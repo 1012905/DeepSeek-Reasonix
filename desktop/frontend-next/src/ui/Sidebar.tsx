@@ -11,6 +11,7 @@ import { AccountRow } from "./AccountRow";
 import { RailSearch } from "./railsearch";
 import { RemoteHosts } from "./RemoteHosts";
 import { StudioIcon } from "./StudioIcon";
+import { UpdateDot } from "./UpdateDot";
 import { useHiddenHosts } from "../state/remotehide";
 import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
@@ -330,7 +331,7 @@ export function Sidebar({
         <div className="studio-user-foot">
           <AccountRow account={account} unread={accountUnread} onOpen={() => onSettings("account")} />
           <span className="studio-workspace-kind">{t(account?.signedIn ? "个人工作空间" : "本地工作空间")}</span>
-          <button className="studio-settings" data-action="chrome.settings" onClick={() => onSettings()} aria-label={t("设置")}><StudioIcon name="settings" /></button>
+          <button className="studio-settings" data-action="chrome.settings" onClick={() => onSettings()} aria-label={t("设置")}><StudioIcon name="settings" /><UpdateDot /></button>
         </div>
       </div>}
     </div>

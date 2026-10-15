@@ -23,7 +23,7 @@ import type { NetworkProbe, NetworkSettings } from "./network";
 import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry } from "./skill";
-import type { StudioCrash, StudioLogs, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
+import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
 import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
 // The port is one contract; its subjects each keep their own file, the way the
@@ -36,7 +36,7 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, UpdateProgress, VersionEntry,
-  StudioCrash, StudioLogs, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
+  StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
@@ -372,6 +372,8 @@ export interface AgentPort {
   removeProvider(name: string): Promise<ProviderRemoval>;
   versions(): Promise<VersionHub>;
   pinVersion(version: string): Promise<void>;
+  updateMode(): Promise<UpdateMode>;
+  setUpdateMode(mode: UpdateMode): Promise<UpdateMode>;
   // A published release's notes. retry asks past the kernel's short memory of a failed fetch.
   versionNotes(version: string, retry?: boolean): Promise<VersionNotes>;
   // Where this install keeps its logs, and the crash files waiting there.
