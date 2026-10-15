@@ -590,7 +590,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             <span>{rowLabel(session)}</span>{session.archived && <em className="sessarch">{t("已归档")}</em>}
                           </span>
                         )}
-                        {session.unread && <UnreadDot kind="row" />}
+                        {session.unread && <UnreadDot />}
                         {kept.length > 0 && (
                           <button
                             className="sesscopies"

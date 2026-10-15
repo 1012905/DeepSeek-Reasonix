@@ -5,7 +5,6 @@ import { arrowTabs } from "./tablist";
 import { pinToViewport } from "./place";
 import { useMarker } from "./marker";
 import { useDismiss } from "./dismiss";
-import { UnreadDot } from "./UnreadMark";
 
 export interface TabView {
   rt: RuntimeView;
@@ -155,7 +154,7 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
             setMenu({ id: rt.id, x: ev.clientX, y: ev.clientY });
           }}
         >
-          <i className="pip" />
+          <i className="pip" data-unread={unread ? "" : undefined} role={unread ? "img" : undefined} aria-label={unread ? t("未读") : undefined} />
           {editing === rt.id ? (
             <input className="ptab-in" aria-label={t("重命名该会话")} placeholder={t("聊天标题")} autoFocus defaultValue={title}
               onClick={(ev) => ev.stopPropagation()}
@@ -179,7 +178,6 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
           ) : (
             <span className="ptab-nm">{title}</span>
           )}
-          {unread && <UnreadDot kind="tab" />}
           {showRoot && <span className="ptab-ws">{rt.name}</span>}
           {/* Which machine is running this. Panes from two hosts sit side by
               side, and a command lands wherever the focused tab points. */}
