@@ -172,6 +172,7 @@ function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = 
       getIssue: async (n) => { calls.push(["getIssue", n]); return issues[n] ?? issueOf(n); },
       recentComments: async (n) => { calls.push(["comments", n]); return comments; },
       comment: async (n, body) => { calls.push(["comment", n, body]); if (commentFails) throw new Error("gh boom"); },
+      updateComment: async (id, body) => calls.push(["updateComment", id, body]),
       reopen: async (n) => { calls.push(["reopen", n]); if (reopenFails) throw new Error("gh reopen boom"); },
       timeline: async (n) => { calls.push(["timeline", n]); return timeline; },
       getPull: async (n) => pulls[n],
@@ -463,4 +464,52 @@ test("contact is never read, rendered or sent by the converter", async () => {
   assert.ok(!renderBody(item({ contact: secret })).includes(secret) && !renderReply(reply({ contact: secret })).includes(secret));
   const source = readFileSync(new URL("./feedback-sync.mjs", import.meta.url), "utf8");
   assert.ok(!/contact/i.test(source), "the converter must not name a contact field at all");
+});
+
+const shotUrl = (k) => `${ATTACHMENT_PREFIX}${k}`;
+const withImages = (released) => reply({ attachments: [{ name: "a.png", contentType: "image/png", url: shotUrl("abcdefghijklmnop"), released }, { name: "b.png", contentType: "image/png", released: false }] });
+
+test("a reply's released images are shown under it and a held one is said to be waiting, only when images exist", () => {
+  const text = renderReply(withImages(true));
+  assert.ok(text.includes(`![image 1](${shotUrl("abcdefghijklmnop")})`));
+  assert.ok(text.includes("1 image attached, not public: awaiting maintainer review."));
+  assert.ok(text.trimEnd().endsWith(replyMarker("r1")));
+  assert.ok(!renderReply(reply()).includes("awaiting maintainer review"));
+  assert.ok(!renderReply(reply({ attachments: [] })).includes("awaiting maintainer review"));
+  const none = renderReply(reply({ attachments: [{ name: "a.png", url: "https://evil.example/x.png", released: true }] }));
+  assert.ok(!none.includes("evil.example") && none.includes("1 image attached, not public"));
+});
+
+test("a comment already written is edited in place when the images changed, acked, and the issue is not reopened again", async () => {
+  const closed = (n) => ({ ...BOT, number: n, comments: 1, state: "closed", state_reason: "completed" });
+  const before = { id: 7001, user: { login: "github-actions[bot]" }, body: renderReply(withImages(false)) };
+  const d = fakes({ pending: [], replies: [withImages(true)], issueOf: closed, comments: [before] });
+  assert.deepEqual((await run(d)).failures, []);
+  assert.deepEqual(writes(d), ["getIssue", "comments", "updateComment", "ack"]);
+  const update = d.calls.find((c) => c[0] === "updateComment");
+  assert.equal(update[1], 7001);
+  assert.ok(update[2].includes(`![image 1](${shotUrl("abcdefghijklmnop")})`));
+});
+
+test("removed images are edited out of the mirrored comment, leaving no dangling link", async () => {
+  const before = { id: 7002, user: { login: "github-actions[bot]" }, body: renderReply(withImages(true)) };
+  const d = fakes({ pending: [], replies: [reply({ attachments: [] })], comments: [before] });
+  await run(d);
+  const update = d.calls.find((c) => c[0] === "updateComment");
+  assert.ok(update && !update[2].includes(ATTACHMENT_PREFIX) && !update[2].includes("awaiting maintainer review"));
+});
+
+test("a forged comment carrying the marker is never edited; a fresh comment is posted instead", async () => {
+  const forged = { id: 9, user: { login: "mallory" }, body: renderReply(withImages(false)) };
+  const d = fakes({ pending: [], replies: [withImages(true)], comments: [forged] });
+  await run(d);
+  assert.ok(!writes(d).includes("updateComment"));
+  assert.deepEqual(writes(d), ["getIssue", "comments", "comment", "ack"]);
+});
+
+test("a comment that is already current is neither edited nor reposted", async () => {
+  const same = { id: 5, user: { login: "github-actions[bot]" }, body: renderReply(withImages(true)) };
+  const d = fakes({ pending: [], replies: [withImages(true)], comments: [same] });
+  await run(d);
+  assert.deepEqual(writes(d), ["getIssue", "comments", "ack"]);
 });
