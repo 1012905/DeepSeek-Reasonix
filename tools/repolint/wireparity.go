@@ -14,6 +14,7 @@ import (
 // Where the desktop re-declares the kernel's wire types by hand.
 const (
 	tsWireFile      = "desktop/frontend-next/src/port/wire.ts"
+	tsLeaseFile     = "desktop/frontend-next/src/port/workspace_lease.ts"
 	tsBoundaryFile  = "desktop/frontend-next/src/port/boundary.ts"
 	tsRemoteFile    = "desktop/frontend-next/src/port/remote.ts"
 	tsSessionFile   = "desktop/frontend-next/src/port/session.ts"
@@ -193,7 +194,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
 	{"internal/state/checkpoint/types.go", "RewindUndo", tsSessionFile, "RewindUndo"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
-	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},
+	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsLeaseFile, "WorkspaceLease"},
 	// A source and a model as the pickers name them. A label the page cannot
 	// read puts the config name back on screen after the user renamed it.
 	{"internal/frontend/serve/providers.go", "providerView", tsProviderFile, "ProviderEntry"},

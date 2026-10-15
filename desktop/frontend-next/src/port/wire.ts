@@ -1,4 +1,6 @@
 import type { ContextComposition } from "./context_composition";
+import type { WorkspaceLease } from "./workspace_lease";
+export type { WorkspaceLease } from "./workspace_lease";
 import type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset } from "./surface-rich";
 export type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset, SurfaceSeries } from "./surface-rich";
 // Mirrors internal/contract/eventwire. Field names and kind strings must match exactly;
@@ -475,21 +477,6 @@ export interface TodoProgress {
   contentRevision?: number;
   planRevision?: number;
   progressRevision?: number;
-}
-
-/** One closed account of the workspace write lease. Waits under the notice
- *  grace are counted here and nowhere else, and idleMs is the stretch held
- *  after the last write asked for it. */
-export interface WorkspaceLease {
-  contended: number;
-  reported?: number;
-  waitedMs?: number;
-  heldMs: number;
-  idleMs: number;
-  holder?: string;
-  holderSessionId?: string;
-  paths?: string[];
-  requestedPaths?: string[];
 }
 
 // One context-maintenance transaction. status "noop" carries code: the attempt

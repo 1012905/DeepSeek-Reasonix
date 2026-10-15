@@ -571,3 +571,86 @@ func TestACrossProcessWaitNamesTheHolder(t *testing.T) {
 		t.Fatalf("wait reports = %+v, want the first one naming the other process's session", log.seen)
 	}
 }
+
+// Two folders that only share a git repository above them wait on each other,
+// and the report says the shared domain is that repository: a holder and a
+// requester showing one identical path otherwise reads as a session fighting itself.
+func TestAWaitNamesTheRepositoryThatFoldsTwoFoldersIntoOneDomain(t *testing.T) {
+	withWaitGrace(t, 20*time.Millisecond)
+	repo, locks := testenv.TempDir(t), testenv.TempDir(t)
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	projectA, projectB := filepath.Join(repo, "a"), filepath.Join(repo, "b")
+	for _, dir := range []string{projectA, projectB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := New(projectA, locks, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var log waitLog
+	second, err := New(projectB, locks, log.note)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.BeginRun()
+	second.BeginRun()
+	if err := first.AcquireWrite(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	acquired := make(chan error, 1)
+	go func() { acquired <- second.AcquireWrite(context.Background()) }()
+	time.Sleep(100 * time.Millisecond)
+	first.EndRun()
+	if err := <-acquired; err != nil {
+		t.Fatal(err)
+	}
+	second.EndRun()
+	want, err := CanonicalWorkspace(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	if len(log.seen) == 0 || log.seen[0].Repository != want {
+		t.Fatalf("wait reports = %+v, want the first to name repository %q", log.seen, want)
+	}
+}
+
+func TestAWaitOnTheRepositoryRootItselfNamesNoRepository(t *testing.T) {
+	withWaitGrace(t, 20*time.Millisecond)
+	repo, locks := testenv.TempDir(t), testenv.TempDir(t)
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	first, err := New(repo, locks, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var log waitLog
+	second, err := New(repo, locks, log.note)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.BeginRun()
+	second.BeginRun()
+	if err := first.AcquireWrite(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	acquired := make(chan error, 1)
+	go func() { acquired <- second.AcquireWrite(context.Background()) }()
+	time.Sleep(100 * time.Millisecond)
+	first.EndRun()
+	if err := <-acquired; err != nil {
+		t.Fatal(err)
+	}
+	second.EndRun()
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	if len(log.seen) == 0 || log.seen[0].Repository != "" {
+		t.Fatalf("wait reports = %+v, want no repository on the root's own wait", log.seen)
+	}
+}

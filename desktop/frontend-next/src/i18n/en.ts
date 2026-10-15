@@ -1530,6 +1530,7 @@ export const EN: Record<string, string> = {
   "费用显示币种已设为 {mode}": "Cost display currency set to {mode}",
   "这个会话保存的压缩结果没有被复用：它所总结的历史之后发生了变化，现在发送的是完整历史，可能超出模型容量": "This conversation's saved compaction was not reused: the history it summarised has changed since. The full history is being sent, which may exceed the model's window.",
   "这个会话保存的压缩结果是在另一个模型或工作区下生成的，与当前历史对不上，没有被复用，现在发送的是完整历史": "This conversation's saved compaction was made under another model or workspace and does not match its history, so it was not reused. The full history is being sent.",
+  "这些工作区在同一个 Git 仓库 {repo} 内，同一仓库共用一个写入域；把项目移出该仓库，或在用户配置里设 write_lease = \"optimistic\"，才能并行写入": "These workspaces are inside the same Git repository, {repo}, and one repository is one write domain; move the project out of it, or set write_lease = \"optimistic\" in your user config, to write in parallel",
   "配置文件里的提问等待时长无效（须为 0 或 10 到 86400 之间的整数），提问现在会一直等你回答；到设置里重新设一个": "The question wait time in the config file is not valid (it must be a whole number, 0 or 10 to 86400), so questions wait for you as long as it takes; set it again in Settings.",
   "模型卡在重复输出同一段文字，这一轮已停止；可以重试、补充引导，或换一个供应商/模型": "The model is stuck repeating the same text; this turn was stopped. Try again, add guidance, or switch provider/model.",
   "扩展 {ext} 的配套后台程序没有运行，该扩展本次（在 {point}）已被跳过；到「工具与集成」里查看并启动它，或停用该扩展": "The companion background program of extension {ext} is not running, so the extension was skipped this time (at {point}). Open Tools and integrations to check and start it, or disable the extension.",

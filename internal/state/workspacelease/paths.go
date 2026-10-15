@@ -22,6 +22,8 @@ type pathLeaseState struct {
 	record    string
 	sessionID func() string
 	identity  string
+	// repository is the git root that folds the selected folder into this domain; empty when none does.
+	repository string
 }
 
 type pathLeaseRecord struct {
