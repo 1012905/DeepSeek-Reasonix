@@ -246,6 +246,29 @@ func (m *checkpointManager) endOfTurn(turn, tip int) (int, bool) {
 	return end, true
 }
 
+// namesUserMessage reports whether msg is the prompt recorded for the turn that
+// starts at index: the identity a recorded boundary is checked against before
+// it is trusted to cut a conversation that is still being written.
+func (m *checkpointManager) namesUserMessage(index int, msg provider.Message) bool {
+	m.mu.Lock()
+	next, found := 0, false
+	for turn, at := range m.bound {
+		if at == index && (!found || turn < next) {
+			next, found = turn, true
+		}
+	}
+	m.mu.Unlock()
+	if !found || msg.Role != provider.RoleUser {
+		return false
+	}
+	for _, meta := range m.list() {
+		if meta.Turn == next {
+			return sessionstore.UserMessageText(msg) == strings.TrimSpace(sessionstore.StripTransientUserBlocks(meta.Prompt))
+		}
+	}
+	return false
+}
+
 // list returns the checkpoint metadata (nil when disabled).
 func (m *checkpointManager) list() []checkpoint.Meta {
 	m.mu.Lock()
