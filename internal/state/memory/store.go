@@ -527,6 +527,12 @@ func (s Store) pinnedGuidance() ([]Memory, error) {
 			if ResolveActivation(m) != ActivationPinned || strings.TrimSpace(m.Body) == "" {
 				continue
 			}
+			// An explicit expiry is a hard boundary: the index and automatic
+			// recall already drop the fact past it, so the prefix must not keep
+			// sending the body.
+			if memoryFreshness(m, time.Now()) == FreshnessExpired {
+				continue
+			}
 			out = append(out, m)
 		}
 	}
@@ -548,6 +554,7 @@ func (s Store) pinnedGuidanceForProject() ([]Memory, error) {
 	if len(guidance) == 0 || s.Dir == "" {
 		return guidance, nil
 	}
+	now := time.Now()
 	projectKeys := map[string]bool{}
 	facts, err := s.ListAll()
 	if err != nil {
@@ -555,6 +562,11 @@ func (s Store) pinnedGuidanceForProject() ([]Memory, error) {
 	}
 	for _, fact := range facts {
 		if NormalizeFactScope(string(fact.Scope)) != FactScopeProject {
+			continue
+		}
+		// An expired project fact sends nothing, so it cannot shadow the global
+		// guidance it used to override.
+		if memoryFreshness(fact, now) == FreshnessExpired {
 			continue
 		}
 		for _, key := range recallIdentityKeys(fact) {
