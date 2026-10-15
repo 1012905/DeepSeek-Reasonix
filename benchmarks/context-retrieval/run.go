@@ -475,8 +475,20 @@ func writeResults(root string, info batchInfo, all []contextMetrics) int {
 // what a four-arm average cannot do.
 func reportBoundaries(all []contextMetrics) {
 	byKey := map[string]contextMetrics{}
+	scored, failed := 0, 0
 	for _, m := range all {
+		if m.Failed {
+			// No transcript, no boundary to compare: count the failure instead of
+			// printing the zero it left behind as a measurement.
+			failed++
+			continue
+		}
+		scored++
 		byKey[m.Task+"|"+m.Arm] = m
+	}
+	if scored == 0 {
+		fmt.Printf("\n## Across each task's cue boundary\n  no scored runs: scored=%d failed=%d (nothing to compare)\n", scored, failed)
+		return
 	}
 	var cueSide, noCueSide []contextMetrics
 	fmt.Println("\n## Across each task's cue boundary")
