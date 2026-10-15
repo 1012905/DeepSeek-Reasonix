@@ -53,6 +53,7 @@ interface Props {
   onFocusPane: (id: string) => void;
   onClosePanes: (ids: string[]) => Promise<void>;
   onPause: (runtimeId: string) => void;
+  onBranch?: (runtimeId: string, name: string) => Promise<void>;
   onArchive: (path: string, archived: boolean, runtimeId?: string) => Promise<void>;
   onRename: (path: string, title: string, mode?: "inline" | "dialog") => void;
   onCollapse: () => void;
@@ -100,6 +101,7 @@ export function Sidebar({
   onFocusPane,
   onClosePanes,
   onPause,
+  onBranch,
   onArchive,
   onRename,
   onCollapse,
@@ -292,6 +294,7 @@ export function Sidebar({
         pinned={pinned}
         onPin={onPin}
         onPause={(runtimeId) => onPause(runtimeId)}
+        onBranch={onBranch}
         onArchive={onArchive}
         onRename={onRename}
         onError={onError}

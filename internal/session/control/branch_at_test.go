@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/state/sessionstore"
 )
 
@@ -109,5 +110,46 @@ func TestABranchIsListedBesideItsSourceUnderItsOwnTitle(t *testing.T) {
 	}
 	if branch.Recovered || branch.CustomTitle != "the other way" || source.CustomTitle == branch.CustomTitle {
 		t.Fatalf("branch = %+v, want an ordinary session with its own title (source %+v)", branch, source)
+	}
+}
+
+func startLaterTurn(t *testing.T, c *Controller, ag interface {
+	Session() *sessionstore.Session
+}) {
+	t.Helper()
+	sess := ag.Session()
+	start := len(sess.Messages)
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "third prompt"})
+	c.checkpoints.mu.Lock()
+	c.checkpoints.bound[c.checkpoints.turn] = start
+	c.checkpoints.turn++
+	c.checkpoints.mu.Unlock()
+	c.mu.Lock()
+	c.gate.begin(func() {})
+	c.mu.Unlock()
+}
+
+func TestBranchAtClosedTurnWhileALaterTurnRuns(t *testing.T) {
+	c, ag, _ := runTwoTurns(t)
+	turns := orderedTurns(t, c)
+	secondStart, _ := c.checkpoints.boundary(turns[1])
+	startLaterTurn(t, c, ag)
+	total := len(ag.Session().Messages)
+
+	path, err := c.BranchAt(turns[0], "")
+	if err != nil {
+		t.Fatalf("BranchAt a closed turn mid-run: %v", err)
+	}
+	if got := savedMessages(t, path); got != secondStart {
+		t.Fatalf("branch holds %d messages, want %d: the first turn only", got, secondStart)
+	}
+	if _, err := c.BranchAt(turns[1], ""); err != nil {
+		t.Fatalf("the latest closed turn must branch too: %v", err)
+	}
+	if len(ag.Session().Messages) != total {
+		t.Fatalf("the running conversation changed: %d messages, want %d", len(ag.Session().Messages), total)
+	}
+	if _, err := c.BranchAt(turns[1]+1, ""); !errors.Is(err, ErrTurnRunning) {
+		t.Fatalf("the running turn itself: err = %v, want ErrTurnRunning", err)
 	}
 }

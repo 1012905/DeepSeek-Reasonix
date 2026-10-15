@@ -16,6 +16,7 @@ export interface SessionMenuProps {
   onPause: () => void;
   onClose: () => void;
   onArchive: () => void;
+  onBranch?: () => void;
   onCopyInfo: () => void;
   onExport: () => void;
   onDelete: () => void;
@@ -25,7 +26,7 @@ export interface SessionMenuProps {
  *  sidebar's clipping cannot cut it. Every action closes the menu itself:
  *  the parent's handlers do that, this only says which one was chosen. */
 export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function SessionMenu(
-  { session, label, live, pinned, exporting, onPin, onRename, onPause, onClose, onArchive, onCopyInfo, onExport, onDelete },
+  { session, label, live, pinned, exporting, onPin, onRename, onPause, onClose, onArchive, onBranch, onCopyInfo, onExport, onDelete },
   ref,
 ) {
   const target = session.path;
@@ -57,6 +58,11 @@ export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function
             onClick={onClose}
           >
             <StudioIcon name="close" /><span>{t("关闭会话")}</span>
+          </button>
+        )}
+        {session.runtimeId && onBranch && (
+          <button role="menuitem" data-action="session.branch" data-target={target} onClick={onBranch}>
+            <StudioIcon name="branch" /><span>{t("从最近回复分叉")}</span>
           </button>
         )}
         <button

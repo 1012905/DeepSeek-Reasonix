@@ -62,6 +62,7 @@ interface Props {
   pinned?: Set<string>;
   onPin?: (path: string) => void;
   onPause?: (runtimeId: string) => void;
+  onBranch?: (runtimeId: string, name: string) => Promise<void>;
   onArchive?: (path: string, archived: boolean, runtimeId?: string) => Promise<void>;
   onRename: (path: string, title: string, mode?: "inline" | "dialog") => void;
   onError: (e: unknown) => void;
@@ -78,7 +79,7 @@ interface Props {
 const rowLabel = (session: TreeSession) =>
   session.title || (session.runtimeId && !session.turns ? t("新会话") : session.name);
 
-function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, paging = NO_PAGING, onFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
+function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, paging = NO_PAGING, onFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onBranch, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
   const [busy, setBusy] = useState("");
   // Folding a machine is the reader's own preference, held the way a host row
   // holds it.
@@ -648,6 +649,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                               void onClose([id]).catch(onError);
                             }}
                             onArchive={() => archive(session)}
+                            onBranch={onBranch && session.runtimeId ? () => { setSessionMenu(""); void onBranch(session.runtimeId!, `${rowLabel(session)} · ${t("分支")}`).catch(onError); } : undefined}
                             onCopyInfo={() => { void copyText(sessionInfoText(session, ws.root)).catch(onError); setSessionMenu(""); }}
                             onExport={() => void saveSession(session)}
                             onDelete={() => { askDelete(session.path); setSessionMenu(""); }}

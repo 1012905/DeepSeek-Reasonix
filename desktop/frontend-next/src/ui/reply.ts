@@ -111,10 +111,10 @@ export function useReplyActions({ port, items, checkpoints, running, model, subm
         const ask = replyTurns.get(id);
         if (ask) void regenerate(ask.turn, ask.text).catch(onError);
       },
-      canBranch: (id: string) => !running && !!onBranched && replyTurns.has(id),
+      canBranch: (id: string) => !!onBranched && replyTurns.has(id) && (!running || !!replyTurns.get(id)?.hasLaterTurns),
       onBranch: (id: string) => {
         const ask = replyTurns.get(id);
-        if (!running && ask && onBranched) void port.branchAt(ask.turn, branchName ?? "").then(onBranched, onError);
+        if (ask && onBranched && (!running || ask.hasLaterTurns)) void port.branchAt(ask.turn, branchName ?? "").then(onBranched, onError);
       },
       model,
       onConfigureModel: () => onSettings("model"),
