@@ -14,8 +14,7 @@ import { RowCount } from "./RowCount";
 import { Cross } from "./glyphs";
 import { copyText } from "./CopyButton";
 import { sessionInfoText } from "./sessionInfo";
-import { download } from "../port/download";
-import { host } from "../port/host";
+import { saveSessionFile } from "./sessionExport";
 import { useTreeKeys } from "./tree";
 import { useDismiss } from "./dismiss";
 import { asksDelete } from "./keys";
@@ -272,23 +271,24 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
     }
   };
 
+  const autoName = async (session: TreeSession) => {
+    setBusy("name:" + session.path);
+    try {
+      const { title } = await hub.autoNameSession(session.path);
+      await hub.renameSession(session.path, title);
+      await reload();
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy("");
+      setSessionMenu("");
+    }
+  };
+
   const saveSession = async (session: TreeSession) => {
     setBusy("export:" + session.path);
     try {
-      const exported = await hub.exportSession(session.path);
-      const records = exported.content
-        .split(/\r?\n/)
-        .filter((line) => line.trim())
-        .map((line) => JSON.parse(line) as unknown);
-      const content = JSON.stringify(
-        { version: 1, title: session.title || session.name, exportedAt: new Date().toISOString(), records },
-        null,
-        2,
-      );
-      const clean = (session.title || exported.name || session.name).replace(/[<>:"/\\|?*\x00-\x1f]/g, "-").trim() || "reasonix-session";
-      const filename = `${clean}.json`;
-      const saved = await host().saveText(filename, content);
-      if (saved === null) download(filename, content);
+      await saveSessionFile(hub, session);
     } catch (e) {
       onError(e);
     } finally {
@@ -640,8 +640,10 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             live={!!session.runtimeId && liveIds([session.runtimeId]).length > 0}
                             pinned={pinned.has(session.path)}
                             exporting={busy === "export:" + session.path}
+                            autoNaming={busy === "name:" + session.path}
                             onPin={() => { onPin(session.path); setSessionMenu(""); }}
                             onRename={() => { setSessionMenu(""); onRename(session.path, session.title || session.name); }}
+                            onAutoName={() => void autoName(session)}
                             onPause={() => { onPause(session.runtimeId!); setSessionMenu(""); }}
                             onClose={() => {
                               const id = session.runtimeId!;

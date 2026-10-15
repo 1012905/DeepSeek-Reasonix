@@ -25,6 +25,8 @@ function tree(over: Partial<TreeWorkspace> = {}): TreeWorkspace[] {
 function draw(over: { runtimes?: RuntimeView[]; workspaces?: TreeWorkspace[] } = {}) {
   const hub = new MockHub() as unknown as HubPort;
   const removeSession = vi.spyOn(hub, "removeSession").mockResolvedValue(undefined);
+  const renameSession = vi.spyOn(hub, "renameSession").mockResolvedValue(undefined);
+  const autoNameSession = vi.spyOn(hub, "autoNameSession").mockResolvedValue({ title: "a generated title" });
   const onClose = vi.fn().mockResolvedValue(undefined);
   const onOpen = vi.fn().mockResolvedValue(undefined);
   const reload = vi.fn().mockResolvedValue(undefined);
@@ -53,7 +55,7 @@ function draw(over: { runtimes?: RuntimeView[]; workspaces?: TreeWorkspace[] } =
   const { rerender } = render(view(over.workspaces ?? tree()));
   // What the kernel lists after a write: the tree the next reload brings back.
   const relist = (workspaces: TreeWorkspace[]) => rerender(view(workspaces));
-  return { removeSession, onClose, reload, onError, onRename, onOpen, relist };
+  return { removeSession, renameSession, autoNameSession, onClose, reload, onError, onRename, onOpen, relist };
 }
 
 it("projects each open session's run state onto its own row", () => {
@@ -270,5 +272,25 @@ describe("the Delete key on a focused conversation", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
     expect(onRename).toHaveBeenCalledExactlyOnceWith(SESSION, "the one to delete");
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("names the conversation from its menu in one step, without opening a dialog", async () => {
+    const { autoNameSession, renameSession, reload } = draw();
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "自动命名" }));
+    expect(autoNameSession).toHaveBeenCalledExactlyOnceWith(SESSION);
+    await vi.waitFor(() => expect(renameSession).toHaveBeenCalledExactlyOnceWith(SESSION, "a generated title"));
+    await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    expect(screen.queryByRole("menu", { name: "会话操作" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps the title and says why when naming is refused", async () => {
+    const { autoNameSession, renameSession, onError } = draw();
+    autoNameSession.mockRejectedValueOnce(new Error("no model"));
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "自动命名" }));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(renameSession).not.toHaveBeenCalled();
   });
 });

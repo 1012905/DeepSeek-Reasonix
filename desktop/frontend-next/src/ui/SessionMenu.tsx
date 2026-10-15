@@ -11,8 +11,10 @@ export interface SessionMenuProps {
   live: boolean;
   pinned: boolean;
   exporting: boolean;
+  autoNaming: boolean;
   onPin: () => void;
   onRename: () => void;
+  onAutoName: () => void;
   onPause: () => void;
   onClose: () => void;
   onArchive: () => void;
@@ -26,7 +28,7 @@ export interface SessionMenuProps {
  *  sidebar's clipping cannot cut it. Every action closes the menu itself:
  *  the parent's handlers do that, this only says which one was chosen. */
 export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function SessionMenu(
-  { session, label, live, pinned, exporting, onPin, onRename, onPause, onClose, onArchive, onBranch, onCopyInfo, onExport, onDelete },
+  { session, label, live, pinned, exporting, autoNaming, onPin, onRename, onAutoName, onPause, onClose, onArchive, onBranch, onCopyInfo, onExport, onDelete },
   ref,
 ) {
   const target = session.path;
@@ -42,6 +44,9 @@ export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function
         </button>
         <button role="menuitem" data-action="session.rename-start" data-target={target} onClick={onRename}>
           <StudioIcon name="edit" /><span>{t("重命名")}</span>
+        </button>
+        <button role="menuitem" data-action="session.auto-name" data-target={target} disabled={autoNaming} onClick={onAutoName}>
+          <StudioIcon name="spark" /><span>{autoNaming ? t("命名中…") : t("自动命名")}</span>
         </button>
         {session.runtimeId && live && (
           <button role="menuitem" data-action="session.pause" data-target={target} onClick={onPause}>
