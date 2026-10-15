@@ -771,6 +771,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "价格未知": "Price unknown",
   "还没有计费的请求": "Nothing billed yet",
   "会话概览": "Session overview",
+  "下一次请求会带上的内容，是当前值，不是累计": "What the next request would carry: a current reading, not a running total",
+  "自动压缩于 {n}": "Folds automatically at {n}",
   "自本次打开此会话起；恢复或分叉会重新计数": "Since this session was opened in this run; resuming or forking counts again",
   "这个会话还没有计费的请求": "This session has no billed requests yet",
   "返回了用量与价格的模型响应": "Model responses that reported usage and a price",

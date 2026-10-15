@@ -1,5 +1,6 @@
 import { t } from "../i18n";
 import { money } from "../i18n/format";
+import type { ContextBreakdown } from "../port/shell";
 import type { SessionUsage } from "../port/session";
 import type { CostQuote } from "../port/wire";
 import { cacheRate, costSay, sessionTokens, sourceTokens, type CostSay } from "../state/overview";
@@ -47,8 +48,10 @@ function cost(say: CostSay, hide: boolean): { text: string; note: string } {
 // The session as the kernel's ledger holds it, each figure beside what it counts.
 // Everything here is since this session was opened in this run: a resumed or
 // forked session counts again from the start.
-export function SessionOverviewCard({ usage, quote, hideAmounts, className = "" }: {
+export function SessionOverviewCard({ usage, quote, ctx, hideAmounts, onContext, className = "" }: {
   usage?: SessionUsage;
+  ctx?: ContextBreakdown | null;
+  onContext?: () => void;
   quote?: CostQuote;
   hideAmounts: boolean;
   className?: string;
@@ -89,6 +92,23 @@ export function SessionOverviewCard({ usage, quote, hideAmounts, className = "" 
           </section>
         </>
       )}
+      {ctx && ctx.window > 0 && <ContextWindow ctx={ctx} onContext={onContext} />}
     </div>
+  );
+}
+
+const PARTS = [["sys", "system"], ["tool", "tools"], ["user", "user"], ["reply", "reply"], ["output", "output"]] as const;
+
+// The window is a present reading, not a running total: what the next request would carry.
+function ContextWindow({ ctx, onContext }: { ctx: ContextBreakdown; onContext?: () => void }) {
+  return (
+    <section aria-label={t("上下文窗口")}>
+      <div><b>{t("上下文窗口")}</b><b>{Math.min(100, Math.round((ctx.used / ctx.window) * 100))}%</b></div>
+      <small>{t("下一次请求会带上的内容，是当前值，不是累计")}</small>
+      <div className="chrome-context-total"><span>{t("已使用")} <b>{tokens(ctx.used)}</b></span><span>{t("模型容量")} <b>{tokens(ctx.window)}</b></span></div>
+      <div className="chrome-context-bar">{PARTS.map(([key, field]) => <i key={key} data-part={key} style={{ width: `${ctx.used ? Math.max(1, (ctx[field] / ctx.used) * 100) : 0}%` }} />)}</div>
+      {ctx.compact_at > 0 && <small>{t("自动压缩于 {n}", { n: tokens(ctx.compact_at) })}</small>}
+      {onContext && <button type="button" data-action="metrics.details" data-value="context-from-overview" onClick={onContext}>{t("上下文详情")}</button>}
+    </section>
   );
 }

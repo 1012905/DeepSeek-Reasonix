@@ -24,4 +24,5 @@
 .studio-overview-row > small { text-align: right; font-family: var(--mono); }
 @media (hover: hover) {
   .studio-overview-anchor:hover .studio-overview-popover { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition-delay: 0s; }
+  .studio-meterrail:has(.studio-context-anchor[data-open]) .studio-overview-anchor:not([data-open]):hover .studio-overview-popover { opacity: 0; visibility: hidden; pointer-events: none; }
 }
