@@ -80,7 +80,7 @@ export const EN_KERNEL: Record<string, string> = {
   "该待送达由更高版本写入，当前版本只能读取": "This queue was written by a newer version and is read-only here",
   "该提交标识已被使用，且当时的内容不同": "That submission key was already used, with different content",
   // 配置文件本身坏了，以及每一个写设置的面板被它挡住时
-  "配置文件无法读取，因此本次未保存": "The config file does not parse, so nothing was saved",
+  "配置文件无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复": "The config file does not parse, so nothing was saved. Open Settings to see where it is broken and repair it",
   "这台服务器未开放配置编辑": "This server does not allow editing its config",
   "该文件需手动修改：{detail}": "This file needs an edit by hand: {detail}",
   "设置已写入，但运行时未能按新设置重建：{detail}": "The settings were written, but the runtime could not be rebuilt on them: {detail}",
