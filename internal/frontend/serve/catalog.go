@@ -78,6 +78,11 @@ type skillEntry struct {
 	Model       string   `json:"model,omitempty"`
 	Effort      string   `json:"effort,omitempty"`
 	AllowedURI  []string `json:"allowedTools,omitempty"`
+	// License, Compatibility and Metadata are the specification's descriptive
+	// fields as the skill wrote them.
+	License       string            `json:"license,omitempty"`
+	Compatibility string            `json:"compatibility,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
 	// Manual means the model never discovers it; only an explicit call runs it.
 	Manual  bool `json:"manual,omitempty"`
 	Enabled bool `json:"enabled"`
@@ -127,8 +132,9 @@ func (s *Server) skills(w http.ResponseWriter, r *http.Request) {
 			Model:       sk.Model,
 			Effort:      sk.Effort,
 			AllowedURI:  sk.AllowedTools,
-			Manual:      sk.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(sk.Invocation), "manual"),
-			Enabled:     enabled(sk.Name),
+			License:     sk.License, Compatibility: sk.Compatibility, Metadata: sk.Metadata,
+			Manual:  sk.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(sk.Invocation), "manual"),
+			Enabled: enabled(sk.Name),
 		})
 	}
 	writeJSON(w, map[string]any{
