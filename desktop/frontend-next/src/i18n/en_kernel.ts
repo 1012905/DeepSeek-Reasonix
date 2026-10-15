@@ -167,6 +167,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这个文件夹已经在当前工作区里": "This folder is already inside the current workspace.",
   "这个文件夹范围太大（磁盘根目录，或包含你的主目录或 Reasonix 数据目录）": "This folder is too broad: it is a drive root or contains your home or Reasonix data folder.",
   "这个文件夹含有或位于密钥、凭据或 Reasonix 自己的数据目录里，不能授予写入权限": "This folder holds or sits inside keys, credentials or Reasonix's own data, so it cannot be granted write access.",
+  "这里是 Reasonix 保存已安装技能的位置，不能授予写入权限。想让 AI 持续改进自己的技能：把技能的源文件夹用“登记”（register）方式安装，之后在源文件夹里修改。": "This is where Reasonix keeps installed skills, so it cannot be granted write access. To let the AI keep improving a skill of yours, install the skill's source folder in register mode and edit it there.",
   "这个文件夹不属于当前用户，不能授予写入权限": "This folder is not owned by the current user, so it cannot be granted write access.",
   "这个文件夹和已有的可写位置（临时目录、工具缓存或另一个额外文件夹）重叠": "This folder overlaps a location that is already writable (temp, a tool cache or another extra folder).",
   "没有这个预设": "No curated preset has this id.",

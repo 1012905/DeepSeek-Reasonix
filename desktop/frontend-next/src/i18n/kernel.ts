@@ -493,6 +493,7 @@ const SAID: Record<string, string> = {
   "workspace_roots.covered_by_primary": "这个文件夹已经在当前工作区里",
   "workspace_roots.too_broad": "这个文件夹范围太大（磁盘根目录，或包含你的主目录或 Reasonix 数据目录）",
   "workspace_roots.protected": "这个文件夹含有或位于密钥、凭据或 Reasonix 自己的数据目录里，不能授予写入权限",
+  "workspace_roots.skill_store": "这里是 Reasonix 保存已安装技能的位置，不能授予写入权限。想让 AI 持续改进自己的技能：把技能的源文件夹用“登记”（register）方式安装，之后在源文件夹里修改。",
   "workspace_roots.not_owned": "这个文件夹不属于当前用户，不能授予写入权限",
   "workspace_roots.overlaps_write_root": "这个文件夹和已有的可写位置（临时目录、工具缓存或另一个额外文件夹）重叠",
   "provider.preset_unknown": "没有这个预设",
