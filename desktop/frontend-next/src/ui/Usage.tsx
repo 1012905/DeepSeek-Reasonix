@@ -181,7 +181,7 @@ function DailyTable({ days }: { days: UsageDay[] }) {
             <tr><th>{t("日期")}</th><th>Tokens</th><th>{t("支出")}</th><th>{t("请求")}</th></tr>
           </thead>
           <tbody>
-            {days.map((d) => (
+            {[...days].sort((a, b) => b.day.localeCompare(a.day)).map((d) => (
               <tr key={d.day} data-day={d.day}>
                 <td className="ud">{d.day}</td>
                 <td>{count(d.total)}</td>
