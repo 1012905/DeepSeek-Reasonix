@@ -336,7 +336,7 @@ func RenderMemorySummary(set *memory.Set, now time.Time) string {
 }
 
 func renderMemoryRecall(recall memory.RecallResult) string {
-	if strings.TrimSpace(recall.Query) == "" && len(recall.Hits) == 0 && recall.Suppressed == "" {
+	if strings.TrimSpace(recall.Query) == "" && len(recall.Hits) == 0 && recall.SuppressionCode == "" {
 		return "last memory recall: none"
 	}
 	var b strings.Builder
@@ -344,7 +344,7 @@ func renderMemoryRecall(recall memory.RecallResult) string {
 	fmt.Fprintf(&b, "  budget=%d/%d omitted=%d (limit=%d budget=%d)",
 		recall.UsedChars, recall.CharBudget, recall.OmittedByLimit+recall.OmittedByBudget,
 		recall.OmittedByLimit, recall.OmittedByBudget)
-	if recall.Suppressed != "" {
+	if recall.SuppressionCode != "" {
 		fmt.Fprintf(&b, " suppressed=%s", memoryOneLine(recall.Suppressed))
 	}
 	b.WriteByte('\n')

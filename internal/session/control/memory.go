@@ -162,6 +162,7 @@ func memoryRecallAudit(result memory.RecallResult) event.MemoryRecallAudit {
 		OmittedByLimit:  result.OmittedByLimit,
 		OmittedByBudget: result.OmittedByBudget,
 		Suppressed:      result.Suppressed,
+		SuppressionCode: string(result.SuppressionCode),
 	}
 	for _, hit := range result.Hits {
 		audit.Hits = append(audit.Hits, event.MemoryRecallHit{
