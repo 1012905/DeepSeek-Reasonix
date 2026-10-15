@@ -1128,7 +1128,8 @@
   @keyframes bob { 0%, 100% { opacity: .22; transform: translateY(0) } 50% { opacity: 1; transform: translateY(-3px) } }
 
   .think { margin-top: 5px }
-  .think > summary { display: inline-flex }
+  .think > summary { display: inline-flex; max-width: 100%; align-items: baseline; gap: 8px }
+  .think .peek { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--w-reg) var(--fs-ui) var(--ui); color: var(--faint) }
   .think .tk {
     margin-top: 5px; padding-left: 14px;
     font: var(--w-reg) var(--fs-ui)/1.68 var(--ui); color: var(--faint); white-space: pre-wrap;

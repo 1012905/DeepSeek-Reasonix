@@ -899,6 +899,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "超出一屏的命令输出与文件内容": "Command output and file contents longer than a screen",
   "压缩简报": "Compaction brief",
   "上下文压缩后，模型接下来依据的那份简报": "The brief the model works from after context is compacted",
+  "收起并预览首句": "Folded, with first sentence",
   "进行中展开": "Open while running",
   "失败时展开": "Open on failure",
   "改动时展开": "Open on file change",
