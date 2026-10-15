@@ -74,10 +74,16 @@ func TestForgetToolValidates(t *testing.T) {
 	}
 }
 
-// fakeQueue records the turn-tail notes the remember/forget tools queue.
-type fakeQueue struct{ notes []string }
+// fakeQueue records the notes and typed facts the remember/forget tools queue.
+type fakeQueue struct {
+	notes     []string
+	delivered []Memory
+}
 
-func (f *fakeQueue) QueueMemory(note string) { f.notes = append(f.notes, note) }
+func (f *fakeQueue) QueueMemory(note string, delivered ...Memory) {
+	f.notes = append(f.notes, note)
+	f.delivered = append(f.delivered, delivered...)
+}
 
 // TestForgetToolQueuesDisregardNote verifies a forget injects a turn-tail note so
 // the model stops trusting the still-cached index line this session.

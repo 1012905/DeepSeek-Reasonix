@@ -553,11 +553,12 @@ func (c *Controller) ForgetMemory(name string) error {
 }
 
 // QueueMemory implements memory.Queue: when the model runs the remember/forget
-// tool, the tool calls this with a note that rides the next turn so the change
-// applies this session without touching the cache-stable prefix. It also
-// refreshes the snapshot a memory panel reads.
-func (c *Controller) QueueMemory(note string) {
-	c.memory.queue(note)
+// tool, the tool calls this with the typed facts it wrote. The write refreshes
+// the snapshot a memory panel reads and records those facts as delivered, so the
+// next recall re-checks their own files; the note itself does not ride the turn,
+// because the tool result is already in the conversation.
+func (c *Controller) QueueMemory(note string, delivered ...memory.Memory) {
+	c.memory.queue(note, delivered...)
 }
 
 // ClaimAutoMemoryWrite consumes the one-shot create-only authorization issued
