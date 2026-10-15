@@ -48,7 +48,7 @@ func (p pathBoundCapabilityProxy) ResolveCall(ctx context.Context, args json.Raw
 		return resolved, nil
 	}
 	if resolved.Target == nil || !resolved.ReadOnly || tool.HasMCPDestructiveHint(resolved.Target) {
-		return tool.ResolvedCall{}, fmt.Errorf("use_capability target %q is not proven read-only; explicit write_paths sub-agents cannot execute unscoped MCP writers", resolved.TargetName)
+		return tool.ResolvedCall{}, fmt.Errorf("use_capability target %q is not proven read-only, and a sub-agent with explicit write_paths may only run read-only, non-destructive targets (bash never qualifies). Do not retry it: use the file tools inside your write_paths, or finish and report what needs a writer or a shell", resolved.TargetName)
 	}
 	return resolved, nil
 }
