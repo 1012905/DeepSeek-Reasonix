@@ -210,6 +210,9 @@ func (a *contextWindow) loadProjectionSidecar(sessionPath string) {
 	if (key != "" && !keyOK) || !hasMaintenanceSignal {
 		a.sess.win.compactionState = sessionstore.CompactionState{}
 		a.sess.win.checkpointState = "none"
+		if key != "" && !keyOK && len(st.Projection.Messages) > 0 {
+			a.sess.win.checkpointState = string(ProjectionDropLineage)
+		}
 		a.sess.win.compactionMu.Unlock()
 		return
 	}
@@ -229,12 +232,15 @@ func (a *contextWindow) loadProjectionSidecar(sessionPath string) {
 		fingerprint = a.prefixHasher(rewriteVersion)
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key, fingerprint)
-	if !valid && len(st.Projection.Messages) > 0 {
+	dropped := !valid && len(st.Projection.Messages) > 0
+	if dropped {
 		// Keep blocked receipts / telemetry; drop unusable projection body.
 		st.Projection = sessionstore.ContextProjection{}
 	}
 	a.sess.win.compactionState = st
-	if valid {
+	if dropped {
+		a.sess.win.checkpointState = string(ProjectionDropHistory)
+	} else if valid {
 		a.sess.win.checkpointState = "restored"
 		if needsNormalization {
 			if err := a.persistCompactionStateLocked(); err != nil {
@@ -245,6 +251,37 @@ func (a *contextWindow) loadProjectionSidecar(sessionPath string) {
 		a.sess.win.checkpointState = "none"
 	}
 	a.sess.win.compactionMu.Unlock()
+}
+
+// ProjectionDrop names why a saved fold was not reused when its session was
+// bound. The host is the only party that saw which it was.
+type ProjectionDrop string
+
+const (
+	ProjectionDropNone ProjectionDrop = ""
+	// ProjectionDropHistory: the fold's lineage matched but the history behind it changed.
+	ProjectionDropHistory ProjectionDrop = "dropped_history"
+	// ProjectionDropLineage: another model or workspace made it and the history does not match either.
+	ProjectionDropLineage ProjectionDrop = "dropped_lineage"
+)
+
+// ProjectionDropped reports why the fold saved beside the bound session was
+// not reused, or ProjectionDropNone when there was none or it was.
+func (a *Agent) ProjectionDropped() ProjectionDrop {
+	if a == nil {
+		return ProjectionDropNone
+	}
+	return a.window().projectionDropped()
+}
+
+func (a *contextWindow) projectionDropped() ProjectionDrop {
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
+	switch d := ProjectionDrop(a.sess.win.checkpointState); d {
+	case ProjectionDropHistory, ProjectionDropLineage:
+		return d
+	}
+	return ProjectionDropNone
 }
 
 // lineageKeyCompatible reports whether a stored PromptCacheKey still belongs to

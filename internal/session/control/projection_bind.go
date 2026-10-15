@@ -18,6 +18,25 @@ func (c *Controller) bindExecutorProjection(path string, loadSidecar bool) {
 		return
 	}
 	c.executor.BindSessionPath(path, loadSidecar)
+	if loadSidecar {
+		c.announceUnusedFold()
+	}
+}
+
+// announceUnusedFold says why a fold saved beside the session was not reused: the
+// full history goes to the model instead, and only the host knows which reason.
+func (c *Controller) announceUnusedFold() {
+	if c.sink == nil {
+		return
+	}
+	switch c.executor.ProjectionDropped() {
+	case agent.ProjectionDropHistory:
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: event.NoticeCodeFoldNotReusedHistory,
+			Text: "A saved compaction of this conversation was not reused: the history it summarised has changed since. The full history is sent instead."})
+	case agent.ProjectionDropLineage:
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: event.NoticeCodeFoldNotReusedLineage,
+			Text: "A saved compaction of this conversation was made under another model or workspace and does not match its history. The full history is sent instead."})
+	}
 }
 
 // maybeColdResumePrune records warm/cold/unknown only; it never rewrites
