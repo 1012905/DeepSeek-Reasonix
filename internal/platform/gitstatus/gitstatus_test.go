@@ -177,6 +177,51 @@ func TestDiffCapsWhatItReturns(t *testing.T) {
 	}
 }
 
+// A rename's line counts come back on the path git status lists, which is
+// the new name. An ordinary edit in the same diff still has its own counts.
+func TestStatusKeepsRenameCountsOnTheNewPath(t *testing.T) {
+	dir := testenv.TempDir(t)
+	git(t, dir, "init", "-q")
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("old.go", "package a\n\nfunc A() {}\n")
+	write("keep.go", "package k\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "base")
+
+	git(t, dir, "mv", "old.go", "new.go")
+	write("new.go", "package a\n\nfunc A() {}\nfunc B() {}\n")
+	git(t, dir, "add", "new.go")
+	write("keep.go", "package k\n\nfunc K() {}\n")
+
+	changes, ok, err := Status(context.Background(), opened(t, dir))
+	if err != nil || !ok {
+		t.Fatalf("Status = %v ok=%v", err, ok)
+	}
+	byPath := map[string]Change{}
+	for _, c := range changes {
+		byPath[c.Path] = c
+	}
+	renamed, ok := byPath["new.go"]
+	if !ok || renamed.OldPath != "old.go" || renamed.Status != "R" {
+		t.Fatalf("rename = %+v, want new.go from old.go", renamed)
+	}
+	if renamed.Insertions == nil || *renamed.Insertions != 1 || renamed.Deletions == nil || *renamed.Deletions != 0 {
+		t.Fatalf("rename counts = %v/%v, want 1/0", renamed.Insertions, renamed.Deletions)
+	}
+	if _, listed := byPath["old.go"]; listed {
+		t.Fatalf("the source path was listed as its own change: %+v", changes)
+	}
+	edited := byPath["keep.go"]
+	if edited.Insertions == nil || *edited.Insertions != 2 || edited.Deletions == nil || *edited.Deletions != 0 {
+		t.Fatalf("ordinary edit counts = %v/%v, want 2/0", edited.Insertions, edited.Deletions)
+	}
+}
+
 // A change is staged when the index differs from HEAD for it and unstaged when
 // the work tree differs from the index; one path can be both.
 func TestChangesSayWhetherTheyAreStagedOrNot(t *testing.T) {
