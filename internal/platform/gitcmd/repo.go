@@ -27,6 +27,10 @@ type Repo struct {
 	// identity; empty for a repository, and for a folder with no marker at all.
 	Absent       Absence `json:"absent,omitempty"`
 	AbsentDetail string  `json:"absentDetail,omitempty"` // what git said, for a person to read; never decides anything
+	// MarkerPath and MarkerDir record the marker the folder carried when the open
+	// failed, so one later retry can confirm it is still the same one.
+	MarkerPath string `json:"markerPath,omitempty"`
+	MarkerDir  bool   `json:"markerDir,omitempty"`
 }
 
 // Absence is why a workspace with a .git marker has no repository identity.
