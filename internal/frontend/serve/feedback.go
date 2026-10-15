@@ -31,6 +31,10 @@ const (
 	codeFeedbackReplyLimit   = "feedback.reply_limit"
 	codeFeedbackNotReplyable = "feedback.not_replyable"
 	codeFeedbackChallenge    = "feedback.challenge_required"
+	codeFeedbackAccount      = "feedback.account_required"
+	codeFeedbackLinkConflict = "feedback.link_conflict"
+	codeFeedbackLinkLimit    = "feedback.link_limit"
+	codeFeedbackNoInstall    = "feedback.no_install"
 )
 
 // feedbackSurface names where a report from a hub or pane of surface from
@@ -53,6 +57,10 @@ func (s *Server) registerFeedbackRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /feedback/name", s.feedbackName)
 	mux.HandleFunc("POST /feedback/{receipt}/reply", s.feedbackReply)
 	mux.HandleFunc("POST /feedback/{receipt}/seen", s.feedbackSeen)
+	mux.HandleFunc("GET /feedback/links", s.feedbackLinks)
+	mux.HandleFunc("POST /feedback/link", s.feedbackLink)
+	mux.HandleFunc("DELETE /feedback/link", s.feedbackUnlink)
+	mux.HandleFunc("DELETE /feedback/links/{id}", s.feedbackUnlinkInstall)
 }
 
 func (s *Server) feedbackEnv(w http.ResponseWriter, r *http.Request) {
@@ -204,6 +212,14 @@ func refuseFeedback(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusConflict, codeFeedbackNotReplyable, err.Error(), nil)
 	case errors.Is(err, feedback.ErrChallengeRequired):
 		refuse(w, http.StatusForbidden, codeFeedbackChallenge, err.Error(), nil)
+	case errors.Is(err, feedback.ErrAccountRequired):
+		refuse(w, http.StatusUnauthorized, codeFeedbackAccount, err.Error(), nil)
+	case errors.Is(err, feedback.ErrLinkConflict):
+		refuse(w, http.StatusConflict, codeFeedbackLinkConflict, err.Error(), nil)
+	case errors.Is(err, feedback.ErrLinkLimit):
+		refuse(w, http.StatusConflict, codeFeedbackLinkLimit, err.Error(), nil)
+	case errors.Is(err, feedback.ErrNoInstall):
+		refuse(w, http.StatusConflict, codeFeedbackNoInstall, err.Error(), nil)
 	case errors.Is(err, feedback.ErrImageMetadata):
 		refuse(w, http.StatusBadRequest, codeFeedbackImageMeta, err.Error(), nil)
 	case errors.Is(err, feedback.ErrOffline):

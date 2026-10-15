@@ -159,6 +159,15 @@ export interface FeedbackMine {
   profile?: FeedbackProfile | null;
 }
 
+// One install an account holds, as the service lists it: the short id, when it
+// was linked, and whether it is this machine. The install's token never comes
+// with it.
+export interface FeedbackLinkedInstall {
+  id: string;
+  linkedAt: string;
+  current: boolean;
+}
+
 // The window a refusal came from, as the service names it. A refusal carries
 // these in its params; an identifier not listed here is still a window.
 export const FEEDBACK_LIMIT = {
@@ -187,6 +196,10 @@ export const FEEDBACK_CODE = {
   replyLimit: "feedback.reply_limit",
   notReplyable: "feedback.not_replyable",
   challengeRequired: "feedback.challenge_required",
+  accountRequired: "feedback.account_required",
+  linkConflict: "feedback.link_conflict",
+  linkLimit: "feedback.link_limit",
+  noInstall: "feedback.no_install",
   offline: "feedback.offline",
   unavailable: "feedback.unavailable",
   internal: "feedback.internal",

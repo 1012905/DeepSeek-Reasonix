@@ -517,6 +517,10 @@ const SAID: Record<string, string> = {
   "feedback.reply_limit": "这份反馈的回复次数已到上限，或回复太频繁了，请稍后再试",
   "feedback.not_replyable": "这份反馈现在不接收回复",
   "feedback.challenge_required": "反馈服务要求额外验证，请稍后再试",
+  "feedback.account_required": "需要先登录账号",
+  "feedback.link_conflict": "这台电脑已关联到另一个账号",
+  "feedback.link_limit": "这个账号关联的电脑已达上限",
+  "feedback.no_install": "这台电脑还没有发过反馈",
 
   // ── 远程连接停下来问的那一句 ───────────────────────────────────
   "ask.not_found": "不存在该待回答的问题",
