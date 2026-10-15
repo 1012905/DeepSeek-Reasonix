@@ -59,9 +59,8 @@ interface Props {
   // path as changeCount (turn boundaries, writes). null is "not answered yet";
   // repo:false is a workspace with no repository, and the two render apart.
   git?: WorkspaceGit | null;
-  // Called after a branch switch landed, so the change list, the branch reading
-  // and the session's workspace view re-read what the checkout moved.
-  onTreeChanged?: () => void;
+  // The switch already answers with the workspace's Git state.
+  onTreeChanged?: (git: WorkspaceGit) => void;
   // Bumped when settings change; a source edited there can change the ladder.
   pulse?: number;
   draftKey?: string;

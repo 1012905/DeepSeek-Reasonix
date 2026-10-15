@@ -71,6 +71,34 @@ describe("the explorer during a turn", () => {
 });
 
 
+describe("branch switch results in the pane", () => {
+  for (const changesFail of [false, true]) {
+    it(`uses the switch response while the change list ${changesFail ? "fails" : "is pending"}`, async () => {
+      const pane = open();
+      const chip = await screen.findByRole("button", { name: /main/ });
+      const reading = vi.spyOn(pane.port, "workspaceGit").mockImplementation(() => new Promise(() => {}));
+      pane.changes.mockClear();
+      pane.changes.mockImplementation(() => changesFail
+        ? Promise.reject(new Error("change list unavailable"))
+        : new Promise(() => {}));
+      const change = vi.spyOn(pane.port, "switchBranch");
+
+      fireEvent.click(chip);
+      fireEvent.click(await screen.findByRole("menuitem", { name: "studio" }));
+
+      await waitFor(() => expect(chip.getAttribute("aria-label")).toContain("studio"));
+      expect(change).toHaveBeenCalledExactlyOnceWith("studio");
+      expect(pane.changes).toHaveBeenCalledTimes(1);
+      expect(reading).not.toHaveBeenCalled();
+      await waitFor(() => expect(chip.hasAttribute("data-pending")).toBe(false));
+
+      pane.send({ kind: "turn_started" });
+      pane.send({ kind: "turn_done" });
+      await waitFor(() => expect(reading).toHaveBeenCalled());
+    });
+  }
+});
+
 describe("branch switch refusals in the pane", () => {
   for (const language of ["zh", "en"]) {
     for (const code of ["branch.workspace_busy", "branch.jobs_running", "branch.turn_running"]) {
