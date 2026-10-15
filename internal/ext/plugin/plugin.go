@@ -586,6 +586,8 @@ type Client struct {
 	// modern is set once, at connect, when the server speaks a handshake-free
 	// revision; every request then carries its own _meta.
 	modern modernSession
+	// tasks drives results the server answers as a task instead of at once.
+	tasks taskState
 
 	// Capabilities advertised by the server at initialize. prompts/list and
 	// resources/list are only called when advertised, so we never provoke a
