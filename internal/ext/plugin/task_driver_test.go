@@ -433,3 +433,65 @@ func TestTaskThatOutrunsItsBudgetWithoutAJobManagerIsCancelled(t *testing.T) {
 		t.Fatalf("tasks/cancel = %d, want the task cancelled once", got)
 	}
 }
+
+func TestPromotedJobEndsInErrorWhenTheTaskResultIsAToolError(t *testing.T) {
+	s := &taskServer{t: t, polls: []map[string]any{working(nil)}}
+	job, _ := startTaskToolWith(t, s, &clockLog{}, map[string]time.Duration{"job": 150 * time.Millisecond})
+	bg := &background{}
+	if _, err := job.Execute(tool.WithBackgroundStarter(context.Background(), bg.start), json.RawMessage(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	s.script(completedWith("bad input", true))
+	text, err := bg.run(context.Background(), io.Discard)
+	if err == nil || !strings.Contains(text, "bad input") {
+		t.Fatalf("job result = %q, %v, want an error carrying the tool's text", text, err)
+	}
+}
+
+func TestBackgroundTaskSlotsAreBoundedAndReleased(t *testing.T) {
+	var st taskState
+	var releases []func()
+	for range maxConcurrentTasks {
+		release, ok := st.reserveBackground()
+		if !ok {
+			t.Fatal("a slot below the cap was refused")
+		}
+		releases = append(releases, release)
+	}
+	if _, ok := st.reserveBackground(); ok {
+		t.Fatal("a job beyond the cap got a slot")
+	}
+	releases[0]()
+	if release, ok := st.reserveBackground(); !ok {
+		t.Fatal("a released slot was not reusable")
+	} else {
+		release()
+	}
+	inline, err := st.acquire(context.Background())
+	if err != nil {
+		t.Fatalf("background jobs took the inline slots: %v", err)
+	}
+	inline()
+}
+
+func TestCallerGivingUpWhileWaitingForATaskSlotStillCancelsTheTask(t *testing.T) {
+	s := &taskServer{t: t, polls: []map[string]any{working(nil)}}
+	job, _ := startTaskTool(t, s, &clockLog{})
+	client := job.(*remoteTool).client
+	for range maxConcurrentTasks {
+		if _, err := client.tasks.acquire(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		cancel()
+	}()
+	if _, err := job.Execute(ctx, json.RawMessage(`{}`)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if got := len(s.requests("tasks/cancel")); got != 1 {
+		t.Fatalf("tasks/cancel = %d, want the created task cancelled exactly once", got)
+	}
+}
