@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -130,13 +131,17 @@ func (c *clockLog) sleep(ctx context.Context, d time.Duration) error {
 }
 
 func startTaskTool(t *testing.T, s *taskServer, clock *clockLog) (tool.Tool, string) {
+	return startTaskToolWith(t, s, clock, nil)
+}
+
+func startTaskToolWith(t *testing.T, s *taskServer, clock *clockLog, timeouts map[string]time.Duration) (tool.Tool, string) {
 	t.Helper()
 	srv := httptest.NewServer(s)
 	t.Cleanup(srv.Close)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
 	root := t.TempDir()
-	host, tools, err := StartAll(ctx, []Spec{{Name: "m", Type: "http", URL: srv.URL, WorkspaceRoot: root}})
+	host, tools, err := StartAll(ctx, []Spec{{Name: "m", Type: "http", URL: srv.URL, WorkspaceRoot: root, ToolTimeouts: timeouts}})
 	if err != nil {
 		t.Fatalf("StartAll: %v", err)
 	}
@@ -149,6 +154,12 @@ func startTaskTool(t *testing.T, s *taskServer, clock *clockLog) (tool.Tool, str
 		job.(*remoteTool).client.tasks.sleep = clock.sleep
 	}
 	return job, root
+}
+
+func (s *taskServer) script(polls ...map[string]any) {
+	s.mu.Lock()
+	s.polls = polls
+	s.mu.Unlock()
 }
 
 func working(ms any) map[string]any {
@@ -348,5 +359,77 @@ func TestTaskThatKeepsAskingForInputStopsAtTheRoundLimit(t *testing.T) {
 	}
 	if got := len(s.requests("tasks/cancel")); got != 1 {
 		t.Fatalf("tasks/cancel calls = %d, want the task cancelled once", got)
+	}
+}
+
+// background is a BackgroundStarter that records the run instead of starting it.
+type background struct {
+	mu   sync.Mutex
+	kind string
+	name string
+	run  func(context.Context, io.Writer) (string, error)
+}
+
+func (b *background) start(kind, label string, run func(context.Context, io.Writer) (string, error)) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.kind, b.name, b.run = kind, label, run
+	return "mcp_task-1"
+}
+
+func TestTaskThatOutrunsItsBudgetBecomesABackgroundJob(t *testing.T) {
+	s := &taskServer{t: t, polls: []map[string]any{working(nil)}}
+	job, _ := startTaskToolWith(t, s, &clockLog{}, map[string]time.Duration{"job": 150 * time.Millisecond})
+	bg := &background{}
+	ctx := tool.WithBackgroundStarter(context.Background(), bg.start)
+	out, err := job.Execute(ctx, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(out, "mcp_task-1") || strings.Contains(out, "task-1\"") || strings.Contains(out, "taskId") {
+		t.Fatalf("result = %q, want the host job id and no task handle", out)
+	}
+	if bg.kind != "mcp_task" || bg.name != "m.job" {
+		t.Fatalf("job = %q %q, want mcp_task m.job", bg.kind, bg.name)
+	}
+	if got := len(s.requests("tasks/cancel")); got != 0 {
+		t.Fatalf("promoting cancelled the task %d times", got)
+	}
+
+	s.script(completedWith("late result", false))
+	text, err := bg.run(context.Background(), io.Discard)
+	if err != nil || !strings.Contains(text, "late result") || !strings.Contains(text, "[external content") {
+		t.Fatalf("job result = %q, %v, want the result under the external-content label", text, err)
+	}
+}
+
+func TestKillingThePromotedJobCancelsTheTaskOnTheServer(t *testing.T) {
+	s := &taskServer{t: t, polls: []map[string]any{working(nil)}}
+	job, _ := startTaskToolWith(t, s, &clockLog{}, map[string]time.Duration{"job": 150 * time.Millisecond})
+	bg := &background{}
+	if _, err := job.Execute(tool.WithBackgroundStarter(context.Background(), bg.start), json.RawMessage(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, kill := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		kill()
+	}()
+	if _, err := bg.run(ctx, io.Discard); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if got := len(s.requests("tasks/cancel")); got != 1 {
+		t.Fatalf("tasks/cancel = %d, want the task cancelled once", got)
+	}
+}
+
+func TestTaskThatOutrunsItsBudgetWithoutAJobManagerIsCancelled(t *testing.T) {
+	s := &taskServer{t: t, polls: []map[string]any{working(nil)}}
+	job, _ := startTaskToolWith(t, s, &clockLog{}, map[string]time.Duration{"job": 150 * time.Millisecond})
+	if _, err := job.Execute(context.Background(), json.RawMessage(`{}`)); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the timeout", err)
+	}
+	if got := len(s.requests("tasks/cancel")); got != 1 {
+		t.Fatalf("tasks/cancel = %d, want the task cancelled once", got)
 	}
 }
