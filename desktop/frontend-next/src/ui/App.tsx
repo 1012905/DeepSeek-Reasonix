@@ -672,6 +672,7 @@ export function App({ hub }: { hub: HubPort }) {
                   key={`${rt.id}:${takeover[rt.id] ?? 0}`}
                   rt={rt}
                   port={port}
+                  hub={hub}
                   title={tabs.find((tab) => tab.rt.id === rt.id)?.title ?? t("新会话")}
                   active={rt.id === active}
                   sideHost={null}

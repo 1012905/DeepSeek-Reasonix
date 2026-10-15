@@ -29,6 +29,8 @@ import { WorkbenchChanges } from "./WorkbenchChanges";
 import { WorkbenchHistory } from "./WorkbenchHistory";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
+import { OpenWithMenu } from "./OpenWithMenu";
+import type { HubPort } from "../port/hub";
 import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
 import { useCommitCard } from "./CommitCard";
@@ -113,6 +115,7 @@ export function WorkbenchPanel({
   wrote = 0,
   remote = false,
   workspaceRoot = "",
+  hub,
   revealChanges = 0,
   toggleFiles = 0,
   onCloseManual,
@@ -140,6 +143,7 @@ export function WorkbenchPanel({
   /** The workspace is on another machine, so its paths mean nothing here. */
   remote?: boolean;
   workspaceRoot?: string;
+  hub?: Pick<HubPort, "openWith" | "openWithTargets">;
   revealChanges?: number;
   /** A press on the Files button: opens the explorer, or folds it when it is the open one. */
   toggleFiles?: number;
@@ -605,6 +609,7 @@ export function WorkbenchPanel({
                 previewable={previewable}
                 canSave={!busy && file?.path === active.path && draft !== file.content}
                 onSave={() => void save()}
+                openWith={hub && !remote ? <OpenWithMenu hub={hub} root={workspaceRoot} onError={(e) => setFailed(reason(e))} /> : undefined}
               />
               {(fileFailed || failed) && !(mode === "preview" && previewTab) && (
                 <div className="workbench-error" role="alert">
@@ -654,6 +659,7 @@ export function WorkbenchPanel({
               setHidden(on);
             }}
             onReveal={() => reveal("")}
+            openWith={hub && !remote ? <OpenWithMenu hub={hub} root={workspaceRoot} onError={(e) => setListFailed(reason(e))} /> : undefined}
           />
           <label className="workbench-search">
             <StudioIcon name="search" />
