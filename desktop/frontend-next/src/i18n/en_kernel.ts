@@ -424,6 +424,8 @@ export const EN_KERNEL: Record<string, string> = {
   "这个 Studio 不是安装版（从源码启动），没有可以查看或切换的版本":
     "This Studio is not an installed build (it runs from source), so it has no version to show or change",
   "版本固定未能保存：{detail}": "The version hold was not saved: {detail}",
+  "不支持这种更新方式，没有改动。": "That update mode is not supported; nothing was changed.",
+  "更新方式未能保存：{detail}": "The update mode was not saved: {detail}",
   "这不是一个已发布的版本号": "That is not a published version number",
   "这个版本没有发布更新内容": "This version has no published notes",
   "暂时取不到更新内容，请检查网络后重试": "What's new cannot be reached right now. Check the network and try again",

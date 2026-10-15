@@ -23,6 +23,7 @@ import { clearDraftForSession } from "./drafts";
 import { DOCK, Gutter, RAIL, dockMax, keepWidth, widthOf } from "./Gutter";
 import { useWindowKeys, type Shortcut } from "./windowkeys";
 import { useEscStop } from "../state/escstop";
+import { startUpdateWatch } from "../state/updatewatch";
 import { StopHint } from "./StopHint";
 import { folded as roomGaveUp, onRoomWidth } from "./viewport";
 import { useFoldAway } from "./foldaway";
@@ -295,6 +296,7 @@ export function App({ hub }: { hub: HubPort }) {
 
   // Asked on open, on focus (at most every 30 s) and every 10 min while a report
   // is unsettled, never otherwise; a failed refresh stays silent and backs off.
+  useEffect(() => startUpdateWatch(machinePort), [machinePort]);
   useFeedbackUnread(machineRt ? machinePort : null, machineRt?.id ?? "", feedbackUnread, setFeedbackUnread, feedback !== null);
 
   useEffect(() => {

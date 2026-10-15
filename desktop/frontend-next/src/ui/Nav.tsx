@@ -2,6 +2,7 @@ import { t } from "../i18n";
 import { FeedbackBadge } from "./feedbackentry";
 import { ICON, type Section } from "./prefsnav";
 import { StudioIcon } from "./StudioIcon";
+import { UpdateDot } from "./UpdateDot";
 
 // Settings entries share their destination's mark with prefsnav.
 const CHAT = "M3.2 4.4a1.2 1.2 0 0 1 1.2-1.2h7.2a1.2 1.2 0 0 1 1.2 1.2v5a1.2 1.2 0 0 1-1.2 1.2H7.2L4.4 13v-2.4a1.2 1.2 0 0 1-1.2-1.2Z";
@@ -53,6 +54,7 @@ export function Nav({ at, onGo, onFiles, onHome, onRail, onFeedback, onNew, feed
       {key === "files" ? <StudioIcon name="file" aria-hidden="true" /> : <svg viewBox="0 0 16 16" aria-hidden="true">
         {key === "chat" ? <path d={CHAT} /> : ICON[key]}
       </svg>}
+      {key === "advanced" && <UpdateDot />}
       <span className="navhint" role="tooltip">{t(label)}</span>
     </button>
   );

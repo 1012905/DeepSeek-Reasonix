@@ -545,6 +545,8 @@ const SAID: Record<string, string> = {
   "studio.no_install": "这个 Studio 不是安装版（从源码启动），没有可以查看或切换的版本",
   "studio.no_logs": "这个内核没有窗口外壳，没有可以指出的日志目录",
   "studio.pin_rejected": "版本固定未能保存：{detail}",
+  "studio.update_mode_invalid": "不支持这种更新方式，没有改动。",
+  "studio.update_mode_save_failed": "更新方式未能保存：{detail}",
   "studio.notes_bad_version": "这不是一个已发布的版本号",
   "studio.notes_absent": "这个版本没有发布更新内容",
   "studio.notes_unreachable": "暂时取不到更新内容，请检查网络后重试",

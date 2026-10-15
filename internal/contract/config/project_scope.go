@@ -21,6 +21,7 @@ type heldScope struct {
 	sandbox        SandboxConfig
 	permissions    PermissionsConfig
 	approvalMode   string
+	updateMode     string
 	autoSubmit     bool
 	writeLease     string
 	subagentClaims string
@@ -55,6 +56,7 @@ func holdUserScope(c *Config) heldScope {
 		sandbox:         s,
 		permissions:     p,
 		approvalMode:    c.Desktop.DefaultToolApprovalMode,
+		updateMode:      c.DesktopUpdateMode(),
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		subagentClaims:  c.Agent.SubagentClaims,
@@ -192,6 +194,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("desktop.default_tool_approval_mode", c.Desktop.DefaultToolApprovalMode, ProjectUserOnly)
 	}
 	c.Desktop.DefaultToolApprovalMode = h.approvalMode
+	if c.DesktopUpdateMode() != h.updateMode {
+		c.ignoreProject("desktop.update_mode", c.Desktop.UpdateMode, ProjectUserOnly)
+	}
+	c.Desktop.UpdateMode = h.updateMode
 	if !reflect.DeepEqual(c.Network, h.network) {
 		c.ignoreProject("network", "proxy_mode="+c.Network.ProxyMode, ProjectUserOnly)
 	}

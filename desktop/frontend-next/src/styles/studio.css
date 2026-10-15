@@ -149,6 +149,8 @@ body { background: var(--page); }
 .app:not([data-nav="on"]) .nav { border-right-width: 0; }
 [data-titlebar="app"] .nav { -webkit-app-region: drag; }
 [data-titlebar="app"] .nav button { -webkit-app-region: no-drag; }
+.studio-settings, .navbtn { position: relative; }
+.studio-settings .upd-dot, .navbtn .upd-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .navbtn .fbk-badge { position: absolute; top: 3px; right: 2px; min-width: 14px; height: 14px; padding: 0 4px; display: inline-grid; place-items: center; border-radius: var(--r-pill); background: var(--accent); color: var(--accent-fg); font: var(--w-med) 9px/1 var(--ui); }
 .navgrp { gap: 3px; }
 .navbtn { width: 36px; height: 36px; border-radius: 8px; }

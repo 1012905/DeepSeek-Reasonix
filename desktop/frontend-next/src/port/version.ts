@@ -23,6 +23,10 @@ export interface WithdrawnNote {
 
 // err rides alongside the data: an unreachable catalog must not hide which
 // version is running.
+// What this machine does about new releases on its own. Neither mode installs
+// anything: notify only reads the catalog and says when a release is newer.
+export type UpdateMode = "manual" | "notify";
+
 export interface VersionHub {
   current: string;
   pinned: string;
