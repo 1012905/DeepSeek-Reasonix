@@ -39,6 +39,7 @@ import "../src/styles/feedback.css";
 import "../src/styles/toasts.css";
 import "../src/styles/modelmenu.css";
 import "../src/styles/runsignals.css";
+import "../src/styles/overview.css";
 import "../src/styles/themes.css";
 import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
