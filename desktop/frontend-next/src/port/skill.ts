@@ -29,6 +29,26 @@ export interface SkillEntry {
   source?: SkillSource;
 }
 
+// What updating an installed copy from its source folder would change, as the
+// person is shown it before agreeing.
+export interface SkillUpdateChange {
+  path: string;
+  kind: "added" | "changed" | "removed";
+  code: boolean;
+  diff?: string;
+  truncated?: boolean;
+  binary?: boolean;
+}
+
+export interface SkillUpdatePlan {
+  name: string;
+  source: string;
+  state: string;
+  changes: SkillUpdateChange[];
+  overwritesLocal: boolean;
+  planId: string;
+}
+
 export interface SkillSource {
   path: string;
   mode: string;

@@ -4226,3 +4226,8 @@ body { font-size: 14px; line-height: 1.75; }
 .shell .pinpath .fields label { display: grid; gap: 4px; }
 .shell .pinpath .fields input, .shell .pinpath .fields textarea { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--hair); border-radius: 6px; background: var(--page); color: var(--text); font-family: var(--mono); }
 .shell .pinpath .fields small { color: var(--muted); line-height: 1.5; }
+
+.skupd-diff { margin: 6px 0 0; padding: 8px 10px; max-height: 240px; overflow: auto; border: 1px solid var(--hair); border-radius: 6px; background: var(--surface); font: 12px/1.5 var(--mono); white-space: pre; }
+.skupd-diff span[data-d="+"] { color: color-mix(in srgb, var(--add) 62%, var(--text)); background: color-mix(in srgb, var(--add) 9%, transparent); }
+.skupd-diff span[data-d="-"] { color: color-mix(in srgb, var(--del) 58%, var(--text)); background: color-mix(in srgb, var(--del) 8%, transparent); }
+.skupd { margin: 6px 0 14px; }
