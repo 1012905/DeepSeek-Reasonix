@@ -17,7 +17,7 @@ interface Props {
   // Called when a switch lands (status refresh) and when it moved the tree
   // (the change list, the branch reading and the workspace view re-read).
   onChanged: () => void;
-  onSwitched?: () => void;
+  onSwitched?: (git: WorkspaceGit) => void;
   onError: (e: unknown) => void;
 }
 
@@ -74,7 +74,7 @@ export function BranchChip({ port, git, changeCount, countElsewhere = false, onC
     if (busy) return;
     setBusy(true);
     void port.switchBranch(name)
-      .then(() => { onChanged(); onSwitched?.(); })
+      .then((git) => { onChanged(); onSwitched?.(git); })
       .catch(onError)
       .finally(() => setBusy(false));
   };
