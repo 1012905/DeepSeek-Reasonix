@@ -53,7 +53,7 @@ func (c *Controller) BranchAt(turn int, name string) (string, error) {
 	}
 	if err := c.beginRotation(); err != nil {
 		if errors.Is(err, errTurnRunningRotation) {
-			return "", fmt.Errorf("cannot branch while a turn is running: %w", ErrTurnRunning)
+			return c.branchClosedTurn(turn, name)
 		}
 		return "", err
 	}
@@ -74,4 +74,21 @@ func (c *Controller) BranchAt(turn int, name string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// branchClosedTurn cuts a turn that is already closed while a later one runs.
+// The running turn is partial (a tool call may have no result yet), so only a
+// cut that lands before a user message is a conversation boundary; the latest
+// turn, whose end is still moving, is refused.
+func (c *Controller) branchClosedTurn(turn int, name string) (string, error) {
+	if c.executor == nil || c.sessionDir == "" {
+		return "", fmt.Errorf("%w: sessions are not persisted here", ErrBranchUnavailable)
+	}
+	src := c.executor.Session().Snapshot()
+	end, ok := c.checkpoints.endOfTurn(turn, len(src))
+	if !ok || end >= len(src) || src[end].Role != provider.RoleUser {
+		return "", fmt.Errorf("cannot branch this point while a turn is running: %w", ErrTurnRunning)
+	}
+	_, path, err := c.seedBranch(src[:end], name)
+	return path, err
 }

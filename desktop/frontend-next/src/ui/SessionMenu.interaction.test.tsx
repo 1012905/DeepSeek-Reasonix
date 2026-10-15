@@ -10,9 +10,9 @@ afterEach(cleanup);
 
 const session = (over: Partial<TreeSession> = {}): TreeSession => ({ path: "/s/a.jsonl", name: "a", title: "第一个", turns: 1, ...over });
 
-function draw(s: TreeSession, extra: { live?: boolean; pinned?: boolean; exporting?: boolean } = {}) {
-  const on = { onPin: vi.fn(), onRename: vi.fn(), onPause: vi.fn(), onClose: vi.fn(), onArchive: vi.fn(), onCopyInfo: vi.fn(), onExport: vi.fn(), onDelete: vi.fn() };
-  render(<SessionMenu session={s} label="第一个" live={extra.live ?? false} pinned={extra.pinned ?? false} exporting={extra.exporting ?? false} {...on} />);
+function draw(s: TreeSession, extra: { live?: boolean; pinned?: boolean; exporting?: boolean; branch?: boolean } = {}) {
+  const on = { onPin: vi.fn(), onRename: vi.fn(), onPause: vi.fn(), onClose: vi.fn(), onArchive: vi.fn(), onCopyInfo: vi.fn(), onExport: vi.fn(), onDelete: vi.fn(), onBranch: vi.fn() };
+  render(<SessionMenu session={s} label="第一个" live={extra.live ?? false} pinned={extra.pinned ?? false} exporting={extra.exporting ?? false} {...on} onBranch={extra.branch === false ? undefined : on.onBranch} />);
   return on;
 }
 
@@ -45,4 +45,15 @@ it("names the toggles by the state they will leave behind", () => {
 it("disables export while one is in flight", () => {
   draw(session(), { exporting: true });
   expect((screen.getByRole("menuitem", { name: /导出会话/ }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("branches an open conversation from its latest reply, even while it runs", async () => {
+  const on = draw(session({ runtimeId: "r1" }), { live: true });
+  await userEvent.click(screen.getByRole("menuitem", { name: /从最近回复分叉/ }));
+  expect(on.onBranch).toHaveBeenCalledTimes(1);
+});
+
+it("offers no branch for a conversation without an open pane", () => {
+  draw(session());
+  expect(screen.queryByRole("menuitem", { name: /从最近回复分叉/ })).toBeNull();
 });

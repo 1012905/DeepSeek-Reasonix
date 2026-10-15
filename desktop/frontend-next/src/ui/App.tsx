@@ -1,3 +1,4 @@
+import { useBranchSession } from "./useBranchSession";
 import { watchTreeWake } from "./treewake";
 import { usePinnedSessions } from "./usePinnedSessions";
 import { AutoArchiveNotice } from "./AutoArchiveNotice";
@@ -528,6 +529,8 @@ export function App({ hub }: { hub: HubPort }) {
     [closePanes, hub, reloadTree, unpinSession],
   );
 
+  const branchSession = useBranchSession({ panePorts, runtimes, runsRef, openPane });
+
   const first = useFirstRun({ port: activePort, setup, welcomed, setSetup, setWelcomed, reloadPanes });
 
   if (setup === undefined || welcomed === undefined) return <div className="app" data-run="idle" />;
@@ -622,6 +625,7 @@ export function App({ hub }: { hub: HubPort }) {
           onFocusPane={focusPane}
           onClosePanes={closePanes}
           onPause={(runtimeId) => void panePorts.get(runtimeId)?.cancel()}
+          onBranch={branchSession}
           onArchive={archiveSession}
           onRename={renameSession}
           onCollapse={() => setRail(false)}

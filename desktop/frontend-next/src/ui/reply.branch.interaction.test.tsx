@@ -46,9 +46,12 @@ it("branches a reply's conversation at its own turn and opens the result", async
   await waitFor(() => expect(branchAt).toHaveBeenLastCalledWith(1, "我的会话 · 分支"));
 });
 
-it("is not offered while a turn runs", () => {
-  draw({ running: true });
-  expect(screen.queryByRole("button", { name: "分支为新会话" })).toBeNull();
+it("is offered only on replies a later turn has closed while a turn runs", async () => {
+  const { branchAt } = draw({ running: true });
+  const buttons = screen.getAllByRole("button", { name: "分支为新会话" });
+  expect(buttons).toHaveLength(1);
+  await userEvent.click(buttons[0]);
+  await waitFor(() => expect(branchAt).toHaveBeenCalledWith(0, "我的会话 · 分支"));
 });
 
 it("reports a refusal instead of opening anything", async () => {

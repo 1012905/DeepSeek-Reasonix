@@ -1358,6 +1358,8 @@ export const EN: Record<string, string> = {
   "重新生成": "Regenerate",
   "分支为新会话": "Branch into a new conversation",
   "分支": "branch",
+  "从最近回复分叉": "Branch from the latest reply",
+  "还没有已完成的回复可以分叉": "There is no finished reply to branch from yet",
   "当前回复会留在运行历史里": "The current reply stays in the run history",
   "按当前配置重试": "Retry as configured",
   "先调整模型与强度": "Adjust the model and effort first",

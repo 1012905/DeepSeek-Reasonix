@@ -104,6 +104,7 @@ export const ACTIONS: UIAction[] = [
   // Closing a conversation's pane ends its runtime and keeps the transcript;
   // refused while a turn runs, so it never stops work.
   { id: "session.close", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "session.branch", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "session.archive", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "session.copy-info", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "session.export", kind: "shell-native", target: "entity", proof: "browser" },
