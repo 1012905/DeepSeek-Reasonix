@@ -23,7 +23,7 @@ import { WorkspaceOrder, workspaceMenuKeys } from "./WorkspaceOrder";
 import { WorkspaceReveal } from "./WorkspaceReveal";
 import { SessionMenu } from "./SessionMenu";
 import { pinnedFirst } from "./pinorder";
-import { Confirm, removeHint } from "./WorkspaceConfirm";
+import { Confirm, removeHint, sessionDeleteHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
@@ -244,7 +244,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
     void onArchive(session.path, !session.archived, session.runtimeId).catch(onError);
   };
 
-  const dropSession = async (session: TreeSession) => {
+  const dropSession = async (session: TreeSession, withCopies = false) => {
     if (confirm !== session.path) {
       setConfirm(session.path);
       return;
@@ -261,6 +261,9 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
       // transcript's lease until it is down. A running one is left for the
       // kernel to refuse: a delete never stops work in progress.
       if (session.runtimeId && liveIds([session.runtimeId]).length === 0) await onClose([session.runtimeId]);
+      // A plain delete keeps copies that hold content the conversation lacks; taking
+      // them along removes each first, so a refused copy leaves the conversation in place.
+      if (withCopies) for (const copy of session.copies ?? []) await hub.removeSession(copy.path);
       await hub.removeSession(session.path);
       clearDraftForSession("", session.path);
       await reload();
@@ -493,9 +496,10 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                         <Confirm
                           key={session.path}
                           what={t("删除「{name}」？", { name: rowLabel(session) })}
-                          hint={t(!session.runtimeId ? "连同其记录一并删除" : liveIds([session.runtimeId]).length ? "正在运行，停止后才能删除" : "它的面板会先关掉")}
+                          hint={sessionDeleteHint(session.copies?.length ?? 0, !!session.runtimeId, !!session.runtimeId && liveIds([session.runtimeId]).length > 0)}
                           go={t("删除")}
                           danger
+                          alt={(session.copies?.length ?? 0) > 0 ? { label: t("连同 {n} 份副本删除", { n: session.copies!.length }), onGo: () => void dropSession(session, true) } : undefined}
                           onGo={() => void dropSession(session)}
                           onCancel={() => setConfirm("")}
                         />
