@@ -55,6 +55,7 @@ import { singleFlight } from "./singleflight";
 import { useTreeRead } from "./useTreeRead";
 import { useOpenPane } from "./useOpenPane";
 import { markSettled } from "../boot/gate";
+import type { PaneView } from "./PaneNav";
 
 // Start fetching the settings chunk with the shell instead of waiting for the
 // first click. It remains a separate chunk (and keeps its failure boundary),
@@ -114,6 +115,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [report, setReport] = useState<PaneReport>(NO_REPORT);
   const [findPulse, setFindPulse] = useState(0);
   const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
+  const [viewRequests, setViewRequests] = useState<Record<string, { to: PaneView; n: number }>>({});
   const [error, setError] = useState("");
   const [renaming, setRenaming] = useState<{ path: string; title: string } | null>(null);
   // false = closed, true = open at its last section, a string = open there.
@@ -363,6 +365,12 @@ export function App({ hub }: { hub: HubPort }) {
     setFilesRequests((requests) => ({ ...requests, [active]: (requests[active] ?? 0) + 1 }));
   }, [active, panePorts, hidePrefs]);
 
+  const showView = useCallback((to: PaneView) => {
+    if (!panePorts.has(active)) return;
+    hidePrefs();
+    setViewRequests((requests) => ({ ...requests, [active]: { to, n: (requests[active]?.n ?? 0) + 1 } }));
+  }, [active, panePorts, hidePrefs]);
+
   const openPane = useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes: refreshPanes, sw });
 
   // Awaitable because deleting a conversation has to close its pane first and
@@ -412,9 +420,12 @@ export function App({ hub }: { hub: HubPort }) {
       { chord: "\\", fields: true, action: "rail.toggle", run: () => setRail((v) => !v) },
       { chord: ",", fields: true, action: "chrome.settings", run: showPrefs },
       { chord: "f", action: "transcript.find", run: openFind },
+      { chord: "1", fields: true, action: "pane.view", run: () => showView("flow") },
+      { chord: "2", fields: true, action: "pane.view", run: () => showView("analysis") },
+      { chord: "3", fields: true, action: "pane.view", run: () => showView("browser") },
       ...zoomKeys,
     ],
-    [showPrefs, openFind, zoomKeys],
+    [showPrefs, openFind, showView, zoomKeys],
   );
   const closeBrowser = useCallback(() => setBrowser(false), []);
   const stopTurn = useCallback(() => activePort?.cancel(), [activePort]);
@@ -626,6 +637,7 @@ export function App({ hub }: { hub: HubPort }) {
           wallet={report.wallet}
           onSettings={showPrefs}
           onFiles={openFiles}
+          onView={showView}
           onFeedback={(tab) => setFeedback(tab ?? "send")}
           feedbackUnread={feedbackUnread}
           onFind={openFind}
@@ -680,6 +692,7 @@ export function App({ hub }: { hub: HubPort }) {
                   pulse={settingsPulse}
                   findPulse={findPulse}
                   filesPulse={filesRequests[rt.id] ?? 0}
+                  viewRequest={viewRequests[rt.id]}
                   alert={rt.id === active ? bar : undefined}
                   connect={first.connect}
                   needsProject={needsProject}

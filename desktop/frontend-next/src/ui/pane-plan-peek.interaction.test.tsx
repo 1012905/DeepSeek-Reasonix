@@ -48,5 +48,6 @@ it("reads the host plan after reload, retains the composer entry, and follows to
   await act(async () => emit({ kind: "todo_progress" } as WireEvent));
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "计划" })).toBeNull());
   expect(screen.getByRole("dialog", { name: "目标" }).textContent).toContain("验证当前修复");
-  expect(view.container.querySelector(".studio-todo")).toBeNull();
+  expect(view.container.querySelector(".studio-todo")?.textContent).toContain("验证当前修复");
+  expect(view.container.querySelector(".studio-todo small")).toBeNull();
 });

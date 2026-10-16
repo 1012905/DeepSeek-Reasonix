@@ -84,7 +84,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, viewRequest, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -340,6 +340,9 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
     else openChanges();
   }, [visible, workbench, openChanges]);
   useOnBump(filesPulse, pressFiles);
+  useOnBump(viewRequest?.n ?? 0, () => {
+    if (viewRequest && (viewRequest.to !== "analysis" || traj.rows.length > 0)) showView(viewRequest.to);
+  });
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   useEffect(() => { void loadFoldWorkPref(port); }, [port]);
   const foldWork = useFoldsTurnWork(port);
@@ -555,7 +558,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         </span>
         {/* Everything stacked above the input box shares one ceiling, so no
             child of this region may grow without bound. */}
-        <PlanFold plan={s.plan} shown={tab === "flow"} paused={blocked} />
+        <PlanFold plan={s.plan} goal={status?.goal} shown={tab === "flow"} paused={blocked} />
         {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} since={s.running ? s.runSince : undefined} sent={sent} received={received} estimated={s.outLive > 0} />}
         <div className="composeaux">
           <Queue

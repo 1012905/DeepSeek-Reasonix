@@ -216,7 +216,7 @@ class BenchPort extends MockPort {
   private readonly jobsSince = Date.now() - 739_000;
 
   async status() {
-    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}) };
+    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}) };
     if (STATUS_MS > 0) await new Promise((r) => setTimeout(r, STATUS_MS));
     if (!JOBS) return st;
     const jobs = Array.from({ length: JOBS }, (_, i) => ({
