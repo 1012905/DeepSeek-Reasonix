@@ -1309,6 +1309,7 @@ export const EN: Record<string, string> = {
   "详情": "Details",
   "分离状态": "detached",
   "当前 Git 分支：{branch}": "Current Git branch: {branch}",
+  "正在切换到 {branch}…": "Switching to {branch}…",
   "{n} 个变更": "{n} changes",
   "1 个文件已更改": "1 file changed",
   "{n} 个文件已更改": "{n} files changed",
