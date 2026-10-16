@@ -155,6 +155,14 @@ export interface ProviderRemoval {
   cleared: string[];
 }
 
+/** The form's unsaved state, laid over the saved entry for one check. Blank
+ *  means what is saved. Nothing in it is written anywhere. */
+export interface ProviderCheckDraft {
+  baseUrl?: string;
+  apiKey?: string;
+  kind?: string;
+}
+
 export interface ProviderCheck {
   ok: boolean;
   kind?: string;

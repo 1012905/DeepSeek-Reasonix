@@ -1,5 +1,5 @@
 import { SseBoundary } from "./sse_boundary";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./port";
+import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./port";
 
 // Where models come from: the accounts, the protocols their endpoints answer,
 // and what probing one found.
@@ -25,8 +25,8 @@ export class SseProvider extends SseBoundary {
   probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe> {
     return this.post0<ProviderProbe>("/providers/probe", { baseUrl, apiKey });
   }
-  checkProvider(name: string): Promise<ProviderCheck> {
-    return this.post0<ProviderCheck>("/providers/check", { name });
+  checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck> {
+    return this.post0<ProviderCheck>("/providers/check", { name, ...draft });
   }
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck> {
     return this.post0<ProviderModelCheck>("/providers/check/model", request);

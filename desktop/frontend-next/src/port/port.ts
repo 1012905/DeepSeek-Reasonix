@@ -43,8 +43,8 @@ import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } fr
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, BrowserToolsSettings, SubagentClaimsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
-export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
+import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
+export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 
@@ -355,7 +355,7 @@ export interface AgentPort {
   probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe>;
   // Re-probes what is already saved, so "is the key still good, and is this
   // still the protocol we recorded" is one button rather than a re-add.
-  checkProvider(name: string): Promise<ProviderCheck>;
+  checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck>;
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   saveProvider(draft: ProviderDraft): Promise<void>;
   // Changes only the fields the form owns. Saving a whole entry instead would
