@@ -3,6 +3,7 @@ package migration
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -531,5 +532,27 @@ func TestExplicitImportFindsSessionsAddedAfterAnEarlierRun(t *testing.T) {
 	writeLegacyFile(t, sessions, "b.jsonl", legacyMessageLog)
 	if got := totalImported(RunLegacySessionImportInto(picked, dest, event.Discard).SessionImports); got != 1 {
 		t.Fatalf("second run imported %d, want the new session only", got)
+	}
+}
+
+func TestExplicitImportNamesTheFoldersItRoutedSessionsBackInto(t *testing.T) {
+	home := isolateMigrationHome(t)
+	root := filepath.Join(home, "Roaming", "reasonix")
+	project := filepath.Join(home, "work", "old-project")
+	sessions := filepath.Join(root, "sessions")
+	for _, dir := range []string{project, sessions} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(sessions, "a.jsonl"), []byte(legacyMessageLog), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sessions, "a.meta.json"), []byte(`{"workspace":`+strconv.Quote(project)+`}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := RunLegacySessionImportInto(root, filepath.Join(config.SessionDir(), "ws"), event.Discard)
+	if len(res.Workspaces) != 1 || res.Workspaces[0] != project {
+		t.Fatalf("Workspaces = %v, want [%s]", res.Workspaces, project)
 	}
 }
