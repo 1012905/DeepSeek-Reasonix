@@ -58,7 +58,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "步骤 1 · 连接服务": "Step 1 · Connect service",
   "先连接服务，再选择这个来源要启用的模型。": "Connect the service, then choose which models to enable from it.",
   "来源名称": "Source name",
-  "例如：公司中转站": "For example: Company gateway",
+  "连接后自动生成，可改": "Made after connecting; editable",
   "API Key 仅保存在运行内核的这台机器上。": "The API key is stored only on the machine running the kernel.",
   "检测并继续": "Test and continue",
   "自动识别协议与模型": "Protocol and models are detected automatically",
