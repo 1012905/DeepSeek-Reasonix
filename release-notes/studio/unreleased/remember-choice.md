@@ -1,0 +1,2 @@
+- 权限批准卡片上“本会话允许 / 始终允许”下多了一行说明：前者只在本次会话有效、不写磁盘，后者写入用户配置的权限规则，可在设置里撤销。关联 e54381d4f。
+- The approval card now says where "Allow for this session" and "Always allow" are kept: the first only for the session, the second as a user-config permission rule Settings can undo. Refs e54381d4f.
