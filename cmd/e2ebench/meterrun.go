@@ -116,10 +116,10 @@ func renderMeterAccounting(results []result) string {
 		miss += r.Meter.CacheMissTokens
 		unmeasured += r.Meter.WithoutUsage
 		injected += r.Meter.Injected
-		// A run whose metrics file never landed has no harness number, so it
-		// stays out of both sides of the comparison. A metered run whose
-		// harness reported no tokens at all is the same absence, not a ratio.
-		if r.Unaccounted || r.PromptTokens+r.CompletionTokens == 0 {
+		// Whether the harness has a side to compare is the suite's Unaccounted
+		// state, not a token count: a persisted record saying zero is a real
+		// measurement of zero, so it belongs on both sides like any other.
+		if r.Unaccounted {
 			continue
 		}
 		selfReported++

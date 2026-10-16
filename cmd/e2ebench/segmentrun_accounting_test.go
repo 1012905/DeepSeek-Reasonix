@@ -63,9 +63,9 @@ func TestSuiteHealthyRunKeepsItsFinalAccount(t *testing.T) {
 		t.Fatalf("a healthy leg must not fail the run: %v", err)
 	}
 	stats := gatherSuiteStats([]result{r})
-	if stats.unaccounted != 0 || stats.accounted != 1 {
-		t.Fatalf("a healthy run changed category: unaccounted=%d accounted=%d",
-			stats.unaccounted, stats.accounted)
+	if stats.unaccounted != 0 || stats.accounted != 1 || stats.partial != 0 {
+		t.Fatalf("a healthy run changed category: unaccounted=%d accounted=%d partial=%d",
+			stats.unaccounted, stats.accounted, stats.partial)
 	}
 	if stats.pTok != 900 || stats.cTok != 60 || stats.cost != 0.02 {
 		t.Fatalf("a healthy run's numbers changed: tokens=%d/%d cost=%.4f",
@@ -104,11 +104,17 @@ func TestSuiteRunKeepsTheSnapshotItRecovered(t *testing.T) {
 		t.Fatalf("the snapshot was kept but not recovered: tokens=%d/%d",
 			r.PromptTokens, r.CompletionTokens)
 	}
+	// Recovering the numbers must not also mark the run unmeasured: the snapshot
+	// is evidence, so the run stays accounted and Partial marks it a lower bound.
+	if r.Unaccounted || !r.Partial {
+		t.Fatalf("a recovered snapshot was not reported as accounted but partial: partial=%v unaccounted=%v",
+			r.Partial, r.Unaccounted)
+	}
 }
 
-// TestMeterAccountingSkipsAnUnaccountedRunWithTokens pins the other term of the
-// guard: a run the suite already marked unmeasured stays out of the ratio even
-// when the harness number is present, so a partial account is not priced.
+// TestMeterAccountingSkipsAnUnaccountedRunWithTokens pins the guard: a run the
+// suite marked unmeasured stays out of the ratio even when a harness number is
+// present, so a run with no record is not priced.
 func TestMeterAccountingSkipsAnUnaccountedRunWithTokens(t *testing.T) {
 	r := result{
 		task:        task{ID: "killed"},
