@@ -605,6 +605,7 @@ export const ACTIONS: UIAction[] = [
   { id: "sandbox.add-write-root", kind: "kernel-mutation", target: "optional", proof: "authority-effect" },
   { id: "sandbox.remove-write-root", kind: "destructive", target: "entity", proof: "authority-effect" },
   { id: "browser-tools.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "tree.retry", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "update.mode", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "update.restart", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "update.later", kind: "view", target: "none", proof: "interaction" },

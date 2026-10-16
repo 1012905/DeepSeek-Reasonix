@@ -1311,6 +1311,7 @@ export const EN: Record<string, string> = {
   "新版本 {v} 已下载。重启后使用，不会自动重启。": "Version {v} is downloaded. Restart to use it; Studio never restarts by itself.",
   "重启并更新": "Restart and update",
   "有 {n} 个会话还在运行，等它们结束后再重启。": "{n} sessions are still running; restart after they finish.",
+  "仍在读取（会话很多时首次较慢）": "Still reading (the first read is slow with many sessions)",
   "当前 Git 分支：{branch}": "Current Git branch: {branch}",
   "正在切换到 {branch}…": "Switching to {branch}…",
   "这张图片在工作区之外，不会加载": "This picture is outside the workspace and is not loaded",
