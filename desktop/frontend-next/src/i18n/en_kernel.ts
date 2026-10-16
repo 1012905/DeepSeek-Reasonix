@@ -77,6 +77,8 @@ export const EN_KERNEL: Record<string, string> = {
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
   "这个后台任务已经不在运行了": "That background job is no longer running",
+  "这条调用已经结束了": "This call has already finished",
+  "你停止了这条调用，它在外部已经做了什么无法确定": "You stopped this call; what it had already done outside the workspace is unknown",
   "已经请求停止这个后台任务，它的进程还没有退出，仍在等待": "A stop was already requested for this background job; its process has not exited yet, so it is still shutting down",
   "该条当前状态不允许此操作": "That entry's current state does not allow this",
   "待送达已暂停，请先恢复派发再进行操作": "The pending queue is on hold - resume it first",

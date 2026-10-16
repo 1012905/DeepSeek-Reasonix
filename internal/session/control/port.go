@@ -364,6 +364,11 @@ type BackgroundJobs interface {
 	CancelJob(id string) bool
 }
 
+// ToolCallStopper ends one running tool call and leaves its turn going.
+type ToolCallStopper interface {
+	CancelToolCall(id string) bool
+}
+
 // DiffRendering reports the session's diff-rendering choices, resolved once at
 // build. A frontend rebuilding a transcript (e.g. the HTTP server answering
 // /history) reads them here instead of reloading config per request.
@@ -480,6 +485,7 @@ type SessionAPI interface {
 	Inbox
 	Provenance
 	BackgroundJobs
+	ToolCallStopper
 	LocalShell
 	DiffRendering
 	Feedback
@@ -515,6 +521,7 @@ var (
 	_ FolderTrust        = (*Controller)(nil)
 	_ Goals              = (*Controller)(nil)
 	_ BackgroundJobs     = (*Controller)(nil)
+	_ ToolCallStopper    = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)
 	_ SlashDispatch      = (*Controller)(nil)

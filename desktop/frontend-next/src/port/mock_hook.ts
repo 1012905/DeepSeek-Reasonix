@@ -1,5 +1,5 @@
 import { MockMcp } from "./mock_mcp";
-import type { HookCatalog, HookDryRun, HookEntry } from "./port";
+import { HttpError, type HookCatalog, type HookDryRun, type HookEntry } from "./port";
 
 // Hooks, and what a dry run of one reports back.
 export class MockHook extends MockMcp {
@@ -7,6 +7,10 @@ export class MockHook extends MockMcp {
     { event: "PostToolUse", match: "edit_file|write_file", command: "gofmt -w .", scope: "global", usesMatch: true },
     { event: "PreToolUse", match: "bash", command: "./scripts/guard.sh", scope: "global", blocking: true, usesMatch: true },
   ];
+
+  async stopToolCall(_callId: string): Promise<void> {
+    throw new HttpError(409, "no running tool call with this id", { code: "tool_call.not_running" });
+  }
 
   async hooks(): Promise<HookCatalog> {
     return {
