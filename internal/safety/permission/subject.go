@@ -54,6 +54,11 @@ func Subjects(args json.RawMessage) []string {
 			return []string{s}
 		}
 	}
+	if to, text := stringArg(m, "to"), stringArg(m, "text"); to != "" && text != "" {
+		// A message to another session: who it goes to and every word of it, so
+		// the person approving reads what would leave this session.
+		return []string{to + ": " + text}
+	}
 	return nil
 }
 
