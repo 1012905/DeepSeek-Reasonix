@@ -1,0 +1,2 @@
+- 设置里“网络 → 测试连接”的每一步结果现在会按界面语言显示：英文界面不再出现中文的步骤名、提示和“key 被拒了”之类的句子。关联 #12040。
+- Settings → Network → "Test it" now words every step in the interface language: the English window no longer shows Chinese step names, advice or sentences such as "key was rejected". Refs #12040.
