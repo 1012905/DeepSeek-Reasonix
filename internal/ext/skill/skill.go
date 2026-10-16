@@ -187,6 +187,7 @@ type Store struct {
 	requiresReady    func([]string) []string
 	toolBindings     func(Skill) []tool.MCPBinding
 	hits             *PathHits
+	scans            scanCache
 }
 
 // New builds a Store. Relative custom paths and a relative project root are made
@@ -547,7 +548,9 @@ func pathStatus(dir string) PathStatus {
 	return StatusOK
 }
 
-func (s *Store) discoveredSkills() []Skill {
+func (s *Store) discoveredSkills() []Skill { return s.discover(s.discoverRoot) }
+
+func (s *Store) discover(scan func(discoveryRoot) []Skill) []Skill {
 	if s == nil || s.disableDiscovery {
 		return nil
 	}
@@ -557,7 +560,7 @@ func (s *Store) discoveredSkills() []Skill {
 		if r.Status != StatusOK {
 			continue
 		}
-		for _, sk := range s.discoverRoot(r) {
+		for _, sk := range scan(r) {
 			if disabled[config.SkillNameKey(sk.Name)] {
 				continue
 			}
@@ -611,7 +614,7 @@ func (s *Store) List() []Skill {
 // retained per package under /<plugin>:<name>, even when their bare names
 // collide; non-plugin skills keep their existing short names.
 func (s *Store) SlashList() []Skill {
-	return VisibleSlashSkills(s.discoveredSkills())
+	return VisibleSlashSkills(s.discover(s.discoverRootCached))
 }
 
 // VisibleSlashSkills deduplicates skills by their user-facing slash name and
@@ -967,6 +970,8 @@ func (s *Store) Create(name string, scope Scope) (string, error) {
 // <name>/SKILL.md skill, refusing to clobber an existing directory-layout or
 // legacy flat skill of the same name. Returns the written path.
 func (s *Store) CreateWithContent(name string, scope Scope, content string) (string, error) {
+	s.scans.drop()
+	defer s.scans.drop()
 	if !IsValidName(name) {
 		return "", fmt.Errorf("invalid skill name %q — use letters, digits, '_', '-', '.'", name)
 	}
@@ -1012,6 +1017,8 @@ func (s *Store) CreateWithContent(name string, scope Scope, content string) (str
 // see Delete for why a mismatch must refuse rather than silently target the
 // wrong file.
 func (s *Store) UpdateContent(name string, scope Scope, content string) error {
+	s.scans.drop()
+	defer s.scans.drop()
 	if scope == ScopeBuiltin {
 		return fmt.Errorf("skill %q is built in and cannot be edited", name)
 	}
@@ -1095,6 +1102,8 @@ func (s *Store) validateMutablePath(path string, scope Scope) error {
 // at global scope, which would otherwise silently no-op against the wrong
 // file while a same-named project-scope shadow kept showing up in List().
 func (s *Store) Delete(name string, scope Scope) error {
+	s.scans.drop()
+	defer s.scans.drop()
 	if scope == ScopeBuiltin {
 		return fmt.Errorf("skill %q is built in and cannot be deleted", name)
 	}
