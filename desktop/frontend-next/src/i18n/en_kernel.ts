@@ -486,4 +486,34 @@ export const EN_KERNEL: Record<string, string> = {
   "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹": "A home directory or drive root cannot be trusted as a whole - open a specific project folder",
   "未能记下对此文件夹的信任决定：{detail}": "The trust decision for this folder was not saved: {detail}",
   "该数值超出允许范围，未做任何修改：{detail}": "That value is out of range; nothing was changed: {detail}",
+  "这个项目自带的钩子等程序要你批准后才会运行":
+    "This project ships hooks or other programs that run only after you approve them",
+  "这个项目的程序在批准后被改动过，本次没有运行，需要重新批准":
+    "A program in this project changed after you approved it; it did not run this time and needs approval again",
+  "这个项目声明的一个 MCP 服务要你批准后才会运行；详情里是它要启动的命令":
+    "This project declares an MCP server that runs only after you approve it; the detail shows the command it would start",
+  "一个已启用的项目 MCP 服务要启动的内容变了，本次没有运行，需要查看命令后重新启用":
+    "What an enabled project MCP server would start has changed; it did not run this time - review the command and enable it again",
+  "有一个钩子无法被评估（匹配串无效、无法启动或载荷无法序列化），为安全起见已拦截这次操作；到钩子设置里修复或移除该钩子":
+    "A hook could not be evaluated (invalid matcher, could not start, or payload could not be serialized), so this action was blocked to be safe; fix or remove the hook in the hook settings",
+  "一条外部内容看起来在向智能体下指令，已提醒它只当资料看待":
+    "Some external content looks like it is giving the agent instructions; the agent was told to treat it as data only",
+  "配置里保存的默认模型已不在已配置的供应商中，本次改用第一个可用的模型；在设置里重新选择默认模型即可替换，配置文件未被改动":
+    "The default model saved in your configuration is no longer among the configured providers, so the first available model is used this time; pick a default model again in Settings to replace it - the configuration file was not changed",
+  "搜索模型的格式应为 服务/模型，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The search model must be written as service/model, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型所在的连接已被移出，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The connection of the chosen search model has been removed, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型已不在配置里，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The chosen search model is no longer in the configuration, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型的协议不支持原生搜索，或已关闭搜索，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The chosen search model's protocol does not support native search, or search was turned off, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型所在的连接没有凭据，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The connection of the chosen search model has no credentials, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "配置里的默认审批档位本版本不认识，已按每次询问处理；在界面里选一个档位即可替换":
+    "The default approval level in your configuration is not recognized by this version and is treated as ask every time; pick a level in the interface to replace it",
+  "旧版记忆文件没能先备份，所以没有迁移，保持原样；详情里有具体原因":
+    "The old memory file could not be backed up first, so it was not migrated and was left as it is; the detail gives the reason",
+  "会话、工作区或运行时正在切换，这条消息没能立刻发出；它已排入队列，切换结束后会自动发送，不需要重发":
+    "The session, workspace or runtime is switching, so this message could not be sent right away; it is queued and will be sent automatically when the switch ends - no need to send it again",
 };

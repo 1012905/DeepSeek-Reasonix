@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EN } from "./en";
 import { NOTICE_TEXT } from "./notices";
 import { NOTICE_VAR_CODES, leftoverDetail, noticeWording } from "./notice_wording";
 
@@ -20,6 +21,12 @@ const PAYLOAD: Record<string, string | undefined> = {
 };
 
 describe("notice wording", () => {
+  it.each(Object.entries(NOTICE_TEXT))("%s reads in English too", (code, sentence) => {
+    const english = EN[sentence];
+    expect(english, `${code}: no English for "${sentence}" - an English window would show the Chinese`).toBeTruthy();
+    expect(/[\u4e00-\u9fff]/.test(english), `${code}: the English still holds Chinese`).toBe(false);
+  });
+
   const withSlots = Object.entries(NOTICE_TEXT).filter(([, s]) => placeholders(s).length > 0);
 
   it.each(withSlots)("%s registers a reader for every placeholder it has", (code, sentence) => {
