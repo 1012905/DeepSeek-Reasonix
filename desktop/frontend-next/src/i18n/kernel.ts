@@ -49,6 +49,9 @@ const SAID: Record<string, string> = {
   "session.title_no_message": "该会话还没有可用于命名的用户消息",
   "session.title_unavailable": "未配置可用于自动命名的模型，请先配置模型",
   "session.title_failed": "自动命名失败，原标题未更改，请重试",
+  "session.title_timeout": "自动命名超时：标题模型没有及时回答，原标题未更改，请稍后重试",
+  "session.title_no_text": "自动命名失败：标题模型没有返回任何文字，原标题未更改",
+  "session.title_refused": "自动命名失败：标题模型的接口拒绝了请求（HTTP {status}）{detail}",
   "session.title_save_failed": "会话标题保存失败，请重试",
 
   // ── 忙：不是出错，是「现在不行」 ─────────────────────────────────

@@ -33,6 +33,9 @@ export const EN_KERNEL: Record<string, string> = {
   "该会话还没有可用于命名的用户消息": "This chat has no user message to name it from",
   "未配置可用于自动命名的模型，请先配置模型": "Configure a model before using automatic naming",
   "自动命名失败，原标题未更改，请重试": "Automatic naming failed. The original title is unchanged. Please try again",
+  "自动命名超时：标题模型没有及时回答，原标题未更改，请稍后重试": "Automatic naming timed out: the title model did not answer in time. The original title is unchanged. Please try again later",
+  "自动命名失败：标题模型没有返回任何文字，原标题未更改": "Automatic naming failed: the title model returned no text. The original title is unchanged",
+  "自动命名失败：标题模型的接口拒绝了请求（HTTP {status}）{detail}": "Automatic naming failed: the title model's endpoint refused the request (HTTP {status}) {detail}",
   "会话标题保存失败，请重试": "The session title could not be saved. Please try again",
 
   "参数不符合该工具的约定，本次调用没有执行；请按工具说明补全或更正参数后重试": "The arguments break this tool's contract, so the call did not run; complete or correct them per the tool description and retry",
