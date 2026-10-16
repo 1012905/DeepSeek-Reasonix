@@ -94,6 +94,7 @@ func (w Workspace) Tools(enabled ...string) []tool.Tool {
 		"ls":               listDir{workDir: w.Dir, netRoots: netRoots, readRoots: readRoots, paths: w.ReadPaths, forbidRoots: forbidRoots},
 		"glob":             globTool{workDir: w.Dir, netRoots: netRoots, readRoots: readRoots, paths: w.ReadPaths, forbidRoots: forbidRoots},
 		"grep":             grepTool{workDir: w.Dir, netRoots: netRoots, readRoots: readRoots, paths: w.ReadPaths, rg: w.Search.RgPath, forbidRoots: forbidRoots, sb: w.Bash, sessionTemp: w.SessionTemp},
+		"read_video":       readVideo{workDir: w.Dir, netRoots: netRoots, readRoots: readRoots, paths: w.ReadPaths, forbidRoots: forbidRoots, sb: w.Bash},
 		"web_fetch":        webFetch{proxySpec: w.ProxySpec},
 		"import_web_image": webImage{workDir: w.Dir, roots: roots, guard: w.SessionGuard, proxySpec: w.ProxySpec, receipt: w.FileWriteReceipt},
 	}
