@@ -27,6 +27,7 @@ type scanCache struct {
 	mu      sync.Mutex
 	now     func() time.Time
 	entries map[scanKey]scanEntry
+	gen     uint64
 }
 
 func (c *scanCache) clock() time.Time {
@@ -46,9 +47,18 @@ func (c *scanCache) get(k scanKey) ([]Skill, bool) {
 	return slices.Clone(e.skills), true
 }
 
-func (c *scanCache) put(k scanKey, skills []Skill) {
+func (c *scanCache) generation() uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.gen
+}
+
+func (c *scanCache) put(k scanKey, skills []Skill, gen uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if gen != c.gen {
+		return
+	}
 	if c.entries == nil {
 		c.entries = map[scanKey]scanEntry{}
 	}
@@ -58,6 +68,7 @@ func (c *scanCache) put(k scanKey, skills []Skill) {
 func (c *scanCache) drop() {
 	c.mu.Lock()
 	c.entries = nil
+	c.gen++
 	c.mu.Unlock()
 }
 
@@ -66,7 +77,8 @@ func (s *Store) discoverRootCached(r discoveryRoot) []Skill {
 	if out, ok := s.scans.get(k); ok {
 		return out
 	}
+	gen := s.scans.generation()
 	out := s.discoverRoot(r)
-	s.scans.put(k, out)
+	s.scans.put(k, out, gen)
 	return out
 }
