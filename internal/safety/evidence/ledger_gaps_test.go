@@ -93,3 +93,28 @@ func TestPathsProvenInSessionNeedsEveryPathAndIgnoresFailedCalls(t *testing.T) {
 		t.Fatal("no paths proves nothing")
 	}
 }
+
+func TestHasSuccessfulBashMentioningPathsNeedsEveryPathInASuccessfulCommand(t *testing.T) {
+	l := recorded(
+		Receipt{ToolName: "bash", Success: true, Command: `seq 1 3 > Out/Data.txt`},
+		Receipt{ToolName: "bash", Success: false, Command: `echo hi > failed.txt`},
+		Receipt{ToolName: "edit_file", Success: true, Command: `notes.txt`},
+		Receipt{ToolName: "bash", Success: true, Command: `copy x C:\work\win.txt`},
+	)
+	if !l.HasSuccessfulBashMentioningPaths([]string{"out/data.txt"}) {
+		t.Fatal("the redirect target is named in a successful command, ignoring case")
+	}
+	if !l.HasSuccessfulBashMentioningPaths([]string{"out/data.txt", "c:/work/win.txt"}) {
+		t.Fatal("backslashes in the command read as slashes")
+	}
+	if l.HasSuccessfulBashMentioningPaths([]string{"out/data.txt", "failed.txt"}) {
+		t.Fatal("a failed command proves nothing about its path")
+	}
+	if l.HasSuccessfulBashMentioningPaths([]string{"notes.txt"}) {
+		t.Fatal("only bash commands count")
+	}
+	var nilLedger *Ledger
+	if nilLedger.HasSuccessfulBashMentioningPaths([]string{"a"}) || l.HasSuccessfulBashMentioningPaths(nil) {
+		t.Fatal("a nil ledger and no paths prove nothing")
+	}
+}

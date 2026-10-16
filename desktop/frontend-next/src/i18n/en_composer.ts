@@ -1,6 +1,23 @@
 // The turn starts here: drafting, attachments, run posture, and the two actions
 // that remain available while an agent is live.
 export const EN_COMPOSER: Record<string, string> = {
+  "配置工作目录": "Configure workspace",
+  "独立 worktree · {branch}": "New worktree · {branch}",
+  "当前目录 · {branch}": "Current folder · {branch}",
+  "新建 worktree": "New worktree",
+  "为此会话创建独立的代码目录": "Create a separate code folder for this session",
+  "起始分支": "Source branch",
+  "任务分支": "Task branch",
+  "自动创建": "Create automatically",
+  "基于所选分支的已提交版本创建，不包含未提交修改": "Start from the selected branch's committed version, without uncommitted changes",
+  "使用当前目录，与该目录中的其他会话共享文件": "Use the current folder, sharing files with other sessions in it",
+  "选择起始分支": "Choose source branch",
+  "搜索分支": "Search branches",
+  "搜索分支…": "Search branches…",
+  "远程分支": "Remote branches",
+  "当前分支": "Current branch",
+  "没有匹配的分支": "No matching branches",
+  "分支读取失败，请关闭后重试": "Could not read branches. Close and try again",
   "不思考": "No reasoning",
   "最轻量": "Minimal",
   "比快速档更轻；GLM-5.2 会跳过思考": "Lighter than Fast; GLM-5.2 skips thinking",
@@ -100,6 +117,6 @@ export const EN_COMPOSER: Record<string, string> = {
   "账号：{name}": "Account: {name}",
   "目录": "folder",
   "资源": "resource",
-  "Tab 补全或进入目录 · ↑↓ 后回车确认 · Esc 关闭": "Tab completes or enters a folder · ↑↓ then Enter confirms · Esc closes",
+  "↑↓ 选择 · 回车引用 · Tab 补全或进入目录 · Esc 关闭": "↑↓ selects · Enter references · Tab completes or enters a folder · Esc closes",
   "↑↓ 选择 · Tab 或回车补全 · Esc 关闭": "↑↓ selects · Tab or Enter completes · Esc closes",
 };

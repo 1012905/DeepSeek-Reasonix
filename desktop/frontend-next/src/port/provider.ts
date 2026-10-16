@@ -252,6 +252,10 @@ export interface ProviderEdit {
   // Which request shape controls thinking here. "" is auto — no declaration,
   // which leaves the registry in charge. Omitted still means "leave it alone".
   reasoningProtocol?: string;
+  // Whether to use the endpoint-executed search tool, and how context reaches
+  // the next turn ("" is auto). Omitted leaves the stored choice alone.
+  webSearch?: boolean;
+  continuation?: string;
   // An empty list clears the declared vocabulary; omitted leaves it alone.
   supportedEfforts?: string[];
   defaultEffort?: string;

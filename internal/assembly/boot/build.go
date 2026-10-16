@@ -80,6 +80,7 @@ type toolStage struct {
 	configSpecs []plugin.Spec
 	lsp         *lsp.Manager
 	browser     *browser.Session
+	peerLink    *tool.PeerLink
 	maxSteps    int
 	policy      permission.Policy
 	gate        *control.SharedHeadlessGate
@@ -321,6 +322,7 @@ func (b *builder) wireTools() error {
 	// The full inventory registers for use_capability; the provider-visible surface narrows later.
 	addBuiltins(t.reg, cfg.Tools.Enabled, env.writeRoots, env.bash, env.bashTimeout, env.search, b.stderr, root, b.proxy, env.forbidReadRoots, env.readRoots, env.readPaths, env.sessionGuard, env.managedConfig, opts.FileOverlay, opts.TerminalRunner, env.sessionTemp, b.fileWriteReceipt)
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
+	t.peerLink = addPeerTools(t.reg, cfg)
 	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
 	addWebSearch(t.reg, cfg, b.proxy, b.sink)
@@ -343,7 +345,8 @@ func (b *builder) wireTools() error {
 	// One gate for the executor and every sub-agent, so a child is never a
 	// weaker path around the parent. A headless caller always names a mode:
 	// Ask fails closed, Auto allows writer fallbacks, DontAsk denies (#6927).
-	t.policy = permission.New(cfg.Permissions.Mode, cfg.Permissions.Allow, cfg.Permissions.Ask, cfg.Permissions.Deny).
+	mediaAsk := askWithUnsandboxedMedia(cfg.Permissions.Allow, cfg.Permissions.Ask, cfg.Permissions.Deny, env.bash.Enforce() && sandbox.AvailableFor(env.bash))
+	t.policy = permission.New(cfg.Permissions.Mode, cfg.Permissions.Allow, mediaAsk, cfg.Permissions.Deny).
 		WithAllowDynamicBashFallback(cfg.Permissions.AllowDynamicBash).
 		WithSessionAllow(opts.PermissionAllow)
 	t.gate = control.NewSharedHeadlessGate(t.policy, opts.HeadlessApprovalMode)
@@ -540,7 +543,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		ModelEntry:                     entry,
 		SystemPrompt:                   b.prompt.prompt,
 		SessionDir:                     b.session.dir,
-		Peers:                          peersOptions(cfg),
+		Peers:                          peersOptions(cfg, t.peerLink),
 		Host:                           t.host,
 		Commands:                       t.cmds,
 		Skills:                         b.prompt.skills,

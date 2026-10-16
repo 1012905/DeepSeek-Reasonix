@@ -3,7 +3,9 @@ package plugin
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"reasonix/internal/base/testenv"
@@ -39,6 +41,24 @@ func legacyUpgradeFixture(t *testing.T) (spec Spec, legacy, path string) {
 	return spec, legacy, path
 }
 
+// denyDirWrites stops new entries in dir until the test ends. A directory's
+// read-only attribute does not block writes on Windows, so it takes an ACL there.
+func denyDirWrites(t *testing.T, dir string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		const everyoneSID = "*S-1-1-0"
+		if out, err := exec.Command("icacls", dir, "/deny", everyoneSID+":(W)").CombinedOutput(); err != nil {
+			t.Skipf("cannot deny writes to the cache dir: %v\n%s", err, out)
+		}
+		t.Cleanup(func() { _ = exec.Command("icacls", dir, "/remove:d", everyoneSID).Run() })
+		return
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Skipf("cannot make cache dir read-only on this platform: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+}
+
 func cacheKeyOnDisk(t *testing.T, path string) string {
 	t.Helper()
 	onDisk, err := os.ReadFile(path)
@@ -63,11 +83,7 @@ func TestAuditLegacyCacheUpgradeReportsOnlySuccess(t *testing.T) {
 	spec, legacy, p := legacyUpgradeFixture(t)
 
 	// Make every replacement in that directory fail while reads still work.
-	dir := filepath.Dir(p)
-	if err := os.Chmod(dir, 0o555); err != nil {
-		t.Skipf("cannot make cache dir read-only on this platform: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	denyDirWrites(t, filepath.Dir(p))
 
 	got, ok := LoadCachedSchemaForSpec(spec)
 	if !ok {

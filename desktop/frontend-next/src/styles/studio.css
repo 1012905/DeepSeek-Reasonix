@@ -1955,7 +1955,7 @@ body { font-size: 14px; line-height: 1.75; }
 .rail .sessrow[aria-selected="true"] .session-more { opacity: 1; }
 .rail .session-more:hover,
 .rail .session-more[aria-expanded="true"] { color: var(--text); background: var(--raised); }
-:root[data-theme="light"] .rail .session-more:focus-visible { outline: none; }
+.rail .session-more:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* The deck opens upward out of the rail it is summarised on, so the reading and
    the detail behind it stay one object rather than two places to look. */
 .studio-deck-anchor {

@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"os"
+
 	"reasonix/internal/assembly/boot"
+	"reasonix/internal/base/i18n"
 	"reasonix/internal/contract/config"
 )
 
@@ -38,4 +40,21 @@ func workspaceRootForDir(dir string) (string, error) {
 		return "", fmt.Errorf("resolve --dir workspace root: %w", err)
 	}
 	return wd, nil
+}
+
+// enterProjectDir honours --dir: switch first, then resolve the root from where
+// we now are, the order `run`, the terminal UI and `subagent` use. Config
+// discovery, the sandbox and the file tools key off both answers, so leaving
+// either one at the process's own directory would confine them somewhere the
+// caller did not name. The code is non-zero once a refusal has been reported.
+func enterProjectDir(dir string) (root string, code int) {
+	if rc := chdirTo(dir); rc != 0 {
+		return "", rc
+	}
+	root, err := workspaceRootForDir(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+		return "", 1
+	}
+	return root, 0
 }

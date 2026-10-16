@@ -67,6 +67,12 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.esc-stop", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.configure", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.source-search", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.source-navigate", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.source-select", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.source-open", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.worktree-toggle", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.search", kind: "view", target: "none", proof: "interaction" },
   { id: "session.filter", kind: "view", target: "none", proof: "interaction" },
   { id: "session.more", kind: "repeatable", target: "none", proof: "interaction" },
@@ -655,9 +661,6 @@ export const ACTIONS: UIAction[] = [
   { id: "stall.dismiss", kind: "view", target: "none", proof: "interaction" },
   { id: "provider.remove", kind: "destructive", target: "entity", proof: "interaction" },
   { id: "provider.protocol", kind: "kernel-mutation", target: "entity", proof: "interaction" },
-  { id: "provider.web-search", kind: "kernel-mutation", target: "entity", proof: "interaction" },
-  { id: "provider.thinking", kind: "kernel-mutation", target: "entity", proof: "interaction" },
-  { id: "provider.continuation", kind: "kernel-mutation", target: "entity", proof: "interaction" },
 
   // ── The two side panels. Reached from the keyboard here, and from each
   //    gutter's own grip, which this pass has not annotated yet.

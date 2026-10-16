@@ -30,9 +30,6 @@ export type Port = {
   checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck>;
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   editProvider(edit: ProviderEdit): Promise<void>;
-  setProviderWebSearch(name: string, on: boolean): Promise<void>;
-  setProviderThinking(name: string, on: boolean): Promise<void>;
-  setProviderContinuation(name: string, mode: string): Promise<void>;
   renameProvider(names: string[], displayName: string): Promise<void>;
 };
 
@@ -350,8 +347,7 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
             declare={declare}
             onEdited={() => { const fresh = reload(); onChanged(); return fresh; }}
             onChecked={() => void reload()}
-            onDirty={setDirty}
-            onFailed={onFailed} />
+            onDirty={setDirty} />
         ) : (
           <div className="empty">{t("添加一个模型服务后，在这里查看和修改它。")}</div>
         )}

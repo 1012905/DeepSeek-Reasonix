@@ -123,6 +123,11 @@ func TestExtractPageRefusesWhatCouldWriteOutsideThePage(t *testing.T) {
 		"fifo":                 page(entry{name: "frontend-next/dist/fifo", typ: tar.TypeFifo}),
 		"duplicate":            page(entry{name: "frontend-next/dist/index.html", body: "again"}),
 		"no index":             {{name: "frontend-next/dist/other.html", body: "x"}},
+		"case-only duplicate":  page(entry{name: "frontend-next/dist/INDEX.HTML", body: "x"}),
+		"file then directory":  page(entry{name: "frontend-next/dist/a", body: "x"}, entry{name: "frontend-next/dist/a/b", body: "y"}),
+		"directory then file":  page(entry{name: "frontend-next/dist/a/b", body: "y"}, entry{name: "frontend-next/dist/a", body: "x"}),
+		"trailing dot":         page(entry{name: "frontend-next/dist/assets/app.js.", body: "x"}),
+		"trailing space":       page(entry{name: "frontend-next/dist/assets/app.js ", body: "x"}),
 		"link beside the dist": {{name: "frontend-next/dist/index.html", body: "i"}, {name: "frontend-next/other", typ: tar.TypeSymlink, link: "/"}},
 	} {
 		t.Run(name, func(t *testing.T) {

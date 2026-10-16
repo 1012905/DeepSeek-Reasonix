@@ -2978,9 +2978,9 @@
 
   .addp[data-edit] { border-top: 0; border-left: 2px solid var(--border); padding-left: 12px; margin: 4px 0 10px }
   .mlist { margin-top: 12px; display: flex; flex-direction: column }
-  .mlhead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px }
-  .mlhead .ttl { font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text) }
-  .mlhead .count { font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
+  .mlhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 4px }
+  .mlhead .ttl { flex: none; white-space: nowrap; font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text) }
+  .mlhead .count { flex: none; white-space: nowrap; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
   .mlhead .mrefresh {
     margin-left: auto; padding: 3px 7px; border: 0; border-radius: var(--r-xs);
     background: transparent; color: var(--muted); font: var(--w-reg) var(--fs-meta) var(--ui); cursor: pointer;
