@@ -1,4 +1,6 @@
 import { useBranchSession } from "./useBranchSession";
+import { keepSame } from "./stable";
+import { usePaneCallbacks } from "./usePaneCallbacks";
 import { watchTreeWake } from "./treewake";
 import { usePinnedSessions } from "./usePinnedSessions";
 import { AutoArchiveNotice } from "./AutoArchiveNotice";
@@ -204,7 +206,7 @@ export function App({ hub }: { hub: HubPort }) {
       setSetup((cur) => (cur === undefined ? null : cur));
       setWelcomed((cur) => cur ?? true);
     }
-    setRuntimes(list);
+    setRuntimes((cur) => keepSame(cur, list));
     setPanesRead(true);
     setActive((cur) => (list.some((rt) => rt.id === cur) ? cur : (list[0]?.id ?? "")));
     await reloadTree();
@@ -393,6 +395,9 @@ export function App({ hub }: { hub: HubPort }) {
   // 每个窗口都有一个根 —— 没选过项目时那是它碰巧启动的地方。两者读起来一样，
   // 于是「从哪加项目」这句问题永远问不出口；只有内核说的 remembered 分得开。
   const [claimed, setClaimed] = useState(() => localStorage.getItem("rx-claim") === "off");
+  const { focusFor, openProject, keepHere, openSettings, openFeedback, openSessionFor } = usePaneCallbacks({
+    focusPane, setRail, addFolder: () => adder.add(), setClaimed, showPrefs, setFeedback, runtimes, openPane, fail,
+  });
   const needsProject = treeRead && !claimed && tree.every((ws) => !ws.remembered);
 
   useFoldAway("rail", setRail);
@@ -483,8 +488,8 @@ export function App({ hub }: { hub: HubPort }) {
   // A failed request floats above the composer of the pane in front, where the
   // eye already is; with no pane on screen it takes the main area's corner.
   const activePaneShown = !!activeRuntime && panePorts.has(activeRuntime.id);
-  const errorBar = error ? <ErrorBar text={error} onDismiss={() => setError("")} onReport={() => setFeedback("send")} /> : null;
-  const bar = errorBar ?? <AutoArchiveNotice tree={tree} />;
+  const errorBar = useMemo(() => (error ? <ErrorBar text={error} onDismiss={() => setError("")} onReport={() => setFeedback("send")} /> : null), [error]);
+  const bar = useMemo(() => errorBar ?? <AutoArchiveNotice tree={tree} />, [errorBar, tree]);
   const activeWorkspace = tree.find((ws) => ws.root === activeRuntime?.root) ?? tree[0];
   // The folder a new session opens in is the one the switcher above names —
   // the window's, not whichever project happens to sit first in the tree.
@@ -685,7 +690,7 @@ export function App({ hub }: { hub: HubPort }) {
                   active={rt.id === active}
                   sideHost={null}
                   side={false}
-                  onFocus={() => focusPane(rt.id)}
+                  onFocus={focusFor(rt.id)}
                   visible={rt.id === active}
                   onReport={onReport}
                   onTurnDone={viewed.turnDone}
@@ -700,17 +705,11 @@ export function App({ hub }: { hub: HubPort }) {
                   alert={rt.id === active ? bar : undefined}
                   connect={first.connect}
                   needsProject={needsProject}
-                  onOpenProject={() => {
-                    setRail(true);
-                    adder.add();
-                  }}
-                  onKeepHere={() => {
-                    localStorage.setItem("rx-claim", "off");
-                    setClaimed(true);
-                  }}
-                  onSettings={(section) => section ? showPrefs(section) : showPrefs()}
-                  onFeedback={() => setFeedback("send")}
-                  onOpenSession={async (path) => { await openPane({ root: rt.root, sessionPath: path }).catch(fail); }}
+                  onOpenProject={openProject}
+                  onKeepHere={keepHere}
+                  onSettings={openSettings}
+                  onFeedback={openFeedback}
+                  onOpenSession={openSessionFor(rt.id)}
                   theme={scheme}
                   dockW={shownDockW}
                   dockMax={dockLimit}
