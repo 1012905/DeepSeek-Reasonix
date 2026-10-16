@@ -2658,11 +2658,11 @@ body { font-size: 14px; line-height: 1.75; }
   margin-top: 6px; padding: 8px 10px; border: 1px solid var(--hair);
   border-radius: 6px; background: var(--surface); color: #d39a93;
 }
-.activity-body .call[data-call] > .c {
+.flow .activity-body .call[data-call] > .c {
   margin-bottom: 0; padding: 4px 0 5px !important; border: 0 !important;
   border-bottom: 1px solid var(--hair) !important; border-radius: 0 !important; background: transparent !important;
 }
-.activity-body .call[data-call]:last-child > .c { border-bottom-color: transparent !important; }
+.flow .activity-body .call[data-call]:last-child > .c { border-bottom-color: transparent !important; }
 
 /* A decision stays inside the transcript, but reads as a small choice surface
    rather than a full-page form. Each row carries its own hit area and state. */
