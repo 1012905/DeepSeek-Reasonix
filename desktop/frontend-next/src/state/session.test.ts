@@ -22,6 +22,25 @@ const hidingReceipts = <T,>(body: () => T): T => {
 };
 
 const run = (evs: SessionEvent[]): SessionState => evs.reduce(reduce, initialState);
+
+describe("when this window saw the turn start", () => {
+  it("is stamped by turn_started and not by a repeated start of the same message", () => {
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const started = run([{ kind: "turn_started", msgIndex: 3 } as SessionEvent]);
+      expect(started.runSince).toBe(5_000);
+      vi.setSystemTime(9_000);
+      expect(reduce(started, { kind: "turn_started", msgIndex: 3 } as SessionEvent).runSince).toBe(5_000);
+      expect(reduce(started, { kind: "turn_started", msgIndex: 4 } as SessionEvent).runSince).toBe(9_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is unknown for a session rebuilt from history", () => {
+    expect(fromHistory([]).runSince).toBeUndefined();
+  });
+});
 const tools = (s: SessionState) => s.items.filter((i): i is Extract<Item, { t: "tool" }> => i.t === "tool");
 const notices = (s: SessionState) =>
   s.items.filter((i) => i.t === "notice").map((i) => (i as Extract<Item, { t: "notice" }>).text);
