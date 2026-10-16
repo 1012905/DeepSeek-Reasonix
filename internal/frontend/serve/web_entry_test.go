@@ -55,3 +55,20 @@ func TestRootSaysSoWhenNoPageIsBuilt(t *testing.T) {
 		t.Fatalf("body = %q, want the code a frontend can act on", rec.Body.String())
 	}
 }
+
+// The shell names which build is current and the page's own out-of-date check
+// reads this same file. A stored copy makes an open page look behind, and
+// reloading would land on that same copy, which is what the hashed bundles under
+// /assets avoid by being named for their content and never reused.
+func TestThePageShellIsNeverStored(t *testing.T) {
+	bc := NewBroadcaster()
+	srv := New(control.New(control.Options{Sink: bc}), bc, config.ServeConfig{})
+	srv.page = fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<title>studio</title>")}}
+	for _, path := range []string{"/", "/sessions/reserved-session"} {
+		rec := httptest.NewRecorder()
+		operatorHandler(srv).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := rec.Result().Header.Get("Cache-Control"); got != "no-store" {
+			t.Errorf("GET %s Cache-Control = %q, want no-store", path, got)
+		}
+	}
+}

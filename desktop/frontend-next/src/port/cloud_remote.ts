@@ -203,12 +203,16 @@ export class RemoteEventSource {
     while (!this.closed) {
       let active = false;
       try {
-        const response = await fetch(`${this.replay}?lastEventId=${this.after ?? Number.MAX_SAFE_INTEGER}`, { credentials: "same-origin" });
+        // With no cursor the request is an attach, and the answer then carries
+        // what a run is stopped on — the approvals and asks a page has to show
+        // waiting. Asking past the watermark instead would attach to an empty
+        // answer and leave a question on screen nowhere.
+        const query = this.after === null ? "" : `?lastEventId=${this.after}`;
+        const response = await fetch(`${this.replay}${query}`, { credentials: "same-origin" });
         if (response.ok && !this.closed) {
           const body = await response.json() as ReplayAnswer;
           const watermark = typeof body.watermark === "number" ? body.watermark : null;
-          const attaching = this.after === null;
-          const frames = attaching ? [] : body.frames ?? [];
+          const frames = body.frames ?? [];
           active = frames.length > 0;
           if (this.after === null) this.after = watermark ?? 0;
           else if (body.complete === false) {
@@ -302,6 +306,12 @@ async function connect(deviceId: string, nativeFetch: typeof fetch, useBootstrap
     throw new RemoteLinkError("transient", reason(error));
   }
 }
+
+// ownFetch is the page's own fetch, bound before remoteHub replaces
+// globalThis.fetch with one that routes same-origin requests over the tunnel.
+// A hosted page has to read its own origin — the build it is running — not the
+// kernel's, so anything that reads the page itself uses this and not the global.
+export const ownFetch: typeof fetch = globalThis.fetch.bind(globalThis);
 
 export async function remoteHub(deviceId: string): Promise<HubPort> {
   const nativeFetch = globalThis.fetch.bind(globalThis);
