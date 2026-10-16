@@ -9,6 +9,7 @@ import { CopyButton } from "./CopyButton";
 import { StudioIcon } from "./StudioIcon";
 import { dropDraft, heldDraft, holdDraft } from "./feedbackdraft";
 import { feedbackFailure, type FeedbackFailure } from "./feedbackfailure";
+import { FeedbackShot } from "./FeedbackShot";
 import { admit, megabytes, payload, readShot, REFUSED_LABEL, type Refused, type Shot } from "./feedbackshots";
 import { useFileDrop } from "./filedrop";
 
@@ -339,20 +340,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
             {shots.length > 0 && (
               <ul className="fbk-shots">
                 {shots.map((s) => (
-                  <li key={s.id}>
-                    <img src={s.preview} alt={s.name} />
-                    <span className="fbk-shot-name">{s.name}</span>
-                    <button
-                      type="button"
-                      className="fbk-shot-x"
-                      data-action="feedback.shot.remove"
-                      data-target={s.id}
-                      aria-label={t("移除截图 {name}", { name: s.name })}
-                      onClick={() => setShots((prev) => prev.filter((x) => x.id !== s.id))}
-                    >
-                      <StudioIcon name="close" />
-                    </button>
-                  </li>
+                  <FeedbackShot key={s.id} shot={s} onRemove={() => setShots((prev) => prev.filter((x) => x.id !== s.id))} />
                 ))}
               </ul>
             )}

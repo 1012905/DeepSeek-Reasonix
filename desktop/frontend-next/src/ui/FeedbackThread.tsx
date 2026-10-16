@@ -3,6 +3,7 @@ import { current, t } from "../i18n";
 import { FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, FEEDBACK_REPLYABLE, isUnderReview, type FeedbackItem, type FeedbackLimits, type FeedbackReply } from "../port/feedback";
 import type { AgentPort } from "../port/port";
 import { replyFailure, type FeedbackFailure } from "./feedbackfailure";
+import { FeedbackShot } from "./FeedbackShot";
 import { admit, megabytes, payload, readShot, REFUSED_LABEL, type Refused, type Shot } from "./feedbackshots";
 import { StudioIcon } from "./StudioIcon";
 
@@ -206,13 +207,7 @@ export function FeedbackReplyBox({ port, item, limit, limits = null, offline, on
           {shots.length > 0 && (
             <ul className="fbk-shots">
               {shots.map((s) => (
-                <li key={s.id}>
-                  <img src={s.preview} alt={s.name} />
-                  <span className="fbk-shot-name">{s.name}</span>
-                  <button type="button" className="fbk-shot-x" data-action="feedback.shot.remove" data-target={s.id} disabled={sending} aria-label={t("移除截图 {name}", { name: s.name })} onClick={() => setShots((prev) => prev.filter((x) => x.id !== s.id))}>
-                    <StudioIcon name="close" />
-                  </button>
-                </li>
+                <FeedbackShot key={s.id} shot={s} disabled={sending} onRemove={() => setShots((prev) => prev.filter((x) => x.id !== s.id))} />
               ))}
             </ul>
           )}
