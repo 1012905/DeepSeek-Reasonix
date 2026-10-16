@@ -97,12 +97,11 @@ func ghAPIReadsOnly(args []string) bool {
 	return endpoints == 1
 }
 
-// ghHostReaching are the spellings through which a gh jq filter reaches outside
-// its input: gojq's `env` and `$ENV` return the whole process environment,
-// including credentials, and `input`, `debug`, `stderr` and `halt_error` read
-// or write beyond the document. The match is a substring on purpose, so a field
-// named "environment" is refused too; that costs an approval, not a miss.
-var ghHostReaching = []string{"env", "input", "debug", "stderr", "halt_error"}
+// ghHostReaching are the words through which a gh jq filter reaches outside its
+// input: the environment (`env`, `$ENV`), other streams (`input`, `debug`,
+// `stderr`, `halt_error`) and the module search path (`import`, `include`). A
+// substring match, so a field named "environment" costs an approval, not a miss.
+var ghHostReaching = []string{"env", "input", "debug", "stderr", "halt_error", "import", "include", "get_search_list", "prog_args", "modulemeta"}
 
 // ghFilterReachesHost reports a call that carries a jq or template filter whose
 // text could reach the host, or any word with a control character. Every spelling

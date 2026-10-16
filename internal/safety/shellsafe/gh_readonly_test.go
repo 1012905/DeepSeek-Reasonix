@@ -35,6 +35,7 @@ func TestGhReadOnlyCalls(t *testing.T) {
 		"gh pr view 1 --json number --jq '$ENV'", "gh pr view 1 --json number -q env", "gh pr list --jq 'input'", "gh pr list --jq 'debug'",
 		"gh issue list --json number --jq 'stderr'", "gh run view 9 --json status --jq halt_error", "gh pr list --jq=ENV", "gh pr list -sq env",
 		"gh api user --template '{{.login}}\n{{env}}'", "gh api user --template env", "gh pr view 1 --json environment --jq .environment",
+		"gh api user --jq 'import \"a\" as a; .'", "gh api user --jq 'include \"a\"; .'", "gh pr list --jq get_search_list", "gh pr list --jq '$__prog_args'", "gh api user -q modulemeta",
 		"gh api user -H $'X: a\nb'", "gh api user --cache $'1h\r'",
 		"gh", "gh pr", "gh pr unknown", "gh -R o/r pr view 1", "gh status",
 	}
