@@ -366,9 +366,6 @@ export interface AgentPort {
   // Changes only the fields the form owns. Saving a whole entry instead would
   // drop the per-model prices and effort lists it cannot show.
   editProvider(edit: ProviderEdit): Promise<void>;
-  setProviderWebSearch(name: string, on: boolean): Promise<void>;
-  setProviderThinking(name: string, on: boolean): Promise<void>;
-  setProviderContinuation(name: string, mode: string): Promise<void>;
   // Relabels the entries shown as one account; "" puts the derived name back.
   renameProvider(names: string[], displayName: string): Promise<void>;
 

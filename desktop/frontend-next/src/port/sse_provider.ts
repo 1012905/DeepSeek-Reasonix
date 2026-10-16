@@ -34,17 +34,6 @@ export class SseProvider extends SseBoundary {
   saveProvider(draft: ProviderDraft) {
     return this.post("/providers", draft);
   }
-  setProviderWebSearch(name: string, on: boolean) {
-    return this.post("/providers/websearch", { name, on });
-  }
-  setProviderThinking(name: string, on: boolean) {
-    return this.post("/providers/thinking", { name, on });
-  }
-
-  setProviderContinuation(name: string, mode: string) {
-    return this.post("/providers/continuation", { name, mode });
-  }
-
   renameProvider(names: string[], displayName: string) {
     return this.post("/providers/display-name", { names, displayName });
   }
