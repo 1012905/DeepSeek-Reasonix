@@ -13,6 +13,7 @@ import (
 type Decision string
 
 const (
+	DecisionSent     Decision = "sent"
 	DecisionHeld     Decision = "held"
 	DecisionApproved Decision = "approved"
 	DecisionDenied   Decision = "denied"

@@ -67,6 +67,9 @@ type Live struct {
 	Title       string    `json:"title,omitempty"`
 	Project     string    `json:"project,omitempty"`
 	StartedAt   time.Time `json:"started_at"`
+	// BeatAt is when the session last said it was there. A session that stopped
+	// without withdrawing, by a crash or a kill, goes quiet and is not listed.
+	BeatAt time.Time `json:"beat_at"`
 	// Inbound is the receiver's own policy for messages: "hold" or "refuse".
 	Inbound string `json:"inbound"`
 }
