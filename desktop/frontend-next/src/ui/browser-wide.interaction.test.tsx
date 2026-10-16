@@ -4,6 +4,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { useState } from "react";
 import "./testkit";
 import { Pane } from "./Pane";
+import { ViewSwitch } from "./ViewSwitch";
+import type { PaneView } from "../state/paneview";
 import { MockPort } from "../port/mock";
 import type { RuntimeView } from "../port/hub";
 import { useWindowKeys } from "./windowkeys";
@@ -16,13 +18,14 @@ function open(active = true) {
   const close = vi.fn();
   function Fixture() {
     const [browser, setBrowser] = useState(true);
+    const [req, setReq] = useState<{ to: PaneView; n: number } | undefined>();
     useWindowKeys([], { browser, settings: false, running: false, confirm: false, closeBrowser: () => { close(); setBrowser(false); }, stop: vi.fn(), onArm: vi.fn() });
-    return <Pane port={port} rt={{ id: "wide", root: "/fixture", name: "Fixture" } as RuntimeView}
+    return <><ViewSwitch view={browser ? "browser" : "flow"} rows={0} surfaces={0} onView={(to) => setReq((r) => ({ to, n: (r?.n ?? 0) + 1 }))} /><Pane port={port} rt={{ id: "wide", root: "/fixture", name: "Fixture" } as RuntimeView}
       title="Fixture" active={active} visible={active} sideHost={null} side={false}
       onFocus={() => {}} onReport={() => {}} onSessionChanged={() => {}} pulse={0} findPulse={0}
       onSettings={() => {}} needsProject={false} onOpenProject={() => {}} onKeepHere={() => {}}
       theme="light" dockW={560} dockMax={880} onDockW={width}
-      manualBrowser={browser} onManualBrowser={setBrowser} />;
+      manualBrowser={browser} onManualBrowser={setBrowser} viewRequest={req} /></>;
   }
   const view = render(<Fixture />);
   const launcher = view.container.querySelector<HTMLElement>('[data-action="workbench.launch-browser"]');
@@ -86,8 +89,8 @@ describe("browser wide mode", () => {
     open();
     const frame = await screen.findByLabelText("网页地址");
     fireEvent.click(screen.getByRole("button", { name: "加宽浏览器" }));
-    fireEvent.click(screen.getByRole("tab", { name: "对话" }));
-    fireEvent.click(screen.getByRole("tab", { name: /^工作台/ }));
+    fireEvent.click(screen.getByRole("button", { name: "工作台" }));
+    fireEvent.click(screen.getByRole("button", { name: "工作台" }));
     expect(screen.getByRole("button", { name: "加宽浏览器" }).getAttribute("aria-pressed")).toBe("false");
     expect(screen.getByLabelText("网页地址")).toBe(frame);
   });

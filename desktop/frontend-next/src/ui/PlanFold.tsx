@@ -30,7 +30,7 @@ export function PlanFold({ plan, goal, shown, paused }: { plan: PlanStep[]; goal
       </button>
       {open && (
         <div className="studio-todo-body">
-          {goal && <p className="plan-peek-goal">{goal}</p>}
+          {goal && <p className="studio-todo-goal">{goal}</p>}
           {plan.length > 0 && <Plan steps={plan} paused={paused} />}
         </div>
       )}

@@ -7,8 +7,6 @@ import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/dock.css";
 import "./styles/studio.css";
-import "./styles/planpeek.css";
-import "./styles/vthumb.css";
 import "./styles/dialogcenter.css";
 import "./styles/stophint.css";
 import "./styles/phonecomposer.css";

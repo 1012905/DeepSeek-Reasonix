@@ -25,7 +25,7 @@ it("the side question is an icon in the composer toolbar, right after the attach
   expect(button.previousElementSibling?.getAttribute("aria-label")).toBe("添加附件");
   expect(button.getAttribute("aria-label")).toBe("辅助会话");
   expect(button.textContent).not.toContain("辅助会话 ");
-  expect(view.container.querySelector(".tabs .sidetoggle")).toBeNull();
+  expect(view.container.querySelector(".sidetoggle")).toBeNull();
 });
 
 it("opens and closes the side panel, and says which state it is in", async () => {

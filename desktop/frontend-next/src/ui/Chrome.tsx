@@ -8,7 +8,9 @@ import { useDismiss } from "./dismiss";
 import { useFolded } from "./usefold";
 import { ariaChord, chord } from "./keys";
 import { PhonePop } from "./PhonePop";
+import { ViewSwitch } from "./ViewSwitch";
 import { WindowControls, zoomOnTitleBar } from "./WindowControls";
+import type { PaneView } from "../state/paneview";
 
 const base = (p: string) => p.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || p;
 // The filename is a timestamp and a model ref — true, and useless to read. The
@@ -31,12 +33,17 @@ interface Props {
   theme: string;
   onTheme: () => void;
   onFind: () => void;
+  // The focused pane's view, and what the switch needs to draw itself.
+  view: PaneView;
+  rows: number;
+  surfaces: number;
+  onView: (to: PaneView) => void;
   // The window's port, for what belongs to the window rather than a pane.
   hub?: HubPort;
   onError?: (e: unknown) => void;
 }
 
-export function Chrome({ port, status, title, steer, onSettings, account, host, theme, onTheme, onFind, hub, onError }: Props) {
+export function Chrome({ port, status, title, steer, onSettings, account, host, theme, onTheme, onFind, view, rows, surfaces, onView, hub, onError }: Props) {
   const root = status?.workspaceRoot || status?.cwd || "";
   const project = root ? base(root) : "—";
   // The folder mark opens the project itself. Only a shell that can enter a
@@ -147,6 +154,7 @@ export function Chrome({ port, status, title, steer, onSettings, account, host, 
         <button className="top-action" data-action="settings.section" data-value="tools" onClick={() => onSettings("tools")} aria-label={t("沙盒")} title={t("沙盒与运行边界")}>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m8 2.5 5 2.7v5.6l-5 2.7-5-2.7V5.2Z" /><path d="m3 5.2 5 2.7 5-2.7M8 7.9v5.6" /></svg><span>{t("沙盒")}</span>
         </button>
+        {port && <ViewSwitch view={view} rows={rows} surfaces={surfaces} onView={onView} />}
         </div>
         <span className="account-presence" title={account?.signedIn ? account.user?.label : t("未登录")} />
         <WindowControls />

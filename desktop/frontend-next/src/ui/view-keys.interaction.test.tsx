@@ -34,7 +34,7 @@ async function mount() {
 
 const chord = (target: Element, digit: string) =>
   fireEvent.keyDown(target, { key: digit, code: `Digit${digit}`, ctrlKey: true });
-const selected = () => document.querySelector('.pane [role="tab"][aria-selected="true"]')?.getAttribute("data-value");
+const selected = () => document.querySelector('.chrome [data-action="pane.view"][aria-pressed="true"]')?.getAttribute("data-value") ?? "flow";
 
 it("Mod+3 opens the workbench and Mod+1 returns to the conversation, even from the composer", async () => {
   const box = await mount();

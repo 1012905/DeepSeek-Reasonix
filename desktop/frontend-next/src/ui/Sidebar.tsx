@@ -20,7 +20,7 @@ import { Workspaces } from "./Workspaces";
 import type { TreePaging } from "./treewindow";
 import { MASK, useHidesAmounts } from "./wallet";
 import { useFileDrop } from "./filedrop";
-import type { PaneView } from "./PaneNav";
+import type { PaneView } from "../state/paneview";
 
 interface Props {
   hub: HubPort;
