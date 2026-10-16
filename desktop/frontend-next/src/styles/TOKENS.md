@@ -251,10 +251,10 @@ pack states a shape, never a number the layout has to agree with.
 
 ## Type
 
-- Composer menus share `composer-menu.css`: 380px surfaces with a viewport cap,
-  20px corners and 12px insets. Primary labels use 15px medium type, descriptions
-  13px regular type, and quiet headings 14px. Neutral selection and a check mark
-  keep choices readable; permission warnings retain semantic colour.
+- Composer menus share `composer-menu.css`: 280–340px widths capped by the
+  viewport, 12px corners and 8px insets. Labels use 13px medium type,
+  descriptions 11px and headings 12px. Selection uses a neutral fill and check;
+  permission warnings retain semantic colour.
 - The composer scope covers work mode, workspace, permissions, model and effort.
   Search results wrap long names; large lists scroll within the viewport. Other
   pickers retain their own density.
