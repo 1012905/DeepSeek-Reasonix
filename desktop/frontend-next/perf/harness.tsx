@@ -30,6 +30,7 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
 import "../src/styles/skillpin.css";
 import "../src/styles/narrow.css";
@@ -144,6 +145,15 @@ class BenchPort extends MockPort {
 
   async providerSetup() {
     return ONBOARDING ? { required: true, noProvider: true, provider: "", model: "" } : null;
+  }
+
+  async peers() {
+    if (!query.has("peers")) return super.peers();
+    return {
+      enabled: true,
+      peers: [{ key: "s-1a2b3c4d", title: "拾音", project: "rx-archive" }, { key: "s-5e6f7a8b", title: "文档整理", project: "docs" }],
+      held: [{ id: "m-1", fromSession: "s-1a2b3c4d", fromTitle: "拾音", fromProject: "rx-archive", sentAt: "2026-10-16T12:00:00Z", body: "迁移脚本跑完了，结果在 out/report.md，请你核对第三节再继续。" }],
+    };
   }
 
   async foldWorkSettings() {

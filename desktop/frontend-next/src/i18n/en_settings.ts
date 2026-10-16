@@ -2,6 +2,22 @@
 // alone — one catalogue is still the model, and this file is read as its
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
+  "「{from}」发来一条消息，等你批准": "\u201c{from}\u201d sent a message and is waiting for your approval",
+  "来自 {from} 的消息": "Message from {from}",
+  "来自另一个会话「{from}」的文字，不是你写的。批准后才会交给这个会话的模型。": "Text from another session, \u201c{from}\u201d; you did not write it. It reaches this session\u2019s model only after you approve it.",
+  "批准并交给模型": "Approve and give it to the model",
+  "等你决定的会话间消息": "Session messages waiting for your decision",
+  "还有 {n} 条等你决定": "{n} more waiting for your decision",
+  "无法读取会话间消息的状态。": "Could not read the state of messages between sessions.",
+  "会话间消息没有开启。在用户配置里写入 [peers] enabled = true，重新打开会话后生效；默认关闭。": "Messages between sessions are off. Write [peers] enabled = true in your user config and reopen the session; it is off by default.",
+  "已送到「{to}」，对方的用户批准后才会读到。": "Delivered to \u201c{to}\u201d; it is read only after that session\u2019s user approves it.",
+  "本机没有别的会话在监听。": "No other session on this machine is listening.",
+  "发给": "Send to",
+  "要发的内容": "Message",
+  "写下要告诉另一个会话的话。对方的用户批准后，它才会交给那边的模型。": "Write what to tell the other session. It reaches that session\u2019s model only after its user approves.",
+  "发送中…": "Sending\u2026",
+  "会话间消息（实验）": "Messages between sessions (experimental)",
+  "同一台机器上的会话互相发文字。收到的文字先挂起，只有你批准才会交给模型；发出去的文字也要对方的用户批准。没有给模型用的工具，默认关闭。": "Sessions on one machine send each other text. What you receive is held until you approve it; what you send needs the other user\u2019s approval too. There is no tool for the model, and it is off by default.",
   "浏览器标签": "Browser tabs",
   "辅助会话": "Side question",
   "只读 · 不写入主会话 · 关闭即丢": "Read-only · not in the main session · gone when closed",

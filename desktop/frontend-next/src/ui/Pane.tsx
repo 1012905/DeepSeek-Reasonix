@@ -54,6 +54,7 @@ import { useBrowserWide } from "./browserwide";
 import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
+import { PeerHeldBar } from "./PeerHeldBar";
 import { PostureNote } from "./PostureNote";
 import { SidePanel } from "./SidePanel";
 import { cancelJob } from "./jobcancel";
@@ -571,6 +572,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
             onRefresh={onQueueRefresh}
             onPause={onQueuePause}
           />
+          <PeerHeldBar port={port} />
           {connect && <ConnectNote offer={connect} />}
           <PostureNote port={port} status={status} onChanged={refreshStatus} />
         {/* Views the user (or the extension) put next to the composer. They sit
