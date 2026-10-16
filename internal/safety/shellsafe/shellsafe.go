@@ -142,6 +142,9 @@ func ClassifyReadOnlyFields(fields []string) (base, sub string, out []string, ok
 			}
 		}
 	}
+	if sub, ok := ghReadOnlyCall(fields); ok {
+		return base, sub, fields, true
+	}
 	return "", "", nil, false
 }
 
@@ -271,6 +274,9 @@ func readOnlyFields(fields []string) (base, sub string, ok bool) {
 		if ReadOnlyPrefixes[base][sub] {
 			return base, sub, true
 		}
+	}
+	if sub, ok := ghReadOnlyCall(fields); ok {
+		return base, sub, true
 	}
 	return "", "", false
 }
