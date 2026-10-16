@@ -142,3 +142,104 @@ func TestEveryCommandTheClassifierCallsAReadLeavesTheDirectoryAlone(t *testing.T
 	}
 	t.Logf("%d commands classified as reads, %d executed", classified, executed)
 }
+
+var gitDifferentialSubs = []string{"branch", "remote", "config", "stash", "merge-base", "log", "diff", "show", "tag", "status", "rev-parse", "describe", "reflog", "shortlog", "blame", "grep", "ls-files", "ls-tree", "cat-file", "for-each-ref", "name-rev", "rev-list", "cherry", "whatchanged"}
+
+var gitDifferentialArgs = []string{
+	"main", "HEAD", "HEAD~1", "topic", "newbranch", "v1", "origin", "a.txt", "-", "--",
+	"-a", "-r", "-v", "-vv", "-l", "--list", "-d", "-D", "-m", "-M", "-c", "-C", "-f", "-u", "-t", "-n", "-p", "-s", "-e", "-z",
+	"--delete", "--move", "--copy", "--force", "--set-upstream-to=main", "--unset-upstream", "--edit-description", "--track", "--show-current",
+	"--contains", "--merged", "--no-merged", "--points-at", "--sort=-committerdate", "--format=%(refname)", "--oneline", "--stat", "--all",
+	"add", "remove", "rm", "rename", "set-url", "set-head", "prune", "update", "get-url", "show",
+	"--get", "--get-all", "--get-regexp", "--list", "--global", "--local", "--system", "--unset", "--add", "--replace-all", "--file=x.cfg", "-f=x.cfg",
+	"user.name", "core.bare", "alias.x", "x.y", "Bob", "!sh",
+	"push", "pop", "apply", "drop", "clear", "save", "branch", "create", "store",
+	"--output=out.txt", "--ext-diff", "--textconv", "-O", "--open-files-in-pager",
+}
+
+func TestEveryGitCommandTheClassifierCallsAReadLeavesTheRepositoryAlone(t *testing.T) {
+	if testing.Short() || runtime.GOOS == "windows" {
+		t.Skip("spawns a process per generated command")
+	}
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git")
+	}
+	sh, _ := exec.LookPath("sh")
+	home := t.TempDir()
+	env := []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "LC_ALL=C", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "GIT_EDITOR=true"}
+	build := func(dir string) {
+		t.Helper()
+		seedScratch(t, dir)
+		for _, step := range [][]string{
+			{"init", "-q", "-b", "main"}, {"config", "user.email", "t@example.test"}, {"config", "user.name", "T"},
+			{"add", "."}, {"commit", "-q", "-m", "one"}, {"branch", "topic"}, {"tag", "v1"},
+		} {
+			cmd := exec.Command(git, step...)
+			cmd.Dir, cmd.Env = dir, env
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", step, err, out)
+			}
+		}
+	}
+	snapshot := func(dir string) string {
+		full := snapshotDir(t, dir)
+		var keep []string
+		for line := range strings.SplitSeq(full, "\n") {
+			if strings.HasPrefix(line, ".git/index") || strings.Contains(line, ".lock|") {
+				continue
+			}
+			keep = append(keep, line)
+		}
+		return strings.Join(keep, "\n")
+	}
+	rng := rand.New(rand.NewSource(20261017))
+	scratch := t.TempDir()
+	classified := 0
+	seen := map[string]bool{}
+	for range 120 {
+		sub := gitDifferentialSubs[rng.Intn(len(gitDifferentialSubs))]
+		parts := []string{"git", sub}
+		for n := rng.Intn(4); n > 0; n-- {
+			parts = append(parts, gitDifferentialArgs[rng.Intn(len(gitDifferentialArgs))])
+		}
+		command := strings.Join(parts, " ")
+		if seen[command] {
+			continue
+		}
+		seen[command] = true
+		base, subWord, fields, ok := ClassifyReadOnlyCommand(command)
+		if !ok || ArgsMakeReadOnlyCommandWrite(base, subWord, fields) {
+			continue
+		}
+		classified++
+		if err := os.RemoveAll(scratch); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(scratch, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		build(scratch)
+		before := snapshot(scratch)
+		cmd := exec.Command(sh, "-c", command)
+		cmd.Dir, cmd.Env = scratch, env
+		done := make(chan struct{})
+		go func() {
+			_ = cmd.Run()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			_ = cmd.Process.Kill()
+			<-done
+		}
+		if after := snapshot(scratch); after != before {
+			t.Errorf("classified as a read but changed the repository: %q\nbefore:\n%s\nafter:\n%s", command, before, after)
+		}
+	}
+	if classified < 10 {
+		t.Fatalf("only %d generated git commands were classified as reads", classified)
+	}
+	t.Logf("%d git commands classified as reads and executed", classified)
+}
