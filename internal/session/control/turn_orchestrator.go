@@ -381,7 +381,7 @@ func (o *turnOrchestrator) gatePlanApproval(ctx context.Context) error {
 	c.sharePlanRuntime()
 	// The plan is already visible as the assistant's answer, so the request
 	// carries no subject — it's purely the gate.
-	allow, _, err := c.requestApproval(ctx, approvalRequest{tool: planApprovalTool})
+	allow, err := c.planApproved(ctx)
 	if err != nil {
 		// A stop or timeout leaves the plan unapproved, which is the same state
 		// as a revise: awaiting approval has no card left to answer it.

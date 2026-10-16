@@ -459,6 +459,7 @@ type Messages struct {
 	GoalNotPaused                string
 	GoalPaused                   string
 	AwaitingUserFmt              string
+	PlanAutoApproved             string
 	ImagesNotReadable            string
 	ImagesNeedVisionRole         string
 	ImagesDropped                string

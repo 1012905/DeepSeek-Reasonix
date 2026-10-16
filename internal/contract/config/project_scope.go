@@ -24,6 +24,7 @@ type heldScope struct {
 	updateMode     string
 	autoSubmit     bool
 	writeLease     string
+	planApproval   string
 	subagentClaims string
 	hostVerif      string
 	shell          ShellConfig
@@ -60,6 +61,7 @@ func holdUserScope(c *Config) heldScope {
 		updateMode:      c.DesktopUpdateMode(),
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
+		planApproval:    c.Agent.PlanApproval,
 		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
 		shell:           shell,
@@ -166,6 +168,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	}
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.
+	if c.Agent.PlanApproval != h.planApproval {
+		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
+		c.Agent.PlanApproval = h.planApproval
+	}
 	if c.Agent.WriteLease != h.writeLease {
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
 		c.Agent.WriteLease = h.writeLease

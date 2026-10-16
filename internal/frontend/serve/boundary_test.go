@@ -104,7 +104,7 @@ func TestBoundaryWritesRefusedWithoutGrant(t *testing.T) {
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
-	for _, path := range []string{"/permissions", "/sandbox", "/browser-tools", "/subagent-claims", "/write-lease"} {
+	for _, path := range []string{"/permissions", "/sandbox", "/browser-tools", "/subagent-claims", "/write-lease", "/plan-approval"} {
 		resp := postProvider(t, srv.URL, path, `{}`)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusForbidden {
