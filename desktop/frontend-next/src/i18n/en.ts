@@ -136,6 +136,7 @@ export const EN: Record<string, string> = {
   // ── 运行状态 ─────────────────────────────────────────────────────
   "空闲": "Idle",
   "运行中": "Running",
+  "只停止这一条调用": "Stop only this call",
   "声明推理档位": "Declare reasoning levels",
   "这个端点没有报告推理档位，中转站通常不转发这项能力。将打开该来源的编辑表单，可以选择思考参数或直接填写档位。": "This endpoint reported no reasoning levels; relays often do not forward them. Opens this source’s editor, where you can pick a thinking parameter or list the levels yourself.",
   "本轮已发送 / 已接收的 token": "Tokens sent and received this turn",

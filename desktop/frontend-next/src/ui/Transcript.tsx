@@ -37,7 +37,7 @@ import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion">>;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion" | "stopToolCall">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -735,6 +735,7 @@ const Row = memo(function Row({
             onExtInvoke={onExtInvoke}
             onPrepareFileRevert={onPrepareFileRevert}
             onCommitFileRevert={onCommitFileRevert}
+            onStop={port?.stopToolCall && it.tool.id ? () => void port.stopToolCall!(it.tool.id!).catch(() => {}) : undefined}
           />
         );
         const chart = activity ? null : chartOfTool(it.tool);

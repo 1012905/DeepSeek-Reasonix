@@ -184,3 +184,12 @@ func (c *Controller) CancelJob(id string) bool {
 	}
 	return c.jobs.KillForSession(c.parentSessionID(), id)
 }
+
+// CancelToolCall stops one running tool call of the active turn. The turn goes
+// on: the model is told the call was stopped and why.
+func (c *Controller) CancelToolCall(id string) bool {
+	if c.executor == nil {
+		return false
+	}
+	return c.executor.CancelToolCall(id)
+}

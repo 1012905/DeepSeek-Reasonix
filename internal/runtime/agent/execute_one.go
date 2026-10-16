@@ -664,6 +664,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 
 	var result string
 	var images []string
+	var execution *tool.ShellExecution
 	var err error
 	// A call that was authorized under reader classification carries that
 	// basis into dispatch: the MCP execution layer re-verifies it linearizably
@@ -683,33 +684,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// ctx would otherwise kill the hook before it runs.
 		defer func() { a.svc.hooks.SubagentStop(context.WithoutCancel(ctx), call.ID, result, err) }()
 	}
-	var execution *tool.ShellExecution
-	if de, ok := runTool.(tool.DetailedExecutor); ok {
-		var detailed tool.DetailedResult
-		detailed, err = de.ExecuteDetailed(cctx, runArgs)
-		result, images, execution = detailed.Output, detailed.Images, detailed.Execution
-		// Annotate verification outcome when the host classified this call as a
-		// verifier. The exit status answers for the whole command, so it is a
-		// verdict about the verifier only when no later stage can decide it.
-		if execution != nil && plan.verification {
-			execution.Verification = shellVerificationVerdict(bashCommandFromArgs(plan.evidenceArgs),
-				bashDeclaredCheck(plan.evidenceArgs) != "", execution.PipeStatus, err)
-			result = shellVerificationNotice(result, execution)
-		} else if execution != nil && execution.Verification == "" {
-			execution.Verification = tool.ShellVerificationNotVerification
-		}
-		annotateShellSubject(execution, runArgs)
-		// Sole opaque inline interpreters are allowed outside Delivery but cannot
-		// prove mutation completeness.
-		if execution != nil && evidence.BashCommandMayBeOpaqueMutation(runArgs) &&
-			execution.MutationRisk == tool.ShellMutationMayHaveCompleted {
-			execution.MutationRisk = tool.ShellMutationUnknown
-		}
-	} else if it, ok := runTool.(tool.ImageTool); ok {
-		result, images, err = it.ExecuteWithImages(cctx, runArgs)
-	} else {
-		result, err = runTool.Execute(cctx, runArgs)
-	}
+	result, images, execution, err = a.executeStoppable(ctx, cctx, plan)
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
@@ -781,4 +756,38 @@ func annotateShellSubject(execution *tool.ShellExecution, args json.RawMessage) 
 	if subject, cut := shellrun.OperativeCommand(cmd); cut {
 		execution.Subject = subject
 	}
+}
+
+// executeStoppable runs the call under a context CancelToolCall can end alone.
+func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan) (result string, images []string, execution *tool.ShellExecution, err error) {
+	runTool, runArgs := plan.runTool, plan.runArgs
+	cctx, endCall := a.stops.begin(cctx, plan.call.ID)
+	defer endCall()
+	if de, ok := runTool.(tool.DetailedExecutor); ok {
+		var detailed tool.DetailedResult
+		detailed, err = de.ExecuteDetailed(cctx, runArgs)
+		result, images, execution = detailed.Output, detailed.Images, detailed.Execution
+		// Annotate verification outcome when the host classified this call as a
+		// verifier. The exit status answers for the whole command, so it is a
+		// verdict about the verifier only when no later stage can decide it.
+		if execution != nil && plan.verification {
+			execution.Verification = shellVerificationVerdict(bashCommandFromArgs(plan.evidenceArgs),
+				bashDeclaredCheck(plan.evidenceArgs) != "", execution.PipeStatus, err)
+			result = shellVerificationNotice(result, execution)
+		} else if execution != nil && execution.Verification == "" {
+			execution.Verification = tool.ShellVerificationNotVerification
+		}
+		annotateShellSubject(execution, runArgs)
+		// Sole opaque inline interpreters are allowed outside Delivery but cannot
+		// prove mutation completeness.
+		if execution != nil && evidence.BashCommandMayBeOpaqueMutation(runArgs) &&
+			execution.MutationRisk == tool.ShellMutationMayHaveCompleted {
+			execution.MutationRisk = tool.ShellMutationUnknown
+		}
+	} else if it, ok := runTool.(tool.ImageTool); ok {
+		result, images, err = it.ExecuteWithImages(cctx, runArgs)
+	} else {
+		result, err = runTool.Execute(cctx, runArgs)
+	}
+	return result, images, execution, stoppedByUser(turn, cctx, err)
 }

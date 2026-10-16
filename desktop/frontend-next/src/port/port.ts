@@ -601,6 +601,9 @@ export interface AgentPort {
   // Stops one background job this session started; a job that already ended
   // is refused (job.not_running), not silently acknowledged.
   cancelJob(jobId: string): Promise<void>;
+  // Ends one running tool call and lets the turn go on; a call that already
+  // finished is refused (tool_call.not_running).
+  stopToolCall(callId: string): Promise<void>;
   // Re-freezes the files an entry references. A line that waited through the
   // work that changed them would otherwise arrive quoting what is no longer.
   refreshQueued(itemId: string): Promise<void>;

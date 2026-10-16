@@ -41,3 +41,7 @@ func (r Refusal) String() string {
 // Empty reports a refusal carrying neither identity nor words, which is what a
 // tool that cannot say why it is unavailable returns.
 func (r Refusal) Empty() bool { return r.Code == "" && strings.TrimSpace(r.Message) == "" }
+
+// CodeCancelledByUser identifies a call the user stopped on its own while the
+// turn went on. Whatever the call had already done outside the host is unknown.
+const CodeCancelledByUser = "tool.cancelled_by_user"
