@@ -343,7 +343,8 @@ func (b *builder) wireTools() error {
 	// One gate for the executor and every sub-agent, so a child is never a
 	// weaker path around the parent. A headless caller always names a mode:
 	// Ask fails closed, Auto allows writer fallbacks, DontAsk denies (#6927).
-	t.policy = permission.New(cfg.Permissions.Mode, cfg.Permissions.Allow, cfg.Permissions.Ask, cfg.Permissions.Deny).
+	mediaAsk := askWithUnsandboxedMedia(cfg.Permissions.Allow, cfg.Permissions.Ask, cfg.Permissions.Deny, env.bash.Enforce() && sandbox.AvailableFor(env.bash))
+	t.policy = permission.New(cfg.Permissions.Mode, cfg.Permissions.Allow, mediaAsk, cfg.Permissions.Deny).
 		WithAllowDynamicBashFallback(cfg.Permissions.AllowDynamicBash).
 		WithSessionAllow(opts.PermissionAllow)
 	t.gate = control.NewSharedHeadlessGate(t.policy, opts.HeadlessApprovalMode)

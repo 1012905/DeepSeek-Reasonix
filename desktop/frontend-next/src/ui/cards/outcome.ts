@@ -37,6 +37,9 @@ export function toolErrorDetail(tool: Tool): string {
     case "workspace.read_outside_scope":
     case "workspace.overwrite_read_forbidden":
     case "workspace.overwrite_read_outside_scope":
+    case "video.ffmpeg_missing":
+    case "video.unsupported_container":
+    case "video.too_large":
       if (toolRefusalReason(tool)) return "";
   }
   return tool.err ?? "";
