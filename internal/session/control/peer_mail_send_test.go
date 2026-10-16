@@ -188,3 +188,17 @@ func TestPeerCommandSendsAndTheReceiverApprovesByIDFromItsOwnCommand(t *testing.
 		t.Fatal("a name without text must not parse")
 	}
 }
+
+func TestASentMessageCarriesNoProcessWriterIdentity(t *testing.T) {
+	peersDir := filepath.Join(testenv.TempDir(t), "peers")
+	a := newPeerSession(t, peersDir, "alpha")
+	b := newPeerSession(t, peersDir, "beta")
+	a.peerIngest()
+	if _, err := a.SendPeerMessage(b.peers.key, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := a.peers.dir.Pending(b.peers.key)
+	if len(pending) != 1 || pending[0].From.WriterID != "" {
+		t.Fatalf("pending = %+v: a host-name-derived writer id can exceed the id limit and make every send invalid", pending)
+	}
+}

@@ -108,7 +108,7 @@ func (c *Controller) SendPeerMessage(to, text string) (PeerReceipt, error) {
 	_, _ = rand.Read(token[:])
 	msg := peermail.Message{
 		ID: "m-" + hex.EncodeToString(token[:]), SentAt: time.Now().UTC(), Body: text,
-		From: peermail.Party{SessionID: self, WriterID: sessionstore.SessionWriterID(), Title: peerAttribute(sessionstore.BranchID(path)), Project: peerAttribute(baseName(c.WorkspaceRoot()))},
+		From: peermail.Party{SessionID: self, Title: peerAttribute(sessionstore.BranchID(path)), Project: peerAttribute(baseName(c.WorkspaceRoot()))},
 		To:   peermail.Party{SessionID: target.SessionID, WriterID: target.WriterID, Title: target.Title, Project: target.Project},
 	}
 	if err := p.dir.Send(msg); err != nil {
