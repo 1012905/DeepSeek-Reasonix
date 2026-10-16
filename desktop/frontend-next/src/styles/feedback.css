@@ -147,7 +147,7 @@
 .fbk-mine-bar .btn { display: inline-flex; align-items: center; gap: 5px; }
 .fbk-mine-bar .btn .studio-icon { width: 12px; height: 12px; }
 .fbk-empty { margin: 8px 0; padding: 22px 12px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: var(--r-sm); }
-.fbk-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--hair); }
+.fbk-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--hair); scroll-margin-top: 56px; }
 .fbk-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--hair); }
 .fbk-item-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .fbk-code { font: var(--w-med) var(--fs-ui) var(--mono); color: var(--text); }
@@ -281,3 +281,10 @@
 .fbk-level-limits { color: var(--text); }
 .fbk-level-gone { margin: 0; }
 .fbk-reply-shots { display: grid; gap: 6px; margin-top: 8px; }
+.fbk-item[hidden] { display: none; }
+.fbk-filter { position: sticky; top: -14px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0 6px; background: var(--float); }
+.fbk-filter-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; cursor: pointer; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--muted); font: var(--w-med) var(--fs-meta)/1.4 var(--ui); }
+.fbk-filter-chip small { font-variant-numeric: tabular-nums; color: var(--faint); }
+.fbk-filter-chip:hover, .fbk-filter-chip[aria-pressed="true"] { color: var(--text); background: var(--overlay); }
+.fbk-filter-chip[data-live] small { color: var(--accent-ink); font-weight: 600; }
+.fbk-filter-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
