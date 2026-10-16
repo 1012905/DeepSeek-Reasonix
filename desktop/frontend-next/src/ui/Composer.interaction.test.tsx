@@ -465,6 +465,22 @@ describe("composer menus", () => {
     }
   });
 
+  it("does not announce loading while prose is typed after a finished slash command", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const port = new MockPort();
+      const request = deferred<Completion>();
+      vi.spyOn(port, "complete").mockReturnValue(request.promise);
+      const { box } = draw({ port });
+      const prose = "/review 审查一下当前工作空间的代码结构";
+      fireEvent.change(box, { target: { value: prose, selectionStart: prose.length } });
+      act(() => vi.advanceTimersByTime(400));
+      expect(screen.queryByText("正在加载命令与技能…")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not flash loading for a fast slash catalog answer", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {

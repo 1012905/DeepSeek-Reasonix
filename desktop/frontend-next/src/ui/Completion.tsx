@@ -43,6 +43,14 @@ function midSlash(text: string, caret: number): { from: number; to: number; toke
   return { from, to: rest < 0 ? text.length : from + rest, token: text.slice(from, caret) };
 }
 
+// Whether the caret rests in a word that opens with "/" at the line start or
+// after a space: the one place a person is waiting for the command list. Prose
+// typed after a finished command still asks (an argument may complete) but is
+// not waiting, so it never announces loading.
+function inSlashWord(text: string, caret: number): boolean {
+  return /(^|\s)\/\S*$/.test(text.slice(0, caret));
+}
+
 // The chips a menu pick can become, and whether the caret rests on one: a chip
 // is finished, so the letters it is spelled with are not a word to complete.
 interface ChipHost {
@@ -120,7 +128,7 @@ export function useCompletion(
       : previous.kind === "ref";
     if (!compatible) setCompletion(EMPTY);
     setLoading(false);
-    const timer = slashy && !compatible
+    const timer = inSlashWord(text, caret) && !compatible
       ? window.setTimeout(() => { if (id === asked.current) setLoading(true); }, 180)
       : undefined;
     const asking = new AbortController();
