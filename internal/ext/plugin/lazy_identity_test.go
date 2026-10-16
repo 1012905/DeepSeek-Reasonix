@@ -66,7 +66,7 @@ func TestLazyCachedRawIdentityAcrossHTTPDiscovery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			saveLazyCachedSchema(spec, live, "")
+			saveLazyCachedSchema(spec, live, "", map[string]bool{"tools": len(live) > 0})
 			first.Close()
 			cs, ok := LoadCachedSchemaForSpec(spec)
 			if !ok || len(cs.Tools) != 1 || cs.Tools[0].Name != tc.raw {

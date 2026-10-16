@@ -1227,6 +1227,9 @@ type ToolsConfig struct {
 	SystemOne                SystemOneConfig      `toml:"system_one"`
 	ProtectChangedFiles      *bool                `toml:"protect_changed_files"`
 	BrowserTools             *bool                `toml:"browser_tools"`
+	// MCPResources offers the model a tool that reads a resource a connected
+	// server declares. The user file only; off by default.
+	MCPResources bool `toml:"mcp_resources"`
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`

@@ -39,3 +39,16 @@ func TestTheMessageSubjectIsAGenericRuleNotSpecificToOneTool(t *testing.T) {
 		}
 	}
 }
+
+// A resource read shows the server and the whole address, in the form the chat
+// uses for an @server:uri reference, so the person approving reads what would
+// be fetched.
+func TestSubjectOfAResourceReadIsServerAndFullAddress(t *testing.T) {
+	got := Subject(json.RawMessage(`{"server":"docs","uri":"file:///etc/shadow?x=1#frag"}`))
+	if got != "docs:file:///etc/shadow?x=1#frag" {
+		t.Fatalf("subject = %q", got)
+	}
+	if Subject(json.RawMessage(`{"server":"docs"}`)) != "" || Subject(json.RawMessage(`{"uri":"doc://a"}`)) != "" {
+		t.Fatal("half a pair produced a subject")
+	}
+}
