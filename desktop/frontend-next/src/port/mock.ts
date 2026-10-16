@@ -323,7 +323,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
           insert: "@" + dir + n,
           descend: n.endsWith("/"),
           kind: n.endsWith("/") ? "dir" : "file",
-        }));
+        })).filter((it) => it.insert !== line.slice(at, to));
       return { kind: "ref", from: at, to, query: frag.slice(dir.length), items };
     }
     if (line.startsWith("/") && !/\s/.test(line)) {

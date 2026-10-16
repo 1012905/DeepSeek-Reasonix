@@ -40,6 +40,37 @@ it.each([
   await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith(reference));
 });
 
+it.each([
+  ["@REAS", "@REASONIX.md"],
+  ["查看 @REAS", "查看 @REASONIX.md"],
+  ["@internal/control/compl", "@internal/control/complete.go"],
+])("sends an exact reference in one Enter when no candidates remain (%s)", async (query, exact) => {
+  const { box, type, onSubmit } = draw();
+  type(query);
+  await screen.findByRole("listbox", { name: "补全" });
+  type(exact);
+  await waitFor(() => expect(screen.queryByRole("listbox", { name: "补全" })).toBeNull());
+  fireEvent.keyDown(box, { key: "Enter" });
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith(exact));
+});
+
+it("confirms a genuine alternative while an exact reference is also a path prefix", async () => {
+  const { port, box, type, onSubmit } = draw();
+  const query = "@notes.md";
+  vi.spyOn(port, "complete").mockImplementation(async (line): Promise<Completion> => line === query
+    ? { kind: "ref", from: 0, to: query.length,
+      items: [{ label: "notes.md.bak", insert: "@notes.md.bak", kind: "file" }] }
+    : { kind: "", from: 0, to: 0, items: [] });
+  type(query);
+  await screen.findByRole("option", { name: /notes.md.bak/ });
+  fireEvent.keyDown(box, { key: "Enter" });
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(box.value).toBe("@notes.md.bak ");
+  await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+  fireEvent.keyDown(box, { key: "Enter" });
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith("@notes.md.bak"));
+});
+
 it("uses Tab to descend through directories and Enter to finish a nested file reference", async () => {
   const { box, type, onSubmit } = draw();
   type("@inter");
