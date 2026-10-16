@@ -2,7 +2,9 @@ package shellsafe
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -36,6 +38,9 @@ func snapshotDir(t *testing.T, root string) string {
 	t.Helper()
 	var lines []string
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -43,6 +48,9 @@ func snapshotDir(t *testing.T, root string) string {
 		line := fmt.Sprintf("%s|%v|%d", rel, info.Mode(), info.Size())
 		if info.Mode().IsRegular() {
 			data, readErr := os.ReadFile(path)
+			if errors.Is(readErr, fs.ErrNotExist) {
+				return nil
+			}
 			if readErr != nil {
 				return readErr
 			}
@@ -172,7 +180,7 @@ func TestEveryGitCommandTheClassifierCallsAReadLeavesTheRepositoryAlone(t *testi
 		t.Helper()
 		seedScratch(t, dir)
 		for _, step := range [][]string{
-			{"init", "-q", "-b", "main"}, {"config", "user.email", "t@example.test"}, {"config", "user.name", "T"},
+			{"init", "-q", "-b", "main"}, {"config", "gc.auto", "0"}, {"config", "maintenance.auto", "false"}, {"config", "user.email", "t@example.test"}, {"config", "user.name", "T"},
 			{"add", "."}, {"commit", "-q", "-m", "one"}, {"branch", "topic"}, {"tag", "v1"},
 		} {
 			cmd := exec.Command(git, step...)
