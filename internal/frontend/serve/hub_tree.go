@@ -83,6 +83,7 @@ type treeSession struct {
 
 func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /tree", h.tree)
+	mux.HandleFunc("GET /history/search", historySearch)
 	mux.HandleFunc("GET /tree/events", h.treeEvents)
 	mux.HandleFunc("GET /tree/events/replay", h.treeEventsReplay)
 	mux.HandleFunc("POST /tree/workspaces", h.addWorkspace)
@@ -152,12 +153,16 @@ func attachVersions(dir string, rows []treeSession, open map[string]string) {
 	}
 }
 
-// unlistedOpenSessions are the conversations a pane in root holds that the
-// listing does not show: a path is minted at the first submit, and the
-// transcript is written after it, so a first turn in flight has no file yet.
-// Without a row it can be neither found nor returned to while it runs.
-func (h *Hub) unlistedOpenSessions(root string, listed []treeSession) []treeSession {
-	seen := make(map[string]bool, len(listed))
+// unlistedOpenSessions are the open panes' conversations that have no file yet
+// (a path is minted at the first submit, the transcript written after). A
+// session on disk is never unlisted: a scope, search or window that leaves its
+// row out is the view's choice.
+func (h *Hub) unlistedOpenSessions(root string, shown []treeSession, onDisk []sessionstore.SessionInfo) []treeSession {
+	seen := make(map[string]bool, len(shown)+len(onDisk))
+	for _, si := range onDisk {
+		seen[sessionstore.CanonicalSessionPath(si.Path)] = true
+	}
+	listed := shown
 	for _, row := range listed {
 		seen[sessionstore.CanonicalSessionPath(row.Path)] = true
 		for _, cp := range row.Copies {
@@ -169,7 +174,7 @@ func (h *Hub) unlistedOpenSessions(root string, listed []treeSession) []treeSess
 		ctrl := rt.Server.Controller()
 		path := ctrl.SessionPath()
 		canonical := sessionstore.CanonicalSessionPath(path)
-		if canonical == "" || seen[canonical] || !drivesRoot(rt, root) {
+		if canonical == "" || seen[canonical] || !drivesRoot(rt, root) || !sessionstore.IsVisibleSession(path) {
 			continue
 		}
 		seen[canonical] = true
@@ -323,6 +328,13 @@ func (h *Hub) importLegacySessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := migration.RunLegacySessionImportInto(strings.TrimSpace(body.Path), SessionDirFor(known), legacyImportLog)
+	for _, root := range result.Workspaces {
+		// A folder the import routed sessions back into is a project the person
+		// had in 1.x; without a place in the list its conversations are unreachable.
+		if err := addRememberedWorkspace(r.Context(), root); err != nil && !errors.Is(err, errWorkspaceListFull) {
+			slog.Warn("serve: could not list an imported project", "root", root, "err", err)
+		}
+	}
 	count := 0
 	for _, imported := range result.SessionImports {
 		count += imported.Count

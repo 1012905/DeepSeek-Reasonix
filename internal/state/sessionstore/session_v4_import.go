@@ -110,6 +110,35 @@ func importV4(path string, s sessionv4.Session) error {
 	return saveImportMeta(path, s, t)
 }
 
+// importedTitle is the name 1.x showed for the conversation: the title its log
+// recorded, else the one its listing cache kept. The list of unimported 1.x
+// conversations reads both, so an import that read only the log named the copy
+// after its file.
+func importedTitle(s sessionv4.Session, t sessionv4.Transcript) string {
+	if t.Title != "" {
+		return t.Title
+	}
+	if listing, ok := s.CachedListing(); ok {
+		return listing.Title
+	}
+	return ""
+}
+
+// healImportedTitle gives an earlier import the title it should have had. Only
+// an empty title is filled; one the person set stays.
+func healImportedTitle(path string, s sessionv4.Session) {
+	meta, ok, err := LoadBranchMeta(path)
+	if err != nil || !ok || meta.ImportedFrom == nil || meta.CustomTitle != "" {
+		return
+	}
+	listing, cached := s.CachedListing()
+	if !cached || listing.Title == "" {
+		return
+	}
+	meta.CustomTitle = listing.Title
+	_ = SaveBranchMeta(path, meta)
+}
+
 func saveImportMeta(path string, s sessionv4.Session, t sessionv4.Transcript) error {
 	digest, err := DigestSessionMessages(t.Messages)
 	if err != nil {
@@ -122,8 +151,8 @@ func saveImportMeta(path string, s sessionv4.Session, t sessionv4.Transcript) er
 	meta.UpdatedAt = s.UpdatedAt()
 	meta.Preview, meta.Turns, meta.SchemaVersion = preview, turns, BranchMetaCountsVersion
 	meta.Model = t.ModelRef
-	if t.Title != "" {
-		meta.CustomTitle = t.Title
+	if title := importedTitle(s, t); title != "" {
+		meta.CustomTitle = title
 	}
 	meta.ImportedFrom = &ImportSource{Line: importLineV4, LogSize: s.LogSize, Digest: hex.EncodeToString(digest[:])}
 	return SaveBranchMeta(path, meta)
@@ -215,6 +244,7 @@ func ImportV4From(store fs.FS, dir string, route func(sessionID string) string) 
 		}
 		path := v4ImportPath(target, id)
 		if sessionArtifactExists(path) {
+			healImportedTitle(path, s)
 			continue
 		}
 		t, err := s.Transcript()

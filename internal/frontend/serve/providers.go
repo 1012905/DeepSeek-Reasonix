@@ -139,6 +139,9 @@ type providerView struct {
 	InheritedLimits map[string]modelLimitsView `json:"inheritedLimits,omitempty"`
 	// Per chat model: the price per million tokens it declares for itself.
 	ModelPrices map[string]modelPriceView `json:"modelPrices,omitempty"`
+	// LastCheck is how the latest plain check of this saved entry ended; absent
+	// when none ran in this process or the entry changed since.
+	LastCheck *providerLastCheck `json:"lastCheck,omitempty"`
 }
 
 func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
@@ -153,6 +156,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 		p := &cfg.Providers[i]
 		settable := visionSettableOf(cfg, p)
 		out = append(out, providerView{
+			LastCheck:          lastCheckOf(p),
 			Name:               p.Name,
 			DisplayName:        strings.TrimSpace(p.DisplayName),
 			Kind:               strings.ToLower(strings.TrimSpace(p.Kind)),

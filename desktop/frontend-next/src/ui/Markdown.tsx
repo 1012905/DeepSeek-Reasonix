@@ -1,10 +1,11 @@
 import { createElement, isValidElement, memo, useEffect, useState, type JSX, type ReactNode, type MouseEvent, type KeyboardEvent } from "react";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
+import { t } from "../i18n";
 import { CodeBlock } from "./CodeBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { remarkCodeSpanLink, remarkTrimAutolink } from "./autolink";
-import { remarkFileLinks } from "./filelinks";
+import { OUTSIDE_IMAGE, remarkFileLinks, remarkLocalImages } from "./filelinks";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { useRevealed } from "./reveal";
@@ -163,6 +164,8 @@ export interface LocalRefs {
   /** Where to load src from, or null to leave it as written. */
   image(src: string): string | null;
   path?(href: string): string | null;
+  /** The same for a local picture in a folder the user granted, spelled as GRANTED/<n>/<path>. */
+  granted?(src: string): string | null;
   title?(href: string): string;
   menu?(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, href: string): void;
 }
@@ -198,7 +201,7 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local, i
   const body = normalizeMath(tail ? balanceFences(src) : src);
   return (
     <ReactMarkdown
-      remarkPlugins={([...BASE_REMARK, [remarkFileLinks, local?.path], ...(emoji ? [emoji] : [])]) as never}
+      remarkPlugins={([...BASE_REMARK, [remarkFileLinks, local?.path], [remarkLocalImages, local?.path, local?.granted], ...(emoji ? [emoji] : [])]) as never}
       rehypePlugins={([...BASE_REHYPE, math, code].filter(Boolean)) as never}
       components={{
         ...DIRECTED,
@@ -237,12 +240,18 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local, i
             </a>
           );
         },
-        img: ({ src, alt, title }) =>
-          images ? (
-            <img src={(local && typeof src === "string" && local.image(src)) || (src as string | undefined)} alt={alt} title={title} />
+        img: ({ src, alt, title }) => {
+          const at = local && typeof src === "string" ? local.image(src) : null;
+          if (images && src === OUTSIDE_IMAGE) {
+            return <span className="md-noimg md-outside-image" title={t("这张图片在工作区之外，不会加载")}>{alt}</span>;
+          }
+          if (images && !at && typeof src !== "string") return <span className="md-noimg">{alt}</span>;
+          return images ? (
+            <img src={at || (src as string | undefined)} alt={alt} title={title} />
           ) : (
             <span className="md-noimg">{alt}</span>
-          ),
+          );
+        },
         pre: ({ children }) => (
           <CodeBlock lang={langOf(children)} source={textOf(children)} live={live}>{children}</CodeBlock>
         ),

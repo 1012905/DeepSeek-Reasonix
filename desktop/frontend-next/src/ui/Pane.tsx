@@ -31,7 +31,6 @@ import { key as slotKey } from "./slots";
 import { Metrics } from "./Metrics";
 import { railOf } from "./panels/derive";
 import { accountOf, useHidesAmounts, useWallet } from "./wallet";
-import { PaneNav } from "./PaneNav";
 import { useOnBump } from "./useOnBump";
 import { useShowView } from "./showview";
 import { useSubmit } from "./usesubmit";
@@ -39,6 +38,7 @@ import { useSurfaceSlots } from "./usesurfaceslots";
 import { useSurfaceReplay } from "./surface-replay";
 import { MeterRail } from "./MeterRail";
 import { PlanFold } from "./PlanFold";
+import { useBroughtResults } from "./useBroughtResults";
 import { RunLine } from "./RunLine";
 import type { PaneProps, PaneReport } from "./panetypes";
 import { useRate, useTrail } from "./num";
@@ -54,6 +54,7 @@ import { useBrowserWide } from "./browserwide";
 import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
+import { PeerHeldBar } from "./PeerHeldBar";
 import { PostureNote } from "./PostureNote";
 import { SidePanel } from "./SidePanel";
 import { cancelJob } from "./jobcancel";
@@ -84,7 +85,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, viewRequest, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -175,6 +176,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       ? prev : { kind: "settled", status: next }));
   }, []);
 
+  const readJob = useCallback((id: string) => port.jobOutput(id), [port]);
   const refreshStatus = useCallback(() => port.status().then((st) => { applyStatus(st); statusRead(); }).catch(() => {}), [port, applyStatus, statusRead]);
 
   const [wallet, refreshWallet] = useWallet(port, accountOf(status?.modelRef));
@@ -340,9 +342,13 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
     else openChanges();
   }, [visible, workbench, openChanges]);
   useOnBump(filesPulse, pressFiles);
+  useOnBump(viewRequest?.n ?? 0, () => {
+    if (viewRequest && (viewRequest.to !== "analysis" || traj.rows.length > 0)) showView(viewRequest.to);
+  });
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   useEffect(() => { void loadFoldWorkPref(port); }, [port]);
   const foldWork = useFoldsTurnWork(port);
+  const brought = useBroughtResults(s.items);
   const refreshTree = useCallback((git?: WorkspaceGit) => {
     void port.changes().then(setTree).catch(() => setTree(null));
     if (git) setGit(git);
@@ -437,8 +443,11 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       mcp,
       wallet: walletDisplay,
       interactions:s.interactions,
+      view: docked ? "browser" : tab,
+      rows: traj.rows.length,
+      surfaces,
     });
-  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions]);
+  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions, docked, tab, traj.rows.length, surfaces]);
 
   return (
     <section
@@ -452,14 +461,6 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       onMouseDownCapture={active ? undefined : onFocus}
       onFocusCapture={active ? undefined : onFocus}
     >
-      <PaneNav
-        view={docked ? "browser" : tab}
-        onPick={showView}
-        rows={traj.rows.length} plan={s.plan} goal={status?.goal}
-        surfaces={surfaces}
-        side={sideAsk} onSide={() => setSideAsk((on) => !on)}
-      />
-
       <Find find={find} />
 
       <div className="pbody rewind-notice-host" data-dock={tab === "flow" ? "" : undefined} data-full={tab === "browser" ? "" : undefined}>
@@ -470,6 +471,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       <PaneShown.Provider value={shown}>
       <LiveWork.Provider value={live}>
       <Transcript port={port}
+        brought={brought}
         foldWork={foldWork}
         turnRunning={running}
         reply={fileReply}
@@ -555,8 +557,8 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         </span>
         {/* Everything stacked above the input box shares one ceiling, so no
             child of this region may grow without bound. */}
-        <PlanFold plan={s.plan} shown={tab === "flow"} paused={blocked} />
-        {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} sent={sent} received={received} estimated={s.outLive > 0} />}
+        <PlanFold plan={s.plan} goal={status?.goal} shown={tab === "flow"} paused={blocked} />
+        {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} since={s.running ? s.runSince : undefined} sent={sent} received={received} estimated={s.outLive > 0} />}
         <div className="composeaux">
           <Queue
             queue={queue}
@@ -570,6 +572,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
             onRefresh={onQueueRefresh}
             onPause={onQueuePause}
           />
+          <PeerHeldBar port={port} />
           {connect && <ConnectNote offer={connect} />}
           <PostureNote port={port} status={status} onChanged={refreshStatus} />
         {/* Views the user (or the extension) put next to the composer. They sit
@@ -591,11 +594,12 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         </div>
         {alert && <div className="cmpalert">{alert}</div>}
         {pill && <ChangedFilesPill changes={tree?.changes ?? []} onOpen={openChanges} />}
-        <Composer port={port} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={notify} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
+        <Composer port={port} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={notify} onSettings={onSettings} side={sideAsk} onSide={() => setSideAsk((on) => !on)} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
         <MeterRail
           tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} compact={compact} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}
           onCancelJob={(id) => cancelJob(port, id, notify, refreshStatus).then(() => {})}
+          onReadJob={readJob}
           usage={status?.sessionUsage} quote={status?.sessionCostQuote}
         />
         {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}

@@ -74,6 +74,8 @@ const (
 	// default_model names nothing configured, so the window opened on a fallback; the file is unchanged.
 	NoticeCodeDefaultModelUnavailable        = "default_model_unavailable"
 	NoticeCodeInheritedSubagentEffortDropped = "inherited_subagent_effort_dropped"
+	// A branch's saved model disappeared from the current provider catalog; the pane uses a fallback.
+	NoticeCodeBranchModelUnavailable = "branch_model_unavailable"
 	// A legacy memory file could not be preserved, so the metadata migration left it as it was.
 	NoticeCodeMemoryMigrationBackup = "memory_migration_backup"
 	// /compact folded the context.

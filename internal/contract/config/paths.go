@@ -313,6 +313,18 @@ func (r Roots) ScheduleDir() string {
 	return filepath.Join(dir, "schedules")
 }
 
+// PeersDir is where sessions on this machine leave messages for one another:
+// machine-wide, under the state root beside the sessions, and never inside a
+// project. Runtime sandboxes deny reading it, because its files are other
+// sessions' words.
+func (r Roots) PeersDir() string {
+	dir := r.userSupportDir()
+	if strings.TrimSpace(dir) == "" {
+		return ""
+	}
+	return filepath.Join(dir, "peers")
+}
+
 // RemoteStateDir is <home>/remote under these roots. A serve launched over SSH
 // keeps its launch token there, so runtime sandboxes deny reading it.
 func (r Roots) RemoteStateDir() string {

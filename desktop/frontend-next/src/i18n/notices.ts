@@ -22,6 +22,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   suspected_injection: "一条外部内容看起来在向智能体下指令，已提醒它只当资料看待",
   await_user: "等待你的输入",
   default_model_unavailable: "配置里保存的默认模型已不在已配置的供应商中，本次改用第一个可用的模型；在设置里重新选择默认模型即可替换，配置文件未被改动",
+  branch_model_unavailable: "分支保存的模型已不可用，本次改用其他已配置的模型；可以在模型设置中重新选择",
   web_search_model_bad_ref: "搜索模型的格式应为 服务/模型，搜索已关闭；到模型偏好里重新选择，或恢复自动",
   web_search_model_not_added: "所选搜索模型所在的连接已被移出，搜索已关闭；到模型偏好里重新选择，或恢复自动",
   web_search_model_removed: "所选搜索模型已不在配置里，搜索已关闭；到模型偏好里重新选择，或恢复自动",

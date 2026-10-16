@@ -14,6 +14,7 @@ const { externalTarget } = require("../src/links.js");
 const { offerCleanup, ownBundle } = require("../src/legacy.js");
 const { stripPackageGrants, readReport, unpaintedWindowCause } = require("../src/packagegrants.js");
 const { groundFor, themeSourceFor, GROUND } = require("../src/ground.js");
+const { folderAnswer } = require("../src/folderpanel.js");
 const { pick, loadPrefs, savePrefs, registerPrefs } = require("../src/prefs.js");
 
 const TOKEN = "a".repeat(64);
@@ -2440,4 +2441,13 @@ test("the window capture is scaled down past the upload-friendly width and refus
   assert.equal(Buffer.from(await wide({})).toString(), `png:${MAX_WIDTH}`);
   const blank = captureHandler(() => ({ webContents: { capturePage: async () => fakeImage(0, { empty: true }) } }));
   assert.equal(await blank({}), null);
+});
+
+test("a folder panel that closes before anyone could read it is reported as never drawn on Linux", () => {
+  const closed = { canceled: true, filePaths: [] };
+  assert.equal(folderAnswer(closed, 20, "linux"), null);
+  assert.equal(folderAnswer(closed, 5000, "linux"), "");
+  assert.equal(folderAnswer(closed, 20, "darwin"), "");
+  assert.equal(folderAnswer(closed, 20, "win32"), "");
+  assert.equal(folderAnswer({ canceled: false, filePaths: ["/home/a/p"] }, 20, "linux"), "/home/a/p");
 });

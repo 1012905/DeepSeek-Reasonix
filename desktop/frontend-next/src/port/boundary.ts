@@ -106,6 +106,41 @@ export interface SubagentClaimsSettings {
   path: string;
 }
 
+// How this machine's sessions hold the workspace write lease against one
+// another, as the user file records it. A project file cannot set it. A running
+// session keeps the lease it was built with, so a change reaches sessions
+// opened after it.
+export interface WriteLeaseSettings {
+  optimistic: boolean;
+  path: string;
+}
+
+export interface PeerView {
+  key: string;
+  title: string;
+  project?: string;
+}
+
+export interface PeerHeld {
+  id: string;
+  fromSession: string;
+  fromTitle?: string;
+  fromProject?: string;
+  sentAt: string;
+  body: string;
+}
+
+export interface PeersState {
+  enabled: boolean;
+  peers: PeerView[];
+  held: PeerHeld[];
+}
+
+export interface PeerReceipt {
+  id: string;
+  to: PeerView;
+}
+
 export interface AutoArchiveSettings {
   enabled: boolean;
   days: number;

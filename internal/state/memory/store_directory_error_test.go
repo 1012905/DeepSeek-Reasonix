@@ -229,7 +229,7 @@ func TestUnreadableStoreReachesToolsAndRecall(t *testing.T) {
 	}
 	for _, result := range []RecallResult{set.AutoRecall("compiler configuration", RecallOptions{}), AutoRecall(s, "compiler configuration", RecallOptions{})} {
 		requireDirectoryError(t, result.StoreError, s.Dir, os.ErrPermission)
-		if len(result.Hits) != 0 || result.Suppressed != "memory store unreadable" || !strings.Contains(result.Block(), "could not be read") {
+		if len(result.Hits) != 0 || result.SuppressionCode != SuppressUnreadable || !strings.Contains(result.Block(), "could not be read") {
 			t.Fatalf("recall = %+v", result)
 		}
 	}

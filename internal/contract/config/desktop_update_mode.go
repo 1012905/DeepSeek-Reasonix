@@ -11,6 +11,9 @@ import (
 const (
 	UpdateModeManual = "manual"
 	UpdateModeNotify = "notify"
+	// UpdateModeDownload also fetches and verifies a newer release in the
+	// background and leaves it waiting. It never installs or restarts.
+	UpdateModeDownload = "download"
 )
 
 // ErrUpdateModeInvalid is a mode this build does not offer.
@@ -18,10 +21,14 @@ var ErrUpdateModeInvalid = errors.New("config: unknown update mode")
 
 // DesktopUpdateMode is how the desktop behaves about new releases: manual does
 // nothing on its own, notify reads the version catalog in the background and
-// says so when something newer is published. It installs nothing either way.
+// says so when something newer is published, download also leaves that release
+// downloaded and verified. None of them installs or restarts.
 func (c *Config) DesktopUpdateMode() string {
-	if c != nil && strings.TrimSpace(c.Desktop.UpdateMode) == UpdateModeNotify {
-		return UpdateModeNotify
+	if c != nil {
+		switch m := strings.TrimSpace(c.Desktop.UpdateMode); m {
+		case UpdateModeNotify, UpdateModeDownload:
+			return m
+		}
 	}
 	return UpdateModeManual
 }
@@ -31,7 +38,7 @@ func (c *Config) DesktopUpdateMode() string {
 // the user did not pick.
 func (c *Config) SetDesktopUpdateMode(mode string) error {
 	switch m := strings.TrimSpace(mode); m {
-	case UpdateModeManual, UpdateModeNotify:
+	case UpdateModeManual, UpdateModeNotify, UpdateModeDownload:
 		c.Desktop.UpdateMode = m
 		return nil
 	}

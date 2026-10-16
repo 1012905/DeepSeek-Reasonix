@@ -20,7 +20,7 @@ export type { MemoryEdit } from "./memory";
 export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
 import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
-import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
+import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
@@ -31,7 +31,7 @@ import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResul
 // them all.
 export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, ApprovalVerdict, WorkspaceTrust, CapabilityScope,
   Checkpoint, CompactionSettings, Completion, CompletionItem, ContextBreakdown, DeviceGrant, HistoryMessage, HostTodo, BrowserTab,
-  HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource, JobEntry, McpCatalog, McpDraft,
+  HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource, JobEntry, JobOutput, McpCatalog, McpDraft,
   McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, MemoryCatalog,
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus, SessionUsage, SourceUsage,
@@ -42,9 +42,9 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, BrowserToolsSettings, SubagentClaimsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
-export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
+export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 
@@ -275,6 +275,11 @@ export interface AgentPort {
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
   subagentClaims(): Promise<SubagentClaimsSettings>;
   saveSubagentClaims(optimistic: boolean): Promise<SubagentClaimsSettings>;
+  writeLease(): Promise<WriteLeaseSettings>;
+  saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
+  peers(): Promise<PeersState>;
+  sendPeerMessage(to: string, text: string): Promise<PeerReceipt>;
+  resolvePeerMessage(id: string, approve: boolean): Promise<void>;
   displayCurrency(): Promise<DisplayCurrencySettings>;
   // Applies live: the kernel announces it and every ledger rebinds; no rebuild.
   saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
@@ -355,7 +360,7 @@ export interface AgentPort {
   probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe>;
   // Re-probes what is already saved, so "is the key still good, and is this
   // still the protocol we recorded" is one button rather than a re-add.
-  checkProvider(name: string): Promise<ProviderCheck>;
+  checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck>;
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   saveProvider(draft: ProviderDraft): Promise<void>;
   // Changes only the fields the form owns. Saving a whole entry instead would
@@ -539,7 +544,8 @@ export interface AgentPort {
   workspaceFile(path: string): Promise<WorkspaceFile>;
   saveWorkspaceFile(file: WorkspaceFile): Promise<WorkspaceFile>;
   // Where an image in the workspace is served, for a rendered document to show.
-  workspaceImageURL(path: string): string;
+  /** root names a folder the user granted this workspace; absent means the workspace itself. */
+  workspaceImageURL(path: string, root?: string): string;
   // Saves bytes into the workspace's attachment directory and returns the
   // "@path" token a turn references it by. This is the door for what has no
   // path to offer — the clipboard, and a browser tab's dropped File. A window
@@ -600,6 +606,13 @@ export interface AgentPort {
   // Stops one background job this session started; a job that already ended
   // is refused (job.not_running), not silently acknowledged.
   cancelJob(jobId: string): Promise<void>;
+  // Ends one running tool call and lets the turn go on; a call that already
+  // finished is refused (tool_call.not_running).
+  stopToolCall(callId: string): Promise<void>;
+  // The end of a running job's output, for the person looking at it. It does
+  // not take output from the model's own reader; a job that ended is refused
+  // (job.not_running).
+  jobOutput(jobId: string): Promise<JobOutput>;
   // Re-freezes the files an entry references. A line that waited through the
   // work that changed them would otherwise arrive quoting what is no longer.
   refreshQueued(itemId: string): Promise<void>;

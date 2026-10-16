@@ -11,7 +11,7 @@ import "../src/styles/askskip.css";
 import "../src/styles/pastekeep.css";
 import "../src/styles/ctxitems.css";
 import "../src/styles/sidepanel.css";
-import "../src/styles/planpeek.css";
+import "../src/styles/contentmatches.css";
 import "../src/styles/scrolljump.css";
 import "../src/styles/chart.css";
 import "../src/styles/community.css";
@@ -27,9 +27,10 @@ import "../src/styles/dialogcenter.css";
 import "../src/styles/treerows.css";
 import "../src/styles/workbench-changes.css";
 import "../src/styles/gitgraph.css";
-import "../src/styles/vthumb.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
+import "../src/styles/bring.css";
+import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
 import "../src/styles/skillpin.css";
 import "../src/styles/narrow.css";
@@ -46,6 +47,7 @@ import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
 import type { AgentPort, Appearance, HistoryMessage } from "../src/port/port";
+import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
 import type { WireEvent } from "../src/port/wire";
@@ -89,6 +91,12 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  // ?checkfail=<name> makes a plain test of that source answer 401.
+  protected async answerCheck(name: string) {
+    if (query.get("checkfail") !== name) return super.answerCheck(name);
+    return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
+  }
+
   async browserTabs() {
     if (!query.has("agentpage")) return super.browserTabs();
     return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
@@ -101,6 +109,7 @@ class BenchPort extends MockPort {
   }
 
   async versions() {
+    if (query.has("update")) return { current: "2.42.0", pinned: "", stalePin: false, latest: "2.43.0", newer: true, versions: [] };
     if (!query.has("versions")) return super.versions();
     const names = ["2.38.0", "2.37.0", "2.36.0", "2.35.0", "2.34.0", "2.33.0", "2.32.0", "2.31.0", "2.30.0", "2.29.0"];
     return {
@@ -136,6 +145,15 @@ class BenchPort extends MockPort {
 
   async providerSetup() {
     return ONBOARDING ? { required: true, noProvider: true, provider: "", model: "" } : null;
+  }
+
+  async peers() {
+    if (!query.has("peers")) return super.peers();
+    return {
+      enabled: true,
+      peers: [{ key: "s-1a2b3c4d", title: "拾音", project: "rx-archive" }, { key: "s-5e6f7a8b", title: "文档整理", project: "docs" }],
+      held: [{ id: "m-1", fromSession: "s-1a2b3c4d", fromTitle: "拾音", fromProject: "rx-archive", sentAt: "2026-10-16T12:00:00Z", body: "迁移脚本跑完了，结果在 out/report.md，请你核对第三节再继续。" }],
+    };
   }
 
   async foldWorkSettings() {
@@ -213,7 +231,7 @@ class BenchPort extends MockPort {
   private readonly jobsSince = Date.now() - 739_000;
 
   async status() {
-    const st = await super.status();
+    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}) };
     if (STATUS_MS > 0) await new Promise((r) => setTimeout(r, STATUS_MS));
     if (!JOBS) return st;
     const jobs = Array.from({ length: JOBS }, (_, i) => ({
@@ -224,6 +242,24 @@ class BenchPort extends MockPort {
       startedAt: this.jobsSince,
     }));
     return { ...st, jobs };
+  }
+
+  async switchBranch(name: string) {
+    if (SWITCH_MS > 0) await new Promise((r) => setTimeout(r, SWITCH_MS));
+    return super.switchBranch(name);
+  }
+
+  async goToVersion() {}
+
+  onUpdateProgress(cb?: (p: UpdateProgress) => void) {
+    if (cb && query.has("update")) queueMicrotask(() => cb({ version: "2.43.0", phase: "ready", received: 0, total: 0 }));
+    return () => {};
+  }
+
+  async jobOutput(jobId: string) {
+    if (!JOBS) return super.jobOutput(jobId);
+    const lines = Array.from({ length: 28 }, (_, i) => `[${String(i).padStart(2, "0")}] compiling module ${i * 7 + 3} … ok`);
+    return { text: lines.join("\n") + "\nwatching for changes\n", status: this.stopped.has(jobId) ? "killed" : "running", bytes: 1100, truncated: false };
   }
 
   async cancelJob(jobId: string) {
@@ -264,6 +300,7 @@ const SESSIONS = Number(query.get("sess") ?? 0);
 // ?turns= is how long the conversation being opened already is.
 const TURNS = Number(query.get("turns") ?? 0);
 const STATUS_MS = Number(query.get("statusms") ?? 0);
+const SWITCH_MS = Number(query.get("switchms") ?? 0);
 // ?queue= is how many lines are already waiting when the window opens.
 const QUEUE = Number(query.get("queue") ?? 0);
 const QUEUE_BODY = query.has("queuebody");
@@ -277,6 +314,16 @@ const NO_PANES = PANES === 0;
 
 class BenchHub extends MockHub {
   readonly feeds = new Map<string, BenchPort>();
+
+  // ?search=1 answers every query with two conversations that say it.
+  async searchHistory(q: string) {
+    if (!query.has("search")) return super.searchHistory(q);
+    return [
+      { path: "/sessions/mock.jsonl", id: "mock", snippet: `…上周讨论过要不要把 ${q} 的轮换放进发布流程，结论是每月一次…`, role: "assistant", messageIndex: 4, score: 2 },
+      { path: "/sessions/older.jsonl", id: "older", snippet: `怎么把 ${q} 配到预发环境里？`, role: "user", messageIndex: 0, score: 1 },
+    ];
+  }
+
   private readonly settingsPort = new BenchPort();
 
   machinePort(): AgentPort {

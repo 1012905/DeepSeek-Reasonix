@@ -475,8 +475,8 @@ func (c *Controller) managementNotice(trimmed string) bool {
 	case "/memory":
 		args := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
 		c.notice(MemoryCommandText(c, args))
-	case "/feedback":
-		c.feedbackCommand(strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0])))
+	case "/feedback", "/peer", "/peers":
+		c.argumentCommand(fields[0], strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0])))
 	case "/migrate", "/migration":
 		args := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
 		migration.RunLegacyRescueCommand(args, c.sink)

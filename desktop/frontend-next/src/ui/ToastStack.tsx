@@ -1,17 +1,31 @@
 import { useLayoutEffect, useState } from "react";
 import { t } from "../i18n";
+import type { AgentPort, Appearance } from "../port/port";
 import { dismissToast, useToasts } from "../state/toasts";
+import { useUpdateReady } from "../state/updatewatch";
 import { reportProblem } from "./reportproblem";
+import { useSizeAsk } from "./SizeAsk";
+import { UpdateReady } from "./UpdateReady";
 
 /** The window's corner for failures that do not block what the person is doing.
  *  They stay until dismissed, and each can be reported from where it appeared. */
-export function ToastStack({ onFeedback }: { onFeedback: () => void }) {
+export function ToastStack({ onFeedback, port, idle = false, look = {}, onLook = () => {} }: { onFeedback: () => void; port?: Pick<AgentPort, "restartToVersion">; idle?: boolean; look?: Appearance; onLook?: (next: Appearance) => void }) {
   const toasts = useToasts();
-  const at = useAboveComposer(toasts.length > 0);
-  if (toasts.length === 0) return null;
+  const waiting = useUpdateReady() !== "";
+  const update = port !== undefined && waiting && idle;
+  const ask = useSizeAsk(look, onLook);
+  const at = useAboveComposer(toasts.length > 0 || update || ask.open);
+  if (toasts.length === 0 && !update && !ask.open) return null;
   return (
     <div className="toasts" role="region" aria-label={t("通知")} style={at ? { bottom: at.bottom, right: at.right } : undefined}>
-      {toasts.map((toast) => (
+      {ask.node}
+      {port && <UpdateReady port={port} idle={idle} />}
+      {toasts.map((toast) => toast.tone === "note" ? (
+        <div className="toast note" role="status" key={toast.id}>
+          <span>{toast.text}</span>
+          <button data-action="toast.dismiss" data-target={String(toast.id)} onClick={() => dismissToast(toast.id)}>{t("知道了")}</button>
+        </div>
+      ) : (
         <div className="toast" role="alert" key={toast.id}>
           <span>{toast.text}</span>
           <button data-action="toast.report" onClick={() => { reportProblem(toast.text); onFeedback(); dismissToast(toast.id); }}>{t("报告此问题")}</button>

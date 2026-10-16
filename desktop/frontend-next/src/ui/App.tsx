@@ -6,7 +6,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useS
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
-import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
+import type { HubPort, RuntimeView } from "../port/hub";
 import { Chrome } from "./Chrome";
 import { RailToggle } from "./RailToggle";
 import { useLaunchHealth } from "./launchhealth";
@@ -52,8 +52,10 @@ import { useFirstRun } from "./useFirstRun";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
 import { singleFlight } from "./singleflight";
+import { useTreeRead } from "./useTreeRead";
 import { useOpenPane } from "./useOpenPane";
 import { markSettled } from "../boot/gate";
+import type { PaneView } from "../state/paneview";
 
 // Start fetching the settings chunk with the shell instead of waiting for the
 // first click. It remains a separate chunk (and keeps its failure boundary),
@@ -79,6 +81,9 @@ const NO_REPORT: PaneReport = {
   context: null,
   mcp: [],
   wallet: "",
+  view: "flow",
+  rows: 0,
+  surfaces: 0,
 };
 
 // App is the window around the panes, not a session itself: the workspace tree,
@@ -90,10 +95,8 @@ export function App({ hub }: { hub: HubPort }) {
   const [runtimes, setRuntimes] = useState<RuntimeView[]>([]);
   const [panesRead, setPanesRead] = useState(false);
   const [active, setActive] = useState(savedActivePane);
-  const [tree, setTree] = useState<TreeWorkspace[]>([]);
-  // An empty tree before the first read settles is an unread one, not a
-  // machine with no folders; only the kernel's answer can say the latter.
-  const [treeRead, setTreeRead] = useState(false);
+  const treeWindow = useTreeWindow();
+  const { tree, treeRead, readTree, reloadTree, retryTree } = useTreeRead(hub, treeWindow);
   // Null until asked, and null again where this kernel refuses remote panes —
   // which is what keeps the section out of a browser rather than drawing a
   // heading over a feature that cannot work there.
@@ -115,6 +118,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [report, setReport] = useState<PaneReport>(NO_REPORT);
   const [findPulse, setFindPulse] = useState(0);
   const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
+  const [viewRequests, setViewRequests] = useState<Record<string, { to: PaneView; n: number }>>({});
   const [error, setError] = useState("");
   const [renaming, setRenaming] = useState<{ path: string; title: string } | null>(null);
   // false = closed, true = open at its last section, a string = open there.
@@ -177,16 +181,6 @@ export function App({ hub }: { hub: HubPort }) {
     setReport(reportsRef.current[active] ?? NO_REPORT);
   }, [active]);
 
-  const treeWindow = useTreeWindow();
-  const readTree = useMemo(
-    () => singleFlight(() =>
-      hub
-        .tree(treeWindow.current())
-        .then(setTree)
-        .finally(() => setTreeRead(true))),
-    [hub, treeWindow],
-  );
-  const reloadTree = useCallback(() => readTree().catch(() => {}), [readTree]);
   const paging = useMemo<TreePaging>(
     () => ({
       more: (root) => treeWindow.grow(root, readTree),
@@ -374,6 +368,12 @@ export function App({ hub }: { hub: HubPort }) {
     setFilesRequests((requests) => ({ ...requests, [active]: (requests[active] ?? 0) + 1 }));
   }, [active, panePorts, hidePrefs]);
 
+  const showView = useCallback((to: PaneView) => {
+    if (!panePorts.has(active)) return;
+    hidePrefs();
+    setViewRequests((requests) => ({ ...requests, [active]: { to, n: (requests[active]?.n ?? 0) + 1 } }));
+  }, [active, panePorts, hidePrefs]);
+
   const openPane = useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes: refreshPanes, sw });
 
   // Awaitable because deleting a conversation has to close its pane first and
@@ -423,9 +423,12 @@ export function App({ hub }: { hub: HubPort }) {
       { chord: "\\", fields: true, action: "rail.toggle", run: () => setRail((v) => !v) },
       { chord: ",", fields: true, action: "chrome.settings", run: showPrefs },
       { chord: "f", action: "transcript.find", run: openFind },
+      { chord: "1", fields: true, action: "pane.view", run: () => showView("flow") },
+      { chord: "2", fields: true, action: "pane.view", run: () => showView("analysis") },
+      { chord: "3", fields: true, action: "pane.view", run: () => showView("browser") },
       ...zoomKeys,
     ],
-    [showPrefs, openFind, zoomKeys],
+    [showPrefs, openFind, showView, zoomKeys],
   );
   const closeBrowser = useCallback(() => setBrowser(false), []);
   const stopTurn = useCallback(() => activePort?.cancel(), [activePort]);
@@ -577,6 +580,7 @@ export function App({ hub }: { hub: HubPort }) {
         theme={scheme}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
         onFind={openFind}
+        view={report.view} rows={report.rows} surfaces={report.surfaces} onView={showView}
         hub={hub} onError={fail}
       />
 
@@ -619,6 +623,7 @@ export function App({ hub }: { hub: HubPort }) {
           reloadRemoteTrees={reloadRemoteTrees}
           readRemoteTree={readRemoteTree}
           reloadTree={reloadTree}
+          retryTree={retryTree}
           paging={paging}
           adder={adder}
           opening={sw.path}
@@ -636,6 +641,7 @@ export function App({ hub }: { hub: HubPort }) {
           wallet={report.wallet}
           onSettings={showPrefs}
           onFiles={openFiles}
+          onView={showView}
           onFeedback={(tab) => setFeedback(tab ?? "send")}
           feedbackUnread={feedbackUnread}
           onFind={openFind}
@@ -690,6 +696,7 @@ export function App({ hub }: { hub: HubPort }) {
                   pulse={settingsPulse}
                   findPulse={findPulse}
                   filesPulse={filesRequests[rt.id] ?? 0}
+                  viewRequest={viewRequests[rt.id]}
                   alert={rt.id === active ? bar : undefined}
                   connect={first.connect}
                   needsProject={needsProject}
@@ -703,7 +710,7 @@ export function App({ hub }: { hub: HubPort }) {
                   }}
                   onSettings={(section) => section ? showPrefs(section) : showPrefs()}
                   onFeedback={() => setFeedback("send")}
-                  onOpenSession={(path) => void openPane({ root: rt.root, sessionPath: path }).catch(fail)}
+                  onOpenSession={async (path) => { await openPane({ root: rt.root, sessionPath: path }).catch(fail); }}
                   theme={scheme}
                   dockW={shownDockW}
                   dockMax={dockLimit}
@@ -747,7 +754,7 @@ export function App({ hub }: { hub: HubPort }) {
           onSaved={() => { setRenaming(null); void reloadTree().catch(fail); }} />
       )}
 
-      <ToastStack onFeedback={() => setFeedback("send")} />
+      <ToastStack onFeedback={() => setFeedback("send")} port={machinePort} idle={!running} look={look} onLook={onLook} />
 
       {feedback && activePort && (
         <Feedback port={machinePort} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />

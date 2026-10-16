@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"reasonix/internal/contract/config"
@@ -47,6 +48,9 @@ type Result struct {
 	SessionImports []SessionImport
 	SessionErrs    []error
 	SessionSkips   []SessionSkip
+	// Workspaces are the folders an explicit import routed sessions back into:
+	// each still exists on disk and now holds sessions of its own.
+	Workspaces []string
 	// Unrecognised is set when an explicit import found no 1.x session
 	// store under the chosen folder, as opposed to finding nothing new.
 	Unrecognised bool
@@ -160,7 +164,13 @@ func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink
 	result := Result{}
 	sourceRoot = strings.TrimSpace(sourceRoot)
 	emit(event.LevelInfo, "migration rescue: scanning explicit legacy sessions from "+sourceRoot)
-	sources, closeRoot, err := explicitLegacySessionSources(sourceRoot)
+	var routed []string
+	note := func(root string) {
+		if !slices.Contains(routed, root) {
+			routed = append(routed, root)
+		}
+	}
+	sources, closeRoot, err := explicitLegacySessionSources(sourceRoot, note)
 	defer closeRoot()
 	if err != nil {
 		result.SessionErrs = append(result.SessionErrs, err)
@@ -185,7 +195,13 @@ func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink
 			}
 		} else {
 			var rep *sessionstore.LegacyReport
-			n, rep, err = sessionstore.ImportLegacySessionsFromExplicitDir(src.dir, fallbackDest, config.ProjectSessionDir)
+			n, rep, err = sessionstore.ImportLegacySessionsFromExplicitDir(src.dir, fallbackDest, func(root string) string {
+				dir := config.ProjectSessionDir(root)
+				if dir != "" {
+					note(root)
+				}
+				return dir
+			})
 			skipped = rep.Skipped
 		}
 		for _, sk := range skipped {
@@ -206,6 +222,7 @@ func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink
 	if len(result.SessionImports) == 0 && len(result.SessionErrs) == 0 && len(result.SessionSkips) == 0 {
 		emit(event.LevelInfo, "migration rescue: no legacy sessions needed migration from "+sourceRoot)
 	}
+	result.Workspaces = routed
 	emit(event.LevelInfo, result.Summary())
 	return result
 }
@@ -568,7 +585,7 @@ func trimMatchingQuotes(s string) string {
 // explicitLegacySessionSources finds the session stores under a user-picked
 // folder. Every probe goes through one os.Root, so a symlink inside the folder
 // cannot lead the scan outside it.
-func explicitLegacySessionSources(picked string) ([]explicitSessionSource, func(), error) {
+func explicitLegacySessionSources(picked string, note func(root string)) ([]explicitSessionSource, func(), error) {
 	picked = strings.TrimSpace(picked)
 	if picked == "" {
 		return nil, func() {}, fmt.Errorf("--from requires a legacy directory path")
@@ -598,7 +615,7 @@ func explicitLegacySessionSources(picked string) ([]explicitSessionSource, func(
 	for _, home := range []string{".", ".reasonix", "reasonix"} {
 		add(path.Join(home, "sessions"), false, nil)
 		add(path.Join(home, "sessions-v4"), true, nil)
-		add(path.Join(home, "desktop-sessions-v5", "by-id"), true, routeToOwner(desktopSessionOwners(tree, home)))
+		add(path.Join(home, "desktop-sessions-v5", "by-id"), true, routeToOwner(desktopSessionOwners(tree, home), note))
 		projects, _ := fs.ReadDir(tree, path.Join(home, "projects"))
 		for _, project := range projects {
 			if !project.IsDir() {

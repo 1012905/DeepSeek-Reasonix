@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Clip } from "./Clip";
 import { useEscape } from "./dismiss";
 import { t } from "../i18n";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "../port/port";
+import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "../port/port";
 import { AddProvider } from "./AddProvider";
 import { ProviderDetail } from "./ProviderDetail";
 import { accountKey, accountLabel, disambiguate, hostOf } from "./vendors";
 import { reason } from "../i18n/kernel";
+import { providerDot } from "./providerdot";
 import { moveAccount, orderAccounts, useProviderOrder, writeProviderOrder } from "../state/providerorder";
 import { StudioIcon } from "./StudioIcon";
 import { RemovalNotice, removalChangedRoles, type Removal } from "./ProviderRemoval";
@@ -26,7 +27,7 @@ export type Port = {
   probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe>;
   saveProvider(draft: ProviderDraft): Promise<void>;
   removeProvider(name: string): Promise<ProviderRemoval>;
-  checkProvider(name: string): Promise<ProviderCheck>;
+  checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck>;
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   editProvider(edit: ProviderEdit): Promise<void>;
   setProviderWebSearch(name: string, on: boolean): Promise<void>;
@@ -229,8 +230,7 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
         <div className="plist-rows" role="group" aria-label={t("{n} 个来源", { n: accounts.length })}>
           {shown.map((a, index) => {
             const entries = Object.values(a.byKind);
-            const inUse = entries.some((e) => e.inUse);
-            const keyless = entries.every((e) => !e.hasKey);
+            const dot = providerDot(entries);
             if (renaming === a.key) {
               return (
                 <div className="svcrow-wrap" data-selected="true" data-renaming="" key={a.key}>
@@ -277,8 +277,7 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
                     <span className="nm">{a.label}</span>
                     <Clip className="ds">{a.host}</Clip>
                   </span>
-                  <i className="pstate" data-state={inUse ? "use" : keyless ? "warn" : undefined}
-                    title={t(inUse ? "正在用" : keyless ? "缺 key" : "")} />
+                  <i className="pstate" data-state={dot.state} title={dot.title} />
                 </button>
                 <span className="svcrow-order">
                   <button data-action="provider.rename-start" data-target={a.key} disabled={busy !== ""}
@@ -350,6 +349,7 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
             onRename={() => startRename(current.key)}
             declare={declare}
             onEdited={() => { const fresh = reload(); onChanged(); return fresh; }}
+            onChecked={() => void reload()}
             onDirty={setDirty}
             onFailed={onFailed} />
         ) : (

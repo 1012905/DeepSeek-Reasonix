@@ -16,10 +16,10 @@ import (
 // render. A title is decoration on a navigation list, so the request never
 // waits for one — the preview stands in and the generated title lands in the
 // cache for the next read.
-const (
-	titleFillWorkers = 4
-	titleFillTimeout = 30 * time.Second
-)
+const titleFillWorkers = 4
+
+// titleFillTimeout is a variable so a test can make a slow model cheap to wait for.
+var titleFillTimeout = 30 * time.Second
 
 type titleJob struct {
 	name   string

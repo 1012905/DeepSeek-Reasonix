@@ -1,4 +1,5 @@
 import type {
+  ProviderCheckDraft,
   ModelEffort,
   ModelLimit,
   ModelRate,
@@ -74,8 +75,12 @@ export class MockProvider extends MockBoundary {
     },
   ];
 
+  // Like the kernel, a plain re-check is remembered for the list; one made with
+  // the form's own values is not.
+  private readonly lastChecks = new Map<string, NonNullable<ProviderEntry["lastCheck"]>>();
+
   async providers(): Promise<ProviderEntry[]> {
-    return this.sources;
+    return this.sources.map((s) => (this.lastChecks.has(s.name) ? { ...s, lastCheck: this.lastChecks.get(s.name) } : s));
   }
 
   // Mirrors the kernel catalog: two wires answer one OpenAI model listing.
@@ -115,7 +120,14 @@ export class MockProvider extends MockBoundary {
   // The fixture's endpoints answer both protocols, which is the case the row's
   // "改用…" repair exists for. The relay answers at gateway scale, which is the
   // case the model list's search and its row cap exist for.
-  async checkProvider(name: string): Promise<ProviderCheck> {
+  async checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck> {
+    const got = await this.answerCheck(name);
+    const plain = !draft?.baseUrl && !draft?.apiKey && !draft?.kind;
+    if (plain) this.lastChecks.set(name, { at: Date.now(), ok: got.ok, ...(got.code ? { code: got.code } : {}) });
+    return got;
+  }
+
+  protected async answerCheck(name: string): Promise<ProviderCheck> {
     if (name === "mimo") return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
     const models = name.startsWith("myrelay")
       ? relayCatalog()

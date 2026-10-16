@@ -38,9 +38,6 @@ func (n *nestedInvoker) Invoke(ctx context.Context, name string, args json.RawMe
 		StartedAt:      started.UnixMilli(), EndedAt: started.UnixMilli() + elapsed, Issuer: event.IssuedByModel,
 		Executed: out.executed,
 	}})
-	if out.provenance.External() && !n.parent.nestedOrigin.External() {
-		n.parent.nestedOrigin = out.provenance
-	}
 	if out.errMsg != "" || out.blocked || out.refusalCode != "" {
 		reason := out.errMsg
 		if reason == "" {

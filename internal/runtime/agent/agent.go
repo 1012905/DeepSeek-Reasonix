@@ -246,6 +246,8 @@ type Agent struct {
 	agentConfig
 	// svc are the collaborators this agent talks to; see services.go.
 	svc agentServices
+	// stops lets one running call be ended without ending the turn.
+	stops callStops
 	// role is what this agent is; see agent_role.go.
 	role agentRole
 	// eventSource names this agent as the producer of its own frames.

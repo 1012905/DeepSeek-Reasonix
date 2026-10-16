@@ -285,6 +285,8 @@ type RuntimeSettings interface {
 	SaveBrowserToolsSettings(enabled bool) error
 	SubagentClaimsSettings() SubagentClaimsSettings
 	SaveSubagentClaimsSettings(optimistic bool) error
+	WriteLeaseSettings() WriteLeaseSettings
+	SaveWriteLeaseSettings(optimistic bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
@@ -345,6 +347,7 @@ type Capabilities interface {
 
 // Status covers read-only run/usage/billing telemetry and task list state.
 type Status interface {
+	TurnInFlight() bool
 	ContextSnapshot() (int, int)
 	ContextBreakdown() agent.ContextBreakdown
 	ContextMaintenanceSnapshot() agent.ContextMaintenanceSnapshot
@@ -362,6 +365,22 @@ type Status interface {
 // BackgroundJobs stops work a session left running outside any turn.
 type BackgroundJobs interface {
 	CancelJob(id string) bool
+	JobPeek(id string, max int) (jobs.Peek, bool)
+}
+
+// ToolCallStopper ends one running tool call and leaves its turn going.
+type ToolCallStopper interface {
+	CancelToolCall(id string) bool
+}
+
+// PeerMail is messages between sessions: who can be written to, sending, what
+// other sessions sent and the user has not decided, and the decision.
+type PeerMail interface {
+	PeersEnabled() bool
+	Peers() []PeerView
+	SendPeerMessage(to, text string) (PeerReceipt, error)
+	HeldPeerMessages() []PeerHeld
+	ResolvePeerMessage(id string, approve bool) error
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -480,6 +499,8 @@ type SessionAPI interface {
 	Inbox
 	Provenance
 	BackgroundJobs
+	ToolCallStopper
+	PeerMail
 	LocalShell
 	DiffRendering
 	Feedback
@@ -515,6 +536,8 @@ var (
 	_ FolderTrust        = (*Controller)(nil)
 	_ Goals              = (*Controller)(nil)
 	_ BackgroundJobs     = (*Controller)(nil)
+	_ ToolCallStopper    = (*Controller)(nil)
+	_ PeerMail           = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)
 	_ SlashDispatch      = (*Controller)(nil)

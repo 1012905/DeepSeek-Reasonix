@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 )
 
@@ -68,12 +69,37 @@ func (a *contextWindow) visibleByFullScan() []provider.Message {
 	a.sess.win.compactionMu.Lock()
 	st := a.sess.win.compactionState
 	a.sess.win.compactionMu.Unlock()
-	if projectionValid(st, msgs, a.currentPromptCacheKey(), snap.fingerprint) {
+	key := a.currentPromptCacheKey()
+	if projectionValid(st, msgs, key, snap.fingerprint) {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
 	}
+	a.announceWidenedView(st, key)
 	return msgs
+}
+
+// announceWidenedView says why a fold that was installed stopped being used: the
+// request that widens the view to the whole history is the one that carries the
+// reason, once per cause. A session that never had a fold has nothing to say.
+func (a *contextWindow) announceWidenedView(st sessionstore.CompactionState, key string) {
+	if len(st.Projection.Messages) == 0 {
+		return
+	}
+	drop := ProjectionDropHistory
+	if !projectionLineageOK(st, key) {
+		drop = ProjectionDropLineage
+	}
+	a.sess.win.compactionMu.Lock()
+	already := a.sess.win.checkpointState == string(drop)
+	a.sess.win.checkpointState = string(drop)
+	a.sess.win.compactionMu.Unlock()
+	if already {
+		return
+	}
+	if code, text, ok := FoldNotReusedNotice(drop); ok {
+		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: code, Text: text})
+	}
 }
 
 // ProjectionVersion is the installed fold's version. A caller comparing folds
@@ -264,6 +290,19 @@ const (
 	// ProjectionDropLineage: another model or workspace made it and the history does not match either.
 	ProjectionDropLineage ProjectionDrop = "dropped_lineage"
 )
+
+// FoldNotReusedNotice is what the person is told when a saved fold is not used
+// and the whole history goes to the model instead; both the session bind and a
+// later request say it in these words.
+func FoldNotReusedNotice(d ProjectionDrop) (code, text string, ok bool) {
+	switch d {
+	case ProjectionDropHistory:
+		return event.NoticeCodeFoldNotReusedHistory, "A saved compaction of this conversation was not reused: the history it summarised has changed since. The full history is sent instead.", true
+	case ProjectionDropLineage:
+		return event.NoticeCodeFoldNotReusedLineage, "A saved compaction of this conversation was made under another model or workspace and does not match its history. The full history is sent instead.", true
+	}
+	return "", "", false
+}
 
 // ProjectionDropped reports why the fold saved beside the bound session was
 // not reused, or ProjectionDropNone when there was none or it was.

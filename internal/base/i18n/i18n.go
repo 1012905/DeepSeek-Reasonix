@@ -726,6 +726,7 @@ type Messages struct {
 	UpgradeChecksumNotFoundFmt string // asset not listed in SHA256SUMS
 	UpgradeExtractFailed       string // "failed to extract binary: %v"
 	UpgradeApplying            string // "Replacing binary…"
+	UpgradePageLinked          string // "the page directory is a link; its page was not replaced"
 	UpgradeApplyFailed         string // "failed to apply update: %v"
 	UpgradeSuccessFmt          string // "Updated %s → %s"
 	UpgradeManagedFmt          string // package-manager-owned install: %s is the command to run

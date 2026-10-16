@@ -8,6 +8,7 @@ import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { ICON, NAV, SECTION_NAME } from "./prefsnav";
 import { Group, SCOPE_SAID } from "./Group";
+import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
 import { PhoneAccess } from "./PhoneAccess";
@@ -29,7 +30,6 @@ import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
-import { SubagentClaims } from "./SubagentClaims";
 import { AskTimeout } from "./AskTimeout";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
@@ -411,7 +411,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   <span className="cost">
                     {[
                       t(SCOPE_SAID[e.scope]),
-                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : "",
+                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : "",
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </button>
@@ -602,12 +602,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               >
                 <BrowserTools port={port} onChanged={onChanged} />
               </Group>
-              <Group id="subagent-claims"
-                title={t("子代理的写入范围")}
-                hint={t("后台子代理写文件时如何占用工作区。默认严格：没有声明 write_paths 的子代理占住整个工作区，其他写入要等它结束。修改会重建运行时，任务运行期间无法变更。")}
-              >
-                <SubagentClaims port={port} onChanged={onChanged} />
-              </Group>
+              <SessionCoordination port={port} onChanged={onChanged} />
             </>
           )}
 

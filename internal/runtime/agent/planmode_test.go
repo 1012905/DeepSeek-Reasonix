@@ -197,7 +197,7 @@ func TestPlanModeSafeWriterStillUsesWriterPermission(t *testing.T) {
 // asked the user to accept a command prefix as read-only; that path is gone,
 // and this pins what replaced it rather than that it is not called.
 func TestBashWaitsForApprovalThenReachesOrdinaryPermission(t *testing.T) {
-	const command = `{"command":"gh issue view 6482"}`
+	const command = `{"command":"gh issue create --title x"}`
 	reg := tool.NewRegistry()
 	reg.Add(fakeTool{name: "bash"})
 	gate := &recordingPermissionGate{allow: true}

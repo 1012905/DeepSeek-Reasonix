@@ -231,6 +231,18 @@ describe("screenshots", () => {
     expect(document.querySelector(".fbk-shots")).toBeNull();
   });
 
+  it("opens an attached screenshot at full size and keeps it attached", async () => {
+    setup();
+    await ready();
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, png("big.png"));
+    await userEvent.click(await screen.findByRole("button", { name: "查看图片 big.png" }));
+    const dialog = screen.getByRole("dialog", { name: "big.png" });
+    expect(dialog.querySelector("img")).toBeTruthy();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "big.png" })).toBeNull();
+    expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(1);
+  });
+
   it("stops at the image limit and past the upload size", async () => {
     setup({ limits: { bodyBytes: 8192, nameChars: 40, contactChars: 120, images: 2, imageBytes: 2 << 20, uploadBytes: 100, replyBytes: 4096 } });
     await ready();

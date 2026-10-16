@@ -41,6 +41,7 @@ type heldScope struct {
 	// turnNarration is the user's [agent] turn_narration. It adds output tokens
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
+	peers         bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -71,6 +72,7 @@ func holdUserScope(c *Config) heldScope {
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
+		peers:           c.Peers.Enabled,
 	}
 }
 
@@ -155,6 +157,12 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.AutoSubmit != h.autoSubmit {
 		c.ignoreProject("auto_submit", fmt.Sprintf("%t", c.AutoSubmit), ProjectUserOnly)
 		c.AutoSubmit = h.autoSubmit
+	}
+	// Messages between sessions put other sessions' text in front of this one's
+	// model, so enabling them is the user's alone.
+	if c.Peers.Enabled != h.peers {
+		c.ignoreProject("peers.enabled", fmt.Sprintf("%t", c.Peers.Enabled), ProjectUserOnly)
+		c.Peers.Enabled = h.peers
 	}
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.

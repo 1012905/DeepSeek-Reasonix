@@ -22,6 +22,7 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  "此检查点不包含文件快照": "This checkpoint contains no file snapshots",
   ...EN_SURFACES,
   "重命名聊天": "Rename chat",
   "保持简短且易于识别": "Keep it short and recognizable",
@@ -135,6 +136,12 @@ export const EN: Record<string, string> = {
   // ── 运行状态 ─────────────────────────────────────────────────────
   "空闲": "Idle",
   "运行中": "Running",
+  "只停止这一条调用": "Stop only this call",
+  "把结果带到末尾": "Show this result again at the end",
+  "带到末尾的结果": "Brought to the end",
+  "正在搜索对话内容…": "Searching conversation text…",
+  "对话内容暂时搜不了，稍后再试": "Conversation text cannot be searched right now; try again shortly",
+  "对话内容匹配": "Matches in conversation text",
   "声明推理档位": "Declare reasoning levels",
   "这个端点没有报告推理档位，中转站通常不转发这项能力。将打开该来源的编辑表单，可以选择思考参数或直接填写档位。": "This endpoint reported no reasoning levels; relays often do not forward them. Opens this source’s editor, where you can pick a thinking parameter or list the levels yourself.",
   "本轮已发送 / 已接收的 token": "Tokens sent and received this turn",
@@ -321,6 +328,7 @@ export const EN: Record<string, string> = {
 
   // ── 会话树 ───────────────────────────────────────────────────────
   "新会话": "New session",
+  "标签数已到上限 {n}，已把「{title}」从标签栏收起，对话仍在列表里。": "The open-session limit ({n}) was reached, so \"{title}\" was folded out of the tab bar. The conversation is still in the list.",
   "打开项目文件夹": "Open project folder",
   "新会话 {n}": "New session {n}",
   "从左栏选择，或在当前文件夹新建": "Pick one on the left, or start a new one in this folder",
@@ -1081,6 +1089,9 @@ export const EN: Record<string, string> = {
   "外部服务 {name} 提供的工具": "A tool provided by the external service {name}",
   "这次调用解析到的能力目录条目": "The capability catalogue entry this call resolved to",
   "在这段对话里查找": "Find in this conversation",
+  "显示对话": "Show conversation",
+  "显示运行分析": "Show run analysis",
+  "显示工作台": "Show workbench",
   "无结果": "No matches",
   "上一处": "Previous match",
   "下一处": "Next match",
@@ -1171,6 +1182,7 @@ export const EN: Record<string, string> = {
   // ── 回合中的通知（notices.ts 按 code 查表，扫描器看不到）──────
   "这一轮模型没有给出回答，正在让它重说一次": "The model gave no answer this round; asking it again",
   "模型直接给了答案却没动手，正在要求它先用工具": "The model answered without acting; asking it to use its tools first",
+  "分支保存的模型已不可用，本次改用其他已配置的模型；可以在模型设置中重新选择": "The model saved for this branch is unavailable, so another configured model is in use; choose a model again in settings",
   "同一个检查连着几轮都报同样的结果，是否继续由你定":
     "The same check has reported the same thing for several rounds; whether to keep at it is yours to call",
   "另一个会话正在写这个工作区，等它写完会自动继续":
@@ -1308,7 +1320,26 @@ export const EN: Record<string, string> = {
   "本轮": "This turn",
   "详情": "Details",
   "分离状态": "detached",
+  "新版本 {v} 已下载。重启后使用，不会自动重启。": "Version {v} is downloaded. Restart to use it; Studio never restarts by itself.",
+  "重启并更新": "Restart and update",
+  "有 {n} 个会话还在运行，等它们结束后再重启。": "{n} sessions are still running; restart after they finish.",
+  "仍在读取（会话很多时首次较慢）": "Still reading (the first read is slow with many sessions)",
+  "界面是不是偏小？可以在这里放大，之后也能在「外观」里调整。": "Is the interface too small? You can enlarge it here and change it later under Appearance.",
+  "界面已改为 {n}%。合适吗？": "The interface is now {n}%. Does that look right?",
+  "恢复 {n}%": "Restore {n}%",
+  "不用了": "No thanks",
+  "好": "OK",
+  "后台任务输出：{name}": "Background task output: {name}",
+  "查看输出：{cmd}": "View output: {cmd}",
+  "查看输出": "View output",
+  "停止此任务": "Stop this task",
+  "复制输出": "Copy output",
+  "这个任务已经结束，没有可显示的输出了。": "This task has ended; there is no output left to show.",
+  "只显示最后一部分（共 {total}）。": "Showing only the last part ({total} in all).",
+  "还没有输出": "No output yet",
   "当前 Git 分支：{branch}": "Current Git branch: {branch}",
+  "正在切换到 {branch}…": "Switching to {branch}…",
+  "这张图片在工作区之外，不会加载": "This picture is outside the workspace and is not loaded",
   "{n} 个变更": "{n} changes",
   "1 个文件已更改": "1 file changed",
   "{n} 个文件已更改": "{n} files changed",
@@ -1368,7 +1399,7 @@ export const EN: Record<string, string> = {
   "复制选中内容": "Copy selected text",
   "选中内容": "Selected text",
   "重新生成": "Regenerate",
-  "分支为新会话": "Branch into a new conversation",
+  "创建对话分支": "Create a conversation branch",
   "分支": "branch",
   "从最近回复分叉": "Branch from the latest reply",
   "还没有已完成的回复可以分叉": "There is no finished reply to branch from yet",

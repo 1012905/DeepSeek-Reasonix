@@ -138,8 +138,11 @@ export const NAV: [string, [Section, string][]][] = [
  *  restart         written and kept now; this process goes on without it and
  *                  the next launch starts with it. Saved is not the same fact
  *                  as in force, and the row says both.
+ *  on-open         written and kept now; the running session keeps what it was
+ *                  built with, and so does a rebuild, so the sessions opened
+ *                  afterwards are the ones that start with it.
  *  none            nothing here changes anything: the block only reports. */
-export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "none";
+export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "on-open" | "none";
 
 /** Who owns what a block governs — the other half of the contract, and the one
  *  the screen could not answer. "When does it take effect" was declared here
@@ -222,6 +225,10 @@ export const SETTINGS: SettingEntry[] = [
   { section: "tools", anchor: "shell", title: "命令执行程序", scope: "machine", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
   // The tools are bound while a runtime is assembled, and the save rebuilds this
   // one. The shared [browser] enabled key belongs to the 1.x command line.
+  // The lease is built with the session and a rebuild adopts the one it holds, so
+  // the save reaches only sessions opened afterwards; the handler rebuilds nothing.
+  { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "none", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
+  { section: "tools", anchor: "write-lease", title: "多个会话同时写一个项目", scope: "machine", apply: "on-open", keywords: ["lease", "写锁", "并行", "多会话", "乐观", "optimistic", "write_lease", "等待"] },
   { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
   { section: "tools", anchor: "browser-tools", title: "内置浏览器", scope: "machine", apply: "runtime-rebuild", keywords: ["browser", "网页", "chrome", "浏览器工具"] },
 
@@ -248,7 +255,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "account", anchor: "backup-file", title: "导出与导入配置", scope: "machine", apply: "immediate", keywords: ["备份", "导出", "导入", "换机", "迁移", "文件"] },
   { section: "account", anchor: "backup", title: "云备份", scope: "account", apply: "immediate", keywords: ["备份", "恢复", "换机", "同步", "导出"] },
   { section: "versions", anchor: "versions", title: "版本", scope: "machine", apply: "immediate", keywords: ["更新", "升级"] },
-  { section: "versions", anchor: "update-mode", title: "更新方式", scope: "machine", apply: "immediate", keywords: ["自动更新", "检查更新", "更新提醒", "后台", "update", "auto update", "notify"] },
+  { section: "versions", anchor: "update-mode", title: "更新方式", scope: "machine", apply: "immediate", keywords: ["自动更新", "检查更新", "更新提醒", "后台", "update", "auto update", "notify", "自动下载", "download"] },
   { section: "versions", anchor: "logs", title: "日志与异常退出记录", scope: "machine", apply: "none", keywords: ["日志", "崩溃", "闪退", "异常退出", "log", "logs", "crash", "路径"] },
   { section: "versions", anchor: "community", title: "社区与贡献者", scope: "machine", apply: "none", keywords: ["社区", "交流群", "QQ", "加群", "二维码", "discord", "贡献者", "contributors", "community"] },
   { section: "versions", anchor: "sponsor", title: "赞助", scope: "machine", apply: "none", keywords: ["捐助", "支付宝", "微信支付", "收款码", "paypal", "donate", "sponsor", "support", "alipay", "wechat"] },
@@ -262,6 +269,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "appearance", anchor: "graphics", title: "图形渲染", scope: "machine", apply: "restart", keywords: ["硬件加速", "显卡", "gpu", "软件渲染", "占用", "卡顿"] },
   { section: "appearance", anchor: "navrail", title: "图标栏", scope: "machine", apply: "immediate", keywords: ["侧边栏", "导航", "图标", "sidebar", "nav"] },
   { section: "appearance", anchor: "session-quick-actions", title: "会话行快捷按钮", scope: "machine", apply: "immediate", keywords: ["会话", "归档", "删除", "快捷", "按钮", "hover", "archive", "delete", "session", "row", "sidebar"] },
+  { section: "appearance", anchor: "open-session-limit", title: "同时保留的会话标签数", scope: "machine", apply: "immediate", keywords: ["标签", "窗格", "收起", "保留", "tabs", "panes", "warm", "内存", "memory"] },
   { section: "appearance", anchor: "legacy-sessions", title: "1.x 旧会话", scope: "machine", apply: "immediate", keywords: ["1.x", "旧会话", "迁移", "隐藏", "legacy", "sessions", "sidebar"] },
   { section: "appearance", anchor: "live-grace", title: "进行中列表保留已完成会话", scope: "machine", apply: "immediate", keywords: ["进行中", "完成", "保留", "过滤", "running", "grace", "sidebar"] },
   { section: "appearance", anchor: "send-shortcut", title: "发送快捷键", scope: "machine", apply: "immediate", keywords: ["发送", "回车", "换行", "enter", "ctrl", "cmd"] },

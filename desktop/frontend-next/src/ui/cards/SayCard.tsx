@@ -73,7 +73,7 @@ export interface ReplyActions {
   hasLaterTurns: (id: string) => boolean;
   onRegenerate: (id: string) => void;
   canBranch: (id: string) => boolean;
-  onBranch: (id: string) => void;
+  onBranch: (id: string) => void | Promise<void>;
   model?: string;
   onConfigureModel?: () => void;
   onRunDetail?: () => void;
@@ -97,7 +97,8 @@ function download(text: string) {
   URL.revokeObjectURL(url);
 }
 
-export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; reply?: ReplyActions; quiet?: boolean }) {
+export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; settled?: boolean; reply?: ReplyActions; quiet?: boolean }) {
+  const [branching, setBranching] = useState(false);
   const start = useStartsOpen("thinking", !item.done && !item.text);
   const [touched, setOpen] = useState<boolean | null>(null);
   const open = touched ?? start;
@@ -179,8 +180,9 @@ export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Ite
           )}
           {afterAnswer}
           {/* Only once the answer is whole: copying half a stream hands over
-              something that was never said. */}
-          {item.done && item.text.trim() && (
+              something that was never said, and a row of actions under work
+              that is still running reads as the turn being over. */}
+          {item.done && settled && item.text.trim() && (
             <div className="acts">
               <CopyButton text={item.text} iconOnly />
               {reply && (
@@ -189,8 +191,8 @@ export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Ite
                 </button>
               )}
               {reply?.canBranch(item.id) && (
-                <button type="button" data-action="reply.branch" title={t("分支为新会话")} aria-label={t("分支为新会话")} onClick={() => reply.onBranch(item.id)}>
-                  <StudioIcon name="branch" />
+                <button type="button" data-action="reply.branch" title={t("创建对话分支")} aria-label={t("创建对话分支")} disabled={branching} onClick={() => { setBranching(true); void Promise.resolve(reply.onBranch(item.id)).finally(() => setBranching(false)); }}>
+                  <StudioIcon name={branching ? "clock" : "fork"} />
                 </button>
               )}
               {reply?.canRegenerate(item.id) && (

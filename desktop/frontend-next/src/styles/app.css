@@ -64,7 +64,7 @@
   :root[data-bg] .app { background: transparent }
 
   .rail, .side { background: var(--page) }
-  .panes, .tabs { background: var(--surface) }
+  .panes { background: var(--surface) }
 
   :root[data-bg] .main, :root[data-bg] .panes { background: transparent }
 
@@ -74,16 +74,6 @@
     text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 88%, transparent),
                  0 0 6px color-mix(in srgb, var(--page) 70%, transparent);
   }
-  :root[data-bg] .tabs {
-    background: color-mix(in srgb, var(--surface) 62%, transparent);
-    border-bottom-color: transparent;
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 88%, transparent);
-  }
-  :root[data-bg] .tabs::after {
-    content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 18px; z-index: 2; pointer-events: none;
-    background: linear-gradient(color-mix(in srgb, var(--surface) 62%, transparent), transparent);
-  }
-
   :root[data-bg] .flow:not([data-empty]) {
     text-shadow: var(--flow-text-shadow, 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
                  0 0 7px color-mix(in srgb, var(--page) 72%, transparent));
@@ -693,12 +683,6 @@
 
   .main { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--surface) }
 
-  .tabs {
-    position: relative;
-    display: flex; align-items: center; flex-wrap: wrap; gap: 4px 2px; flex: none;
-    border-bottom: 1px solid var(--hair);
-    padding: 8px 0; padding-inline: var(--pane-gutter);
-  }
   .vtabs { display: flex; align-items: center; gap: 2px; min-width: 0 }
 
   .tabmark {
@@ -718,8 +702,6 @@
 
   .tab .n { font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--faint); margin-left: 5px; font-variant-numeric: tabular-nums }
 
-  .tabs > .picker { margin-left: auto }
-
   .scroll[data-pane="browser"] { display: flex; flex-direction: column; overflow: hidden }
   .scroll[data-pane="browser"][hidden] { display: none }
 
@@ -733,9 +715,8 @@
      and the composer's; a child of the body would stop at the composer's edge. */
   .pane:has(> .pbody[data-dock]) {
     display: grid;
-    grid-template: "nav side" auto "find side" auto "body side" minmax(0, 1fr) "compose side" auto / minmax(var(--dock-left-min), 1fr) minmax(0, var(--dock-w));
+    grid-template: "find side" auto "body side" minmax(0, 1fr) "compose side" auto / minmax(var(--dock-left-min), 1fr) minmax(0, var(--dock-w));
   }
-  .pane:has(> .pbody[data-dock]) > .tabs { grid-area: nav }
   .pane:has(> .pbody[data-dock]) > .findhost { grid-area: find }
   .pane:has(> .pbody[data-dock]) > .pbody { grid-area: body }
   .pane:has(> .pbody[data-dock]) > .compose { grid-area: compose }
@@ -1446,6 +1427,8 @@
     border-radius: var(--r-md); overflow: hidden; background: var(--raised);
     box-shadow: 0 2px 10px -4px color-mix(in srgb, var(--accent) 26%, transparent);
   }
+
+  .ask > .err { padding: 10px 14px; color: var(--err-ink); font: var(--w-med) var(--fs-ui)/1.5 var(--ui); border-bottom: 1px solid var(--hair) }
 
   .ask-tabs {
     display: flex; gap: 2px; padding: 8px 10px 0;
@@ -3130,7 +3113,7 @@
   .unit-field { display: flex; min-width: 0; align-items: stretch; border: 1px solid var(--border); border-radius: var(--r-xs); background: var(--raised); overflow: hidden }
   .unit-field:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
   .unit-field:has(input[aria-invalid="true"]) { border-color: var(--err) }
-  .unit-field input { min-width: 0; width: 100%; border: 0 !important; outline: 0 !important; background: transparent !important }
+  .unit-field input { min-width: 0; width: 100%; border: 0 !important; outline: 0 !important; background: transparent !important; color: var(--text) }
   .unit-field > i { flex: none; display: flex; align-items: center; padding: 0 9px; border-left: 1px solid var(--hair); color: var(--faint); font: var(--w-reg) var(--fs-micro) var(--mono); font-style: normal }
   .addp-footer { justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--hair) }
 
@@ -3936,6 +3919,7 @@
   .md a:hover { color: var(--text) }
   .md a code, .out .txt a code { color: inherit }
   .md img { max-width: 100%; border-radius: var(--r-sm) }
+  .md .md-outside-image { display: inline-block; padding: 1px 8px; border: 1px dashed var(--hair); border-radius: var(--r-sm); color: var(--muted); cursor: help }
 
   .md > :last-child::after { content: "" }
   .md .caret { margin-left: 2px; vertical-align: -2px }

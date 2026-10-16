@@ -26,7 +26,8 @@ function readyHub() {
 describe("the workbench has one way in", () => {
   it("has no separate browser button in the title bar", async () => {
     render(<App hub={readyHub().hub} />);
-    await screen.findByRole("tab", { name: /工作台/ });
+    await screen.findByRole("button", { name: "工作台" });
+    expect(document.querySelectorAll('[data-action="pane.view"][data-value="browser"]')).toHaveLength(1);
     expect(document.querySelector(".chrome .browser-action")).toBeNull();
     expect(document.querySelector('[data-action="browser.open"]')).toBeNull();
   });
@@ -35,7 +36,7 @@ describe("the workbench has one way in", () => {
     const user = userEvent.setup();
     const { hub, opened } = readyHub();
     render(<App hub={hub} />);
-    await user.click(await screen.findByRole("tab", { name: /工作台/ }));
+    await user.click(await screen.findByRole("button", { name: "工作台" }));
 
     await waitFor(() => expect(document.querySelector(".workbench-launcher")).not.toBeNull());
     expect(opened).not.toHaveBeenCalled();

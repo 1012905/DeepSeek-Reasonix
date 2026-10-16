@@ -43,7 +43,6 @@ const probe = (page) =>
         }
       return hits;
     };
-    const tabbar = document.querySelector(".tabs");
     const bar = document.querySelector(".chrome");
     const row = document.querySelector(".compose .row");
     const tools = document.querySelector(".compose .turntools");
@@ -54,8 +53,9 @@ const probe = (page) =>
     return {
       bar: { overlaps: overlaps(bar).concat(overlaps(bar.querySelector(".r"))), outside: outside(bar).concat(outside(bar.querySelector(".r"))) },
       row: { overlaps: overlaps(row), outside: outside(row) },
-      tabs: flatOverlaps([...tabbar.querySelectorAll(".vtabs > .tab, .plan-peek, .sidetoggle")]),
-      tabsOutside: [...tabbar.querySelectorAll(".vtabs > .tab, .plan-peek, .sidetoggle")].filter((el) => live(el).bottom > tabbar.getBoundingClientRect().bottom + 1).map(name),
+      viewSwitch: [...bar.querySelectorAll(".view-action")].map((el) => el.getAttribute("data-value")),
+      sideAsk: (() => { const el = tools.querySelector('[data-action="side.toggle"]'); const r = el && live(el); return r ? { w: r.width, h: r.height } : null; })(),
+      toolsOverlaps: flatOverlaps([...tools.children]),
       toolsOverflow: [...tools.children].filter((el) => live(el) && live(el).right > tools.getBoundingClientRect().right + 1).map(name),
       titleShown: t.width,
       titleOutsideCrumb: t.width > 0 && (t.left < clip.left - 1 || t.right > clip.right + 1),
@@ -64,7 +64,7 @@ const probe = (page) =>
     };
   });
 
-const CONTROLS = [".phone-action", ".find-action", ".theme-toggle", ".top-action"];
+const CONTROLS = [".phone-action", ".find-action", ".theme-toggle", ".top-action", ".view-action"];
 
 // Opens the fold when there is one, then presses nothing: asks whether each control is on screen with nothing over it.
 async function reachable(page) {
@@ -142,9 +142,10 @@ for (const scheme of ["light", "dark"]) {
     const m = await probe(page);
     check(`${tag}: title bar controls do not overlap`, m.bar.overlaps.length === 0, m.bar.overlaps.join(", "));
     check(`${tag}: title bar stays inside the window`, m.bar.outside.length === 0, m.bar.outside.join(", "));
-    check(`${tag}: view tabs and their neighbours do not overlap`, m.tabs.length === 0, m.tabs.join(", "));
-    check(`${tag}: the tab bar grows to hold a wrapped row`, m.tabsOutside.length === 0, m.tabsOutside.join(", "));
+    check(`${tag}: the workbench switch is on the bar`, m.viewSwitch.includes("browser"), JSON.stringify(m.viewSwitch));
     check(`${tag}: composer row does not overlap`, m.row.overlaps.length === 0, m.row.overlaps.join(", "));
+    check(`${tag}: the side question icon is drawn in the toolbar`, !!m.sideAsk && m.sideAsk.w > 0 && m.sideAsk.h > 0, JSON.stringify(m.sideAsk));
+    check(`${tag}: composer toolbar controls do not overlap`, m.toolsOverlaps.length === 0, m.toolsOverlaps.join(", "));
     check(`${tag}: composer toolbar controls stay in the toolbar`, m.toolsOverflow.length === 0, m.toolsOverflow.join(", "));
     check(`${tag}: the title keeps its 4em floor inside its own box`, m.crumbWidth >= 48 && !m.titleOutsideCrumb, `crumb ${Math.round(m.crumbWidth)}px`);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/${process.env.NARROW_TAG ?? "shot"}-${scheme}-${width}-z${zoom}.png` });

@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import type { Item, Waiting } from "../state/session";
 import type { ExtensionSurface } from "../port/wire";
 import type { AgentPort, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../port/port";
-import { SymbolMark } from "./RMark";
+import { Hero } from "./Hero";
 import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
 import { Boundary } from "./Boundary";
@@ -24,6 +24,7 @@ import { RememberCard } from "./cards/RememberCard";
 import { ExtensionCard } from "./cards/ExtensionCard";
 import { toolChangedFile, toolFailed } from "./cards/outcome";
 import { drawn, foldStats, repeatedSpeakers, sameMembers, transcriptRows, type Shown } from "./turnrows";
+import { BroughtResults } from "./BroughtResults";
 import { ReceiptSlot } from "./ReceiptSlot";
 import { WorkFold } from "./WorkFold";
 import { opensTurn, useBlocks } from "./blocks";
@@ -37,7 +38,7 @@ import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion">>;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion" | "stopToolCall">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -84,9 +85,12 @@ interface Props {
    *  may not run at all. */
   entering: string[];
   onEntered: (ids: string[]) => void;
+  /** Calls the reader asked to see again at the end, in the order asked. Absent
+   *  where no live pane stands behind the transcript: no card offers the action. */
+  brought?: { ids: string[]; bring: (id: string) => void; dismiss: (id: string) => void };
 }
 
-export function Transcript({ items, port, entering, onEntered, revision, waiting, scroll, hidden, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
+export function Transcript({ items, port, entering, onEntered, brought, revision, waiting, scroll, hidden, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
   // A block the selection touches must not leave the DOM. Unmounting the node a
   // selection is anchored to makes the browser remap that selection onto
   // whatever is still mounted — which reads as "I selected up there and the
@@ -447,7 +451,9 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
     return kept.current;
   }, [items]);
 
-  const rowProps = { owed, echoes, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
+  const bring = brought?.bring;
+  const onBring = useMemo(() => (bring ? (id: string) => { bring(id); resume(); } : undefined), [bring, resume]);
+  const rowProps = { onBring, owed, echoes, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
 
   // What you said, and where it sits. Derived from the same blocks the
   // transcript renders, so a mark always knows which block holds it — that is
@@ -502,6 +508,7 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
           />
         ))}
         {live && <Row it={live} {...rowProps} cp={checkpoints.get(live.id)} />}
+        {brought && <BroughtResults items={items} ids={brought.ids} onDismiss={brought.dismiss} takeovers={takeovers} onExtInvoke={onExtInvoke} onPrepareFileRevert={onPrepareFileRevert} onCommitFileRevert={onCommitFileRevert} />}
         {waiting.ttftSince && <Await since={waiting.ttftSince} retry={waiting.retry} />}
         <div ref={end} className="flow-end" aria-hidden="true" />
       </div>
@@ -572,6 +579,7 @@ const Block = memo(function Block({
           it={row.item}
           {...rowProps}
           cp={checkpoints.get(row.item.id)}
+          settled={!row.activity?.some((item) => item.t === "tool" && item.running)}
           afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
         />
       </Fragment>
@@ -592,6 +600,7 @@ const Block = memo(function Block({
 });
 
 interface RowHandlers {
+  onBring?: (id: string) => void;
   owed: Set<string>;
   echoes: Set<string>;
   port: Props["port"];
@@ -668,6 +677,7 @@ const ActivityGroup = memo(function ActivityGroup({
 const Row = memo(function Row({
   it,
   port,
+  onBring,
   owed,
   echoes,
   onApprove,
@@ -686,8 +696,9 @@ const Row = memo(function Row({
   onPrepareFileRevert,
   onCommitFileRevert,
   afterAnswer,
+  settled,
   activity = false,
-}: RowHandlers & { it: Item; cp?: Checkpoint; afterAnswer?: ReactNode; activity?: boolean }) {
+}: RowHandlers & { it: Item; cp?: Checkpoint; afterAnswer?: ReactNode; settled?: boolean; activity?: boolean }) {
   // Read once, for the life of this element. The projection spends the debt as
   // soon as this is drawn, and a card whose answer is still streaming would
   // otherwise lose the attribute mid-animation and have it cut short. A block
@@ -715,7 +726,7 @@ const Row = memo(function Row({
       // model. Gating the card on text meant all of it stayed invisible and
       // then landed at once. An empty card is still not a message, so a turn
       // that produced neither draws nothing.
-      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} reply={reply} quiet={echoes.has(it.id)} /> : null;
+      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} settled={settled} reply={reply} quiet={echoes.has(it.id)} /> : null;
     case "tool":
       // The ask tool also raises ask_request, which carries the id /answer
       // needs. Drawing the tool call too put two copies of the same question on
@@ -733,6 +744,8 @@ const Row = memo(function Row({
             onExtInvoke={onExtInvoke}
             onPrepareFileRevert={onPrepareFileRevert}
             onCommitFileRevert={onCommitFileRevert}
+            onBring={it.tool.id && onBring ? () => onBring(it.tool.id!) : undefined}
+            onStop={port?.stopToolCall && it.tool.id ? () => void port.stopToolCall!(it.tool.id!).catch(() => {}) : undefined}
           />
         );
         const chart = activity ? null : chartOfTool(it.tool);
@@ -768,33 +781,3 @@ const Row = memo(function Row({
     </div>
   );
 });
-
-interface HeroProps {
-  needsProject: boolean;
-  onOpen: () => void;
-  onKeep: () => void;
-}
-
-function Hero({ needsProject, onOpen, onKeep }: HeroProps) {
-  return (
-    <div className="hero">
-      <SymbolMark />
-      <div className="t">{needsProject ? t("先打开一个项目") : t("描述任务，其余交给 Reasonix")}</div>
-      <div className="s">
-        {needsProject
-          ? t("读取代码、运行测试与修改文件均只在你选定的文件夹内进行。")
-          : t("可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。")}
-      </div>
-      {needsProject ? (
-        <div className="herogo">
-          <button className="pick" data-action="workspace.add" onClick={onOpen}>
-            {t("打开项目…")}
-          </button>
-          <button className="stay" onClick={onKeep}>
-            {t("使用当前位置")}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}

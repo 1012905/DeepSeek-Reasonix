@@ -66,7 +66,7 @@ func renderDesktopSection(b *strings.Builder, c *Config) {
 	// outlive the install that set it, or the next launch updates the user
 	// back off the build they chose.
 	if mode := c.DesktopUpdateMode(); mode != UpdateModeManual {
-		fmt.Fprintf(b, "update_mode = %q   # desktop: manual (default) | notify reads the version catalog in the background and tells you when a release is newer; installs nothing; user file only\n", mode)
+		fmt.Fprintf(b, "update_mode = %q   # desktop: manual (default) | notify tells you when a release is newer | download also leaves it downloaded and verified; never installs or restarts; user file only\n", mode)
 	}
 	if pinned := c.DesktopPinnedVersion(); pinned != "" {
 		fmt.Fprintf(b, "pinned_version = %q   # desktop: hold this machine on a release; empty follows the catalog\n", pinned)

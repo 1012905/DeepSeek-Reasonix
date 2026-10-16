@@ -193,8 +193,11 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	used, window := s.ctl().ContextSnapshot()
 	hit, miss := s.ctl().SessionCache()
 	sess := map[string]any{
-		"label":            s.ctl().Label(),
-		"running":          s.ctl().Running(),
+		"label": s.ctl().Label(),
+		// running is what a window shows; busy is what refuses a new turn, which
+		// also holds through the delivery of the previous turn's TurnDone.
+		"running":          s.ctl().TurnInFlight(),
+		"busy":             s.ctl().Running(),
 		"plan":             s.ctl().PlanMode(),
 		"autoApproveTools": s.ctl().AutoApproveTools(),
 		"bypass":           s.ctl().AutoApproveTools(),

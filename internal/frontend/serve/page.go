@@ -30,8 +30,10 @@ func FindPage(dir string) (fs.FS, error) {
 	if err != nil {
 		return nil, err
 	}
+	if page := pageBeside(exe); page != nil {
+		return page, nil
+	}
 	for _, candidate := range []string{
-		filepath.Join(filepath.Dir(exe), "frontend-next", "dist"),
 		filepath.Join("..", "frontend-next", "dist"),
 		filepath.Join("desktop", "frontend-next", "dist"),
 	} {
@@ -40,6 +42,22 @@ func FindPage(dir string) (fs.FS, error) {
 		}
 	}
 	return nil, nil
+}
+
+// pageBeside looks next to the executable as invoked, then next to where a link
+// to it points: a package manager that links the binary onto the PATH leaves the
+// page beside the real file.
+func pageBeside(exe string) fs.FS {
+	dirs := []string{filepath.Dir(exe)}
+	if real, err := filepath.EvalSymlinks(exe); err == nil && filepath.Dir(real) != dirs[0] {
+		dirs = append(dirs, filepath.Dir(real))
+	}
+	for _, dir := range dirs {
+		if candidate := filepath.Join(dir, "frontend-next", "dist"); hasIndex(candidate) {
+			return os.DirFS(candidate)
+		}
+	}
+	return nil
 }
 
 func hasIndex(dir string) bool {

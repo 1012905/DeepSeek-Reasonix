@@ -33,6 +33,9 @@ export const EN_KERNEL: Record<string, string> = {
   "该会话还没有可用于命名的用户消息": "This chat has no user message to name it from",
   "未配置可用于自动命名的模型，请先配置模型": "Configure a model before using automatic naming",
   "自动命名失败，原标题未更改，请重试": "Automatic naming failed. The original title is unchanged. Please try again",
+  "自动命名超时：标题模型没有及时回答，原标题未更改，请稍后重试": "Automatic naming timed out: the title model did not answer in time. The original title is unchanged. Please try again later",
+  "自动命名失败：标题模型没有返回任何文字，原标题未更改": "Automatic naming failed: the title model returned no text. The original title is unchanged",
+  "自动命名失败：标题模型的接口拒绝了请求（HTTP {status}）{detail}": "Automatic naming failed: the title model's endpoint refused the request (HTTP {status}) {detail}",
   "会话标题保存失败，请重试": "The session title could not be saved. Please try again",
 
   "参数不符合该工具的约定，本次调用没有执行；请按工具说明补全或更正参数后重试": "The arguments break this tool's contract, so the call did not run; complete or correct them per the tool description and retry",
@@ -74,6 +77,10 @@ export const EN_KERNEL: Record<string, string> = {
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
   "这个后台任务已经不在运行了": "That background job is no longer running",
+  "这条调用已经结束了": "This call has already finished",
+  "你停止了这条调用，它在外部已经做了什么无法确定": "You stopped this call; what it had already done outside the workspace is unknown",
+  "请输入要搜索的内容": "Enter something to search for",
+  "对话内容索引暂时无法回答，稍后再试": "The conversation index cannot answer right now; try again shortly",
   "已经请求停止这个后台任务，它的进程还没有退出，仍在等待": "A stop was already requested for this background job; its process has not exited yet, so it is still shutting down",
   "该条当前状态不允许此操作": "That entry's current state does not allow this",
   "待送达已暂停，请先恢复派发再进行操作": "The pending queue is on hold - resume it first",
@@ -85,7 +92,7 @@ export const EN_KERNEL: Record<string, string> = {
   "该待送达由更高版本写入，当前版本只能读取": "This queue was written by a newer version and is read-only here",
   "该提交标识已被使用，且当时的内容不同": "That submission key was already used, with different content",
   // 配置文件本身坏了，以及每一个写设置的面板被它挡住时
-  "配置文件无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复": "The config file does not parse, so nothing was saved. Open Settings to see where it is broken and repair it",
+  "配置文件 {path} 无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复": "The config file {path} does not parse, so nothing was saved. Open Settings to see where it is broken and repair it",
   "这台服务器未开放配置编辑": "This server does not allow editing its config",
   "该文件需手动修改：{detail}": "This file needs an edit by hand: {detail}",
   "设置已写入，但运行时未能按新设置重建：{detail}": "The settings were written, but the runtime could not be rebuilt on them: {detail}",
@@ -95,6 +102,8 @@ export const EN_KERNEL: Record<string, string> = {
   "内置浏览器设置未能保存：{detail}": "The built-in browser setting was not saved: {detail}",
   "本次请求未说明开关状态，未做任何修改": "The request did not say on or off, so nothing changed",
   "这台服务器未开放子代理写入范围设置": "This server does not open the sub-agent write scope setting",
+  "这台服务器未开放多会话写入设置": "This server does not open the multi-session write setting",
+  "多会话写入设置未能保存：{detail}": "The multi-session write setting was not saved: {detail}",
   "子代理写入范围设置未能保存：{detail}": "The sub-agent write scope setting was not saved: {detail}",
   "本次请求未说明选择，未做任何修改": "The request did not say which, so nothing changed",
   "这个路径正被另一个并行的子代理或写入占用。本次写入未执行；请换一个路径，或等对方结束后再写": "This path is in use by another parallel sub-agent or write. This write did not run; choose another path, or wait until it finishes",
@@ -292,6 +301,18 @@ export const EN_KERNEL: Record<string, string> = {
   "这个辅助提问已经关闭，请重新打开": "That side question is closed; open it again",
   "上一个问题还在回答，请稍候再问": "The previous question is still being answered; wait a moment",
   "同时打开的辅助提问太多，请先关闭几个": "Too many side questions are open; close some first",
+  "会话间消息未开启": "Messages between sessions are not turned on",
+  "这个客户端不能收发会话间消息": "This client cannot send or decide messages between sessions",
+  "本机没有叫这个名字的会话": "No session on this machine has that name",
+  "有多个会话叫这个名字，请改用「项目/会话名」": "More than one session has that name; use project/session",
+  "不能给自己发消息": "A session cannot message itself",
+  "对方不接收消息": "That session does not accept messages",
+  "发得太快了，请稍后再发": "Sending too fast; try again shortly",
+  "请先写下要发的内容": "Write the message first",
+  "这条消息太长": "That message is too long",
+  "这条消息已经处理过了": "That message was already decided",
+  "会话间消息没能完成：{detail}": "The message between sessions did not go through: {detail}",
+  "地址换了域名，已保存的密钥不会发过去；请填入这个地址对应的密钥": "The address moved to another origin, so the saved key is not sent there; enter the key for this address",
   "请先写下要问的内容": "Write the question first",
   "辅助提问没能完成，请重试": "The side question could not be completed; try again",
   "尚未填写服务地址": "No endpoint address yet",
@@ -457,6 +478,7 @@ export const EN_KERNEL: Record<string, string> = {
   "找不到该文件，它可能已被移动或删除": "The file was not found; it may have been moved or deleted",
   "文件操作失败，请重试": "The file operation failed; try again",
   "该路径不在当前工作区内": "That path is outside the current workspace",
+  "这个文件夹没有授权给当前工作区": "That folder has not been granted to this workspace",
   "写入目标不在工作区可写范围内。这是文件工具的写入范围，不是操作系统沙箱；要允许写入，请在 设置 → 沙箱 → 额外可写目录 中添加目标文件夹": "The target is outside the workspace write scope. This is the file tools' write scope, not an OS sandbox; to allow the write, add the target folder under Settings → Sandbox → Also writable",
   "无法读取工作区文件列表": "The workspace file list could not be read",
   "该文件不是可编辑文本或超过大小限制": "The file is not editable text or exceeds the size limit",
@@ -475,4 +497,34 @@ export const EN_KERNEL: Record<string, string> = {
   "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹": "A home directory or drive root cannot be trusted as a whole - open a specific project folder",
   "未能记下对此文件夹的信任决定：{detail}": "The trust decision for this folder was not saved: {detail}",
   "该数值超出允许范围，未做任何修改：{detail}": "That value is out of range; nothing was changed: {detail}",
+  "这个项目自带的钩子等程序要你批准后才会运行":
+    "This project ships hooks or other programs that run only after you approve them",
+  "这个项目的程序在批准后被改动过，本次没有运行，需要重新批准":
+    "A program in this project changed after you approved it; it did not run this time and needs approval again",
+  "这个项目声明的一个 MCP 服务要你批准后才会运行；详情里是它要启动的命令":
+    "This project declares an MCP server that runs only after you approve it; the detail shows the command it would start",
+  "一个已启用的项目 MCP 服务要启动的内容变了，本次没有运行，需要查看命令后重新启用":
+    "What an enabled project MCP server would start has changed; it did not run this time - review the command and enable it again",
+  "有一个钩子无法被评估（匹配串无效、无法启动或载荷无法序列化），为安全起见已拦截这次操作；到钩子设置里修复或移除该钩子":
+    "A hook could not be evaluated (invalid matcher, could not start, or payload could not be serialized), so this action was blocked to be safe; fix or remove the hook in the hook settings",
+  "一条外部内容看起来在向智能体下指令，已提醒它只当资料看待":
+    "Some external content looks like it is giving the agent instructions; the agent was told to treat it as data only",
+  "配置里保存的默认模型已不在已配置的供应商中，本次改用第一个可用的模型；在设置里重新选择默认模型即可替换，配置文件未被改动":
+    "The default model saved in your configuration is no longer among the configured providers, so the first available model is used this time; pick a default model again in Settings to replace it - the configuration file was not changed",
+  "搜索模型的格式应为 服务/模型，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The search model must be written as service/model, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型所在的连接已被移出，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The connection of the chosen search model has been removed, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型已不在配置里，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The chosen search model is no longer in the configuration, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型的协议不支持原生搜索，或已关闭搜索，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The chosen search model's protocol does not support native search, or search was turned off, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "所选搜索模型所在的连接没有凭据，搜索已关闭；到模型偏好里重新选择，或恢复自动":
+    "The connection of the chosen search model has no credentials, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "配置里的默认审批档位本版本不认识，已按每次询问处理；在界面里选一个档位即可替换":
+    "The default approval level in your configuration is not recognized by this version and is treated as ask every time; pick a level in the interface to replace it",
+  "旧版记忆文件没能先备份，所以没有迁移，保持原样；详情里有具体原因":
+    "The old memory file could not be backed up first, so it was not migrated and was left as it is; the detail gives the reason",
+  "会话、工作区或运行时正在切换，这条消息没能立刻发出；它已排入队列，切换结束后会自动发送，不需要重发":
+    "The session, workspace or runtime is switching, so this message could not be sent right away; it is queued and will be sent automatically when the switch ends - no need to send it again",
 };

@@ -2,6 +2,7 @@ package serve
 
 import (
 	"io"
+	"io/fs"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -124,5 +125,76 @@ func TestThePagesFilesKeepTheirTypeWhateverTheMachineRegistered(t *testing.T) {
 		if got := resp.Header.Get("Content-Type"); got != want {
 			t.Errorf("%s is served as %q, want %q", path, got, want)
 		}
+	}
+}
+
+// A package manager that puts a link on the PATH leaves the page beside the
+// real executable, not beside the link. Homebrew's cask does exactly that.
+func TestPageIsFoundBesideTheRealExecutableOfALink(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "Caskroom", "reasonix", "2.0.0")
+	dist := filepath.Join(real, "frontend-next", "dist")
+	if err := os.MkdirAll(dist, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("<title>studio</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(real, "reasonix")
+	if err := os.WriteFile(exe, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(bin, "reasonix")
+	if err := os.Symlink(exe, link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+
+	page := pageBeside(link)
+	if page == nil {
+		t.Fatal("the page beside the real executable was not found through the link")
+	}
+	if _, err := fs.Stat(page, "index.html"); err != nil {
+		t.Errorf("the page found has no index.html: %v", err)
+	}
+}
+
+// A page beside the link itself still wins over one beside its target, so an
+// install that never used a link resolves as it always did.
+func TestPageBesideTheLinkComesFirst(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"here", "there"} {
+		dist := filepath.Join(root, d, "frontend-next", "dist")
+		if err := os.MkdirAll(dist, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte(d), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := filepath.Join(root, "there", "reasonix")
+	if err := os.WriteFile(target, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "here", "reasonix")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	page := pageBeside(link)
+	if page == nil {
+		t.Fatal("no page found")
+	}
+	got, err := fs.ReadFile(page, "index.html")
+	if err != nil || string(got) != "here" {
+		t.Errorf("found %q (%v), want the page beside the link", got, err)
+	}
+}
+
+func TestNoPageBesideAnExecutableIsNil(t *testing.T) {
+	if page := pageBeside(filepath.Join(t.TempDir(), "reasonix")); page != nil {
+		t.Errorf("found a page where none exists")
 	}
 }

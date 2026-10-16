@@ -53,6 +53,8 @@ type Config struct {
 	// AutoSubmit commits a multi-question ask once its last question is answered,
 	// instead of showing the Submit tab. User/global only; a repo cannot set it.
 	AutoSubmit bool `toml:"auto_submit"`
+	// Peers governs messages between sessions; see PeersConfig.
+	Peers PeersConfig `toml:"peers"`
 	// Storage relocates the movable roots, keyed by RootID. User/global only.
 	Storage map[string]string `toml:"storage"`
 
@@ -1267,25 +1269,6 @@ func (c *Config) MCPStartupTimeoutSeconds() int {
 		return defaultMCPStartupTimeoutSeconds
 	}
 	return *c.Tools.MCPStartupTimeoutSeconds
-}
-
-// BackgroundJobsConfig tunes parent-created background jobs.
-type BackgroundJobsConfig struct {
-	StalledWarningSeconds *int `toml:"stalled_warning_seconds"`
-}
-
-// BackgroundJobStalledWarningSeconds returns the stalled warning threshold in
-// seconds. Omitted/negative values keep the default, explicit 0 disables the
-// notice, and oversized values clamp to one day so a typo cannot become
-// effectively invisible.
-func (c *Config) BackgroundJobStalledWarningSeconds() int {
-	if c.Tools.BackgroundJobs.StalledWarningSeconds == nil || *c.Tools.BackgroundJobs.StalledWarningSeconds < 0 {
-		return defaultBackgroundJobStalledWarningSec
-	}
-	if *c.Tools.BackgroundJobs.StalledWarningSeconds > maxBackgroundJobStalledWarningSec {
-		return maxBackgroundJobStalledWarningSec
-	}
-	return *c.Tools.BackgroundJobs.StalledWarningSeconds
 }
 
 // SearchConfig tunes the grep tool's engine. Engine is "auto" (default — use

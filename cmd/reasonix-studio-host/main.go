@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -156,14 +157,47 @@ func main() {
 	}
 
 	shell := shellIdentity{version: *studioVersion, exe: *studioApp, pid: *studioAppPID, logsDir: logsDirOf(*crashDir)}
-	releaseFatalLog := crashreport.InstallFatalLog(*crashDir, defaultVersion(shell.version))
-	code := run(parentLease(os.Stdin), os.Stdout, os.Stderr, *page, shell, driver)
-	releaseFatalLog()
+	releaseFatalLog, exitedFatalLog := crashreport.InstallFatalLog(*crashDir, defaultVersion(shell.version))
+	logs := &lastLine{w: os.Stderr}
+	code := run(parentLease(os.Stdin), os.Stdout, logs, *page, shell, driver)
+	if code == 0 {
+		releaseFatalLog()
+	} else {
+		exitedFatalLog(code, logs.last())
+	}
 	os.Exit(code)
 }
 
 // logsDirOf is the shell's logs directory: the crash directory it passed is
 // the "crash" folder inside it.
+// lastLine passes everything through and remembers the last line written, which
+// is where run says why it is returning a failure code.
+type lastLine struct {
+	w    io.Writer
+	mu   sync.Mutex
+	line string
+}
+
+func (l *lastLine) Write(p []byte) (int, error) {
+	for line := range strings.SplitSeq(strings.TrimRight(string(p), "\r\n"), "\n") {
+		if strings.HasPrefix(line, "reasonix-studio-host:") {
+			l.mu.Lock()
+			l.line = strings.TrimSpace(line)
+			l.mu.Unlock()
+		}
+	}
+	return l.w.Write(p)
+}
+
+func (l *lastLine) last() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.line == "" {
+		return "no reason was reported"
+	}
+	return l.line
+}
+
 func logsDirOf(crashDir string) string {
 	if strings.TrimSpace(crashDir) == "" {
 		return ""

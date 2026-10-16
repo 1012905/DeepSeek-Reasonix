@@ -75,6 +75,8 @@ export interface HostTodo {
 // before each turn's first write. prompt is the user's own text, with the
 // compose prefixes already stripped kernel-side.
 export interface Checkpoint {
+  // Copied conversation metadata without parent file-recovery payloads.
+  forkCopied?: boolean;
   turn: number;
   prompt: string;
   // Distinct files in this checkpoint and every later checkpoint.
@@ -286,6 +288,15 @@ export interface JobEntry {
   label: string;
   status: string;
   startedAt: number;
+}
+
+// The end of a running job's output, for a person looking at it: how much the
+// job has written in all, and whether the text is only the last part.
+export interface JobOutput {
+  text: string;
+  status: string;
+  bytes: number;
+  truncated: boolean;
 }
 
 // The UI depends on this and nothing else. SsePort talks to internal/frontend/serve;

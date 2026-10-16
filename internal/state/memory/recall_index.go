@@ -54,11 +54,11 @@ func (s *Set) AutoRecall(query string, opts RecallOptions) RecallResult {
 	opts = s.withConfiguredBudgets(opts)
 	result := RecallResult{Query: strings.TrimSpace(query), CharBudget: recallCharBudget(opts.MaxChars)}
 	if genericRecallQuery(result.Query) {
-		result.Suppressed = "generic user turn"
+		result.Suppress(SuppressGenericTurn, "generic user turn")
 		return result
 	}
 	if s == nil {
-		result.Suppressed = "memory store is empty"
+		result.Suppress(SuppressEmptyStore, "memory store is empty")
 		return result
 	}
 	if s.StoreError != nil {

@@ -90,6 +90,7 @@ var mirroredWireTypes = []wireMirror{
 	// status the page cannot read is a signed-off step drawn as the current one.
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
 	{"internal/frontend/serve/session_usage.go", "SessionUsage", tsSessionFile, "SessionUsage"},
+	{"internal/frontend/serve/jobs.go", "JobOutput", tsSessionFile, "JobOutput"},
 	{"internal/frontend/serve/session_usage.go", "SourceUsage", tsSessionFile, "SourceUsage"},
 	// The agent's tabs. The target id is what the window draws a view by, so a
 	// tab the page cannot read one for is a tab it cannot show.
@@ -113,6 +114,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/workspace_roots.go", "workspaceRootsView", tsBoundaryFile, "WorkspaceRoots"},
 	{"internal/session/control/browser_settings.go", "BrowserToolsSettings", tsBoundaryFile, "BrowserToolsSettings"},
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
+	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},

@@ -51,7 +51,8 @@ function fitCard(anchor: HTMLDivElement) {
 // the pane's tree refresh; this component owns only the choosing.
 export function BranchChip({ port, git, changeCount, countElsewhere = false, onChanged, onSwitched, onError }: Props) {
   const branchTipId = useId();
-  const [busy, setBusy] = useState(false);
+  const [moving, setMoving] = useState<string | null>(null);
+  const busy = moving !== null;
   const [locals, setLocals] = useState<WorkspaceBranch[]>([]);
   // The list re-reads on open: a terminal or another window can move HEAD
   // while this pane is not looking, and a stale list would offer a switch
@@ -72,11 +73,11 @@ export function BranchChip({ port, git, changeCount, countElsewhere = false, onC
   ];
   const switchTo = (name: string) => {
     if (busy) return;
-    setBusy(true);
+    setMoving(name);
     void port.switchBranch(name)
       .then((git) => { onChanged(); onSwitched?.(git); })
       .catch(onError)
-      .finally(() => setBusy(false));
+      .finally(() => setMoving(null));
   };
 
   if (git && !git.repo && git.absent) {
@@ -124,8 +125,8 @@ export function BranchChip({ port, git, changeCount, countElsewhere = false, onC
         onPick={switchTo}
         label={<>
           <span className="ic" aria-hidden="true"><StudioIcon name="branch" /></span>
-          <span className="lb">{git.branch}</span>
-          {changeCount > 0 && !countElsewhere && <small>{t("{n} 个变更", { n: changeCount })}</small>}
+          <span className="lb">{moving === null ? git.branch : t("正在切换到 {branch}…", { branch: moving })}</span>
+          {changeCount > 0 && !countElsewhere && !busy && <small>{t("{n} 个变更", { n: changeCount })}</small>}
           <StudioIcon name="down" />
         </>}
       />
