@@ -1544,3 +1544,8 @@ what exists.
   the edited title; pending requests disable all editing and dismissal.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
+
+## Rows in place of cards
+
+- An allowed guardian review at low or unknown risk, and a remembered fact, are Lines (`LineRow`): glyph, title, mono subject, meta and, when there is one, the action, on one row over a hairline, with the rationale or description as a muted line under it.
+- A refusal, or an allow at medium risk or above, stays a card: it is something to read.

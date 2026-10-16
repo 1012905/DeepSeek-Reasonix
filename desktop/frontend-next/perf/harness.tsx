@@ -30,6 +30,7 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/line.css";
 import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
 import "../src/styles/skillpin.css";
