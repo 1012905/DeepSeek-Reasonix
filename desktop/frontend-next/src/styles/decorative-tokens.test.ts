@@ -47,7 +47,6 @@ const STATUS: [string, string, string][] = [
   ["app", '.call[data-k="deleg"] > .g .sym', "--deleg"],
   ["app", ".nest", "--deleg"],
   ["app", '.rmtrow[data-state="connected"] .st', "--net"],
-  ["app", ".call[data-running] > .g .line", "--net"],
   ["app", ".pane[data-run=\"running\"] .compose:focus-within", "--net"],
   ["studio", '.tool-state[data-state="running"]', "--net"],
   ["studio", ".run-live", "--net"],

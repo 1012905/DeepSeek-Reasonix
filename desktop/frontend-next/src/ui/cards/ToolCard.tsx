@@ -279,7 +279,6 @@ export function ToolCard({
     >
       <div className="g">
         <Sym glyph={glyphFor(shown)} done={settling.pop && !bad} />
-        <span className="line" />
       </div>
       <div className="c">
         {hasBody ? (
@@ -333,7 +332,6 @@ export function NestedCall({ tool, whole = false }: { tool: Tool; whole?: boolea
     <div className="call" data-call={tool.id || undefined} data-k={KINDED.has(categoryOf(shown)) ? categoryOf(shown) : undefined}>
       <div className="g">
         <Sym glyph={glyphFor(shown)} />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

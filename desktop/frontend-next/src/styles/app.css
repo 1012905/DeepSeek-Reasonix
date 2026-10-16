@@ -924,10 +924,6 @@
   .nest-bd .call > .g .sym { margin-top: 8px; border-radius: var(--r-xs); box-shadow: none }
   .nest-bd .call > .g .sym svg { width: 10.5px; height: 10.5px }
 
-  .call > .g .line {
-    flex: 1; width: 2px; border-radius: 1px; min-height: 6px;
-    background: color-mix(in srgb, var(--border) 88%, transparent);
-  }
   .call > .c { min-width: 0; padding: var(--y-card) 0 }
   .call:has(> .c > .out:empty) > .c { padding: var(--y-line) 0 }
   .call:has(.nest, .ask) > .c { padding: var(--y-panel) 0 }
@@ -947,31 +943,19 @@
   .call[data-k="me"]::before {
     content: ""; grid-column: 1 / -1; height: 1px; margin-bottom: 12px; background: var(--hair);
   }
-  .call[data-k="net"]   > .g .line { background: color-mix(in srgb, var(--net) 30%, transparent) }
-  .call[data-k="deleg"] > .g .line { background: color-mix(in srgb, var(--deleg) 30%, transparent) }
-  .call[data-k="write"] > .g .line { background: color-mix(in srgb, var(--warn) 34%, transparent) }
-  .call[data-k="ask"]   > .g .line { background: color-mix(in srgb, var(--accent) 55%, transparent) }
-  .call[data-k="mcp"]   > .g .line { background: color-mix(in srgb, var(--net) 30%, transparent) }
-  .call[data-k="mem"]   > .g .line { background: color-mix(in srgb, var(--deleg) 30%, transparent) }
 
   .call[data-k="host"]  > .g .sym {
     background: none; color: var(--ok);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 38%, transparent);
   }
-  .call[data-k="host"]  > .g .line {
-    background: none; width: 0; border-radius: 0;
-    border-left: 2px dashed color-mix(in srgb, var(--ok) 48%, transparent);
-  }
   .call[data-k="host"][data-lvl="warn"] > .g .sym {
     color: var(--warn);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 38%, transparent);
   }
-  .call[data-k="host"][data-lvl="warn"] > .g .line { border-left-color: color-mix(in srgb, var(--warn) 48%, transparent) }
   .call[data-k="host"][data-lvl="err"] > .g .sym {
     color: var(--err);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--err) 38%, transparent);
   }
-  .call[data-k="host"][data-lvl="err"] > .g .line { border-left-color: color-mix(in srgb, var(--err) 48%, transparent) }
   .call[data-k="host"]  > .c .hl .nm { font-weight: var(--w-reg); color: var(--muted) }
 
   .call[data-k="say"] > .g .sym { background: none; box-shadow: none; color: var(--text) }
@@ -1012,22 +996,6 @@
   .enterbox[data-enter] .hl .cost { animation: costin var(--t-card) var(--ease-out) both }
   @keyframes costin { from { opacity: 0; transform: translateX(5px) } to { opacity: 1; transform: none } }
 
-  .call[data-running] > .g .line {
-    background:
-      linear-gradient(to bottom,
-        transparent 0 34%,
-        color-mix(in srgb, var(--net) 88%, transparent) 44%,
-        color-mix(in srgb, var(--net) 24%, transparent) 52%,
-        transparent 62% 100%),
-      color-mix(in srgb, var(--net) 22%, transparent);
-    background-size: 100% 260%, 100% 100%;
-    background-repeat: no-repeat, no-repeat;
-    animation: linepulse 2.3s linear infinite;
-  }
-  @keyframes linepulse {
-    from { background-position: 0 -160%, 0 0 }
-    to   { background-position: 0 160%, 0 0 }
-  }
   .call > .g .sym {
     transition: opacity var(--t-card) var(--ease-out),
                 box-shadow var(--t-card) var(--ease-out);
@@ -2243,8 +2211,6 @@
 
     .gutter[data-edge]::after { animation: edgeflash var(--t-card) var(--ease) }
     @keyframes edgeflash { 0%, 100% { opacity: .9 } 50% { opacity: .25 } }
-
-    .call[data-running] > .g .line { background: color-mix(in srgb, var(--net) 55%, var(--hair)) }
 
     .compose .row:has([data-pending])::after { animation: none; background: var(--net); opacity: .5 }
     .scroll { scroll-behavior: auto }

@@ -115,7 +115,6 @@ export function ReadsCard({ tools }: { tools: Tool[] }) {
     <div className="call" data-state={failed ? "failed" : "done"}>
       <div className="g">
         <Sym glyph={glyphFor("read_file")} />
-        <span className="line" />
       </div>
       <div className="c">
         <details className="tool-disclosure reads-disclosure" open={expanded} onToggle={(event) => event.currentTarget.open !== expanded && setExpanded(event.currentTarget.open)}>

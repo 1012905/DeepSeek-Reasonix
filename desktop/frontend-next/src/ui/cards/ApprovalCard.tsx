@@ -113,7 +113,6 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
     <div className="call" data-k="write" data-approval={sealed ? item.verdict : "pending"} data-prompt={sealed ? "settled" : "pending"}>
       <div className="g">
         <Sym glyph="⊛" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">
@@ -233,7 +232,6 @@ function PlanGate({ item, onPlan }: { item: Props["item"]; onPlan: Props["onPlan
     <div className="call" data-k="ask" data-prompt={sealed ? "settled" : "pending"}>
       <div className="g">
         <Sym glyph="?" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">
