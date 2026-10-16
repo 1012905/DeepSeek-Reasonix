@@ -25,7 +25,7 @@ export interface WithdrawnNote {
 // version is running.
 // What this machine does about new releases on its own. Neither mode installs
 // anything: notify only reads the catalog and says when a release is newer.
-export type UpdateMode = "manual" | "notify";
+export type UpdateMode = "manual" | "notify" | "download";
 
 export interface VersionHub {
   current: string;

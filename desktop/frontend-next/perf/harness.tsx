@@ -46,6 +46,7 @@ import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
 import type { AgentPort, Appearance, HistoryMessage } from "../src/port/port";
+import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
 import type { WireEvent } from "../src/port/wire";
@@ -101,6 +102,7 @@ class BenchPort extends MockPort {
   }
 
   async versions() {
+    if (query.has("update")) return { current: "2.42.0", pinned: "", stalePin: false, latest: "2.43.0", newer: true, versions: [] };
     if (!query.has("versions")) return super.versions();
     const names = ["2.38.0", "2.37.0", "2.36.0", "2.35.0", "2.34.0", "2.33.0", "2.32.0", "2.31.0", "2.30.0", "2.29.0"];
     return {
@@ -229,6 +231,13 @@ class BenchPort extends MockPort {
   async switchBranch(name: string) {
     if (SWITCH_MS > 0) await new Promise((r) => setTimeout(r, SWITCH_MS));
     return super.switchBranch(name);
+  }
+
+  async goToVersion() {}
+
+  onUpdateProgress(cb?: (p: UpdateProgress) => void) {
+    if (cb && query.has("update")) queueMicrotask(() => cb({ version: "2.43.0", phase: "ready", received: 0, total: 0 }));
+    return () => {};
   }
 
   async cancelJob(jobId: string) {

@@ -792,6 +792,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "提醒": "Notify",
   "不会在后台联网查新版本。要更新时在上面的版本列表里自己下载并重启。这是默认。": "Nothing is checked in the background. To update, download and restart yourself from the version list above. This is the default.",
   "每天在后台读取一次版本目录，有更新的版本时在设置图标上显示一个小点。不会下载，也不会安装或重启。": "Reads the version catalog once a day in the background and shows a dot on the Settings icon when a newer release exists. It never downloads, installs or restarts.",
+  "自动下载": "Download",
+  "在提醒的基础上，后台下载并校验新版本。下载完成后在没有会话运行时提示你，由你点「重启并更新」；不会安装，也不会自动重启。": "On top of Notify, downloads and verifies the new release in the background. When it is ready and no session is running you get a notice; you press Restart and update. It never installs or restarts by itself.",
   "下载暂停了：连接长时间没有数据，已重连 {n} 次…": "Download paused: the connection delivered nothing for a while, reconnected {n} time(s)…",
   "{v} 下载卡住了": "Downloading {v} got stuck",
   "下载连接长时间没有数据，重连几次仍未恢复。当前版本未被改动，可以稍后重试，或下载完整安装包手动安装。": "The download connection delivered nothing for a long time and several reconnects did not help. The running version was not touched; try again later, or download the full installer.",

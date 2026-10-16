@@ -61,7 +61,7 @@ func TestUpdateModeRoutesDefaultToManualAndWriteTheUsersFile(t *testing.T) {
 
 func TestUpdateModeRouteRefusesAModeItDoesNotOfferByCode(t *testing.T) {
 	srv := studioServer(t, &update.Install{Version: "2.10.0"})
-	status, code := postUpdateMode(t, srv.URL, `{"mode":"download"}`)
+	status, code := postUpdateMode(t, srv.URL, `{"mode":"auto"}`)
 	if status != http.StatusBadRequest || code != codeUpdateModeInvalid {
 		t.Fatalf("POST download = %d %q, want 400 %q", status, code, codeUpdateModeInvalid)
 	}
