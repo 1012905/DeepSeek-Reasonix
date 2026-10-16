@@ -418,6 +418,7 @@ const SAID: Record<string, string> = {
   "subagent_claims.no_choice": "本次请求未说明选择，未做任何修改",
   "write_lease.editing_disabled": "这台服务器未开放多会话写入设置",
   "write_lease.save_failed": "多会话写入设置未能保存：{detail}",
+  "provider.key_origin_changed": "地址换了域名，已保存的密钥不会发过去；请填入这个地址对应的密钥",
   "write_lease.no_choice": "本次请求未说明选择，未做任何修改",
   "write.path_busy": "这个路径正被另一个并行的子代理或写入占用。本次写入未执行；请换一个路径，或等对方结束后再写",
   "display_currency.invalid": "不支持这个币种，只能选自动、CNY 或 USD：{detail}",
