@@ -173,7 +173,7 @@ func (h *Hub) unlistedOpenSessions(root string, shown []treeSession, onDisk []se
 		ctrl := rt.Server.Controller()
 		path := ctrl.SessionPath()
 		canonical := sessionstore.CanonicalSessionPath(path)
-		if canonical == "" || seen[canonical] || !drivesRoot(rt, root) {
+		if canonical == "" || seen[canonical] || !drivesRoot(rt, root) || !sessionstore.IsVisibleSession(path) {
 			continue
 		}
 		seen[canonical] = true

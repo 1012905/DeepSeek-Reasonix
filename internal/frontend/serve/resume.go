@@ -81,6 +81,10 @@ func (s *Server) resumeInto(path string) (int, error) {
 	if sessionstore.IsCleanupPending(realPath) {
 		return http.StatusBadRequest, refusal(http.StatusBadRequest, "session.pending_cleanup", errors.New("session is pending cleanup"), nil)
 	}
+	settings, err := branchSettings(realPath)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
 	// Serialize with /new, /fork, and switchModel so the controller and lease
 	// cannot land on different sessions. Validate first to avoid slow holders.
 	s.bindMu.Lock()
@@ -120,7 +124,27 @@ func (s *Server) resumeInto(path string) (int, error) {
 			return http.StatusInternalServerError, refusal(http.StatusInternalServerError, "session.bind_failed", errors.New("session authority: unable to bind resumed session"), nil)
 		}
 	}
-	s.adoptSessionModelLocked(realPath)
+	if settings != nil {
+		if s.branchModelAvailable(settings.Model) {
+			if currentModelRef(s.ctl()) != settings.Model {
+				if err := s.switchModelLocked(context.Background(), settings.Model); err != nil {
+					return http.StatusInternalServerError, err
+				}
+			}
+		} else {
+			s.notifyBranchModelFallback(settings.Model)
+		}
+		// A model rebuild constructs a new controller, so apply these after it.
+		s.ctl().SetAgentPreset(settings.AgentPreset)
+		s.ctl().SetPlanMode(settings.Mode == "plan")
+		if s.leases == nil || s.leases.Lease() != nil {
+			if err := s.ctl().Snapshot(); err != nil {
+				return http.StatusInternalServerError, err
+			}
+		}
+	} else {
+		s.adoptSessionModelLocked(realPath)
+	}
 	s.resetSessionView()
 	return http.StatusNoContent, nil
 }

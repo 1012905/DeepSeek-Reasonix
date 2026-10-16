@@ -73,7 +73,7 @@ export interface ReplyActions {
   hasLaterTurns: (id: string) => boolean;
   onRegenerate: (id: string) => void;
   canBranch: (id: string) => boolean;
-  onBranch: (id: string) => void;
+  onBranch: (id: string) => void | Promise<void>;
   model?: string;
   onConfigureModel?: () => void;
   onRunDetail?: () => void;
@@ -98,6 +98,7 @@ function download(text: string) {
 }
 
 export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; settled?: boolean; reply?: ReplyActions; quiet?: boolean }) {
+  const [branching, setBranching] = useState(false);
   const start = useStartsOpen("thinking", !item.done && !item.text);
   const [touched, setOpen] = useState<boolean | null>(null);
   const open = touched ?? start;
@@ -190,8 +191,8 @@ export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { i
                 </button>
               )}
               {reply?.canBranch(item.id) && (
-                <button type="button" data-action="reply.branch" title={t("分支为新会话")} aria-label={t("分支为新会话")} onClick={() => reply.onBranch(item.id)}>
-                  <StudioIcon name="branch" />
+                <button type="button" data-action="reply.branch" title={t("创建对话分支")} aria-label={t("创建对话分支")} disabled={branching} onClick={() => { setBranching(true); void Promise.resolve(reply.onBranch(item.id)).finally(() => setBranching(false)); }}>
+                  <StudioIcon name={branching ? "clock" : "fork"} />
                 </button>
               )}
               {reply?.canRegenerate(item.id) && (
