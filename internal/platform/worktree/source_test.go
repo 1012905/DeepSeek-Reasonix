@@ -43,7 +43,8 @@ func TestCreateFromBranchKeepsSourceAndSeparatesTasks(t *testing.T) {
 	}
 	for _, root := range []string{first.WorkspaceRoot, second.WorkspaceRoot} {
 		data, err := os.ReadFile(filepath.Join(root, "README.md"))
-		if err != nil || string(data) != "base\n" {
+		// Git for Windows may check the committed LF out as CRLF (core.autocrlf).
+		if err != nil || strings.TrimSpace(string(data)) != "base" {
 			t.Fatalf("checkout = %q, %v", data, err)
 		}
 	}
