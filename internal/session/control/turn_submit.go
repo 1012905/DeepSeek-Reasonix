@@ -399,14 +399,7 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		}
 		if sk, task, ok := c.resolveSkillInvocation(trimmed); ok {
 			if sk.RunAs == skill.RunSubagent {
-				if strings.TrimSpace(task) == "" {
-					if !sk.RunsWithoutTask() {
-						c.notice("usage: /" + sk.Name + " <task>")
-						return turnNoTurn
-					}
-					task = skill.DefaultReviewTask
-				}
-				return c.runSubagentSkillSlash(sk, task, trimmed, display)
+				return c.slashSubagent(sk, task, trimmed, display)
 			}
 			sent := c.skills.renderInvocation(sk, task)
 			return c.runGuarded(func(ctx context.Context) error {
@@ -418,6 +411,19 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		return runRefTurn(input, display)
 	}
 	return turnNoTurn
+}
+
+// slashSubagent runs a typed /skill that runs as a subagent. With no task a
+// review skill takes its own default scope; any other asks for one.
+func (c *Controller) slashSubagent(sk skill.Skill, task, raw, display string) admissionResult {
+	if strings.TrimSpace(task) == "" {
+		if !sk.RunsWithoutTask() {
+			c.notice("usage: /" + sk.Name + " <task>")
+			return turnNoTurn
+		}
+		task = skill.DefaultReviewTask
+	}
+	return c.runSubagentSkillSlash(sk, task, raw, display)
 }
 
 // slashWord is the command a line names: its first space-delimited word, which
