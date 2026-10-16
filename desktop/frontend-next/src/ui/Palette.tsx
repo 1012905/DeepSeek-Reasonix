@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useModalFocus } from "./useModalFocus";
 import type { TreeWorkspace } from "../port/hub";
 import { t } from "../i18n";
 import { StudioIcon, type StudioIconName } from "./StudioIcon";
@@ -42,6 +43,8 @@ export function Palette({ open, onClose, commands, tree, onOpenSession }: Props)
   const [at, setAt] = useState(0);
   const box = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  useModalFocus(sheet, open);
 
   // A palette opened on what the last one was looking for is a palette that
   // answers the wrong question; it starts empty every time.
@@ -99,7 +102,7 @@ export function Palette({ open, onClose, commands, tree, onOpenSession }: Props)
 
   return (
     <div className="palette-veil" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label={t("搜索与快捷操作")}>
+      <div ref={sheet} className="palette" role="dialog" aria-modal="true" aria-label={t("搜索与快捷操作")}>
         <label className="palette-input">
           <StudioIcon name="search" />
           <input

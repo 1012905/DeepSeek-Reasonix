@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useModalFocus } from "../useModalFocus";
 import { createPortal } from "react-dom";
 import { t } from "../../i18n";
 import { reason } from "../../i18n/kernel";
@@ -21,6 +22,8 @@ export function JobOutputView({ job, read, onClose, onCancel }: { job: JobEntry;
   const [gone, setGone] = useState(false);
   const [failed, setFailed] = useState("");
   const box = useRef<HTMLPreElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  useModalFocus(sheet);
   useEscape(true, onClose);
 
   useEffect(() => {
@@ -58,7 +61,7 @@ export function JobOutputView({ job, read, onClose, onCancel }: { job: JobEntry;
   const ended = out && out.status !== "running" ? ENDED[out.status] ?? out.status : "";
   const body = (
     <div className="agent-tx-scrim" data-action="job.close" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="agent-tx" role="dialog" aria-modal="true" aria-label={t("后台任务输出：{name}", { name: job.label || job.id })}>
+      <div ref={sheet} className="agent-tx" role="dialog" aria-modal="true" aria-label={t("后台任务输出：{name}", { name: job.label || job.id })}>
         <div className="agent-tx-hd">
           <span className="who">{job.label || job.id}</span>
           <span className="rt">{ended ? t(ended) : t("运行中")}</span>
