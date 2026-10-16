@@ -7,13 +7,7 @@ import (
 	"reasonix/internal/state/sessioninbox"
 )
 
-const (
-	maxInboxDispatchRetryAttempts = 3
-	// inboxDispatchLongStop is the slow re-check armed once the burst above is
-	// spent. A durable item must not be abandoned just because three quick
-	// attempts failed, so the schedule parks here instead of stopping.
-	inboxDispatchLongStop = 1 * time.Second
-)
+const maxInboxDispatchRetryAttempts = 3
 
 type inboxDispatchResult int
 
@@ -131,30 +125,23 @@ func (c *Controller) dispatchInboxOnce() inboxDispatchResult {
 
 func (c *Controller) scheduleInboxDispatchRetry() {
 	c.inbox.mu.Lock()
-	if c.inbox.dispatchRetryScheduled {
+	if c.inbox.dispatchRetryScheduled || c.inbox.dispatchRetryAttempts >= maxInboxDispatchRetryAttempts {
 		c.inbox.mu.Unlock()
 		return
 	}
 	attempt := c.inbox.dispatchRetryAttempts
-	burstSpent := attempt >= maxInboxDispatchRetryAttempts
-	if !burstSpent {
-		c.inbox.dispatchRetryAttempts++
-	}
+	c.inbox.dispatchRetryAttempts++
 	c.inbox.dispatchRetryScheduled = true
 	schedule := c.inbox.scheduleDispatchRetry
 	c.inbox.mu.Unlock()
 
+	delay := [...]time.Duration{50 * time.Millisecond, 200 * time.Millisecond, 500 * time.Millisecond}[attempt]
 	retry := func() {
 		c.inbox.mu.Lock()
 		c.inbox.dispatchRetryScheduled = false
 		c.inbox.mu.Unlock()
 		c.maybeDispatchInbox()
 	}
-	if burstSpent {
-		c.armInboxDispatchLongStop(retry)
-		return
-	}
-	delay := [...]time.Duration{50 * time.Millisecond, 200 * time.Millisecond, 500 * time.Millisecond}[attempt]
 	if schedule != nil {
 		schedule(delay, retry)
 		return
@@ -162,26 +149,8 @@ func (c *Controller) scheduleInboxDispatchRetry() {
 	time.AfterFunc(delay, retry)
 }
 
-// armInboxDispatchLongStop parks the dispatcher on a slow production timer and
-// keeps the handle so a later success or Close cancels the pending re-check. It
-// deliberately skips the injectable burst hook: tests may drop that hook's
-// retries, and the slow stop is what keeps a durable item alive regardless.
-func (c *Controller) armInboxDispatchLongStop(retry func()) {
-	timer := time.AfterFunc(inboxDispatchLongStop, retry)
-	c.inbox.mu.Lock()
-	if c.inbox.dispatchLongStop != nil {
-		c.inbox.dispatchLongStop.Stop()
-	}
-	c.inbox.dispatchLongStop = timer
-	c.inbox.mu.Unlock()
-}
-
 func (c *Controller) resetInboxDispatchRetries() {
 	c.inbox.mu.Lock()
 	c.inbox.dispatchRetryAttempts = 0
-	if c.inbox.dispatchLongStop != nil {
-		c.inbox.dispatchLongStop.Stop()
-		c.inbox.dispatchLongStop = nil
-	}
 	c.inbox.mu.Unlock()
 }

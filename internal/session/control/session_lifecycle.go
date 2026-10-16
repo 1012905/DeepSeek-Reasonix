@@ -552,7 +552,6 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 			c.gate.canceling = true
 		}
 		c.mu.Unlock()
-		c.resetInboxDispatchRetries()
 		c.leaveCurrencyGroup()
 		c.closePeers()
 		c.side.closeAll()
