@@ -283,8 +283,11 @@ func (s sandboxEscapeApprover) ApproveEgress(ctx context.Context, host string) (
 	if err != nil || !reply.allow {
 		return false, err
 	}
-	if reply.session {
+	if reply.session || reply.persist {
 		s.c.approval.grantSession(NetworkEgressApprovalTool, host)
+	}
+	if reply.persist && s.c.egressPersistable() {
+		s.c.emitRememberResult(s.c.rememberEgressHost(host))
 	}
 	return true, nil
 }
