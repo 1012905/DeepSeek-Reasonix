@@ -328,6 +328,13 @@ func (h *Hub) importLegacySessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := migration.RunLegacySessionImportInto(strings.TrimSpace(body.Path), SessionDirFor(known), legacyImportLog)
+	for _, root := range result.Workspaces {
+		// A folder the import routed sessions back into is a project the person
+		// had in 1.x; without a place in the list its conversations are unreachable.
+		if err := addRememberedWorkspace(r.Context(), root); err != nil && !errors.Is(err, errWorkspaceListFull) {
+			slog.Warn("serve: could not list an imported project", "root", root, "err", err)
+		}
+	}
 	count := 0
 	for _, imported := range result.SessionImports {
 		count += imported.Count

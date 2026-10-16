@@ -40,7 +40,7 @@ func desktopSessionOwners(tree fs.FS, home string) map[string]string {
 
 // routeToOwner sends a session to its former workspace's session directory
 // while that workspace still exists, and otherwise declines.
-func routeToOwner(owners map[string]string) func(string) string {
+func routeToOwner(owners map[string]string, note func(root string)) func(string) string {
 	if len(owners) == 0 {
 		return nil
 	}
@@ -52,6 +52,7 @@ func routeToOwner(owners map[string]string) func(string) string {
 		if info, err := os.Stat(root); err != nil || !info.IsDir() {
 			return ""
 		}
+		note(root)
 		return config.ProjectSessionDir(root)
 	}
 }
