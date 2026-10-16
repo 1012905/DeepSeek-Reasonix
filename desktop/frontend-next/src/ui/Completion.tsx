@@ -94,15 +94,18 @@ export function useCompletion(
   apply: (text: string, caret: number) => void,
   chips?: ChipHost,
 ): State {
-  const [completion, setCompletion] = useState<Completion>(EMPTY);
+  const [{ completion, active, kb }, setMenu] = useState({ completion: EMPTY, active: 0, kb: true });
+  // An answer and its default highlight publish together; a deferred reset can
+  // overwrite navigation after the rows are already visible.
+  const setCompletion = useCallback((completion: Completion) => {
+    setMenu({ completion, active: 0, kb: true });
+  }, []);
   const [loading, setLoading] = useState(false);
   const currentCompletion = useRef(completion);
   currentCompletion.current = completion;
-  const [active, setActive] = useState(0);
   // The answer that was dismissed, not a flag: a reset run as an effect lands
   // after the commit that opened the menu, and a blur between the two is undone.
   const [dismissed, setDismissed] = useState<Completion | null>(null);
-  const [kb, setKb] = useState(true);
   // Answers can land out of order; only the newest question still has an answer
   // worth showing.
   const asked = useRef(0);
@@ -148,13 +151,6 @@ export function useCompletion(
     };
   }, [port, text, caret]);
 
-  // A keystroke changed the list under the pointer, so its claim on the
-  // highlight is stale even though it never moved.
-  useEffect(() => {
-    setActive(0);
-    setKb(true);
-  }, [completion]);
-
   const items = completion.items;
   const open = dismissed !== completion && items.length > 0;
   const at = Math.min(active, items.length - 1);
@@ -186,12 +182,14 @@ export function useCompletion(
     loading,
     kb,
     move: (delta) => {
-      setKb(true);
-      setActive((i) => (((Math.min(i, items.length - 1) + delta) % items.length) + items.length) % items.length);
+      setMenu((menu) => {
+        const count = menu.completion.items.length;
+        if (!count) return menu;
+        return { ...menu, kb: true, active: (((Math.min(menu.active, count - 1) + delta) % count) + count) % count };
+      });
     },
     hover: (i) => {
-      setKb(false);
-      setActive(i);
+      setMenu((menu) => ({ ...menu, kb: false, active: i }));
     },
     dismiss: () => {
       asked.current++;
