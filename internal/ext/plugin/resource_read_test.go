@@ -14,6 +14,7 @@ import (
 type resourceTransport struct {
 	mu        sync.Mutex
 	listed    []string
+	templates []string
 	text      string
 	listErr   error
 	readErr   error
@@ -33,6 +34,12 @@ func (t *resourceTransport) call(_ context.Context, method string, params any) (
 			items = append(items, map[string]string{"uri": u, "name": u})
 		}
 		return json.Marshal(map[string]any{"resources": items})
+	case "resources/templates/list":
+		items := make([]map[string]string, 0, len(t.templates))
+		for _, u := range t.templates {
+			items = append(items, map[string]string{"uriTemplate": u, "name": u})
+		}
+		return json.Marshal(map[string]any{"resourceTemplates": items})
 	case "resources/read":
 		uri := params.(map[string]any)["uri"].(string)
 		t.readCalls = append(t.readCalls, uri)
@@ -158,5 +165,53 @@ func TestDeclaresResourcesReadsTheLiveClientThenTheCache(t *testing.T) {
 	}
 	if !live.DeclaresResources(spec) {
 		t.Fatal("the live client's declaration was not honoured")
+	}
+}
+
+// A server may declare addresses it builds on demand. An address is admitted
+// only when a declared template can produce it, and the host never reads an
+// operator it does not understand as permission.
+func TestUriMatchesTemplate(t *testing.T) {
+	for _, tc := range []struct {
+		template, uri string
+		want          bool
+	}{
+		{"doc://{id}", "doc://42", true},
+		{"doc://{id}", "doc://42/extra", false},
+		{"doc://{id}", "doc://", false},
+		{"doc://{id}/page/{n}", "doc://abc/page/3", true},
+		{"doc://{id}/page/{n}", "doc://abc/page", false},
+		{"file:///{+path}", "file:///src/a/b.go", true},
+		{"file:///{+path}", "file:///src/a b.go", false},
+		{"file:///{+path}", "http://evil.example/x", false},
+		{"doc://{id}", "doc://a\nb", false},
+		{"doc://{id}", "other://42", false},
+		{"doc://{id}", "xdoc://42", false},
+		{"doc://{id}", "doc://42#frag", false},
+		{"doc://{id}{?q}", "doc://42?q=1", false},
+		{"doc://{/id}", "doc://x", false},
+		{"doc://{id", "doc://42", false},
+		{"doc://a.b/{id}", "doc://aXb/1", false},
+		{"", "doc://x", false},
+	} {
+		if got := uriMatchesTemplate(tc.template, tc.uri); got != tc.want {
+			t.Errorf("template %q, uri %q: %v, want %v", tc.template, tc.uri, got, tc.want)
+		}
+	}
+}
+
+func TestReadDeclaredResourceAdmitsWhatADeclaredTemplateBuilds(t *testing.T) {
+	tr := &resourceTransport{listed: []string{"doc://index"}, templates: []string{"doc://item/{id}"}, text: "T"}
+	h := resourceHost(tr, true)
+	got, err := h.ReadDeclaredResource(context.Background(), "docs", "doc://item/7", 0)
+	if err != nil || got.Text != "T" {
+		t.Fatalf("an address a declared template builds: %+v, %v", got, err)
+	}
+	_, err = h.ReadDeclaredResource(context.Background(), "docs", "doc://secret/7", 0)
+	if code := refusalCode(t, err); code != CodeResourceNotDeclared {
+		t.Fatalf("code = %q, want %q", code, CodeResourceNotDeclared)
+	}
+	if len(tr.readCalls) != 1 || tr.readCalls[0] != "doc://item/7" {
+		t.Fatalf("the server was asked to read %v", tr.readCalls)
 	}
 }
