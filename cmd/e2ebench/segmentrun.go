@@ -21,10 +21,17 @@ func runSegments(ctx context.Context, cfg suiteConfig, t task, work, trajDir str
 	// call on the harness's own token counts, and another found this directory
 	// by grepping the temp root for its task — moving it only helps unnamed.
 	metricsDir, err := os.MkdirTemp("", "e2ebench-metrics-")
+	// A snapshot recovered from the sidecar is the only surviving evidence of
+	// what that leg spent, so its directory is kept instead of removed.
+	keepMetrics := false
 	if err != nil {
 		metricsDir = work
 	} else {
-		defer func() { _ = os.RemoveAll(metricsDir) }()
+		defer func() {
+			if !keepMetrics {
+				_ = os.RemoveAll(metricsDir)
+			}
+		}()
 	}
 	var runErr error
 	for _, seg := range segs {
@@ -42,7 +49,18 @@ func runSegments(ctx context.Context, cfg suiteConfig, t task, work, trajDir str
 		cmd.WaitDelay = 10 * time.Second
 		runErr = cmd.Run()
 
-		if m, err := readMetrics(metricsPath); err == nil {
+		m, partial, err := legMetrics(metricsPath)
+		if err != nil {
+			// The leg left no record at all: its real spend is unknown, so the
+			// run is reported as unmeasured rather than priced at zero.
+			r.Unaccounted = true
+		} else {
+			// A leg that finished wrote the final record; one that was killed
+			// only left the sidecar snapshot, so the account stops at the last
+			// write and the run's total is still incomplete.
+			r.Unaccounted = r.Unaccounted || partial
+			r.Partial = partial || !m.Complete
+			keepMetrics = keepMetrics || partial
 			foldSegmentMetrics(r, m, seg.index)
 		}
 		// A leg that died takes the run with it: resuming a session the child
@@ -53,6 +71,19 @@ func runSegments(ctx context.Context, cfg suiteConfig, t task, work, trajDir str
 		}
 	}
 	return runErr
+}
+
+// legMetrics reads one leg's accounting. The final record is authoritative and
+// the in-flight snapshot is only read when the final one is absent, so the two
+// can never be counted together.
+func legMetrics(path string) (m runMetrics, partial bool, err error) {
+	if m, err = readMetrics(path); err == nil {
+		return m, false, nil
+	}
+	if m, err = readMetrics(path + ".partial"); err == nil {
+		return m, true, nil
+	}
+	return m, false, err
 }
 
 // segmentTrajectoryPath keeps one file per leg so a resumed leg cannot truncate
