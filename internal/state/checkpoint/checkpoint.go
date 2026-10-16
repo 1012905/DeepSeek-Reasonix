@@ -147,6 +147,8 @@ type Store struct {
 	blobQuota     int64
 	// protectTurns prevents GC of these turn payloads (active tx / last undo).
 	protectTurns map[int]bool
+	// unreadable reserves turns whose file exists but would not load.
+	unreadable map[int]bool
 }
 
 // New returns a store for the given checkpoint dir and workspace root, loading any
@@ -240,12 +242,15 @@ func (s *Store) load() {
 			if _, err := fmt.Sscanf(e.Name(), "turn-%d.json", &turnNum); err != nil || seen[turnNum] {
 				continue
 			}
-			b, err := fileenc.ReadFileUTF8(filepath.Join(dir, e.Name()))
+			path := filepath.Join(dir, e.Name())
+			b, err := fileenc.ReadFileUTF8(path)
 			if err != nil {
+				s.markUnreadable(turnNum, path, err)
 				continue
 			}
 			var c Checkpoint
 			if json.Unmarshal(b, &c) != nil {
+				s.markUnreadable(turnNum, path, nil)
 				continue
 			}
 			if expired {
@@ -272,6 +277,8 @@ func (s *Store) load() {
 					c.CoverageGaps = append(c.CoverageGaps, CoverageGap{Reason: GapLegacyUnverified, Detail: "v1 checkpoint cannot verify later manual edits"})
 				}
 			}
+			// A readable copy of this turn wins over an unreadable one.
+			delete(s.unreadable, turnNum)
 			seen[turnNum] = true
 			s.done = append(s.done, &c)
 		}
@@ -767,7 +774,9 @@ func (s *Store) expirePayloadLocked(c *Checkpoint) error {
 
 // NextTurn returns the turn number a new checkpoint should take: one past the
 // highest existing turn (0 when empty), so a resumed session keeps numbering
-// without colliding with checkpoints loaded from disk.
+// without colliding with checkpoints loaded from disk. Turns whose file exists
+// but would not load count as existing: their snapshot is unrecoverable, and
+// overwriting it with a new turn would destroy the only remaining copy.
 func (s *Store) NextTurn() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -780,7 +789,7 @@ func (s *Store) NextTurn() int {
 	if s.cur != nil && s.cur.Turn >= next {
 		next = s.cur.Turn + 1
 	}
-	return next
+	return max(next, s.unreadableFloor())
 }
 
 // FileState returns the earliest pre-edit state recorded for p across the
