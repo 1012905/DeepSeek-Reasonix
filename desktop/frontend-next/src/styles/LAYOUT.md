@@ -1544,3 +1544,9 @@ what exists.
   the edited title; pending requests disable all editing and dismissal.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
+
+## Transcript Line
+
+- A tool call is a Line: a bare status glyph, the title, the mono subject and the meta on one row over a `--hair` bottom border, with no box, icon square or vertical track. Expanding it opens the detail in place.
+- A call brought to the end of the transcript is the same Line drawn open, under a small caption that says it was brought. It sits in `.activity-body` with the indent and left rule removed, so every rule that styles a row in the Execution group styles it.
+- The Line rules are keyed `.flow .activity-body .call[data-call] > .c` so they outrank the card shell in both themes; the card shell's surface background is for cards, never rows.

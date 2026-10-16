@@ -1,0 +1,2 @@
+- “带到末尾的结果”改成和执行过程里一样的一行（无边框、图标方块、竖线）；暗色主题下执行过程的行也不再有整块底色。关联 #13456。
+- A result brought to the end is now the same single row as in the Execution group (no box, icon square or track); dark-theme rows there lose their slab background. Refs #13456.

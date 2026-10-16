@@ -10,3 +10,4 @@
 .brought-close .studio-icon { width: 12px; height: 12px; }
 .brought-close:hover { color: var(--text); background: var(--overlay); }
 .brought-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.brought .brought-line { margin-left: 0; padding: 0; border-left: 0; }
