@@ -81,18 +81,23 @@ type toolCallPlan struct {
 	// ranClean: the tool's own Execute returned no error, before tool.after ruled.
 	ranClean bool
 	executed bool
-	// nestedOrigin is the first external origin among calls this tool made
-	// through its invoker; it labels the result when the tool declares none.
-	nestedOrigin tool.Provenance
+	// spawned collects the external origins of calls this tool made on its own
+	// account, nested or through a sub-agent; it labels a result the tool
+	// declares nothing external for.
+	spawned *tool.ProvenanceSink
 }
 
 // provenanceOf is where the result's content came from: the tool's own
-// answer, else what its nested calls fetched.
+// answer, else what the calls it spawned fetched.
 func (p *toolCallPlan) provenanceOf(t tool.Tool, args json.RawMessage) tool.Provenance {
-	if own := tool.ProvenanceOf(t, args); own.External() {
+	own := tool.ProvenanceOf(t, args)
+	if own.External() || p.spawned == nil {
 		return own
 	}
-	return p.nestedOrigin
+	if inherited := p.spawned.Origin(); inherited.External() {
+		return inherited
+	}
+	return own
 }
 
 // executeOne runs a single tool call. It is pure with respect to the event sink
@@ -696,6 +701,8 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		return a.blockedToolOutcome(plan, msg)
 	}
 	err = usecap.WithContractHint(err, runTool, runArgs)
+	origin := plan.provenanceOf(runTool, runArgs)
+	tool.NoteProvenance(ctx, origin)
 	owedBefore := a.obligations()
 	a.recordToolReceipts(ctx, plan, result, execution, err)
 	result = a.withObligationNotice(result, owedBefore, execution, readOnly)
@@ -723,7 +730,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
 			output: body, images: images, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
-			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
+			execution: execution, provenance: origin, refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
 		if truncMsg != "" {
 			out.rawOutput = rawErr
@@ -735,7 +742,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
 		output: body, images: images, bound: bound, truncMsg: truncMsg,
-		execution: execution, provenance: plan.provenanceOf(runTool, runArgs), checkpointErr: checkpointErr,
+		execution: execution, provenance: origin, checkpointErr: checkpointErr,
 	}
 	if truncMsg != "" {
 		out.rawOutput = result
