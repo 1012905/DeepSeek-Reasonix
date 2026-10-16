@@ -1,5 +1,5 @@
 import { SseShell } from "./sse_shell";
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
@@ -43,6 +43,12 @@ export class SseBoundary extends SseShell {
   }
   subagentClaims() {
     return this.get<SubagentClaimsSettings>("/subagent-claims");
+  }
+  planApproval() {
+    return this.get<PlanApprovalSettings>("/plan-approval");
+  }
+  savePlanApproval(auto: boolean) {
+    return this.post0<PlanApprovalSettings>("/plan-approval", { auto });
   }
   writeLease() {
     return this.get<WriteLeaseSettings>("/write-lease");
