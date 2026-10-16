@@ -155,6 +155,7 @@ jobs:
           node perf/branch-tooltip.mjs
           node perf/branch-menu.mjs
           node perf/image-preview.mjs
+          node perf/user-images.mjs
           node perf/toast-anchor.mjs
           node perf/addfolder-rest.mjs
           node perf/scroll-jump.mjs
