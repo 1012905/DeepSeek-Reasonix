@@ -16,15 +16,17 @@ var gitBranchFlags = map[string]bool{
 // gitBranchValued are the `--name=value` forms accepted for the same listing.
 var gitBranchValued = []string{"--sort=", "--format=", "--color=", "--column=", "--abbrev=", "--contains=", "--no-contains=", "--merged=", "--no-merged=", "--points-at="}
 
-var gitConfigReads = map[string]bool{
-	"--get": true, "--get-all": true, "--get-regexp": true, "--get-urlmatch": true, "-l": true, "--list": true,
-}
+var gitConfigReads = map[string]bool{"--get": true, "--get-all": true}
+
+// gitSecretKeys are substrings (compared case-insensitively) of configuration
+// keys that hold credentials or lead to them; reading one is never classified.
+var gitSecretKeys = []string{"credential", "extraheader", "token", "password", "insteadof", "signingkey", "secret"}
 
 // gitConfigFlags may accompany a read of the configuration; the valued ones
 // take a following word. Naming a file or blob is not among them.
 var gitConfigFlags = map[string]bool{
 	"--local": false, "--global": false, "--system": false, "--worktree": false, "--show-origin": false,
-	"--show-scope": false, "--name-only": false, "-z": false, "--null": false, "--includes": false, "--no-includes": false,
+	"--show-scope": false, "-z": false, "--null": false, "--includes": false, "--no-includes": false,
 	"--bool": false, "--int": false, "--path": false, "--bool-or-int": false, "--expiry-date": false,
 	"--default": true, "--type": true,
 }
@@ -94,7 +96,7 @@ func gitRemoteReads(args []string) bool {
 	case "-v", "--verbose":
 		return len(args) == 1
 	case "show":
-		return gitOperandsOnly(args[1:], "-n")
+		return len(args) > 2 && args[1] == "-n" && gitOperandsOnly(args[2:])
 	case "get-url":
 		return gitOperandsOnly(args[1:], "--all", "--push")
 	}
@@ -111,15 +113,18 @@ func gitOperandsOnly(args []string, flags ...string) bool {
 	return true
 }
 
+// gitConfigReadsOnly accepts a read of exactly one key. A listing, a regexp or a
+// url match would put the whole merged configuration, including the user-level
+// files outside the workspace, in front of the model.
 func gitConfigReadsOnly(args []string) bool {
-	if len(args) > 0 && (args[0] == "get" || args[0] == "list") {
+	if len(args) > 0 && args[0] == "get" {
 		return gitConfigFlagsOnly(args[1:], false)
 	}
 	return gitConfigFlagsOnly(args, true)
 }
 
 func gitConfigFlagsOnly(args []string, needsRead bool) bool {
-	read := !needsRead
+	read, keys := !needsRead, 0
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if gitConfigReads[arg] {
@@ -127,6 +132,13 @@ func gitConfigFlagsOnly(args []string, needsRead bool) bool {
 			continue
 		}
 		if !strings.HasPrefix(arg, "-") {
+			keys++
+			lower := strings.ToLower(arg)
+			for _, secret := range gitSecretKeys {
+				if strings.Contains(lower, secret) {
+					return false
+				}
+			}
 			continue
 		}
 		name, _, attached := strings.Cut(arg, "=")
@@ -138,5 +150,5 @@ func gitConfigFlagsOnly(args []string, needsRead bool) bool {
 			i++
 		}
 	}
-	return read
+	return read && keys == 1
 }
