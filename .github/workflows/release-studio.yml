@@ -900,12 +900,31 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The page every archive carries beside the executable, built once here
+      # rather than once per target: serve.FindPage looks for
+      # frontend-next/dist next to the binary.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10
+          run_install: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: desktop/frontend-next/pnpm-lock.yaml
+
+      - name: Build the page
+        working-directory: desktop/frontend-next
+        run: pnpm install --frozen-lockfile && pnpm build
+
       # Every target the release line claims to support, from one runner: the
       # CLI is CGO-free, so none of them needs a toolchain of its own.
       - name: Cross-compile and archive
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           SHA: ${{ needs.resolve.outputs.sha }}
+          PAGE_DIR: desktop/frontend-next/dist
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -917,11 +936,7 @@ jobs:
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
               -ldflags "-s -w -X main.version=$VERSION -X main.gitCommit=${SHA:0:12} -X main.buildTimeUTC=$built -X $pkg.linkedVersion=$VERSION -X $pkg.linkedRevision=$SHA" \
               -o "reasonix$ext" ./cmd/reasonix
-            if [ "$os" = windows ]; then
-              zip -qj "dist/reasonix-$os-$arch.zip" "reasonix$ext"
-            else
-              tar czf "dist/reasonix-$os-$arch.tar.gz" "reasonix$ext"
-            fi
+            scripts/package-cli-archive.sh "$os" "$arch" "reasonix$ext" "$PAGE_DIR" dist
             rm -f "reasonix$ext"
           done
           # The digest list the remote verifies against. Resolved on the
@@ -933,13 +948,7 @@ jobs:
       # A release that published the archives without the digest list is worse
       # than one that published neither: the routes resolve SHA256SUMS first.
       - name: Check the set is complete
-        run: |
-          set -euo pipefail
-          for want in reasonix-darwin-amd64.tar.gz reasonix-darwin-arm64.tar.gz \
-            reasonix-linux-amd64.tar.gz reasonix-linux-arm64.tar.gz \
-            reasonix-windows-amd64.zip reasonix-windows-arm64.zip SHA256SUMS; do
-            [ -f "dist/$want" ] || { echo "::error::no dist/$want"; exit 1; }
-          done
+        run: python3 scripts/check-cli-archives.py dist
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
