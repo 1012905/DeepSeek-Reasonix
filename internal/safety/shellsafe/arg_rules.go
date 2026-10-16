@@ -141,12 +141,9 @@ func withoutPrefixed(args []string, prefix string) []string {
 	return out
 }
 
-// uniqWritesAnOutputFile reports whether uniq is given a second operand, which
-// it opens as the output file. POSIX and BSD uniq stop reading options at the
-// first operand, so everything after it, `-v` or `--` included, is an operand
-// there, while GNU uniq keeps reading options: a word after the first operand
-// counts as an output file unless a GNU-only reading is certain, which the
-// classifier cannot know on the machine that will run it.
+// uniqWritesAnOutputFile reports a word after uniq's input file, which uniq
+// opens as the output file. POSIX and BSD uniq stop reading options at the
+// first operand, so `-v` or `--` there is that file; GNU keeps reading options.
 func uniqWritesAnOutputFile(args []string) bool {
 	seenOperand := false
 	for i := 0; i < len(args); i++ {

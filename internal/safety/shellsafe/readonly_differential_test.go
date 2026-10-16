@@ -14,11 +14,9 @@ import (
 	"time"
 )
 
-// The classifier says a command only reads. This test asks the operating system:
-// generate commands from the read-only table with the options that make real
-// programs write, and for every one the classifier accepts, run it in a scratch
-// directory and compare the directory before and after. Any change is a command
-// the classifier called a read that wrote.
+// For every generated command the classifier accepts as a read, run it in a
+// scratch directory and compare the directory before and after: any change is
+// a command called a read that wrote.
 
 var differentialPrograms = []string{
 	"cat", "head", "tail", "ls", "find", "grep", "egrep", "fgrep", "echo", "printf", "pwd",
@@ -95,7 +93,7 @@ func TestEveryCommandTheClassifierCallsAReadLeavesTheDirectoryAlone(t *testing.T
 	home := t.TempDir()
 	classified, executed := 0, 0
 	seen := map[string]bool{}
-	for i := 0; i < 1200; i++ {
+	for range 1200 {
 		program := differentialPrograms[rng.Intn(len(differentialPrograms))]
 		if !present[program] {
 			continue
