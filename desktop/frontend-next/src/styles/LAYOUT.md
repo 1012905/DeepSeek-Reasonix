@@ -1544,3 +1544,7 @@ what exists.
   the edited title; pending requests disable all editing and dismissal.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
+
+## Opened step detail
+
+- An opened step shows its detail as an indented panel in place, bordered on all four sides by one `--hair` line with a `--r-sm` radius. A rule on one side only is a rail, and the conversation has none.
