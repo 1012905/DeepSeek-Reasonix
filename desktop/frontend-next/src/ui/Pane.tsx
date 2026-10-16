@@ -38,6 +38,7 @@ import { useSurfaceSlots } from "./usesurfaceslots";
 import { useSurfaceReplay } from "./surface-replay";
 import { MeterRail } from "./MeterRail";
 import { PlanFold } from "./PlanFold";
+import { useBroughtResults } from "./useBroughtResults";
 import { RunLine } from "./RunLine";
 import type { PaneProps, PaneReport } from "./panetypes";
 import { useRate, useTrail } from "./num";
@@ -346,6 +347,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   useEffect(() => { void loadFoldWorkPref(port); }, [port]);
   const foldWork = useFoldsTurnWork(port);
+  const brought = useBroughtResults(s.items);
   const refreshTree = useCallback((git?: WorkspaceGit) => {
     void port.changes().then(setTree).catch(() => setTree(null));
     if (git) setGit(git);
@@ -468,6 +470,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       <PaneShown.Provider value={shown}>
       <LiveWork.Provider value={live}>
       <Transcript port={port}
+        brought={brought}
         foldWork={foldWork}
         turnRunning={running}
         reply={fileReply}

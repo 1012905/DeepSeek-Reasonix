@@ -29,6 +29,7 @@ import "../src/styles/workbench-changes.css";
 import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
+import "../src/styles/bring.css";
 import "../src/styles/jsontext.css";
 import "../src/styles/skillpin.css";
 import "../src/styles/narrow.css";

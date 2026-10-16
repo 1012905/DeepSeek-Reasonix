@@ -137,6 +137,8 @@ export const EN: Record<string, string> = {
   "空闲": "Idle",
   "运行中": "Running",
   "只停止这一条调用": "Stop only this call",
+  "把结果带到末尾": "Show this result again at the end",
+  "带到末尾的结果": "Brought to the end",
   "正在搜索对话内容…": "Searching conversation text…",
   "对话内容暂时搜不了，稍后再试": "Conversation text cannot be searched right now; try again shortly",
   "对话内容匹配": "Matches in conversation text",
