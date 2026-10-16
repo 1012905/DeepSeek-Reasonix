@@ -31,7 +31,6 @@ import { key as slotKey } from "./slots";
 import { Metrics } from "./Metrics";
 import { railOf } from "./panels/derive";
 import { accountOf, useHidesAmounts, useWallet } from "./wallet";
-import { PaneNav } from "./PaneNav";
 import { useOnBump } from "./useOnBump";
 import { useShowView } from "./showview";
 import { useSubmit } from "./usesubmit";
@@ -441,8 +440,11 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       mcp,
       wallet: walletDisplay,
       interactions:s.interactions,
+      view: docked ? "browser" : tab,
+      rows: traj.rows.length,
+      surfaces,
     });
-  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions]);
+  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions, docked, tab, traj.rows.length, surfaces]);
 
   return (
     <section
@@ -456,13 +458,6 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       onMouseDownCapture={active ? undefined : onFocus}
       onFocusCapture={active ? undefined : onFocus}
     >
-      <PaneNav
-        view={docked ? "browser" : tab}
-        onPick={showView}
-        rows={traj.rows.length} plan={s.plan} goal={status?.goal}
-        surfaces={surfaces}
-      />
-
       <Find find={find} />
 
       <div className="pbody rewind-notice-host" data-dock={tab === "flow" ? "" : undefined} data-full={tab === "browser" ? "" : undefined}>

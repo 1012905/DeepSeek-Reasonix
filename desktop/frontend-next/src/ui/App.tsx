@@ -55,7 +55,7 @@ import { singleFlight } from "./singleflight";
 import { useTreeRead } from "./useTreeRead";
 import { useOpenPane } from "./useOpenPane";
 import { markSettled } from "../boot/gate";
-import type { PaneView } from "./PaneNav";
+import type { PaneView } from "../state/paneview";
 
 // Start fetching the settings chunk with the shell instead of waiting for the
 // first click. It remains a separate chunk (and keeps its failure boundary),
@@ -81,6 +81,9 @@ const NO_REPORT: PaneReport = {
   context: null,
   mcp: [],
   wallet: "",
+  view: "flow",
+  rows: 0,
+  surfaces: 0,
 };
 
 // App is the window around the panes, not a session itself: the workspace tree,
@@ -577,6 +580,7 @@ export function App({ hub }: { hub: HubPort }) {
         theme={scheme}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
         onFind={openFind}
+        view={report.view} rows={report.rows} surfaces={report.surfaces} onView={showView}
         hub={hub} onError={fail}
       />
 

@@ -123,7 +123,7 @@ await page.waitForTimeout(400);
 const trajRows = await page.locator(".run-analysis").count();
 check("运行分析页有内容", trajRows > 0, `${trajRows} 个`);
 await page.screenshot({ path: `${SHOTS}/3-运行分析页.png` });
-await page.locator('[role="tab"]').nth(0).click();
+await page.locator('[data-action="pane.view"][aria-pressed="true"]').first().click();
 await page.waitForTimeout(400);
 const after = await page.locator('[data-pane="flow"] .call').count();
 check("切回后卡片仍在", after > 0, `${after} 张`);

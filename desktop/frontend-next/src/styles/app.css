@@ -64,7 +64,7 @@
   :root[data-bg] .app { background: transparent }
 
   .rail, .side { background: var(--page) }
-  .panes, .tabs { background: var(--surface) }
+  .panes { background: var(--surface) }
 
   :root[data-bg] .main, :root[data-bg] .panes { background: transparent }
 
@@ -74,16 +74,6 @@
     text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 88%, transparent),
                  0 0 6px color-mix(in srgb, var(--page) 70%, transparent);
   }
-  :root[data-bg] .tabs {
-    background: color-mix(in srgb, var(--surface) 62%, transparent);
-    border-bottom-color: transparent;
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 88%, transparent);
-  }
-  :root[data-bg] .tabs::after {
-    content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 18px; z-index: 2; pointer-events: none;
-    background: linear-gradient(color-mix(in srgb, var(--surface) 62%, transparent), transparent);
-  }
-
   :root[data-bg] .flow:not([data-empty]) {
     text-shadow: var(--flow-text-shadow, 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
                  0 0 7px color-mix(in srgb, var(--page) 72%, transparent));
@@ -693,12 +683,6 @@
 
   .main { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--surface) }
 
-  .tabs {
-    position: relative;
-    display: flex; align-items: center; flex-wrap: wrap; gap: 4px 2px; flex: none;
-    border-bottom: 1px solid var(--hair);
-    padding: 8px 0; padding-inline: var(--pane-gutter);
-  }
   .vtabs { display: flex; align-items: center; gap: 2px; min-width: 0 }
 
   .tabmark {
@@ -718,8 +702,6 @@
 
   .tab .n { font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--faint); margin-left: 5px; font-variant-numeric: tabular-nums }
 
-  .tabs > .picker { margin-left: auto }
-
   .scroll[data-pane="browser"] { display: flex; flex-direction: column; overflow: hidden }
   .scroll[data-pane="browser"][hidden] { display: none }
 
@@ -733,9 +715,8 @@
      and the composer's; a child of the body would stop at the composer's edge. */
   .pane:has(> .pbody[data-dock]) {
     display: grid;
-    grid-template: "nav side" auto "find side" auto "body side" minmax(0, 1fr) "compose side" auto / minmax(var(--dock-left-min), 1fr) minmax(0, var(--dock-w));
+    grid-template: "find side" auto "body side" minmax(0, 1fr) "compose side" auto / minmax(var(--dock-left-min), 1fr) minmax(0, var(--dock-w));
   }
-  .pane:has(> .pbody[data-dock]) > .tabs { grid-area: nav }
   .pane:has(> .pbody[data-dock]) > .findhost { grid-area: find }
   .pane:has(> .pbody[data-dock]) > .pbody { grid-area: body }
   .pane:has(> .pbody[data-dock]) > .compose { grid-area: compose }
