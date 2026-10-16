@@ -1,0 +1,2 @@
+- 键盘用户：设置、命令面板等对话框现在把 Tab 键留在对话框里，关闭后焦点回到原处；远程会话的“删除”按钮在浅色主题下聚焦时有了焦点环。关联 d191b73fc。
+- Keyboard: Settings, the command palette and other dialogs now keep Tab inside and return focus on close; the remote-session delete button shows a focus ring in the light theme. Refs d191b73fc.

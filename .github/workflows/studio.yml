@@ -163,6 +163,8 @@ jobs:
           node perf/narrow.mjs
           node perf/settings-rows.mjs
           node perf/narrow-steps.mjs
+          node perf/modal-focus.mjs
+          node perf/focus-ring.mjs
           node perf/narrow-forms.mjs
           node perf/narrow-rail.mjs
           node perf/selfcheck.mjs branch-tooltip

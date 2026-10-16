@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useModalFocus } from "./useModalFocus";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
@@ -59,6 +60,8 @@ export function DirRows({
 // the selection — a separately highlighted row would be a second way to say
 // which one is meant, and the two disagree the moment a path is typed.
 export function RemoteDirs({ hub, host, start, onPick, onClose }: Props) {
+  const sheet = useRef<HTMLDivElement>(null);
+  useModalFocus(sheet);
   const [listing, setListing] = useState<RemoteListing | null>(null);
   // What the path field holds, kept apart from where we are: typing is not
   // navigating, or every keystroke would be a round trip to another machine.
@@ -109,6 +112,7 @@ export function RemoteDirs({ hub, host, start, onPick, onClose }: Props) {
   // the sheet rather than the window.
   return createPortal(
     <div
+      ref={sheet}
       className="pickveil"
       role="dialog"
       aria-modal="true"

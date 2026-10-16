@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useModalFocus } from "./useModalFocus";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
@@ -141,6 +142,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   const [memCount, setMemCount] = useState(0);
   const [ruleCount, setRuleCount] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+  useModalFocus(root);
   const veiled = useRef(false);
   const reloadExt = useCallback(() => {
     const refresh = ++extRefresh.current;
