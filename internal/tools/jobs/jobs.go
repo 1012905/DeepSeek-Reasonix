@@ -49,11 +49,15 @@ const DefaultTeardownGrace = 15 * time.Second
 
 // View is a read-only snapshot of a job for the status bar.
 type View struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Label     string `json:"label"`
-	Status    string `json:"status"`
-	StartedAt int64  `json:"startedAt"` // unix milliseconds
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	// Description is the short name the caller gave it for a person, Detail the
+	// full command or task it runs; Label stays the short preview.
+	Description string `json:"description,omitempty"`
+	Detail      string `json:"detail,omitempty"`
+	Status      string `json:"status"`
+	StartedAt   int64  `json:"startedAt"` // unix milliseconds
 }
 
 // Result is one job's terminal (or current) state returned by Wait.
@@ -114,6 +118,10 @@ type Job struct {
 	Kind      string // "bash" | "task"
 	Label     string
 	SessionID string
+	// Description is the name the caller gave the job for a person, and Detail
+	// what it actually runs in full. Both are set once, at start.
+	Description string
+	Detail      string
 
 	mu          sync.Mutex
 	tail        []byte
@@ -379,9 +387,28 @@ func (m *Manager) startInvalid(parentSession, kind, label string, validationErr 
 	return j
 }
 
+// StartOption sets what a job carries beyond its kind and label, before it is
+// visible to anything else.
+type StartOption func(*Job)
+
+// MaxDetailRunes bounds the full command a job keeps for display.
+const MaxDetailRunes = 4096
+
+// WithPresentation names the job for a person and records what it runs in full.
+func WithPresentation(description, detail string) StartOption {
+	return func(j *Job) {
+		j.Description = strings.TrimSpace(description)
+		if r := []rune(strings.TrimSpace(detail)); len(r) > MaxDetailRunes {
+			j.Detail = string(r[:MaxDetailRunes]) + "…"
+		} else {
+			j.Detail = string(r)
+		}
+	}
+}
+
 // StartForSession launches a job owned by parentSession. Session-scoped readers
 // only see jobs whose owner matches the active session.
-func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), opts ...StartOption) *Job {
 	parentSession = strings.TrimSpace(parentSession)
 	kind = strings.TrimSpace(kind)
 	if err := validatePathSegment(parentSession, "parentSession"); err != nil {
@@ -406,6 +433,9 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 		cancel:    cancel,
 		done:      make(chan struct{}),
 		artifact:  jobArtifact{path: logPath, metaPath: metaPath, file: file, complete: artifactErr == "", err: artifactErr},
+	}
+	for _, opt := range opts {
+		opt(j)
 	}
 	ctx = WithSession(ctx, parentSession)
 	ctx = context.WithValue(ctx, jobCtxKey{}, j)
@@ -567,6 +597,8 @@ func (m *Manager) writeJobMetaLocked(j *Job, st Status) error {
 		ID:               j.ID,
 		Kind:             j.Kind,
 		Label:            j.Label,
+		Description:      j.Description,
+		Detail:           j.Detail,
 		SessionID:        j.SessionID,
 		OwnerID:          m.ownerID,
 		Status:           st,
@@ -962,7 +994,7 @@ func (m *Manager) RunningForSession(parentSession string) []View {
 		// runtime idle early. The public view remains "running" while a stop is
 		// in flight; clients may render a local "stopping" state after they
 		// request cancellation.
-		out = append(out, View{ID: j.ID, Kind: j.Kind, Label: j.Label, Status: string(Running), StartedAt: j.times.started})
+		out = append(out, View{ID: j.ID, Kind: j.Kind, Label: j.Label, Description: j.Description, Detail: j.Detail, Status: string(Running), StartedAt: j.times.started})
 		j.mu.Unlock()
 	}
 	return out
@@ -1454,15 +1486,17 @@ func (m *Manager) loadSessionArtifacts(parentSession, sessionPath, dir string) {
 			logPath = filepath.Join(dir, filepath.Base(meta.LogPath))
 		}
 		loaded = append(loaded, &Job{
-			ID:        id,
-			Kind:      meta.Kind,
-			Label:     meta.Label,
-			SessionID: parentSession,
-			status:    meta.Status,
-			times:     jobTimes{started: meta.StartedAt, activity: meta.FinishedAt, finished: meta.FinishedAt},
-			done:      done,
-			artifact:  jobArtifact{path: logPath, metaPath: filepath.Join(dir, id+jobMetaExt), complete: meta.ArtifactComplete, err: meta.ArtifactError},
-			evidence:  mutationEvidenceFromArtifact(meta),
+			ID:          id,
+			Kind:        meta.Kind,
+			Label:       meta.Label,
+			Description: meta.Description,
+			Detail:      meta.Detail,
+			SessionID:   parentSession,
+			status:      meta.Status,
+			times:       jobTimes{started: meta.StartedAt, activity: meta.FinishedAt, finished: meta.FinishedAt},
+			done:        done,
+			artifact:    jobArtifact{path: logPath, metaPath: filepath.Join(dir, id+jobMetaExt), complete: meta.ArtifactComplete, err: meta.ArtifactError},
+			evidence:    mutationEvidenceFromArtifact(meta),
 		})
 	}
 	if len(repairErrors) > 0 {
