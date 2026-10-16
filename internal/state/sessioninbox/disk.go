@@ -162,6 +162,12 @@ func (s *Store) readManifestWithoutTransaction() error {
 	if err != nil {
 		return fmt.Errorf("sessioninbox: decode manifest: %w", err)
 	}
+	if man.RunID != "" && man.RunID != s.runID {
+		// Another run owns this queue. Taking it over is the locked path's job
+		// (it marks in-flight items uncertain first), so without the transaction
+		// this read reports the foreign owner instead of adopting its items.
+		return fmt.Errorf("sessioninbox: manifest belongs to run %q: %w", man.RunID, ErrForeignRun)
+	}
 	s.man = man
 	s.readonly = man.SchemaVersion > SchemaVersion
 	if s.readonly {
