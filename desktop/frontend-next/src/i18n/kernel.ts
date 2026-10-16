@@ -391,7 +391,7 @@ const SAID: Record<string, string> = {
   "inbox.idempotency_conflict": "该提交标识已被使用，且当时的内容不同",
 
   // ── 配置文件本身坏了，以及每一个写设置的面板被它挡住时 ─────────
-  "config.unparsed": "配置文件无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复",
+  "config.unparsed": "配置文件 {path} 无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复",
   "changes.path_outside_tree": "{path} 不在当前工作树中，无法查看其改动",
   "changes.diff_failed": "无法读取该文件的改动 —— git 未返回结果",
   "trajectory.unreadable": "无法读取本次运行的轨迹记录，因此无法确定其覆盖范围",
