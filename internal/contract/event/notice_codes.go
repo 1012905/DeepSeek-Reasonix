@@ -70,6 +70,8 @@ const (
 	NoticeCodeGoalRetry = "goal_retry"
 	// The retry allowance ran out; the Goal waits for the user.
 	NoticeCodeGoalRetryGaveUp = "goal_retry_gave_up"
+	// Bash reached a host outside allowed_domains because the user's file says not to ask; Detail is the host.
+	NoticeCodeEgressAutoAllowed = "egress_auto_allowed"
 	// A slash command nothing resolves, refused rather than sent as prose.
 	NoticeCodeUnknownCommand = "unknown_command"
 	// The display currency preference changed; Detail is the stored value, "" for auto.
