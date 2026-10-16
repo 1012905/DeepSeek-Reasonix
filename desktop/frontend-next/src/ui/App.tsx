@@ -747,7 +747,7 @@ export function App({ hub }: { hub: HubPort }) {
           onSaved={() => { setRenaming(null); void reloadTree().catch(fail); }} />
       )}
 
-      <ToastStack onFeedback={() => setFeedback("send")} />
+      <ToastStack onFeedback={() => setFeedback("send")} port={machinePort} idle={!running} />
 
       {feedback && activePort && (
         <Feedback port={machinePort} tab={feedback} onClose={() => setFeedback(null)} onError={setError} onUnread={setFeedbackUnread} />

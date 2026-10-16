@@ -34,6 +34,16 @@ it("saves notify and says what it does, and nothing downloads", async () => {
   expect(screen.getByText(/不会下载，也不会安装或重启/)).toBeTruthy();
 });
 
+it("offers a third choice that downloads but never installs or restarts, off until chosen", async () => {
+  const set = vi.fn((m: Mode) => Promise.resolve(m));
+  render(<UpdateMode port={portAt("manual", set)} />);
+  const choice = await screen.findByRole("radio", { name: "自动下载" });
+  expect(choice.getAttribute("aria-checked")).toBe("false");
+  await userEvent.click(choice);
+  expect(set).toHaveBeenCalledExactlyOnceWith("download");
+  expect(screen.getByText(/下载并校验新版本.*不会安装，也不会自动重启/)).toBeTruthy();
+});
+
 it("keeps the old choice and says why when the kernel refuses", async () => {
   const set = vi.fn(() => Promise.reject(new HttpError(400, "bad", { code: "studio.update_mode_invalid" }, true)));
   render(<UpdateMode port={portAt("manual", set)} />);
