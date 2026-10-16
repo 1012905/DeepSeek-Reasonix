@@ -10,12 +10,10 @@ import (
 )
 
 // ListSessionOrder returns every *.jsonl session under dir in the same
-// most-recently-active order used by ListSessions, using only file metadata and
-// branch sidecars. A missing directory is not an error.
-//
-// A folder of thousands of conversations is read once and then remembered
-// (listindex.go): a session whose files are unchanged since the last listing is
-// answered from the index, so a restart does not have to open every sidecar.
+// most-recently-active order used by ListSessions, from file metadata and
+// branch sidecars. A session whose files are unchanged since the last listing
+// is answered from the remembered index (listindex.go). A missing directory is
+// not an error.
 func ListSessionOrder(dir string) ([]SessionOrderInfo, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
