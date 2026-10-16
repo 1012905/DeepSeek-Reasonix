@@ -1,17 +1,6 @@
 .worktree-trigger .lb { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.compose-footer { position: absolute; top: calc(100% + 5px); left: 12px; right: 12px; display: flex; align-items: center; gap: 8px; min-height: 28px }
-.compose-workspace { display: flex; flex: 1; min-width: 0 }
-.compose-workspace:empty { display: none }
-.compose-workspace > .worktree-trigger { min-width: 0; max-width: 100% }
-.compose-workspace .studio-branch-pop { display: block; min-width: 0; max-width: 100% }
-.compose-workspace .studio-branch-pop .studio-branch { width: auto; max-width: 100%; justify-content: flex-start; padding-inline: 6px }
-.compose-workspace .studio-branch-pop .studio-branch .lb, .compose-workspace .studio-branch-pop .studio-branch small { display: block }
-.compose-workspace .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.compose-workspace .studio-icon { flex-shrink: 0; width: 14px; height: 14px }
-.compose-footer > .studio-meterrail { position: static; min-width: 0; margin-left: auto; padding-inline: 0 }
-:root .compose .compose-workspace .mode { font-size: 12px; border-radius: 8px }
-:root .compose .compose-workspace .mode.worktree-trigger[data-on] { color: var(--brand); background: var(--brand-wash) }
-:root .compose .compose-workspace .mode.worktree-trigger[data-on] .lb, :root .compose .compose-workspace .mode.worktree-trigger[data-on] .studio-icon { color: var(--brand) }
+:root .compose .mode.worktree-trigger[data-on] { color: var(--brand); background: var(--brand-wash) }
+:root .compose .mode.worktree-trigger[data-on] .lb, :root .compose .mode.worktree-trigger[data-on] .studio-icon { color: var(--brand) }
 .worktree-panel { position: fixed; z-index: 1000; width: min(370px, calc(100vw / var(--zoom, 1) - 24px)); max-height: calc(100vh / var(--zoom, 1) - 24px); overflow: auto; padding: 18px; border: 1px solid var(--hair); border-radius: 20px; background: var(--float); color: var(--text); box-shadow: var(--shadow-float); font: 14px/1.5 var(--ui) }
 .worktree-heading { color: var(--muted); margin-bottom: 16px; font-size: 13px }
 .worktree-toggle { display: flex; align-items: center; gap: 12px; padding: 4px 0 18px; border-bottom: 1px solid var(--hair); margin-bottom: 8px }
@@ -37,9 +26,3 @@ button.worktree-row:hover { background: var(--float-hi) }
 .worktree-sources button[aria-selected="true"] { color: var(--brand); background: var(--brand-wash) }
 .worktree-back { border: 0; background: none; color: var(--muted); padding: 6px; font: inherit }
 .worktree-panel :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
-@container conversation (max-width: 720px) {
-  .compose:has(.compose-footer) { margin-bottom: 68px }
-  .compose-footer { flex-wrap: wrap; gap: 0 }
-  .compose-workspace { flex-basis: 100% }
-  .compose-footer > .studio-meterrail { flex: 1 0 100%; margin-left: 0 }
-}

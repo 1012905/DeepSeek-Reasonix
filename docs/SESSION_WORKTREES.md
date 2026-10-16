@@ -9,7 +9,7 @@ reviewed: 2026-10-15
 
 ## 中文
 
-在有提交记录的 Git 项目中新建会话，点击输入框下方的「当前目录 · 分支」：
+在有提交记录的 Git 项目中新建会话，点击输入框内底部工具栏的「当前目录 · 分支」：
 
 1. 开启「新建 worktree」。
 2. 点击「起始分支」，搜索并选择本地分支或已获取的远程分支。
@@ -25,7 +25,7 @@ reviewed: 2026-10-15
 
 ## English
 
-Start a new conversation in a Git project with a commit, then open **Current folder · branch** below the composer:
+Start a new conversation in a Git project with a commit, then open **Current folder · branch** in the composer's bottom toolbar:
 
 1. Enable **New worktree**.
 2. Open **Base branch** and search local or fetched remote-tracking branches.

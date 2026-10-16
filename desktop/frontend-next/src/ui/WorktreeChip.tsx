@@ -74,8 +74,8 @@ export function WorktreeChip({ sources, selection, branch, busy, changeCount, on
     ref: sources.sources.find((source) => source.current)?.ref ?? "HEAD",
   });
   const shown = sources.sources.filter((source) => source.name.toLowerCase().includes(query.toLowerCase()));
-  return <>
-    <button ref={trigger} type="button" className="mode plain worktree-trigger" data-on={selection ? "" : undefined} data-action="workspace.configure" aria-label={t("配置工作目录")} aria-haspopup="dialog" aria-expanded={open} disabled={busy} onClick={show}>
+  return <div className="studio-branch-pop">
+    <button ref={trigger} type="button" className="mode plain studio-branch worktree-trigger" data-on={selection ? "" : undefined} data-action="workspace.configure" aria-label={t("配置工作目录")} aria-haspopup="dialog" aria-expanded={open} disabled={busy} onClick={show}>
       <StudioIcon name="branch" /><span className="lb">{selection ? t("独立 worktree · {branch}", { branch: label }) : t("当前目录 · {branch}", { branch })}</span>{changeCount > 0 && <small>{t("{n} 个变更", { n: changeCount })}</small>}<StudioIcon name="down" />
     </button>
     {open && createPortal(<div ref={panel} className="worktree-panel composer-menu" role="dialog" aria-labelledby={title}>
@@ -108,5 +108,5 @@ export function WorktreeChip({ sources, selection, branch, busy, changeCount, on
         </> : <p className="worktree-note">{t("使用当前目录，与该目录中的其他会话共享文件")}</p>}
       </>}
     </div>, document.body)}
-  </>;
+  </div>;
 }

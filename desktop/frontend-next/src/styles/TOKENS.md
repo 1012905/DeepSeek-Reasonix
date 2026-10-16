@@ -258,9 +258,9 @@ pack states a shape, never a number the layout has to agree with.
 - The composer scope covers work mode, workspace, permissions, model and effort.
   Search results wrap long names; large lists scroll within the viewport. Other
   pickers retain their own density.
-- Workspace controls sit below the input card beside runtime statistics. Below
-  720px they occupy separate footer rows, keeping branch names readable without
-  competing with the send, permission and model controls.
+- Workspace controls share the branch slot in the composer's bottom toolbar,
+  including its pill radius, hover surface and narrow-pane label folding.
+  Runtime statistics remain below the input card.
 
 - The scale carried 24 sizes, 442 uses of them inside the four steps between 10
   and 11.5px. Half a pixel is not a level; it reads as nothing quite matching.

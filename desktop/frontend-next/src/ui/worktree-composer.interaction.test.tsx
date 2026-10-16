@@ -31,6 +31,7 @@ async function choose() {
 it("selects a source without switching the checkout and creates only when sending", async () => {
   const { port, isolate, submit } = draw();
   const switchBranch = vi.spyOn(port, "switchBranch");
+  expect((await screen.findByRole("button", { name: "配置工作目录" })).closest(".turntools")).not.toBeNull();
   await choose();
   expect(isolate).not.toHaveBeenCalled();
   expect(switchBranch).not.toHaveBeenCalled();
@@ -66,6 +67,6 @@ it("reuses the prepared worktree when the first submission is refused", async ()
 it("retains the branch switcher for existing conversations", async () => {
   const { port } = draw(false);
   expect(screen.queryByRole("button", { name: "配置工作目录" })).toBeNull();
-  expect(screen.getByRole("button", { name: /当前 Git 分支/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /当前 Git 分支/ }).closest(".turntools")).not.toBeNull();
   expect(vi.spyOn(port, "worktreeSources")).not.toHaveBeenCalled();
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
 import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
@@ -33,7 +33,6 @@ import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
 
 interface Props {
-  children?: ReactNode;
   fresh?: boolean;
   port: AgentPort;
   status: SessionStatus | null;
@@ -120,7 +119,7 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false, children }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const modelGroups = useModelFilter();
@@ -422,7 +421,6 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const warnPictures = status?.vision === false && shots.some((c) => c.k === "attachment" && c.state === "ready" && isPicture(c));
 
   return (
-    // display:contents retains one drop target across the input and footer.
     <div className="dropzone" ref={dropzone}>
       {menu.open && (
         <CompletionMenu
@@ -691,6 +689,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             label={<><StudioIcon name="agent" /><span className="studio-sr-label">{t("计划")}</span><span>{status?.plan ? "Plan" : "Agent"}</span><StudioIcon name="down" /></>}
           />
         </div>
+        {fresh && worktree.sources?.available ? <WorktreeChip changeCount={countElsewhere ? 0 : changeCount} sources={worktree.sources} selection={worktree.selection} branch={git?.branch ?? "HEAD"} busy={submitting || running} onSelect={worktree.setSelection} refresh={worktree.refresh} /> : <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />}
         {/* The toggle keeps its legacy meaning: it follows `plan`, which the
             kernel turns off the moment a plan is approved. The lifecycle is a
             separate reading — an approved plan is still running, and saying so
@@ -790,10 +789,6 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             <span>{t(submitting ? "正在发送…" : running ? "插话" : "发送")}</span>
           </button>}
         </span>
-      </div>
-      <div className="compose-footer">
-        <div className="compose-workspace">{fresh && worktree.sources?.available ? <WorktreeChip changeCount={countElsewhere ? 0 : changeCount} sources={worktree.sources} selection={worktree.selection} branch={git?.branch ?? "HEAD"} busy={submitting || running} onSelect={worktree.setSelection} refresh={worktree.refresh} /> : <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />}</div>
-        {children}
       </div>
     </div>
   );
