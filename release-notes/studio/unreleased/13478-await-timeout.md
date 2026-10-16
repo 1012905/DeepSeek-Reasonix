@@ -1,0 +1,2 @@
+- 设置“提问超时”后，模型交还任务清单却无人回应时，也会按此时间自动继续并写明假设，连续最多 3 次；默认关闭。关联 #13478。
+- With the ask timeout on, a task list handed back to you continues after that time, assumptions stated, at most 3 times in a row; off by default. Refs #13478.
