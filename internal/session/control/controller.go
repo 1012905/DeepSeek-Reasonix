@@ -718,7 +718,8 @@ func (c *Controller) noticeDetail(text, detail string) {
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: text, Detail: detail})
 }
 
-// Running reports whether a turn is currently in flight.
+// Running reports whether admission is closed by a turn, including the delivery
+// of its TurnDone. Guards read this; a window shows TurnInFlight.
 func (c *Controller) Running() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

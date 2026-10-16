@@ -347,6 +347,7 @@ type Capabilities interface {
 
 // Status covers read-only run/usage/billing telemetry and task list state.
 type Status interface {
+	TurnInFlight() bool
 	ContextSnapshot() (int, int)
 	ContextBreakdown() agent.ContextBreakdown
 	ContextMaintenanceSnapshot() agent.ContextMaintenanceSnapshot
