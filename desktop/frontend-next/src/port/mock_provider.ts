@@ -127,7 +127,7 @@ export class MockProvider extends MockBoundary {
     return got;
   }
 
-  private async answerCheck(name: string): Promise<ProviderCheck> {
+  protected async answerCheck(name: string): Promise<ProviderCheck> {
     if (name === "mimo") return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
     const models = name.startsWith("myrelay")
       ? relayCatalog()
