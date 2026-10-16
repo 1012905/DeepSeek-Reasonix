@@ -111,18 +111,16 @@ export function EditConn({
 
   // Re-asking the endpoint is how a source that gained models catches up; the
   // ticks the user already made survive it.
-  // A blank key field means "keep the stored one", so re-probing has to go
-  // through the saved source. Sending the empty field instead probes as a
-  // provider with no credential at all, which fails before it reaches the host.
+  // A blank key field means "keep the stored one", so the kernel is asked
+  // through the saved source with the form's address, key and protocol laid
+  // over it: what is being edited is what gets tested.
   const refetch = async () => {
     setBusy(`refresh:${entry.name}`);
     setErr(null);
     setRefreshFail("");
     setDiff(null);
     try {
-      const refreshed = apiKey.trim()
-        ? await port.probeProvider(baseUrl.trim(), apiKey.trim())
-        : await port.checkProvider(entry.name);
+      const refreshed = await port.checkProvider(entry.name, { baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), kind });
       if ("ok" in refreshed && !refreshed.ok) {
         setRefreshFail(checkFailure(refreshed));
         return;

@@ -72,6 +72,11 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Name string `json:"name"`
+		// The rest is the form's unsaved state. Each is optional: blank means
+		// what is saved, so a plain re-check still sends only the name.
+		BaseURL string `json:"baseUrl"`
+		APIKey  string `json:"apiKey"`
+		Kind    string `json:"kind"`
 	}
 	if !decodeProviderBody(w, r, &body) {
 		return
@@ -81,15 +86,29 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	entry, ok := cfg.Provider(strings.TrimSpace(body.Name))
+	saved, ok := cfg.Provider(strings.TrimSpace(body.Name))
 	if !ok {
 		notFound(w, "provider", body.Name)
 		return
 	}
+	entry := *saved
+	if value := strings.TrimSpace(body.BaseURL); value != "" {
+		entry.BaseURL = value
+	}
+	if value := strings.ToLower(strings.TrimSpace(body.Kind)); value != "" {
+		if !config.SupportedProviderKind(value) {
+			refuse(w, http.StatusBadRequest, "provider.kind_unsupported", "unsupported provider kind", map[string]any{"kind": value})
+			return
+		}
+		entry.Kind = value
+	}
+	if key := strings.TrimSpace(body.APIKey); key != "" {
+		entry = entry.WithAPIKeyForProbe(key)
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), providerProbeTimeout)
 	defer cancel()
 	if config.AnswersFor(entry.Kind) == config.AnswersDecision {
-		writeJSON(w, checkDecisionProvider(ctx, cfg, entry))
+		writeJSON(w, checkDecisionProvider(ctx, cfg, &entry))
 		return
 	}
 	proxied, direct := probeClients()

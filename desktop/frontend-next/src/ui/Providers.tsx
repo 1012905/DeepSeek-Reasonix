@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Clip } from "./Clip";
 import { useEscape } from "./dismiss";
 import { t } from "../i18n";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "../port/port";
+import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "../port/port";
 import { AddProvider } from "./AddProvider";
 import { ProviderDetail } from "./ProviderDetail";
 import { accountKey, accountLabel, disambiguate, hostOf } from "./vendors";
@@ -26,7 +26,7 @@ export type Port = {
   probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe>;
   saveProvider(draft: ProviderDraft): Promise<void>;
   removeProvider(name: string): Promise<ProviderRemoval>;
-  checkProvider(name: string): Promise<ProviderCheck>;
+  checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck>;
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   editProvider(edit: ProviderEdit): Promise<void>;
   setProviderWebSearch(name: string, on: boolean): Promise<void>;
