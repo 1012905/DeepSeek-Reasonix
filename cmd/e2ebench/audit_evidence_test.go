@@ -144,3 +144,75 @@ func TestMeterAccountingKeepsAPersistedZeroOnBothSides(t *testing.T) {
 		t.Fatalf("a real zero-token measurement was dropped as if it were missing:\n%s", got)
 	}
 }
+
+func TestCorrectBoundaryMediansExcludeRunsWithNoRecordedSplit(t *testing.T) {
+	cp := []checkpoint{{Seq: 1, ElapsedMs: 1_000}, {Seq: 2, ElapsedMs: 2_000, Pass: true}}
+	measured := result{
+		task: task{ID: "measured"}, Passed: true, WallMs: 200_000, Checkpoints: cp,
+		FirstCorrectMs: 50_000, PostSolveWasteMs: 150_000,
+		MutationsBeforeCorrect: 1, RoundsBeforeCorrect: 3, RoundsAfterCorrect: 4,
+		CallsAfterCorrect: 5, VerifyAfterCorrect: 2,
+		Trajectory: &trajectorySummary{ModelRounds: 8},
+	}
+	// the same run twice, but -trajectories was omitted: no digest, so no split
+	// was ever taken and the before/after tallies stay at their zero value.
+	unmeasured := result{
+		task: task{ID: "unmeasured"}, Passed: true, WallMs: 200_000, Checkpoints: cp,
+		FirstCorrectMs: 50_000, PostSolveWasteMs: 150_000,
+		MutationsBeforeCorrect: 1,
+	}
+	unmeasured2 := unmeasured
+	unmeasured2.task = task{ID: "unmeasured-2"}
+	// The audit read the rendered line as plain text; the renderer emits
+	// markdown emphasis around each label, so compare with it stripped.
+	const want = "**rounds before** 3 · **rounds after** 4"
+	got := renderSolveProfiles([]result{measured, unmeasured, unmeasured2})
+	if !strings.Contains(got, want) {
+		t.Fatalf("medians folded in a run whose trajectory was never split:\n%s\n"+
+			"want %q (the measured run only)", got, want)
+	}
+}
+
+// Control (a): when every run recorded its split, the exclusion must not touch
+// a single number — the medians stay the measured ones.
+func TestCorrectBoundaryMediansAllMeasuredUnchanged(t *testing.T) {
+	cp := []checkpoint{{Seq: 1, ElapsedMs: 1_000}, {Seq: 2, ElapsedMs: 2_000, Pass: true}}
+	mk := func(id string, before, after, verify, mutations int) result {
+		return result{
+			task: task{ID: id}, Passed: true, WallMs: 200_000, Checkpoints: cp,
+			FirstCorrectMs: 50_000, PostSolveWasteMs: 150_000,
+			RoundsBeforeCorrect: before, RoundsAfterCorrect: after,
+			VerifyAfterCorrect: verify, MutationsBeforeCorrect: mutations,
+			Trajectory: &trajectorySummary{ModelRounds: 8},
+		}
+	}
+	got := renderSolveProfiles([]result{mk("a", 2, 6, 1, 0), mk("b", 3, 4, 2, 1), mk("c", 4, 5, 3, 2)})
+	const want = "**mutations before** 1 · **rounds before** 3 · **rounds after** 5 · **verifications after** 2"
+	if !strings.Contains(got, want) {
+		t.Fatalf("all-measured medians changed:\n%s\nwant %q", got, want)
+	}
+}
+
+// Control (b): with -trajectories off no split was ever taken for any run, so
+// there is nothing to average. Printing zeros would publish them as
+// observations; the report must say the boundary is unmeasured instead.
+func TestCorrectBoundaryWithNoRecordedSplitSaysNothingToAverage(t *testing.T) {
+	cp := []checkpoint{{Seq: 1, ElapsedMs: 1_000}, {Seq: 2, ElapsedMs: 2_000, Pass: true}}
+	run := func(id string, mutations int) result {
+		return result{
+			task: task{ID: id}, Passed: true, WallMs: 200_000, Checkpoints: cp,
+			FirstCorrectMs: 50_000, PostSolveWasteMs: 150_000,
+			MutationsBeforeCorrect: mutations,
+		}
+	}
+	got := renderSolveProfiles([]result{run("a", 1), run("b", 3)})
+	if strings.Contains(got, "rounds before") || strings.Contains(got, "verifications after") {
+		t.Fatalf("a boundary that was never split printed as a measurement:\n%s", got)
+	}
+	if !strings.Contains(got, "**mutations before** 3") {
+		t.Fatalf("the checkpoint-derived mutation count is measured without a trajectory and must still be printed:\n%s", got)
+	}
+	if !strings.Contains(got, "nothing to average") {
+		t.Fatalf("the report must say the boundary was never measured:\n%s", got)
+	}
+}
