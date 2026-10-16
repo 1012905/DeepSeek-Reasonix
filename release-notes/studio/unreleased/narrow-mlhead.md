@@ -1,0 +1,2 @@
+- 手机宽度下，连接设置里“模型”标题不再被挤成竖排两行，右边的按钮会换到下一行。关联 #12040。
+- On phone-width windows the "Models" heading in the connection settings no longer breaks into two lines; the buttons beside it wrap onto the next line. Refs #12040.
