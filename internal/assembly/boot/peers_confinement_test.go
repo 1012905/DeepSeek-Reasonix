@@ -10,6 +10,7 @@ import (
 
 	"reasonix/internal/contract/config"
 	"reasonix/internal/safety/sandbox"
+	"reasonix/internal/state/peermail"
 )
 
 // What a confined command may do to the peer-mail spool, composed exactly the
@@ -63,6 +64,16 @@ func TestAConfinedCommandCannotTouchThePeerSpool(t *testing.T) {
 	if out, _ := run("ls " + spool); strings.Contains(out, "msg-1.json") {
 		t.Errorf("a confined command listed the spool: %q", out)
 	}
+	d, err := peermail.Open(cfg.Roots().PeersDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Audit(peermail.AuditRecord{Receiver: "sess-b", Sender: "sess-a", ID: "m1", Decision: peermail.DecisionHeld, SHA256: "audit-digest-marker"}); err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := run("cat " + filepath.Join(cfg.Roots().PeersDir(), "audit", "*.jsonl")); strings.Contains(out, "audit-digest-marker") {
+		t.Errorf("a confined command read the audit trail: %q", out)
+	}
 	if out, _ := run("ls " + cfg.Roots().PeersDir()); strings.Contains(out, "spool") {
 		t.Errorf("a confined command listed the peers directory: %q", out)
 	}
@@ -83,7 +94,7 @@ func TestAConfinedCommandCannotTouchThePeerSpool(t *testing.T) {
 		filepath.Join(spool, "forged.json"),
 		entry + ".x",
 		filepath.Join(cfg.Roots().PeersDir(), "spool", "sess-c"),
-		filepath.Join(cfg.Roots().PeersDir(), "live"),
+		filepath.Join(cfg.Roots().PeersDir(), "live", "x.json"),
 	} {
 		if _, err := os.Lstat(path); !os.IsNotExist(err) {
 			t.Errorf("a confined command left %s on the host", path)

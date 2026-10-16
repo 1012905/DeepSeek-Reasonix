@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"reasonix/internal/base/fileutil"
 )
@@ -74,6 +75,28 @@ func (d *Dir) RemoveLive(sessionID string) error {
 		return ErrInvalid
 	}
 	err := os.Remove(filepath.Join(d.root, "live", sessionID+".json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// RemoveLiveIf withdraws the record only while it still belongs to instance: a
+// session rebuilt in place is published by its replacement before the old
+// controller closes, and the old one must not take that record down with it.
+func (d *Dir) RemoveLiveIf(sessionID, instance string) error {
+	if !validID(sessionID) {
+		return ErrInvalid
+	}
+	path := filepath.Join(d.root, "live", sessionID+".json")
+	var l Live
+	if reason := d.readJSON(path, maxLiveBytes, &l); reason != "" {
+		return nil
+	}
+	if l.Instance != instance {
+		return nil
+	}
+	err := os.Remove(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -156,6 +179,27 @@ func (d *Dir) Send(m Message) error {
 		return err
 	}
 	return nil
+}
+
+// SweepTemp removes hidden temporary files in sessionID's spool that are older
+// than olderThan. A sender that crashed between creating one and linking it
+// into place leaves it behind, and until it goes a retry under the same id is
+// refused as a duplicate.
+func (d *Dir) SweepTemp(sessionID string, olderThan time.Duration) {
+	if !validID(sessionID) {
+		return
+	}
+	entries, _ := os.ReadDir(d.spoolDir(sessionID))
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), ".tmp-") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || !info.Mode().IsRegular() || time.Since(info.ModTime()) < olderThan {
+			continue
+		}
+		_ = os.Remove(filepath.Join(d.spoolDir(sessionID), e.Name()))
+	}
 }
 
 // Pending reads the messages addressed to sessionID, oldest name first. A file

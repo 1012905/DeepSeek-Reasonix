@@ -194,6 +194,8 @@ type Controller struct {
 	// inbox is the durable session-level instruction queue. Disk I/O never
 	// runs under c.mu; the store owns its own lock.
 	inbox inboxState
+	// peers is this controller's side of messages between sessions; nil-safe off.
+	peers *peerMail
 }
 
 type approvalReply struct {
@@ -312,12 +314,14 @@ type Options struct {
 	SystemPrompt        string
 	SessionDir          string
 	SessionPath         string
-	Host                *plugin.Host
-	Commands            []command.Command
-	Skills              []skill.Skill
-	AllSkills           []skill.Skill
-	SkillStore          *skill.Store
-	AllSkillStore       *skill.Store
+	// Peers opens this session to messages from other sessions; zero is off.
+	Peers         PeersOptions
+	Host          *plugin.Host
+	Commands      []command.Command
+	Skills        []skill.Skill
+	AllSkills     []skill.Skill
+	SkillStore    *skill.Store
+	AllSkillStore *skill.Store
 	// Clock is the host's wall clock for the date the model is told; nil means
 	// the model is told none.
 	Clock func() time.Time
@@ -480,7 +484,9 @@ func New(opts Options) *Controller {
 	// Checkpoints: bind a store to the session and route writer pre-edits into it.
 	c.rebindCheckpoints(opts.SessionPath)
 	c.setActiveJobSession(opts.SessionPath)
+	c.peers = newPeerMail(opts.Peers)
 	c.rebindInbox()
+	c.startPeers()
 	// Observe Steer / unapplied-steer for durable inbox state transitions.
 	// Must wrap both the controller sink and the executor sink: agent.Steer
 	// emits on the executor path, TurnDone on the controller path.
@@ -745,13 +751,6 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 	}
 }
 
-// Turn returns the current turn number (0 before the first submit).
-func (c *Controller) Turn() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.turn
-}
-
 type plannerPlanApprover struct {
 	c *Controller
 }
@@ -892,17 +891,6 @@ func (c *Controller) loadGuardianSession() {
 	}
 	if err := c.guardianSess.Load(path); err != nil && !os.IsNotExist(err) {
 		slog.Warn("controller: load guardian session", "err", err)
-	}
-}
-
-// ResetPlannerSession clears the planner's conversation history so the next
-// plan starts fresh. In dual-model (Plan+Execute) mode, this prevents stale
-// planner output from a previous session or tab from contaminating the current
-// executor's handoff. Safe to call on a single-model controller (no-op).
-func (c *Controller) ResetPlannerSession() {
-	runner, ok := c.runner.(plannerSessionResetter)
-	if ok {
-		runner.ResetPlannerSession()
 	}
 }
 
