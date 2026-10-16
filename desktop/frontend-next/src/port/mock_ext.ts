@@ -1,5 +1,5 @@
 import { download } from "./download";
-import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan, ScopeLayer, SkillCatalog, SkillEntry } from "./port";
+import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan, ScopeLayer, SkillCatalog, SkillEntry, SkillUpdatePlan } from "./port";
 import { MockMarket } from "./mock_market";
 
 // The extension half of the fixture: skills, and the packages that bring them.
@@ -71,6 +71,11 @@ export class MockExtensions extends MockMarket {
   // localSkills is what the fixture counts as this project's exceptions; the
   // real store keys them by repository, which a browser fixture cannot do.
   protected localSkills = new Set<string>();
+
+  async planSkillUpdate(name: string): Promise<SkillUpdatePlan> {
+    return { name, source: "/home/demo/skills/" + name, state: "source_changed", changes: [], overwritesLocal: false, planId: "demo" };
+  }
+  async applySkillUpdate(): Promise<void> {}
 
   async setSkillEnabled(name: string, enabled: boolean, scope: ScopeLayer = "project") {
     const sk = this.skillList.find((x) => x.name === name);

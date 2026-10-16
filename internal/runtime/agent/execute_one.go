@@ -81,18 +81,23 @@ type toolCallPlan struct {
 	// ranClean: the tool's own Execute returned no error, before tool.after ruled.
 	ranClean bool
 	executed bool
-	// nestedOrigin is the first external origin among calls this tool made
-	// through its invoker; it labels the result when the tool declares none.
-	nestedOrigin tool.Provenance
+	// spawned collects the external origins of calls this tool made on its own
+	// account, nested or through a sub-agent; it labels a result the tool
+	// declares nothing external for.
+	spawned *tool.ProvenanceSink
 }
 
 // provenanceOf is where the result's content came from: the tool's own
-// answer, else what its nested calls fetched.
+// answer, else what the calls it spawned fetched.
 func (p *toolCallPlan) provenanceOf(t tool.Tool, args json.RawMessage) tool.Provenance {
-	if own := tool.ProvenanceOf(t, args); own.External() {
+	own := tool.ProvenanceOf(t, args)
+	if own.External() || p.spawned == nil {
 		return own
 	}
-	return p.nestedOrigin
+	if inherited := p.spawned.Origin(); inherited.External() {
+		return inherited
+	}
+	return own
 }
 
 // executeOne runs a single tool call. It is pure with respect to the event sink
@@ -664,6 +669,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 
 	var result string
 	var images []string
+	var execution *tool.ShellExecution
 	var err error
 	// A call that was authorized under reader classification carries that
 	// basis into dispatch: the MCP execution layer re-verifies it linearizably
@@ -683,33 +689,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// ctx would otherwise kill the hook before it runs.
 		defer func() { a.svc.hooks.SubagentStop(context.WithoutCancel(ctx), call.ID, result, err) }()
 	}
-	var execution *tool.ShellExecution
-	if de, ok := runTool.(tool.DetailedExecutor); ok {
-		var detailed tool.DetailedResult
-		detailed, err = de.ExecuteDetailed(cctx, runArgs)
-		result, images, execution = detailed.Output, detailed.Images, detailed.Execution
-		// Annotate verification outcome when the host classified this call as a
-		// verifier. The exit status answers for the whole command, so it is a
-		// verdict about the verifier only when no later stage can decide it.
-		if execution != nil && plan.verification {
-			execution.Verification = shellVerificationVerdict(bashCommandFromArgs(plan.evidenceArgs),
-				bashDeclaredCheck(plan.evidenceArgs) != "", execution.PipeStatus, err)
-			result = shellVerificationNotice(result, execution)
-		} else if execution != nil && execution.Verification == "" {
-			execution.Verification = tool.ShellVerificationNotVerification
-		}
-		annotateShellSubject(execution, runArgs)
-		// Sole opaque inline interpreters are allowed outside Delivery but cannot
-		// prove mutation completeness.
-		if execution != nil && evidence.BashCommandMayBeOpaqueMutation(runArgs) &&
-			execution.MutationRisk == tool.ShellMutationMayHaveCompleted {
-			execution.MutationRisk = tool.ShellMutationUnknown
-		}
-	} else if it, ok := runTool.(tool.ImageTool); ok {
-		result, images, err = it.ExecuteWithImages(cctx, runArgs)
-	} else {
-		result, err = runTool.Execute(cctx, runArgs)
-	}
+	result, images, execution, err = a.executeStoppable(ctx, cctx, plan)
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
@@ -721,6 +701,8 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		return a.blockedToolOutcome(plan, msg)
 	}
 	err = usecap.WithContractHint(err, runTool, runArgs)
+	origin := plan.provenanceOf(runTool, runArgs)
+	tool.NoteProvenance(ctx, origin)
 	owedBefore := a.obligations()
 	a.recordToolReceipts(ctx, plan, result, execution, err)
 	result = a.withObligationNotice(result, owedBefore, execution, readOnly)
@@ -748,7 +730,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
 			output: body, images: images, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
-			execution: execution, provenance: plan.provenanceOf(runTool, runArgs), refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
+			execution: execution, provenance: origin, refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
 		if truncMsg != "" {
 			out.rawOutput = rawErr
@@ -760,7 +742,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
 		output: body, images: images, bound: bound, truncMsg: truncMsg,
-		execution: execution, provenance: plan.provenanceOf(runTool, runArgs), checkpointErr: checkpointErr,
+		execution: execution, provenance: origin, checkpointErr: checkpointErr,
 	}
 	if truncMsg != "" {
 		out.rawOutput = result
@@ -781,4 +763,38 @@ func annotateShellSubject(execution *tool.ShellExecution, args json.RawMessage) 
 	if subject, cut := shellrun.OperativeCommand(cmd); cut {
 		execution.Subject = subject
 	}
+}
+
+// executeStoppable runs the call under a context CancelToolCall can end alone.
+func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan) (result string, images []string, execution *tool.ShellExecution, err error) {
+	runTool, runArgs := plan.runTool, plan.runArgs
+	cctx, endCall := a.stops.begin(cctx, plan.call.ID)
+	defer endCall()
+	if de, ok := runTool.(tool.DetailedExecutor); ok {
+		var detailed tool.DetailedResult
+		detailed, err = de.ExecuteDetailed(cctx, runArgs)
+		result, images, execution = detailed.Output, detailed.Images, detailed.Execution
+		// Annotate verification outcome when the host classified this call as a
+		// verifier. The exit status answers for the whole command, so it is a
+		// verdict about the verifier only when no later stage can decide it.
+		if execution != nil && plan.verification {
+			execution.Verification = shellVerificationVerdict(bashCommandFromArgs(plan.evidenceArgs),
+				bashDeclaredCheck(plan.evidenceArgs) != "", execution.PipeStatus, err)
+			result = shellVerificationNotice(result, execution)
+		} else if execution != nil && execution.Verification == "" {
+			execution.Verification = tool.ShellVerificationNotVerification
+		}
+		annotateShellSubject(execution, runArgs)
+		// Sole opaque inline interpreters are allowed outside Delivery but cannot
+		// prove mutation completeness.
+		if execution != nil && evidence.BashCommandMayBeOpaqueMutation(runArgs) &&
+			execution.MutationRisk == tool.ShellMutationMayHaveCompleted {
+			execution.MutationRisk = tool.ShellMutationUnknown
+		}
+	} else if it, ok := runTool.(tool.ImageTool); ok {
+		result, images, err = it.ExecuteWithImages(cctx, runArgs)
+	} else {
+		result, err = runTool.Execute(cctx, runArgs)
+	}
+	return result, images, execution, stoppedByUser(turn, cctx, err)
 }

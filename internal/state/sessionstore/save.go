@@ -1573,7 +1573,7 @@ func ReconcileCleanupPending(dir string, cleanup func(CleanupPendingInfo) error)
 		return errors.Join(errs...)
 	}
 	for _, item := range pending {
-		handled, err := reconcileRecoveryTrashPending(item)
+		handled, err := reconcilePending(dir, item, cleanup)
 		if !handled {
 			if cleanup == nil {
 				continue
@@ -1911,111 +1911,6 @@ func reparentSessionBranches(dir string, renamed map[string]string) error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-// ListSessionOrder returns every *.jsonl session under dir in the same
-// most-recently-active order used by ListSessions, using only file metadata and
-// branch sidecars. A missing directory is not an error.
-func ListSessionOrder(dir string) ([]SessionOrderInfo, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var out []SessionOrderInfo
-	for _, e := range entries {
-		if e.IsDir() || !store.IsSessionTranscriptName(e.Name()) {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		full := filepath.Join(dir, e.Name())
-		if !IsVisibleSession(full) {
-			continue
-		}
-		contentMod := SessionContentModTime(full)
-		if contentMod.IsZero() {
-			contentMod = info.ModTime()
-		}
-		createdAt := info.ModTime()
-		lastActivityAt := contentMod
-		scope := "global"
-		workspaceRoot := ""
-		topicID := ""
-		topicTitle := ""
-		customTitle := ""
-		archived, unread, recovered, pinned := false, false, false, false
-		recoveryReason, recoveryDigest, parentID, recoveryRootID := "", "", "", ""
-		turns := 0
-		preview := ""
-		schemaVersion := 0
-		revision := int64(0)
-		contentDigest := ""
-		if meta, ok, err := LoadBranchMeta(full); err == nil && ok {
-			if meta.Superseded {
-				continue
-			}
-			if !meta.CreatedAt.IsZero() {
-				createdAt = meta.CreatedAt
-			}
-			if !meta.UpdatedAt.IsZero() {
-				lastActivityAt = meta.UpdatedAt
-			}
-			scope = meta.DefaultScope()
-			workspaceRoot = meta.WorkspaceRoot
-			topicID = meta.TopicID
-			topicTitle = meta.TopicTitle
-			customTitle = meta.CustomTitle
-			archived = meta.Archived
-			pinned = meta.Pinned
-			unread = meta.Unread()
-			recovered = meta.Recovered
-			recoveryReason = meta.RecoveryReason
-			recoveryDigest = meta.RecoveryDigest
-			parentID = meta.ParentID
-			recoveryRootID = meta.RecoveryRootID
-			turns = meta.Turns
-			preview = meta.Preview
-			schemaVersion = meta.SchemaVersion
-			revision = meta.Revision
-			contentDigest = meta.ContentDigest
-		}
-		out = append(out, SessionOrderInfo{
-			Path:           full,
-			CreatedAt:      createdAt,
-			LastActivityAt: lastActivityAt,
-			ModTime:        lastActivityAt,
-			Scope:          scope,
-			WorkspaceRoot:  workspaceRoot,
-			TopicID:        topicID,
-			TopicTitle:     topicTitle,
-			CustomTitle:    customTitle,
-			Archived:       archived,
-			Pinned:         pinned,
-			Unread:         unread,
-			Recovered:      recovered,
-			RecoveryReason: recoveryReason,
-			RecoveryDigest: recoveryDigest,
-			ParentID:       parentID,
-			RecoveryRootID: recoveryRootID,
-			Turns:          turns,
-			Preview:        preview,
-			SchemaVersion:  schemaVersion,
-			Revision:       revision,
-			ContentDigest:  contentDigest,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].LastActivityAt.Equal(out[j].LastActivityAt) {
-			return out[i].Path < out[j].Path
-		}
-		return out[i].LastActivityAt.After(out[j].LastActivityAt)
-	})
-	return out, nil
 }
 
 // ListSessions returns every non-empty *.jsonl session under dir,

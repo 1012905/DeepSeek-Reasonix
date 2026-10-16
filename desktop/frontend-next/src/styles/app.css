@@ -1447,6 +1447,8 @@
     box-shadow: 0 2px 10px -4px color-mix(in srgb, var(--accent) 26%, transparent);
   }
 
+  .ask > .err { padding: 10px 14px; color: var(--err-ink); font: var(--w-med) var(--fs-ui)/1.5 var(--ui); border-bottom: 1px solid var(--hair) }
+
   .ask-tabs {
     display: flex; gap: 2px; padding: 8px 10px 0;
     overflow-x: auto; overflow-y: hidden;
@@ -3154,6 +3156,10 @@
   .ml-head span { font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
   .ml-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 150px; align-items: center; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--hair) }
   .addp .ml-row .unit-field input { padding: 6px 8px; font-size: var(--fs-meta) }
+  .mp-row { grid-template-columns: repeat(4, minmax(0, 1fr)) }
+  .mp-row .me-name { grid-column: 1 / -1 }
+  .mp-row .why { grid-column: 1 / -1 }
+  .mp-row select { padding: 6px 8px; font-size: var(--fs-meta) }
   .ml-row .me-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--w-med) var(--fs-ui) var(--mono); color: var(--text) }
   .ml-row input::placeholder { color: var(--ghost) }
   .ml-row[data-own] .unit-field:has(input:not(:placeholder-shown)) { border-color: var(--accent) }
@@ -3932,6 +3938,7 @@
   .md a:hover { color: var(--text) }
   .md a code, .out .txt a code { color: inherit }
   .md img { max-width: 100%; border-radius: var(--r-sm) }
+  .md .md-outside-image { display: inline-block; padding: 1px 8px; border: 1px dashed var(--hair); border-radius: var(--r-sm); color: var(--muted); cursor: help }
 
   .md > :last-child::after { content: "" }
   .md .caret { margin-left: 2px; vertical-align: -2px }

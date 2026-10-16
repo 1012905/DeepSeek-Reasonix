@@ -26,6 +26,7 @@ const (
 	RootCoveredAlready = config.RootCoveredAlready
 	RootTooBroad       = config.RootTooBroad
 	RootProtected      = config.RootProtected
+	RootSkillStore     = config.RootSkillStore
 )
 
 // WorkspaceRootError carries the refusal as an identity a frontend can map.

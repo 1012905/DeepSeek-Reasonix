@@ -244,6 +244,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		sess["modes"] = modes
 	}
 	sess["sessionCostQuote"] = s.bc.SessionCostQuote()
+	sess["sessionUsage"] = s.bc.SessionUsage()
 	if j := s.ctl().Jobs(); len(j) > 0 {
 		sess["jobs"] = j
 	}

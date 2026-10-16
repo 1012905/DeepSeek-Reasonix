@@ -117,21 +117,23 @@ func (c *Controller) activeGoalTurnBlock(goal, goalStatus string) string {
 	return c.activeGoalBlockForTurn(goal)
 }
 
-// recallTail is the one block that follows the user's text rather than
-// preceding it: retrieved facts answer the request, so they sit with it. An
-// out-of-band write already supplied the new fact verbatim, so that turn
-// records why it did not retrieve instead of retrieving again.
+// recallTail is the one block after the user's text: retrieved facts answer the
+// request. A carried note already supplied the new fact verbatim, so every
+// outcome — note, ablation switch, real search — records and audits one decision.
 func (c *Controller) recallTail(source string, hasNotes bool) string {
+	query := strings.TrimSpace(source)
 	if hasNotes {
-		suppressed := memory.RecallResult{
-			Query:      strings.TrimSpace(source),
-			Suppressed: "memory update already supplies the new fact",
-		}
+		suppressed := memory.RecallResult{Query: query}
+		suppressed.Suppress(memory.SuppressCarriedNote, "memory update already supplies the new fact")
 		c.memory.recordRecall(suppressed)
 		event.RecordMemoryRecall(c.sink, memoryRecallAudit(suppressed))
 		return ""
 	}
 	if c.ablation.Off(ablation.Retrieval) {
+		ablated := memory.RecallResult{Query: query}
+		ablated.Suppress(memory.SuppressRetrievalOff, "automatic recall is switched off for this turn")
+		c.memory.recordRecall(ablated)
+		event.RecordMemoryRecall(c.sink, memoryRecallAudit(ablated))
 		return ""
 	}
 	result := c.memory.recall(source)

@@ -56,6 +56,7 @@ import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
 import { PostureNote } from "./PostureNote";
 import { SidePanel } from "./SidePanel";
+import { cancelJob } from "./jobcancel";
 import { ConnectNote } from "./ConnectNote";
 import { useStatusPoll } from "./useStatusPoll";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
@@ -83,7 +84,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, viewRequest, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -174,6 +175,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       ? prev : { kind: "settled", status: next }));
   }, []);
 
+  const readJob = useCallback((id: string) => port.jobOutput(id), [port]);
   const refreshStatus = useCallback(() => port.status().then((st) => { applyStatus(st); statusRead(); }).catch(() => {}), [port, applyStatus, statusRead]);
 
   const [wallet, refreshWallet] = useWallet(port, accountOf(status?.modelRef));
@@ -339,6 +341,9 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
     else openChanges();
   }, [visible, workbench, openChanges]);
   useOnBump(filesPulse, pressFiles);
+  useOnBump(viewRequest?.n ?? 0, () => {
+    if (viewRequest && (viewRequest.to !== "analysis" || traj.rows.length > 0)) showView(viewRequest.to);
+  });
   useEffect(() => { void loadChangedFilesPref(port); }, [port]);
   useEffect(() => { void loadFoldWorkPref(port); }, [port]);
   const foldWork = useFoldsTurnWork(port);
@@ -454,7 +459,6 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         onPick={showView}
         rows={traj.rows.length} plan={s.plan} goal={status?.goal}
         surfaces={surfaces}
-        side={sideAsk} onSide={() => setSideAsk((on) => !on)}
       />
 
       <Find find={find} />
@@ -552,8 +556,8 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         </span>
         {/* Everything stacked above the input box shares one ceiling, so no
             child of this region may grow without bound. */}
-        <PlanFold plan={s.plan} shown={tab === "flow"} paused={blocked} />
-        {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} sent={sent} received={received} estimated={s.outLive > 0} />}
+        <PlanFold plan={s.plan} goal={status?.goal} shown={tab === "flow"} paused={blocked} />
+        {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} since={s.running ? s.runSince : undefined} sent={sent} received={received} estimated={s.outLive > 0} />}
         <div className="composeaux">
           <Queue
             queue={queue}
@@ -588,11 +592,13 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         </div>
         {alert && <div className="cmpalert">{alert}</div>}
         {pill && <ChangedFilesPill changes={tree?.changes ?? []} onOpen={openChanges} />}
-        <Composer port={port} fresh={ready && !rt.host && s.items.length === 0} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={notify} onSettings={onSettings} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
+        <Composer port={port} fresh={ready && !rt.host && s.items.length === 0} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={notify} onSettings={onSettings} side={sideAsk} onSide={() => setSideAsk((on) => !on)} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
         <MeterRail
           tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} compact={compact} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}
-          onCancelJob={(id) => port.cancelJob(id).then(refreshStatus, notify)}
+          onCancelJob={(id) => cancelJob(port, id, notify, refreshStatus).then(() => {})}
+          onReadJob={readJob}
+          usage={status?.sessionUsage} quote={status?.sessionCostQuote}
         />
         {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}
         {/* Below the box, under a ceiling of their own. Both arrive unbidden and

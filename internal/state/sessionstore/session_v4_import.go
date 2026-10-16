@@ -43,8 +43,10 @@ func v4ImportPath(sessionsDir, id string) string {
 	return filepath.Join(sessionsDir, v4ImportPrefix+id+".jsonl")
 }
 
+// isV4SessionID admits the lowercase hex ids 1.x generates (32 digits in
+// sessions-v4, 24 in Desktop's by-id store), which are safe as a file name.
 func isV4SessionID(id string) bool {
-	if len(id) != 32 {
+	if len(id) < 16 || len(id) > 64 {
 		return false
 	}
 	_, err := hex.DecodeString(id)
@@ -207,8 +209,12 @@ func ImportV4From(store fs.FS, dir string, route func(sessionID string) string) 
 				target = routed
 			}
 		}
+		if !isV4SessionID(id) {
+			skip(e.Name(), SkipUnreadableFormat)
+			continue
+		}
 		path := v4ImportPath(target, id)
-		if !isV4SessionID(id) || sessionArtifactExists(path) {
+		if sessionArtifactExists(path) {
 			continue
 		}
 		t, err := s.Transcript()

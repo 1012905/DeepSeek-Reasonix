@@ -141,10 +141,12 @@ jobs:
           node perf/stickyfold.mjs
           node perf/crumb.mjs
           node perf/hoverradius.mjs
+          node perf/jump-ends.mjs
           node perf/modelrows.mjs
           node perf/explorersize.mjs
           node perf/rowhit.mjs
           node perf/tab-pip.mjs
+          node perf/plan-chip.mjs
           node perf/flow-feather.mjs
           node perf/context-card-hover.mjs
           node perf/sessquick.mjs
@@ -153,6 +155,7 @@ jobs:
           node perf/branch-tooltip.mjs
           node perf/branch-menu.mjs
           node perf/image-preview.mjs
+          node perf/user-images.mjs
           node perf/toast-anchor.mjs
           node perf/addfolder-rest.mjs
           node perf/scroll-jump.mjs

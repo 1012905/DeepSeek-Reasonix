@@ -11,6 +11,12 @@ import (
 	"reasonix/internal/base/secrets"
 )
 
+// UserSkillsDirName is the folder under the Reasonix home that holds installed
+// skills. A skill is instructions and scripts the agent later follows, so the
+// folder is never granted for writing; the supported way to keep improving a
+// personal skill is to install its source folder in register mode and edit there.
+const UserSkillsDirName = "skills"
+
 // WorkspaceRootRefusal says why a folder cannot be an extra workspace root.
 type WorkspaceRootRefusal string
 
@@ -19,6 +25,7 @@ const (
 	RootCoveredAlready WorkspaceRootRefusal = "workspace_roots.covered_by_primary"
 	RootTooBroad       WorkspaceRootRefusal = "workspace_roots.too_broad"
 	RootProtected      WorkspaceRootRefusal = "workspace_roots.protected"
+	RootSkillStore     WorkspaceRootRefusal = "workspace_roots.skill_store"
 	RootNotOwned       WorkspaceRootRefusal = "workspace_roots.not_owned"
 	RootOverlapsWrite  WorkspaceRootRefusal = "workspace_roots.overlaps_write_root"
 )
@@ -50,6 +57,9 @@ func (c *Config) ForbiddenRootsForRoot(root string) []string {
 	base := c.ForbidReadRootsForRoot(root)
 	base = appendUniqueResolved(base, secrets.ForbiddenReadPaths(c.Secrets.ProtectSensitiveFiles)...)
 	base = appendUniqueResolved(base, append(secrets.HostSecretPaths(), c.Roots().RemoteStateDir(), c.Roots().ScheduleDir())...)
+	if peers := c.Roots().PeersDir(); peers != "" {
+		base = appendUniqueResolved(base, peers)
+	}
 	credentialPath := strings.TrimSpace(c.Roots().UserCredentialsPath())
 	if credentialPath == "" {
 		return base
@@ -152,6 +162,9 @@ func (r Roots) FolderGrantRefusal(dir string) (WorkspaceRootRefusal, bool) {
 	}
 	if home, err := osUserHomeDir(); err == nil && home != "" && keyWithin(rootKey(home), key) {
 		return RootTooBroad, true
+	}
+	if keyWithin(key, rootKey(resolveThroughExisting(filepath.Join(r.Dir(RootHome), UserSkillsDirName)))) {
+		return RootSkillStore, true
 	}
 	var guarded []string
 	for _, id := range RootIDs() {

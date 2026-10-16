@@ -107,7 +107,7 @@ ask, await_user, docs, explore, fleet, forget, history, install_skill, install_s
 
 `list_subagents` recovers the references themselves when the aggregate that carried them never arrived, which is what an interrupted background fleet leaves behind. References are restricted to the current conversation lineage and workspace.
 
-`use_capability` (`action` = `list` | `inspect` | `call` | `decline`) is on the provider-visible surface for every execution setting (`light` | `balanced` | `delivery`).
+`use_capability` (`action` = `list` | `inspect` | `call` | `decline`) is on the provider-visible surface for every execution setting (`balanced` | `delivery`).
 
 Optional tools stay registered for host dispatch but are not expanded into the top-level provider schema; the model reaches them through `use_capability` without cache-breaking schema churn.
 

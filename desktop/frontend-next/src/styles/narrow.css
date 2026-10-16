@@ -2,7 +2,7 @@
 @container conversation (max-width: 720px) {
   .turntools { flex-wrap: nowrap; }
   .studio-model-group { flex: 1 1 0; }
-  .studio-model-control { flex: 0 1 auto; min-width: 64px; }
+  .studio-model-control { flex: 0 1 auto; min-width: 0; }
   .studio-model-control .model-picker .nm { max-width: none; }
 }
 .chrome .r-fold { display: contents; }
@@ -10,10 +10,15 @@
 [data-fold~="bar"] .chrome .r-fold[data-open] { display: flex; }
 [data-fold~="bar"] .tab { flex: 0 1 auto; min-width: 0; padding-inline: 6px; overflow: hidden; text-overflow: ellipsis; }
 @container conversation (max-width: 360px) {
+  .turntools { flex-wrap: wrap; }
   .studio-effort-picker::before { display: none; }
-  .studio-model-group { flex-wrap: wrap; }
+  .studio-model-group { flex-basis: 100%; flex-wrap: wrap; }
 }
 @container conversation (max-width: 200px) { .studio-meterrail .studio-meter-cache { display: none; } }
 @container conversation (max-width: 520px) { .studio-deckchip > span { display: none; } }
 .chrome .thbtn.r-more { color: var(--muted); }
 .chrome .thbtn.r-more svg { stroke-width: 2.6; }
+@container conversation (max-width: 480px) {
+  .studio-overview-anchor { position: static; }
+  .studio-overview-anchor .studio-overview-popover { left: 0; right: 0; width: auto; }
+}

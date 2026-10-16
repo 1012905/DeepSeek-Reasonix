@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import type { Item, Waiting } from "../state/session";
 import type { ExtensionSurface } from "../port/wire";
 import type { AgentPort, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../port/port";
-import { SymbolMark } from "./RMark";
+import { Hero } from "./Hero";
 import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
 import { Boundary } from "./Boundary";
@@ -37,7 +37,7 @@ import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion">>;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion" | "stopToolCall">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -360,12 +360,20 @@ export function Transcript({ items, port, entering, onEntered, revision, waiting
     follow();
   }, [follow]);
 
-  // The nearest expanded call or thought in that direction, else the very end:
-  // one jump should not cross a whole stretch of context the reader has opened.
+  // The button goes to the end it names. Held with Shift it steps to the nearest
+  // expanded call or thought in that direction instead, else the end: a jump
+  // that should not cross a whole stretch of context the reader has opened.
   const jumpToward = useCallback(
-    (dir: Direction) => {
+    (dir: Direction, step: boolean) => {
       const root = scroll.current;
       if (!root) return;
+      if (!step) {
+        if (dir === "down") return resume();
+        landing.current++;
+        release();
+        root.scrollTop = 0;
+        return;
+      }
       const base = root.getBoundingClientRect().top - root.scrollTop;
       const tops = [...root.querySelectorAll<HTMLElement>("details.tool-disclosure[open], details.think[open]")].map((el) => el.getBoundingClientRect().top - base);
       const to = landingOf(dir, tops, root.scrollTop, root.clientHeight, root.scrollHeight);
@@ -564,6 +572,7 @@ const Block = memo(function Block({
           it={row.item}
           {...rowProps}
           cp={checkpoints.get(row.item.id)}
+          settled={!row.activity?.some((item) => item.t === "tool" && item.running)}
           afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
         />
       </Fragment>
@@ -678,8 +687,9 @@ const Row = memo(function Row({
   onPrepareFileRevert,
   onCommitFileRevert,
   afterAnswer,
+  settled,
   activity = false,
-}: RowHandlers & { it: Item; cp?: Checkpoint; afterAnswer?: ReactNode; activity?: boolean }) {
+}: RowHandlers & { it: Item; cp?: Checkpoint; afterAnswer?: ReactNode; settled?: boolean; activity?: boolean }) {
   // Read once, for the life of this element. The projection spends the debt as
   // soon as this is drawn, and a card whose answer is still streaming would
   // otherwise lose the attribute mid-animation and have it cut short. A block
@@ -707,7 +717,7 @@ const Row = memo(function Row({
       // model. Gating the card on text meant all of it stayed invisible and
       // then landed at once. An empty card is still not a message, so a turn
       // that produced neither draws nothing.
-      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} reply={reply} quiet={echoes.has(it.id)} /> : null;
+      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} settled={settled} reply={reply} quiet={echoes.has(it.id)} /> : null;
     case "tool":
       // The ask tool also raises ask_request, which carries the id /answer
       // needs. Drawing the tool call too put two copies of the same question on
@@ -725,6 +735,7 @@ const Row = memo(function Row({
             onExtInvoke={onExtInvoke}
             onPrepareFileRevert={onPrepareFileRevert}
             onCommitFileRevert={onCommitFileRevert}
+            onStop={port?.stopToolCall && it.tool.id ? () => void port.stopToolCall!(it.tool.id!).catch(() => {}) : undefined}
           />
         );
         const chart = activity ? null : chartOfTool(it.tool);
@@ -760,33 +771,3 @@ const Row = memo(function Row({
     </div>
   );
 });
-
-interface HeroProps {
-  needsProject: boolean;
-  onOpen: () => void;
-  onKeep: () => void;
-}
-
-function Hero({ needsProject, onOpen, onKeep }: HeroProps) {
-  return (
-    <div className="hero">
-      <SymbolMark />
-      <div className="t">{needsProject ? t("先打开一个项目") : t("描述任务，其余交给 Reasonix")}</div>
-      <div className="s">
-        {needsProject
-          ? t("读取代码、运行测试与修改文件均只在你选定的文件夹内进行。")
-          : t("可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。")}
-      </div>
-      {needsProject ? (
-        <div className="herogo">
-          <button className="pick" data-action="workspace.add" onClick={onOpen}>
-            {t("打开项目…")}
-          </button>
-          <button className="stay" onClick={onKeep}>
-            {t("使用当前位置")}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}

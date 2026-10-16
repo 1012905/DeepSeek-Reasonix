@@ -37,7 +37,7 @@ function draw({ running = false, branchAt = vi.fn(async (_turn: number, _name: s
 
 it("branches a reply's conversation at its own turn and opens the result", async () => {
   const { branchAt, onBranched } = draw();
-  const buttons = screen.getAllByRole("button", { name: "分支为新会话" });
+  const buttons = screen.getAllByRole("button", { name: "创建对话分支" });
   expect(buttons).toHaveLength(2);
   await userEvent.click(buttons[0]);
   await waitFor(() => expect(onBranched).toHaveBeenCalledWith("/s/branch.jsonl"));
@@ -48,7 +48,7 @@ it("branches a reply's conversation at its own turn and opens the result", async
 
 it("is offered only on replies a later turn has closed while a turn runs", async () => {
   const { branchAt } = draw({ running: true });
-  const buttons = screen.getAllByRole("button", { name: "分支为新会话" });
+  const buttons = screen.getAllByRole("button", { name: "创建对话分支" });
   expect(buttons).toHaveLength(1);
   await userEvent.click(buttons[0]);
   await waitFor(() => expect(branchAt).toHaveBeenCalledWith(0, "我的会话 · 分支"));
@@ -57,7 +57,7 @@ it("is offered only on replies a later turn has closed while a turn runs", async
 it("reports a refusal instead of opening anything", async () => {
   const refusal = new Error("no boundary");
   const { onBranched, onError } = draw({ branchAt: vi.fn(async () => { throw refusal; }) });
-  await userEvent.click(screen.getAllByRole("button", { name: "分支为新会话" })[0]);
+  await userEvent.click(screen.getAllByRole("button", { name: "创建对话分支" })[0]);
   await waitFor(() => expect(onError).toHaveBeenCalledWith(refusal));
   expect(onBranched).not.toHaveBeenCalled();
 });

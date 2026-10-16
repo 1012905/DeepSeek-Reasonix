@@ -33,7 +33,7 @@ func workspaceLeaseConflictScope(err error) *event.WorkspaceLease {
 		return nil
 	}
 	return &event.WorkspaceLease{Holder: conflict.Holder, HolderSessionID: conflict.SessionID,
-		Paths: conflict.Paths, RequestedPaths: conflict.RequestedPaths}
+		Paths: conflict.Paths, RequestedPaths: conflict.RequestedPaths, Repository: conflict.Repository}
 }
 
 func workspaceLeaseRefusalCode(err error) string {

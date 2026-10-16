@@ -182,7 +182,8 @@ type MemoryRecallAudit struct {
 	Omitted         int
 	OmittedByLimit  int
 	OmittedByBudget int
-	Suppressed      string // reason recall stayed silent; "" when hits were injected
+	Suppressed      string // why recall stayed silent, as "<code>: <sentence>"; "" when hits were injected
+	SuppressionCode string // the typed code Suppressed begins with; consumers match this, never the prose
 	// Shadow is the Retrieval V2 ranking (telemetry only, never served).
 	Shadow []MemoryRecallHit
 }

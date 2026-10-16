@@ -261,6 +261,9 @@ pack states a shape, never a number the layout has to agree with.
 - Workspace controls share the branch slot in the composer's bottom toolbar,
   including its pill radius, hover surface and narrow-pane label folding.
   Runtime statistics remain below the input card.
+- Empty phone toolbars keep their compact geometry when a control receives
+  focus, so a pointer press and release target the same button. Draft content,
+  attachments and open menus expand the toolbar.
 
 - The scale carried 24 sizes, 442 uses of them inside the four steps between 10
   and 11.5px. Half a pixel is not a level; it reads as nothing quite matching.

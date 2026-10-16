@@ -84,6 +84,7 @@ type MemoryRecall struct {
 	OmittedByLimit  int               `json:"omitted_by_limit"`
 	OmittedByBudget int               `json:"omitted_by_budget"`
 	Suppressed      string            `json:"suppressed,omitempty"`
+	SuppressionCode string            `json:"suppression_code,omitempty"`
 	ShadowHits      []MemoryRecallHit `json:"shadow_hits,omitempty"`
 }
 
@@ -513,7 +514,8 @@ func (r *Recorder) RecordMemoryRecall(a event.MemoryRecallAudit) {
 	rec := &MemoryRecall{
 		CharBudget: a.CharBudget, UsedChars: a.UsedChars, Omitted: a.Omitted,
 		OmittedByLimit: a.OmittedByLimit, OmittedByBudget: a.OmittedByBudget,
-		Suppressed: a.Suppressed,
+		Suppressed:      a.Suppressed,
+		SuppressionCode: a.SuppressionCode,
 	}
 	for _, hit := range a.Hits {
 		rec.Hits = append(rec.Hits, MemoryRecallHit{

@@ -67,6 +67,9 @@ func buildPromptAssembly(ctx context.Context, opts Options, cfg *config.Config, 
 		if strings.TrimSpace(cfg.Tools.Shell.Path) != "" {
 			shellLabel = shell.Path
 		}
+		if label := shell.Description(); label != "" {
+			shellLabel = label
+		}
 		envSection := environment.FormatSection(
 			environment.RunProbesWithOptions(ctx, environment.DefaultProbes(), environment.ProbeOptions{
 				Overrides: cfg.Environment.Tools,

@@ -71,7 +71,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		if inWindow {
 			windowed++
 		}
-		if !inWindow && !(si.Pinned && !si.Archived) {
+		if !inWindow && runtimeID == "" && !(si.Pinned && !si.Archived) {
 			if matches {
 				remaining++
 			}
@@ -90,7 +90,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		decorateArchiveState(&out[len(out)-1], si.Path)
 	}
 	attachVersions(dir, out, h.openSessionsIn(root))
-	unlisted := h.unlistedOpenSessions(root, out)
+	unlisted := h.unlistedOpenSessions(root, out, listed)
 	// Never nil: the frontend iterates rows, and a null blanks the window.
 	rows := append(append([]treeSession{}, unlisted...), out...)
 	said := len(unlisted) > 0

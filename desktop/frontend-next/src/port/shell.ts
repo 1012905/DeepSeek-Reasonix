@@ -51,6 +51,10 @@ export interface ShellOption {
 export interface ShellSettings {
   prefer: string;
   path?: string;
+  // Launcher arguments saved for path, and the exact command line that was run
+  // to verify them when they are in force (absent when they fell back to auto).
+  args?: string[];
+  argv?: string[];
   effective: ShellOption;
   auto: ShellOption;
   options?: ShellOption[];

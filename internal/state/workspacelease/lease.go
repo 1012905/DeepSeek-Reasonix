@@ -55,6 +55,9 @@ type Wait struct {
 	HolderSessionID string
 	Paths           []string
 	RequestedPaths  []string
+	// Repository is the git repository root that folded this session's folder
+	// into the shared writer domain; empty when the domain is the folder itself.
+	Repository string
 }
 
 // WaitNotice receives both ends of a reported wait. It must return quickly and
@@ -131,7 +134,7 @@ var localRegistry = struct {
 // shared by Reasonix processes for cross-process protection; it is kept outside
 // the workspace so acquiring a lease never dirties user files.
 func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Owner, error) {
-	canonical, err := CanonicalWorkspace(workspaceRoot)
+	selected, canonical, err := canonicalWorkspaceParts(workspaceRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +163,9 @@ func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Own
 		local:    local,
 		scope:    pathLeaseState{root: canonical, identity: rand.Text()},
 	}
+	if selected != canonical {
+		o.scope.repository = canonical
+	}
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -170,25 +176,34 @@ func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Own
 // resolves symlinks when possible and folds case on Windows, where paths are
 // case-insensitive by default.
 func CanonicalWorkspace(root string) (string, error) {
+	_, domain, err := canonicalWorkspaceParts(root)
+	return domain, err
+}
+
+// canonicalWorkspaceParts returns the folder as selected and the writer domain it
+// belongs to; they differ exactly when a git repository above the folder folds it in.
+func canonicalWorkspaceParts(root string) (selected, domain string, err error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return "", errors.New("workspace root is empty")
+		return "", "", errors.New("workspace root is empty")
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
-		return "", fmt.Errorf("resolve workspace root: %w", err)
+		return "", "", fmt.Errorf("resolve workspace root: %w", err)
 	}
 	abs = filepath.Clean(abs)
 	if resolved, resolveErr := fileutil.ResolveExistingPath(abs); resolveErr == nil {
 		abs = filepath.Clean(resolved)
 	} else if !os.IsNotExist(resolveErr) {
-		return "", fmt.Errorf("canonicalize workspace root: %w", resolveErr)
+		return "", "", fmt.Errorf("canonicalize workspace root: %w", resolveErr)
 	}
-	abs = nearestGitWorktreeRoot(abs)
-	if runtime.GOOS == "windows" {
-		abs = strings.ToLower(filepath.ToSlash(abs))
+	fold := func(p string) string {
+		if runtime.GOOS == "windows" {
+			return strings.ToLower(filepath.ToSlash(p))
+		}
+		return p
 	}
-	return abs, nil
+	return fold(abs), fold(nearestGitWorktreeRoot(abs)), nil
 }
 
 // nearestGitWorktreeRoot folds a repository root and any selected directory
@@ -421,7 +436,7 @@ func (w *waitClock) close(outcome WaitOutcome) {
 }
 
 func (w *waitClock) notice(outcome WaitOutcome, elapsed time.Duration) Wait {
-	n := Wait{Outcome: outcome, Elapsed: elapsed, Holder: w.holder, RequestedPaths: w.requested}
+	n := Wait{Outcome: outcome, Elapsed: elapsed, Holder: w.holder, RequestedPaths: w.requested, Repository: w.owner.scope.repository}
 	if c := w.conflict; c != nil {
 		n.Holder, n.HolderSessionID, n.Paths = c.Holder, c.SessionID, c.Paths
 	}

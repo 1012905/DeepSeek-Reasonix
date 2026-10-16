@@ -31,6 +31,7 @@ import { useModelFilter, writeModelFilter } from "../state/modelfilter";
 import { useDraft } from "./useDraft";
 import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
+import { SideAskButton } from "./SideAskButton";
 
 interface Props {
   fresh?: boolean;
@@ -56,6 +57,8 @@ interface Props {
   onChanged: () => void;
   onError: (e: unknown) => void;
   onSettings?: (section?: string) => void;
+  side?: boolean;
+  onSide?: () => void;
   changeCount?: number;
   countElsewhere?: boolean;
   // The work tree's Git state as git itself reports it, refreshed on the same
@@ -119,7 +122,7 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, side = false, onSide, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const modelGroups = useModelFilter();
@@ -668,6 +671,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
               <span>{t("也可直接拖入或粘贴")}</span>
             </span>
           </button>
+          {onSide && <SideAskButton open={side} onToggle={onSide} />}
           {refine.button}
         <div className="studio-mode-control">
           <Picker

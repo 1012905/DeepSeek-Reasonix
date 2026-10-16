@@ -104,7 +104,7 @@ func TestBoundaryWritesRefusedWithoutGrant(t *testing.T) {
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
-	for _, path := range []string{"/permissions", "/sandbox", "/browser-tools", "/subagent-claims"} {
+	for _, path := range []string{"/permissions", "/sandbox", "/browser-tools", "/subagent-claims", "/write-lease"} {
 		resp := postProvider(t, srv.URL, path, `{}`)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusForbidden {
@@ -410,6 +410,43 @@ func TestSaveSubagentClaimsPersists(t *testing.T) {
 	back := postProvider(t, srv.URL, "/subagent-claims", `{"optimistic":false}`)
 	back.Body.Close()
 	if config.LoadForEdit(config.UserConfigPath()).SubagentClaimsOptimistic() {
+		t.Fatal("returning to strict did not reach the config file")
+	}
+}
+
+// The same choice for the main session's own lease. Strict is the default, the
+// write goes to the user file only, and a body that does not say which changes
+// nothing. The running session keeps the lease it was built with, so the answer
+// says that instead of rebuilding a runtime that would adopt the same lease.
+func TestSaveWriteLeasePersistsAndSaysWhenItTakesEffect(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	if got := readJSON[control.WriteLeaseSettings](t, srv.URL, "/write-lease"); got.Optimistic {
+		t.Fatalf("unset choice reads %+v, want the strict default", got)
+	}
+	empty := postProvider(t, srv.URL, "/write-lease", `{}`)
+	empty.Body.Close()
+	if empty.StatusCode != http.StatusBadRequest {
+		t.Fatalf("POST /write-lease without a choice = %d, want 400", empty.StatusCode)
+	}
+	resp := postProvider(t, srv.URL, "/write-lease", `{"optimistic":true}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		got, _ := readAllString(resp)
+		t.Fatalf("POST /write-lease = %d: %s", resp.StatusCode, got)
+	}
+	if !config.LoadForEdit(config.UserConfigPath()).WriteLeaseOptimistic() {
+		t.Fatal("choosing optimistic did not reach the config file")
+	}
+	if got := readJSON[control.WriteLeaseSettings](t, srv.URL, "/write-lease"); !got.Optimistic {
+		t.Fatalf("read back = %+v, want optimistic", got)
+	}
+	back := postProvider(t, srv.URL, "/write-lease", `{"optimistic":false}`)
+	back.Body.Close()
+	if config.LoadForEdit(config.UserConfigPath()).WriteLeaseOptimistic() {
 		t.Fatal("returning to strict did not reach the config file")
 	}
 }

@@ -11,6 +11,7 @@ import { EffortShape } from "./EffortShape";
 import type { ModelEffort, ModelLimit, ProviderEdit } from "../port/port";
 import { KIND_LABEL } from "./vendors";
 import { ModelLimits, limitTextOf, limitsToSend, type LimitText } from "./ModelLimits";
+import { ModelPrices, incomplete, priceTextOf, pricesToSend, type PriceText } from "./ModelPrices";
 import { useModelBatch } from "./useModelBatch";
 
 // Only what this form owns is sent: the entry keeps its prices, effort
@@ -60,6 +61,9 @@ export function EditConn({
   const [limitText, setLimitText] = useState<Record<string, LimitText>>(
     () => Object.fromEntries(Object.entries(entry.modelLimits ?? {}).map(([m, l]) => [m, limitTextOf(l)])),
   );
+  const [priceText, setPriceText] = useState<Record<string, PriceText>>(
+    () => Object.fromEntries(Object.entries(entry.modelPrices ?? {}).map(([m, r]) => [m, priceTextOf(r)])),
+  );
   const [think, setThink] = useState(entry.reasoningProtocol ?? "");
   // Until saved, the thinking field follows the wire being picked: the stored
   // entry's field belongs to the stored wire.
@@ -107,18 +111,16 @@ export function EditConn({
 
   // Re-asking the endpoint is how a source that gained models catches up; the
   // ticks the user already made survive it.
-  // A blank key field means "keep the stored one", so re-probing has to go
-  // through the saved source. Sending the empty field instead probes as a
-  // provider with no credential at all, which fails before it reaches the host.
+  // A blank key field means "keep the stored one", so the kernel is asked
+  // through the saved source with the form's address, key and protocol laid
+  // over it: what is being edited is what gets tested.
   const refetch = async () => {
     setBusy(`refresh:${entry.name}`);
     setErr(null);
     setRefreshFail("");
     setDiff(null);
     try {
-      const refreshed = apiKey.trim()
-        ? await port.probeProvider(baseUrl.trim(), apiKey.trim())
-        : await port.checkProvider(entry.name);
+      const refreshed = await port.checkProvider(entry.name, { baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), kind });
       if ("ok" in refreshed && !refreshed.ok) {
         setRefreshFail(checkFailure(refreshed));
         return;
@@ -223,6 +225,7 @@ export function EditConn({
     defaultEffort: levels.includes(defEffort) ? defEffort : "",
     modelEfforts: Object.fromEntries(picked.filter((m) => ownEfforts[m]).map((m) => [m, ownEfforts[m]])),
     modelLimits: limitsToSend(picked, limitText, entry.modelLimits ?? {}),
+    modelPrices: pricesToSend(picked, priceText, entry.modelPrices ?? {}),
     headers: parseHeaders(heads),
     extraBody: parseExtraBody(extra) ?? {},
   });
@@ -249,7 +252,7 @@ export function EditConn({
   const [edited, setEdited] = useState(false);
   if (dirty && !edited) setEdited(true);
 
-  const canSave = (dirty || err?.kind === "unapplied") && busy === "" && !testing && picked.length > 0 && !extraBad && idle.ok;
+  const canSave = (dirty || err?.kind === "unapplied") && busy === "" && !testing && picked.length > 0 && !extraBad && idle.ok && !picked.some((m) => incomplete(priceText[m]));
   const phase: Phase = saving ? "saving"
     : err?.kind === "save" && dirty ? "failed"
       : dirty ? "dirty"
@@ -336,6 +339,7 @@ export function EditConn({
         {(picked.length > 1 || picked.some((m) => entry.modelLimits?.[m])) && (
           <ModelLimits models={picked} value={limitText} onChange={setLimitText} inherited={inheritedLimitsFor} />
         )}
+        {picked.length > 0 && <ModelPrices models={picked} value={priceText} onChange={setPriceText} />}
       </div>
 
       <div className="mlist">

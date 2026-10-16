@@ -75,6 +75,8 @@ export interface HostTodo {
 // before each turn's first write. prompt is the user's own text, with the
 // compose prefixes already stripped kernel-side.
 export interface Checkpoint {
+  // Copied conversation metadata without parent file-recovery payloads.
+  forkCopied?: boolean;
   turn: number;
   prompt: string;
   // Distinct files in this checkpoint and every later checkpoint.
@@ -256,6 +258,7 @@ export interface SessionStatus {
   cacheHit: number;
   cacheMiss: number;
   sessionCostQuote?: import("./wire").CostQuote;
+  sessionUsage?: SessionUsage;
   jobs?: JobEntry[];
 }
 
@@ -287,6 +290,15 @@ export interface JobEntry {
   startedAt: number;
 }
 
+// The end of a running job's output, for a person looking at it: how much the
+// job has written in all, and whether the text is only the last part.
+export interface JobOutput {
+  text: string;
+  status: string;
+  bytes: number;
+  truncated: boolean;
+}
+
 // The UI depends on this and nothing else. SsePort talks to internal/frontend/serve;
 // MockPort replays a fixture. Neither is allowed to leak transport details
 // upward, which is what keeps the same UI usable in a browser and in a shell.
@@ -296,4 +308,30 @@ export interface SessionEntry {
   title?: string;
   turns?: number;
   current?: boolean;
+}
+
+// What one usage source has spent since this session was opened in this run.
+// cacheUnknown is prompt the endpoint did not split into cached and uncached.
+export interface SourceUsage {
+  source: string;
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheHit: number;
+  cacheMiss: number;
+  cacheUnknown?: number;
+  cost: import("./wire").CostQuote;
+}
+
+// The session's usage grouped by source, read from the ledger the cost total is.
+// workMs is the answered work time of turns that gave a final answer.
+export interface SessionUsage {
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheHit: number;
+  cacheMiss: number;
+  cacheUnknown?: number;
+  workMs: number;
+  sources: SourceUsage[];
 }

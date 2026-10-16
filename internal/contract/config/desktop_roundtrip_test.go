@@ -83,6 +83,7 @@ var desktopStringMark = map[string]string{
 	"reasoning_display_mode":     "hidden",
 	"conversation_width":         "full",
 	"pinned_version":             "9.9.9",
+	"update_mode":                "notify",
 	"editor":                     "/usr/local/bin/round-trip-editor",
 }
 

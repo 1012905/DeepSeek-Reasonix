@@ -3,6 +3,7 @@ import type { HubPort, OpenWithTarget, TreeWorkspace } from "../port/hub";
 import { host } from "../port/host";
 import { t } from "../i18n";
 import { StudioIcon } from "./StudioIcon";
+import { openWithName } from "./openwith_label";
 
 export function WorkspaceReveal({ ws, hub, dismiss, onError }: {
   ws: TreeWorkspace;
@@ -17,7 +18,7 @@ export function WorkspaceReveal({ ws, hub, dismiss, onError }: {
   useEffect(() => {
     if (!shell) return;
     let alive = true;
-    void hub.openWithTargets().then((list) => alive && setTargets(list.filter((x) => x.available))).catch(() => {});
+    void hub.openWithTargets().then((list) => alive && setTargets(list.filter((x) => x.available && x.id !== "file-manager"))).catch(() => {});
     return () => { alive = false; };
   }, [hub, shell]);
   if (!shell) return null;
@@ -49,7 +50,7 @@ export function WorkspaceReveal({ ws, hub, dismiss, onError }: {
             hub.openWith(ws.root, target.id).catch(onError);
           }}
         >
-          <StudioIcon name="external" /><span>{t("用 {name} 打开", { name: target.name })}</span>
+          <StudioIcon name="external" /><span>{t("用 {name} 打开", { name: openWithName(target) })}</span>
         </button>
       ))}
     </div>

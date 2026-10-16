@@ -3,12 +3,14 @@ package serve
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"reasonix/internal/base/nilutil"
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/state/sessionstore"
 	"reasonix/internal/state/store"
 )
@@ -103,9 +105,9 @@ func (h *Hub) autoNameSession(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), titleFillTimeout)
 	defer cancel()
-	title := generator.generateTitle(ctx, source)
-	if title == "" {
-		refuse(w, http.StatusBadGateway, "session.title_failed", "the model did not generate a title", nil)
+	title, err := generator.tryGenerateTitle(ctx, source)
+	if err != nil || title == "" {
+		refuseTitle(w, err)
 		return
 	}
 	if err := r.Context().Err(); err != nil {
@@ -154,4 +156,28 @@ func (h *Hub) resumeAutomaticTitle(path string, cache *titleCache) {
 		titles:     cache, fill: newTitleFiller(),
 	}
 	worker.scheduleTitle(name, source, mod)
+}
+
+// refuseTitle says why automatic naming failed. Each kind asks for something
+// different: wait, pick another title model, or look at what the endpoint said.
+func refuseTitle(w http.ResponseWriter, err error) {
+	var api *provider.APIError
+	var auth *provider.AuthError
+	switch {
+	case errors.Is(err, errTitleTimeout):
+		refuse(w, http.StatusGatewayTimeout, "session.title_timeout", "the title model did not answer in time", nil)
+	case errors.Is(err, errTitleNoText):
+		refuse(w, http.StatusBadGateway, "session.title_no_text", "the title model answered with no text", nil)
+	case errors.As(err, &api), errors.As(err, &auth):
+		status := 0
+		if api != nil {
+			status = api.Status
+		} else {
+			status = auth.Status
+		}
+		refuse(w, http.StatusBadGateway, "session.title_refused", "the title model's endpoint refused the request",
+			map[string]any{"status": status, "detail": modelCheckDetail(err, func() string { return "" })})
+	default:
+		refuse(w, http.StatusBadGateway, "session.title_failed", "the model did not generate a title", nil)
+	}
 }

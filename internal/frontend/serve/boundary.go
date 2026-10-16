@@ -26,6 +26,8 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /browser-tools", s.saveBrowserToolsSettings)
 	mux.HandleFunc("GET /subagent-claims", s.subagentClaimsSettings)
 	mux.HandleFunc("POST /subagent-claims", s.saveSubagentClaimsSettings)
+	mux.HandleFunc("GET /write-lease", s.writeLeaseSettings)
+	mux.HandleFunc("POST /write-lease", s.saveWriteLeaseSettings)
 	// The file every one of these is written to, for when it is the thing that
 	// is wrong: each save above refuses with the same code, and this is where a
 	// surface reads it before trying, and repairs it after.
@@ -222,4 +224,36 @@ func (s *Server) saveSubagentClaimsSettings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, s.ctl().SubagentClaimsSettings())
+}
+
+func (s *Server) writeLeaseSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, s.ctl().WriteLeaseSettings())
+}
+
+// saveWriteLeaseSettings rides the provider-edit grant: choosing optimistic
+// lets two sessions write one file with the last write winning, so a networked
+// client must not make that choice for the machine's owner. It does not rebuild
+// the runtime: a rebuild adopts the lease it already holds, so the choice is for
+// the sessions opened afterwards and the answer says so by not pretending.
+func (s *Server) saveWriteLeaseSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "write_lease.editing_disabled", "write-lease editing is not enabled on this server", nil)
+		return
+	}
+	var body struct {
+		Optimistic *bool `json:"optimistic"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
+		badBody(w)
+		return
+	}
+	if body.Optimistic == nil {
+		refuse(w, http.StatusBadRequest, "write_lease.no_choice", "optimistic is required", nil)
+		return
+	}
+	if err := s.ctl().SaveWriteLeaseSettings(*body.Optimistic); err != nil {
+		saveFailed(w, http.StatusInternalServerError, "write_lease.save_failed", err)
+		return
+	}
+	writeJSON(w, s.ctl().WriteLeaseSettings())
 }

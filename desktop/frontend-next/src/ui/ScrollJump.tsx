@@ -12,7 +12,7 @@ export function ScrollJump({ scroll, flow, active, onJump }: {
   scroll: RefObject<HTMLDivElement | null>;
   flow: RefObject<HTMLDivElement | null>;
   active: boolean;
-  onJump: (dir: Direction) => void;
+  onJump: (dir: Direction, step: boolean) => void;
 }) {
   const [shown, setShown] = useState(NONE);
   useEffect(() => {
@@ -47,12 +47,12 @@ export function ScrollJump({ scroll, flow, active, onJump }: {
     <div className="scrolljump">
       <div>
         {shown.up && (
-          <button type="button" data-action="transcript.scroll" data-value="up" aria-label={t("回到会话顶部")} title={t("回到会话顶部")} onClick={() => onJump("up")}>
+          <button type="button" data-action="transcript.scroll" data-value="up" aria-label={t("回到会话顶部")} title={t("回到会话顶部（Shift+点击：上一个展开的块）")} onClick={(e) => onJump("up", e.shiftKey)}>
             <StudioIcon name="down" />
           </button>
         )}
         {shown.down && (
-          <button type="button" data-action="transcript.scroll" data-value="down" aria-label={t("跳到最新")} title={t("跳到最新")} onClick={() => onJump("down")}>
+          <button type="button" data-action="transcript.scroll" data-value="down" aria-label={t("跳到最新")} title={t("跳到最新（Shift+点击：下一个展开的块）")} onClick={(e) => onJump("down", e.shiftKey)}>
             <StudioIcon name="down" />
           </button>
         )}

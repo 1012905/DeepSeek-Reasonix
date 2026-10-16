@@ -30,6 +30,7 @@ import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { SubagentClaims } from "./SubagentClaims";
+import { WriteLease } from "./WriteLease";
 import { AskTimeout } from "./AskTimeout";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
@@ -411,7 +412,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   <span className="cost">
                     {[
                       t(SCOPE_SAID[e.scope]),
-                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : "",
+                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : "",
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </button>
@@ -601,6 +602,12 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 hint={t("agent 用来打开和操作网页的工具。该开关单独保存，不受命令行版本浏览器设置的影响。修改会重建运行时，任务运行期间无法变更。")}
               >
                 <BrowserTools port={port} onChanged={onChanged} />
+              </Group>
+              <Group id="write-lease"
+                title={t("多个会话同时写一个项目")}
+                hint={t("多个会话在同一个项目里工作时如何互相等待。默认严格：没声明写入范围的操作（bash、MCP、没写 write_paths 的子代理）会占住整个工作区，其他会话要等它结束。只影响之后新开的会话，已在运行的会话保持它启动时的设置。")}
+              >
+                <WriteLease port={port} />
               </Group>
               <Group id="subagent-claims"
                 title={t("子代理的写入范围")}

@@ -28,6 +28,8 @@ type recordingKernel struct {
 	keyless bool
 	// refuseText makes the attachment route refuse a kept paste.
 	refuseText bool
+	// partialCoverage makes a prepared rewind plan ask for confirmation.
+	partialCoverage bool
 }
 
 func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +120,11 @@ func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			{"turn": 0, "prompt": "read the code"}, {"turn": 1, "prompt": "fix the bug", "files": 2},
 		})
 	case "/rewind/prepare":
+		if k.partialCoverage {
+			_ = json.NewEncoder(w).Encode(map[string]any{"planId": "p-1", "canFiles": true, "canConversation": true,
+				"coverageGaps": []map[string]any{{"path": "gen.go"}}, "requiresConfirmation": true})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"planId": "p-1", "canFiles": true, "canConversation": true})
 	case "/rewind/commit":
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "conversationOk": true})

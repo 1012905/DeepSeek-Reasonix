@@ -106,6 +106,15 @@ export interface SubagentClaimsSettings {
   path: string;
 }
 
+// How this machine's sessions hold the workspace write lease against one
+// another, as the user file records it. A project file cannot set it. A running
+// session keeps the lease it was built with, so a change reaches sessions
+// opened after it.
+export interface WriteLeaseSettings {
+  optimistic: boolean;
+  path: string;
+}
+
 export interface AutoArchiveSettings {
   enabled: boolean;
   days: number;

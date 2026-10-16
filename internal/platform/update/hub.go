@@ -149,6 +149,27 @@ func Pin(version string) error {
 	return cfg.SaveTo(config.UserConfigPath())
 }
 
+// Mode is what this machine does about new releases on its own, read from the
+// user's config: manual unless the user chose otherwise.
+func Mode() string {
+	if cfg, err := config.Load(); err == nil && cfg != nil {
+		return cfg.DesktopUpdateMode()
+	}
+	return config.UpdateModeManual
+}
+
+// SetMode records the user's choice, refusing a mode this build does not offer
+// with config.ErrUpdateModeInvalid.
+func SetMode(mode string) error {
+	unlock := config.LockUserConfigEdits()
+	defer unlock()
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	if err := cfg.SetDesktopUpdateMode(mode); err != nil {
+		return err
+	}
+	return cfg.SaveTo(config.UserConfigPath())
+}
+
 // ReleaseStalePin drops a pin that names a build other than the one running.
 // Such a pin holds nobody anywhere: it is what a move that never landed, or an
 // install from outside the app, leaves behind. A running build that is not a

@@ -236,6 +236,8 @@ export interface SessionState {
   metrics: Metrics;
   waiting: Waiting;
   running: boolean;
+  // When this window saw the turn start; unknown for a turn that began before it attached.
+  runSince?: number;
   doing: string;
   steerQueue: string[];
   // Queue ids this window gave up, so a receipt that lands after the withdrawal

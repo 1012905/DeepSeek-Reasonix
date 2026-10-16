@@ -89,6 +89,9 @@ type Server struct {
 	// resolver is what every rebuild of this pane resolves models through, set
 	// by the hub. Nil leaves boot reading this machine's own config.
 	resolver provider.Resolver
+	// branchModelFallback is set while opening a branch whose saved model is gone.
+	// resumeInto consumes it when it emits the single user-facing notice.
+	branchModelFallback string
 }
 
 // New builds a Server. bc must be what the controller's events reach; a host
@@ -392,6 +395,10 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	// The built page onboards in its own words, against the same
 	// /provider-setup this kernel answers. There is no second page to draw.
 	if s.page == nil {
+		if wantsHTML(r.Header) {
+			writePageMissing(w)
+			return
+		}
 		refuse(w, http.StatusNotFound, "page.not_built", "this kernel is serving no built interface", nil)
 		return
 	}
@@ -661,15 +668,16 @@ func (s *Server) forget(w http.ResponseWriter, r *http.Request) {
 // checkpoints returns the session's checkpoint list for the rewind picker.
 func (s *Server) checkpoints(w http.ResponseWriter, _ *http.Request) {
 	type cp struct {
-		Turn     int    `json:"turn"`
-		Prompt   string `json:"prompt"`
-		Files    int    `json:"files"`
-		MsgIndex int    `json:"msgIndex"`
+		Turn       int    `json:"turn"`
+		Prompt     string `json:"prompt"`
+		Files      int    `json:"files"`
+		MsgIndex   int    `json:"msgIndex"`
+		ForkCopied bool   `json:"forkCopied,omitempty"`
 	}
 	raw := s.ctl().Checkpoints()
 	out := make([]cp, len(raw))
 	for i, c := range raw {
-		out[i] = cp{Turn: c.Turn, Prompt: c.Prompt, Files: c.RewindFiles, MsgIndex: c.MsgIndex}
+		out[i] = cp{Turn: c.Turn, Prompt: c.Prompt, Files: c.RewindFiles, MsgIndex: c.MsgIndex, ForkCopied: c.ForkCopied}
 	}
 	writeJSON(w, out)
 }

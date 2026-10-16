@@ -23,8 +23,10 @@ type taskRuntime struct {
 	contract       *contract.Contract
 	contractRecord string
 	ledger         *evidence.Ledger
-	outcome        *evidence.OutcomeTracker
-	budget         runBudget
+	// unprovenExplained is the obligation whose full explanation an ended turn already carried.
+	unprovenExplained string
+	outcome           *evidence.OutcomeTracker
+	budget            runBudget
 	// witness holds, per changed path, the lines a later output has to carry to
 	// have shown that change. It is working state, not evidence: the verdict
 	// lands on the receipt, so the ledger never holds file content.

@@ -100,6 +100,37 @@ describe("branch switch results in the pane", () => {
   }
 });
 
+describe("branch switch in flight", () => {
+  it("says which branch it is moving to until the switch answers, then names the branch", async () => {
+    const pane = open();
+    const chip = await screen.findByRole("button", { name: /main/ });
+    let land: (git: Awaited<ReturnType<typeof pane.port.switchBranch>>) => void = () => {};
+    const done = new Promise<Awaited<ReturnType<typeof pane.port.switchBranch>>>((resolve) => { land = resolve; });
+    vi.spyOn(pane.port, "switchBranch").mockImplementation(() => done);
+
+    fireEvent.click(chip);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "studio" }));
+
+    await waitFor(() => expect(chip.textContent).toContain("正在切换到 studio…"));
+    expect(chip.getAttribute("aria-label")).toContain("main");
+    expect(chip.hasAttribute("data-pending")).toBe(true);
+
+    land({ ...pane.port.branchState, branch: "studio" });
+    await waitFor(() => expect(chip.textContent).not.toContain("正在切换"));
+    expect(chip.textContent).toContain("studio");
+  });
+
+  it("goes back to the current branch when the switch is refused", async () => {
+    const pane = open();
+    const chip = await screen.findByRole("button", { name: /main/ });
+    vi.spyOn(pane.port, "switchBranch").mockRejectedValue(new HttpError(409, "busy", { code: "branch.turn_running", error: "busy" }));
+    fireEvent.click(chip);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "studio" }));
+    await waitFor(() => expect(chip.textContent).not.toContain("正在切换"));
+    expect(chip.textContent).toContain("main");
+  });
+});
+
 describe("branch switch refusals in the pane", () => {
   for (const language of ["zh", "en"]) {
     for (const code of ["branch.workspace_busy", "branch.jobs_running", "branch.turn_running"]) {

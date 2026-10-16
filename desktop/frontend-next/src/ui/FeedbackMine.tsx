@@ -4,6 +4,8 @@ import { tx } from "../i18n/rich";
 import { FEEDBACK_NEXT_VERSION, FEEDBACK_REPO_ISSUES, isUnderReview, type FeedbackItem, type FeedbackLimits, type FeedbackMine as Mine, type FeedbackStatus } from "../port/feedback";
 import type { AgentPort } from "../port/port";
 import { CopyButton } from "./CopyButton";
+import { FeedbackFilter } from "./FeedbackFilter";
+import { inGroup, type FeedbackGroup } from "./feedbackgroups";
 import { FeedbackLevel } from "./FeedbackLevel";
 import { FeedbackLink } from "./FeedbackLink";
 import { feedbackFailure, type FeedbackFailure } from "./feedbackfailure";
@@ -115,6 +117,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
   const [failure, setFailure] = useState<FeedbackFailure | null>(null);
   const [loading, setLoading] = useState(true);
   const [fresh, setFresh] = useState<Record<string, number>>({});
+  const [group, setGroup] = useState<FeedbackGroup>("all");
   const [limits, setLimits] = useState<FeedbackLimits | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const [said, setSaid] = useState("");
@@ -175,6 +178,11 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
     };
   }, [port]);
 
+  const pick = (to: FeedbackGroup) => {
+    setGroup(to);
+    requestAnimationFrame(() => list.current?.scrollIntoView({ block: "start" }));
+  };
+
   const sent = (receipt: string) => {
     setSaid(t("回复已发送。"));
     load();
@@ -201,6 +209,8 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
           {t("刷新列表")}
         </button>
       </div>
+
+      {mine && mine.items.length > 1 && <FeedbackFilter items={mine.items} fresh={fresh} group={group} onPick={pick} />}
 
       {mine?.profile ? (
         <FeedbackLevel profile={mine.profile} offline={mine.offline} />
@@ -238,10 +248,14 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
         <p className="fbk-empty">{t("还没有提交过反馈。发出第一条之后，它的进展会出现在这里。")}</p>
       )}
 
+      {mine && mine.items.length > 1 && !mine.items.some((i) => inGroup(i, group, fresh[i.receipt] ?? 0)) && (
+        <p className="fbk-empty">{t("这一组里没有反馈。")}</p>
+      )}
+
       {mine && mine.items.length > 0 && (
         <ul className="fbk-list" ref={list}>
           {mine.items.map((item) => (
-            <li key={item.receipt} className="fbk-item" tabIndex={-1} aria-label={`${item.receipt} ${snippet(item.titleSnippet)}`} data-receipt={item.receipt} data-status={item.status} data-stale={item.statusUnavailable ? "" : undefined}>
+            <li key={item.receipt} className="fbk-item" hidden={!inGroup(item, group, fresh[item.receipt] ?? 0)} tabIndex={-1} aria-label={`${item.receipt} ${snippet(item.titleSnippet)}`} data-receipt={item.receipt} data-status={item.status} data-stale={item.statusUnavailable ? "" : undefined}>
               <div className="fbk-item-hd">
                 <code className="fbk-code">{item.receipt}</code>
                 <CopyButton iconOnly text={item.receipt} label={t("复制回执号")} />

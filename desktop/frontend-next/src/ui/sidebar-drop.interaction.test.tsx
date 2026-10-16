@@ -36,6 +36,7 @@ function draw(collapsed = false) {
       {error && <div role="alert">{error}</div>}
       <Sidebar
         onFiles={vi.fn()}
+        onView={vi.fn()}
         hub={hub} collapsed={collapsed} navShown={false} paging={NO_PAGING} tree={[]} treeRead runtimes={[]} runs={{}} active="remote-pane"
         activeWorkspace={undefined} liveIds={() => []} pinned={new Set()} onPin={() => {}}
         remotes={null} remoteTrees={{}} reloadRemotes={async () => {}} reloadRemoteTrees={async () => {}}

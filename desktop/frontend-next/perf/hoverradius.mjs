@@ -36,6 +36,11 @@ try {
     const grounds = new Set(seen.map(([, v]) => v.bg));
     check(`${context}: one corner radius across the row`, radii.size === 1, [...radii].join(" / "));
     check(`${context}: one hover ground across the row`, grounds.size === 1, [...grounds].join(" / "));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(url.href, { waitUntil: "networkidle" });
+    const chip = page.locator(turns ? ".compose .studio-branch" : ".compose .worktree-trigger").first();
+    await chip.click();
+    check(`${context}: a narrow-pane pointer click opens the workspace menu`, await chip.getAttribute("aria-expanded") === "true");
     await page.close();
   }
 } finally {

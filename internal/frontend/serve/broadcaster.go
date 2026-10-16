@@ -20,6 +20,7 @@ type Broadcaster struct {
 	subs            map[*subscriber]struct{}
 	ledger          *pricing.Ledger
 	displayCurrency string
+	workMs          int64
 	// The transport's, not the session's: numbering outlives /new and /resume, so
 	// resuming across one is told to rebuild rather than handed another
 	// conversation's frames under numbers it already has.
@@ -82,6 +83,7 @@ func (b *Broadcaster) ResetSession() {
 	}
 	b.mu.Lock()
 	b.ledger = pricing.NewLedger()
+	b.workMs = 0
 	b.replay.reset()
 	b.initialNoticesReplayed = false
 	b.mu.Unlock()
@@ -139,6 +141,9 @@ func (b *Broadcaster) Emit(e event.Event) {
 	}
 	if e.Kind == event.Notice && e.Code == event.NoticeCodeDisplayCurrency {
 		b.displayCurrency = pricing.NormalizeCurrency(e.Detail)
+	}
+	if e.Kind == event.TurnDone && e.WorkDurationMs > 0 {
+		b.workMs += e.WorkDurationMs
 	}
 	if e.Kind == event.Usage && e.Usage != nil && e.CostQuote != nil {
 		if b.ledger == nil {

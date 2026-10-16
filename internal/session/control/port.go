@@ -271,7 +271,7 @@ type RuntimeSettings interface {
 	SaveNetworkSettings(in NetworkSettings, password string, clearPassword bool) error
 	DiagnoseNetwork(ctx context.Context) []NetworkProbe
 	ShellSettings() ShellSettings
-	SaveShellSettings(prefer, path string) error
+	SaveShellSettings(prefer, path string, args ...string) error
 	PermissionRules() PermissionRules
 	SavePermissionRules(in PermissionLists) error
 	RevokeSessionGrant(rule string) int
@@ -285,6 +285,8 @@ type RuntimeSettings interface {
 	SaveBrowserToolsSettings(enabled bool) error
 	SubagentClaimsSettings() SubagentClaimsSettings
 	SaveSubagentClaimsSettings(optimistic bool) error
+	WriteLeaseSettings() WriteLeaseSettings
+	SaveWriteLeaseSettings(optimistic bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
@@ -362,6 +364,12 @@ type Status interface {
 // BackgroundJobs stops work a session left running outside any turn.
 type BackgroundJobs interface {
 	CancelJob(id string) bool
+	JobPeek(id string, max int) (jobs.Peek, bool)
+}
+
+// ToolCallStopper ends one running tool call and leaves its turn going.
+type ToolCallStopper interface {
+	CancelToolCall(id string) bool
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -480,6 +488,7 @@ type SessionAPI interface {
 	Inbox
 	Provenance
 	BackgroundJobs
+	ToolCallStopper
 	LocalShell
 	DiffRendering
 	Feedback
@@ -515,6 +524,7 @@ var (
 	_ FolderTrust        = (*Controller)(nil)
 	_ Goals              = (*Controller)(nil)
 	_ BackgroundJobs     = (*Controller)(nil)
+	_ ToolCallStopper    = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)
 	_ SlashDispatch      = (*Controller)(nil)

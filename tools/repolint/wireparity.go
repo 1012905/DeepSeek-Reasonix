@@ -14,6 +14,7 @@ import (
 // Where the desktop re-declares the kernel's wire types by hand.
 const (
 	tsWireFile      = "desktop/frontend-next/src/port/wire.ts"
+	tsLeaseFile     = "desktop/frontend-next/src/port/workspace_lease.ts"
 	tsBoundaryFile  = "desktop/frontend-next/src/port/boundary.ts"
 	tsRemoteFile    = "desktop/frontend-next/src/port/remote.ts"
 	tsSessionFile   = "desktop/frontend-next/src/port/session.ts"
@@ -91,6 +92,9 @@ var mirroredWireTypes = []wireMirror{
 	// The canonical task list, which the panel reads rather than derives. A
 	// status the page cannot read is a signed-off step drawn as the current one.
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
+	{"internal/frontend/serve/session_usage.go", "SessionUsage", tsSessionFile, "SessionUsage"},
+	{"internal/frontend/serve/jobs.go", "JobOutput", tsSessionFile, "JobOutput"},
+	{"internal/frontend/serve/session_usage.go", "SourceUsage", tsSessionFile, "SourceUsage"},
 	// The agent's tabs. The target id is what the window draws a view by, so a
 	// tab the page cannot read one for is a tab it cannot show.
 	{"internal/platform/browser/session.go", "TabInfo", tsSessionFile, "BrowserTab"},
@@ -113,6 +117,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/workspace_roots.go", "workspaceRootsView", tsBoundaryFile, "WorkspaceRoots"},
 	{"internal/session/control/browser_settings.go", "BrowserToolsSettings", tsBoundaryFile, "BrowserToolsSettings"},
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
+	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},
@@ -194,7 +199,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
 	{"internal/state/checkpoint/types.go", "RewindUndo", tsSessionFile, "RewindUndo"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
-	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},
+	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsLeaseFile, "WorkspaceLease"},
 	// A source and a model as the pickers name them. A label the page cannot
 	// read puts the config name back on screen after the user renamed it.
 	{"internal/frontend/serve/providers.go", "providerView", tsProviderFile, "ProviderEntry"},

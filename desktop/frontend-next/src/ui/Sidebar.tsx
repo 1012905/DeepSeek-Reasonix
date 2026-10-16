@@ -8,9 +8,11 @@ import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
 import type { Adder } from "./addws";
 import { AccountRow } from "./AccountRow";
+import { ContentMatches } from "./ContentMatches";
 import { RailSearch } from "./railsearch";
 import { RemoteHosts } from "./RemoteHosts";
 import { StudioIcon } from "./StudioIcon";
+import { UpdateDot } from "./UpdateDot";
 import { useHiddenHosts } from "../state/remotehide";
 import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
@@ -18,6 +20,7 @@ import { Workspaces } from "./Workspaces";
 import type { TreePaging } from "./treewindow";
 import { MASK, useHidesAmounts } from "./wallet";
 import { useFileDrop } from "./filedrop";
+import type { PaneView } from "./PaneNav";
 
 interface Props {
   hub: HubPort;
@@ -45,6 +48,7 @@ interface Props {
   reloadRemoteTrees: () => Promise<void>;
   readRemoteTree: (host: string) => Promise<void>;
   reloadTree: () => Promise<void>;
+  retryTree?: () => Promise<void>;
   paging: TreePaging;
   adder: Adder;
   opening?: string;
@@ -62,6 +66,7 @@ interface Props {
   wallet: string;
   onSettings: (section?: string) => void;
   onFiles: () => void;
+  onView: (to: PaneView) => void;
   onFeedback: (tab?: "send" | "mine") => void;
   // Reports with a new reply or a question waiting; the entry and the palette say so.
   feedbackUnread: number;
@@ -93,6 +98,7 @@ export function Sidebar({
   reloadRemoteTrees,
   readRemoteTree,
   reloadTree,
+  retryTree,
   paging,
   adder,
   opening,
@@ -110,6 +116,7 @@ export function Sidebar({
   wallet,
   onSettings,
   onFiles,
+  onView,
   onFeedback,
   feedbackUnread,
   onFind,
@@ -174,6 +181,9 @@ export function Sidebar({
         run: () => void onOpen({ root: newSessionRoot }).catch(onError) },
       { id: "find", label: t("在这段对话里查找"), icon: "search", keywords: "find search conversation 查找 搜索 对话",
         keys: chord("F"), run: onFind },
+      { id: "view-flow", label: t("显示对话"), icon: "menu", keywords: "conversation chat flow 对话 会话", keys: chord("1"), run: () => onView("flow") },
+      { id: "view-analysis", label: t("显示运行分析"), icon: "list", keywords: "run analysis trace 运行 分析", keys: chord("2"), run: () => onView("analysis") },
+      { id: "view-browser", label: t("显示工作台"), icon: "panel", keywords: "workbench browser files 工作台 浏览器", keys: chord("3"), run: () => onView("browser") },
       { id: "files", label: t("文件"), icon: "file", keywords: "files workspace explorer 文件 工作区", run: onFiles },
       { id: "storage", label: t("存储"), icon: "file", keywords: "storage disk data 存储 磁盘 数据",
         run: () => onSettings("storage") },
@@ -194,7 +204,7 @@ export function Sidebar({
       { id: "settings", label: t("设置"), icon: "settings", keywords: "settings preferences 设置 偏好",
         run: () => onSettings() },
     ],
-    [newSessionRoot, onOpen, onFiles, onSettings, onFeedback, feedbackUnread, onFind, onError],
+    [newSessionRoot, onOpen, onFiles, onView, onSettings, onFeedback, feedbackUnread, onFind, onError],
   );
   const sessionCount = tree.reduce(
     (n, ws) => n + (ws.total === undefined ? ws.sessions.filter((session) => !session.archived).length : ws.total - (ws.archived ?? 0)),
@@ -273,6 +283,7 @@ export function Sidebar({
         </div>
       </div>
       <RailSearch>
+      <ContentMatches hub={hub} tree={tree} onOpen={onOpen} onError={onError} />
       <Workspaces
         hub={hub}
         tree={tree}
@@ -282,6 +293,7 @@ export function Sidebar({
         folded={folded}
         onFold={onFold}
         reload={reloadTree}
+        retry={retryTree ? () => void retryTree() : undefined}
         paging={paging}
         opening={opening}
         onOpen={onOpen}
@@ -330,7 +342,7 @@ export function Sidebar({
         <div className="studio-user-foot">
           <AccountRow account={account} unread={accountUnread} onOpen={() => onSettings("account")} />
           <span className="studio-workspace-kind">{t(account?.signedIn ? "个人工作空间" : "本地工作空间")}</span>
-          <button className="studio-settings" data-action="chrome.settings" onClick={() => onSettings()} aria-label={t("设置")}><StudioIcon name="settings" /></button>
+          <button className="studio-settings" data-action="chrome.settings" onClick={() => onSettings()} aria-label={t("设置")}><StudioIcon name="settings" /><UpdateDot /></button>
         </div>
       </div>}
     </div>

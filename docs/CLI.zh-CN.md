@@ -25,7 +25,7 @@ reasonix --dir /path/to/project
 | --- | --- |
 | `--model NAME` | 选择已配置的 provider 或 `provider/model` 引用。 |
 | `--preset balanced\|delivery` | 选择 Agent 执行设定。默认 `balanced`。 |
-| `--profile economy\|balanced\|delivery` | 已弃用，等同 `--preset`（`economy` → `light`）。 |
+| `--profile economy\|balanced\|delivery` | 已弃用，等同 `--preset`；`economy` 与 `light` 都解析为 `balanced`。 |
 | `--effort LEVEL` | 覆盖当前会话的 reasoning effort。 |
 | `--max-steps N` | 为本次运行设置工具调用轮数上限；`0` 使用自动执行。 |
 | `--dir PATH` | 加载配置和工具前切换 workspace 根目录。 |

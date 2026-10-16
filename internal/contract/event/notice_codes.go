@@ -74,6 +74,8 @@ const (
 	// default_model names nothing configured, so the window opened on a fallback; the file is unchanged.
 	NoticeCodeDefaultModelUnavailable        = "default_model_unavailable"
 	NoticeCodeInheritedSubagentEffortDropped = "inherited_subagent_effort_dropped"
+	// A branch's saved model disappeared from the current provider catalog; the pane uses a fallback.
+	NoticeCodeBranchModelUnavailable = "branch_model_unavailable"
 	// A legacy memory file could not be preserved, so the metadata migration left it as it was.
 	NoticeCodeMemoryMigrationBackup = "memory_migration_backup"
 	// /compact folded the context.
@@ -104,4 +106,11 @@ const (
 	NoticeCodeWebSearchModelRemoved       = "web_search_model_removed"
 	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
 	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
+)
+
+// A saved fold was not reused when its session was bound: the whole history is
+// sent instead.
+const (
+	NoticeCodeFoldNotReusedHistory = "fold_not_reused_history"
+	NoticeCodeFoldNotReusedLineage = "fold_not_reused_lineage"
 )

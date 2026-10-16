@@ -22,6 +22,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   suspected_injection: "一条外部内容看起来在向智能体下指令，已提醒它只当资料看待",
   await_user: "等待你的输入",
   default_model_unavailable: "配置里保存的默认模型已不在已配置的供应商中，本次改用第一个可用的模型；在设置里重新选择默认模型即可替换，配置文件未被改动",
+  branch_model_unavailable: "分支保存的模型已不可用，本次改用其他已配置的模型；可以在模型设置中重新选择",
   web_search_model_bad_ref: "搜索模型的格式应为 服务/模型，搜索已关闭；到模型偏好里重新选择，或恢复自动",
   web_search_model_not_added: "所选搜索模型所在的连接已被移出，搜索已关闭；到模型偏好里重新选择，或恢复自动",
   web_search_model_removed: "所选搜索模型已不在配置里，搜索已关闭；到模型偏好里重新选择，或恢复自动",
@@ -46,5 +47,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   permission_rules_dormant: "有 {n} 条权限规则没有对应的工具，匹配不到任何调用，因此起不到限制作用（如「{list}」里的 {rule}）；到「设置 → 权限」里删除或改写，命令要写成 Bash(命令:*)",
   extension_skipped: "扩展 {ext} 的配套后台程序没有运行，该扩展本次（在 {point}）已被跳过；到「工具与集成」里查看并启动它，或停用该扩展",
   ask_timeout_invalid: "配置文件里的提问等待时长无效（须为 0 或 10 到 86400 之间的整数），提问现在会一直等你回答；到设置里重新设一个",
+  fold_not_reused_history: "这个会话保存的压缩结果没有被复用：它所总结的历史之后发生了变化，现在发送的是完整历史，可能超出模型容量",
+  fold_not_reused_lineage: "这个会话保存的压缩结果是在另一个模型或工作区下生成的，与当前历史对不上，没有被复用，现在发送的是完整历史",
   perseveration_loop: "模型卡在重复输出同一段文字，这一轮已停止；可以重试、补充引导，或换一个供应商/模型",
 };

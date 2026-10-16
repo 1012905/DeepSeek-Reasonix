@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { openWithName } from "./openwith_label";
 import type { HubPort, OpenWithTarget } from "../port/hub";
 import { host } from "../port/host";
 import { t } from "../i18n";
@@ -55,7 +56,7 @@ export function OpenWithMenu({ hub, root, onError }: {
                 hub.openWith(root, target.id).catch(onError);
               }}
             >
-              <span>{t("用 {name} 打开", { name: target.name })}</span>
+              <span>{t("用 {name} 打开", { name: openWithName(target) })}</span>
             </button>
           ))}
         </div>

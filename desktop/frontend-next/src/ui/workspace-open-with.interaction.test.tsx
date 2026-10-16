@@ -40,7 +40,7 @@ it("offers only the programs this machine has, and opens the project in the chos
   const { openWith } = draw(TARGETS);
   await openMenu();
   expect(await screen.findByRole("menuitem", { name: /用 Visual Studio Code 打开/ })).toBeTruthy();
-  expect(screen.getByRole("menuitem", { name: /用 Terminal 打开/ })).toBeTruthy();
+  expect(screen.getByRole("menuitem", { name: /用 终端 打开/ })).toBeTruthy();
   expect(screen.queryByRole("menuitem", { name: /Cursor/ })).toBeNull();
 
   await userEvent.click(screen.getByRole("menuitem", { name: /用 Visual Studio Code 打开/ }));
@@ -63,7 +63,7 @@ it("reports a failed launch where the person is looking", async () => {
   const refusal = new Error("not installed");
   openWith.mockRejectedValue(refusal);
   await openMenu();
-  await userEvent.click(await screen.findByRole("menuitem", { name: /用 Terminal 打开/ }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: /用 终端 打开/ }));
   await waitFor(() => expect(onError).toHaveBeenCalledWith(refusal));
 });
 

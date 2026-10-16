@@ -90,6 +90,9 @@ type skillEntry struct {
 	// this project set it for itself, "global" when it applies everywhere, and
 	// empty when nothing overrides what the skill itself declares.
 	SwitchScope string `json:"switchScope,omitempty"`
+	// Source is where an installed copy came from and whether it still matches;
+	// absent for a skill the installer never recorded.
+	Source *skillSource `json:"source,omitempty"`
 }
 
 // skills lists every discoverable skill, disabled ones included, so the
@@ -110,6 +113,7 @@ func (s *Server) skills(w http.ResponseWriter, r *http.Request) {
 	raw := ctl.AllSkills()
 	enabled := ctl.SkillActivation()
 	entries := make([]skillEntry, 0, len(raw))
+	sources := loadSkillSources()
 	for _, sk := range raw {
 		switchScope := ""
 		if scope, found := ctl.SkillOverrideScope(sk.Name); found {
@@ -135,6 +139,7 @@ func (s *Server) skills(w http.ResponseWriter, r *http.Request) {
 			License:     sk.License, Compatibility: sk.Compatibility, Metadata: sk.Metadata,
 			Manual:  sk.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(sk.Invocation), "manual"),
 			Enabled: enabled(sk.Name),
+			Source:  sources.of(sk.Name, string(sk.Scope), sk.Path),
 		})
 	}
 	writeJSON(w, map[string]any{
