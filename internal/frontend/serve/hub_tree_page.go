@@ -71,7 +71,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		if inWindow {
 			windowed++
 		}
-		if !inWindow && !(si.Pinned && !si.Archived) {
+		if !inWindow && runtimeID == "" && !(si.Pinned && !si.Archived) {
 			if matches {
 				remaining++
 			}
