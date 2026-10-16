@@ -46,8 +46,54 @@ func TestOpeningAnArchivedSessionAddsNoRowAndKeepsItArchived(t *testing.T) {
 	if !rows[0].Archived || rows[0].Path != path {
 		t.Fatalf("the opened row is %+v, want the archived session itself", rows[0])
 	}
-	if active := h.workspacePage(root, "", nil, treeWindow{scope: scopeActive}, 0).Sessions; len(active) != 0 {
-		t.Fatalf("the everyday list shows %+v for an archived session that is only open", active)
+	open := h.openSessionsIn(root)
+	active := h.workspacePage(root, "", open, treeWindow{scope: scopeActive}, 0).Sessions
+	if len(active) != 1 || active[0].Path != path || active[0].RuntimeID == "" || active[0].Title == "" || active[0].Turns == 0 {
+		t.Fatalf("the everyday list shows %+v, want the open session once, with its own title and turns", active)
+	}
+}
+
+// A pane's conversation keeps its row whatever the window's scope, word or size
+// leaves out, so its tab can read its title from the row.
+func TestAnOpenSessionOutsideTheWindowKeepsItsTitledRow(t *testing.T) {
+	root := testenv.TempDir(t)
+	writeServeModelConfig(t)
+	closeSharedCatalogsOnCleanup(t)
+	h := NewHub(HubOptions{ProviderResolver: homeResolver()})
+	defer h.Shutdown()
+	old := filepath.Join(SessionDirFor(root), "20260101-120000.jsonl")
+	s := sessionstore.NewSession("system")
+	s.Add(provider.Message{Role: provider.RoleUser, Content: "the oldest conversation"})
+	s.Add(provider.Message{Role: provider.RoleAssistant, Content: "an answer"})
+	if err := s.SaveSnapshot(old); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"20260301-120000.jsonl", "20260302-120000.jsonl"} {
+		n := sessionstore.NewSession("system")
+		n.Add(provider.Message{Role: provider.RoleUser, Content: "a newer one " + name})
+		n.Add(provider.Message{Role: provider.RoleAssistant, Content: "ok"})
+		if err := n.SaveSnapshot(filepath.Join(SessionDirFor(root), name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rt, err := h.Open(context.Background(), OpenRequest{Root: root, SessionPath: old})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { rt.Server.Controller().Close() })
+
+	rows := h.workspacePage(root, "", h.openSessionsIn(root), treeWindow{scope: scopeEvery}, 1).Sessions
+	var held *treeSession
+	for i := range rows {
+		if rows[i].RuntimeID != "" {
+			held = &rows[i]
+		}
+	}
+	if held == nil || held.Title == "" || held.Turns == 0 {
+		t.Fatalf("rows %+v: the open session has no titled row of its own", rows)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows %+v, want the one the window allows plus the open one", rows)
 	}
 }
 
