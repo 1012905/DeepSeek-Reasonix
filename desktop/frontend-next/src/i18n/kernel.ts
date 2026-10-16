@@ -70,6 +70,7 @@ const SAID: Record<string, string> = {
   "workspace.file_missing": "找不到该文件，它可能已被移动或删除",
   "workspace.file_failed": "文件操作失败，请重试",
   "workspace.path_outside_tree": "该路径不在当前工作区内",
+  "workspace.root_not_granted": "这个文件夹没有授权给当前工作区",
   "workspace.target_access_unconfigured": "未配置文件访问策略，无法执行此文件操作。",
   "workspace.read_forbidden": "无法读取目标文件：没有权限访问。",
   "workspace.read_outside_scope": "无法读取目标文件：没有权限访问。",

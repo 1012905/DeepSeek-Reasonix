@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, renderHook } from "@testing-library/react";
+import { cleanup, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import type { AgentPort } from "../port/port";
 import { Markdown } from "./Markdown";
@@ -50,4 +50,28 @@ it("shows the alt text for a picture whose address the sanitiser removed, instea
   const { container } = render(<Markdown text={'<img src="file:///C:/Users/me/a.jpg" alt="wall">'} local={refs("C:\\Work")} />);
   expect(container.querySelector("img")).toBeNull();
   expect(container.querySelector(".md-noimg")?.textContent).toBe("wall");
+});
+
+const grantedPort = {
+  workspaceImageURL: (path: string, root?: string) => `/rt/r1/workspace/image?path=${encodeURIComponent(path)}${root ? `&root=${encodeURIComponent(root)}` : ""}`,
+  workspaceRoots: () => Promise.resolve({ primary: "/work", extra: ["/pictures"] }),
+  revealsFiles: () => false, opensFiles: () => false,
+} as unknown as AgentPort;
+
+it("loads a picture from a folder the user granted, named by that folder", async () => {
+  const { result } = renderHook(() => useConversationFiles(grantedPort, "/work", false, true, () => {}, () => {}));
+  await waitFor(() => expect(result.current.refs.image("/pictures/wall/moon.png")).not.toBeNull());
+  const at = result.current.refs;
+  expect(at.image("/pictures/wall/moon.png")).toBe("/rt/r1/workspace/image?path=wall%2Fmoon.png&root=%2Fpictures");
+  expect(at.image("file:///pictures/wall/moon.png")).toBe("/rt/r1/workspace/image?path=wall%2Fmoon.png&root=%2Fpictures");
+  expect(at.image("/elsewhere/moon.png")).toBeNull();
+  expect(at.image("wall/moon.png")).toBe("/rt/r1/workspace/image?path=wall%2Fmoon.png");
+});
+
+it("draws a granted folder's picture in the conversation and still notes one that is outside every grant", async () => {
+  const { result } = renderHook(() => useConversationFiles(grantedPort, "/work", false, true, () => {}, () => {}));
+  await waitFor(() => expect(result.current.refs.image("/pictures/a.png")).not.toBeNull());
+  const { container } = render(<Markdown text={"![in](/pictures/a.png)\n\n![out](/elsewhere/b.png)"} local={result.current.refs} />);
+  expect([...container.querySelectorAll("img")].map((i) => i.getAttribute("src"))).toEqual(["/rt/r1/workspace/image?path=a.png&root=%2Fpictures"]);
+  expect([...container.querySelectorAll(".md-outside-image")].map((n) => n.textContent)).toEqual(["out"]);
 });

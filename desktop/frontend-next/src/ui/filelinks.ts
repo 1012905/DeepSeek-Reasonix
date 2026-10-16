@@ -85,15 +85,19 @@ export function remarkFileLinks(resolve?: (href: string) => string | null) {
   };
 }
 
+/** A picture in a folder the user granted is carried as GRANTED/<n>/<path> until the
+ *  image is loaded, n being the folder's place in the granted list. */
+export const GRANTED = ".granted";
+
 /** A picture the model wrote as a file path: inside the workspace it becomes a
  *  workspace-relative address the controlled image channel can serve, outside it
  *  becomes OUTSIDE_IMAGE, so no local address ever reaches an <img>. */
-export function remarkLocalImages(resolve?: (src: string) => string | null) {
+export function remarkLocalImages(resolve?: (src: string) => string | null, granted?: (src: string) => string | null) {
   return (tree: Node) => {
     if (!resolve) return;
     const walk = (node: Node) => {
       if (node.type === "image" && node.url) {
-        const path = resolve(node.url);
+        const path = resolve(node.url) ?? (granted && isLocalPathShape(node.url) ? granted(node.url) : null);
         if (path) node.url = path.split("/").map(encodeURIComponent).join("/");
         else if (isLocalPathShape(node.url)) node.url = OUTSIDE_IMAGE;
       }

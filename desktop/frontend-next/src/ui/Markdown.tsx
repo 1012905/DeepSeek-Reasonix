@@ -164,6 +164,8 @@ export interface LocalRefs {
   /** Where to load src from, or null to leave it as written. */
   image(src: string): string | null;
   path?(href: string): string | null;
+  /** The same for a local picture in a folder the user granted, spelled as GRANTED/<n>/<path>. */
+  granted?(src: string): string | null;
   title?(href: string): string;
   menu?(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, href: string): void;
 }
@@ -199,7 +201,7 @@ const Block = memo(function Block({ src, math, emoji, code, tail, live, local, i
   const body = normalizeMath(tail ? balanceFences(src) : src);
   return (
     <ReactMarkdown
-      remarkPlugins={([...BASE_REMARK, [remarkFileLinks, local?.path], [remarkLocalImages, local?.path], ...(emoji ? [emoji] : [])]) as never}
+      remarkPlugins={([...BASE_REMARK, [remarkFileLinks, local?.path], [remarkLocalImages, local?.path, local?.granted], ...(emoji ? [emoji] : [])]) as never}
       rehypePlugins={([...BASE_REHYPE, math, code].filter(Boolean)) as never}
       components={{
         ...DIRECTED,
