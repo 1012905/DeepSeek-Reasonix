@@ -656,6 +656,9 @@ type preparedInvocationTurn struct {
 	composed         string
 	subagents        []skill.Skill
 	inlineSkillNames []string
+	// task stands in for the typed text when none was given and every subagent
+	// chosen has a default scope of its own.
+	task string
 }
 
 // prometheusPrompt is the strategic planner system prompt.

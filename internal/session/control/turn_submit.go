@@ -143,8 +143,12 @@ func (c *Controller) prepareInvocationTurn(input string, requests []InvocationRe
 		}
 	}
 
+	task := ""
 	if strings.TrimSpace(input) == "" && len(subagents) > 0 {
-		return preparedInvocationTurn{}, fmt.Errorf("subagent invocation requires a task")
+		if slices.ContainsFunc(subagents, func(sk skill.Skill) bool { return !sk.RunsWithoutTask() }) {
+			return preparedInvocationTurn{}, fmt.Errorf("subagent invocation requires a task")
+		}
+		task = skill.DefaultReviewTask
 	}
 	inlineSkillNames := make([]string, 0, len(inline))
 	for _, sk := range inline {
@@ -161,7 +165,7 @@ func (c *Controller) prepareInvocationTurn(input string, requests []InvocationRe
 	if strings.TrimSpace(input) != "" {
 		parts = append(parts, input)
 	}
-	return preparedInvocationTurn{composed: strings.Join(parts, "\n\n"), subagents: subagents, inlineSkillNames: inlineSkillNames}, nil
+	return preparedInvocationTurn{composed: strings.Join(parts, "\n\n"), subagents: subagents, inlineSkillNames: inlineSkillNames, task: task}, nil
 }
 
 func (c *Controller) runPreparedInvocationTurn(
@@ -187,7 +191,7 @@ func (c *Controller) runPreparedInvocationTurn(
 		ctx,
 		prepared.subagents,
 		prepared.composed,
-		input,
+		firstNonEmptyStr(prepared.task, input),
 		display,
 		runner,
 		c.PlanMode(),
@@ -396,8 +400,11 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		if sk, task, ok := c.resolveSkillInvocation(trimmed); ok {
 			if sk.RunAs == skill.RunSubagent {
 				if strings.TrimSpace(task) == "" {
-					c.notice("usage: /" + sk.Name + " <task>")
-					return turnNoTurn
+					if !sk.RunsWithoutTask() {
+						c.notice("usage: /" + sk.Name + " <task>")
+						return turnNoTurn
+					}
+					task = skill.DefaultReviewTask
 				}
 				return c.runSubagentSkillSlash(sk, task, trimmed, display)
 			}
