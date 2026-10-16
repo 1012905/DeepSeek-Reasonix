@@ -37,6 +37,7 @@ const PATHS = {
   external: "M14 3h7v7M21 3 11 13M10 3H3v18h18v-7",
   plug: "M8 3v5m8-5v5M5 8h14v4a7 7 0 0 1-14 0V8M12 19v3",
   download: "M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4",
+  chat: "M4 5h16v10H9l-5 4V5z",
   list: "M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01",
   edit: "m4 16 12-12 4 4L8 20H4v-4zM13 7l4 4",
   rewind: "M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-4",

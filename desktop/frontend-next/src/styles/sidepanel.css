@@ -1,10 +1,4 @@
-.sidetoggle {
-  margin-left: auto; padding: 4px 10px; cursor: pointer; align-self: center;
-  border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--muted);
-  font: var(--w-med) var(--fs-meta)/1.4 var(--ui); flex: none; white-space: nowrap;
-}
-.sidetoggle:hover, .sidetoggle[aria-pressed="true"] { color: var(--text); background: var(--overlay); }
-.sidetoggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.turntools .studio-attach[aria-pressed="true"] { color: var(--text); background: var(--hair); }
 .sidepanel {
   position: absolute; right: 60px; top: 48px; z-index: 30; width: min(380px, calc(100% - 76px)); max-height: min(520px, calc(100% - 290px));
   display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px;
