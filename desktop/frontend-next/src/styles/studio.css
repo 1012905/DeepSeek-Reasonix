@@ -736,8 +736,6 @@ body { background: var(--page) !important; }
 .notice { background: var(--surface); border-color: var(--hair); box-shadow: none; }
 .call:hover { background: var(--raised); border-color: var(--border); }
 .flow .call { gap: 13px; }
-.flow .call > .g .line { width: 1px; background: var(--float-hi); }
-.flow .call[data-k="say"] > .g .line,
 .flow .call[data-k="me"] > .g { display: none; }
 .flow .call[data-k="say"] {
   position: relative; display: block; padding-inline-start: 6px; margin-inline-start: -6px;
@@ -898,7 +896,7 @@ body { background: var(--page) !important; }
               content-visibility 150ms allow-discrete;
 }
 .activity-group[open]::details-content { block-size: auto; opacity: 1; }
-.activity-body { margin-left: 5px; padding: 2px 0 2px 12px; border-left: 1px solid var(--hair); }
+.activity-body { margin-left: 5px; padding: 2px 0 2px 12px; }
 .activity-body .call { min-height: 38px; display: block; }
 .activity-body .call > .g { display: none; }
 .activity-body .call:not([data-k="me"]):not([data-k="say"]) > .c {
@@ -1037,7 +1035,6 @@ body { background: var(--page) !important; }
 .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) { display: block; position: relative; margin: 12px 0 !important; }
 .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .c { margin: 0 !important; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g { position: absolute; top: 1px; left: 1px; z-index: 1; width: 34px; height: 38px; display: grid; place-items: center; pointer-events: none; }
-.flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g .line, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g .line { display: none; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g .sym, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g .sym { width: 14px; height: 14px; margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--faint); }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g .sym svg, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g .sym svg { width: 12px; height: 12px; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"])[data-lvl="ok"] > .g .sym { color: var(--ok); }
@@ -3063,7 +3060,6 @@ body { font-size: 14px; line-height: 1.75; }
 .flow .opt .ds { color: var(--muted); }
 .flow .call[data-k="say"] > .g .sym { background: var(--text); }
 .flow .call[data-k="say"] > .g .sym::after { color: var(--page); }
-.flow .call > .g .line { background: var(--border); }
 
 .flow .call[data-call] > .c,
 .flow .ask { background: var(--raised) !important; border-color: var(--border) !important; }

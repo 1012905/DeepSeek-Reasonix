@@ -9,7 +9,6 @@ export function GuardianCard({ g }: { g: Guardian }) {
     <div className="call" data-k="host" data-lvl={g.outcome === "deny" ? "err" : risk === "medium" ? "warn" : undefined}>
       <div className="g">
         <Sym glyph="⊛" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

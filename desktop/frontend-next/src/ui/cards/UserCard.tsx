@@ -81,7 +81,6 @@ export function UserCard({
     <div className="call" data-k="me" data-pending={item.pending ? "" : undefined}>
       <div className="g">
         <span className="sym">{t("你")}</span>
-        <span className="line" />
       </div>
       <div className="c">
         {(item.steer || source) && <div className="hl user-hl">
