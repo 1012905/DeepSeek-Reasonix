@@ -1,5 +1,6 @@
 import type { ChangeDiff, StageRequest, WorkspaceBranches, WorkspaceChanges, WorkspaceGit } from "./port";
 import type { GitHistory } from "./workspace";
+import type { JobOutput } from "./session";
 import { SseFeedback } from "./sse_feedback";
 import { host } from "./host";
 import { HttpError } from "./http_error";
@@ -42,5 +43,15 @@ export class SseWorkspace extends SseFeedback {
 
   changeDiff(path: string) {
     return this.get<ChangeDiff>(`/changes/diff?path=${encodeURIComponent(path)}`);
+  }
+
+  stopToolCall(callId: string) {
+    return this.post("/tool-calls/" + encodeURIComponent(callId) + "/cancel");
+  }
+  cancelJob(jobId: string) {
+    return this.post("/jobs/" + encodeURIComponent(jobId) + "/cancel");
+  }
+  jobOutput(jobId: string) {
+    return this.get<JobOutput>("/jobs/" + encodeURIComponent(jobId) + "/output");
   }
 }

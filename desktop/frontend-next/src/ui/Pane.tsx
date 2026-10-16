@@ -175,6 +175,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       ? prev : { kind: "settled", status: next }));
   }, []);
 
+  const readJob = useCallback((id: string) => port.jobOutput(id), [port]);
   const refreshStatus = useCallback(() => port.status().then((st) => { applyStatus(st); statusRead(); }).catch(() => {}), [port, applyStatus, statusRead]);
 
   const [wallet, refreshWallet] = useWallet(port, accountOf(status?.modelRef));
@@ -596,6 +597,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
           tps={tps} trail={trail} running={running} speed={speed} metrics={s.metrics} ctx={ctx} mcp={mcp} compact={compact} cost={cost}
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}
           onCancelJob={(id) => cancelJob(port, id, notify, refreshStatus).then(() => {})}
+          onReadJob={readJob}
           usage={status?.sessionUsage} quote={status?.sessionCostQuote}
         />
         {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}

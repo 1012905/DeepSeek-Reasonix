@@ -1,5 +1,6 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
-import type { PlanAction } from "./session";
+import type { JobOutput, PlanAction } from "./session";
+import { approvalKind } from "./mock_approval";
 import { HttpError } from "./port";
 import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
@@ -655,6 +656,12 @@ export class MockPort extends MockWorkspace implements AgentPort {
     this.state = { ...this.state, jobs: this.state.jobs?.map((j) => (j === job ? { ...j, status: "killed" } : j)) };
   }
 
+  async jobOutput(jobId: string): Promise<JobOutput> {
+    const job = this.state.jobs?.find((j) => j.id === jobId);
+    if (!job || job.status !== "running") throw new HttpError(409, "no running background job with this id", { code: "job.not_running" });
+    return { text: "> dev\n> vite\n\n  VITE ready in 312 ms\n  Local: http://localhost:5173/\n", status: job.status, bytes: 66, truncated: false };
+  }
+
   async retryQueued(itemId: string) {
     void itemId;
   }
@@ -786,15 +793,4 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async setGoal(text: string) {
     this.state.goal = text;
   }
-}
-
-// Which owner answers a pending approval. The kernel decides it from the
-// approval itself — a recovery gate, the plan tool, otherwise the tool gate —
-// and the fixture reads the same fields the card does rather than inventing a
-// third rule.
-function approvalKind(ev: WireEvent): "plan_approval" | "recovery_approval" | "tool_approval" {
-  const a = ev.approval;
-  if (a?.kind === "plan" || a?.tool === "exit_plan_mode") return "plan_approval";
-  if (a?.kind === "recovery") return "recovery_approval";
-  return "tool_approval";
 }

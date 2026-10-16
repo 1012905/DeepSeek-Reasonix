@@ -90,6 +90,7 @@ var mirroredWireTypes = []wireMirror{
 	// status the page cannot read is a signed-off step drawn as the current one.
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
 	{"internal/frontend/serve/session_usage.go", "SessionUsage", tsSessionFile, "SessionUsage"},
+	{"internal/frontend/serve/jobs.go", "JobOutput", tsSessionFile, "JobOutput"},
 	{"internal/frontend/serve/session_usage.go", "SourceUsage", tsSessionFile, "SourceUsage"},
 	// The agent's tabs. The target id is what the window draws a view by, so a
 	// tab the page cannot read one for is a tab it cannot show.

@@ -134,6 +134,8 @@ export const ACTIONS: UIAction[] = [
   { id: "session.stop", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "tool.stop", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "job.cancel", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "job.view", kind: "view", target: "entity", proof: "interaction" },
+  { id: "job.close", kind: "view", target: "none", proof: "interaction" },
   { id: "plan.mode", kind: "kernel-mutation", target: "none", proof: "interaction" },
   // A rewrite is asked of the kernel but changes nothing there; taking it only
   // replaces what is in the box.

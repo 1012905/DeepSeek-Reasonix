@@ -20,7 +20,7 @@ export type { MemoryEdit } from "./memory";
 export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
 import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
-import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
+import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
@@ -31,7 +31,7 @@ import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResul
 // them all.
 export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, ApprovalVerdict, WorkspaceTrust, CapabilityScope,
   Checkpoint, CompactionSettings, Completion, CompletionItem, ContextBreakdown, DeviceGrant, HistoryMessage, HostTodo, BrowserTab,
-  HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource, JobEntry, McpCatalog, McpDraft,
+  HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource, JobEntry, JobOutput, McpCatalog, McpDraft,
   McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, MemoryCatalog,
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus, SessionUsage, SourceUsage,
@@ -604,6 +604,10 @@ export interface AgentPort {
   // Ends one running tool call and lets the turn go on; a call that already
   // finished is refused (tool_call.not_running).
   stopToolCall(callId: string): Promise<void>;
+  // The end of a running job's output, for the person looking at it. It does
+  // not take output from the model's own reader; a job that ended is refused
+  // (job.not_running).
+  jobOutput(jobId: string): Promise<JobOutput>;
   // Re-freezes the files an entry references. A line that waited through the
   // work that changed them would otherwise arrive quoting what is no longer.
   refreshQueued(itemId: string): Promise<void>;

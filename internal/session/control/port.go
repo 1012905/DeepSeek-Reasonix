@@ -362,6 +362,7 @@ type Status interface {
 // BackgroundJobs stops work a session left running outside any turn.
 type BackgroundJobs interface {
 	CancelJob(id string) bool
+	JobPeek(id string, max int) (jobs.Peek, bool)
 }
 
 // ToolCallStopper ends one running tool call and leaves its turn going.

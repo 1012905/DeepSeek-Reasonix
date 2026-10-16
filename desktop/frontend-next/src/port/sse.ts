@@ -720,12 +720,6 @@ export class SsePort extends SseWorkspace implements AgentPort {
   moveQueued(itemId: string, toIndex: number) {
     return this.post("/inbox/move", { id: itemId, toIndex });
   }
-  stopToolCall(callId: string) {
-    return this.post("/tool-calls/" + encodeURIComponent(callId) + "/cancel");
-  }
-  cancelJob(jobId: string) {
-    return this.post("/jobs/" + encodeURIComponent(jobId) + "/cancel");
-  }
   retryQueued(itemId: string) {
     return this.post("/inbox/items/" + encodeURIComponent(itemId) + "/retry");
   }

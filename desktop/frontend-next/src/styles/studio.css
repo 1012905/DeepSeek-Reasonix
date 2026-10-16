@@ -4181,7 +4181,7 @@ body { font-size: 14px; line-height: 1.75; }
 .agent-tx-x:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
 .agent-tx-bd { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px 14px 10px; }
 .agent-tx .nest-ret { flex: none; max-height: 30vh; overflow-y: auto; margin: 4px 14px 14px; white-space: pre-wrap; }
-.nest-bd :is(.term, .term-l) { white-space: pre-wrap; overflow-wrap: anywhere; }
+.nest-bd :is(.term, .term-l) { white-space: pre-wrap; overflow-wrap: anywhere; } .job-view { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; } .job-view:hover { text-decoration: underline; } .agent-tx .job-out { max-height: 60vh; flex: 1 1 auto; }
 .agent-tx .call { content-visibility: auto; contain-intrinsic-size: auto 80px; }
 .agent-tx:focus { outline: none; }
 
