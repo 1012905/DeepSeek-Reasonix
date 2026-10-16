@@ -56,7 +56,10 @@ type Message struct {
 // is really alive is the caller's question, answered from the session lease.
 // SessionID is the key; WriterID is the process holding the lease.
 type Live struct {
-	SessionID   string    `json:"session_id"`
+	SessionID string `json:"session_id"`
+	// Instance names the controller that published the record, so a controller
+	// that is replaced does not withdraw the record its replacement just wrote.
+	Instance    string    `json:"instance,omitempty"`
 	WriterID    string    `json:"writer_id,omitempty"`
 	SessionPath string    `json:"session_path"`
 	PID         int       `json:"pid"`

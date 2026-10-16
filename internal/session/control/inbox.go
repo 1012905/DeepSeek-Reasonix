@@ -244,6 +244,7 @@ func inboxRecoveredNotice(n int) event.Event {
 // rebindInbox opens the inbox for the current session path. Safe across
 // NewSession/Resume/SetSessionPath; does not copy items on fork.
 func (c *Controller) rebindInbox() {
+	c.rebindPeers()
 	path := c.SessionPath()
 	c.inbox.mu.Lock()
 	defer c.inbox.mu.Unlock()

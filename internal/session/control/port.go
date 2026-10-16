@@ -372,6 +372,14 @@ type ToolCallStopper interface {
 	CancelToolCall(id string) bool
 }
 
+// PeerMail is the receiving side of messages between sessions: what other
+// sessions sent and the user has not decided, and the decision.
+type PeerMail interface {
+	PeersEnabled() bool
+	HeldPeerMessages() []PeerHeld
+	ResolvePeerMessage(id string, approve bool) error
+}
+
 // DiffRendering reports the session's diff-rendering choices, resolved once at
 // build. A frontend rebuilding a transcript (e.g. the HTTP server answering
 // /history) reads them here instead of reloading config per request.
@@ -489,6 +497,7 @@ type SessionAPI interface {
 	Provenance
 	BackgroundJobs
 	ToolCallStopper
+	PeerMail
 	LocalShell
 	DiffRendering
 	Feedback
@@ -525,6 +534,7 @@ var (
 	_ Goals              = (*Controller)(nil)
 	_ BackgroundJobs     = (*Controller)(nil)
 	_ ToolCallStopper    = (*Controller)(nil)
+	_ PeerMail           = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)
 	_ SlashDispatch      = (*Controller)(nil)

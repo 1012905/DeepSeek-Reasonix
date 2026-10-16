@@ -330,3 +330,89 @@ func TestADirectoryThatIsALinkIsRefused(t *testing.T) {
 		t.Fatalf("Open over a linked spool: %v, want ErrUnsafeDir", err)
 	}
 }
+
+func TestAnInstanceThatWasReplacedDoesNotWithdrawItsReplacementsRecord(t *testing.T) {
+	d, _ := open(t)
+	old := Live{SessionID: "sess-a", Instance: "old", Inbound: "hold"}
+	if err := d.PublishLive(old); err != nil {
+		t.Fatal(err)
+	}
+	next := Live{SessionID: "sess-a", Instance: "new", Inbound: "hold"}
+	if err := d.PublishLive(next); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RemoveLiveIf("sess-a", "old"); err != nil {
+		t.Fatal(err)
+	}
+	if live, _ := d.ListLive(func(Live) bool { return true }); len(live) != 1 || live[0].Instance != "new" {
+		t.Fatalf("the replacement's record was withdrawn: %+v", live)
+	}
+	if err := d.RemoveLiveIf("sess-a", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if live, _ := d.ListLive(func(Live) bool { return true }); len(live) != 0 {
+		t.Fatalf("the owner could not withdraw its own record: %+v", live)
+	}
+}
+
+func TestTheAuditTrailNamesPartiesAndDecisionsButNeverTheWords(t *testing.T) {
+	d, root := open(t)
+	body := "the secret plan for tuesday"
+	if err := d.Audit(AuditRecord{Receiver: "sess-b", Sender: "sess-a", ID: "m1", Decision: DecisionHeld, Bytes: len(body), SHA256: Digest(body)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Audit(AuditRecord{Receiver: "sess-b", ID: "x", Decision: DecisionRejected, Reason: ReasonMalformed}); err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(root, "audit", "*.jsonl"))
+	if len(files) != 1 {
+		t.Fatalf("audit files = %v, want one for the month", files)
+	}
+	data, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Contains(text, "secret plan") {
+		t.Fatalf("the audit trail carries the body: %s", text)
+	}
+	if !strings.Contains(text, Digest(body)) || !strings.Contains(text, `"decision":"held"`) || !strings.Contains(text, `"reason":"malformed"`) {
+		t.Fatalf("the audit trail lacks its identities: %s", text)
+	}
+	if strings.Count(text, "\n") != 2 {
+		t.Fatalf("want one line per record: %q", text)
+	}
+}
+
+// A sender that died between creating its temporary file and linking it into
+// place must not make that id unusable for ever.
+func TestAStaleTemporaryFileIsSweptAndTheIdBecomesUsableAgain(t *testing.T) {
+	d, root := open(t)
+	dir := filepath.Join(root, "spool", "sess-b")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale, fresh := filepath.Join(dir, ".tmp-m1"), filepath.Join(dir, ".tmp-m2")
+	for _, p := range []string{stale, fresh} {
+		if err := os.WriteFile(p, []byte("{"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Send(msg("m1")); !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("before the sweep a retry under the leftover id = %v, want ErrDuplicate", err)
+	}
+	d.SweepTemp("sess-b", 10*time.Minute)
+	if _, err := os.Lstat(stale); !os.IsNotExist(err) {
+		t.Fatal("the stale temporary file survived the sweep")
+	}
+	if _, err := os.Lstat(fresh); err != nil {
+		t.Fatal("a fresh temporary file, possibly mid-write, was swept")
+	}
+	if err := d.Send(msg("m1")); err != nil {
+		t.Fatalf("after the sweep a retry = %v, want it accepted", err)
+	}
+}
