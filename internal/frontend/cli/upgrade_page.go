@@ -61,6 +61,7 @@ func extractPage(data []byte, archiveName string) (*pageTree, error) {
 	}
 	tree := &pageTree{}
 	seen := map[string]bool{}
+	names := newPageNames()
 	var total int64
 	for _, e := range entries {
 		rel, err := pageRel(e.name)
@@ -71,6 +72,9 @@ func extractPage(data []byte, archiveName string) (*pageTree, error) {
 			return nil, fmt.Errorf("page entry %q appears twice", rel)
 		}
 		seen[rel] = true
+		if err := names.add(rel); err != nil {
+			return nil, err
+		}
 		if len(tree.files) >= maxPageEntries {
 			return nil, errors.New("page has too many files")
 		}
@@ -124,6 +128,47 @@ func pageRel(name string) (string, error) {
 		return "", fmt.Errorf("page entry %q is not local", name)
 	}
 	return joined, nil
+}
+
+// pageNames refuses entries that would land on one another once written: names
+// that differ only by case (one file on a case-insensitive volume), a name that
+// is both a file and the directory of another entry, and a trailing dot or space
+// that Windows drops. Refusing them before anything is written keeps a bad
+// archive from failing halfway through the swap.
+type pageNames struct {
+	folded map[string]string
+	files  map[string]bool
+	dirs   map[string]bool
+}
+
+func newPageNames() *pageNames {
+	return &pageNames{folded: map[string]string{}, files: map[string]bool{}, dirs: map[string]bool{}}
+}
+
+func (n *pageNames) add(rel string) error {
+	parts := strings.Split(rel, "/")
+	for _, part := range parts {
+		if strings.HasSuffix(part, ".") || strings.HasSuffix(part, " ") {
+			return fmt.Errorf("page entry %q ends in a dot or space", rel)
+		}
+	}
+	key := strings.ToLower(rel)
+	if other, clash := n.folded[key]; clash {
+		return fmt.Errorf("page entries %q and %q differ only by case", other, rel)
+	}
+	n.folded[key] = rel
+	if n.dirs[key] {
+		return fmt.Errorf("page entry %q is a file and also a directory", rel)
+	}
+	n.files[key] = true
+	for i := 1; i < len(parts); i++ {
+		dir := strings.ToLower(strings.Join(parts[:i], "/"))
+		if n.files[dir] {
+			return fmt.Errorf("page entry %q is a file and also a directory", dir)
+		}
+		n.dirs[dir] = true
+	}
+	return nil
 }
 
 // underFrontend picks the entries that belong to the page or claim to, by the
