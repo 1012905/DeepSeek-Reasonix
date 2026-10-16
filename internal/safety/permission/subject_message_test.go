@@ -16,3 +16,26 @@ func TestAMessageToAnotherSessionIsApprovedByItsRecipientAndFullText(t *testing.
 		t.Fatalf("a call with no text is not a message: %q", got)
 	}
 }
+
+func TestTheMessageSubjectIsAGenericRuleNotSpecificToOneTool(t *testing.T) {
+	both, _ := json.Marshal(map[string]string{"to": "alice@example.test", "text": "hello"})
+	if got, want := Subject(both), "alice@example.test: hello"; got != want {
+		t.Fatalf("any tool call carrying string to and text gets that subject: %q, want %q", got, want)
+	}
+	for name, args := range map[string]string{
+		"only text":       `{"text":"hello"}`,
+		"non-string to":   `{"to":5,"text":"hello"}`,
+		"empty to":        `{"to":"","text":"hello"}`,
+		"other arguments": `{"recipient":"x","body":"y"}`,
+		"a command wins":  `{"command":"ls","to":"a","text":"b"}`,
+	} {
+		got := Subject(json.RawMessage(args))
+		want := ""
+		if name == "a command wins" {
+			want = "ls"
+		}
+		if got != want {
+			t.Errorf("%s: Subject = %q, want %q", name, got, want)
+		}
+	}
+}
