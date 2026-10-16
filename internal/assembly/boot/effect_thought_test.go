@@ -20,7 +20,9 @@ type thinkingProvider struct{}
 func (thinkingProvider) Name() string { return "boot-thinking" }
 
 func (thinkingProvider) Stream(context.Context, provider.Request) (<-chan provider.Chunk, error) {
-	ch := make(chan provider.Chunk, 4)
+	// Unbuffered: the host times the thought from when it takes each chunk, so
+	// the pause must not start before the reasoning chunk has been taken.
+	ch := make(chan provider.Chunk)
 	go func() {
 		defer close(ch)
 		ch <- provider.Chunk{Type: provider.ChunkReasoning, Text: "weighing it"}
