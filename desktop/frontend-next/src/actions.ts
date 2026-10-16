@@ -624,6 +624,7 @@ export const ACTIONS: UIAction[] = [
   { id: "skills.update-reload", kind: "view", target: "none", proof: "interaction" },
   { id: "skills.update-apply", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "subagent-claims.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "write-lease.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
   { id: "auto-archive.notice-dismiss", kind: "view", target: "none", proof: "interaction" },

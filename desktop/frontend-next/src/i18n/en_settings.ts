@@ -136,6 +136,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "重建运行时": "Rebuilds the runtime",
   "重启后生效": "Takes effect after a restart",
   "已保存 · 重启后生效": "Saved · takes effect after a restart",
+  "已保存 · 新开的会话生效": "Saved · applies to sessions opened from now on",
+  "新开的会话生效": "Applies to new sessions",
 
   // ── 设置：分区与导航 ─────────────────────────────────────────────
   "设置分类": "Settings sections",
@@ -369,6 +371,11 @@ export const EN_SETTINGS: Record<string, string> = {
   "无法读取内置浏览器设置。": "Could not read the built-in browser setting.",
   "启用内置浏览器": "Enable the built-in browser",
   "乐观模式（效率优先）": "Optimistic mode (efficiency first)",
+  "无法读取多会话写入设置。": "Could not read the multi-session write setting.",
+  "多个会话同时写一个项目": "Several sessions writing one project",
+  "多个会话在同一个项目里工作时如何互相等待。默认严格：没声明写入范围的操作（bash、MCP、没写 write_paths 的子代理）会占住整个工作区，其他会话要等它结束。只影响之后新开的会话，已在运行的会话保持它启动时的设置。": "How sessions working in one project wait for each other. Strict by default: an operation that declares no write scope (bash, MCP, a sub-agent with no write_paths) holds the whole workspace and other sessions wait for it. It affects sessions opened afterwards; a session already running keeps the setting it started with.",
+  "乐观模式（多会话并行）": "Optimistic mode (sessions in parallel)",
+  "没声明写入范围的操作（bash、MCP、没写 write_paths 的子代理）不再占住整个工作区，所以同一个项目里的多个会话可以同时工作，不必互相等待。代价：声明了路径的写入（如编辑文件）仍按路径互斥，但 bash 和 MCP 的写入没有事前的路径围栏，只在事后观察，两个会话用它们改同一个文件时可能互相覆盖。默认关闭（严格模式）；只对之后新开的会话生效。": "An operation that declares no write scope (bash, MCP, a sub-agent with no write_paths) no longer holds the whole workspace, so several sessions in one project can work at the same time without waiting. The cost: writes that declare a path (such as editing a file) still exclude each other by path, but bash and MCP writes have no path fence beforehand and are only observed afterwards, so two sessions using them on one file can overwrite each other. Off by default (strict mode); applies only to sessions opened afterwards.",
   "无法读取子代理写入范围设置。": "Could not read the sub-agent write scope setting.",
   "子代理的写入范围": "Sub-agent write scope",
   "后台子代理写文件时如何占用工作区。默认严格：没有声明 write_paths 的子代理占住整个工作区，其他写入要等它结束。修改会重建运行时，任务运行期间无法变更。": "How a background sub-agent holds the workspace while it writes. Strict by default: a sub-agent that names no write_paths holds the whole workspace and other writers wait for it. Changing it rebuilds the runtime and cannot be done while a task runs.",

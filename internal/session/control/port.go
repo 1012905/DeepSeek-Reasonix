@@ -285,6 +285,8 @@ type RuntimeSettings interface {
 	SaveBrowserToolsSettings(enabled bool) error
 	SubagentClaimsSettings() SubagentClaimsSettings
 	SaveSubagentClaimsSettings(optimistic bool) error
+	WriteLeaseSettings() WriteLeaseSettings
+	SaveWriteLeaseSettings(optimistic bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings

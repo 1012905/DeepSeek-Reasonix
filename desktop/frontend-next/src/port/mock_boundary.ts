@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
@@ -146,6 +146,17 @@ export class MockBoundary extends MockShell {
   async saveSubagentClaims(optimistic: boolean): Promise<SubagentClaimsSettings> {
     this.claims = { ...this.claims, optimistic };
     return { ...this.claims };
+  }
+
+  private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };
+
+  async writeLease(): Promise<WriteLeaseSettings> {
+    return { ...this.lease };
+  }
+
+  async saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings> {
+    this.lease = { ...this.lease, optimistic };
+    return { ...this.lease };
   }
 
   private archive: AutoArchiveSettings = { enabled: false, days: 30, defaultDays: 30, path: "/Users/you/.reasonix/config.toml" };
