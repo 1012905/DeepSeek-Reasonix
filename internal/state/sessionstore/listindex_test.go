@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -199,13 +200,11 @@ func TestListingsRunningTogetherAgree(t *testing.T) {
 	writeSessions(t, dir, 150)
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if got, err := ListSessionOrder(dir); err != nil || len(got) != 150 {
 				t.Errorf("rows=%d err=%v", len(got), err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -214,15 +213,13 @@ func TestListingsRunningTogetherAgree(t *testing.T) {
 // has changed shape, so changing SessionOrderInfo means saying so by bumping
 // listIndexFormat.
 func TestListIndexFormatTracksTheRowShape(t *testing.T) {
-	var shape string
-	typ := reflect.TypeOf(SessionOrderInfo{})
-	for i := range typ.NumField() {
-		f := typ.Field(i)
-		shape += f.Name + " " + f.Type.String() + ";"
+	var shape strings.Builder
+	for f := range reflect.TypeFor[SessionOrderInfo]().Fields() {
+		shape.WriteString(f.Name + " " + f.Type.String() + ";")
 	}
 	const known = "Path string;CreatedAt time.Time;LastActivityAt time.Time;ModTime time.Time;Scope string;WorkspaceRoot string;TopicID string;TopicTitle string;CustomTitle string;Archived bool;Pinned bool;Unread bool;Recovered bool;RecoveryReason string;RecoveryDigest string;ParentID string;RecoveryRootID string;Turns int;Preview string;SchemaVersion int;Revision int64;ContentDigest string;"
-	if shape != known {
-		t.Fatalf("SessionOrderInfo changed shape: bump listIndexFormat (now %d) and update this table.\nnow:   %s\nknown: %s", listIndexFormat, shape, known)
+	if shape.String() != known {
+		t.Fatalf("SessionOrderInfo changed shape: bump listIndexFormat (now %d) and update this table.\nnow:   %s\nknown: %s", listIndexFormat, shape.String(), known)
 	}
 }
 
