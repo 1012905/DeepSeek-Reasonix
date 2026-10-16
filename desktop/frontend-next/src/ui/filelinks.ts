@@ -25,6 +25,16 @@ export function conversationFile(root: string, href: string): string | null {
   return docRef("", raw.split("/").map(encodeURIComponent).join("/"));
 }
 
+/** Whether src is spelled as a file on this machine: a file: URL, a drive path,
+ *  a rooted path or a UNC share. The shape decides; what it names never does. */
+/** What an image source becomes when it is spelled as a local file the workspace does not hold. */
+export const OUTSIDE_IMAGE = "#outside-image";
+
+export function isLocalPathShape(src: string): boolean {
+  const raw = src.trim();
+  return /^file:/i.test(raw) || /^[a-z]:[\\/]/i.test(raw) || (raw.startsWith("/") && !raw.startsWith("//")) || raw.startsWith("\\\\");
+}
+
 interface Node {
   type: string;
   url?: string;
@@ -70,6 +80,24 @@ export function remarkFileLinks(resolve?: (href: string) => string | null) {
         walk(child);
         return [child];
       });
+    };
+    walk(tree);
+  };
+}
+
+/** A picture the model wrote as a file path: inside the workspace it becomes a
+ *  workspace-relative address the controlled image channel can serve, outside it
+ *  becomes OUTSIDE_IMAGE, so no local address ever reaches an <img>. */
+export function remarkLocalImages(resolve?: (src: string) => string | null) {
+  return (tree: Node) => {
+    if (!resolve) return;
+    const walk = (node: Node) => {
+      if (node.type === "image" && node.url) {
+        const path = resolve(node.url);
+        if (path) node.url = path.split("/").map(encodeURIComponent).join("/");
+        else if (isLocalPathShape(node.url)) node.url = OUTSIDE_IMAGE;
+      }
+      node.children?.forEach(walk);
     };
     walk(tree);
   };

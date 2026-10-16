@@ -3936,6 +3936,7 @@
   .md a:hover { color: var(--text) }
   .md a code, .out .txt a code { color: inherit }
   .md img { max-width: 100%; border-radius: var(--r-sm) }
+  .md .md-outside-image { display: inline-block; padding: 1px 8px; border: 1px dashed var(--hair); border-radius: var(--r-sm); color: var(--muted); cursor: help }
 
   .md > :last-child::after { content: "" }
   .md .caret { margin-left: 2px; vertical-align: -2px }

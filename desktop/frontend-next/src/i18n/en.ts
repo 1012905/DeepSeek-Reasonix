@@ -1310,6 +1310,7 @@ export const EN: Record<string, string> = {
   "分离状态": "detached",
   "当前 Git 分支：{branch}": "Current Git branch: {branch}",
   "正在切换到 {branch}…": "Switching to {branch}…",
+  "这张图片在工作区之外，不会加载": "This picture is outside the workspace and is not loaded",
   "{n} 个变更": "{n} changes",
   "1 个文件已更改": "1 file changed",
   "{n} 个文件已更改": "{n} files changed",

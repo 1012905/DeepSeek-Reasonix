@@ -32,7 +32,7 @@ export function useConversationFiles(port: AgentPort, root: string, remote: bool
         const file = path(href);
         return file ? () => { setRequest({ path: file, port, root }); reveal(); } : null;
       },
-      image: () => null,
+      image: (src) => { const file = path(src); return file ? port.workspaceImageURL(file) : null; },
       menu: offer,
     };
   }, [port, root, reveal]);
