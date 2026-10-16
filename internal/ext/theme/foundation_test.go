@@ -38,3 +38,25 @@ func TestFoundationPalettesAreCompleteAndReadable(t *testing.T) {
 		})
 	}
 }
+
+func TestShippedPackInksReadOnEverySurfaceTheyAreSetOn(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	for _, p := range List() {
+		for _, scheme := range []string{"light", "dark"} {
+			tokens := p.Tokens[scheme]
+			for _, ink := range []string{"fgDim", "fgFaint"} {
+				if tokens[ink] == "" {
+					continue
+				}
+				for _, surface := range []string{"bg", "bgSoft", "bgElev", "panel"} {
+					if tokens[surface] == "" {
+						continue
+					}
+					if got := contrastRatio(t, tokens[ink], tokens[surface]); got < 4.5 {
+						t.Errorf("%s %s: %s on %s is %.2f, want at least 4.5", p.ID, scheme, ink, surface, got)
+					}
+				}
+			}
+		}
+	}
+}
