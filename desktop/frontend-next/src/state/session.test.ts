@@ -37,8 +37,9 @@ describe("when this window saw the turn start", () => {
     }
   });
 
-  it("is unknown for a session rebuilt from history", () => {
-    expect(fromHistory([]).runSince).toBeUndefined();
+  it("is unknown until a turn starts in this window", () => {
+    expect(initialState.runSince).toBeUndefined();
+    expect(run([{ kind: "text", text: "x" } as SessionEvent]).runSince).toBeUndefined();
   });
 });
 const tools = (s: SessionState) => s.items.filter((i): i is Extract<Item, { t: "tool" }> => i.t === "tool");
