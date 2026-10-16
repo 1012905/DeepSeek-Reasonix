@@ -142,11 +142,25 @@ export function treeQuery(window: TreeWindow | undefined): string {
 
 // HubPort is the window's view of the kernel: which panes it drives and which
 // folders it can open. One AgentPort hangs off each pane.
+/** One conversation whose words matched, with the passage that matched. */
+export interface HistoryHit {
+  path: string;
+  id: string;
+  title?: string;
+  workspace?: string;
+  snippet: string;
+  role: string;
+  messageIndex: number;
+  score: number;
+}
+
 export interface HubPort extends SharePort {
   runtimes(): Promise<RuntimeView[]>;
   open(req: { root?: string; sessionPath?: string }): Promise<RuntimeView>;
   close(id: string): Promise<void>;
   tree(window?: TreeWindow): Promise<TreeWorkspace[]>;
+  /** Conversations, in every workspace, that say these words. */
+  searchHistory(query: string): Promise<HistoryHit[]>;
   onTreeChanged(listener: () => void): () => void;
   addWorkspace(path: string): Promise<TreeWorkspace>;
   removeWorkspace(path: string): Promise<void>;
@@ -306,6 +320,10 @@ export class SseHub implements HubPort {
 
   tree(window?: TreeWindow) {
     return this.get<TreeWorkspace[]>("/tree" + treeQuery(window));
+  }
+
+  searchHistory(query: string) {
+    return this.get<HistoryHit[]>("/history/search?q=" + encodeURIComponent(query));
   }
 
   addWorkspace(path: string) {
