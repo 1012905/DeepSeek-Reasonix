@@ -102,6 +102,8 @@ export const EN_KERNEL: Record<string, string> = {
   "内置浏览器设置未能保存：{detail}": "The built-in browser setting was not saved: {detail}",
   "本次请求未说明开关状态，未做任何修改": "The request did not say on or off, so nothing changed",
   "这台服务器未开放子代理写入范围设置": "This server does not open the sub-agent write scope setting",
+  "这台服务器未开放多会话写入设置": "This server does not open the multi-session write setting",
+  "多会话写入设置未能保存：{detail}": "The multi-session write setting was not saved: {detail}",
   "子代理写入范围设置未能保存：{detail}": "The sub-agent write scope setting was not saved: {detail}",
   "本次请求未说明选择，未做任何修改": "The request did not say which, so nothing changed",
   "这个路径正被另一个并行的子代理或写入占用。本次写入未执行；请换一个路径，或等对方结束后再写": "This path is in use by another parallel sub-agent or write. This write did not run; choose another path, or wait until it finishes",

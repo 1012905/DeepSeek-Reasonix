@@ -8,3 +8,13 @@ import "strings"
 func (c *Config) WriteLeaseOptimistic() bool {
 	return c != nil && strings.EqualFold(strings.TrimSpace(c.Agent.WriteLease), "optimistic")
 }
+
+// SetWriteLease records the user's choice: optimistic, or the strict default
+// that a writer declaring no extent holds the whole workspace.
+func (c *Config) SetWriteLease(optimistic bool) {
+	if optimistic {
+		c.Agent.WriteLease = "optimistic"
+		return
+	}
+	c.Agent.WriteLease = "strict"
+}
