@@ -1,5 +1,5 @@
 import type { AgentPort } from "./port";
-import type { HubPort, RuntimeView, TreeWindow, TreeWorkspace } from "./hub";
+import type { HistoryHit, HubPort, RuntimeView, TreeWindow, TreeWorkspace } from "./hub";
 import type { RemoteHost, RemoteListing, RemoteProbe } from "./remote";
 import type { ShareStatus } from "./share";
 import { MockPort } from "./mock";
@@ -208,6 +208,10 @@ export class MockHub implements HubPort {
       [this.roots[at], this.roots[to]] = [this.roots[to], this.roots[at]];
     }
     return Promise.resolve();
+  }
+
+  searchHistory(_query: string): Promise<HistoryHit[]> {
+    return Promise.resolve([]);
   }
 
   placeWorkspace(path: string, before: string) {

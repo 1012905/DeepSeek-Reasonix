@@ -384,6 +384,8 @@ const SAID: Record<string, string> = {
   "inbox.not_found": "该条已不在待送达队列中",
   "tool_call.not_running": "这条调用已经结束了",
   "tool.cancelled_by_user": "你停止了这条调用，它在外部已经做了什么无法确定",
+  "history.query_required": "请输入要搜索的内容",
+  "history.search_failed": "对话内容索引暂时无法回答，稍后再试",
   "job.not_running": "这个后台任务已经不在运行了",
   "job.stop_in_progress": "已经请求停止这个后台任务，它的进程还没有退出，仍在等待",
   "inbox.invalid_state": "该条当前状态不允许此操作",

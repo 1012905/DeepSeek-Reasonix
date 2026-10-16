@@ -79,6 +79,8 @@ export const EN_KERNEL: Record<string, string> = {
   "这个后台任务已经不在运行了": "That background job is no longer running",
   "这条调用已经结束了": "This call has already finished",
   "你停止了这条调用，它在外部已经做了什么无法确定": "You stopped this call; what it had already done outside the workspace is unknown",
+  "请输入要搜索的内容": "Enter something to search for",
+  "对话内容索引暂时无法回答，稍后再试": "The conversation index cannot answer right now; try again shortly",
   "已经请求停止这个后台任务，它的进程还没有退出，仍在等待": "A stop was already requested for this background job; its process has not exited yet, so it is still shutting down",
   "该条当前状态不允许此操作": "That entry's current state does not allow this",
   "待送达已暂停，请先恢复派发再进行操作": "The pending queue is on hold - resume it first",

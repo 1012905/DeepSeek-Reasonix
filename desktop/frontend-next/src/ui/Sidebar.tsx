@@ -8,6 +8,7 @@ import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
 import type { Adder } from "./addws";
 import { AccountRow } from "./AccountRow";
+import { ContentMatches } from "./ContentMatches";
 import { RailSearch } from "./railsearch";
 import { RemoteHosts } from "./RemoteHosts";
 import { StudioIcon } from "./StudioIcon";
@@ -276,6 +277,7 @@ export function Sidebar({
         </div>
       </div>
       <RailSearch>
+      <ContentMatches hub={hub} tree={tree} onOpen={onOpen} onError={onError} />
       <Workspaces
         hub={hub}
         tree={tree}
