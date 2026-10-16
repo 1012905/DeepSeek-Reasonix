@@ -399,6 +399,45 @@ export function onHidesLegacySessionsChange(fn: () => void): () => void {
   };
 }
 
+// How many sessions stay open as tabs before the oldest idle one is folded away.
+// Zero is never: folding closes a pane on its own, so it is something the person
+// asks for. Whatever is missing, corrupt or out of range reads as zero too.
+const OPEN_SESSION_LIMIT_KEY = "rx-open-session-limit";
+const openSessionLimitListeners = new Set<() => void>();
+
+export function openSessionLimit(): number {
+  try {
+    const raw = localStorage.getItem(OPEN_SESSION_LIMIT_KEY);
+    if (raw === null || !/^(0|[1-9][0-9]*)$/.test(raw)) return 0;
+    const n = Number(raw);
+    return Number.isSafeInteger(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setOpenSessionLimit(n: number): void {
+  try {
+    if (Number.isSafeInteger(n) && n > 0) localStorage.setItem(OPEN_SESSION_LIMIT_KEY, String(n));
+    else localStorage.removeItem(OPEN_SESSION_LIMIT_KEY);
+  } catch {
+    /* the choice holds for this window and is forgotten on the next */
+  }
+  openSessionLimitListeners.forEach((fn) => fn());
+}
+
+export function onOpenSessionLimitChange(fn: () => void): () => void {
+  openSessionLimitListeners.add(fn);
+  const storage = (event: StorageEvent) => {
+    if (event.key === OPEN_SESSION_LIMIT_KEY || event.key === null) fn();
+  };
+  window.addEventListener("storage", storage);
+  return () => {
+    openSessionLimitListeners.delete(fn);
+    window.removeEventListener("storage", storage);
+  };
+}
+
 // The send key is local to this machine, never read from project settings.
 export type SendShortcut = "enter" | "modifier_enter";
 const SEND_SHORTCUT_KEY = "rx-send-shortcut";
