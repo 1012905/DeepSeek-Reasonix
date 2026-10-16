@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/base/i18n"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/skill"
@@ -34,24 +33,6 @@ func newSubagentProbe(t *testing.T, sk skill.Skill) *subagentProbe {
 	})
 	t.Cleanup(p.c.Close)
 	return p
-}
-
-func (p *subagentProbe) notices(t *testing.T) []string {
-	t.Helper()
-	var out []string
-	for {
-		select {
-		case e := <-p.events:
-			if e.Kind == event.Notice {
-				out = append(out, e.Text)
-			}
-			if e.Kind == event.TurnDone {
-				return out
-			}
-		default:
-			return out
-		}
-	}
 }
 
 var reviewSkill = skill.Skill{
@@ -96,5 +77,4 @@ func TestASubagentSkillWithNoDefaultTaskStillNeedsOne(t *testing.T) {
 	if len(p.tasks) != 0 {
 		t.Fatalf("a task-less call ran the subagent: %q", p.tasks)
 	}
-	_ = i18n.M
 }
