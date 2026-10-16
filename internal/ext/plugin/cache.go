@@ -140,7 +140,9 @@ func LoadCachedSchema(name, expectedKey string) (*CachedSchema, bool) {
 
 // LoadCachedSchemaForSpec returns a usable enabled-tool snapshot matching the
 // current spec. Invalid model-visible names are a cache miss. A matching legacy
-// URL key is upgraded in place without changing the tool definitions.
+// URL key is upgraded in place without changing the tool definitions; if that
+// rewrite fails, the hit keeps the legacy key the file still holds, so no
+// caller is handed a key that disagrees with the disk.
 func LoadCachedSchemaForSpec(s Spec) (*CachedSchema, bool) {
 	current := SchemaCacheKey(s)
 	if cs, ok := LoadCachedSchema(s.Name, current); ok {
@@ -158,12 +160,17 @@ func LoadCachedSchemaForSpec(s Spec) (*CachedSchema, bool) {
 	if !ok {
 		return nil, false
 	}
-	cs.CacheKey = current
 	cs.Tools = s.EnabledCachedTools(cs.Tools)
 	if !cachedToolNamesUsable(s, cs.Tools) {
 		return nil, false
 	}
-	_ = SaveCachedSchema(s.Name, *cs)
+	// Claim the upgraded key only once it reached the disk: the caller
+	// cannot see this write, so it must not get a key the file lacks.
+	upgraded := *cs
+	upgraded.CacheKey = current
+	if err := SaveCachedSchema(s.Name, upgraded); err == nil {
+		cs.CacheKey = current
+	}
 	return cs, true
 }
 
