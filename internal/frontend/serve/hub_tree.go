@@ -152,12 +152,16 @@ func attachVersions(dir string, rows []treeSession, open map[string]string) {
 	}
 }
 
-// unlistedOpenSessions are the conversations a pane in root holds that the
-// listing does not show: a path is minted at the first submit, and the
-// transcript is written after it, so a first turn in flight has no file yet.
-// Without a row it can be neither found nor returned to while it runs.
-func (h *Hub) unlistedOpenSessions(root string, listed []treeSession) []treeSession {
-	seen := make(map[string]bool, len(listed))
+// unlistedOpenSessions are the open panes' conversations that have no file yet
+// (a path is minted at the first submit, the transcript written after). A
+// session on disk is never unlisted: a scope, search or window that leaves its
+// row out is the view's choice.
+func (h *Hub) unlistedOpenSessions(root string, shown []treeSession, onDisk []sessionstore.SessionInfo) []treeSession {
+	seen := make(map[string]bool, len(shown)+len(onDisk))
+	for _, si := range onDisk {
+		seen[sessionstore.CanonicalSessionPath(si.Path)] = true
+	}
+	listed := shown
 	for _, row := range listed {
 		seen[sessionstore.CanonicalSessionPath(row.Path)] = true
 		for _, cp := range row.Copies {
