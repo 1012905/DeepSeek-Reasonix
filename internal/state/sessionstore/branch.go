@@ -553,10 +553,10 @@ func ListBranches(dir string) ([]BranchInfo, error) {
 			continue
 		}
 		meta, ok, err := LoadBranchMeta(path)
-		if err != nil {
-			continue
-		}
-		if !ok {
+		if err != nil || !ok {
+			// An unreadable sidecar is an absent one: the branch is still a
+			// conversation on disk, and dropping it let a caller read "the turn
+			// did not continue here" out of a read failure.
 			meta = BranchMeta{
 				ID:        BranchID(path),
 				CreatedAt: info.ModTime().UTC(),
