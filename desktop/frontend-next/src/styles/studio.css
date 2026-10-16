@@ -877,7 +877,8 @@ body { background: var(--page) !important; }
 .activity-group:not([open]) .activity-body .tool-state .studio-icon { animation: none; }
 .pane[data-off] :is(.activity-status-icon, .tool-state .studio-icon) { animation-play-state: paused; }
 @keyframes tool-running { to { transform: rotate(360deg); } }
-.ws-reading { display: flex; align-items: center; gap: 6px; }
+.ws-reading { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.ws-reading-retry { border: 0; background: transparent; padding: 0; cursor: pointer; color: var(--accent-ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .ws-reading .studio-icon { width: 12px; height: 12px; flex: none; color: var(--net); animation: tool-running 2.4s linear infinite; }
 .ws-reading-t { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .ws-reading .studio-icon { animation: none; } }

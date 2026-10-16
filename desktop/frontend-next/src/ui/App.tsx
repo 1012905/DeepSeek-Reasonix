@@ -6,7 +6,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useS
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
-import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
+import type { HubPort, RuntimeView } from "../port/hub";
 import { Chrome } from "./Chrome";
 import { RailToggle } from "./RailToggle";
 import { useLaunchHealth } from "./launchhealth";
@@ -52,6 +52,7 @@ import { useFirstRun } from "./useFirstRun";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
 import { singleFlight } from "./singleflight";
+import { useTreeRead } from "./useTreeRead";
 import { useOpenPane } from "./useOpenPane";
 import { markSettled } from "../boot/gate";
 
@@ -90,10 +91,8 @@ export function App({ hub }: { hub: HubPort }) {
   const [runtimes, setRuntimes] = useState<RuntimeView[]>([]);
   const [panesRead, setPanesRead] = useState(false);
   const [active, setActive] = useState(savedActivePane);
-  const [tree, setTree] = useState<TreeWorkspace[]>([]);
-  // An empty tree before the first read settles is an unread one, not a
-  // machine with no folders; only the kernel's answer can say the latter.
-  const [treeRead, setTreeRead] = useState(false);
+  const treeWindow = useTreeWindow();
+  const { tree, treeRead, readTree, reloadTree, retryTree } = useTreeRead(hub, treeWindow);
   // Null until asked, and null again where this kernel refuses remote panes —
   // which is what keeps the section out of a browser rather than drawing a
   // heading over a feature that cannot work there.
@@ -177,16 +176,6 @@ export function App({ hub }: { hub: HubPort }) {
     setReport(reportsRef.current[active] ?? NO_REPORT);
   }, [active]);
 
-  const treeWindow = useTreeWindow();
-  const readTree = useMemo(
-    () => singleFlight(() =>
-      hub
-        .tree(treeWindow.current())
-        .then(setTree)
-        .finally(() => setTreeRead(true))),
-    [hub, treeWindow],
-  );
-  const reloadTree = useCallback(() => readTree().catch(() => {}), [readTree]);
   const paging = useMemo<TreePaging>(
     () => ({
       more: (root) => treeWindow.grow(root, readTree),
@@ -619,6 +608,7 @@ export function App({ hub }: { hub: HubPort }) {
           reloadRemoteTrees={reloadRemoteTrees}
           readRemoteTree={readRemoteTree}
           reloadTree={reloadTree}
+          retryTree={retryTree}
           paging={paging}
           adder={adder}
           opening={sw.path}

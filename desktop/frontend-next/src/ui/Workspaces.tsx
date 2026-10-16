@@ -4,12 +4,12 @@ import { hidesLegacySessions, onHidesLegacySessionsChange } from "../state/prefs
 import { onSessionQuickActionsChange, showsSessionQuickActions } from "../state/sessionQuick";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
-import { seconds } from "../i18n/format";
 import type { HubPort, RuntimeView, TreeSession, TreeWorkspace } from "../port/hub";
 import type { Adder } from "./addws";
 import { pinToViewport } from "./place";
 import { useRailQuery } from "./railsearch";
 import { StudioIcon } from "./StudioIcon";
+import { TreeReading } from "./TreeReading";
 import { RowCount } from "./RowCount";
 import { Cross } from "./glyphs";
 import { copyText } from "./CopyButton";
@@ -44,6 +44,7 @@ interface Props {
   folded: Set<string>;
   onFold: (root: string, folded: boolean) => void;
   reload: () => Promise<void>;
+  retry?: () => void;
   paging?: TreePaging;
   // The session path being opened, or empty. The row shows it selected and busy
   // before the kernel answers; the owner clears it on failure.
@@ -78,7 +79,7 @@ interface Props {
 const rowLabel = (session: TreeSession) =>
   session.title || (session.runtimeId && !session.turns ? t("新会话") : session.name);
 
-function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, paging = NO_PAGING, onFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onBranch, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
+function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, retry, paging = NO_PAGING, onFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onBranch, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
   const [busy, setBusy] = useState("");
   // Folding a machine is the reader's own preference, held the way a host row
   // holds it.
@@ -751,32 +752,13 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
           {!shutHere && tree.length === 0 && (treeRead ? (
             <div className="ws-empty">{t("尚无文件夹")}</div>
           ) : (
-            <TreeReading />
+            <TreeReading onRetry={retry} />
           ))}
           {children}
         </div>
       </div>
 
     </>
-  );
-}
-
-// Display only, timed from this row's mount; whether the tree is read is `treeRead`.
-export function TreeReading() {
-  const [since] = useState(() => Date.now());
-  const [now, setNow] = useState(since);
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const ms = now - since;
-  return (
-    <div className="ws-empty ws-reading" role="status" aria-busy="true">
-      <StudioIcon name="clock" />
-      <span>{t("正在读取文件夹…")}</span>
-      {/* Outside the live region's speech: a status that re-announces itself every second is noise. */}
-      {ms >= 1000 && <span className="ws-reading-t" aria-hidden="true">{seconds(ms, 0)}</span>}
-    </div>
   );
 }
 

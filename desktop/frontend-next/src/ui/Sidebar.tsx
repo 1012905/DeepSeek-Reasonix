@@ -46,6 +46,7 @@ interface Props {
   reloadRemoteTrees: () => Promise<void>;
   readRemoteTree: (host: string) => Promise<void>;
   reloadTree: () => Promise<void>;
+  retryTree?: () => Promise<void>;
   paging: TreePaging;
   adder: Adder;
   opening?: string;
@@ -94,6 +95,7 @@ export function Sidebar({
   reloadRemoteTrees,
   readRemoteTree,
   reloadTree,
+  retryTree,
   paging,
   adder,
   opening,
@@ -283,6 +285,7 @@ export function Sidebar({
         folded={folded}
         onFold={onFold}
         reload={reloadTree}
+        retry={retryTree ? () => void retryTree() : undefined}
         paging={paging}
         opening={opening}
         onOpen={onOpen}
