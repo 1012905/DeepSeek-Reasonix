@@ -290,6 +290,15 @@ export interface JobEntry {
   startedAt: number;
 }
 
+// The end of a running job's output, for a person looking at it: how much the
+// job has written in all, and whether the text is only the last part.
+export interface JobOutput {
+  text: string;
+  status: string;
+  bytes: number;
+  truncated: boolean;
+}
+
 // The UI depends on this and nothing else. SsePort talks to internal/frontend/serve;
 // MockPort replays a fixture. Neither is allowed to leak transport details
 // upward, which is what keeps the same UI usable in a browser and in a shell.

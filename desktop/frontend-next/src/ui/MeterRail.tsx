@@ -1,6 +1,6 @@
 import { useCallback, useId, useRef, useState, type CSSProperties } from "react";
 import { t } from "../i18n";
-import type { ContextBreakdown, JobEntry, McpEntry, SessionUsage } from "../port/port";
+import type { ContextBreakdown, JobEntry, JobOutput, McpEntry, SessionUsage } from "../port/port";
 import type { CostQuote } from "../port/wire";
 import { cacheRate as rateOf } from "../state/overview";
 import { SessionOverviewCard } from "./SessionOverviewCard";
@@ -17,7 +17,7 @@ import { MASK, type Wallet } from "./wallet";
 import type { SpeedSummary } from "./speed";
 
 /** The numbers about this turn, in one row under the composer. */
-export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compact, cost, wallet, hideAmounts, tasks, jobs, onSettings, onCancelJob, usage, quote }: {
+export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compact, cost, wallet, hideAmounts, tasks, jobs, onSettings, onCancelJob, onReadJob, usage, quote }: {
   tps: number;
   trail: number[];
   running: boolean;
@@ -33,6 +33,7 @@ export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compa
   jobs: JobEntry[];
   onSettings: (section?: string) => void;
   onCancelJob: (id: string) => Promise<void>;
+  onReadJob?: (id: string) => Promise<JobOutput>;
   usage?: SessionUsage;
   quote?: CostQuote;
 }) {
@@ -100,7 +101,7 @@ export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compa
       {cost && <span className="studio-meter-cost"><span>{t("本轮")}</span><b>{hideAmounts ? MASK : cost}</b></span>}
       <button className="studio-meter-mask" type="button" data-action="metrics.hide-amounts" aria-pressed={hideAmounts} aria-label={hideAmounts ? t("显示金额") : t("隐藏金额")} title={hideAmounts ? t("显示金额") : t("隐藏金额")} onClick={() => setHidesAmounts(!hideAmounts)}><StudioIcon name={hideAmounts ? "eyeoff" : "eye"} /></button>
       {wallet.kind === "read" && <button className="studio-meter-wallet" data-short={wallet.reading.available ? undefined : "true"} title={wallet.reading.available ? undefined : t("余额不足")} data-action="settings.section" data-value="usage" aria-label={wallet.reading.available ? t("查看钱包余额") : `${t("查看钱包余额")}, ${t("余额不足")}`} onClick={() => onSettings("usage")}><StudioIcon name="wallet" /><b>{hideAmounts ? MASK : wallet.reading.display}</b></button>}
-      <DeckChips tasks={tasks} jobs={jobs} open={deck} onOpen={setDeck} onCancelJob={onCancelJob} />
+      <DeckChips tasks={tasks} jobs={jobs} open={deck} onOpen={setDeck} onCancelJob={onCancelJob} onReadJob={onReadJob} />
     </div>
   );
 }

@@ -241,6 +241,12 @@ class BenchPort extends MockPort {
     return () => {};
   }
 
+  async jobOutput(jobId: string) {
+    if (!JOBS) return super.jobOutput(jobId);
+    const lines = Array.from({ length: 28 }, (_, i) => `[${String(i).padStart(2, "0")}] compiling module ${i * 7 + 3} … ok`);
+    return { text: lines.join("\n") + "\nwatching for changes\n", status: this.stopped.has(jobId) ? "killed" : "running", bytes: 1100, truncated: false };
+  }
+
   async cancelJob(jobId: string) {
     if (!JOBS) return super.cancelJob(jobId);
     this.stopped.add(jobId);

@@ -177,6 +177,15 @@ func (c *Controller) KillJob(id string) bool {
 	return c.jobs.Kill(id)
 }
 
+// JobPeek is the end of one running job's output, for a person looking at it.
+// It does not consume what the model's bash_output has yet to read.
+func (c *Controller) JobPeek(id string, max int) (jobs.Peek, bool) {
+	if c.jobs == nil {
+		return jobs.Peek{}, false
+	}
+	return c.jobs.PeekForSession(c.parentSessionID(), id, max)
+}
+
 // CancelJob stops one background job owned by this controller's session.
 func (c *Controller) CancelJob(id string) bool {
 	if c.jobs == nil {

@@ -12,7 +12,7 @@ const ENDED: Record<string, { label: string; tone: string }> = {
   interrupted: { label: "已中断", tone: "var(--faint)" },
 };
 
-export function Jobs({ jobs, onCancel }: { jobs: JobEntry[]; onCancel?: (id: string) => Promise<void> }) {
+export function Jobs({ jobs, onCancel, onView }: { jobs: JobEntry[]; onCancel?: (id: string) => Promise<void>; onView?: (id: string) => void }) {
   const [, tick] = useState(0);
   const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
 
@@ -43,7 +43,13 @@ export function Jobs({ jobs, onCancel }: { jobs: JobEntry[]; onCancel?: (id: str
                 className="pip"
                 style={running ? { background: "var(--net)", animation: "tick 1.6s ease-in-out infinite" } : { background: ended?.tone ?? "var(--faint)" }}
               />
-              <span className="cmd">{j.label || j.id}</span>
+              {running && onView ? (
+                <button type="button" className="cmd job-view" data-action="job.view" data-target={j.id} aria-label={t("查看输出：{cmd}", { cmd: j.label || j.id })} title={t("查看输出")} onClick={() => onView(j.id)}>
+                  {j.label || j.id}
+                </button>
+              ) : (
+                <span className="cmd">{j.label || j.id}</span>
+              )}
               <span className="rt">{running ? `${Math.floor((Date.now() - j.startedAt) / 1000)}s` : ended ? t(ended.label) : j.status}</span>
               {running && onCancel && (
                 <button
