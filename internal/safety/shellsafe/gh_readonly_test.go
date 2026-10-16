@@ -31,6 +31,11 @@ func TestGhReadOnlyCalls(t *testing.T) {
 		"gh api repos/o/r --field a=b", "gh api repos/o/r --raw-field a=b", "gh api repos/o/r --input body.json", "gh api graphql -f query=x",
 		"gh api graphql", "gh api https://evil.test/x", "gh api repos/o/r --hostname evil.test", "gh api repos/o/r -H 'X-HTTP-Method-Override: DELETE'",
 		"gh api", "gh api a b", "gh api repos/o/r -Xdelete", "gh api repos/o/r --paginate=false", "gh api repos/o/r --unknown",
+		"gh api user --jq env", "gh api user --jq 'env|keys'", "gh api user --jq '$ENV'", "gh api user -q '$__loc__ | env'", "gh api user --jq=env", "gh api user -qenv",
+		"gh pr view 1 --json number --jq '$ENV'", "gh pr view 1 --json number -q env", "gh pr list --jq 'input'", "gh pr list --jq 'debug'",
+		"gh issue list --json number --jq 'stderr'", "gh run view 9 --json status --jq halt_error", "gh pr list --jq=ENV", "gh pr list -sq env",
+		"gh api user --template '{{.login}}\n{{env}}'", "gh api user --template env", "gh pr view 1 --json environment --jq .environment",
+		"gh api user -H $'X: a\nb'", "gh api user --cache $'1h\r'",
 		"gh", "gh pr", "gh pr unknown", "gh -R o/r pr view 1", "gh status",
 	}
 	for _, command := range escapes {

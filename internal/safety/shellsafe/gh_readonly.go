@@ -31,6 +31,9 @@ func ghReadOnlyCall(fields []string) (sub string, ok bool) {
 	if len(fields) < 3 || strings.ToLower(fields[0]) != "gh" || hasResolvedSubstitution(fields) {
 		return "", false
 	}
+	if ghFilterReachesHost(fields[2:]) {
+		return "", false
+	}
 	group := strings.ToLower(fields[1])
 	if group == "api" {
 		return group, ghAPIReadsOnly(fields[2:])
@@ -92,4 +95,39 @@ func ghAPIReadsOnly(args []string) bool {
 		}
 	}
 	return endpoints == 1
+}
+
+// ghHostReaching are the spellings through which a gh jq filter reaches outside
+// its input: gojq's `env` and `$ENV` return the whole process environment,
+// including credentials, and `input`, `debug`, `stderr` and `halt_error` read
+// or write beyond the document. The match is a substring on purpose, so a field
+// named "environment" is refused too; that costs an approval, not a miss.
+var ghHostReaching = []string{"env", "input", "debug", "stderr", "halt_error"}
+
+// ghFilterReachesHost reports a call that carries a jq or template filter whose
+// text could reach the host, or any word with a control character. Every spelling
+// of the filter options counts, attached or clustered, because cobra reads the
+// rest of a short cluster as the value.
+func ghFilterReachesHost(args []string) bool {
+	filtered := hasShortFlag(args, 'q') || hasShortFlag(args, 't')
+	for _, arg := range args {
+		if strings.IndexFunc(arg, func(r rune) bool { return r < 0x20 && r != '\t' || r == 0x7f }) >= 0 {
+			return true
+		}
+		if arg == "--jq" || arg == "--template" || strings.HasPrefix(arg, "--jq=") || strings.HasPrefix(arg, "--template=") {
+			filtered = true
+		}
+	}
+	if !filtered {
+		return false
+	}
+	for _, arg := range args {
+		lower := strings.ToLower(arg)
+		for _, word := range ghHostReaching {
+			if strings.Contains(lower, word) {
+				return true
+			}
+		}
+	}
+	return false
 }
