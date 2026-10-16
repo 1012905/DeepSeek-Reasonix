@@ -353,11 +353,17 @@ func (a *contextWindow) keepIndexes(region []provider.Message, policy KeepPolicy
 			policyStart = i + 1
 		}
 	}
-	// Retention applies only to messages since the latest digest; older kept
-	// messages are allowed to fold on the next pass so they cannot grow forever.
+	// Retention applies only to messages since the latest digest. A failed tool
+	// result is bounded by its own budget, since last fold's survivors sit past
+	// the digest and would otherwise be kept again.
+	var failures []int
 	for i, m := range region {
 		if i >= policyStart && shouldKeepMessage(m, policy) {
-			keep[i] = true
+			if m.Role == provider.RoleTool {
+				failures = append(failures, i)
+			} else {
+				keep[i] = true
+			}
 		}
 		// The request that began the running turn states the work the rest of
 		// the turn is executing. Its closed transactions may fold; it may not.
@@ -365,6 +371,7 @@ func (a *contextWindow) keepIndexes(region []provider.Message, policy KeepPolicy
 			keep[i] = true
 		}
 	}
+	a.keepFailuresWithinBudget(region, keep, failures)
 	retention := a.keepUserTurns(region, keep)
 	pinned := slices.Clone(keep)
 	for i, m := range region {
