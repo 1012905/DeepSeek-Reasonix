@@ -712,6 +712,7 @@ var English = Messages{
 	UpgradeChecksumNotFoundFmt: "%s not found in SHA256SUMS",
 	UpgradeExtractFailed:       "failed to extract binary: %v",
 	UpgradeApplying:            "Replacing binary…",
+	UpgradePageLinked:          "the page directory is a link; its page was not replaced",
 	UpgradeApplyFailed:         "failed to apply update: %v",
 	UpgradeSuccessFmt:          "Updated %s → %s",
 	UpgradeManagedFmt:          "installed through a package manager, which must do the upgrade to keep its records correct: %s",

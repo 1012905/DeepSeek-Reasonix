@@ -784,6 +784,7 @@ var ChineseTraditional = Messages{
 	UpgradeChecksumNotFoundFmt: "SHA256SUMS 中未找到 %s",
 	UpgradeExtractFailed:       "解壓二進位制檔案失敗：%v",
 	UpgradeApplying:            "正在替換二進位制檔案…",
+	UpgradePageLinked:          "頁面目錄是連結，未替換頁面",
 	UpgradeApplyFailed:         "應用更新失敗：%v",
 	UpgradeSuccessFmt:          "已更新 %s → %s",
 	UpgradeManagedFmt:          "由套件管理器安裝，需用它升級才能保持其記錄一致：%s",

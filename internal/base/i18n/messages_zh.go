@@ -712,6 +712,7 @@ var Chinese = Messages{
 	UpgradeChecksumNotFoundFmt: "SHA256SUMS 中未找到 %s",
 	UpgradeExtractFailed:       "解压二进制文件失败：%v",
 	UpgradeApplying:            "正在替换二进制文件…",
+	UpgradePageLinked:          "页面目录是链接，未替换页面",
 	UpgradeApplyFailed:         "应用更新失败：%v",
 	UpgradeSuccessFmt:          "已更新 %s → %s",
 	UpgradeManagedFmt:          "由包管理器安装，需用它升级才能保持其记录一致：%s",
