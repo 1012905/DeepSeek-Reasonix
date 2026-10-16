@@ -13,6 +13,7 @@ import "./styles/phonecomposer.css";
 import "./styles/tips.css";
 import "./styles/skillpin.css";
 import "./styles/waitnote.css";
+import "./styles/bring.css";
 import "./styles/contentmatches.css";
 import "./styles/jsontext.css";
 import "./styles/narrow.css";

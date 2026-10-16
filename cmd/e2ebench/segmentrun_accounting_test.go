@@ -17,6 +17,7 @@ import (
 // in-flight snapshot and no final record.
 func stubScript(t *testing.T, name, body, suffix string, code int) string {
 	t.Helper()
+	requireShellStub(t)
 	script := fmt.Sprintf(`#!/bin/sh
 metrics=""
 prev=""

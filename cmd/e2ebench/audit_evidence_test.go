@@ -34,6 +34,7 @@ func writeKilledAgentStub(t *testing.T, dir string) string {
 
 func killedRun(t *testing.T) result {
 	t.Helper()
+	requireShellStub(t)
 	work := testenv.TempDir(t)
 	tk := task{ID: "stub-task", Prompt: "do the thing"}
 	r := result{task: tk}

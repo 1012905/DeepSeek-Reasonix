@@ -12,6 +12,7 @@ import { Cost } from "../Cost";
 import { seconds, tokens } from "../../i18n/format";
 import { currentStep, parsePlan, stepDone } from "../../state/session";
 import { DiffView } from "./DiffView";
+import { BringCall } from "./BringCall";
 import { StopCall } from "./StopCall";
 import { WaitNote } from "./WaitNote";
 import { Term, ToolOutput, BoundNote } from "./ToolOutput";
@@ -59,7 +60,7 @@ function useSettling(running: boolean): { pop: boolean; swap: boolean } {
 }
 
 export function ToolCard({
-  tool, running, children = [], takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, onStop, activity = false,
+  tool, running, children = [], takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, onStop, onBring, pinned = false, activity = false,
 }: {
   tool: Tool;
   running: boolean;
@@ -73,6 +74,11 @@ export function ToolCard({
   // Ends this call alone and leaves the turn running. Absent where no live
   // session stands behind the card.
   onStop?: () => void;
+  // Shows this call's result again at the end of the transcript. Absent on the
+  // copy that is already there, and where no transcript stands behind the card.
+  onBring?: () => void;
+  // The copy brought to the end: drawn open, because it was asked for.
+  pinned?: boolean;
   takeover?: ExtensionSurface;
   onExtInvoke?: (actionId: string) => void;
 }) {
@@ -118,7 +124,7 @@ export function ToolCard({
   // the work is happening, and a call that opens itself pushes the transcript
   // around while it reads. A failure is different — that is what is being asked.
   const start = useStartsOpen("steps", false, bad, toolChangedFile(tool));
-  const [touched, setOpen] = useState<boolean | null>(null);
+  const [touched, setOpen] = useState<boolean | null>(pinned ? true : null);
   useEffect(() => {
     if (bad) setOpen(null);
   }, [bad]);
@@ -158,6 +164,7 @@ export function ToolCard({
       >
         <StudioIcon name={running ? "clock" : bad ? "warning" : "check"} />
       </span>
+      {onBring && tool.id && !running && hasBody ? <BringCall onBring={onBring} /> : null}
       {hasBody && <span className="tool-fold" aria-hidden="true" />}
     </>
   );

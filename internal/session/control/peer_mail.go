@@ -58,8 +58,13 @@ type peerMail struct {
 	key      string
 	held     map[string]peermail.Message
 	order    []string
-	stop     chan struct{}
-	stopOnce sync.Once
+	// resolving holds ids a decision is in the middle of, so two clicks on one
+	// card cannot settle it twice; rejected names the files already audited.
+	resolving map[string]bool
+	rejected  map[string]bool
+	sent      []time.Time
+	stop      chan struct{}
+	stopOnce  sync.Once
 }
 
 // sessionPeerKey is the address a session is filed under: a digest of its
@@ -74,7 +79,7 @@ func sessionPeerKey(path string) string {
 }
 
 func newPeerMail(opts PeersOptions) *peerMail {
-	p := &peerMail{held: map[string]peermail.Message{}, stop: make(chan struct{})}
+	p := &peerMail{held: map[string]peermail.Message{}, resolving: map[string]bool{}, rejected: map[string]bool{}, stop: make(chan struct{})}
 	if strings.TrimSpace(opts.Dir) == "" {
 		return p
 	}
@@ -128,15 +133,23 @@ func (c *Controller) rebindPeers() {
 		_ = p.dir.RemoveLiveIf(p.key, p.instance)
 	}
 	p.key = key
-	p.held, p.order = map[string]peermail.Message{}, nil
+	p.held, p.order, p.rejected = map[string]peermail.Message{}, nil, map[string]bool{}
 	if key == "" {
 		return
 	}
+	c.publishPeerLiveLocked(path)
+}
+
+// publishPeerLiveLocked writes this session's record with a fresh beat; it is
+// called when the session changes and on every ingest tick.
+func (c *Controller) publishPeerLiveLocked(path string) {
+	p := c.peers
 	host, _ := os.Hostname()
+	now := time.Now().UTC()
 	err := p.dir.PublishLive(peermail.Live{
-		SessionID: key, Instance: p.instance, SessionPath: path, PID: os.Getpid(), Hostname: host,
+		SessionID: p.key, Instance: p.instance, SessionPath: path, PID: os.Getpid(), Hostname: host,
 		Title: peerAttribute(sessionstore.BranchID(path)), Project: peerAttribute(filepath.Base(c.WorkspaceRoot())),
-		StartedAt: time.Now().UTC(), Inbound: "hold",
+		StartedAt: now, BeatAt: now, Inbound: "hold",
 	})
 	if err != nil {
 		slog.Warn("controller: could not publish this session to its peers", "err", err)
@@ -162,31 +175,49 @@ func (c *Controller) closePeers() {
 
 // peerIngest reads this session's own spool and holds what it finds. Held is
 // the file still sitting in the spool, not a second copy: a crash loses nothing
-// and a restart holds the same messages again.
+// and a restart holds the same messages again. Disk work happens outside the
+// lock, so asking what is held never waits on a directory read.
 func (c *Controller) peerIngest() {
 	p := c.peers
 	if p == nil || p.dir == nil {
 		return
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.key == "" {
+	key, path := p.key, c.SessionPath()
+	if key != "" {
+		c.publishPeerLiveLocked(path)
+	}
+	p.mu.Unlock()
+	if key == "" {
 		return
 	}
-	p.dir.SweepTemp(p.key, peerStaleTemp)
-	messages, rejected := p.dir.Pending(p.key)
+	p.dir.SweepTemp(key, peerStaleTemp)
+	messages, rejected := p.dir.Pending(key)
+	var fresh []peermail.Message
+	for _, m := range messages {
+		if p.dir.Seen(key, m.ID) {
+			_ = p.dir.Ack(key, m.ID)
+			continue
+		}
+		fresh = append(fresh, m)
+	}
+	var audits []peermail.AuditRecord
+	p.mu.Lock()
+	if p.key != key {
+		p.mu.Unlock()
+		return
+	}
 	for _, r := range rejected {
-		_ = p.dir.Audit(peermail.AuditRecord{Receiver: p.key, Decision: peermail.DecisionRejected, Reason: r.Reason})
+		if !p.rejected[r.Name] {
+			p.rejected[r.Name] = true
+			audits = append(audits, peermail.AuditRecord{Receiver: key, Decision: peermail.DecisionRejected, Reason: r.Reason})
+		}
 	}
 	perSender := map[string]int{}
 	for _, id := range p.order {
 		perSender[p.held[id].From.SessionID]++
 	}
-	for _, m := range messages {
-		if p.dir.Seen(p.key, m.ID) {
-			_ = p.dir.Ack(p.key, m.ID)
-			continue
-		}
+	for _, m := range fresh {
 		if _, ok := p.held[m.ID]; ok {
 			continue
 		}
@@ -196,7 +227,11 @@ func (c *Controller) peerIngest() {
 		p.held[m.ID] = m
 		p.order = append(p.order, m.ID)
 		perSender[m.From.SessionID]++
-		_ = p.dir.Audit(peermail.AuditRecord{Receiver: p.key, Sender: m.From.SessionID, ID: m.ID, Decision: peermail.DecisionHeld, Bytes: len(m.Body), SHA256: peermail.Digest(m.Body)})
+		audits = append(audits, peermail.AuditRecord{Receiver: key, Sender: m.From.SessionID, ID: m.ID, Decision: peermail.DecisionHeld, Bytes: len(m.Body), SHA256: peermail.Digest(m.Body)})
+	}
+	p.mu.Unlock()
+	for _, a := range audits {
+		_ = p.dir.Audit(a)
 	}
 }
 
@@ -232,10 +267,21 @@ func (c *Controller) ResolvePeerMessage(id string, approve bool) error {
 	p.mu.Lock()
 	m, ok := p.held[id]
 	key := p.key
+	if ok && p.resolving[id] {
+		ok = false
+	}
+	if ok {
+		p.resolving[id] = true
+	}
 	p.mu.Unlock()
 	if !ok {
 		return ErrPeerNotHeld
 	}
+	defer func() {
+		p.mu.Lock()
+		delete(p.resolving, id)
+		p.mu.Unlock()
+	}()
 	decision := peermail.DecisionDenied
 	if approve {
 		display, submit := peerMessageTexts(m)

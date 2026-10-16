@@ -133,6 +133,8 @@ export const ACTIONS: UIAction[] = [
   // live turn the first steers and the second cancels the current turn.
   { id: "session.send", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "session.stop", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "tool.bring", kind: "view", target: "entity", proof: "interaction" },
+  { id: "tool.unbring", kind: "view", target: "entity", proof: "interaction" },
   { id: "tool.stop", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "session.open-match", kind: "navigation", target: "entity", proof: "interaction" },
   { id: "job.cancel", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
