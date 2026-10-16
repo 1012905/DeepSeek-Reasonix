@@ -599,11 +599,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
               menu.move(e.key === "ArrowDown" ? 1 : -1);
               return;
             }
-            // Tab completes; Enter completes a partial command or an explicitly selected item.
+            // Tab descends into directories; Enter confirms the highlighted reference.
             // The configured modifier chord sends the draft even with a menu open.
-            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && menu.ownsEnter && !(sendShortcut === "modifier_enter" && sendKey))) && !e.shiftKey) {
+            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && !(sendShortcut === "modifier_enter" && sendKey))) && !e.shiftKey) {
               e.preventDefault();
-              menu.accept();
+              menu.accept(undefined, e.key === "Tab" ? "descend" : "confirm");
               return;
             }
             // Esc closes the menu and stops there: reaching the app would cancel

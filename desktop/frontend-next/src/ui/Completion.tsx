@@ -19,7 +19,7 @@ const KIND: Record<string, string> = {
 };
 
 const HINT: Record<string, string> = {
-  ref: "Tab 补全或进入目录 · ↑↓ 后回车确认 · Esc 关闭",
+  ref: "↑↓ 选择 · 回车引用 · Tab 补全或进入目录 · Esc 关闭",
   slash: "↑↓ 选择 · Tab 或回车补全 · Esc 关闭",
   "slash-arg": "↑↓ 选择 · Tab 或回车补全 · Esc 关闭",
 };
@@ -77,14 +77,10 @@ interface State {
   move: (delta: number) => void;
   hover: (i: number) => void;
   dismiss: () => void;
-  accept: (item?: CompletionItem) => void;
+  accept: (item?: CompletionItem, mode?: "confirm" | "descend") => void;
   // Whether the keys still hold the highlight. A menu opens under whatever the
   // pointer happens to be resting on, so the pointer only takes it by moving.
   kb: boolean;
-  // Whether Enter belongs to the menu. A half-typed command is not a message,
-  // so Enter completes it; a reference is ordinary prose the moment it resolves,
-  // so Enter sends unless the user went looking through the list.
-  ownsEnter: boolean;
 }
 
 // useCompletion keeps the menu in step with the caret. Every decision about
@@ -103,7 +99,6 @@ export function useCompletion(
   const currentCompletion = useRef(completion);
   currentCompletion.current = completion;
   const [active, setActive] = useState(0);
-  const [picked, setPicked] = useState(false);
   // The answer that was dismissed, not a flag: a reset run as an effect lands
   // after the commit that opened the menu, and a blur between the two is undone.
   const [dismissed, setDismissed] = useState<Completion | null>(null);
@@ -157,7 +152,6 @@ export function useCompletion(
   // highlight is stale even though it never moved.
   useEffect(() => {
     setActive(0);
-    setPicked(false);
     setKb(true);
   }, [completion]);
 
@@ -166,13 +160,21 @@ export function useCompletion(
   const at = Math.min(active, items.length - 1);
 
   const accept = useCallback(
-    (item?: CompletionItem) => {
+    (item?: CompletionItem, mode: "confirm" | "descend" = "confirm") => {
       const pick = item ?? items[Math.min(active, items.length - 1)];
       if (!pick) return;
       const placed = chips?.place(text, completion, pick);
       if (placed) return apply(placed.text, placed.caret);
-      const next = text.slice(0, completion.from) + pick.insert + text.slice(completion.to);
-      apply(next, completion.from + pick.insert.length);
+      const finishRef = completion.kind === "ref" && !(mode === "descend" && pick.descend);
+      const suffix = text.slice(completion.to);
+      const separator = finishRef && !/^\s/.test(suffix) ? " " : "";
+      const next = text.slice(0, completion.from) + pick.insert + separator + suffix;
+      if (completion.kind === "ref") {
+        asked.current++;
+        setCompletion(EMPTY);
+        setLoading(false);
+      }
+      apply(next, completion.from + pick.insert.length + (finishRef ? 1 : 0));
     },
     [items, active, text, completion, apply, chips],
   );
@@ -182,15 +184,12 @@ export function useCompletion(
     active: at,
     open,
     loading,
-    ownsEnter: open && (completion.kind !== "ref" || picked),
     kb,
     move: (delta) => {
-      setPicked(true);
       setKb(true);
       setActive((i) => (((Math.min(i, items.length - 1) + delta) % items.length) + items.length) % items.length);
     },
     hover: (i) => {
-      setPicked(true);
       setKb(false);
       setActive(i);
     },
