@@ -250,6 +250,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.mine", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.logs", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.refresh", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "feedback.filter", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.account-link", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "feedback.account-unlink", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "feedback.account-unlink-other", kind: "kernel-mutation", target: "entity", proof: "interaction" },

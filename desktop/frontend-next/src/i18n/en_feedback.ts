@@ -1,6 +1,11 @@
 // English for the in-app feedback dialog and its refusals.
 export const EN_FEEDBACK: Record<string, string> = {
   "反馈": "Feedback",
+  "新回复": "New replies",
+  "未结束": "Open",
+  "已结束": "Closed",
+  "按进展筛选": "Filter by progress",
+  "这一组里没有反馈。": "No reports in this group.",
   "已完成：": "Done: ",
   "当前：": "Current: ",
   "尚未开始：": "Not yet: ",
