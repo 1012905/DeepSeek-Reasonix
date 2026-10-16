@@ -8,7 +8,6 @@ export const EN_SETTINGS: Record<string, string> = {
   "关闭辅助会话": "Close the side question",
   "移除引用 {n}": "Remove quote {n}",
   "向辅助会话提问": "Ask the side question",
-  "向辅助会话提问（只读，不写入主会话）": "Ask a side question (read-only, kept out of the main session)",
   "提问…": "Ask…",
   "先在对话里选中一段文字": "Select some text in the conversation first",
   "正在读取并回答…": "Reading and answering…",
