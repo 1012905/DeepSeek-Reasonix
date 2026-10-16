@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,8 @@ import (
 	"reasonix/internal/state/sessioninbox"
 	"reasonix/internal/state/sessionstore"
 )
+
+var peerFrameTag = regexp.MustCompile(`(?i)<(\s*/?\s*` + peerMessageTag + `)`)
 
 const (
 	peerIngestEvery   = 2 * time.Second
@@ -327,8 +330,7 @@ func peerMessageTexts(m peermail.Message) (display, submit string) {
 		from = fmt.Sprintf("%s · %s", from, project)
 	}
 	display = "message from another session: " + from
-	body := strings.ReplaceAll(m.Body, "</"+peerMessageTag, "<\\/"+peerMessageTag)
-	body = strings.ReplaceAll(body, "<"+peerMessageTag, "<\\"+peerMessageTag)
+	body := peerFrameTag.ReplaceAllString(m.Body, `<\$1`)
 	var b strings.Builder
 	fmt.Fprintf(&b, "<%s from=%q session=%q id=%q>\n", peerMessageTag, from, m.From.SessionID, m.ID)
 	b.WriteString(body)
