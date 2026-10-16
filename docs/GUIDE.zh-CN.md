@@ -104,6 +104,7 @@ enabled = []   # 省略/为空 = 全部内置工具
 bash_timeout_seconds = 120   # 前台安全上限；设为 0 表示不设工具层超时
 protect_changed_files = true   # 模型读过或写过的文件之后被改动时，拒绝整文件覆盖
 browser_tools = true   # 内置浏览器工具；浏览器在第一次使用时才启动
+# mcp_resources = true  # 仅用户配置文件；给模型一个 read_mcp_resource 工具，只能读已连接 MCP server 自己列出的资源，每次先询问；默认关闭
 mcp_startup_timeout_seconds = 30   # 后台 initialize + tools/list 安全上限
 mcp_call_timeout_seconds = 300   # MCP 调用默认安全上限；可用 plugin/tool 覆盖
 

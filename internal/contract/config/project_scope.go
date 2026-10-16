@@ -42,6 +42,8 @@ type heldScope struct {
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
 	peers         bool
+	// mcpResources decides whether a server's resources are readable by the model.
+	mcpResources bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -73,6 +75,7 @@ func holdUserScope(c *Config) heldScope {
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
 		peers:           c.Peers.Enabled,
+		mcpResources:    c.Tools.MCPResources,
 	}
 }
 
@@ -163,6 +166,12 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Peers.Enabled != h.peers {
 		c.ignoreProject("peers.enabled", fmt.Sprintf("%t", c.Peers.Enabled), ProjectUserOnly)
 		c.Peers.Enabled = h.peers
+	}
+	// Letting the model read what a server publishes widens what a third party
+	// can put in front of it, so a cloned repo must not turn it on.
+	if c.Tools.MCPResources != h.mcpResources {
+		c.ignoreProject("tools.mcp_resources", fmt.Sprintf("%t", c.Tools.MCPResources), ProjectUserOnly)
+		c.Tools.MCPResources = h.mcpResources
 	}
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.
