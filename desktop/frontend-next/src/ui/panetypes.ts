@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { AgentPort, ContextBreakdown, McpEntry, SessionStatus } from "../port/port";
 import type { HubPort, RuntimeView } from "../port/hub";
 import type { ConnectOffer } from "./ConnectNote";
+import type { PaneView } from "./PaneNav";
 
 // PaneReport is what the window's own chrome needs from whichever pane has
 // focus: everything else about a session stays inside the pane that owns it.
@@ -47,6 +48,7 @@ export interface PaneProps {
   pulse: number;
   findPulse: number;
   filesPulse?: number;
+  viewRequest?: { to: PaneView; n: number };
   onSettings: (section?: string) => void;
   // Opens the feedback form; a notice in this pane can be reported from where it appeared.
   onFeedback?: () => void;

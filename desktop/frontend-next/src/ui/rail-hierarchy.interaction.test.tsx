@@ -22,7 +22,7 @@ function draw() {
   const noop = vi.fn();
   render(
     <Sidebar
-      onFiles={noop} hub={hub} collapsed={false} navShown paging={NO_PAGING} tree={tree} treeRead runtimes={[]} runs={{}} active=""
+      onFiles={noop} onView={noop} hub={hub} collapsed={false} navShown paging={NO_PAGING} tree={tree} treeRead runtimes={[]} runs={{}} active=""
       activeWorkspace={undefined} liveIds={() => []} pinned={new Set()} onPin={noop}
       remotes={null} remoteTrees={{}} reloadRemotes={async () => {}} reloadRemoteTrees={async () => {}}
       readRemoteTree={async () => {}} reloadTree={async () => {}} adder={{ busy: false, add: noop, addPath: noop } as never}
