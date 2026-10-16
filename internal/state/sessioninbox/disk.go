@@ -2,6 +2,7 @@ package sessioninbox
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -140,6 +141,33 @@ func readRegularFile(path string, maxBytes int64) ([]byte, error) {
 		return nil, fmt.Errorf("file exceeds %d bytes", maxBytes)
 	}
 	return data, nil
+}
+
+// readManifestWithoutTransaction refreshes the in-memory manifest from the
+// published file without taking the disk transaction. Commits land by atomic
+// rename, so a plain read sees a complete snapshot of another process's queue
+// and never a half-written one. Repair work (quarantine, salvage, migration)
+// needs the lock and is deliberately not attempted here.
+func (s *Store) readManifestWithoutTransaction() error {
+	data, err := readRegularFile(filepath.Join(s.dir, manifestName), maxManifestBytes)
+	if errors.Is(err, os.ErrNotExist) {
+		s.man = emptyManifest(s.runID)
+		s.readonly = false
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("sessioninbox: read manifest: %w", err)
+	}
+	man, err := decodeManifest(data)
+	if err != nil {
+		return fmt.Errorf("sessioninbox: decode manifest: %w", err)
+	}
+	s.man = man
+	s.readonly = man.SchemaVersion > SchemaVersion
+	if s.readonly {
+		s.man.Paused = true
+	}
+	return nil
 }
 
 func (s *Store) commitManifestLocked(next *manifest) error {
