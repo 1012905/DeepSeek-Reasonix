@@ -91,6 +91,12 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  // ?checkfail=<name> makes a plain test of that source answer 401.
+  protected async answerCheck(name: string) {
+    if (query.get("checkfail") !== name) return super.answerCheck(name);
+    return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
+  }
+
   async browserTabs() {
     if (!query.has("agentpage")) return super.browserTabs();
     return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];

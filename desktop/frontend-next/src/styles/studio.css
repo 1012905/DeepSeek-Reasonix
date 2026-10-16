@@ -3785,7 +3785,7 @@ body { font-size: 14px; line-height: 1.75; }
 .svcrow-wrap[data-renaming]:focus-within { outline: 0; }
 .pstate { flex: none; width: 6px; height: 6px; border-radius: 50%; }
 .pstate[data-state="use"] { background: var(--ok); }
-.pstate[data-state="warn"] { background: var(--warn); }
+.pstate[data-state="warn"] { background: var(--warn); } .pstate[data-state="fail"] { background: var(--err); } .pstate[data-state="pass"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ok); }
 .plist .padd {
   display: inline-flex;
   align-items: center;
