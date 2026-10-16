@@ -117,13 +117,14 @@ func renderMeterAccounting(results []result) string {
 		unmeasured += r.Meter.WithoutUsage
 		injected += r.Meter.Injected
 		// A run whose metrics file never landed has no harness number, so it
-		// stays out of both sides of the comparison; folding its meter tokens
-		// against a silent zero would invent a divergence.
-		if !r.Unaccounted {
-			selfReported++
-			harnessTokens += r.PromptTokens + r.CompletionTokens
-			comparableTokens += r.Meter.PromptTokens + r.Meter.CompletionTokens
+		// stays out of both sides of the comparison. A metered run whose
+		// harness reported no tokens at all is the same absence, not a ratio.
+		if r.Unaccounted || r.PromptTokens+r.CompletionTokens == 0 {
+			continue
 		}
+		selfReported++
+		harnessTokens += r.PromptTokens + r.CompletionTokens
+		comparableTokens += r.Meter.PromptTokens + r.Meter.CompletionTokens
 	}
 	if metered == 0 {
 		return ""
