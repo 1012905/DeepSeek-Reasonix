@@ -38,7 +38,11 @@ func (s *Server) workspaceImage(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "workspace.file_unreadable", "not an image this view shows", nil)
 		return
 	}
-	root, err := os.OpenRoot(s.ctl().WorkspaceRoot())
+	base, ok := s.imageRoot(w, r.URL.Query().Get("root"))
+	if !ok {
+		return
+	}
+	root, err := os.OpenRoot(base)
 	if err != nil {
 		refuse(w, http.StatusInternalServerError, "workspace.file_failed", err.Error(), nil)
 		return
@@ -60,4 +64,26 @@ func (s *Server) workspaceImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = io.Copy(w, io.LimitReader(file, maxWorkspaceImage))
+}
+
+// imageRoot is the folder a picture is read from: the workspace, or a folder the
+// user granted this workspace, named by its own path. A grant lives in the user's
+// home, so a checkout cannot add one to itself; anything not on that list is refused.
+func (s *Server) imageRoot(w http.ResponseWriter, named string) (string, bool) {
+	primary := s.ctl().WorkspaceRoot()
+	if strings.TrimSpace(named) == "" || filepath.Clean(named) == filepath.Clean(primary) {
+		return primary, true
+	}
+	roots, err := s.ctl().WorkspaceRoots()
+	if err != nil {
+		refuse(w, http.StatusInternalServerError, "workspace.file_failed", err.Error(), nil)
+		return "", false
+	}
+	for _, extra := range roots.Extra {
+		if filepath.Clean(extra) == filepath.Clean(named) {
+			return extra, true
+		}
+	}
+	refuse(w, http.StatusForbidden, "workspace.root_not_granted", "that folder is not one this workspace was granted", map[string]any{"root": named})
+	return "", false
 }
