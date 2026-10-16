@@ -395,6 +395,10 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	// The built page onboards in its own words, against the same
 	// /provider-setup this kernel answers. There is no second page to draw.
 	if s.page == nil {
+		if wantsHTML(r.Header) {
+			writePageMissing(w)
+			return
+		}
 		refuse(w, http.StatusNotFound, "page.not_built", "this kernel is serving no built interface", nil)
 		return
 	}
