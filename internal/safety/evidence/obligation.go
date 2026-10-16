@@ -133,6 +133,11 @@ func (o Obligation) Subject() string {
 	return subject
 }
 
+// UnprovenMutationSettle is what ends an unproven mutation. Observation proves
+// effects and nothing the model runs afterwards re-observes the change, so
+// making it again does not settle it either.
+const UnprovenMutationSettle = "nothing the model can run settles it: call conclude_blocked saying what could not be established, or leave it to the user"
+
 // ObligationDelta is the net change one action made to the ledger's debts, not
 // a history of what happened inside it: a debt that fell and rose again under
 // one identity is reported as neither. An action can settle one and create
@@ -160,7 +165,7 @@ func (l *Ledger) Obligations(contract CheckContract) []Obligation {
 			ID:        fmt.Sprintf("unproven_mutation@%d", at),
 			Kind:      ObligationUnprovenMutation,
 			Cause:     l.commandAt(at),
-			Discharge: "establish what the change touched by making it through a tool that reports its paths",
+			Discharge: UnprovenMutationSettle,
 		})
 	}
 	at, changed := l.LatestSuccessfulMutationIndex()

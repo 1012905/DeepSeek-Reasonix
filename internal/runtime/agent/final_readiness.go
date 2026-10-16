@@ -468,9 +468,14 @@ func (a *Agent) turnHasNothingToAnswerFor(out finalReadinessCheck, missing []str
 // only one that ran after can answer. The debt is recorded for every preset —
 // it is the host's, not the model's — but only Delivery may not finish owing it.
 func (a *Agent) appendUnprovenMutationGap(out *finalReadinessCheck, missing []string) []string {
-	if !slices.ContainsFunc(a.obligations(), func(o evidence.Obligation) bool {
-		return o.Kind == evidence.ObligationUnprovenMutation
-	}) {
+	var owed *evidence.Obligation
+	for _, o := range a.obligations() {
+		if o.Kind == evidence.ObligationUnprovenMutation {
+			owed = &o
+			break
+		}
+	}
+	if owed == nil {
 		return missing
 	}
 	out.applies = true
@@ -478,14 +483,30 @@ func (a *Agent) appendUnprovenMutationGap(out *finalReadinessCheck, missing []st
 	if !a.deliveryProfile {
 		return missing
 	}
+	if a.task.unprovenExplained == owed.ID {
+		return append(missing, unprovenMutationAgain)
+	}
 	return append(missing, unprovenMutationAsk)
 }
 
-// unprovenMutationAsk is what discharges a change the host could not read: no
-// check can, since observation proves effects and a check only the state.
-const unprovenMutationRedo = "make the change again through a tool that reports what it touched, or call conclude_blocked with what cannot be established"
+const unprovenMutationAsk = "a change ran whose extent the host could not establish, and neither a check nor making the change again settles it: " +
+	evidence.UnprovenMutationSettle
 
-const unprovenMutationAsk = "a change ran whose extent the host could not establish, and no check can establish it: " + unprovenMutationRedo
+const unprovenMutationAgain = "the unproven change was already explained and still stands: call conclude_blocked saying what could not be established, or leave it to the user"
+
+// noteUnprovenMutationExplained records that the turn ending now carried the
+// full explanation, so a continuation of the same task repeats it once, short.
+func (a *Agent) noteUnprovenMutationExplained() {
+	if !a.deliveryProfile {
+		return
+	}
+	for _, o := range a.obligations() {
+		if o.Kind == evidence.ObligationUnprovenMutation {
+			a.task.unprovenExplained = o.ID
+			return
+		}
+	}
+}
 
 // appendUnseenRenderGap owes a look at each page or image the turn wrote and no
 // screenshot has shown since. It holds wherever verification is asked for, and
@@ -536,7 +557,7 @@ func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string
 func (a *Agent) verificationGap(writer int) (string, bool) {
 	ask := "run a relevant verification command after the latest write for the current role setting" + a.verificationCause()
 	if _, unproven := a.task.ledger.LatestUnprovenMutationIndex(); unproven {
-		ask += " — but a check cannot settle a change the host could not read: " + unprovenMutationRedo
+		ask += " — but a check cannot settle a change the host could not read: " + evidence.UnprovenMutationSettle
 	}
 	if unreadable, ok := a.task.ledger.LatestUnreadableVerificationAfter(writer); ok && strings.TrimSpace(unreadable.Command) != "" {
 		return fmt.Sprintf("%s — %q ran, but its exit status is the last stage's, not the check's, "+
