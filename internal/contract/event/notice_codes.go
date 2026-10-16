@@ -10,6 +10,7 @@ const (
 	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
 	NoticeCodeCheckpointRecordingFailed                         = "checkpoint_recording_failed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
+	NoticeCodePlanAutoApproved                                  = "plan_auto_approved"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
 	NoticeCodeExecutorHandoff                                   = "executor_handoff"

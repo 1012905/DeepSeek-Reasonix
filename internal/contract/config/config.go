@@ -1091,6 +1091,7 @@ type AgentConfig struct {
 	MaxParallelWriters int    `toml:"max_parallel_writers"`
 	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
+	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
@@ -1400,6 +1401,7 @@ func Default() *Config {
 			MaxParallelWriters:     3,
 			SubagentClaims:         "strict",
 			WriteLease:             "strict",
+			PlanApproval:           "ask",
 			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask
