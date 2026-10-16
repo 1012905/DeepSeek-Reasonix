@@ -168,8 +168,9 @@ func applyUnifiedProviderToolSurface(reg *tool.Registry, goalTurnsUnreachable bo
 			allow = append(allow, name)
 		}
 	}
-	// advise, best_of_n and run_script are registered only when config asks, at boot.
-	for _, name := range []string{advisor.Name, bestof.Name, script.Name} {
+	// advise, best_of_n, run_script and the peer tools are registered only when
+	// config asks, at boot.
+	for _, name := range []string{advisor.Name, bestof.Name, script.Name, "list_peers", "send_peer_message"} {
 		if _, ok := reg.Get(name); ok {
 			allow = append(allow, name)
 		}

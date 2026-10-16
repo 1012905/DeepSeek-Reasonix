@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode"
 
+	"reasonix/internal/contract/tool"
 	"reasonix/internal/state/peermail"
 	"reasonix/internal/state/sessioninbox"
 	"reasonix/internal/state/sessionstore"
@@ -39,7 +40,11 @@ var (
 
 // PeersOptions turns on messages between sessions for this controller. Empty
 // Dir is off: the session is not published and its spool is never read.
-type PeersOptions struct{ Dir string }
+type PeersOptions struct {
+	Dir string
+	// Link, when set, is bound to this controller so the peer tools can reach it.
+	Link *tool.PeerLink
+}
 
 // PeerHeld is a message another session sent that has not been approved or
 // denied. Nothing in it reaches the model until the user approves it.
@@ -57,6 +62,7 @@ type PeerHeld struct {
 type peerMail struct {
 	mu       sync.Mutex
 	dir      *peermail.Dir
+	link     *tool.PeerLink
 	instance string
 	key      string
 	held     map[string]peermail.Message
@@ -82,7 +88,7 @@ func sessionPeerKey(path string) string {
 }
 
 func newPeerMail(opts PeersOptions) *peerMail {
-	p := &peerMail{held: map[string]peermail.Message{}, resolving: map[string]bool{}, rejected: map[string]bool{}, stop: make(chan struct{})}
+	p := &peerMail{link: opts.Link, held: map[string]peermail.Message{}, resolving: map[string]bool{}, rejected: map[string]bool{}, stop: make(chan struct{})}
 	if strings.TrimSpace(opts.Dir) == "" {
 		return p
 	}
@@ -102,6 +108,9 @@ func newPeerMail(opts PeersOptions) *peerMail {
 func (c *Controller) startPeers() {
 	if c.peers.dir == nil {
 		return
+	}
+	if c.peers.link != nil {
+		c.peers.link.Bind(peerDirectory{c})
 	}
 	go func() {
 		tick := time.NewTicker(peerIngestEvery)
