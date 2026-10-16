@@ -30,7 +30,7 @@ func newTUIFlags() *tuiFlags {
 	fs := pflag.NewFlagSet("tui", pflag.ContinueOnError)
 	f := &tuiFlags{fs: fs}
 	f.model = fs.String("model", "", "provider name (default: config default_model)")
-	f.preset = fs.String("preset", "balanced", "agent execution setting: light | balanced | delivery")
+	f.preset = fs.String("preset", "balanced", presetFlagUsage())
 	f.profile = fs.String("profile", "", "deprecated: use --preset")
 	f.dir = fs.String("dir", "", "change to this directory first (project root)")
 	f.inline = fs.Bool("inline", false, "write the conversation into the terminal's scrollback instead of taking the full screen")
@@ -54,7 +54,7 @@ func newTUIFlags() *tuiFlags {
 func (f *tuiFlags) runtimeProfile() (string, error) {
 	raw := strings.TrimSpace(*f.profile)
 	if raw != "" {
-		fmt.Fprintln(os.Stderr, "warning: --profile is deprecated; use --preset light|balanced|delivery")
+		warnProfileDeprecated()
 	} else {
 		raw = strings.TrimSpace(*f.preset)
 	}

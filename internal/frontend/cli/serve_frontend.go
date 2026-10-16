@@ -255,7 +255,7 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	fs := flag.NewFlagSet(opts.command, flag.ContinueOnError)
 	model := fs.String("model", "", "provider name (default: config default_model)")
 	profileFlag := fs.String("profile", "", "deprecated: use --preset (economy|balanced|delivery)")
-	presetFlag := fs.String("preset", "balanced", "agent execution setting: light | balanced | delivery")
+	presetFlag := fs.String("preset", "balanced", presetFlagUsage())
 	maxSteps := fs.Int("max-steps", 0, "one-off max tool-call rounds (0 = automatic)")
 	addr := fs.String("addr", "127.0.0.1:8787", "listen address")
 	resume := fs.String("resume", "", "resume a saved session file")
@@ -301,7 +301,7 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	}
 	profileRaw := strings.TrimSpace(*profileFlag)
 	if profileRaw != "" {
-		fmt.Fprintln(os.Stderr, "warning: --profile is deprecated; use --preset light|balanced|delivery")
+		warnProfileDeprecated()
 	} else {
 		profileRaw = strings.TrimSpace(*presetFlag)
 	}
