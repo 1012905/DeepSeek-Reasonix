@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import type { Item, Waiting } from "../state/session";
 import type { ExtensionSurface } from "../port/wire";
 import type { AgentPort, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../port/port";
-import { SymbolMark } from "./RMark";
+import { Hero } from "./Hero";
 import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
 import { Boundary } from "./Boundary";
@@ -572,6 +572,7 @@ const Block = memo(function Block({
           it={row.item}
           {...rowProps}
           cp={checkpoints.get(row.item.id)}
+          settled={!row.activity?.some((item) => item.t === "tool" && item.running)}
           afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
         />
       </Fragment>
@@ -686,8 +687,9 @@ const Row = memo(function Row({
   onPrepareFileRevert,
   onCommitFileRevert,
   afterAnswer,
+  settled,
   activity = false,
-}: RowHandlers & { it: Item; cp?: Checkpoint; afterAnswer?: ReactNode; activity?: boolean }) {
+}: RowHandlers & { it: Item; cp?: Checkpoint; afterAnswer?: ReactNode; settled?: boolean; activity?: boolean }) {
   // Read once, for the life of this element. The projection spends the debt as
   // soon as this is drawn, and a card whose answer is still streaming would
   // otherwise lose the attribute mid-animation and have it cut short. A block
@@ -715,7 +717,7 @@ const Row = memo(function Row({
       // model. Gating the card on text meant all of it stayed invisible and
       // then landed at once. An empty card is still not a message, so a turn
       // that produced neither draws nothing.
-      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} reply={reply} quiet={echoes.has(it.id)} /> : null;
+      return drawn(it) || afterAnswer ? <SayCard item={it} afterAnswer={afterAnswer} settled={settled} reply={reply} quiet={echoes.has(it.id)} /> : null;
     case "tool":
       // The ask tool also raises ask_request, which carries the id /answer
       // needs. Drawing the tool call too put two copies of the same question on
@@ -768,33 +770,3 @@ const Row = memo(function Row({
     </div>
   );
 });
-
-interface HeroProps {
-  needsProject: boolean;
-  onOpen: () => void;
-  onKeep: () => void;
-}
-
-function Hero({ needsProject, onOpen, onKeep }: HeroProps) {
-  return (
-    <div className="hero">
-      <SymbolMark />
-      <div className="t">{needsProject ? t("先打开一个项目") : t("描述任务，其余交给 Reasonix")}</div>
-      <div className="s">
-        {needsProject
-          ? t("读取代码、运行测试与修改文件均只在你选定的文件夹内进行。")
-          : t("可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。")}
-      </div>
-      {needsProject ? (
-        <div className="herogo">
-          <button className="pick" data-action="workspace.add" onClick={onOpen}>
-            {t("打开项目…")}
-          </button>
-          <button className="stay" onClick={onKeep}>
-            {t("使用当前位置")}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}

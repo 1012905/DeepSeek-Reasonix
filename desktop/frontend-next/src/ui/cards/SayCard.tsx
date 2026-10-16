@@ -97,7 +97,7 @@ function download(text: string) {
   URL.revokeObjectURL(url);
 }
 
-export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; reply?: ReplyActions; quiet?: boolean }) {
+export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; settled?: boolean; reply?: ReplyActions; quiet?: boolean }) {
   const start = useStartsOpen("thinking", !item.done && !item.text);
   const [touched, setOpen] = useState<boolean | null>(null);
   const open = touched ?? start;
@@ -179,8 +179,9 @@ export function SayCard({ item, afterAnswer, reply, quiet }: { item: Extract<Ite
           )}
           {afterAnswer}
           {/* Only once the answer is whole: copying half a stream hands over
-              something that was never said. */}
-          {item.done && item.text.trim() && (
+              something that was never said, and a row of actions under work
+              that is still running reads as the turn being over. */}
+          {item.done && settled && item.text.trim() && (
             <div className="acts">
               <CopyButton text={item.text} iconOnly />
               {reply && (
