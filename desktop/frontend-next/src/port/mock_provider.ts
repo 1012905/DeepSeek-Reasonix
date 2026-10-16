@@ -157,21 +157,9 @@ export class MockProvider extends MockBoundary {
     this.machine.configured = true;
   }
 
-  async setProviderWebSearch(name: string, on: boolean): Promise<void> {
-    this.sources = this.sources.map((p) => (p.name === name ? { ...p, webSearch: on } : p));
-  }
-
-  async setProviderContinuation(name: string, mode: string): Promise<void> {
-    this.sources = this.sources.map((p) => (p.name === name ? { ...p, continuation: mode } : p));
-  }
-
   async renameProvider(names: string[], displayName: string): Promise<void> {
     const label = displayName.trim();
     this.sources = this.sources.map((p) => (names.includes(p.name) ? { ...p, displayName: label || undefined } : p));
-  }
-
-  async setProviderThinking(name: string, on: boolean): Promise<void> {
-    this.sources = this.sources.map((p) => (p.name === name ? { ...p, sendsThinking: on } : p));
   }
 
   // The kernel refuses a null anywhere in the extra body — TOML cannot hold one,
@@ -187,7 +175,10 @@ export class MockProvider extends MockBoundary {
             contextWindow: edit.contextWindow, maxOutputTokens: edit.maxOutputTokens,
             idleTimeoutSeconds: edit.idleTimeoutSeconds || undefined,
             headers: edit.headers, extraBody: edit.extraBody,
-            reasoningProtocol: edit.reasoningProtocol, supportedEfforts: edit.supportedEfforts,
+            reasoningProtocol: edit.reasoningProtocol,
+            sendsThinking: edit.reasoningProtocol === undefined ? p.sendsThinking : edit.reasoningProtocol !== "none",
+            webSearch: edit.webSearch ?? p.webSearch, continuation: edit.continuation ?? p.continuation,
+            supportedEfforts: edit.supportedEfforts,
             defaultEffort: edit.defaultEffort,
             modelEfforts: edit.modelEfforts ? mockModelEfforts(edit.modelEfforts) : p.modelEfforts,
             modelLimits: edit.modelLimits ? mockModelLimits(edit.modelLimits) : p.modelLimits,

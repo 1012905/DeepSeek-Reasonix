@@ -47,9 +47,6 @@ func (s *Server) registerProviderRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /providers/remove", s.removeProvider)
 	mux.HandleFunc("POST /providers/edit", s.editProvider)
 	mux.HandleFunc("POST /providers/display-name", s.renameProvider)
-	mux.HandleFunc("POST /providers/websearch", s.setProviderWebSearch)
-	mux.HandleFunc("POST /providers/thinking", s.setProviderThinking)
-	mux.HandleFunc("POST /providers/continuation", s.setProviderContinuation)
 	s.registerProviderCheckRoutes(mux)
 }
 

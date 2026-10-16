@@ -13,15 +13,16 @@ import { KIND_LABEL } from "./vendors";
 import { ModelLimits, limitTextOf, limitsToSend, type LimitText } from "./ModelLimits";
 import { ModelPrices, incomplete, priceTextOf, pricesToSend, type PriceText } from "./ModelPrices";
 import { useModelBatch } from "./useModelBatch";
+import { EndpointSwitches, hasEndpointSwitches } from "./EndpointSwitches";
 
 // Only what this form owns is sent: the entry keeps its prices, effort
 // vocabularies and everything else the panel cannot show.
 // declare opens the form on the reasoning fields: the composer sends a user
 // here when the endpoint reported no effort levels.
 export function EditConn({
-  entry, wireFixed = false, initialCheck, port, busy, setBusy, onDone, onRevert, onSaved, onDirty, declare = false, justSaved = false,
+  entry, label = entry.name, wireFixed = false, initialCheck, port, busy, setBusy, onDone, onRevert, onSaved, onDirty, declare = false, justSaved = false,
 }: {
-  entry: ProviderEntry; wireFixed?: boolean; initialCheck?: ProviderCheck; port: Port;
+  entry: ProviderEntry; label?: string; wireFixed?: boolean; initialCheck?: ProviderCheck; port: Port;
   busy: string; setBusy: (b: string) => void; onDone: () => void | Promise<void>; onRevert: () => void; onSaved?: () => void; onDirty?: (dirty: boolean) => void;
   declare?: boolean; justSaved?: boolean;
 }) {
@@ -65,6 +66,10 @@ export function EditConn({
     () => Object.fromEntries(Object.entries(entry.modelPrices ?? {}).map(([m, r]) => [m, priceTextOf(r)])),
   );
   const [think, setThink] = useState(entry.reasoningProtocol ?? "");
+  const [search, setSearch] = useState(entry.webSearch ?? false);
+  const [carry, setCarry] = useState(entry.continuation ?? "");
+  // These belong to the stored wire; a draft that retypes it carries none of them.
+  const wireSwitches = kind === entry.kind;
   // Until saved, the thinking field follows the wire being picked: the stored
   // entry's field belongs to the stored wire.
   const draftWire = wires.find((w) => w.kind === kind);
@@ -208,6 +213,10 @@ export function EditConn({
     };
   };
 
+  const thinkingShape = (className: string) => (
+    <EffortShape field={think === (entry.reasoningProtocol ?? "") || kind !== entry.kind ? effortField : undefined} level={levels[0]} className={className} />
+  );
+
   const draft = (): ProviderEdit => ({
     name: entry.name,
     ...(kind !== entry.kind && { kind }),
@@ -221,6 +230,8 @@ export function EditConn({
     maxOutputTokens: Number(maxOut.replace(/\D/g, "")) || 0,
     idleTimeoutSeconds: idle.ok ? idle.secs : 0,
     reasoningProtocol: think,
+    ...(wireSwitches && entry.canWebSearch && search !== (entry.webSearch ?? false) && { webSearch: search }),
+    ...(wireSwitches && entry.canSetContinuation && carry !== (entry.continuation ?? "") && { continuation: carry }),
     supportedEfforts: levels,
     defaultEffort: levels.includes(defEffort) ? defEffort : "",
     modelEfforts: Object.fromEntries(picked.filter((m) => ownEfforts[m]).map((m) => [m, ownEfforts[m]])),
@@ -398,6 +409,14 @@ export function EditConn({
       {/* Folded, and worth folding: no probe can answer these, and most
           endpoints need none of them. The fold names its contents, because a
           relay's effort levels are declared nowhere else. */}
+      {wireSwitches && hasEndpointSwitches(entry) && (
+        <EndpointSwitches
+          entry={entry} label={label} disabled={saving} shape={thinkingShape("why")}
+          search={search} sendsThinking={think !== "none"} continuation={carry}
+          onSearch={setSearch} onThinking={(send) => setThink(send ? (think === "none" ? (entry.reasoningProtocol === "none" ? "" : entry.reasoningProtocol ?? "") : think) : "none")} onContinuation={setCarry}
+        />
+      )}
+
       <details className="addp-options" open={more} onToggle={(e) => setMore(e.currentTarget.open)}>
         <summary data-action="provider.draft" data-value="compat">
           <span className="tx">
@@ -422,7 +441,7 @@ export function EditConn({
               <i className="tip">
                 {t("端点控制思考深度的方式。此项无法自动探测：中转站转发的是第三方模型，只有你知道其后端。选择后才能调整推理强度，选择错误会导致请求被端点拒绝。")}
               </i>
-              <EffortShape field={think === (entry.reasoningProtocol ?? "") || kind !== entry.kind ? effortField : undefined} level={levels[0]} />
+              {!(wireSwitches && entry.canSetThinking) && thinkingShape("tip")}
             </label>
             <label className="grow">
               <span>{t("推理档位")}</span>
