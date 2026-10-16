@@ -441,6 +441,16 @@ describe("replying with screenshots", () => {
     await waitFor(() => expect(screen.queryByText("a.png")).toBeNull());
   });
 
+  it("opens an attached screenshot at full size before the reply is sent", async () => {
+    await openBox();
+    await attach(png("a.png"));
+    await userEvent.click(await screen.findByRole("button", { name: "查看图片 a.png" }));
+    expect(screen.getByRole("dialog", { name: "a.png" }).querySelector("img")).toBeTruthy();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("a.png")).toBeTruthy();
+  });
+
   it("lets a picture be removed, and refuses more than the limit or a wrong type with the reason", async () => {
     await openBox();
     await attach(png("a.png"), png("b.png"), png("c.png"), png("d.png"));
