@@ -57,6 +57,26 @@ type providerCheck struct {
 // nothing about whether both chat contracts live at this base_url — DeepSeek
 // serves OpenAI chat at /chat/completions and Anthropic at /anthropic/v1/messages.
 // Flipping kind alone would aim one contract at the other's address.
+const codeKeyOriginChanged = "provider.key_origin_changed"
+
+// refuseKeyOriginChange stops a draft address on another origin from borrowing
+// the saved credential: with no key typed, the probe would resolve the saved
+// one and send it to wherever the form now points.
+func refuseKeyOriginChange(w http.ResponseWriter, saved *config.ProviderEntry, draftBaseURL, draftKey string) bool {
+	draftBaseURL = strings.TrimSpace(draftBaseURL)
+	if saved == nil || draftBaseURL == "" || strings.TrimSpace(draftKey) != "" {
+		return false
+	}
+	if strings.TrimSpace(saved.APIKeyEnv) == "" && saved.APIKey() == "" {
+		return false
+	}
+	if redirectguard.SameOrigin(saved.BaseURL, draftBaseURL) {
+		return false
+	}
+	refuse(w, http.StatusConflict, codeKeyOriginChanged, "the address is on another origin than the saved key; type the key for it", nil)
+	return true
+}
+
 func (s *Server) registerProviderCheckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /providers/check", s.checkProvider)
 	mux.HandleFunc("POST /providers/check/model", s.checkProviderModel)
@@ -89,6 +109,9 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 	saved, ok := cfg.Provider(strings.TrimSpace(body.Name))
 	if !ok {
 		notFound(w, "provider", body.Name)
+		return
+	}
+	if refuseKeyOriginChange(w, saved, body.BaseURL, body.APIKey) {
 		return
 	}
 	// Only a check of what is saved says anything about what is saved.
@@ -236,6 +259,9 @@ func (s *Server) checkProviderModel(w http.ResponseWriter, r *http.Request) {
 	}
 	if !found {
 		entry = &config.ProviderEntry{Name: "probe", Kind: "openai"}
+	}
+	if found && refuseKeyOriginChange(w, entry, body.BaseURL, body.APIKey) {
+		return
 	}
 	candidate := *entry
 	if value := strings.TrimSpace(body.BaseURL); value != "" {

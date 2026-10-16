@@ -301,6 +301,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这个辅助提问已经关闭，请重新打开": "That side question is closed; open it again",
   "上一个问题还在回答，请稍候再问": "The previous question is still being answered; wait a moment",
   "同时打开的辅助提问太多，请先关闭几个": "Too many side questions are open; close some first",
+  "地址换了域名，已保存的密钥不会发过去；请填入这个地址对应的密钥": "The address moved to another origin, so the saved key is not sent there; enter the key for this address",
   "请先写下要问的内容": "Write the question first",
   "辅助提问没能完成，请重试": "The side question could not be completed; try again",
   "尚未填写服务地址": "No endpoint address yet",
