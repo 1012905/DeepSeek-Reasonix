@@ -91,6 +91,8 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 		notFound(w, "provider", body.Name)
 		return
 	}
+	// Only a check of what is saved says anything about what is saved.
+	plain := strings.TrimSpace(body.BaseURL) == "" && strings.TrimSpace(body.APIKey) == "" && strings.TrimSpace(body.Kind) == ""
 	entry := *saved
 	if value := strings.TrimSpace(body.BaseURL); value != "" {
 		entry.BaseURL = value
@@ -108,7 +110,11 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), providerProbeTimeout)
 	defer cancel()
 	if config.AnswersFor(entry.Kind) == config.AnswersDecision {
-		writeJSON(w, checkDecisionProvider(ctx, cfg, &entry))
+		got := checkDecisionProvider(ctx, cfg, &entry)
+		if plain {
+			noteLastCheck(saved, got)
+		}
+		writeJSON(w, got)
 		return
 	}
 	proxied, direct := probeClients()
@@ -121,14 +127,18 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 	// A refusal is a finding, not a request failure: the row wants to say what
 	// went wrong, and a bare status code would leave it with nothing to show.
 	if probeErr != nil {
-		writeJSON(w, probeFinding(probeErr, entry.APIKey))
+		found := probeFinding(probeErr, entry.APIKey)
+		if plain {
+			noteLastCheck(saved, found)
+		}
+		writeJSON(w, found)
 		return
 	}
 	completed := ""
 	if got.BaseURL != strings.TrimSpace(entry.BaseURL) {
 		completed = got.BaseURL
 	}
-	writeJSON(w, providerCheck{
+	result := providerCheck{
 		OK:        true,
 		Kind:      got.Kind,
 		BaseURL:   completed,
@@ -137,7 +147,11 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 		Vision:    nonNilStrings(got.Vision),
 		Ambiguous: got.Ambiguous,
 		NoProxy:   got.NoProxy,
-	})
+	}
+	if plain {
+		noteLastCheck(saved, result)
+	}
+	writeJSON(w, result)
 }
 
 // probeFinding reads a failed probe as the typed finding a client renders. An

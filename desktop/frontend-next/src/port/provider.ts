@@ -63,6 +63,9 @@ export interface ProviderEntry {
   // Per model: the price per million tokens it declares for itself. A model
   // with none is absent, which means unknown, not zero.
   modelPrices?: Record<string, ModelRate>;
+  // How the latest plain test of this saved entry ended, in this kernel process.
+  // Absent when none ran or the entry changed since.
+  lastCheck?: { at: number; ok: boolean; code?: string };
   // Removing the one in use would leave the session on a model that no longer
   // resolves, so the row offers no delete.
   inUse: boolean;
