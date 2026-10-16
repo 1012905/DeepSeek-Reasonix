@@ -226,6 +226,11 @@ class BenchPort extends MockPort {
     return { ...st, jobs };
   }
 
+  async switchBranch(name: string) {
+    if (SWITCH_MS > 0) await new Promise((r) => setTimeout(r, SWITCH_MS));
+    return super.switchBranch(name);
+  }
+
   async cancelJob(jobId: string) {
     if (!JOBS) return super.cancelJob(jobId);
     this.stopped.add(jobId);
@@ -264,6 +269,7 @@ const SESSIONS = Number(query.get("sess") ?? 0);
 // ?turns= is how long the conversation being opened already is.
 const TURNS = Number(query.get("turns") ?? 0);
 const STATUS_MS = Number(query.get("statusms") ?? 0);
+const SWITCH_MS = Number(query.get("switchms") ?? 0);
 // ?queue= is how many lines are already waiting when the window opens.
 const QUEUE = Number(query.get("queue") ?? 0);
 const QUEUE_BODY = query.has("queuebody");
