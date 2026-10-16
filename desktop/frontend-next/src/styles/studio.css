@@ -3147,6 +3147,8 @@ body { font-size: 14px; line-height: 1.75; }
   background: var(--net-wash);
   font: 650 11px/1.2 var(--ui);
 }
+.studio-runclock { flex: none; font-variant-numeric: tabular-nums; font-weight: 500; opacity: .78; }
+.studio-runclock::before { content: "·"; margin-right: 7px; opacity: .6; }
 .studio-runstate .studio-runtokens { flex: none; }
 .studio-runstate .rmark {
   width: 15px;

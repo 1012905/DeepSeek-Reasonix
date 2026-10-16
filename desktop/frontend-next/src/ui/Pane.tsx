@@ -556,7 +556,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
         {/* Everything stacked above the input box shares one ceiling, so no
             child of this region may grow without bound. */}
         <PlanFold plan={s.plan} shown={tab === "flow"} paused={blocked} />
-        {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} sent={sent} received={received} estimated={s.outLive > 0} />}
+        {tab === "flow" && <RunLine label={chipLabel(s, running)} running={running} blocked={blocked} since={s.running ? s.runSince : undefined} sent={sent} received={received} estimated={s.outLive > 0} />}
         <div className="composeaux">
           <Queue
             queue={queue}
