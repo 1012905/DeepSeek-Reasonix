@@ -22,6 +22,7 @@ const { reveal, revealWorkspace, revealLogs, openWorkspace, openFile } = require
 const { appIcon } = require("./appicon");
 const { setUnreadBadge } = require("./badge");
 const layout = require("./layout");
+const { folderAnswer } = require("./folderpanel");
 const { offerCleanup } = require("./legacy");
 const { stripPackageGrants, unpaintedWindowCause } = require("./packagegrants");
 const { BrowserProtocol } = require("./browserprotocol");
@@ -472,17 +473,18 @@ ipcMain.handle("dialog:save-bytes", (event, name, bytes) =>
 // createDirectory is the half that carries meaning: a panel that can only open
 // what exists reads as an app that cannot start a project, which is what the
 // Wails picker was reported as before it said so. A dismissed panel answers ""
-// like the save dialogs, and startIn is dropped when it names nothing.
+// like the save dialogs, a panel that could not be drawn answers null, and startIn
+// is dropped when it names nothing.
 ipcMain.handle("dialog:pick-folder", async (event, startIn) => {
   const target = fromWindow(event);
   if (!target) return "";
+  const shownAt = Date.now();
   const picked = await dialog.showOpenDialog(target, {
     defaultPath: startIn || undefined,
     // Tools keep their working folders behind a leading dot, so those are listed too.
     properties: ["openDirectory", "createDirectory", "showHiddenFiles"],
   });
-  if (picked.canceled || !picked.filePaths.length) return "";
-  return picked.filePaths[0];
+  return folderAnswer(picked, Date.now() - shownAt, process.platform);
 });
 
 // Named before any path is derived from it: userData hangs off the app name,
