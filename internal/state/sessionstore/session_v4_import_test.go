@@ -2,12 +2,15 @@ package sessionstore
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/state/sessionv4"
 	"reasonix/internal/state/sessionv4/v4fixture"
 )
 
@@ -159,4 +162,87 @@ func TestImportV4FromCopiesAndIsIdempotent(t *testing.T) {
 		t.Fatalf("second import = %d, %v", n, err)
 	}
 	_ = sessions
+}
+
+// writeListingCache stores the title 1.x cached for a conversation whose log
+// carries none, the way 1.x writes it, so it describes the log as it stands.
+func writeListingCache(t *testing.T, store *v4fixture.Store, dir, title string) {
+	t.Helper()
+	opened, err := sessionv4.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := map[string]any{
+		"version": 5, "codec": "reasonix.session.linear/v4", "sessionId": opened.Manifest.SessionID,
+		"createdAt": opened.Manifest.CreatedAt.UTC().Format(time.RFC3339Nano), "title": title,
+		"turns": 1, "preview": "hello", "logSize": opened.LogSize, "logModTimeNs": opened.LogModTime.UnixNano(),
+	}
+	raw, _ := json.Marshal(meta)
+	cache := filepath.Join(store.Root, ".query-cache", opened.Manifest.SessionID)
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "catalog-metadata.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func untitledV4(t *testing.T) (*v4fixture.Store, string, string) {
+	t.Helper()
+	s := v4fixture.New(t)
+	dir := s.Session(v4TestID, 3)
+	s.Batch(dir, v4fixture.Ended,
+		v4fixture.Event{Kind: "message/complete", Payload: v4fixture.Msg("m3", "user", "hello")},
+		v4fixture.Event{Kind: "message/complete", Payload: v4fixture.Msg("m4", "assistant", "hi")},
+	)
+	sessions := filepath.Join(filepath.Dir(s.Root), "sessions")
+	if err := os.MkdirAll(sessions, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return s, dir, sessions
+}
+
+// 1.x keeps a title in its listing cache when the log never recorded one; the
+// copy carries it, as the unimported row did.
+func TestImportKeepsTheTitleOnlyTheListingCacheHolds(t *testing.T) {
+	s, dir, sessions := untitledV4(t)
+	writeListingCache(t, s, dir, "Floppy")
+	if n, _, err := ImportV4From(os.DirFS(s.Root), sessions, nil); err != nil || n != 1 {
+		t.Fatalf("imported %d, err %v", n, err)
+	}
+	meta, ok, err := LoadBranchMeta(v4ImportPath(sessions, v4TestID))
+	if err != nil || !ok || meta.CustomTitle != "Floppy" {
+		t.Fatalf("meta %+v ok=%v err=%v, want the cached title", meta, ok, err)
+	}
+}
+
+// A copy an earlier import left without a title is given it by the next import;
+// a title the person set is left alone.
+func TestReimportFillsAnEmptyTitleAndKeepsAChosenOne(t *testing.T) {
+	s, dir, sessions := untitledV4(t)
+	if n, _, err := ImportV4From(os.DirFS(s.Root), sessions, nil); err != nil || n != 1 {
+		t.Fatalf("imported %d, err %v", n, err)
+	}
+	path := v4ImportPath(sessions, v4TestID)
+	if meta, _, _ := LoadBranchMeta(path); meta.CustomTitle != "" {
+		t.Fatalf("setup: title %q", meta.CustomTitle)
+	}
+	writeListingCache(t, s, dir, "Floppy")
+	if n, _, err := ImportV4From(os.DirFS(s.Root), sessions, nil); err != nil || n != 0 {
+		t.Fatalf("second import: %d, err %v", n, err)
+	}
+	if meta, _, _ := LoadBranchMeta(path); meta.CustomTitle != "Floppy" {
+		t.Fatalf("title %q, want it filled from the cache", meta.CustomTitle)
+	}
+	meta, _, _ := LoadBranchMeta(path)
+	meta.CustomTitle = "Mine"
+	if err := SaveBranchMeta(path, meta); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ImportV4From(os.DirFS(s.Root), sessions, nil); err != nil {
+		t.Fatal(err)
+	}
+	if meta, _, _ := LoadBranchMeta(path); meta.CustomTitle != "Mine" {
+		t.Fatalf("title %q, a chosen title must stay", meta.CustomTitle)
+	}
 }
