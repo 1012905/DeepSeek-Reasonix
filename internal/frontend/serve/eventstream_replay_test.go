@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -174,5 +175,64 @@ func TestEventsReplayDropsAnAskOnceItIsAnswered(t *testing.T) {
 	}
 	if strings.Contains(getReplay(t, handler, "?lastEventId=0").Frames[0].Kind, "ask_request") {
 		t.Fatal("a settled ask came back through the log")
+	}
+}
+
+// latePromptReplay raises a prompt in the exact window the review named: after
+// the pending-prompt snapshot is taken, before the client's cursor is decided.
+// A prompt landing there must be numbered above the cursor rather than below
+// it. The hook drives that window synchronously, not by racing for it.
+type latePromptReplay struct {
+	control.SessionAPI
+	bc      *Broadcaster
+	lateSeq int64
+}
+
+func (l *latePromptReplay) ReplayPendingPromptsWith(f func() event.Sink) {
+	l.SessionAPI.ReplayPendingPromptsWith(f)
+	// The snapshot is taken and the lock released; a fresh prompt lands here,
+	// between the two steps. A cursor read after this point would cover it.
+	l.bc.Emit(event.Event{Kind: event.AskRequest, Ask: event.Ask{ID: "late-ask"}})
+	l.lateSeq = l.bc.Watermark()
+}
+
+// A prompt raised while an attach is being answered must not be swallowed by the
+// cursor that attach hands the client: the client adopts that cursor, so a
+// prompt numbered at or below it is one the next resume never reaches.
+func TestEventsReplayAttachCursorNeverSkipsAPromptRaisedDuringIt(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	ctrl.EnableInteractiveApproval()
+	late := &latePromptReplay{SessionAPI: ctrl, bc: bc}
+	srv := New(late, bc, config.ServeConfig{})
+	cancelAsk, asking := askFor(t, ctrl, "pick one")
+	defer func() { cancelAsk(); <-asking }()
+
+	handler := operatorHandler(srv)
+	deadline := time.Now().Add(3 * time.Second)
+	for !ctrl.PendingPrompt() {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the parked ask")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	answer := getReplay(t, handler, "")
+	if late.lateSeq == 0 {
+		t.Fatal("the harness never raised a prompt inside the attach")
+	}
+	if answer.Watermark >= late.lateSeq {
+		t.Fatalf("attach cursor = %d already covers the prompt raised at %d while the attach was answered, so the client would skip it", answer.Watermark, late.lateSeq)
+	}
+
+	// Resuming from the cursor the attach handed over still reaches it.
+	reached := false
+	for _, f := range getReplay(t, handler, "?lastEventId="+strconv.FormatInt(answer.Watermark, 10)).Frames {
+		if f.Kind == "ask_request" && f.Ask.ID == "late-ask" {
+			reached = true
+		}
+	}
+	if !reached {
+		t.Fatalf("the resume from cursor %d never reached the prompt raised during the attach", answer.Watermark)
 	}
 }

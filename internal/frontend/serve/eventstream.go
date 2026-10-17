@@ -29,18 +29,25 @@ func (s *Server) eventsReplay(w http.ResponseWriter, r *http.Request) {
 		// An attach is not a resume: the numbered log is another connection's
 		// history. What it owes is the connection-local state no numbered frame
 		// carries — the approval or question a run is stopped on.
-		writeEventsReplayFrames(w, s.bc, s.pendingPromptFrames(), true)
+		frames, watermark := s.pendingPromptSnapshot()
+		writeEventsReplayFrames(w, frames, true, watermark)
 		return
 	}
 	writeEventsReplay(w, r, s.bc)
 }
 
-// pendingPromptFrames is what a run is waiting on, encoded as the stream encodes
-// it: the same frames events would push to an attaching subscriber, unnumbered,
-// because replaying a prompt to a second client replays a conversation it never had.
-func (s *Server) pendingPromptFrames() []json.RawMessage {
+// pendingPromptSnapshot is what a run is waiting on, encoded as the stream does
+// — the same frames events would push to an attaching subscriber, unnumbered —
+// read together with the watermark under one hold of the prompt-emission lock.
+// Reading the watermark later would let a prompt raised in between be numbered
+// below the cursor the client adopts and skipped by it.
+func (s *Server) pendingPromptSnapshot() ([]json.RawMessage, int64) {
 	var frames []json.RawMessage
+	var watermark int64
 	s.ctl().ReplayPendingPromptsWith(func() event.Sink {
+		// Before the snapshot, still inside the lock: a prompt raised after this
+		// is numbered above the watermark and reached by the next resume.
+		watermark = s.bc.Watermark()
 		return event.FuncSink(func(e event.Event) {
 			data, err := json.Marshal(eventwire.ToWire(e))
 			if err != nil {
@@ -49,7 +56,7 @@ func (s *Server) pendingPromptFrames() []json.RawMessage {
 			frames = append(frames, data)
 		})
 	})
-	return frames
+	return frames, watermark
 }
 
 // attaching reports whether a request carries no resume cursor. Both transports
@@ -61,10 +68,10 @@ func attaching(r *http.Request) bool {
 
 func writeEventsReplay(w http.ResponseWriter, r *http.Request, bc *Broadcaster) {
 	frames, complete := bc.Replay(lastEventID(r))
-	writeEventsReplayFrames(w, bc, frames, complete)
+	writeEventsReplayFrames(w, frames, complete, bc.Watermark())
 }
 
-func writeEventsReplayFrames(w http.ResponseWriter, bc *Broadcaster, frames []json.RawMessage, complete bool) {
+func writeEventsReplayFrames(w http.ResponseWriter, frames []json.RawMessage, complete bool, watermark int64) {
 	if frames == nil {
 		frames = []json.RawMessage{}
 	}
@@ -72,7 +79,7 @@ func writeEventsReplayFrames(w http.ResponseWriter, bc *Broadcaster, frames []js
 		Frames    []json.RawMessage `json:"frames"`
 		Complete  bool              `json:"complete"`
 		Watermark int64             `json:"watermark"`
-	}{frames, complete, bc.Watermark()})
+	}{frames, complete, watermark})
 }
 
 // lastEventID reads the resume point a client carries. The header is
