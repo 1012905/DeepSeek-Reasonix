@@ -224,10 +224,10 @@ jobs:
 
       - if: steps.scope.outputs.run == 'true'
         name: Build the host, the stand-ins and the page
-        working-directory: desktop/frontend-next
         run: |
-          go build -o relay/bin/studio-host ../../cmd/reasonix-studio-host
-          go build -o relay/bin/relayfake ../../tools/relayfake
+          go build -o desktop/frontend-next/relay/bin/studio-host ./cmd/reasonix-studio-host
+          go build -o desktop/frontend-next/relay/bin/relayfake ./tools/relayfake
+          cd desktop/frontend-next
           pnpm install --frozen-lockfile
           pnpm exec vite build --outDir dist-relay --emptyOutDir
           pnpm exec playwright install --with-deps chromium
