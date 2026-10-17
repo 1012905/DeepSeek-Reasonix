@@ -67,11 +67,14 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # planner_model = "deepseek-pro"      # optional low-frequency planner
 # subagent_model = "deepseek-pro"     # optional default for runAs=subagent skills
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }
-# max_subagent_depth = 2              # nested delegation depth; set 1 for the old single-layer boundary
-# max_subagent_concurrency = 6        # session-wide sub-agent concurrency (task/fleet/skills)
-# max_parallel_writers = 3            # concurrent writers with non-overlapping write_paths
+# max_subagent_depth = 8              # nested delegation depth; a named stop against runaway recursion, 0 removes it; set 1 for the single-layer boundary (user config only)
+# max_subagent_concurrency = 0        # session-wide sub-agent concurrency (task/fleet/skills); 0 = no limit (user config only)
+# max_parallel_writers = 0            # concurrent writers with non-overlapping write_paths; 0 = no limit, write claims keep writers apart (user config only)
+# max_side_sessions = 0              # side conversations open at once; 0 = no limit (user config only)
+# max_queued_inputs = 0              # prompts waiting in a session's queue; 0 = no limit, the queue's byte limits still apply (user config only)
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
+# plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
 # host_verification = "off"          # user file only; the host stops holding a turn that changed files to a check, a review and a sign-off; the receipt still says what was checked; default on
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
@@ -95,6 +98,9 @@ enabled = []   # omit/empty = all built-ins
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
 protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
 browser_tools = true   # built-in browser tools; the browser starts on first use
+# mcp_resources = true  # user file only; a read_mcp_resource tool for resources a connected MCP server lists or builds from its declared templates (a {+x} template is wide: read the full address on the card before approving); asks first; default off
+# web_search_backends = ["searxng"]  # user file only; ordered chain for web_search
+# searxng_url = "http://localhost:8888"  # your own SearXNG instance
 mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap
 mcp_call_timeout_seconds = 300   # default MCP call safety cap; per-plugin/tool overrides may raise it
 
@@ -132,12 +138,21 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # allow_write    = ["/tmp"]    # extra dirs write_file/edit_file/multi_edit/move_file may touch
 # forbid_read    = ["${HOME}/.ssh"]   # paths the agent must not read or list
 # allow_devices  = ["/dev/nvidia*"]   # host device nodes bound into the Linux bash sandbox (user config only)
+# egress_unlisted = "allow"    # unattended long tasks (user config only): hosts outside allowed_domains pass without asking, said once each; denied_domains still refuse
+
+[peers]
+# enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it; also a switch in Settings, applied at the next turn (user config only)
+# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled (user config only)
+# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
 
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
 # token = ""                   # optional fixed token; empty token mode generates one at startup
 # password_hash = ""           # bcrypt hash generated with reasonix serve --hash-password --password '...'
 # behind_proxy = false         # true only behind a trusted reverse proxy
+
+[desktop]
+# max_workspaces = 0           # most projects the sidebar remembers; 0 = no limit (user config only)
 
 [[plugins]]
 name    = "example"
@@ -871,6 +886,19 @@ Composer shortcuts:
 
 Remembered projects have Move up / Move down in their project menu. Open it with the keyboard, navigate with arrows or Home/End, and use Escape to return to the trigger. Moving a project changes sidebar order without changing the launch project.
 
+Ordinary Reasonix-managed worktree chats appear under their original project,
+without a separate project row for each checkout. The chat header shows Local
+checkout or Worktree, with its actual working directory available on hover;
+worktree chats also carry a sidebar marker.
+
+Reopening history uses that chat's working directory, while starting a chat
+from the project uses the original directory. Ordering, search, paging, pins
+and archives span the project.
+
+Removing the project closes its idle panes and retains every directory and
+transcript. Existing transcripts stay in place and group on restart without migration.
+Worktrees added separately outside Reasonix-managed storage remain independent projects.
+
 The list holds up to 32 projects; adding another requires removing one first. `serve-workspaces.json` now stores an object with `paths` and `launch`. Older binaries read only arrays and cannot preserve this format: do not share the same state home with an older binary after reordering.
 
 Menus and controls:
@@ -1212,11 +1240,14 @@ headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 
 For a remote HTTP server without a static `Authorization` header, an
 authentication challenge (HTTP 401 with a `Bearer` challenge) is reported as
-needing sign-in. Run `reasonix mcp auth <name>` in the CLI; Studio has no
-sign-in control yet. Reasonix performs OAuth metadata discovery, dynamic
+needing sign-in. Run `reasonix mcp auth <name>` in the CLI. Reasonix performs OAuth metadata discovery, dynamic
 client registration, PKCE S256 authorization, and refresh-token
 rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
+
+Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
+
+Tools whose definitions change after you approved them are held back until you accept them (`reasonix mcp trust <name>`). To take one server's changes without being asked, run it with `--follow` (`--unfollow` undoes it); each change is still announced.
 
 OAuth client and token state is kept outside the workspace in the server's
 private Reasonix state directory, written with mode `0600`, and bound to the
@@ -1564,6 +1595,8 @@ until the goal is complete, blocked, paused, or cleared. Ordinary chat never
 changes collaboration mode implicitly; choose Goal in the composer or use
 `/goal` to start a long-running objective.
 
+The desktop plan fold and the terminal footer show a goal's state, turns, requests, tokens and active work time, and name the stop cause when it is not running.
+
 Goal has no default model-round, cross-Run turn, wall-clock, or numeric
 no-progress limit. It continues until completion, a genuine user/external
 blocker, manual stop/pause, an unrecoverable external error, or an explicit
@@ -1780,14 +1813,13 @@ Subagent skills inherit the executor model by default. Set `subagent_model` to
 run them on another configured model, or use `subagent_models` to override only
 specific skills such as `review` or `security_review`.
 
-Subagents may delegate one more layer by default: the root session is depth 0,
-first-layer subagents are depth 1, and the maximum `max_subagent_depth = 2`
-means a depth-1 workflow can dispatch a depth-2 reviewer or implementer. Depth-2
-subagents do not receive recursive agent/skill tools. Set
-`agent.max_subagent_depth = 1` to restore the old single-layer boundary. This is
-intended for workflows such as Superpowers where a workflow skill may dispatch a
-reviewer subagent, while still avoiding unbounded recursion and background
-fanout.
+Subagents delegate in layers: the root is depth 0, and `max_subagent_depth`
+(default 8, a stop against a model delegating to itself without bound; 0 removes
+it, 1 is the single-layer boundary) is the deepest layer with recursive tools.
+`max_subagent_concurrency` and `max_parallel_writers` default to 0, no limit:
+write claims, not a count, keep writers apart. A project's `reasonix.toml`
+cannot set any of the three. A 429 under heavy parallelism is retried with
+backoff and `Retry-After`.
 
 Use `read_only_task` when planning needs isolated, deeper research without
 granting write-capable delegation. Use `read_only_skill` when the same need is
@@ -1940,3 +1972,109 @@ project-local override.
 
 The why behind separate sessions (keeping each model's prefix cache-stable) is in
 [`SPEC.md` §3.5](./SPEC.md#35-two-model-collaboration-coordinator).
+
+## Free web search with SearXNG
+
+`web_search` can use a [SearXNG](https://docs.searxng.org/) instance that you run yourself, so searches cost nothing. Reasonix does not start it.
+
+```
+mkdir -p ./searxng/config/ ./searxng/data/ && cd ./searxng/
+docker run --name searxng -d -p 8888:8080 -v "./config/:/etc/searxng/" -v "./data/:/var/cache/searxng/" docker.io/searxng/searxng:latest
+```
+
+(the command is from the SearXNG documentation). SearXNG answers JSON only when its `settings.yml` allows it; put this in `./config/settings.yml` and restart the container:
+
+```yaml
+use_default_settings: true
+search:
+  formats: [html, json]
+```
+
+Then, in your user config file (a project file cannot set these):
+
+```toml
+[tools]
+web_search_backends = ["searxng"]
+searxng_url = "http://localhost:8888"
+```
+
+A backend counts as not answering when:
+
+- the request fails, or the status is not 200;
+- the body is not JSON, or no results came back.
+
+Each time that happens Reasonix shows a notice naming the backend and the cause, then tries the next one. If none answers, the model receives `search.all_backends_failed`.
+
+- Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
+- Results are third-party content and are labelled as such to the model.
+
+### Paid fallback: the DeepSeek Search API
+
+Add `"deepseek_api"` after `"searxng"` to let `web_search` fall back to DeepSeek's [Search API](https://api-docs.deepseek.com/guides/search) when the free backend did not answer.
+
+```toml
+[tools]
+web_search_backends = ["searxng", "deepseek_api"]
+```
+
+- It uses the key of a provider you configured for `api.deepseek.com`.
+- DeepSeek lists the price as $0.75 per 1,000 successful requests (pricing page, read 2026-10-17); it bills only a 200 response with results, and announces the billing start date separately.
+- The first time a search would reach it, a card shows the price and the query that would be sent to DeepSeek. Allow once, allow for the session, or always allow, which records `web_search_paid_allowed = ["deepseek_api"]` in your user file.
+- After you choose always allow, the queries the model sends are no longer shown one by one before they go to DeepSeek.
+- No approval mode answers that card for you, and a project file cannot record the allowance.
+- Without an answer the model receives `search.free_failed_paid_needs_consent`. A 402 reaches it as `search.insufficient_balance`.
+- Each successful paid request is counted in the usage view under its own source, `deepseek-search`.
+
+### Paid fallback for fetching pages
+
+`web_fetch` can fall back to DeepSeek's [Fetch API](https://api-docs.deepseek.com/guides/search) when this machine could not read a page.
+
+```toml
+[tools]
+web_fetch_backends = ["local", "deepseek_api"]
+```
+
+- `local` is the fetch from this machine and is free. It counts as not answering when the request fails, the status is not 2xx, or no text came back.
+- DeepSeek lists the same price as for search, $0.75 per 1,000 successful requests; a request is billed only when it returns page content.
+- The first time it would be used, a card shows the price and the address that would be sent to DeepSeek. Agreeing to search is not agreeing to fetch: always allow records `web_fetch_paid_allowed`.
+- An address on your own network is never sent. That covers loopback, private and link-local addresses, and names that resolve to them.
+- So are names that cannot be public, even when this machine cannot resolve them: a single label such as `jira`, or a name under `localhost`, `local`, `internal`, `lan`, `home.arpa`, `invalid`, `test`, `example` or `onion`. Both are refused with `fetch.internal_address`.
+- The whole address, including its query string, is sent to DeepSeek as written. The card shows it in full; after you choose always allow it is no longer shown each time.
+- Pages are third-party content. Each successful paid fetch is counted in the usage view as `deepseek-fetch`.
+
+## Letting a model watch a video file
+
+`read_video` has two ways to look at a video.
+
+- Frames: ffmpeg samples still images, which loses audio and the order of fast events.
+- Natively: the MP4 itself is handed to a model that watches video, with no ffmpeg in between.
+
+Native needs two declarations in the provider entry of your user config: the models, and how a file reaches them.
+
+```toml
+[[providers]]
+name = "dashscope"
+video_models = ["qwen3-vl-plus"]
+video_protocol = "inline_data_url"   # or "moonshot_file"
+```
+
+- `inline_data_url`: the file travels inside the request as a `video_url` data URL. DashScope's documentation (read 2026-10-17) limits the encoded string to under 10 MB, so Reasonix caps the file at 7.5 MB.
+- `moonshot_file`: the file is uploaded once (`POST /files`, `purpose = "video"`) and the request names it as `ms://<id>`.
+- Moonshot's file API (read 2026-10-17) allows 100 MiB per file and 10 GiB per organization, and does not say how long a file is kept.
+- A file the vendor no longer holds is uploaded again once. Files stay in your organization's storage until you delete them there.
+- A model that is not listed in `video_models`, or an entry with no `video_protocol`, keeps getting frames. Nothing is guessed from a model or host name; an explicit empty list means "no model here watches video".
+
+`read_video` takes `mode`: `auto` (default) sends natively when the selected model offers it and the file fits, otherwise samples frames and says why; `frames` always samples; `native` refuses with a code if the file cannot be handed over.
+
+- Only MP4 is sent natively; any other container is sampled into frames (`video.native_container_unsupported`).
+- To lower the size limit, set `[tools] video_native_max_bytes` in your user file; a project file cannot set it, and it can only be lower than the protocol's own limit. A refusal names which limit stopped it (`video.native_too_large`).
+- The model sees the video on the one request that follows the read. After it answers, later requests carry a one-line note instead, so a long file is not resent every turn; call `read_video` again to look again. The session file keeps a reference to the file, not its bytes.
+- The file is read from disk when the request is built. A file that changed since it was read is not sent (`video.file_changed`), and one that is gone is reported as `video.file_missing`.
+- Only a video this process's `read_video` handed out is ever opened; a reference from a restored or imported session is not, and is reported as `video.file_unavailable`.
+- Sub-agents do not get native video; they use frames.
+- Where there is no OS sandbox, `read_video` still asks before its first use, as before; choose always allow on that card or add a rule for `read_video` to stop being asked.
+
+Not built, and why:
+
+- Gemini: its video input is in the native Gemini API (inline data, the Files API, YouTube URLs); the OpenAI-compatible page does not list a video content part, and Reasonix reaches Gemini through that endpoint.
+- Zhipu GLM: the documentation shows `video_url` with a public HTTPS address only and says nothing about base64 or limits, so a local file cannot be sent without Reasonix uploading it somewhere.

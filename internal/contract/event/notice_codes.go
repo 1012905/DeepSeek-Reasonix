@@ -10,6 +10,7 @@ const (
 	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
 	NoticeCodeCheckpointRecordingFailed                         = "checkpoint_recording_failed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
+	NoticeCodePlanAutoApproved                                  = "plan_auto_approved"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
 	NoticeCodeExecutorHandoff                                   = "executor_handoff"
@@ -54,6 +55,8 @@ const (
 	NoticeCodeProjectMCPAwaitingApproval, NoticeCodeProjectMCPChanged = "project_mcp_awaiting_approval", "project_mcp_changed"
 	// MCP tools whose definitions are new or changed since approval, withheld from the model; Detail lists them.
 	NoticeCodeMCPToolsHeld = "mcp_tools_held"
+	// Definitions of a server the user follows that changed and were taken without asking; Detail lists them.
+	NoticeCodeMCPToolsFollowed = "mcp_tools_followed"
 	// A conversation opened from a 1.x log went on in a new session of its own.
 	NoticeCodeSessionContinuedFrom1x = "session_continued_from_1x"
 	// The user config names a default approval mode this build does not know; it loads as ask.
@@ -65,6 +68,16 @@ const (
 	NoticeCodeInputRefused = "input_refused"
 	// A turn handed its open list back to the user; Detail is the model's `need`, as it wrote it.
 	NoticeCodeAwaitUser = "await_user"
+	// A Goal paused on its completion check was retried by the host (user setting goal_auto_retry).
+	NoticeCodeGoalRetry = "goal_retry"
+	// The retry allowance ran out; the Goal waits for the user.
+	NoticeCodeGoalRetryGaveUp = "goal_retry_gave_up"
+	// Bash reached a host outside allowed_domains because the user's file says not to ask; Detail is the host.
+	NoticeCodeEgressAutoAllowed = "egress_auto_allowed"
+	// The user allowed no wait for an answer and the host continued the list on its own; Detail is the model's `need`.
+	NoticeCodeAwaitTimedOut = "await_timed_out"
+	// The host stopped continuing an unanswered list after several tries in a row; it waits for the user. Detail is the `need`.
+	NoticeCodeAwaitGaveUp = "await_gave_up"
 	// A slash command nothing resolves, refused rather than sent as prose.
 	NoticeCodeUnknownCommand = "unknown_command"
 	// The display currency preference changed; Detail is the stored value, "" for auto.
@@ -100,12 +113,18 @@ const (
 	NoticeCodeJobKilled = "job_killed"
 	// A background job failed; Detail is the JobNotice payload, its text the English fallback.
 	NoticeCodeJobFailed = "job_failed"
+	// A background job has been silent on its own output past the stalled threshold; Detail is the JobNotice payload with QuietSeconds, its text the English fallback.
+	NoticeCodeJobStalled = "job_stalled"
 	// The selected web search model cannot serve, so search is off; Detail is the provider/model, the code names why.
 	NoticeCodeWebSearchModelBadRef        = "web_search_model_bad_ref"
 	NoticeCodeWebSearchModelNotAdded      = "web_search_model_not_added"
 	NoticeCodeWebSearchModelRemoved       = "web_search_model_removed"
 	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
 	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
+	NoticeCodeWebSearchBackendFallback    = "web_search_backend_fallback"
+	NoticeCodeWebSearchBackendUnusable    = "web_search_backend_unusable"
+	NoticeCodeWebFetchBackendFallback     = "web_fetch_backend_fallback"
+	NoticeCodeWebFetchBackendUnusable     = "web_fetch_backend_unusable"
 )
 
 // A saved fold was not reused when its session was bound: the whole history is

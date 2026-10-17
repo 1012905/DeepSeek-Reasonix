@@ -1,0 +1,2 @@
+- 新增：本机读不到网页时，`web_fetch` 可回退到 DeepSeek 付费抓取接口，需先在卡片上同意；内网地址绝不外发。关联 #13541。
+- Added: when this machine cannot read a page, `web_fetch` can fall back to DeepSeek's paid Fetch API after you agree on a card; internal addresses are never sent. Refs #13541.

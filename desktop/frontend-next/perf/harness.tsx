@@ -30,6 +30,9 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/peerthreads.css";
+import "../src/styles/line.css";
+import "../src/styles/notice.css";
 import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
 import "../src/styles/skillpin.css";
@@ -47,7 +50,7 @@ import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
-import type { AgentPort, Appearance, HistoryMessage } from "../src/port/port";
+import type { AgentPort, Appearance, HistoryMessage, McpEntry } from "../src/port/port";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
@@ -92,10 +95,36 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
+  constructor() {
+    super();
+    if (!query.has("mcpactions")) return;
+    (this as unknown as { servers: McpEntry[] }).servers.push(
+      { name: "notes", state: "ready", enabled: true, transport: "stdio", tools: 2, description: "Notes the agent can search and add to.",
+        held: [{ name: "mcp__notes__search", class: "changed" }, { name: "mcp__notes__add", class: "added" }], heldDigest: "digest-1" },
+      { name: "wiki", state: "ready", enabled: true, transport: "http", tools: 4, followsChanges: true, description: "The team wiki." },
+    );
+  }
+
   // ?checkfail=<name> makes a plain test of that source answer 401.
   protected async answerCheck(name: string) {
     if (query.get("checkfail") !== name) return super.answerCheck(name);
     return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
+  }
+
+  // ?badprice=1: DeepSeek's flash price is a card the vendor's table does not have,
+  // under a pinned display currency.
+  async providers() {
+    const all = await super.providers();
+    if (!query.has("badprice")) return all;
+    return all.map((p) => p.name === "deepseek"
+      ? { ...p, officialPricing: true, modelPrices: { "deepseek-flash": { input: 0.3, output: 1.2, cacheHit: 0, currency: "USD", official: false } } }
+      : p);
+  }
+
+  async displayCurrency() {
+    const got = await super.displayCurrency();
+    return query.has("badprice") ? { ...got, mode: "CNY" as const, unconverted: [{ provider: "deepseek", model: "deepseek-flash", currency: "USD" }] } : got;
   }
 
   async browserTabs() {
@@ -103,7 +132,17 @@ class BenchPort extends MockPort {
     return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
   }
 
-  async workspaceFile(path: string) {
+  // ?grant=1 grants the workspace a folder, /library, holding one document.
+  async workspaceRoots() {
+    const roots = await super.workspaceRoots();
+    return query.has("grant") ? { ...roots, extra: ["/library"] } : roots;
+  }
+
+  async workspaceFile(path: string, root?: string) {
+    if (root) {
+      const content = "# Release plan\n\nThe plan lives in the library folder you granted this project.\n\n- freeze on Friday\n- tag after the checks are green\n- announce the next morning\n";
+      return { path, content, revision: "r1", root, readOnly: true };
+    }
     if (!query.has("doc") || !path.endsWith(".md")) return super.workspaceFile(path);
     const content = "# Install guide\n\nDownload the package for your system, then run the installer. It places the program in your user folder and does not need administrator rights.\n\nAfter the first start, open Settings and add a model service before you begin a conversation.";
     return { path, content, revision: "r1" };
@@ -149,11 +188,39 @@ class BenchPort extends MockPort {
   }
 
   async peers() {
+    if (query.has("peerthreads")) {
+      const states = ["waiting", "working", "replied", "declined"] as const;
+      return {
+        enabled: true,
+        peers: [],
+        held: [],
+        threads: states.map((state, i) => ({ key: `s-${i}`, title: ["文档整理", "发布脚本", "拾音", "旧迁移"][i], project: "rx-archive", sessionPath: `/sessions/w0-s${i}.jsonl`, state, since: "2026-10-16T10:00:00Z", messageId: `m-${i}` })),
+      };
+    }
     if (!query.has("peers")) return super.peers();
     return {
       enabled: true,
       peers: [{ key: "s-1a2b3c4d", title: "拾音", project: "rx-archive" }, { key: "s-5e6f7a8b", title: "文档整理", project: "docs" }],
       held: [{ id: "m-1", fromSession: "s-1a2b3c4d", fromTitle: "拾音", fromProject: "rx-archive", sentAt: "2026-10-16T12:00:00Z", body: "迁移脚本跑完了，结果在 out/report.md，请你核对第三节再继续。" }],
+    };
+  }
+
+  async webAccessSettings() {
+    if (!query.has("webaccess")) return super.webAccessSettings();
+    return {
+      search_backends: ["searxng", "deepseek_api"], searxng_url: "http://127.0.0.1:8080", search_paid_allowed: [],
+      fetch_backends: ["local", "deepseek_api"], fetch_paid_allowed: [],
+      known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"], paid_backends: ["deepseek_api"],
+      deepseek_api_ready: query.get("webaccess") !== "noready", path: "/Users/you/.reasonix/config.toml",
+    };
+  }
+
+  async peersSettings() {
+    if (!query.has("peerset")) return super.peersSettings();
+    return {
+      enabled: true, dispatch: true, applies: "next_turn" as const, pending: query.has("pending"), available: true,
+      path: "/Users/you/.reasonix/config.toml",
+      release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
     };
   }
 
@@ -202,13 +269,16 @@ class BenchPort extends MockPort {
       id: `seed-${i}`,
       // Lines the person queued: the panel leaves out the host's own queued
       // continuations, so a seed of those would draw nothing.
-      intent: "followup" as const,
+      intent: (QUEUE_IMAGES && i === 0 ? "steer" : "followup") as "steer" | "followup",
       state: "queued" as const,
+      ...(QUEUE_IMAGES && i === 0 ? { images: true } : {}),
       // 三种长度，各有各的对照：第一条没被截断（不该弹），第二条长到撞天花板
       // （浮层要自己滚），其余是寻常的被截断行。内核把 preview 截到 120 runes，
       // 所以第二条在队列里到不了 —— 但 .ovf 是通用的，天花板得有人证明它在。
       preview:
-        i === 0
+        QUEUE_IMAGES && i === 0
+          ? "@.reasonix/attachments/clipboard-20261017-141249.png reasonix 的你改好了？我这边看到的还是旧界面"
+          : i === 0
           ? "bash-1 — failed"
           : i === 1
             ? `bash-2 — failed: ${"error[E0308]: mismatched types in the trait implementation; ".repeat(14)}`
@@ -232,13 +302,22 @@ class BenchPort extends MockPort {
   private readonly jobsSince = Date.now() - 739_000;
 
   async status() {
-    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}) };
+    const usage = query.get("goalusage");
+    const goalRuntime = usage
+      ? { turnsUsed: 4, tokensUsed: 128_400, requestsUsed: 9, workDurationMs: 12 * 60_000, noProgressTurns: usage === "blocked" ? 2 : 0, ...(usage === "blocked" ? { stopCause: "goal_stuck", lastReason: "测试一直没有通过，改动没有让失败的数量减少" } : {}) }
+      : undefined;
+    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}), ...(usage ? { goalStatus: usage, goalRuntime } : {}) };
     if (STATUS_MS > 0) await new Promise((r) => setTimeout(r, STATUS_MS));
     if (!JOBS) return st;
     const jobs = Array.from({ length: JOBS }, (_, i) => ({
       id: `job-${i}`,
       kind: "bash",
       label: i === 0 ? "npm run tauri:test 2>&1 | Select-Object -Last 40" : `go test ./internal/... -run Case${i}`,
+      // ?jobnames=1 gives each job the name its caller wrote and the full command.
+      ...(query.has("jobnames") ? {
+        description: i === 0 ? "运行桌面端测试并只看最后 40 行输出" : `跑第 ${i} 组内核测试`,
+        detail: i === 0 ? "npm run tauri:test 2>&1 | Select-Object -Last 40" : `go test ./internal/... -run Case${i} -count=1 -timeout 10m`,
+      } : {}),
       status: this.stopped.has(`job-${i}`) ? "killed" : "running",
       startedAt: this.jobsSince,
     }));
@@ -305,6 +384,8 @@ const SWITCH_MS = Number(query.get("switchms") ?? 0);
 // ?queue= is how many lines are already waiting when the window opens.
 const QUEUE = Number(query.get("queue") ?? 0);
 const QUEUE_BODY = query.has("queuebody");
+// ?queueimages makes the first seeded line a steer that carries a picture.
+const QUEUE_IMAGES = query.has("queueimages");
 const JOBS = Number(query.get("jobs") ?? 0);
 // ?treems= holds every tree read back until that long after load, so the
 // window can be seen before the kernel has named a single folder.

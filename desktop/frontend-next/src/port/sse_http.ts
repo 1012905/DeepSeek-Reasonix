@@ -22,12 +22,13 @@ interface ReadSlot {
 export class SseHttp {
   private readonly reads = new Map<string, ReadSlot>();
 
-  // rt names the pane this port speaks for. The shell's bus carries every
-  // pane's frames, so a channel per runtime is what keeps two live
-  // conversations out of each other's transcript.
+  // rt names the pane this port speaks for: the shell's bus carries every
+  // pane's frames, so a channel per runtime keeps two conversations apart. mux
+  // is off when the transport is the relay's polled EventSource.
   constructor(
     protected readonly base = "",
     protected readonly rt = "",
+    protected readonly mux = true,
   ) {}
 
   // A refusal carries a code; only when it does not do we fall back to text.

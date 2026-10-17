@@ -1,6 +1,10 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
+
+/** What `subscribe` hands back: the disposer, and where the transport has one, a
+ *  way to give its connection up and take it again without losing the cursor. */
+export type Subscription = (() => void) & { pause?: () => void; resume?: () => void; holdsConnection?: () => boolean };
 import type { Attachment, DroppedRef, KeptText } from "./attachment";
 export { DeliveryError, HttpError };
 export type { DeliveryFault };
@@ -42,7 +46,7 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -127,6 +131,9 @@ export interface QueueItem {
   // Files this entry froze at the moment it was queued. Their presence is what
   // makes re-freezing meaningful; the entry quotes them as they were.
   refs?: { path?: string }[];
+  // A picture was frozen with it. Such a line cannot be slipped into a running
+  // turn as guidance; it is sent as a turn of its own when the current one ends.
+  images?: boolean;
 }
 
 /** Both limits bite: the queue refuses on count and on total bytes, and a
@@ -275,11 +282,15 @@ export interface AgentPort {
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
   subagentClaims(): Promise<SubagentClaimsSettings>;
   saveSubagentClaims(optimistic: boolean): Promise<SubagentClaimsSettings>;
+  planApproval(): Promise<PlanApprovalSettings>;
+  savePlanApproval(auto: boolean): Promise<PlanApprovalSettings>;
   writeLease(): Promise<WriteLeaseSettings>;
   saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
   peers(): Promise<PeersState>;
   sendPeerMessage(to: string, text: string): Promise<PeerReceipt>;
-  resolvePeerMessage(id: string, approve: boolean): Promise<void>;
+  resolvePeerMessage(id: string, approve: boolean, remember?: PeerRemember): Promise<void>;
+  peersSettings(): Promise<PeersSettings>;
+  savePeersSettings(edit: PeersSettingsEdit): Promise<PeersSettings>;
   displayCurrency(): Promise<DisplayCurrencySettings>;
   // Applies live: the kernel announces it and every ledger rebinds; no rebuild.
   saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
@@ -289,6 +300,8 @@ export interface AgentPort {
   saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings>;
   turnNarrationSettings(): Promise<TurnNarrationSettings>;
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings>;
+  webAccessSettings(): Promise<WebAccessSettings>;
+  saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
@@ -316,6 +329,9 @@ export interface AgentPort {
   // Approves the withheld definitions the digest names, then reconnects. The
   // kernel refuses a digest that no longer matches what it withholds.
   trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
+  // Blocks until the browser sign-in ends (up to five minutes); a refusal is a thrown coded error.
+  signinMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
+  followMcp(name: string, follow: boolean): Promise<{ name: string; follow: boolean; tools?: number }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;
   setMcpLoad(name: string, load: McpLoad): Promise<void>;
@@ -366,9 +382,6 @@ export interface AgentPort {
   // Changes only the fields the form owns. Saving a whole entry instead would
   // drop the per-model prices and effort lists it cannot show.
   editProvider(edit: ProviderEdit): Promise<void>;
-  setProviderWebSearch(name: string, on: boolean): Promise<void>;
-  setProviderThinking(name: string, on: boolean): Promise<void>;
-  setProviderContinuation(name: string, mode: string): Promise<void>;
   // Relabels the entries shown as one account; "" puts the derived name back.
   renameProvider(names: string[], displayName: string): Promise<void>;
 
@@ -377,7 +390,7 @@ export interface AgentPort {
   welcomeSeen(): Promise<boolean>;
   markWelcomed(): Promise<void>;
   removeProvider(name: string): Promise<ProviderRemoval>;
-  versions(): Promise<VersionHub>;
+  versions(refresh?: boolean): Promise<VersionHub>;
   pinVersion(version: string): Promise<void>;
   updateMode(): Promise<UpdateMode>;
   setUpdateMode(mode: UpdateMode): Promise<UpdateMode>;
@@ -448,6 +461,9 @@ export interface AgentPort {
   setWorkspace(path: string): Promise<void>;
   isolateWorkspace(selection?: import("./workspace").WorktreeSelection): Promise<void>;
   worktreeSources(): Promise<import("./workspace").WorktreeSources>;
+  prepareWorktree(id: string, selection: import("./workspace").WorktreeSelection): Promise<import("./workspace").WorktreePreparation>;
+  worktreePreparation(id: string): Promise<import("./workspace").WorktreePreparation>;
+  cancelWorktreePreparation(id: string): Promise<import("./workspace").WorktreePreparation>;
   // The native folder picker, or "" where there is none (a browser tab) or
   // when the user cancelled. Only the shell can open one.
   // The native folder picker: the chosen path, "" when the user cancelled, and
@@ -542,7 +558,7 @@ export interface AgentPort {
   stageChanges(req: StageRequest): Promise<void>;
   // Dot entries are left out unless hidden is set; VCS stores never appear.
   workspaceFiles(path?: string, query?: string, hidden?: boolean): Promise<WorkspaceFiles>;
-  workspaceFile(path: string): Promise<WorkspaceFile>;
+  workspaceFile(path: string, root?: string): Promise<WorkspaceFile>;
   saveWorkspaceFile(file: WorkspaceFile): Promise<WorkspaceFile>;
   // Where an image in the workspace is served, for a rendered document to show.
   /** root names a folder the user granted this workspace; absent means the workspace itself. */
@@ -568,7 +584,7 @@ export interface AgentPort {
   // model folds one ordered stream and folds nothing twice. The number belongs
   // to the stream, not to the model — several snapshots resume from the lowest
   // of their watermarks, because a duplicate folds and a gap does not.
-  subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>): () => void;
+  subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>): Subscription;
 
   // chips carries skill chips beside the line; without it the line is parsed
   // as typed, so a kernel that predates chips still runs a leading one.

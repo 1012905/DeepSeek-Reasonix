@@ -52,7 +52,7 @@ const subagentToolBoundarySummary = "Recursive agent/skill tools are exposed onl
 // maxConcurrentBackgroundTasks is the legacy writer-background fallback used
 // only when a TaskTool has no session scheduler (tests). Production boots
 // inject MaxParallelWriters via SubagentScheduler.
-const maxConcurrentBackgroundTasks = writeclaim.DefaultMaxParallelWriters
+const maxConcurrentBackgroundTasks = 3
 
 // TaskTool spawns a sub-agent in its own session for a focused sub-task. The
 // sub-agent runs with a filtered tool whitelist and the same step budget shape
@@ -102,6 +102,10 @@ type TaskTool struct {
 	// bashSandboxEnforced reports whether OS sandbox can honour write roots
 	// for bash inside path-bound writer sub-agents.
 	bashSandboxEnforced func() bool
+	// childTools names the tools a child gains from the model it runs on, beyond
+	// what the parent holds: a tool the parent's model has no use for is not in
+	// the parent's registry, so a child on another model would never see it.
+	childTools func(modelRef string) []tool.Tool
 	// mutationObserver is shared with spawned sub-agents for checkpoint capture.
 	mutationObserver *checkpoint.MutationObserver
 	// recoveryGate is the shared Auto Guard boundary for
@@ -300,6 +304,14 @@ func (t *TaskTool) WithProfileConfigResolvers(model, effort func(profile string)
 // the same write roots under the OS sandbox.
 func (t *TaskTool) WithBashSandboxEnforced(fn func() bool) *TaskTool {
 	t.bashSandboxEnforced = fn
+	return t
+}
+
+// WithChildTools supplies the tools a child gets because of its own model (an
+// image reader for a model that reads images). The parent's tool block is not
+// touched; only the child's registry is.
+func (t *TaskTool) WithChildTools(fn func(modelRef string) []tool.Tool) *TaskTool {
+	t.childTools = fn
 	return t
 }
 
@@ -555,11 +567,11 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// it and widen it with the user's answer; the audit at the end reads the
 	// same object, so a path the user granted is not reported as an escape.
 	writeGrant := writeclaim.NewWriteGrant(spec.Grant.WritePaths)
-	subReg, err := t.subRegistryFor(&spec, childDepth, writeGrant)
+	modelRef, effortRef := agent.VisionRefFor(ctx, spec.Worker.Model), agent.VisionEffortFor(ctx, spec.Worker.Model, spec.Worker.Effort)
+	subReg, err := t.childRegistry(&spec, childDepth, writeGrant, modelRef)
 	if err != nil {
 		return "", err
 	}
-	modelRef, effortRef := agent.VisionRefFor(ctx, spec.Worker.Model), agent.VisionEffortFor(ctx, spec.Worker.Model, spec.Worker.Effort)
 	usageModelRef := t.usageModelRef(modelRef, effortRef)
 	parentID, _, _, _ := agent.CallContext(ctx)
 	prov, pricing, ctxWin, err := t.resolveSubSessionRuntime(modelRef, effortRef)

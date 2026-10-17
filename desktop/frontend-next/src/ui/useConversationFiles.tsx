@@ -3,6 +3,7 @@ import type { AgentPort } from "../port/port";
 import { host } from "../port/host";
 import type { LocalRefs } from "./Markdown";
 import { GRANTED, conversationFile, isLocalPathShape } from "./filelinks";
+import { GRANTED_FILE, grantedFileKey } from "./grantedfiles";
 import { WorkbenchFileMenu, absoluteWorkspacePath, type FileMenu } from "./WorkbenchFileMenu";
 
 export function useConversationFiles(port: AgentPort, root: string, remote: boolean, shown: boolean, reveal: () => void, fail: (e: unknown) => void) {
@@ -53,12 +54,19 @@ export function useConversationFiles(port: AgentPort, root: string, remote: bool
       const held = grantedMark(src);
       return held ? image(held) : null;
     }
+    // A path in text may become a link when it is in the workspace or in a granted folder.
+    const linkable = (href: string) => path(href) ?? (isLocalPathShape(href) ? grantedFileKey(granted, href) : null);
     return {
       path,
+      linkable,
       title: (href) => { const file = path(href); return file ? absoluteWorkspacePath(root, file) : ""; },
       link: (href) => {
         const file = path(href);
-        return file ? () => { setRequest({ path: file, port, root }); reveal(); } : null;
+        if (file) return () => { setRequest({ path: file, port, root }); reveal(); };
+        const held = href.startsWith(`${GRANTED_FILE}/`) || href.includes(`/${GRANTED_FILE}/`)
+          ? decodeURIComponent(href.slice(href.indexOf(GRANTED_FILE)))
+          : isLocalPathShape(href) ? grantedFileKey(granted, href) : null;
+        return held ? () => { setRequest({ path: held, port, root }); reveal(); } : null;
       },
       image,
       granted: grantedMark,

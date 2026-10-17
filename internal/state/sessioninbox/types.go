@@ -79,6 +79,7 @@ var (
 	ErrClosed              = errors.New("inbox is closed")
 	ErrEmpty               = errors.New("inbox item body is empty")
 	ErrPaused              = errors.New("inbox is paused")
+	ErrForeignRun          = errors.New("sessioninbox.foreign_run")
 	ErrIdempotencyConflict = errors.New("idempotency key was already used for different input")
 )
 
@@ -102,9 +103,12 @@ type InboxItemMeta struct {
 	Idempotency string       `json:"idempotencyKey,omitempty"`
 	Origin      PromptOrigin `json:"origin,omitempty"`
 	Refs        []RefSummary `json:"refs,omitempty"`
-	BlockReason string       `json:"blockReason,omitempty"`
-	BlockCode   BlockCode    `json:"blockCode,omitempty"`
-	RunID       string       `json:"runId,omitempty"`
+	// Images is true when the item froze a picture for direct input: such an
+	// item cannot be a mid-turn steer and waits for the turn to end.
+	Images      bool      `json:"images,omitempty"`
+	BlockReason string    `json:"blockReason,omitempty"`
+	BlockCode   BlockCode `json:"blockCode,omitempty"`
+	RunID       string    `json:"runId,omitempty"`
 }
 
 // RefSummary is a short reference summary stored in the manifest.
@@ -210,6 +214,10 @@ type EnqueueRequest struct {
 	SessionID   string
 }
 
+// NoItemLimit as Limits.MaxItems queues without counting; the byte limits still
+// bound the store.
+const NoItemLimit = -1
+
 // Limits configures capacity. Zero fields use defaults.
 type Limits struct {
 	MaxItems      int
@@ -218,7 +226,7 @@ type Limits struct {
 }
 
 func (l Limits) withDefaults() Limits {
-	if l.MaxItems <= 0 {
+	if l.MaxItems == 0 {
 		l.MaxItems = DefaultMaxItems
 	}
 	if l.MaxItemBytes <= 0 {

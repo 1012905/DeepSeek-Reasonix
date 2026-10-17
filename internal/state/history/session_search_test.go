@@ -25,7 +25,12 @@ func saveSession(t *testing.T, path string, messages ...provider.Message) {
 
 func TestSearchSessionsFindsWordsInAnyIndexedWorkspaceOncePerSession(t *testing.T) {
 	prevOpen := processHistoryCatalog.open
-	t.Cleanup(func() { processHistoryCatalog = indexedCatalogManager{open: prevOpen} })
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = processHistoryCatalog.close(ctx)
+		processHistoryCatalog = indexedCatalogManager{open: prevOpen}
+	})
 	processHistoryCatalog.open = func(ctx context.Context, opts historycatalog.Options) (*historycatalog.Catalog, error) {
 		opts.Path, opts.InMemory = "", true
 		return historycatalog.Open(ctx, opts)

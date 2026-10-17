@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useModalFocus } from "./useModalFocus";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
@@ -8,6 +9,7 @@ import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { ICON, NAV, SECTION_NAME } from "./prefsnav";
 import { Group, SCOPE_SAID } from "./Group";
+import { PlanApproval } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -31,6 +33,7 @@ import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
+import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
@@ -141,6 +144,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   const [memCount, setMemCount] = useState(0);
   const [ruleCount, setRuleCount] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+  useModalFocus(root);
   const veiled = useRef(false);
   const reloadExt = useCallback(() => {
     const refresh = ++extRefresh.current;
@@ -411,7 +415,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   <span className="cost">
                     {[
                       t(SCOPE_SAID[e.scope]),
-                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : "",
+                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : e.apply === "next-turn" ? t("下个回合起生效") : "",
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </button>
@@ -578,6 +582,12 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 </div>
                 <p className="note">{approvalNote(status?.toolApprovalMode)}</p>
               </Group>
+              <Group id="plan-approval"
+                title={t("计划批准")}
+                hint={t("计划模式提交计划后，默认等你点批准才开始执行。长时间无人值守的任务可以改成自动批准。")}
+              >
+                <PlanApproval port={port} />
+              </Group>
               <Group id="rules"
                 title={t("明确的规则")}
                 hint={t("上一项决定是否请求确认，此处决定哪些操作始终禁止、哪些无需确认。修改会重建运行时，任务运行期间无法变更。")}
@@ -602,6 +612,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               >
                 <BrowserTools port={port} onChanged={onChanged} />
               </Group>
+              <WebAccess port={port} />
               <SessionCoordination port={port} onChanged={onChanged} />
             </>
           )}

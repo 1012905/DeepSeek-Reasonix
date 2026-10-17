@@ -107,7 +107,12 @@ export class SseExtensions extends SseLook {
     });
     if (!res.ok) await SseExtensions.fail(`/plugins/${encodeURIComponent(name)}/export`, res);
     const required = (res.headers.get("X-Reasonix-Required-Env") ?? "").split(",").filter(Boolean);
-    const url = URL.createObjectURL(await res.blob());
+    const blob = await res.blob();
+    // A shell with a save dialog puts the archive where it is asked to; the
+    // anchor below is the browser's own way and the only one a tab has.
+    const saved = await host().saveBytes(`${name}.zip`, new Uint8Array(await blob.arrayBuffer()));
+    if (saved !== null) return { required, savedTo: saved || undefined };
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `${name}.zip`;

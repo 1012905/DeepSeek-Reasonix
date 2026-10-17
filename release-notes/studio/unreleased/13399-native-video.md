@@ -1,0 +1,2 @@
+- 新增：声明 `video_models` 和 `video_protocol` 后，`read_video` 可把 MP4 原生交给能看视频的模型（通义内联、Kimi 上传），卡片显示发给了哪个模型。关联 #13399。
+- Added: declare `video_models` and `video_protocol` and `read_video` hands an MP4 to a model that watches video (DashScope inline, Kimi upload); the card shows which. Refs #13399.

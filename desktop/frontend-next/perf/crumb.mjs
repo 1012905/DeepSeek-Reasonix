@@ -1,4 +1,4 @@
-// The session title sits right beside the project name in the title bar, at every width, and the
+// The session title sits right beside the project and checkout in the title bar, at every width, and the
 // project name still gives way (ellipsis) before the title is pushed off. Layout is a real-browser question.
 import { chromium } from "playwright";
 
@@ -22,9 +22,11 @@ try {
       const range = document.createRange();
       range.selectNodeContents(projEl);
       const text = range.getBoundingClientRect();
-      return { gap: Math.round(sep.left - text.right), titleRight: Math.round(title.right) };
+      const tags = [...document.querySelectorAll(".chrome .crumb .isolab")].filter((el) => !el.hidden);
+      const edge = tags.at(-1)?.getBoundingClientRect().right ?? text.right;
+      return { gap: Math.round(sep.left - edge), titleRight: Math.round(title.right) };
     });
-    check(`${width}px: the title follows the project name`, at.gap >= 0 && at.gap <= 12, `gap ${at.gap}px`);
+    check(`${width}px: the title follows the project and checkout`, at.gap >= 0 && at.gap <= 12, `gap ${at.gap}px`);
     check(`${width}px: the title stays on screen`, at.titleRight <= width, `right edge ${at.titleRight}px`);
     const long = await page.evaluate(() => {
       document.querySelector(".chrome .crumb-proj").textContent = "a-very-long-project-folder-name-".repeat(8);

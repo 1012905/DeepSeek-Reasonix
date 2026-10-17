@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/base/i18n"
 	"reasonix/internal/platform/feedback"
 )
 
@@ -27,14 +28,14 @@ func feedbackArgItems(prior []string) []SlashItem {
 		return nil
 	}
 	return []SlashItem{
-		{Label: "bug", Insert: "bug", Hint: "report something broken"},
-		{Label: "idea", Insert: "idea", Hint: "suggest an improvement"},
-		{Label: "question", Insert: "question", Hint: "ask about usage"},
-		{Label: "other", Insert: "other", Hint: "anything else"},
-		{Label: "list", Insert: "list", Hint: "show your feedback and its status"},
-		{Label: "show", Insert: "show", Hint: "show the thread under one report"},
-		{Label: "reply", Insert: "reply", Hint: "answer the maintainers"},
-		{Label: "name", Insert: "name", Hint: "set the nickname reports go out under"},
+		{Label: "bug", Insert: "bug", Hint: i18n.M.ArgFeedbackBug},
+		{Label: "idea", Insert: "idea", Hint: i18n.M.ArgFeedbackIdea},
+		{Label: "question", Insert: "question", Hint: i18n.M.ArgFeedbackQuestion},
+		{Label: "other", Insert: "other", Hint: i18n.M.ArgFeedbackOther},
+		{Label: "list", Insert: "list", Hint: i18n.M.ArgFeedbackList},
+		{Label: "show", Insert: "show", Hint: i18n.M.ArgFeedbackShow},
+		{Label: "reply", Insert: "reply", Hint: i18n.M.ArgFeedbackReply},
+		{Label: "name", Insert: "name", Hint: i18n.M.ArgFeedbackName},
 	}
 }
 

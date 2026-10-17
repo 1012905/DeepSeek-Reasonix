@@ -55,15 +55,12 @@ export function Chrome({ port, status, title, steer, onSettings, account, host, 
   const openProject = () => {
     if (hub && root) void hub.openWorkspace(root).catch((e) => onError?.(e));
   };
-  // Only for the "隔离" tag: the folder list and the switch itself moved to the
-  // sidebar, where adding one and opening one are the same gesture.
   const [ws, setWs] = useState<WorkspaceInfo | null>(null);
   useEffect(() => {
-    if (!port) {
-      setWs(null);
-      return;
-    }
-    port.workspaces().then(setWs).catch(() => setWs(null));
+    let current = true;
+    setWs(null);
+    if (port) port.workspaces().then((value) => { if (current) setWs(value); }).catch(() => { if (current) setWs(null); });
+    return () => { current = false; };
   }, [port, root]);
 
   const gathered = useFolded("bar");
@@ -87,29 +84,29 @@ export function Chrome({ port, status, title, steer, onSettings, account, host, 
     <div className="chrome" onDoubleClick={zoomOnTitleBar}>
 
       <div className="crumb">
-        <button
-          type="button"
-          className="crumb-folder"
-          data-action="chrome.open-project"
-          aria-label={t("打开项目文件夹")}
-          title={t("打开项目文件夹")}
-          disabled={!canOpenProject}
-          onClick={openProject}
-        >
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
-        </button>
-        <span className="crumb-proj" title={root}>
-          {project}
+        <span className="crumb-context">
+          <button
+            type="button"
+            className="crumb-folder"
+            data-action="chrome.open-project"
+            aria-label={t("打开项目文件夹")}
+            title={t("打开项目文件夹")}
+            disabled={!canOpenProject}
+            onClick={openProject}
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
+          </button>
+          <span className="crumb-proj" title={root}>
+            {project}
+          </span>
+          <span className="isolab" hidden={!ws || ws.current !== root} title={root}>
+            {ws?.isolated ? t("隔离目录") : t("原目录")}
+          </span>
+          <span className="isolab hostlab" hidden={!host}>
+            {host}
+          </span>
+          <span className="crumbsep">/</span>
         </span>
-        <span className="isolab" hidden={!ws?.isolated}>
-          {t("隔离")}
-        </span>
-        {/* Same slot as the isolated tag: both answer "this workspace is not an
-            ordinary folder on this machine", so they read as one language. */}
-        <span className="isolab hostlab" hidden={!host}>
-          {host}
-        </span>
-        <span className="crumbsep">/</span>
         <b title={status?.sessionPath}>{sessionName(title, status?.sessionPath)}</b>
       </div>
 

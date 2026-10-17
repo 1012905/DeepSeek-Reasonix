@@ -29,6 +29,7 @@ const (
 	tsWorkspaceFile = "desktop/frontend-next/src/port/workspace.ts"
 	tsLookFile      = "desktop/frontend-next/src/port/look.ts"
 	tsHubFile       = "desktop/frontend-next/src/port/hub.ts"
+	tsMuxFile       = "desktop/frontend-next/src/port/mux.ts"
 	tsChartFile     = "desktop/frontend-next/src/ui/chart/spec.ts"
 	tsSurfaceFile   = "desktop/frontend-next/src/ui/surface/spec.ts"
 )
@@ -42,6 +43,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/worktree/source.go", "Source", tsWorkspaceFile, "WorktreeSource"},
 	{"internal/frontend/serve/workspace_source.go", "worktreeSourcesView", tsWorkspaceFile, "WorktreeSources"},
 	{"internal/frontend/serve/workspace_source.go", "worktreeSelection", tsWorkspaceFile, "WorktreeSelection"},
+	{"internal/session/control/workspace_preparation.go", "WorkspacePreparationStatus", tsWorkspaceFile, "WorktreePreparation"},
 	{"internal/contract/surfacespec/action_message.go", "Action", "desktop/frontend-next/src/port/surface.ts", "SurfaceAction"},
 	{"internal/session/control/surface_actions.go", "SurfaceActionRequest", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRequest"},
 	{"internal/session/control/surface_actions.go", "SurfaceActionRecord", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRecord"},
@@ -68,6 +70,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/changes.go", "gitHistoryView", tsWorkspaceFile, "GitHistory"},
 	{"internal/platform/gitstatus/history.go", "Commit", tsWorkspaceFile, "GitCommit"},
 	{"internal/contract/eventwire/wire.go", "AskOrigin", tsWireFile, "AskOrigin"},
+	{"internal/session/control/goal_runtime_view.go", "GoalRuntimeView", tsSessionFile, "GoalRuntime"},
 	{"internal/contract/agentgraph/graph.go", "Node", tsWireFile, "GraphNode"},
 	{"internal/contract/agentgraph/graph.go", "Edge", tsWireFile, "GraphEdge"},
 	{"internal/contract/agentgraph/graph.go", "Delta", tsWireFile, "GraphDelta"},
@@ -94,6 +97,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
 	{"internal/frontend/serve/session_usage.go", "SessionUsage", tsSessionFile, "SessionUsage"},
 	{"internal/frontend/serve/jobs.go", "JobOutput", tsSessionFile, "JobOutput"},
+	// The background-job list. A name or full command the page cannot read is
+	// a task it can only call by its short preview.
+	{"internal/tools/jobs/jobs_view.go", "View", tsSessionFile, "JobEntry"},
 	{"internal/frontend/serve/session_usage.go", "SourceUsage", tsSessionFile, "SourceUsage"},
 	// The agent's tabs. The target id is what the window draws a view by, so a
 	// tab the page cannot read one for is a tab it cannot show.
@@ -118,6 +124,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/browser_settings.go", "BrowserToolsSettings", tsBoundaryFile, "BrowserToolsSettings"},
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
 	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
+	{"internal/session/control/plan_approval_settings.go", "PlanApprovalSettings", tsBoundaryFile, "PlanApprovalSettings"},
+	{"internal/session/control/peer_settings.go", "PeersSettings", tsBoundaryFile, "PeersSettings"},
+	{"internal/session/control/peer_settings.go", "PeerReleased", tsBoundaryFile, "PeerProject"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},
@@ -164,6 +173,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/remote_browse.go", "RemoteFolder", tsRemoteFile, "RemoteFolder"},
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
+	{"internal/frontend/serve/hub_mux.go", "muxOpened", tsMuxFile, "MuxOpened"},
+	{"internal/frontend/serve/hub_mux.go", "muxAttachRequest", tsMuxFile, "MuxAttachRequest"},
+	{"internal/frontend/serve/hub_mux.go", "muxEnvelopeView", tsMuxFile, "MuxEnvelope"},
 	{"internal/frontend/serve/hub_tree.go", "treeSession", tsHubFile, "TreeSession"},
 	// The folder's true size beside the rows loaded. A window that cannot read
 	// the total labels a truncated list as the whole history.

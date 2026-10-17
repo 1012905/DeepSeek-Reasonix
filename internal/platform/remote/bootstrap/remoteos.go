@@ -25,6 +25,7 @@ type remoteOS interface {
 	// HomeRelative strips a leading ~ separator, reporting whether there was one.
 	HomeRelative(p string) (string, bool)
 	Absolute(p string) (string, bool)
+	LaunchScript(spec LaunchSpec, p StatePaths) (string, []byte)
 	Launch(spec LaunchSpec, p StatePaths) string
 	Fetch(d releaseasset.CLIDownload, dir, bin string) string
 	Downloader() string

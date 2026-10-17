@@ -1,0 +1,2 @@
+- 会话队列不再限制排队 64 条；想限制时在用户配置里设 `agent.max_queued_inputs`，队列的字节上限仍然生效。关联 #13526。
+- The session queue no longer stops at 64 waiting prompts; set `agent.max_queued_inputs` in your user config to limit it, and the queue's byte limits still apply. Refs #13526.

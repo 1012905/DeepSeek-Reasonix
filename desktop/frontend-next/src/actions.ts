@@ -63,11 +63,15 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.live-grace", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.legacy-sessions", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.open-session-limit", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.live-stream-budget", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.session-quick-actions", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.esc-stop", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.configure", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-cancel", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "workspace.prepare-details", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-edit", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-search", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-navigate", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-select", kind: "view", target: "none", proof: "interaction" },
@@ -144,6 +148,7 @@ export const ACTIONS: UIAction[] = [
   { id: "tool.stop", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "session.open-match", kind: "navigation", target: "entity", proof: "interaction" },
   { id: "job.cancel", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "job.tip", kind: "view", target: "entity", proof: "interaction" },
   { id: "job.view", kind: "view", target: "entity", proof: "interaction" },
   { id: "job.close", kind: "view", target: "none", proof: "interaction" },
   { id: "plan.mode", kind: "kernel-mutation", target: "none", proof: "interaction" },
@@ -196,6 +201,9 @@ export const ACTIONS: UIAction[] = [
   { id: "mcp.enabled", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.retry", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "mcp.trust", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.signin", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.follow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.unfollow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.remove", kind: "destructive", target: "entity", proof: "interaction" },
   { id: "mcp.load", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.tool-search", kind: "view", target: "entity", proof: "interaction" },
@@ -235,6 +243,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.contact", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.capture", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "side.collapse", kind: "view", target: "none", proof: "interaction" },
   { id: "side.toggle", kind: "view", target: "none", proof: "interaction" },
   { id: "side.quote", kind: "view", target: "none", proof: "interaction" },
   { id: "side.unquote", kind: "view", target: "none", proof: "interaction" },
@@ -407,6 +416,7 @@ export const ACTIONS: UIAction[] = [
   // Reached from the workspace tree and from the remote host tree, which are
   // two surfaces for one intent; opening an existing session is not starting a
   // new one, and the host asked differs.
+  { id: "peer.thread-open", kind: "navigation", target: "none", proof: "interaction" },
   { id: "session.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "remote.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Asking a machine whether it answers. Nothing on either side changes, and
@@ -541,7 +551,12 @@ export const ACTIONS: UIAction[] = [
   // two different things a reader wants, however alike they look in CSS.
   { id: "appearance.language", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.zoom", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.backend", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.move", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.consent", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.searxng-url", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.measure", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.background", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.font", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
@@ -634,11 +649,16 @@ export const ACTIONS: UIAction[] = [
   { id: "skills.update-apply", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "subagent-claims.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "write-lease.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "plan-approval.auto", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.target", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.text", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.expand", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.send", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.approve", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.approve-project", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.enable", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.dispatch", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.release-revoke", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "peers.deny", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
@@ -661,9 +681,6 @@ export const ACTIONS: UIAction[] = [
   { id: "stall.dismiss", kind: "view", target: "none", proof: "interaction" },
   { id: "provider.remove", kind: "destructive", target: "entity", proof: "interaction" },
   { id: "provider.protocol", kind: "kernel-mutation", target: "entity", proof: "interaction" },
-  { id: "provider.web-search", kind: "kernel-mutation", target: "entity", proof: "interaction" },
-  { id: "provider.thinking", kind: "kernel-mutation", target: "entity", proof: "interaction" },
-  { id: "provider.continuation", kind: "kernel-mutation", target: "entity", proof: "interaction" },
 
   // ── The two side panels. Reached from the keyboard here, and from each
   //    gutter's own grip, which this pass has not annotated yet.

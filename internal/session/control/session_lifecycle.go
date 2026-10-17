@@ -533,6 +533,8 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 	// controller; make teardown idempotent so a duplicate Close cannot re-fire
 	// SessionEnd hooks or re-run cleanup. The first caller's jobsMode wins.
 	c.closeOnce.Do(func() {
+		c.goalRetry.cancel()
+		c.awaitResume.cancel()
 		c.mu.Lock()
 		started := c.startedOnce
 		cancel := c.gate.cancel

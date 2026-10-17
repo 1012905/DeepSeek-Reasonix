@@ -9,7 +9,7 @@ import { categoryOf, labelFor, mcpOrigin, runLabelFor } from "../icons";
 import { Sym, glyphFor } from "../Sym";
 import { GOAL_STATUS, argOf, goalUpdate, shortArgs } from "../args";
 import { Cost } from "../Cost";
-import { seconds, tokens } from "../../i18n/format";
+import { bytes, seconds, tokens } from "../../i18n/format";
 import { currentStep, parsePlan, stepDone } from "../../state/session";
 import { DiffView } from "./DiffView";
 import { BringCall } from "./BringCall";
@@ -233,6 +233,7 @@ export function ToolCard({
             <ToolOutput name={shown} text={tool.output} bound={tool.bound} id={tool.id} />
           )}
           <ToolShots images={tool.images} />
+          <ToolVideos videos={tool.videos} />
         </>
       )}
       {/* The error stays outside the takeover: an extension may redraw what
@@ -279,7 +280,6 @@ export function ToolCard({
     >
       <div className="g">
         <Sym glyph={glyphFor(shown)} done={settling.pop && !bad} />
-        <span className="line" />
       </div>
       <div className="c">
         {hasBody ? (
@@ -292,6 +292,23 @@ export function ToolCard({
         )}
         {running && onStop && tool.id && <StopCall onStop={onStop} />}
       </div>
+    </div>
+  );
+}
+
+function ToolVideos({ videos }: { videos?: NonNullable<Tool["videos"]> }) {
+  if (!videos?.length) return null;
+  return (
+    <div className="tvideos">
+      {videos.map((v, i) => (
+        <div key={v.name + i} className="tvideo">
+          {t("视频 {name}（{detail}）已原生发送给 {model}", {
+            name: v.name,
+            detail: [bytes(v.size), v.durationMs ? seconds(v.durationMs) : ""].filter(Boolean).join(" · "),
+            model: v.model,
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -333,7 +350,6 @@ export function NestedCall({ tool, whole = false }: { tool: Tool; whole?: boolea
     <div className="call" data-call={tool.id || undefined} data-k={KINDED.has(categoryOf(shown)) ? categoryOf(shown) : undefined}>
       <div className="g">
         <Sym glyph={glyphFor(shown)} />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

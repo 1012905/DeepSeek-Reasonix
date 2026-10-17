@@ -5,6 +5,7 @@ import { arrowTabs } from "./tablist";
 import { pinToViewport } from "./place";
 import { useMarker } from "./marker";
 import { useDismiss } from "./dismiss";
+import { PeerThreadMark } from "./peerthreads";
 
 export interface TabView {
   rt: RuntimeView;
@@ -182,6 +183,7 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
           {/* Which machine is running this. Panes from two hosts sit side by
               side, and a command lands wherever the focused tab points. */}
           {rt.host && <span className="ptab-host">{rt.host}</span>}
+          <PeerThreadMark path={rt.sessionPath} />
           <button
             className="ptab-x"
             data-action="pane.close"

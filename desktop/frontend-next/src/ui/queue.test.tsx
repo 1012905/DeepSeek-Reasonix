@@ -166,6 +166,18 @@ describe("what the pending strip says back", () => {
     expect(html).not.toMatch(/aria-label="字节"[^>]*data-full/);
   });
 
+  it("draws no item meter when the queue has no item limit, only the byte one under pressure", () => {
+    const html = draw(snapshot({ capacity: { items: 300, maxItems: 0, bytes: 60 << 20, maxBytes: 64 << 20 } }));
+    expect(html).not.toContain("300/0");
+    expect(html).not.toMatch(/aria-label="条目" aria-valuemin/);
+    expect(html).toMatch(/role="meter" aria-label="字节"/);
+  });
+
+  it("shows no capacity strip for a long unlimited queue with room in the bytes", () => {
+    const html = draw(snapshot({ capacity: { items: 300, maxItems: 0, bytes: 3174, maxBytes: 64 << 20 } }));
+    expect(html).not.toContain('class="qcap"');
+  });
+
   it("renders nothing when there is nothing waiting and the queue is not held", () => {
     expect(draw(snapshot({ items: [], capacity: { items: 0, maxItems: 64, bytes: 0, maxBytes: 64 << 20 } }))).toBe("");
   });

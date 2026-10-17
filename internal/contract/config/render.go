@@ -82,7 +82,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 
 		renderProgressWatchSection(&b, c)
 		renderAutoArchiveSection(&b, c)
-		renderServeSection(&b, c)
+		renderServeAndPeers(&b, c)
 		b.WriteString("[notifications]\n")
 		fmt.Fprintf(&b, "enabled = %v   # system notifications for CLI and desktop turns; default off\n", c.Notifications.Enabled)
 		fmt.Fprintf(&b, "turn_done = %v   # notify when a turn finishes\n", c.Notifications.TurnDone)
@@ -199,7 +199,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		b.WriteString("# plan_mode_read_only_commands = [\"gh issue view\"]   # legacy compatibility only; Plan bash uses Permissions\n")
 	}
 	renderEmbeddedDiffDetection(&b, c)
-	renderAskTimeout(&b, c)
+	renderUnattended(&b, c)
 	renderAgentDelegation(&b, c)
 	if c.Agent.SubagentEffort != "" {
 		fmt.Fprintf(&b, "subagent_effort = %q   # default effort for subagent entry points\n", c.Agent.SubagentEffort)
@@ -211,11 +211,10 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# subagent_efforts = { review = \"max\", task = \"high\" }   # per-tool/skill effort overrides\n")
 	}
-	agentSetting(&b, "max_subagent_depth", c.Agent.MaxSubagentDepth, defaults.Agent.MaxSubagentDepth, "nested subagent delegation depth; 1 restores the old single-layer boundary")
-	agentSetting(&b, "max_subagent_concurrency", c.Agent.MaxSubagentConcurrency, defaults.Agent.MaxSubagentConcurrency, "session-wide sub-agent concurrency (task/fleet/skills)")
-	agentSetting(&b, "max_parallel_writers", c.Agent.MaxParallelWriters, defaults.Agent.MaxParallelWriters, "concurrent writers with non-overlapping write_paths")
+	renderConcurrencyLimits(&b, c, defaults)
 	agentSetting(&b, "subagent_claims", c.Agent.SubagentClaims, defaults.Agent.SubagentClaims, "optimistic: a sub-agent that declared no write_paths holds only the path it is writing, not the whole workspace; user file only")
 	agentSetting(&b, "write_lease", c.Agent.WriteLease, defaults.Agent.WriteLease, "optimistic: a writer that declared no path does not hold the whole workspace against other sessions; user file only")
+	agentSetting(&b, "plan_approval", c.Agent.PlanApproval, defaults.Agent.PlanApproval, "auto: the plan card answers itself and execution starts; user file only")
 	agentSetting(&b, "host_verification", c.Agent.HostVerification, defaults.Agent.HostVerification, "off: the host does not hold a turn open to ask for a check, a review or a sign-off on files it changed; the receipt still says what was and was not checked; user file only")
 	if c.Agent.OutputStyle != "" {
 		fmt.Fprintf(&b, "output_style = %q   # persona/tone folded into the prompt\n", c.Agent.OutputStyle)
@@ -242,7 +241,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	fmt.Fprintf(&b, "mcp_startup_timeout_seconds = %d   # background initialize + tools/list safety cap; per-plugin overrides may raise it\n", c.MCPStartupTimeoutSeconds())
 	fmt.Fprintf(&b, "mcp_call_timeout_seconds = %d   # default MCP call safety cap; per-plugin/tool overrides may raise it\n", c.MCPCallTimeoutSeconds())
 	fmt.Fprintf(&b, "protect_changed_files = %v   # refuse a whole-file write over a change made since the agent last saw the file\n", c.Tools.ChangedFilesProtected())
-	fmt.Fprintf(&b, "browser_tools = %v   # built-in browser tools; the browser starts on first use\n\n", c.Tools.BrowserToolsEnabled())
+	fmt.Fprintf(&b, "browser_tools = %v   # built-in browser tools; the browser starts on first use\n%s\n", c.Tools.BrowserToolsEnabled(), mcpResourcesLine(c.Tools))
 	renderMCPLoadSection(&b, c.Tools.MCPLoad)
 
 	b.WriteString("[tools.background_jobs]\n")
@@ -308,9 +307,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# allowed_domains = [\"github.com\", \"*.npmjs.org\"]   # limit bash egress to these hosts (macOS, Linux)\n")
 	}
-	if len(c.Sandbox.DeniedDomains) > 0 {
-		fmt.Fprintf(&b, "denied_domains = %s\n", renderStringArray(c.Sandbox.DeniedDomains))
-	}
+	renderDomainLists(&b, c.Sandbox)
 	b.WriteString("\n")
 
 	if scope != RenderScopeProject {
@@ -543,7 +540,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 		(c.Tools.MCPStartupTimeoutSeconds != nil && *c.Tools.MCPStartupTimeoutSeconds > 0) ||
 		(c.Tools.MCPCallTimeoutSeconds != nil && *c.Tools.MCPCallTimeoutSeconds > 0) ||
 		c.Tools.ProtectChangedFiles != nil ||
-		c.Tools.BrowserTools != nil {
+		c.Tools.BrowserTools != nil || c.Tools.MCPResources || c.Tools.any() {
 		b.WriteString("[tools]\n")
 		if len(c.Tools.Enabled) > 0 {
 			fmt.Fprintf(&b, "enabled = %s\n", renderStringArray(c.Tools.Enabled))
@@ -560,9 +557,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 		if c.Tools.ProtectChangedFiles != nil {
 			fmt.Fprintf(&b, "protect_changed_files = %v\n", *c.Tools.ProtectChangedFiles)
 		}
-		if c.Tools.BrowserTools != nil {
-			fmt.Fprintf(&b, "browser_tools = %v\n", *c.Tools.BrowserTools)
-		}
+		renderToolsSwitches(&b, c.Tools)
 		b.WriteString("\n")
 	}
 	renderMCPLoadSection(&b, c.Tools.MCPLoad)

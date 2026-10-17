@@ -20,7 +20,7 @@ var argRules = map[string]func(sub string, args []string) bool{
 	"rg": func(_ string, args []string) bool {
 		return hasLongOpt(args, "--pre", 5) || hasLongOpt(args, "--hostname-bin", 14)
 	},
-	"uniq": func(_ string, args []string) bool { return len(operands(args, "-f", "-s", "-w")) > 1 },
+	"uniq": func(_ string, args []string) bool { return uniqWritesAnOutputFile(args) },
 	"file": func(_ string, args []string) bool { return hasShortFlag(args, 'C') || hasLongOpt(args, "--compile", 5) },
 	"date": func(_ string, args []string) bool {
 		rest := withoutValues(args, "-d", "--date", "-f", "--file", "-r", "--reference")
@@ -139,4 +139,26 @@ func withoutPrefixed(args []string, prefix string) []string {
 		}
 	}
 	return out
+}
+
+// uniqWritesAnOutputFile reports a word after uniq's input file, which uniq
+// opens as the output file. POSIX and BSD uniq stop reading options at the
+// first operand, so `-v` or `--` there is that file; GNU keeps reading options.
+func uniqWritesAnOutputFile(args []string) bool {
+	seenOperand := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if seenOperand {
+			return true
+		}
+		switch {
+		case arg == "--":
+			return len(args[i+1:]) > 1
+		case hasAnyArg([]string{arg}, "-f", "-s", "-w"):
+			i++
+		case !strings.HasPrefix(arg, "-") || arg == "-":
+			seenOperand = true
+		}
+	}
+	return false
 }

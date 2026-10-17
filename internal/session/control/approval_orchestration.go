@@ -156,7 +156,9 @@ func (c *Controller) EnableInteractiveApproval() {
 	}
 	escapeApprover := sandboxEscapeApprover{c}
 	configApprover := managedConfigWriteApprover{c}
+	paidApprover := paidSearchApprover{c}
 	if c.executor != nil {
+		c.executor.SetPaidSearchApprover(paidApprover)
 		c.executor.SetGate(c.newInteractiveGate())
 		c.executor.SetSandboxEscapeApprover(escapeApprover)
 		c.executor.SetConfigWriteApprover(configApprover)
@@ -171,6 +173,11 @@ func (c *Controller) EnableInteractiveApproval() {
 		SetConfigWriteApprover(tool.ConfigWriteApprover)
 	}); ok {
 		setter.SetConfigWriteApprover(configApprover)
+	}
+	if setter, ok := c.runner.(interface {
+		SetPaidSearchApprover(tool.PaidSearchApprover)
+	}); ok {
+		setter.SetPaidSearchApprover(paidApprover)
 	}
 	if setter, ok := c.runner.(interface {
 		SetPlannerPlanApprover(agent.PlannerPlanApprover)
@@ -427,6 +434,9 @@ func (c *Controller) ReplayPendingPromptsWith(sinkFactory func() event.Sink) {
 
 func (c *Controller) replayPendingPromptsTo(sink event.Sink) bool {
 	approvals, asks := c.approval.snapshotPrompts()
+	for i := range approvals {
+		approvals[i].AllowsPersist = c.offersPersist(approvals[i].Tool, approvals[i].AllowsPersist)
+	}
 	c.emitPendingPrompts(sink, approvals, asks)
 	return len(approvals) == 0
 }
@@ -621,7 +631,7 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 	c.sink.Emit(c.approvalRequestEvent(event.Approval{
 		ID: id, Tool: req.tool, Subject: req.subject, Reason: req.reason, ReasonCode: ExplicitApprovalCode(req.tool, req.subject),
 		RawInput: append(json.RawMessage(nil), req.args...), Fresh: req.fresh,
-		AllowsSession: session, AllowsPersist: persist && c.onRemember != nil,
+		AllowsSession: session, AllowsPersist: c.offersPersist(req.tool, persist),
 	}))
 	c.approval.promptEmitMu.Unlock()
 	// The agent now needs the user's attention; a Notification hook can ping an

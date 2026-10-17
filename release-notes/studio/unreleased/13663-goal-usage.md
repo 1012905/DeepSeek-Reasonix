@@ -1,0 +1,2 @@
+- 目标现在显示用量：桌面端展开计划栏能看到状态、轮数、请求数、tokens 和用时，停下时说明原因；终端页脚同样显示。关联 #13663。
+- A goal now shows its usage: the desktop plan fold lists state, turns, requests, tokens and work time and says why it stopped; the terminal footer shows the same. Refs #13663.

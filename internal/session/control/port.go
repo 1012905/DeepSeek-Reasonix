@@ -277,6 +277,7 @@ type RuntimeSettings interface {
 	RevokeSessionGrant(rule string) int
 	RevokeRememberedProjectRule(rule string) error
 	WorkspaceRoots() (WorkspaceRoots, error)
+	ReadableExtraRoots() ([]string, error)
 	AddWorkspaceRoot(dir string) (string, error)
 	RemoveWorkspaceRoot(dir string) error
 	SandboxSettings() SandboxSettings
@@ -287,6 +288,8 @@ type RuntimeSettings interface {
 	SaveSubagentClaimsSettings(optimistic bool) error
 	WriteLeaseSettings() WriteLeaseSettings
 	SaveWriteLeaseSettings(optimistic bool) error
+	PlanApprovalSettings() PlanApprovalSettings
+	SavePlanApprovalSettings(auto bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
@@ -297,6 +300,8 @@ type RuntimeSettings interface {
 	SaveFoldWorkSettings(fold bool) error
 	TurnNarrationSettings() TurnNarrationSettings
 	SaveTurnNarrationSettings(level string) error
+	WebAccessSettings() WebAccessSettings
+	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
@@ -331,6 +336,7 @@ type Extensions interface {
 // that can show what changed.
 type MCPTrust interface {
 	AcceptMCPHeldTools(name, digest string) (int, error)
+	SetMCPFollowToolChanges(name string, follow bool) (int, error)
 }
 
 // Capabilities is the whole pluggable surface, for a frontend that drives all
@@ -362,6 +368,14 @@ type Status interface {
 	BrowserClose(ctx context.Context, tabID string) error
 }
 
+// MCPSignIn signs in to an MCP server that needs OAuth. The frontend supplies
+// how a browser opens; the controller decides whether it may, after the user has
+// seen which host they are sent to. An editor integration has no browser of its
+// own to offer, so only the full session port carries it.
+type MCPSignIn interface {
+	AuthorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
+}
+
 // BackgroundJobs stops work a session left running outside any turn.
 type BackgroundJobs interface {
 	CancelJob(id string) bool
@@ -378,9 +392,13 @@ type ToolCallStopper interface {
 type PeerMail interface {
 	PeersEnabled() bool
 	Peers() []PeerView
+	PeerThreads() []PeerThread
 	SendPeerMessage(to, text string) (PeerReceipt, error)
 	HeldPeerMessages() []PeerHeld
 	ResolvePeerMessage(id string, approve bool) error
+	ResolvePeerMessageRemembering(id string, approve bool, remember PeerRemember) error
+	PeersSettings() PeersSettings
+	SavePeersSettings(patch PeersPatch) (PeersSettings, error)
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -501,6 +519,7 @@ type SessionAPI interface {
 	BackgroundJobs
 	ToolCallStopper
 	PeerMail
+	MCPSignIn
 	LocalShell
 	DiffRendering
 	Feedback
@@ -538,6 +557,7 @@ var (
 	_ BackgroundJobs     = (*Controller)(nil)
 	_ ToolCallStopper    = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
+	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)
 	_ SlashDispatch      = (*Controller)(nil)

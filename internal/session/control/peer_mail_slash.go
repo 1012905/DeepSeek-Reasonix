@@ -10,12 +10,12 @@ import (
 // Submit: list, send, approve, deny. The name to send to is one word, or quoted
 // when a title has spaces.
 func (c *Controller) peerCommand(args string) {
-	if !c.PeersEnabled() {
-		c.notice("messages between sessions are not turned on (peers.enabled in your user config)")
-		return
-	}
 	verb, rest, _ := strings.Cut(strings.TrimSpace(args), " ")
 	rest = strings.TrimSpace(rest)
+	if strings.EqualFold(verb, "settings") || !c.PeersEnabled() {
+		c.notice(c.peerSettingsText())
+		return
+	}
 	switch strings.ToLower(verb) {
 	case "", "list":
 		c.notice(c.peerListText())
@@ -42,7 +42,7 @@ func (c *Controller) peerCommand(args string) {
 		}
 		c.notice("peer " + strings.ToLower(verb) + ": " + rest + " done")
 	default:
-		c.notice("usage: /peer [list | send <session> <text> | approve <id> | deny <id>]")
+		c.notice("usage: /peer [list | settings | send <session> <text> | approve <id> | deny <id>]")
 	}
 }
 
@@ -56,6 +56,9 @@ func (c *Controller) peerListText() string {
 		for _, p := range peers {
 			b.WriteString("\n  " + peerLabel(p) + "  (" + p.Key + ")")
 		}
+	}
+	for _, th := range c.PeerThreads() {
+		fmt.Fprintf(&b, "\nyour message to %s: %s", peerLabel(PeerView{Key: th.Key, Title: th.Title, Project: th.Project}), th.State)
 	}
 	for _, h := range c.HeldPeerMessages() {
 		fmt.Fprintf(&b, "\nwaiting for your decision  %s  from %s: %s", h.ID, peerLabel(PeerView{Title: h.FromTitle, Project: h.FromProject, Key: h.FromSession}), h.Body)
@@ -106,4 +109,27 @@ func (c *Controller) argumentCommand(verb, args string) {
 		return
 	}
 	c.peerCommand(args)
+}
+
+// peerSettingsText only reports: the switches are written from Settings or the
+// user file, because a slash command can arrive from a paired device that has
+// no right to open this machine to its other sessions.
+func (c *Controller) peerSettingsText() string {
+	s := c.PeersSettings()
+	state := func(on bool) string {
+		if on {
+			return "on"
+		}
+		return "off"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "messages between sessions: %s; dispatch to another project: %s", state(s.Enabled), state(s.Dispatch))
+	if s.Pending {
+		b.WriteString(" (applies when the next turn starts)")
+	}
+	for _, r := range s.ReleaseProjects {
+		fmt.Fprintf(&b, "\nreleased project: %s", r.Path)
+	}
+	fmt.Fprintf(&b, "\nchange them in Settings, or in [peers] of %s", s.Path)
+	return b.String()
 }

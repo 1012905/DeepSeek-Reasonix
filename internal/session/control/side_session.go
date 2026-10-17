@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 )
 
@@ -15,7 +16,6 @@ import (
 // its history; what it costs is billed to this session under its own source.
 
 const (
-	maxSideSessions   = 3
 	maxSideQuoteRunes = 20000
 	maxSideQuotes     = 8
 )
@@ -27,7 +27,7 @@ var (
 	ErrSideUnknown = errors.New("no such side conversation")
 	// ErrSideBusy: one question at a time per side conversation.
 	ErrSideBusy = errors.New("this side conversation is still answering")
-	// ErrSideLimit: too many side conversations are open at once.
+	// ErrSideLimit: the user's max_side_sessions is reached.
 	ErrSideLimit = errors.New("too many side conversations are open")
 	// ErrSideEmpty is a question with nothing in it.
 	ErrSideEmpty = errors.New("a side conversation needs a question")
@@ -62,7 +62,7 @@ type sideSet struct {
 	closed  bool
 }
 
-func (s *sideSet) openOne() (string, error) {
+func (s *sideSet) openOne(limit int) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.factory == nil {
@@ -71,7 +71,7 @@ func (s *sideSet) openOne() (string, error) {
 	if s.closed {
 		return "", ErrSideUnavailable
 	}
-	if len(s.open) >= maxSideSessions {
+	if limit > 0 && len(s.open) >= limit {
 		return "", ErrSideLimit
 	}
 	conv, err := s.factory()
@@ -138,7 +138,9 @@ func (e *sideEntry) setRunning(cancel context.CancelFunc) {
 }
 
 // OpenSide starts an empty side conversation and returns its id.
-func (c *Controller) OpenSide() (string, error) { return c.side.openOne() }
+func (c *Controller) OpenSide() (string, error) {
+	return c.side.openOne(config.LoadForEdit(config.UserConfigPath()).SideSessionLimit())
+}
 
 // CloseSide discards a side conversation: its history, and any question still running.
 func (c *Controller) CloseSide(id string) { c.side.close(id) }

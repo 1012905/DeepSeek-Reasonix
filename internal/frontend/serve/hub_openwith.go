@@ -33,7 +33,16 @@ func (h *Hub) registerOpenWithRoutes(mux *http.ServeMux) {
 // openWithTargets lists the programs this machine can open a project in. Which
 // programs exist is the kernel's table; the page only draws what it is told.
 func (h *Hub) openWithTargets(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, map[string]any{"targets": openWithList(LaunchWorkspaces())})
+	writeJSON(w, map[string]any{"targets": openWithList(h.openWithRoots())})
+}
+
+func (h *Hub) openWithRoots() []string {
+	refs := h.sessionRoots()
+	roots := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		roots = append(roots, ref.dir)
+	}
+	return roots
 }
 
 // openWithProject starts one declared program on a project the window lists.
@@ -66,7 +75,7 @@ func (h *Hub) openWithProject(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusNotFound, codeWorkspaceMissing, "the project folder is not on disk", nil)
 		return
 	}
-	name, err := openWithOpen(req.ID, abs, LaunchWorkspaces())
+	name, err := openWithOpen(req.ID, abs, h.openWithRoots())
 	switch {
 	case errors.Is(err, openwith.ErrUnknown):
 		refuse(w, http.StatusNotFound, codeOpenWithUnknown, "no such program in the list", nil)

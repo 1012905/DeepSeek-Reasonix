@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentPort, WorkspaceFile } from "../port/port";
 import { WORKSPACE_FILE_MISSING, reason } from "../i18n/kernel";
 import { HttpError } from "../port/port";
+import { parseGrantedFile } from "./grantedfiles";
 
 type Entry = {
   file: WorkspaceFile | null; draft: string; diff: string; error: string; missing: boolean;
@@ -44,9 +45,10 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
       if (!entry.file) { entry.error = ""; entry.missing = false; }
       if (changed) notify();
       try {
+        const granted = parseGrantedFile(path);
         const [file, patch] = await Promise.all([
-          port.workspaceFile(path),
-          quiet ? Promise.resolve(null) : port.changeDiff(path).catch(() => null),
+          granted ? port.workspaceFile(granted.rel, granted.root) : port.workspaceFile(path),
+          quiet || granted ? Promise.resolve(null) : port.changeDiff(path).catch(() => null),
         ]);
         if (!valid() || dirty(entry)) return;
         changed ||= entry.file?.content !== file.content || entry.file?.revision !== file.revision || !!entry.error;
@@ -78,12 +80,12 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
   }, [read, poll, shown]);
 
   const setDraft = (draft: string) => {
-    if (current.current !== entries || !entry.file) return;
+    if (current.current !== entries || !entry.file || entry.file.readOnly) return;
     entry.draft = draft;
     notify();
   };
   const save = async () => {
-    if (current.current !== entries || !entry.file || !dirty(entry) || entry.pending === "save") return;
+    if (current.current !== entries || !entry.file || entry.file.readOnly || !dirty(entry) || entry.pending === "save") return;
     const sent = { ...entry.file, content: entry.draft };
     const ticket = ++entry.issued;
     entry.pending = "save";

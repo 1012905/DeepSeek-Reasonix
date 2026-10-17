@@ -43,7 +43,8 @@ func TestCreateFromBranchKeepsSourceAndSeparatesTasks(t *testing.T) {
 	}
 	for _, root := range []string{first.WorkspaceRoot, second.WorkspaceRoot} {
 		data, err := os.ReadFile(filepath.Join(root, "README.md"))
-		if err != nil || string(data) != "base\n" {
+		// Git for Windows may check the committed LF out as CRLF (core.autocrlf).
+		if err != nil || strings.TrimSpace(string(data)) != "base" {
 			t.Fatalf("checkout = %q, %v", data, err)
 		}
 	}
@@ -94,11 +95,12 @@ func TestCreateFromDetachedHEADAndOccupiedBranch(t *testing.T) {
 	if _, _, err := runGit(ctx, repo, "checkout", "--detach"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := CreateFrom(ctx, repo, t.TempDir(), "")
+	managedRoot := t.TempDir()
+	result, err := CreateFrom(ctx, repo, managedRoot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := DiscardUnpublished(ctx, repo, result); err != nil {
+	if err := DiscardUnpublished(ctx, repo, managedRoot, result); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(result.WorktreeRoot); !os.IsNotExist(err) {

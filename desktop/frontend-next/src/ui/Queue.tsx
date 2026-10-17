@@ -67,6 +67,9 @@ function label(it: QueueItem): string {
     case "uncertain":
       return t("状态不明");
     default:
+      // The kernel's own reason for not delivering mid-turn, read from what the
+      // entry froze rather than guessed from its text.
+      if (it.images && it.state === "queued") return t("含图片，本轮结束后发送");
       // A steer the kernel could not admit is converted to a follow-up, so an
       // entry still calling itself one is waiting on a held queue, not refused.
       return it.intent === "steer" ? t("插话排队") : t("排队");
@@ -195,10 +198,10 @@ export function Queue({ queue, running, onRead, onEdit, onMove, onCancel, onSend
         {/* Both limits refuse on their own, so a header that showed one of them
             would be wrong about the other exactly when it bites. */}
         {capacityPressure && <span className="qcap" aria-label={t("队列容量")}>
-          <span data-full={fullItems || undefined}>
+          {cap.maxItems > 0 && <span data-full={fullItems || undefined}>
             {t("条目")} {cap.items}/{cap.maxItems}
             <Meter value={cap.items} max={cap.maxItems} label={t("条目")} full={fullItems} />
-          </span>
+          </span>}
           <span data-full={fullBytes || undefined}>
             {t("字节")} {size(cap.bytes)}/{size(cap.maxBytes)}
             <Meter value={cap.bytes} max={cap.maxBytes} label={t("字节")} full={fullBytes} />

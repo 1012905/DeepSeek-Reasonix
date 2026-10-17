@@ -50,7 +50,8 @@ type PeerReceipt struct {
 // promised; the list is the set that beat within the last few seconds.
 func (c *Controller) Peers() []PeerView {
 	p := c.peers
-	if p == nil || p.dir == nil {
+	dir := p.dirOrNil()
+	if dir == nil {
 		return nil
 	}
 	p.mu.Lock()
@@ -66,8 +67,17 @@ func (c *Controller) Peers() []PeerView {
 }
 
 func (c *Controller) livePeers() []peermail.Live {
+	dir := c.peers.dirOrNil()
+	if dir == nil {
+		return nil
+	}
 	now := time.Now()
-	live, _ := c.peers.dir.ListLive(func(l peermail.Live) bool { return now.Sub(l.BeatAt) <= peerBeatTTL })
+	live, _ := dir.ListLive(func(l peermail.Live) bool { return now.Sub(l.BeatAt) <= peerBeatTTL })
+	// A record is a file any process of this user may have written, so the names
+	// are reduced here, where they are read, as the publisher reduces its own.
+	for i := range live {
+		live[i].Title, live[i].Project = peerAttribute(live[i].Title), peerAttribute(live[i].Project)
+	}
 	return live
 }
 
@@ -78,7 +88,8 @@ func (c *Controller) livePeers() []peermail.Live {
 // guessed. What the receiver does with it is the receiver's decision.
 func (c *Controller) SendPeerMessage(to, text string) (PeerReceipt, error) {
 	p := c.peers
-	if p == nil || p.dir == nil {
+	dir := p.dirOrNil()
+	if dir == nil {
 		return PeerReceipt{}, ErrPeersDisabled
 	}
 	text = strings.TrimSpace(text)
@@ -111,10 +122,10 @@ func (c *Controller) SendPeerMessage(to, text string) (PeerReceipt, error) {
 		From: peermail.Party{SessionID: self, Title: peerAttribute(sessionstore.BranchID(path)), Project: peerAttribute(baseName(c.WorkspaceRoot()))},
 		To:   peermail.Party{SessionID: target.SessionID, WriterID: target.WriterID, Title: target.Title, Project: target.Project},
 	}
-	if err := p.dir.Send(msg); err != nil {
+	if err := dir.Send(msg); err != nil {
 		return PeerReceipt{}, err
 	}
-	_ = p.dir.Audit(peermail.AuditRecord{Receiver: target.SessionID, Sender: self, ID: msg.ID, Decision: peermail.DecisionSent, Bytes: len(msg.Body), SHA256: peermail.Digest(msg.Body)})
+	_ = dir.Audit(peermail.AuditRecord{Receiver: target.SessionID, Sender: self, ID: msg.ID, Decision: peermail.DecisionSent, Bytes: len(msg.Body), SHA256: peermail.Digest(msg.Body)})
 	return PeerReceipt{ID: msg.ID, To: PeerView{Key: target.SessionID, Title: target.Title, Project: target.Project}}, nil
 }
 
