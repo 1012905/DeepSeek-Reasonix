@@ -164,6 +164,42 @@ describe("panes sharing one stream", () => {
   });
 });
 
+describe("a shared stream that never opens", () => {
+  it("gives each pane a stream of its own once it has waited long enough", async () => {
+    const hub = stubHub();
+    const client = new MuxClient();
+    const a = pane(client, "r1");
+    const b = pane(client, "r2");
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(a.own).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(a.own).toHaveBeenCalledOnce();
+    expect(b.own).toHaveBeenCalledOnce();
+    expect(open(hub.sources)).toHaveLength(0);
+    expect(client.carried()).toEqual([]);
+  });
+
+  it("keeps the shared stream when it says it is open in time", async () => {
+    const hub = stubHub();
+    const client = new MuxClient();
+    const a = pane(client, "r1");
+    await vi.advanceTimersByTimeAsync(5_000);
+    hub.sources[0].open("c1");
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(a.own).not.toHaveBeenCalled();
+    expect(client.carried()).toEqual(["r1"]);
+  });
+
+  it("opens a pane attached afterwards on its own stream straight away", async () => {
+    stubHub();
+    const client = new MuxClient();
+    pane(client, "r1");
+    await vi.advanceTimersByTimeAsync(11_000);
+    const late = pane(client, "r2");
+    expect(late.own).toHaveBeenCalledOnce();
+  });
+});
+
 describe("a pane's subscription over the shared stream", () => {
   it("loses no frame across a reconnect, even when the replay overlaps", async () => {
     const hub = stubHub();
