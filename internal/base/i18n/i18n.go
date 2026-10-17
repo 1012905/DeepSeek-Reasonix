@@ -462,6 +462,7 @@ type Messages struct {
 	AwaitingUserFmt              string
 	GoalRetryFmt                 string
 	GoalRetryGaveUpFmt           string
+	EgressAutoAllowedFmt         string
 	PlanAutoApproved             string
 	ImagesNotReadable            string
 	ImagesNeedVisionRole         string

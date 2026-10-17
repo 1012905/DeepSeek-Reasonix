@@ -909,6 +909,9 @@ type SandboxConfig struct {
 	AllowedDomains []string `toml:"allowed_domains"`
 	// DeniedDomains outrank AllowedDomains. The repo's are added to the user's.
 	DeniedDomains []string `toml:"denied_domains"`
+	// EgressUnlisted "allow" stops the question about hosts AllowedDomains does
+	// not name. User file only: a repo cannot switch its own prompts off.
+	EgressUnlisted string `toml:"egress_unlisted"`
 }
 
 // WriteRoots returns the directories file-writer tools may modify: the
