@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"reasonix/internal/base/testenv"
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 )
 
@@ -97,11 +99,12 @@ func TestSideQuotesAreCappedAndEmptyQuestionsRefused(t *testing.T) {
 func TestSideLimitsBusyAndUnknown(t *testing.T) {
 	slow := &fakeSide{hold: make(chan struct{}), started: make(chan struct{}, 1)}
 	c := sideController(t, slow)
+	setSideLimit(t, 3)
 	first, err := c.OpenSide()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 1; i < maxSideSessions; i++ {
+	for i := 1; i < 3; i++ {
 		if _, err := c.OpenSide(); err != nil {
 			t.Fatal(err)
 		}
@@ -183,5 +186,26 @@ func TestAQuestionBegunAfterTheSideWasClosedIsCancelled(t *testing.T) {
 	entry.setRunning(cancel)
 	if ctx.Err() == nil {
 		t.Fatal("a closed side let a new question run")
+	}
+}
+
+func setSideLimit(t *testing.T, n int) {
+	t.Helper()
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	cfg.Agent.MaxSideSessions = n
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Nothing limits side conversations until the user's own file says so.
+func TestSideConversationsAreUnlimitedByDefault(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	c := sideController(t, &fakeSide{})
+	for i := range 25 {
+		if _, err := c.OpenSide(); err != nil {
+			t.Fatalf("side conversation %d refused: %v", i+1, err)
+		}
 	}
 }

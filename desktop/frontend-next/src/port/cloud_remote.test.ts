@@ -66,12 +66,41 @@ describe("remote Studio binary framing", () => {
     source.onmessage = (event) => seen.push(JSON.parse(event.data) as Record<string, unknown>);
 
     await vi.advanceTimersByTimeAsync(0);
-    expect(String(fetchMock.mock.calls[0][0])).toBe(`/rt/one/events/replay?lastEventId=${Number.MAX_SAFE_INTEGER}`);
+    // No cursor is an attach, and an attach is answered with whatever a run is
+    // stopped on rather than with the stream's history.
+    expect(String(fetchMock.mock.calls[0][0])).toBe("/rt/one/events/replay");
     expect(seen).toEqual([{ kind: "stream_watermark", seq: 7 }]);
 
     await vi.advanceTimersByTimeAsync(1500);
     expect(String(fetchMock.mock.calls[1][0])).toBe("/rt/one/events/replay?lastEventId=7");
     expect(seen.slice(1)).toEqual([{ kind: "message", seq: 8, text: "new reply" }]);
+
+    source.close();
+    fetchMock.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("hands an attaching page the question a run is waiting on", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        frames: [{ kind: "ask_request", ask: { id: "ask-1" } }],
+        complete: true,
+        watermark: 3,
+      }), { status: 200 }))
+      .mockResolvedValue(new Response(JSON.stringify({ frames: [], complete: true, watermark: 3 }), { status: 200 }));
+    const seen: Array<Record<string, unknown>> = [];
+    const source = new RemoteEventSource("/rt/one/events");
+    source.onmessage = (event) => seen.push(JSON.parse(event.data) as Record<string, unknown>);
+
+    await vi.advanceTimersByTimeAsync(0);
+    // What a run is blocked on is not in the ordinary history a client resumes
+    // past, so a page that read only the log would draw the run as stopped with
+    // nothing to answer.
+    expect(seen).toEqual([{ kind: "ask_request", ask: { id: "ask-1" } }]);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(String(fetchMock.mock.calls[1][0])).toBe("/rt/one/events/replay?lastEventId=3");
 
     source.close();
     fetchMock.mockRestore();
@@ -129,7 +158,9 @@ describe("remote Studio binary framing", () => {
     await vi.advanceTimersByTimeAsync(STREAM_SILENCE_MS * 3);
     stop();
     expect(opened).toBe(1);
-    for (const [input] of fetchMock.mock.calls) expect(String(input)).toMatch(/^\/rt\/one\/events\/replay\?/);
+    // Every read goes to the replay route: the attach carries no cursor, and
+    // every later read resumes from the watermark.
+    for (const [input] of fetchMock.mock.calls) expect(String(input)).toMatch(/^\/rt\/one\/events\/replay(\?|$)/);
     fetchMock.mockRestore();
     vi.unstubAllGlobals();
     vi.useRealTimers();

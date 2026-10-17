@@ -1,6 +1,7 @@
 package peermail
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -414,5 +415,38 @@ func TestAStaleTemporaryFileIsSweptAndTheIdBecomesUsableAgain(t *testing.T) {
 	}
 	if err := d.Send(msg("m1")); err != nil {
 		t.Fatalf("after the sweep a retry = %v, want it accepted", err)
+	}
+}
+
+// Send drops terminal control from a body, but the spool is a folder of files:
+// one written by hand arrives with whatever it holds. Reading applies the same
+// reduction, so a clear-screen, an OSC title, a C1 control and a right-to-left
+// override never reach a terminal or a window as part of an approval prompt.
+func TestAHandWrittenBodyIsReducedWhereItIsRead(t *testing.T) {
+	d, root := open(t)
+	if err := d.Send(msg("real")); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "spool", "sess-b")
+	data, err := os.ReadFile(filepath.Join(dir, "real.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m Message
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	m.Body = "ok\x1b[2J\x1b]0;pwned\x07 line\n\ttab \u0085next ‮gnp.exe"
+	forged, _ := json.Marshal(m)
+	if err := os.WriteFile(filepath.Join(dir, "real.json"), forged, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := d.Pending("sess-b")
+	if len(got) != 1 {
+		t.Fatalf("pending = %+v", got)
+	}
+	want := "ok[2J]0;pwned line\n\ttab next gnp.exe"
+	if got[0].Body != want {
+		t.Fatalf("body = %q, want %q", got[0].Body, want)
 	}
 }
