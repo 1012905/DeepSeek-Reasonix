@@ -1226,11 +1226,14 @@ headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 
 For a remote HTTP server without a static `Authorization` header, an
 authentication challenge (HTTP 401 with a `Bearer` challenge) is reported as
-needing sign-in. Run `reasonix mcp auth <name>` in the CLI; Studio has no
-sign-in control yet. Reasonix performs OAuth metadata discovery, dynamic
+needing sign-in. Run `reasonix mcp auth <name>` in the CLI. Reasonix performs OAuth metadata discovery, dynamic
 client registration, PKCE S256 authorization, and refresh-token
 rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
+
+Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
+
+Tools whose definitions change after you approved them are held back until you accept them (`reasonix mcp trust <name>`). To take one server's changes without being asked, run it with `--follow` (`--unfollow` undoes it); each change is still announced.
 
 OAuth client and token state is kept outside the workspace in the server's
 private Reasonix state directory, written with mode `0600`, and bound to the
