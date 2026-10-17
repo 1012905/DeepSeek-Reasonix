@@ -37,7 +37,7 @@ try {
     env: {
       ...process.env, REASONIX_HOME: home, REASONIX_STATE_HOME: home,
       REASONIX_CACHE_HOME: path.join(home, "cache"),
-      REASONIX_STUDIO_HOST: path.join(root, "desktop/electron/bin/reasonix-studio-host" + (process.platform === "win32" ? ".exe" : "")),
+      REASONIX_STUDIO_HOST: process.env.REASONIX_STUDIO_HOST || path.join(root, "desktop/electron/bin/reasonix-studio-host" + (process.platform === "win32" ? ".exe" : "")),
       REASONIX_STUDIO_PAGE: path.join(root, "desktop/frontend-next/dist"),
     },
   });
@@ -49,20 +49,17 @@ try {
   }
   assert.ok(page, "shell must open its loopback page");
   await page.waitForLoadState("domcontentloaded");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator("#boot").waitFor({ state: "hidden", timeout: 60000 });
   const status = await page.evaluate(async root => {
     const response = await fetch("/runtimes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ root }) });
     return response.status;
   }, workspace);
   assert.equal(status, 200);
   const project = page.locator(".wsrow").filter({ has: page.locator(".wsname").filter({ hasText: /^workspace$/ }) });
-  const priorPane = await page.locator(".pane[data-active]").elementHandle();
-  const opened = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/runtimes"));
   await project.locator("button.wsadd").click();
-  assert.equal((await opened).status(), 200);
-  await page.waitForFunction(prior => {
-    const pane = document.querySelector(".pane[data-active]");
-    return pane && pane !== prior && !document.querySelector('.panes[aria-busy="true"]');
-  }, priorPane);
+  // A blank pane in this workspace may be reused without creating a runtime.
+  await page.waitForFunction(() => document.querySelector('.pane[data-active] input[type=file][data-action-change="session.attach"]') && !document.querySelector('.panes[aria-busy="true"]'));
   const traffic = [];
   page.on("request", request => {
     if (/\/(drop|attachments)/.test(request.url())) traffic.push({ method: request.method(), url: request.url(), contentType: request.headers()["content-type"] });

@@ -897,6 +897,7 @@ desktop shell can identify the file. Selecting one external file grants read
 access to that file; selecting a folder grants its descendants.
 
 Files without a native path use binary streaming into `.reasonix/attachments`.
+Streaming bounds memory use, not total stored bytes.
 Incomplete files are removed if the transfer fails or is canceled. Removing an uploading
 attachment cancels its transfer.
 
