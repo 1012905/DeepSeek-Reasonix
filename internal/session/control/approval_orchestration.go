@@ -156,7 +156,9 @@ func (c *Controller) EnableInteractiveApproval() {
 	}
 	escapeApprover := sandboxEscapeApprover{c}
 	configApprover := managedConfigWriteApprover{c}
+	paidApprover := paidSearchApprover{c}
 	if c.executor != nil {
+		c.executor.SetPaidSearchApprover(paidApprover)
 		c.executor.SetGate(c.newInteractiveGate())
 		c.executor.SetSandboxEscapeApprover(escapeApprover)
 		c.executor.SetConfigWriteApprover(configApprover)
@@ -171,6 +173,11 @@ func (c *Controller) EnableInteractiveApproval() {
 		SetConfigWriteApprover(tool.ConfigWriteApprover)
 	}); ok {
 		setter.SetConfigWriteApprover(configApprover)
+	}
+	if setter, ok := c.runner.(interface {
+		SetPaidSearchApprover(tool.PaidSearchApprover)
+	}); ok {
+		setter.SetPaidSearchApprover(paidApprover)
 	}
 	if setter, ok := c.runner.(interface {
 		SetPlannerPlanApprover(agent.PlannerPlanApprover)

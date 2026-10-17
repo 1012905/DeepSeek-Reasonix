@@ -14,6 +14,9 @@ func mcpResourcesLine(t ToolsConfig) string {
 	if t.SearxngURL != "" {
 		line += fmt.Sprintf("searxng_url = %q   # your own SearXNG instance with the json format enabled; user file only\n", t.SearxngURL)
 	}
+	if len(t.WebSearchPaidAllowed) > 0 {
+		line += fmt.Sprintf("web_search_paid_allowed = %s   # paid search backends you agreed to be charged for; user file only\n", renderStringArray(t.WebSearchPaidAllowed))
+	}
 	return line
 }
 
@@ -31,5 +34,8 @@ func renderToolsSwitches(b *strings.Builder, t ToolsConfig) {
 	}
 	if t.SearxngURL != "" {
 		fmt.Fprintf(b, "searxng_url = %q\n", t.SearxngURL)
+	}
+	if len(t.WebSearchPaidAllowed) > 0 {
+		fmt.Fprintf(b, "web_search_paid_allowed = %s\n", renderStringArray(t.WebSearchPaidAllowed))
 	}
 }

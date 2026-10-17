@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// These caps bound what one search puts into the model's context and memory:
+// ten results of at most 500 bytes each is a few thousand tokens however many
+// results the instance returns. They are protections, not product limits; whether
+// a user should be able to change them is tracked as a follow-up.
 const (
 	searxngMaxBody    = 2 << 20
 	searxngMaxHits    = 10
@@ -73,11 +77,7 @@ func (s *Searxng) Search(ctx context.Context, query string) ([]Hit, error) {
 		if r.URL == "" || len(hits) == searxngMaxHits {
 			continue
 		}
-		snippet := r.Content
-		if len(snippet) > searxngMaxSnippet {
-			snippet = snippet[:searxngMaxSnippet]
-		}
-		hits = append(hits, Hit{Title: r.Title, URL: r.URL, Snippet: snippet})
+		hits = append(hits, Hit{Title: r.Title, URL: r.URL, Snippet: truncateBytes(r.Content, searxngMaxSnippet)})
 	}
 	if len(hits) == 0 {
 		return nil, &BackendError{Backend: s.Name(), Kind: FailEmpty}

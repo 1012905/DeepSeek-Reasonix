@@ -1553,3 +1553,20 @@ searxng_url = "http://localhost:8888"
 
 - SearXNG 内部某些引擎被限流，只要还有一个引擎能回答，搜索就不算失败。
 - 搜索结果是第三方内容，会向模型标注为外部内容。
+
+### 付费回退：DeepSeek 搜索接口
+
+在 `"searxng"` 后面加上 `"deepseek_api"`，免费后端没有回答时，`web_search` 会回退到 DeepSeek 的[搜索接口](https://api-docs.deepseek.com/guides/search)。
+
+```toml
+[tools]
+web_search_backends = ["searxng", "deepseek_api"]
+```
+
+- 使用你为 `api.deepseek.com` 配置的提供方的密钥。
+- DeepSeek 标价为每 1,000 次成功请求 $0.75（价格页，2026-10-17 读取）；只有返回 200 且有结果才计费，计费起始日期由 DeepSeek 另行公布。
+- 第一次搜索要用到它时会弹出卡片，写明价格和将发给 DeepSeek 的搜索词。可选允许一次、本会话允许、始终允许；始终允许会把 `web_search_paid_allowed = ["deepseek_api"]` 写进你的用户配置。
+- 选择始终允许之后，模型发起的搜索词不再逐次展示，就会发给 DeepSeek。
+- 任何审批模式都不会替你回答这张卡片，项目配置文件也无法写入这项许可。
+- 没有得到答复时，模型收到 `search.free_failed_paid_needs_consent`；余额不足（402）时收到 `search.insufficient_balance`。
+- 每次成功的付费请求会在用量视图里按独立来源 `deepseek-search` 计入。

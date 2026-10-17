@@ -51,6 +51,9 @@ type heldScope struct {
 	// only the user file names them.
 	webSearchBackends []string
 	searxngURL        string
+	// webSearchPaid is the user's agreement to be charged; a cloned repo cannot
+	// give it on their behalf.
+	webSearchPaid []string
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -89,6 +92,7 @@ func holdUserScope(c *Config) heldScope {
 
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
 		searxngURL:        c.Tools.SearxngURL,
+		webSearchPaid:     slices.Clone(c.Tools.WebSearchPaidAllowed),
 	}
 }
 
@@ -414,5 +418,9 @@ func (c *Config) keepUserSearchBackends(h heldScope) {
 	if c.Tools.SearxngURL != h.searxngURL {
 		c.ignoreProject("tools.searxng_url", c.Tools.SearxngURL, ProjectUserOnly)
 		c.Tools.SearxngURL = h.searxngURL
+	}
+	if !slices.Equal(c.Tools.WebSearchPaidAllowed, h.webSearchPaid) {
+		c.ignoreProject("tools.web_search_paid_allowed", strings.Join(c.Tools.WebSearchPaidAllowed, ","), ProjectUserOnly)
+		c.Tools.WebSearchPaidAllowed = slices.Clone(h.webSearchPaid)
 	}
 }

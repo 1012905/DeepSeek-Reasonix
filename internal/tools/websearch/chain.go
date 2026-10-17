@@ -22,6 +22,7 @@ type Fallback struct {
 	Backend string
 	Kind    FailKind
 	Status  int
+	Code    string
 	Next    string
 }
 
@@ -30,8 +31,11 @@ type Fallback struct {
 // before it failed and Consent allows the charge.
 type Chain struct {
 	Backends   []Backend
-	Consent    func(ctx context.Context, b Backend) bool
+	Consent    func(ctx context.Context, b Backend, query string) bool
 	OnFallback func(Fallback)
+	// OnBilled is called once for a paid backend that answered, which is the
+	// only case the vendor charges for.
+	OnBilled func(backend string)
 }
 
 func (*Chain) Name() string   { return "web_search" }
@@ -67,17 +71,21 @@ func (c *Chain) Execute(ctx context.Context, args json.RawMessage) (string, erro
 		return "", ErrQuery
 	}
 	needsConsent := false
+	var failed []string
 	for i, b := range c.Backends {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		if b.Paid() && (c.Consent == nil || !c.Consent(ctx, b)) {
+		if b.Paid() && (c.Consent == nil || !c.Consent(ctx, b, query)) {
 			needsConsent = true
 			continue
 		}
 		hits, err := b.Search(ctx, query)
 		if err == nil {
 			out, mErr := json.Marshal(chainResult{Backend: b.Name(), Paid: b.Paid(), Results: hits})
+			if b.Paid() && c.OnBilled != nil {
+				c.OnBilled(b.Name())
+			}
 			return string(out), mErr
 		}
 		if errors.Is(err, context.Canceled) {
@@ -86,15 +94,16 @@ func (c *Chain) Execute(ctx context.Context, args json.RawMessage) (string, erro
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
+		be := failure(err)
+		failed = append(failed, b.Name()+": "+be.identity())
 		if c.OnFallback != nil {
-			kind, status := failKind(err)
-			c.OnFallback(Fallback{Backend: b.Name(), Kind: kind, Status: status, Next: c.next(i)})
+			c.OnFallback(Fallback{Backend: b.Name(), Kind: be.Kind, Status: be.Status, Code: be.Code, Next: c.next(i)})
 		}
 	}
 	if needsConsent {
 		return "", tool.Refusal{Code: CodeFreeFailedPaidNeedsConsent, Message: "The free search backends did not answer, and the paid one needs the user's consent before it is called."}
 	}
-	return "", tool.Refusal{Code: CodeAllBackendsFailed, Message: "No search backend answered."}
+	return "", tool.Refusal{Code: CodeAllBackendsFailed, Message: "No search backend answered (" + strings.Join(failed, "; ") + ")."}
 }
 
 func (c *Chain) next(i int) string {

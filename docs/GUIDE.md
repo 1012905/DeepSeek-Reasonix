@@ -1984,3 +1984,20 @@ Each time that happens Reasonix shows a notice naming the backend and the cause,
 
 - Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
 - Results are third-party content and are labelled as such to the model.
+
+### Paid fallback: the DeepSeek Search API
+
+Add `"deepseek_api"` after `"searxng"` to let `web_search` fall back to DeepSeek's [Search API](https://api-docs.deepseek.com/guides/search) when the free backend did not answer.
+
+```toml
+[tools]
+web_search_backends = ["searxng", "deepseek_api"]
+```
+
+- It uses the key of a provider you configured for `api.deepseek.com`.
+- DeepSeek lists the price as $0.75 per 1,000 successful requests (pricing page, read 2026-10-17); it bills only a 200 response with results, and announces the billing start date separately.
+- The first time a search would reach it, a card shows the price and the query that would be sent to DeepSeek. Allow once, allow for the session, or always allow, which records `web_search_paid_allowed = ["deepseek_api"]` in your user file.
+- After you choose always allow, the queries the model sends are no longer shown one by one before they go to DeepSeek.
+- No approval mode answers that card for you, and a project file cannot record the allowance.
+- Without an answer the model receives `search.free_failed_paid_needs_consent`. A 402 reaches it as `search.insufficient_balance`.
+- Each successful paid request is counted in the usage view under its own source, `deepseek-search`.
