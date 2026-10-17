@@ -2050,7 +2050,8 @@ video_protocol = "inline_data_url"   # or "moonshot_file"
 - Only MP4 is sent natively; any other container is sampled into frames (`video.native_container_unsupported`).
 - To lower the size limit, set `[tools] video_native_max_bytes` in your user file; a project file cannot set it, and it can only be lower than the protocol's own limit. A refusal names which limit stopped it (`video.native_too_large`).
 - The model sees the video on the one request that follows the read. After it answers, later requests carry a one-line note instead, so a long file is not resent every turn; call `read_video` again to look again. The session file keeps a reference to the file, not its bytes.
-- The file is read from disk when the request is built. A file that changed since it was read is not sent (`video.file_changed`), one that is gone is reported as `video.file_missing`, and a reference this process's `read_video` did not hand out (a restored or imported session) is never opened and is reported as `video.file_unavailable`.
+- The file is read from disk when the request is built. A file that changed since it was read is not sent (`video.file_changed`), and one that is gone is reported as `video.file_missing`.
+- Only a video this process's `read_video` handed out is ever opened; a reference from a restored or imported session is not, and is reported as `video.file_unavailable`.
 - Sub-agents do not get native video; they use frames.
 - Where there is no OS sandbox, `read_video` still asks before its first use, as before; choose always allow on that card or add a rule for `read_video` to stop being asked.
 

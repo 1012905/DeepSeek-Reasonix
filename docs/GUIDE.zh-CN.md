@@ -1613,7 +1613,8 @@ video_protocol = "inline_data_url"   # 或 "moonshot_file"
 - 只有 MP4 走原生；其他容器改为抽帧（`video.native_container_unsupported`）。
 - 想把大小上限调低，在用户文件里设 `[tools] video_native_max_bytes`；项目文件不能设，且只能比协议自己的上限更低。拒绝时会说明是哪一层上限挡住的（`video.native_too_large`）。
 - 模型只在读取之后的那一次请求里看到视频；它回答之后，后续请求只带一行说明，长文件不会每一轮重发；想再看就再调用 `read_video`。会话文件里保存的是文件引用，不是文件内容。
-- 文件在构造请求时才从磁盘读取。读取后被改动过的文件不会发送（`video.file_changed`），已被删除的报告为 `video.file_missing`；不是本进程 `read_video` 交出的引用（恢复或导入的会话）一律不打开，报告为 `video.file_unavailable`。
+- 文件在构造请求时才从磁盘读取。读取后被改动过的文件不会发送（`video.file_changed`），已被删除的报告为 `video.file_missing`。
+- 只有本进程 `read_video` 交出的视频才会被打开；恢复或导入的会话里的引用一律不打开，报告为 `video.file_unavailable`。
 - 子代理没有原生视频，使用抽帧。
 - 没有系统沙盒时 `read_video` 首次使用仍会先询问，与之前一致；在卡片上选“始终允许”，或给 `read_video` 添加规则，就不再询问。
 
