@@ -163,6 +163,11 @@ jobs:
           node perf/settings-rows.mjs
           node perf/narrow-steps.mjs
           node perf/job-names.mjs
+          node perf/side-panel.mjs
+          node perf/card-shell.mjs
+          node perf/line-cards.mjs
+          node perf/detail-panel.mjs
+          node perf/brand-lockup.mjs
           node perf/notice-line.mjs
           node perf/brought-line.mjs
           node perf/modal-focus.mjs

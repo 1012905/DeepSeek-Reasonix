@@ -15,7 +15,14 @@ import (
 type workspaceList = workspacelist.List
 
 var errWorkspaceNotRemembered = errors.New("workspace is not remembered")
-var errWorkspaceListFull = errors.New("the project list already contains 32 projects; remove one before adding another")
+var errWorkspaceListFull = errors.New("the project list is at the limit you set (desktop.max_workspaces); remove one before adding another")
+
+// workspaceListFull says whether the user's own limit leaves no room for another
+// project. No limit is set unless their file sets one.
+func workspaceListFull(n int) bool {
+	limit := config.LoadForEdit(config.UserConfigPath()).WorkspaceLimit()
+	return limit > 0 && n >= limit
+}
 
 func workspacesPath() string {
 	if dir := config.MemoryUserDir(); dir != "" {
@@ -65,7 +72,7 @@ func addRememberedWorkspace(ctx context.Context, dir string) error {
 		if slices.Contains(list.Paths, dir) {
 			return nil
 		}
-		if len(list.Paths) >= workspaceRecentMax {
+		if workspaceListFull(len(list.Paths)) {
 			return refusal(http.StatusConflict, "workspace.limit_reached", errWorkspaceListFull, nil)
 		}
 		list.Paths = append([]string{dir}, list.Paths...)
@@ -83,7 +90,7 @@ func keepUsedWorkspace(dir string) {
 		return
 	}
 	err := updateWorkspaceList(context.Background(), true, func(list *workspaceList) error {
-		if slices.Contains(list.Paths, dir) || len(list.Paths) >= workspaceRecentMax {
+		if slices.Contains(list.Paths, dir) || workspaceListFull(len(list.Paths)) {
 			return nil
 		}
 		list.Paths = append(list.Paths, dir)

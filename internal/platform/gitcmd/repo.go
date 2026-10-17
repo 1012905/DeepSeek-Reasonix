@@ -64,13 +64,12 @@ func Open(ctx context.Context, dir string) (Repo, error) {
 	if err != nil {
 		return Repo{}, err
 	}
-	out, err := Command(ctx, abs, "rev-parse", "--absolute-git-dir", "--git-common-dir", "--show-toplevel").Output()
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		return Repo{}, &RefusedError{Dir: abs, Detail: firstLine(exit.Stderr)}
-	}
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return Repo{}, err
+	}
+	out, err := Command(ctx, abs, "rev-parse", "--absolute-git-dir", "--git-common-dir", "--show-toplevel").Output()
+	if err != nil {
+		return Repo{}, openFailure(ctx, abs, err)
 	}
 	lines := strings.Split(strings.TrimRight(string(out), "\r\n"), "\n")
 	if len(lines) != 3 {
@@ -92,6 +91,20 @@ func Open(ctx context.Context, dir string) (Repo, error) {
 		return Repo{}, fmt.Errorf("%w: %s: %w", ErrNotRepository, abs, err)
 	}
 	return repo, nil
+}
+
+// openFailure says why asking git failed. A git that exited non-zero refused
+// the folder, unless the context ended first: then the process was stopped by
+// the deadline, said nothing about the folder, and the answer is the context's.
+func openFailure(ctx context.Context, abs string, err error) error {
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return &RefusedError{Dir: abs, Detail: firstLine(exit.Stderr)}
+	}
+	return err
 }
 
 // Verify checks a Repo recorded earlier against the files as they stand: the

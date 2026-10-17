@@ -81,6 +81,8 @@ export const EN_KERNEL: Record<string, string> = {
   "开关未能保存：其存储文件无法读取或写入": "The switch was not stored: its file could not be read or written",
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
+  "事件流连接已经关闭，需要重新打开并重新订阅各窗格": "The event stream has closed; open a new one and subscribe each pane again",
+  "这个窗格由另一台机器驱动，使用它自己的事件流": "This pane is driven from another machine and keeps its own event stream",
   "这个后台任务已经不在运行了": "That background job is no longer running",
   "这条调用已经结束了": "This call has already finished",
   "你停止了这条调用，它在外部已经做了什么无法确定": "You stopped this call; what it had already done outside the workspace is unknown",
@@ -426,7 +428,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这份备份已不存在": "That backup no longer exists",
   "备份数量已达上限，请先删除一份旧备份": "The backup limit is reached; delete an older backup first",
   "有会在本机运行程序或改变密钥去向的项目，需要逐项确认后才能恢复": "Some items run programs here or change where a key is sent; confirm each one before restoring",
-  "项目列表已满（32 个），请先移除一个项目再添加": "The project list is full (32 projects); remove one before adding another",
+  "项目列表已到你设置的上限（desktop.max_workspaces），请先移除一个项目再添加": "The project list is at the limit you set (desktop.max_workspaces); remove one before adding another",
   "{model} 的价格必须是不小于 0 的数字，并选择货币": "The price for {model} must be a number not below 0, with a currency chosen",
   "{model} 不在已选模型中，未保存价格": "{model} is not one of the selected models, so no price was saved",
   "这台服务器不支持切换工作区": "This server cannot switch workspaces",

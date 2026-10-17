@@ -72,6 +72,10 @@ const (
 	NoticeCodeGoalRetryGaveUp = "goal_retry_gave_up"
 	// Bash reached a host outside allowed_domains because the user's file says not to ask; Detail is the host.
 	NoticeCodeEgressAutoAllowed = "egress_auto_allowed"
+	// The user allowed no wait for an answer and the host continued the list on its own; Detail is the model's `need`.
+	NoticeCodeAwaitTimedOut = "await_timed_out"
+	// The host stopped continuing an unanswered list after several tries in a row; it waits for the user. Detail is the `need`.
+	NoticeCodeAwaitGaveUp = "await_gave_up"
 	// A slash command nothing resolves, refused rather than sent as prose.
 	NoticeCodeUnknownCommand = "unknown_command"
 	// The display currency preference changed; Detail is the stored value, "" for auto.

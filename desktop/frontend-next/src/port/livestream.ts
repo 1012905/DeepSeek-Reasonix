@@ -8,7 +8,7 @@ const CHECK_MS = 5_000;
 /** The disposer of a live stream, which can also give its connection back and
  *  take one again. A paused stream keeps whatever cursor `url` reads, so the
  *  connection that replaces it asks for exactly what went by in between. */
-export type LiveStream = (() => void) & { pause: () => void; resume: () => void };
+export type LiveStream = (() => void) & { pause: () => void; resume: () => void; holdsConnection?: () => boolean };
 
 /** Holds one EventSource open and replaces it once it has gone silent. `url`
  *  names where to resume, so a replacement asks for what the dead one missed.

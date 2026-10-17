@@ -336,7 +336,10 @@ export async function remoteHub(deviceId: string): Promise<HubPort> {
     return new URL(request.url).origin === location.origin ? link.fetch(request) : nativeFetch(request);
   }) as typeof fetch;
   globalThis.EventSource = RemoteEventSource as unknown as typeof EventSource;
-  return new SseHub();
+  // RemoteEventSource is a polled stand-in for one stream. The multiplexed
+  // stream also needs an open frame and per-pane subscriptions, which polling
+  // cannot carry, so every pane here reads its own /events instead.
+  return new SseHub({ mux: false });
 }
 
 export const remoteCodec = {

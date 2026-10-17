@@ -243,7 +243,8 @@ export class SseHub implements HubPort {
   // last list. The default matches the kernel's own until one arrives.
   // Bindings the shell exposes are pane-independent; this reaches them without
   // pretending to belong to a runtime.
-  private readonly shell = new SsePort();
+  private readonly shell: SsePort;
+  private readonly mux: boolean;
   private readonly settings = new Map<string, AgentPort>();
   // Questions seen this session, kept so an answer can carry the identities the
   // kernel will check it against.
@@ -251,6 +252,11 @@ export class SseHub implements HubPort {
   private readonly askSubs = new Set<(ask: RemoteAsk) => void>();
   private dialing = 0;
   private askTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(options: { mux?: boolean } = {}) {
+    this.mux = options.mux !== false;
+    this.shell = new SsePort("", "", this.mux);
+  }
 
   // A refusal carries a code, and it is the code that has words in the reader's
   // language. Flattening the body into the message threw that away: what
@@ -613,7 +619,7 @@ export class SseHub implements HubPort {
     const held = this.settings.get(runtimeId);
     if (held) return held;
     const base = runtimeId ? `/host/settings/runtime/${encodeURIComponent(runtimeId)}` : "/host/settings";
-    const port = new SsePort(base);
+    const port = new SsePort(base, "", this.mux);
     this.settings.set(runtimeId, port);
     return port;
   }
@@ -621,7 +627,7 @@ export class SseHub implements HubPort {
   portFor(rt: RuntimeView): AgentPort {
     const held = this.ports.get(rt.id);
     if (held) return held;
-    const port = new SsePort(rt.base, rt.id);
+    const port = new SsePort(rt.base, rt.id, this.mux);
     this.ports.set(rt.id, port);
     return port;
   }
