@@ -14,7 +14,11 @@ function titleOf(hit: HistoryHit, tree: TreeWorkspace[]): string {
 }
 
 function rootOf(hit: HistoryHit, tree: TreeWorkspace[]): string | undefined {
-  return tree.find((w) => w.sessions.some((s) => s.path === hit.path))?.root ?? (hit.workspace || undefined);
+  for (const workspace of tree) {
+    const session = workspace.sessions.find((s) => s.path === hit.path);
+    if (session) return session.workspaceRoot || workspace.root;
+  }
+  return hit.workspace || undefined;
 }
 
 /** Conversations whose words, not names, match what the rail is searching for.

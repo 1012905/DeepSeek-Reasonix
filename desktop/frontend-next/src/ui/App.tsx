@@ -9,6 +9,7 @@ import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
 import type { HubPort, RuntimeView } from "../port/hub";
+import { workspaceContains } from "../port/hub";
 import { Chrome } from "./Chrome";
 import { RailToggle } from "./RailToggle";
 import { useLaunchHealth } from "./launchhealth";
@@ -490,7 +491,7 @@ export function App({ hub }: { hub: HubPort }) {
   const activePaneShown = !!activeRuntime && panePorts.has(activeRuntime.id);
   const errorBar = useMemo(() => (error ? <ErrorBar text={error} onDismiss={() => setError("")} onReport={() => setFeedback("send")} /> : null), [error]);
   const bar = useMemo(() => errorBar ?? <AutoArchiveNotice tree={tree} />, [errorBar, tree]);
-  const activeWorkspace = tree.find((ws) => ws.root === activeRuntime?.root) ?? tree[0];
+  const activeWorkspace = tree.find((ws) => !activeRuntime?.host && workspaceContains(ws, activeRuntime?.root)) ?? tree[0];
   // The folder a new session opens in is the one the switcher above names —
   // the window's, not whichever project happens to sit first in the tree.
   const newSessionRoot = activeWorkspace?.root;

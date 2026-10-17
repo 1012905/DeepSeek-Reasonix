@@ -354,6 +354,8 @@ export const EN: Record<string, string> = {
   "读取代码、运行测试与修改文件均只在你选定的文件夹内进行。": "Reading code, running tests and editing files all happen inside the folder you choose.",
   "使用当前位置": "Stay where I am",
   "隔离": "Isolated",
+  "原目录": "Local checkout",
+  "隔离目录": "Worktree",
   "移除": "Remove",
   "删除": "Delete",
   "删除该会话": "Delete this session",

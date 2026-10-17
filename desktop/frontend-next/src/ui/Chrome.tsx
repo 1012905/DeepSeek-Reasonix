@@ -55,15 +55,12 @@ export function Chrome({ port, status, title, steer, onSettings, account, host, 
   const openProject = () => {
     if (hub && root) void hub.openWorkspace(root).catch((e) => onError?.(e));
   };
-  // Only for the "隔离" tag: the folder list and the switch itself moved to the
-  // sidebar, where adding one and opening one are the same gesture.
   const [ws, setWs] = useState<WorkspaceInfo | null>(null);
   useEffect(() => {
-    if (!port) {
-      setWs(null);
-      return;
-    }
-    port.workspaces().then(setWs).catch(() => setWs(null));
+    let current = true;
+    setWs(null);
+    if (port) port.workspaces().then((value) => { if (current) setWs(value); }).catch(() => { if (current) setWs(null); });
+    return () => { current = false; };
   }, [port, root]);
 
   const gathered = useFolded("bar");
@@ -101,11 +98,9 @@ export function Chrome({ port, status, title, steer, onSettings, account, host, 
         <span className="crumb-proj" title={root}>
           {project}
         </span>
-        <span className="isolab" hidden={!ws?.isolated}>
-          {t("隔离")}
+        <span className="isolab" hidden={!ws || ws.current !== root} title={root}>
+          {ws?.isolated ? t("隔离目录") : t("原目录")}
         </span>
-        {/* Same slot as the isolated tag: both answer "this workspace is not an
-            ordinary folder on this machine", so they read as one language. */}
         <span className="isolab hostlab" hidden={!host}>
           {host}
         </span>

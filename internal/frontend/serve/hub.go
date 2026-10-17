@@ -747,6 +747,9 @@ func (h *Hub) findSession(path string) *Runtime {
 // resolveRoot decides which folder a new runtime opens against: the one asked
 // for, the one that owns the session being opened, or the first runtime's.
 func (h *Hub) resolveRoot(req OpenRequest) (string, error) {
+	if root := h.listedSessionRoot(req.SessionPath, req.Root); root != "" {
+		return resolveWorkspaceDir(root)
+	}
 	if root := strings.TrimSpace(req.Root); root != "" {
 		return resolveWorkspaceDir(root)
 	}
