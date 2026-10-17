@@ -103,6 +103,7 @@ type bashParams struct {
 	PreserveBackgroundProcesses bool   `json:"preserve_background_processes"`
 	TimeoutSeconds              int    `json:"timeout_seconds"`
 	Verifies                    string `json:"verifies"`
+	Description                 string `json:"description"`
 }
 
 func (bash) Name() string { return "bash" }
@@ -156,7 +157,7 @@ func (b bash) resolved() sandbox.Shell {
 }
 
 func (bash) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute"},"run_in_background":{"type":"boolean","description":"Run detached: returns a job id immediately and keeps running across turns (no foreground timeout). Read new output with bash_output, wait with wait, stop it with kill_shell. Use for long-running commands like servers, watchers, or builds you don't need to block on."},"preserve_background_processes":{"type":"boolean","description":"After the shell command exits normally, keep any process-group members it intentionally left behind. Use only for deliberate daemonization, browser/GUI/session launchers such as playwright-cli open, or nohup/disown/setsid; cancellation and timeouts still kill the process group."},"timeout_seconds":{"type":"integer","description":"Deadline for this foreground call. Only tightens the host cap — a larger value is clamped to it. Output collected before the deadline is still returned, so set it low when a command's cost is unpredictable (a broad filesystem walk, a network fetch) instead of paying the full cap to find out. For work that legitimately runs long, use run_in_background.","minimum":1},"verifies":{"type":"string","description":"Name what this call decides (e.g. \"balances.json keys are sorted\") to record it as a check. The exit status becomes the verdict, so the command must be one command or an && chain; a ';', a pipe, or '||' hands the status to something else and the call is refused."}},"required":["command"]}`)
+	return json.RawMessage(`{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute"},"description":{"type":"string","description":"Optional short name for this call, in the user's language, shown in task lists."},"run_in_background":{"type":"boolean","description":"Run detached: returns a job id immediately and keeps running across turns (no foreground timeout). Read new output with bash_output, wait with wait, stop it with kill_shell. Use for long-running commands like servers, watchers, or builds you don't need to block on."},"preserve_background_processes":{"type":"boolean","description":"After the shell command exits normally, keep any process-group members it intentionally left behind. Use only for deliberate daemonization, browser/GUI/session launchers such as playwright-cli open, or nohup/disown/setsid; cancellation and timeouts still kill the process group."},"timeout_seconds":{"type":"integer","description":"Deadline for this foreground call. Only tightens the host cap — a larger value is clamped to it. Output collected before the deadline is still returned, so set it low when a command's cost is unpredictable (a broad filesystem walk, a network fetch) instead of paying the full cap to find out. For work that legitimately runs long, use run_in_background.","minimum":1},"verifies":{"type":"string","description":"Name what this call decides (e.g. \"balances.json keys are sorted\") to record it as a check. The exit status becomes the verdict, so the command must be one command or an && chain; a ';', a pipe, or '||' hands the status to something else and the call is refused."}},"required":["command"]}`)
 }
 
 // ReadOnly is false: bash's effect cannot be inferred from args (rm, curl,
@@ -283,7 +284,7 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 			}
 			b.writeEgressNote(out, prepared.EgressToken)
 			return "", jobExit(normalizeBashRunError(jobCtx, runErr, p.PreserveBackgroundProcesses))
-		})
+		}, jobs.WithPresentation(p.Description, p.Command))
 		msg := fmt.Sprintf("Started background job %q. It keeps running across turns; read new output with bash_output(job_id=%q), wait for it with wait, or stop it with kill_shell(job_id=%q).", job.ID, job.ID, job.ID)
 		// Background start is not a completed execution: completion is reported
 		// later by bash_output/wait. Do not masquerade as success with exit 0.

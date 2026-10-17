@@ -391,6 +391,8 @@ const SAID: Record<string, string> = {
   "history.query_required": "请输入要搜索的内容",
   "history.search_failed": "对话内容索引暂时无法回答，稍后再试",
   "job.not_running": "这个后台任务已经不在运行了",
+  "mux.unknown_connection": "事件流连接已经关闭，需要重新打开并重新订阅各窗格",
+  "mux.pane_not_local": "这个窗格由另一台机器驱动，使用它自己的事件流",
   "job.stop_in_progress": "已经请求停止这个后台任务，它的进程还没有退出，仍在等待",
   "inbox.invalid_state": "该条当前状态不允许此操作",
   "inbox.paused": "待送达已暂停，请先恢复派发再进行操作",

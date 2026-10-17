@@ -101,6 +101,10 @@
           "description": "Shell command to execute",
           "type": "string"
         },
+        "description": {
+          "description": "Optional short name for this call, in the user's language, shown in task lists.",
+          "type": "string"
+        },
         "preserve_background_processes": {
           "description": "After the shell command exits normally, keep any process-group members it intentionally left behind. Use only for deliberate daemonization, browser/GUI/session launchers such as playwright-cli open, or nohup/disown/setsid; cancellation and timeouts still kill the process group.",
           "type": "boolean"

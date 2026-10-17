@@ -2116,6 +2116,11 @@
   .jobs { display: flex; flex-direction: column; gap: 7px; min-height: 18px }
   .job { display: flex; align-items: center; gap: 8px; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--muted); animation: card var(--t-card) var(--ease-out) both }
   .job .cmd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .job .job-name { position: relative; min-width: 0; flex: 0 1 auto; display: block }
+  .job .job-name > .cmd { display: block; max-width: 100% }
+  .job-tip { position: fixed; z-index: 60; width: max-content; max-width: min(420px, 80vw); display: flex; flex-direction: column; gap: 4px; padding: 7px 9px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--raised); box-shadow: 0 4px 14px color-mix(in srgb, var(--text) 12%, transparent); user-select: text; cursor: text; white-space: normal }
+  .job-tip .jt-name { color: var(--text); font: var(--w-med) var(--fs-ui)/1.5 var(--ui); overflow-wrap: anywhere }
+  .job-tip .jt-cmd { color: var(--muted); font: var(--w-reg) var(--fs-meta)/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere }
   .job .rt { margin-left: auto; color: var(--ghost); font-variant-numeric: tabular-nums; flex: none }
   .job[data-done] { color: var(--faint) }
 
