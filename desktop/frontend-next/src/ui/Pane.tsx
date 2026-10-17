@@ -583,7 +583,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
             onRefresh={onQueueRefresh}
             onPause={onQueuePause}
           />
-          <PeerHeldBar port={port} />
+          <PeerHeldBar port={port} project={rt.host ? undefined : { path: rt.root, name: rt.name }} />
           {connect && <ConnectNote offer={connect} />}
           <PostureNote port={port} status={status} onChanged={refreshStatus} />
         {/* Views the user (or the extension) put next to the composer. They sit

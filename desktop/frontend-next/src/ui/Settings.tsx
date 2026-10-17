@@ -415,7 +415,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   <span className="cost">
                     {[
                       t(SCOPE_SAID[e.scope]),
-                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : "",
+                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : e.apply === "next-turn" ? t("下个回合起生效") : "",
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </button>

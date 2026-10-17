@@ -156,6 +156,34 @@ export interface PeersState {
   threads?: PeerThread[];
 }
 
+export interface PeerProject {
+  path: string;
+  name: string;
+}
+
+/** The session-messages switches as the kernel holds them (snake_case on the
+ *  wire). Saved values reach the model only at the next turn boundary, so
+ *  `pending` stays true until then. */
+export interface PeersSettings {
+  enabled: boolean;
+  dispatch: boolean;
+  release_projects: PeerProject[];
+  path: string;
+  applies: "next_turn";
+  pending: boolean;
+  // False where the session has no folder to open (a headless run): there is
+  // nowhere for messages to be held, so the switches are inert.
+  available: boolean;
+}
+
+export interface PeersSettingsEdit {
+  enabled?: boolean;
+  dispatch?: boolean;
+  release_projects?: string[];
+}
+
+export type PeerRemember = "project" | "none";
+
 export interface PeerReceipt {
   id: string;
   to: PeerView;
