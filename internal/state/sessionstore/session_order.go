@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
+	"sync/atomic"
 
 	"reasonix/internal/state/store"
 )
@@ -27,6 +29,7 @@ func ListSessionOrder(dir string) ([]SessionOrderInfo, error) {
 	next := make(map[string]listIndexEntry, len(entries))
 	var out []SessionOrderInfo
 	reused := 0
+	var misses []orderMiss
 	for _, e := range entries {
 		if e.IsDir() || !store.IsSessionTranscriptName(e.Name()) {
 			continue
@@ -46,10 +49,13 @@ func ListSessionOrder(dir string) ([]SessionOrderInfo, error) {
 			}
 			continue
 		}
-		info, skip := orderInfoOf(full, e)
-		next[e.Name()] = listIndexEntry{Print: print, Skip: skip, Info: info}
-		if !skip {
-			out = append(out, info)
+		misses = append(misses, orderMiss{entry: e, full: full, print: print})
+	}
+	readOrderMisses(misses)
+	for _, m := range misses {
+		next[m.entry.Name()] = listIndexEntry{Print: m.print, Skip: m.skip, Info: m.info}
+		if !m.skip {
+			out = append(out, m.info)
 		}
 	}
 	saveListIndex(dir, index, next, reused)
@@ -107,4 +113,43 @@ func orderInfoOf(full string, e fs.DirEntry) (SessionOrderInfo, bool) {
 	row.Revision = meta.Revision
 	row.ContentDigest = meta.ContentDigest
 	return row, false
+}
+
+// orderMiss is a session the remembered listing could not answer.
+type orderMiss struct {
+	entry fs.DirEntry
+	full  string
+	print listPrint
+	info  SessionOrderInfo
+	skip  bool
+}
+
+// orderReaders bounds the sidecar reads in flight. A cold folder is a wait on
+// the disk, one file at a time, so a few readers cut it without crowding out
+// the rest of the app.
+const orderReaders = 8
+
+// readOrderMisses fills each miss in place. Every worker owns whole slots, so
+// the listing comes out exactly as a sequential read would give it.
+func readOrderMisses(misses []orderMiss) {
+	if len(misses) < 2*orderReaders {
+		for i := range misses {
+			misses[i].info, misses[i].skip = orderInfoOf(misses[i].full, misses[i].entry)
+		}
+		return
+	}
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for range orderReaders {
+		wg.Go(func() {
+			for {
+				i := int(next.Add(1)) - 1
+				if i >= len(misses) {
+					return
+				}
+				misses[i].info, misses[i].skip = orderInfoOf(misses[i].full, misses[i].entry)
+			}
+		})
+	}
+	wg.Wait()
 }
