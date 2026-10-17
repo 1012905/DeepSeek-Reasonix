@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const { WebContentsView, session } = require("electron");
 const { installPaneReload } = require("./reload");
 const { guestNavigationAllowed, typed } = require("./browserguard");
+const { KeyboardKeeper } = require("./keyboard");
 
 // The size a page lays out at while nobody is looking at it: the kernel drives
 // pages whether or not the panel is open, and a page sized to nothing reads as
@@ -30,6 +31,7 @@ class BrowserViews {
     // for this run only: a restart, or a different certificate, asks again.
     this.trusted = new Set();
     this.shown = "";
+    this.keyboard = new KeyboardKeeper({ win });
     // Moves with every show and hide, so a freeze that finishes after one does
     // not put away a page shown since.
     this.placed = 0;
@@ -106,7 +108,8 @@ class BrowserViews {
       }
       onEvent(method, params);
     });
-    const entry = { view, onDownload, typed: 0 };
+    const entry = { view, onDownload, typed: 0, synthUntil: 0 };
+    this.keyboard.watch(contents, () => Date.now() < entry.synthUntil);
     this.watchLoads(targetId, entry);
     let closed = false;
     const close = () => {
@@ -125,7 +128,10 @@ class BrowserViews {
     void contents.loadURL(url).catch(() => {});
     return {
       targetId,
-      send: (method, params) => contents.debugger.sendCommand(method, params),
+      send: (method, params) => {
+        if (method.startsWith("Input.")) entry.synthUntil = Date.now() + 250;
+        return contents.debugger.sendCommand(method, params);
+      },
       close,
       mainFrame: () => mainFrame,
     };
@@ -159,6 +165,14 @@ class BrowserViews {
     this.win.contentView.addChildView(entry.view);
     entry.view.setBounds(at);
     entry.at = at;
+    this.keepKeyboard();
+  }
+
+  // Attaching a view can leave nobody holding the keyboard, and the platform
+  // settles that a moment later, so the page is handed it back twice.
+  keepKeyboard() {
+    this.keyboard.reclaim();
+    setTimeout(() => this.keyboard.reclaim(), 150);
   }
 
   reattach() {
@@ -168,6 +182,7 @@ class BrowserViews {
       this.win.contentView.addChildView(entry.view);
       if (id !== this.shown) this.putAway(entry.view, entry);
     }
+    this.keepKeyboard();
   }
 
   // freeze answers with a picture of the page on screen, taken before it is put
