@@ -1,2 +1,0 @@
-- 用户配置新增 `sandbox.egress_unlisted = "allow"`：清单外的主机不再询问，每个主机只提示一次；拒绝名单照旧；默认关闭。关联 #13478。
-- New user-config `sandbox.egress_unlisted = "allow"`: hosts outside allowed_domains pass without asking, said once per host; denied_domains still refuse; off by default. Refs #13478.
