@@ -271,6 +271,19 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("tools.system_one.laya.local", "true", ProjectUserOnly)
 		c.Tools.SystemOne.Laya.Local = false
 	}
+	c.applyWorkspaceGrants(r, ws)
+	store := NewProjectProgramStore(r.Home())
+	h.gatePrograms(c, store, ws)
+	// Launcher arguments belong to the program the user chose them for.
+	if c.Tools.Shell.Path != h.shell.Path {
+		c.Tools.Shell.Args = nil
+	}
+	h.endpoints.gateEndpoints(c, store, ws)
+}
+
+// applyWorkspaceGrants adds what the user already granted this workspace, and
+// refuses a granted root that no longer resolves to itself.
+func (c *Config) applyWorkspaceGrants(r Roots, ws string) {
 	grant := grantedToWorkspace(r.Home(), ws)
 	c.Permissions.Allow = appendMissing(c.Permissions.Allow, grant.Allow...)
 	for _, entry := range grant.AllowWrite {
@@ -294,13 +307,6 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		}
 		c.projectScope.extraRoots = appendMissing(c.projectScope.extraRoots, resolved)
 	}
-	store := NewProjectProgramStore(r.Home())
-	h.gatePrograms(c, store, ws)
-	// Launcher arguments belong to the program the user chose them for.
-	if c.Tools.Shell.Path != h.shell.Path {
-		c.Tools.Shell.Args = nil
-	}
-	h.endpoints.gateEndpoints(c, store, ws)
 }
 
 func (h heldScope) narrowSandbox(c *Config, ws string) {
