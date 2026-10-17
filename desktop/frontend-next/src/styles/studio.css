@@ -232,6 +232,23 @@ body { background: var(--page); }
   box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 0 0 3px color-mix(in srgb, var(--focus) 10%, transparent), 0 14px 34px -24px rgb(0 0 0 / .4);
 }
 .compose:focus-within::after { border-color: color-mix(in srgb, var(--focus) 58%, var(--border)); }
+@property --compose-sweep { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.compose::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; opacity: 0;
+  background: conic-gradient(from var(--compose-sweep), transparent 0 62%, color-mix(in srgb, var(--focus) 70%, transparent) 82%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pane:not([data-run="running"]) .compose:is(:hover, :focus-within)::before { animation: compose-sweep 1.9s cubic-bezier(.22, .8, .18, 1) both; }
+}
+@keyframes compose-sweep {
+  0% { --compose-sweep: 190deg; opacity: 0; }
+  22% { opacity: .22; }
+  48% { opacity: .58; }
+  78% { --compose-sweep: 520deg; opacity: .42; }
+  100% { --compose-sweep: 560deg; opacity: 0; }
+}
 .compose .row { background: transparent; border-top-color: var(--hair); }
 .compose .row > * { animation: none; }
 .composeguide { display: none; }
@@ -3130,7 +3147,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   font: 650 calc(11px * var(--fs-scale, 1))/1.2 var(--ui);
 }
 .studio-runclock { flex: none; font-variant-numeric: tabular-nums; font-weight: 500; opacity: .78; }
-.studio-runclock::before { content: "·"; margin-right: 7px; opacity: .6; }
 .studio-runstate .studio-runtokens { flex: none; }
 .studio-runstate .rmark {
   width: 15px;

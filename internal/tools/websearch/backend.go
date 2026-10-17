@@ -38,7 +38,10 @@ type BackendError struct {
 	Backend string
 	Kind    FailKind
 	Status  int
-	Err     error
+	// Code is the identity the backend gives its own failure, when it has one
+	// (the DeepSeek API's balance and key problems); empty otherwise.
+	Code string
+	Err  error
 }
 
 func (e *BackendError) Error() string {
@@ -48,12 +51,20 @@ func (e *BackendError) Error() string {
 	return fmt.Sprintf("%s backend: %s", e.Backend, e.Kind)
 }
 
+// identity is what the model is told: the backend's own code, else the kind.
+func (e *BackendError) identity() string {
+	if e.Code != "" {
+		return e.Code
+	}
+	return string(e.Kind)
+}
+
 func (e *BackendError) Unwrap() error { return e.Err }
 
-func failKind(err error) (FailKind, int) {
+func failure(err error) *BackendError {
 	var be *BackendError
 	if errors.As(err, &be) {
-		return be.Kind, be.Status
+		return be
 	}
-	return FailTransport, 0
+	return &BackendError{Kind: FailTransport, Err: err}
 }

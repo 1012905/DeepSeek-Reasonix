@@ -21,7 +21,7 @@ export function RunLine({ label, running, blocked, since, sent, received, estima
       data-waiting={blocked ? "" : undefined}
       data-idle={running || blocked ? undefined : ""}
     >
-      <span className="studio-runlabel"><RMark /><span>{t(label)}</span>{running && since !== undefined && <RunClock since={since} />}</span>
+      <span className="studio-runlabel"><RMark /><span className="sr-only">{t(label)}</span>{running && since !== undefined && <RunClock since={since} />}</span>
       <RunTokens sent={sent} received={received} estimated={estimated} />
     </div>
   );

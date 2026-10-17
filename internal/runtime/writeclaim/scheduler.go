@@ -94,7 +94,7 @@ func NewSubagentScheduler(maxTotal, maxWriters int) *SubagentScheduler {
 	return &SubagentScheduler{maxTotal: maxTotal, maxWriters: maxWriters}
 }
 
-// Limits returns the effective total/writer caps.
+// Limits returns the effective total/writer caps; zero is no limit.
 // Queued is how many acquires are waiting for a slot.
 func (s *SubagentScheduler) Queued() int {
 	s.mu.Lock()
@@ -104,7 +104,7 @@ func (s *SubagentScheduler) Queued() int {
 
 func (s *SubagentScheduler) Limits() (total, writers int) {
 	if s == nil {
-		return DefaultMaxSubagentConcurrency, DefaultMaxParallelWriters
+		return 0, 0
 	}
 	return s.maxTotal, s.maxWriters
 }
@@ -279,13 +279,13 @@ const parentWriteLabel = "the main agent's write in progress"
 // them are answered by a setting and the third only by a path or an edge, and a
 // reader cannot tell those apart from "queued".
 func (s *SubagentScheduler) canStartLocked(req AcquireRequest) (bool, Held) {
-	if s.activeTotal >= s.maxTotal {
+	if s.maxTotal > 0 && s.activeTotal >= s.maxTotal {
 		return false, Held{Cause: agentgraph.WaitSlots}
 	}
 	if !req.Writer {
 		return true, Held{}
 	}
-	if s.activeWriters >= s.maxWriters {
+	if s.maxWriters > 0 && s.activeWriters >= s.maxWriters {
 		return false, Held{Cause: agentgraph.WaitWriters}
 	}
 	for _, active := range slices.Concat(s.activeClaims, s.parentClaims) {

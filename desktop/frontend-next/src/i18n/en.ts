@@ -1559,6 +1559,8 @@ export const EN: Record<string, string> = {
   "后台任务已结束：{name}": "Background job finished: {name}",
   "后台任务已终止：{name}": "Background job killed: {name}",
   "后台任务 {name} 失败，需要处理": "Background job {name} failed: needs attention",
+  "后台任务 {name} 已有 {quiet} 没往自己的输出里写任何内容：可能是在写文件，也可能卡住了；可以用 wait 或 bash_output 查看，或用 kill_shell 结束它":
+    "Background job {name} has written nothing to its own output for {quiet}: it may be writing to a file, or stuck; check it with wait or bash_output, or stop it with kill_shell",
   "被信号 {signal} 终止": "Ended by signal {signal}",
   "退出码 {code}": "Exit code {code}",
   "已恢复 {n} 条未完成的指令。待发送已暂停，请先在输入框上方的队列里查看，再点“继续派发”": "Recovered {n} unfinished instruction(s). Sending is paused: review them in the queue above the input box, then press Release",

@@ -21,5 +21,8 @@ func addPeerTools(reg *tool.Registry, cfg *config.Config) *tool.PeerLink {
 			reg.Add(t)
 		}
 	}
+	if cfg.PeersDispatch() && (len(cfg.Tools.Enabled) == 0 || slices.Contains(cfg.Tools.Enabled, "dispatch_to_project")) {
+		reg.Add(builtin.DispatchTool(link))
+	}
 	return link
 }
