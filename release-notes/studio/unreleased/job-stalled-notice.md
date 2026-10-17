@@ -1,0 +1,2 @@
+- 修复：后台任务一段时间没往自己的输出里写内容时，界面上的警告改成中文，写明任务名和已安静的时长，不再显示英文原文。关联 #13566。
+- Fixed: the warning about a background job that has been silent on its own output is now worded in the interface language, with the job name and how long it has been quiet. Refs #13566.
