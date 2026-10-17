@@ -16,6 +16,7 @@ class KeyboardKeeper {
     this.now = now;
     this.owner = win.webContents.isFocused() ? "app" : "none";
     win.webContents.on("focus", () => {
+      if (process.env.KEYBOARD_DEBUG) process.stdout.write("[keeper] app focus\n");
       this.owner = "app";
     });
   }
@@ -31,6 +32,7 @@ class KeyboardKeeper {
       if (input && input.type === "mouseDown" && !synthetic()) personAt = this.now();
     });
     contents.on("focus", () => {
+      if (process.env.KEYBOARD_DEBUG) process.stdout.write(`[keeper] view focus owner=${this.owner} live=${this.live()} person=${this.now() - personAt < PERSON_MS}\n`);
       if (this.now() - personAt < PERSON_MS) {
         this.owner = "view";
         return;
