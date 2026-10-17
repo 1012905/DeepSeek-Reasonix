@@ -171,9 +171,17 @@ export interface AutoArchiveSettings {
 export type DisplayCurrencyMode = "auto" | "CNY" | "USD";
 
 // Which currency costs are shown in; the user file holds it.
+export interface UnconvertedPrice {
+  provider: string;
+  model: string;
+  currency: string;
+}
+
 export interface DisplayCurrencySettings {
   mode: DisplayCurrencyMode;
   path: string;
+  // Models whose price cannot be shown in a pinned currency.
+  unconverted: UnconvertedPrice[];
 }
 
 // Whether the changed-files pill is drawn above the composer; the user file
