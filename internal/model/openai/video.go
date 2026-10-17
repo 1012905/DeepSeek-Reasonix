@@ -94,6 +94,9 @@ func (w *videoWire) forget(shas []string) {
 // It exists so a test can swap the path there.
 var afterVideoOpen = func(string) {}
 
+// beforeVideoOpen is called with the path just before it is opened.
+var beforeVideoOpen = func(string) {}
+
 var errVideoChanged = errors.New("the file no longer matches what the tool read")
 
 // resolve turns a reference into what the vendor reads. The file is opened once
@@ -114,6 +117,7 @@ func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http
 			return "ms://" + id, true, ""
 		}
 	}
+	beforeVideoOpen(ref.Path)
 	f, err := os.Open(ref.Path)
 	if err != nil {
 		return "", false, readCode(err)
@@ -130,6 +134,11 @@ func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http
 		}
 		return "data:" + ref.MIME + ";base64," + base64.StdEncoding.EncodeToString(raw), false, ""
 	}
+	// The opened file is checked end to end before a byte goes out; the check
+	// inside the stream is the second line, against the same file changing in place.
+	if code := verifyOpened(f, ref); code != "" {
+		return "", false, code
+	}
 	id, err := w.upload(ctx, h, auth, ref, f)
 	switch {
 	case errors.Is(err, errVideoChanged):
@@ -141,6 +150,22 @@ func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http
 	w.ids[ref.SHA256] = id
 	w.mu.Unlock()
 	return "ms://" + id, false, ""
+}
+
+// verifyOpened hashes the open file from its start and leaves it rewound.
+func verifyOpened(f *os.File, ref provider.VideoRef) string {
+	sum := sha256.New()
+	n, err := io.Copy(sum, f)
+	if err != nil {
+		return videoReadFailed
+	}
+	if n != ref.Size || hex.EncodeToString(sum.Sum(nil)) != ref.SHA256 {
+		return videoFileChanged
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return videoReadFailed
+	}
+	return ""
 }
 
 func readCode(err error) string {

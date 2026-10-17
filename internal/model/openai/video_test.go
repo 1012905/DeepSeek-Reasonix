@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -25,6 +26,13 @@ type videoServer struct {
 	// a file it no longer holds.
 	failChatOnce bool
 	srv          *httptest.Server
+	filesBytes   int
+}
+
+func (v *videoServer) receivedBytes() int {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.filesBytes
 }
 
 type uploadSeen struct {
@@ -41,6 +49,9 @@ func newVideoServer(t *testing.T) *videoServer {
 		defer v.mu.Unlock()
 		switch {
 		case r.URL.Path == "/v1/files" && r.Method == http.MethodPost:
+			raw, _ := io.ReadAll(r.Body)
+			v.filesBytes += len(raw)
+			r.Body = io.NopCloser(bytes.NewReader(raw))
 			if err := r.ParseMultipartForm(32 << 20); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -288,6 +299,51 @@ func TestUploadIsAbortedWhenTheBytesStopMatchingMidStream(t *testing.T) {
 	}
 	if len(v.uploads) != 0 {
 		t.Fatalf("a file that does not match its hash was uploaded: %+v", v.uploads)
+	}
+	body, _ := json.Marshal(v.chats[0])
+	if !strings.Contains(string(body), "video.file_changed") {
+		t.Fatalf("the model was not told by code: %s", body)
+	}
+}
+
+// The path may already be another file when it is opened. Nothing of it leaves.
+func swapBeforeOpen(t *testing.T, other string) {
+	t.Helper()
+	elsewhere := filepath.Join(t.TempDir(), "other.mp4")
+	if err := os.WriteFile(elsewhere, []byte(other), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	beforeVideoOpen = func(path string) {
+		if err := os.Rename(elsewhere, path); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { beforeVideoOpen = func(string) {} })
+}
+
+func TestInlineSendsNothingOfAFileThePathBecameBeforeItWasOpened(t *testing.T) {
+	v := newVideoServer(t)
+	ref := writeVideo(t, "FAKE-MP4-BYTES")
+	swapBeforeOpen(t, "SECRET-OF-ANOTHER-FILE")
+	if err := run(t, v.provider(t, "inline_data_url"), readRound(ref)); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(v.chats[0])
+	if strings.Contains(string(body), "SECRET-OF-ANOTHER-FILE") || strings.Contains(string(body), base64.StdEncoding.EncodeToString([]byte("SECRET-OF-ANOTHER-FILE"))) ||
+		strings.Contains(string(body), "video_url") || !strings.Contains(string(body), "video.file_changed") {
+		t.Fatalf("the swapped file was sent, or the model was not told by code: %s", body)
+	}
+}
+
+func TestUploadSendsNotAByteOfAFileThePathBecameBeforeItWasOpened(t *testing.T) {
+	v := newVideoServer(t)
+	ref := writeVideo(t, "FAKE-MP4-BYTES")
+	swapBeforeOpen(t, "SECRET-OF-ANOTHER-FILE")
+	if err := run(t, v.provider(t, "moonshot_file"), readRound(ref)); err != nil {
+		t.Fatal(err)
+	}
+	if v.receivedBytes() != 0 {
+		t.Fatalf("the vendor received %d bytes of the file the path became", v.receivedBytes())
 	}
 	body, _ := json.Marshal(v.chats[0])
 	if !strings.Contains(string(body), "video.file_changed") {
