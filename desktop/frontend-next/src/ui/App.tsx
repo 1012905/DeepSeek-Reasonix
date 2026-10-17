@@ -48,6 +48,7 @@ import { PeerThreadsProvider } from "./peerthreads";
 import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
+import { paneReader } from "../state/paneread";
 import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
 import { useLiveGrace } from "./useLiveGrace";
 import { isUnread, useViewed, useUnreadBadge } from "./unread";
@@ -198,8 +199,9 @@ export function App({ hub }: { hub: HubPort }) {
 
   // Panes and tree move together: opening a session marks its row live, closing
   // one hands the row back.
+  const readPanes = useMemo(() => paneReader(() => hub.runtimes()), [hub]);
   const reloadPanes = useCallback(async () => {
-    const list = await hub.runtimes().catch(() => [] as RuntimeView[]);
+    const list = await readPanes(); if (!list) return;
     // Setup and the welcome are read through a pane's port. With none open
     // there is nothing to ask, and waiting on them would leave the window
     // blank; the next pane to open reads both again.
@@ -212,7 +214,7 @@ export function App({ hub }: { hub: HubPort }) {
     setActive((cur) => (list.some((rt) => rt.id === cur) ? cur : (list[0]?.id ?? "")));
     await reloadTree();
     void reloadRemoteTrees();
-  }, [hub, reloadTree, reloadRemoteTrees]);
+  }, [hub, readPanes, reloadTree, reloadRemoteTrees]);
   const refreshPanes = useMemo(() => singleFlight(reloadPanes), [reloadPanes]);
 
   useEffect(() => {

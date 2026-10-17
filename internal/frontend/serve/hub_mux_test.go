@@ -378,3 +378,41 @@ func TestMuxSubscriptionsLeaveNoGoroutinesBehind(t *testing.T) {
 		t.Fatalf("goroutines after disconnect = %d, baseline %d", got, baseline)
 	}
 }
+
+// A pane that attached before it had seen any frame still resumes from where it
+// attached: the stream states that position, so frames that fall while the
+// connection is down are replayed on the next one instead of skipped.
+func TestMuxAttachStatesItsPositionSoANewConnectionLosesNothing(t *testing.T) {
+	_, rts, srv := muxHub(t, 1)
+	rt := rts[0]
+	rt.Events.Emit(notice("before"))
+
+	first := openMux(t, srv)
+	if code, body := first.call(http.MethodPut, rt.ID, ""); code != http.StatusNoContent {
+		t.Fatalf("attach = %d %s", code, body)
+	}
+	var seen int64 = -1
+	for seen < 0 {
+		if f := first.next(); f.Pane == rt.ID && f.Frame.Kind == "stream_watermark" {
+			seen = f.Frame.Seq
+		}
+	}
+	first.cancel()
+
+	rt.Events.Emit(notice("during-1"))
+	rt.Events.Emit(notice("during-2"))
+
+	second := openMux(t, srv)
+	if code, body := second.call(http.MethodPut, rt.ID, `{"after":`+jsonInt(seen)+`}`); code != http.StatusNoContent {
+		t.Fatalf("resume = %d %s", code, body)
+	}
+	var codes []string
+	for len(codes) < 2 {
+		if f := second.next(); f.Frame.Code != "" && f.Frame.Seq > 0 {
+			codes = append(codes, f.Frame.Code)
+		}
+	}
+	if strings.Join(codes, ",") != "during-1,during-2" {
+		t.Fatalf("after reattaching from %d got %v, want both missed frames once", seen, codes)
+	}
+}

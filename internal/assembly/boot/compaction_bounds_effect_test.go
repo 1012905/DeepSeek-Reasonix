@@ -23,7 +23,7 @@ func (p pacedDigestProvider) Name() string { return "boot-paced-digest" }
 
 func (p pacedDigestProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	ch := make(chan provider.Chunk)
-	digest := strings.Contains(req.Messages[0].Content, "compacting the earlier part")
+	digest := req.Summary
 	go func() {
 		defer close(ch)
 		if !digest {

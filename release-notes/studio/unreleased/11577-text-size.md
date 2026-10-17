@@ -1,0 +1,2 @@
+- 新增：设置 > 外观 > 大小 增加“界面文字”四档，只放大侧栏、设置、标签等处的文字，不动边距和控件；对话正文仍由“正文”单独设置。关联 #11577。
+- Added: Appearance > Size has an Interface text step (small to larger) that enlarges only sidebar, settings and tab text, not spacing or controls; body text keeps its own. Refs #11577.
