@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/session/control"
@@ -284,7 +286,7 @@ func TestEffectMCPResourceReadAsksWithTheFullAddressAndRefusesWhatTheServerDidNo
 				if len(s.approvals) == 0 {
 					select {
 					case err := <-done:
-						t.Fatalf("the run ended without an approval card (err=%v); the first request offered %v", err, s.rec.firstTools())
+						t.Fatalf("the run ended without an approval card (err=%v); the first request offered %v; the server's cache entry: %s", err, s.rec.firstTools(), resourceCacheEntry())
 					default:
 					}
 					return false
@@ -314,4 +316,21 @@ func TestEffectMCPResourceReadAsksWithTheFullAddressAndRefusesWhatTheServerDidNo
 			}
 		})
 	}
+}
+
+// resourceCacheEntry is what the schema cache holds for the test server, for the
+// failure message: whether the second Build could have seen the capability.
+func resourceCacheEntry() string {
+	raw, err := os.ReadFile(filepath.Join(config.CacheDir(), "mcp", "res.json"))
+	if err != nil {
+		return "unreadable: " + err.Error()
+	}
+	var entry struct {
+		Capabilities map[string]bool `json:"capabilities"`
+		Tools        []any           `json:"tools"`
+	}
+	if err := json.Unmarshal(raw, &entry); err != nil {
+		return fmt.Sprintf("not JSON (%d bytes): %v", len(raw), err)
+	}
+	return fmt.Sprintf("capabilities %v, %d tools", entry.Capabilities, len(entry.Tools))
 }
