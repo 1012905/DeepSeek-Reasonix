@@ -47,19 +47,22 @@ func (s *Server) openDocument(w http.ResponseWriter, r *http.Request) {
 	if !filepath.IsAbs(candidate) {
 		candidate = filepath.Join(workspace, candidate)
 	}
-	candidate = filepath.Clean(candidate)
-
 	roots := []string{workspace}
 	if extra, err := s.ctl().ReadableExtraRoots(); err == nil {
 		roots = append(roots, extra...)
 	}
-	real, err := filepath.EvalSymlinks(candidate)
+	named, ok := lexicallyWithin(roots, filepath.Clean(candidate))
+	if !ok {
+		refuse(w, http.StatusForbidden, codeDocumentOutsideRoots, "the file is outside the workspace and its granted folders", nil)
+		return
+	}
+	real, err := filepath.EvalSymlinks(named)
 	if errors.Is(err, fs.ErrNotExist) {
 		refuse(w, http.StatusNotFound, codeDocumentMissing, "the file does not exist", nil)
 		return
 	}
 	if err != nil || !withinAny(roots, real) {
-		refuse(w, http.StatusForbidden, codeDocumentOutsideRoots, "the file is outside the workspace and its granted folders", nil)
+		refuse(w, http.StatusForbidden, codeDocumentOutsideRoots, "the file resolves outside the workspace and its granted folders", nil)
 		return
 	}
 	if info, err := os.Stat(real); err != nil {
@@ -79,6 +82,24 @@ func (s *Server) openDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"path": real})
+}
+
+// lexicallyWithin is the string-only first gate, run before any file is
+// touched. It tries each root as written and as its links resolve, so a path
+// spelled either way passes, and answers the path rebuilt from that root.
+func lexicallyWithin(roots []string, candidate string) (string, bool) {
+	for _, root := range roots {
+		forms := []string{filepath.Clean(root)}
+		if real, err := filepath.EvalSymlinks(root); err == nil {
+			forms = append(forms, real)
+		}
+		for _, form := range forms {
+			if rel, err := filepath.Rel(form, candidate); err == nil && filepath.IsLocal(rel) {
+				return filepath.Join(form, rel), true
+			}
+		}
+	}
+	return "", false
 }
 
 // withinAny judges the resolved file against each root's own resolved form, so

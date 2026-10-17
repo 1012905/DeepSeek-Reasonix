@@ -24,6 +24,13 @@ type documentFixture struct {
 
 func newDocumentFixture(t *testing.T, granted bool) *documentFixture {
 	t.Helper()
+	return newDocumentFixtureAt(t, granted, false)
+}
+
+// aliased runs the kernel with its workspace named through a symlink, so the
+// root as written and the root as it resolves are different strings.
+func newDocumentFixtureAt(t *testing.T, granted, aliased bool) *documentFixture {
+	t.Helper()
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	f := &documentFixture{work: testenv.TempDir(t), library: testenv.TempDir(t), other: testenv.TempDir(t)}
 	for dir, names := range map[string][]string{
@@ -41,8 +48,15 @@ func newDocumentFixture(t *testing.T, granted bool) *documentFixture {
 			}
 		}
 	}
+	root := f.work
+	if aliased {
+		root = filepath.Join(testenv.TempDir(t), "alias")
+		if err := os.Symlink(f.work, root); err != nil {
+			t.Fatal(err)
+		}
+	}
 	bc := NewBroadcaster()
-	ctrl := control.New(control.Options{Runner: fakeRunner{}, Sink: bc, WorkspaceRoot: f.work})
+	ctrl := control.New(control.Options{Runner: fakeRunner{}, Sink: bc, WorkspaceRoot: root})
 	t.Cleanup(ctrl.Close)
 	if err := config.NewProjectGrantStore(config.Roots{}.Home()).Update(f.work, func(g config.ProjectGrant) (config.ProjectGrant, error) {
 		g.AllowWrite = append(g.AllowWrite, f.library)
@@ -173,5 +187,30 @@ func TestOpenDocumentReportsAFailedLaunch(t *testing.T) {
 	f.launchErr = os.ErrPermission
 	if code, why := f.open(t, filepath.Join(f.work, "site", "index.html")); code != http.StatusInternalServerError || why != codeDocumentLaunch {
 		t.Fatalf("status %d code %q, want 500 %s", code, why, codeDocumentLaunch)
+	}
+}
+
+func TestOpenDocumentAcceptsAPathSpelledThroughALinkedWorkspace(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks needs a privilege on Windows")
+	}
+	f := newDocumentFixtureAt(t, true, true)
+	real, err := filepath.EvalSymlinks(f.work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := f.srv.ctl().WorkspaceRoot()
+	for _, path := range []string{
+		filepath.Join(alias, "site", "index.html"),
+		filepath.Join(real, "site", "index.html"),
+		"site/index.html",
+	} {
+		before := len(f.launched)
+		if code, why := f.open(t, path); code != http.StatusOK || len(f.launched) != before+1 {
+			t.Errorf("%s: status %d code %q launched %v, want 200 and one launch", path, code, why, f.launched)
+		}
+	}
+	if code, why := f.open(t, filepath.Join(f.other, "secret.html")); code != http.StatusForbidden || why != codeDocumentOutsideRoots {
+		t.Errorf("outside the roots with an aliased workspace: status %d code %q", code, why)
 	}
 }
