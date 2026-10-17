@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,7 +207,7 @@ func TestRememberingAnApprovalReleasesThisProjectAndDenyCannotRemember(t *testin
 	f.send(t, "m1", "first")
 	f.send(t, "m2", "second")
 	f.c.peerIngest()
-	if err := f.c.ResolvePeerMessageRemembering("m1", false, PeerRememberProject); err != ErrPeerRememberDenied {
+	if err := f.c.ResolvePeerMessageRemembering("m1", false, PeerRememberProject); !errors.Is(err, ErrPeerRememberDenied) {
 		t.Fatalf("a remembered denial: %v", err)
 	}
 	if config.LoadForEdit(config.UserConfigPath()).PeersReleasedProject(f.c.WorkspaceRoot()) {
@@ -227,7 +228,7 @@ func TestRememberingAMessageThatIsNotHeldWritesNothing(t *testing.T) {
 	f := newPeerFixture(t)
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	f.c.workspaceRoot = testenv.TempDir(t)
-	if err := f.c.ResolvePeerMessageRemembering("nope", true, PeerRememberProject); err != ErrPeerNotHeld {
+	if err := f.c.ResolvePeerMessageRemembering("nope", true, PeerRememberProject); !errors.Is(err, ErrPeerNotHeld) {
 		t.Fatalf("unknown id: %v", err)
 	}
 	if config.LoadForEdit(config.UserConfigPath()).PeersReleasedProject(f.c.WorkspaceRoot()) {
