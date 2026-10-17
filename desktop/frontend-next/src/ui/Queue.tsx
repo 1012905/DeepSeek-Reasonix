@@ -195,10 +195,10 @@ export function Queue({ queue, running, onRead, onEdit, onMove, onCancel, onSend
         {/* Both limits refuse on their own, so a header that showed one of them
             would be wrong about the other exactly when it bites. */}
         {capacityPressure && <span className="qcap" aria-label={t("队列容量")}>
-          <span data-full={fullItems || undefined}>
+          {cap.maxItems > 0 && <span data-full={fullItems || undefined}>
             {t("条目")} {cap.items}/{cap.maxItems}
             <Meter value={cap.items} max={cap.maxItems} label={t("条目")} full={fullItems} />
-          </span>
+          </span>}
           <span data-full={fullBytes || undefined}>
             {t("字节")} {size(cap.bytes)}/{size(cap.maxBytes)}
             <Meter value={cap.bytes} max={cap.maxBytes} label={t("字节")} full={fullBytes} />
