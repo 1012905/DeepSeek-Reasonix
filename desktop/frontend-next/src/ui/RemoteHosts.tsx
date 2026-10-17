@@ -160,7 +160,8 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
           const key = remoteProjectKey(host.name, ws.root);
           const hasChildren = ws.sessions.length > 0 || (ws.total ?? 0) > 0 || (!tree && !working) || panes.some((rt) => workspaceContains(ws, rt.root));
           const folded = hasChildren && !needle && (foldedProjects ?? shut).has(key);
-          const current = panes.some((rt) => workspaceContains(ws, rt.root) && rt.id === active);
+          const currentPane = panes.find((rt) => workspaceContains(ws, rt.root) && rt.id === active);
+          const current = !!currentPane;
           const visible = needle || scope !== "all" || expanded.has(key) ? ws.sessions
             : ws.sessions.filter((session, index) => index < previewLimit || panes.some((rt) => rt.id === active && rt.sessionPath === session.path));
           return (
@@ -171,6 +172,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                 <StudioIcon name="folder" className="wsfolder" />
                 <span className="wsname" title={host.name + " · " + ws.root} dir="ltr">{ws.name}</span>
                 <span className="project-source" title={host.target}>{host.name}</span>
+                {currentPane && <span className="wsmeta" title={currentPane.root} dir="ltr">{t("连接目录：{path}", { path: currentPane.root })}</span>}
                 <span className="wsacts">
                   {folded && <UnreadCount n={ws.sessions.filter((session) => session.unread).length} />}
                   {tree && ws.sessions.length > 0 && <RowCount c={scope === "all" && older > 0
@@ -183,7 +185,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                       onClick={(event) => { event.stopPropagation(); void open(host, ws.root); }}>
                       <StudioIcon name="chat" />
                     </button>
-                    <RemoteProjectMenu name={ws.name} root={ws.root} host={host.name} busy={!!busy}
+                    <RemoteProjectMenu name={ws.name} root={ws.root} host={host.name} defaultRoot={host.workspace || workspacesOf(host)[0]} busy={!!busy}
                       onRefresh={() => void readBook(host.name)}
                       onRemove={ws.booked ? () => void drop(host, ws) : undefined} />
                   </span>

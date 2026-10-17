@@ -309,15 +309,13 @@ func (h *Hub) removeRemoteSession(w http.ResponseWriter, r *http.Request) {
 // remoteLink is an endpoint on host: a pane's link when one is open, or one
 // taken for this request and handed back by release.
 func (h *Hub) remoteLink(r *http.Request, host string) (RemoteEndpoint, func(), error) {
-	if ep, ok := h.anyRemotePane(host); ok {
-		return ep, func() {}, nil
-	}
-	// The far kernel outlives the link, and its book is on its own disk. A
-	// machine the book has turned off is not reached for at all, so a question
-	// about it fails the same way opening it would.
+	// Disabling a host must also refuse reads that could reuse an existing pane.
 	workspace, err := h.remoteHostWorkspace(host)
 	if err != nil {
 		return RemoteEndpoint{}, nil, err
+	}
+	if ep, ok := h.remotePane(host, workspace); ok {
+		return ep, func() {}, nil
 	}
 	return h.opts.Remote.Attach(operationContext(r), host, workspace)
 }
@@ -339,17 +337,12 @@ func (h *Hub) remoteHostWorkspace(name string) (string, error) {
 	if !entry.IsEnabled() {
 		return "", errRemoteDisabled
 	}
-	if dirs := entry.WorkspaceList(); len(dirs) > 0 {
-		return dirs[0], nil
-	}
-	return "", nil
+	return entry.DefaultWorkspace(), nil
 }
 
-// anyRemotePane returns an endpoint on host, for a question about the machine
-// rather than about one pane.
-func (h *Hub) anyRemotePane(host string) (RemoteEndpoint, bool) {
+func (h *Hub) remotePane(host, workspace string) (RemoteEndpoint, bool) {
 	for _, rt := range h.Runtimes() {
-		if ep, ok := rt.Remote(); ok && ep.Host == host {
+		if ep, ok := rt.Remote(); ok && ep.Host == host && ep.Workspace == workspace {
 			return ep, true
 		}
 	}

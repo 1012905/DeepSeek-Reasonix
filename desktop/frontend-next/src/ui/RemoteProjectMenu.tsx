@@ -6,10 +6,11 @@ import { pinToViewport } from "./place";
 import { StudioIcon } from "./StudioIcon";
 import { workspaceMenuKeys } from "./WorkspaceOrder";
 
-export function RemoteProjectMenu({ name, root, host, busy, onRefresh, onRemove }: {
+export function RemoteProjectMenu({ name, root, host, defaultRoot, busy, onRefresh, onRemove }: {
   name: string;
   root: string;
   host: string;
+  defaultRoot?: string;
   busy: boolean;
   onRefresh: () => void;
   onRemove?: () => void;
@@ -32,7 +33,8 @@ export function RemoteProjectMenu({ name, root, host, busy, onRefresh, onRemove 
     </button>
     {open && createPortal(<div ref={menu} className="session-pop" role="menu" aria-label={t("项目操作")}
       data-action-keydown="workspace.menu" onKeyDown={workspaceMenuKeys} onClick={(event) => event.stopPropagation()}>
-      <div className="session-pop-head"><b>{name}</b><small className="session-pop-path">{host} · {root}</small></div>
+      <div className="session-pop-head"><b>{name}</b><small className="session-pop-path">{host} · {root}</small>
+        <small className="session-pop-path">{defaultRoot ? t("默认连接目录：{path}", { path: defaultRoot }) : t("未设置默认工作区")}</small></div>
       <div className="session-pop-group">
         <button role="menuitem" data-action="remote.read" data-target={host} disabled={busy} onClick={() => { close(); onRefresh(); }}>
           <StudioIcon name="refresh" /><span>{t("刷新 {name} 上的会话", { name: host })}</span>

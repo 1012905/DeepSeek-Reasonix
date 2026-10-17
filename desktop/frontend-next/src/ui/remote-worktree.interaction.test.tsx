@@ -55,3 +55,10 @@ it("marks the grouped SSH project current and removes all its booked directories
   expect(onClose).toHaveBeenCalledWith(["r1"]);
   expect(removeRemoteWorkspace.mock.calls).toEqual([["gpu", root], ["gpu", copy]]);
 });
+
+it("shows the active SSH directory separately from the host's default read target", async () => {
+  draw(true);
+  expect(screen.getByText("连接目录：" + copy)).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "项目操作：site · gpu" }));
+  expect(screen.getByText("默认连接目录：" + root)).toBeTruthy();
+});

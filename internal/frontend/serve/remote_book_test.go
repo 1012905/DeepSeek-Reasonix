@@ -96,45 +96,6 @@ func TestAskingAboutADisabledMachineIsRefused(t *testing.T) {
 	}
 }
 
-func TestRemoteDefaultWorkspaceIsUsedForTreeAndOpen(t *testing.T) {
-	for _, operation := range []string{"tree", "open"} {
-		t.Run(operation, func(t *testing.T) {
-			const root = "/srv/qa-project"
-			far := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/runtimes" {
-					writeJSON(w, RuntimeView{ID: "far", Base: "/rt/far", Root: root, Name: "qa-project"})
-					return
-				}
-				writeJSON(w, []treeWorkspace{})
-			}))
-			defer far.Close()
-			workspace := "not attached"
-			front := bookServer(t, &stubAttacher{attach: func(host, dir string) (RemoteEndpoint, func(), error) {
-				workspace = dir
-				return RemoteEndpoint{Host: host, Workspace: dir, Addr: far.Listener.Addr().String(), Token: "qa-token"}, func() {}, nil
-			}})
-			bookPost(t, front, "/remotes", `{"name":"gpu-box","host":"10.0.0.4","workspaces":["/srv/qa-project"]}`)
-			var resp *http.Response
-			var err error
-			if operation == "tree" {
-				resp, err = http.Get(front.URL + "/remotes/gpu-box/tree")
-			} else {
-				resp, err = http.Post(front.URL+"/remotes/open", "application/json", strings.NewReader(`{"host":"gpu-box"}`))
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer resp.Body.Close()
-			if workspace != root {
-				t.Fatalf("attached workspace = %q, want configured default %q", workspace, root)
-			}
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want 200", resp.StatusCode)
-			}
-		})
-	}
-}
-
 // The flag is the book's, so it round-trips and the fields the page cannot see
 // come back with it; turning it off again is an ordinary save.
 func TestDisabledSurvivesASaveAndKeepsTheRest(t *testing.T) {

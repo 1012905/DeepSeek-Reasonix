@@ -26,6 +26,7 @@
 .wsfolder { grid-area: 1 / 1; width: 16px; height: 16px; color: var(--muted); }
 .rail .wsname { grid-area: 1 / 2; }
 .rail .wsmeta { grid-area: 2 / 2; }
+.rail .rmtwsrow .wsmeta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail .wsacts { grid-area: 1 / 3; }
 .wsrow:not([aria-expanded]) { cursor: default; }
 .rail .wsname { font-size: var(--fs-ui); }
