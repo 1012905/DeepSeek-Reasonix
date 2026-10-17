@@ -805,7 +805,7 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		// is left untouched for backends that also honour it.
 		out.Thinking = &thinkingMode{Type: c.thinkingType}
 	}
-	return out
+	return out.forSummary(req.Summary)
 }
 
 func (c *client) buildPrefixRequest(req provider.Request, content, reasoning string) chatRequest {
@@ -1103,20 +1103,6 @@ func normaliseUsage(u *wireUsage) *provider.Usage {
 }
 
 // OpenAI-compatible wire protocol
-
-type chatRequest struct {
-	Model               string         `json:"model"`
-	Messages            []chatMessage  `json:"messages"`
-	Tools               []chatTool     `json:"tools,omitempty"`
-	Stream              bool           `json:"stream"`
-	StreamOptions       *streamOptions `json:"stream_options,omitempty"`
-	Temperature         *float64       `json:"temperature,omitempty"`
-	MaxTokens           int            `json:"max_tokens,omitempty"`
-	MaxCompletionTokens int            `json:"max_completion_tokens,omitempty"`
-	ReasoningEffort     string         `json:"reasoning_effort,omitempty"`
-	Thinking            *thinkingMode  `json:"thinking,omitempty"`
-	ExtraBody           map[string]any `json:"-"`
-}
 
 func omitExtraBodyFields(in map[string]any, names ...string) map[string]any {
 	if len(in) == 0 {
