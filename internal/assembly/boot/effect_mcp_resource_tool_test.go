@@ -56,6 +56,8 @@ func newResourceMCPServer(t *testing.T, declares bool) *resourceMCPServer {
 			result = map[string]any{"tools": []map[string]any{{"name": "ping", "description": "Ping.", "inputSchema": map[string]any{"type": "object"}}}}
 		case "resources/list":
 			result = map[string]any{"resources": []map[string]any{{"uri": resourceDeclaredURI, "name": "handbook"}}}
+		case "resources/templates/list":
+			result = map[string]any{"resourceTemplates": []map[string]any{{"uriTemplate": "doc://item/{id}", "name": "item"}}}
 		case "resources/read":
 			var p struct {
 				URI string `json:"uri"`
@@ -251,6 +253,7 @@ func TestEffectMCPResourceReadAsksWithTheFullAddressAndRefusesWhatTheServerDidNo
 	}{
 		{"declared, approved", resourceDeclaredURI, true, resourceBody, true},
 		{"declared, declined", resourceDeclaredURI, false, "", false},
+		{"built by a declared template, approved", "doc://item/9", true, resourceBody, true},
 		{"not listed, approved", resourceSecretURI, true, "mcp_resource.not_declared", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

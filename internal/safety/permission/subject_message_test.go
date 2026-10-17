@@ -52,3 +52,16 @@ func TestSubjectOfAResourceReadIsServerAndFullAddress(t *testing.T) {
 		t.Fatal("half a pair produced a subject")
 	}
 }
+
+// The pair is a general rule over argument names, so it must not outrank a
+// command, and a value that is not text names nothing.
+func TestSubjectServerAndURIPairYieldsToACommandAndNeedsText(t *testing.T) {
+	if got := Subject(json.RawMessage(`{"command":"ls","server":"a","uri":"b"}`)); got != "ls" {
+		t.Fatalf("a command lost to the pair: %q", got)
+	}
+	for _, args := range []string{`{"server":"a","uri":5}`, `{"server":1,"uri":"b"}`, `{"server":"","uri":"b"}`} {
+		if got := Subject(json.RawMessage(args)); got != "" {
+			t.Fatalf("%s produced subject %q", args, got)
+		}
+	}
+}
