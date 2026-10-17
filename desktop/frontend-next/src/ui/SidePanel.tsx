@@ -30,6 +30,24 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
     if (open) void open.then((held) => port.closeSide(held)).catch(() => {});
   }, [port]);
 
+  // The room above the composer inside its pane is what the panel may fill: the
+  // pane's own top is the ceiling, so the panel never rides over what is above.
+  useEffect(() => {
+    const el = panel.current;
+    const host = el?.offsetParent;
+    const pane = host?.closest(".pane");
+    if (!el || !host || !pane) return;
+    const fit = () => {
+      const room = host.getBoundingClientRect().top - pane.getBoundingClientRect().top - 18;
+      el.style.setProperty("--side-room", `${Math.max(240, Math.min(520, Math.floor(room)))}px`);
+    };
+    fit();
+    const watch = new ResizeObserver(fit);
+    watch.observe(host);
+    watch.observe(pane);
+    return () => watch.disconnect();
+  }, []);
+
   // Pressing the button collapses the selection in some browsers, so the last
   // passage selected outside this panel is kept as it is made.
   const lastSelected = useRef("");
@@ -84,7 +102,18 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
   };
 
   return (
-    <aside className="sidepanel" ref={panel} role="complementary" aria-label={t("辅助会话")}>
+    <aside
+      className="sidepanel"
+      ref={panel}
+      role="complementary"
+      aria-label={t("辅助会话")}
+      data-action-keydown="side.close"
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" || e.nativeEvent.isComposing) return;
+        e.stopPropagation();
+        close();
+      }}
+    >
       <header>
         <span><b>{t("辅助会话")}</b><small>{t("只读 · 不写入主会话 · 关闭即丢")}</small></span>
         <button type="button" data-action="side.close" aria-label={t("关闭辅助会话")} title={t("关闭辅助会话")} onClick={close}>×</button>

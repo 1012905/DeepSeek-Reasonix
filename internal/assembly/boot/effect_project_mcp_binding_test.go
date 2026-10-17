@@ -208,7 +208,9 @@ func TestEffectEnabledProjectMCPDoesNotLaunchARewrittenDeclaration(t *testing.T)
 // the call is refused before any process starts, and the server reads as
 // waiting for the user.
 func TestEffectEnabledProjectMCPRefusesAWorkspaceFileChangedMidSession(t *testing.T) {
-	t.Parallel()
+	// Serial: the schema cache is a process-wide file named after the server, and
+	// these tests share the name "docs-helper", so running side by side they
+	// overwrite each other's cache entry.
 	if runtime.GOOS == "windows" {
 		t.Skip("the launcher script is POSIX shell")
 	}
@@ -253,15 +255,10 @@ model = "x"
 	if !waitForPhase(logPath, "approved", 5*time.Second) {
 		t.Fatalf("enabled server never launched; log=%v", launchedPhases(logPath))
 	}
+	// Connecting by hand left the schema in the cache before Close returned, so
+	// the next session registers the server from cache and starts nothing until
+	// a call.
 	first.Close()
-	// The next session discovers and caches the schema, so the one after it
-	// registers the server from cache and starts nothing until a call.
-	discovery, err := Build(t.Context(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard})
-	if err != nil {
-		t.Fatal(err)
-	}
-	waitForCond(t, "schema discovery", 10*time.Second, func() bool { return discovery.MCPCatalogTools()["docs-helper"] > 0 })
-	discovery.Close()
 	launches := len(launchedPhases(logPath))
 
 	ctrl, err := Build(t.Context(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard})
@@ -297,7 +294,9 @@ model = "x"
 // that PATH points into the workspace, the file it finds is repository code
 // the user approved, and swapping it must not start on that approval.
 func TestEffectEnabledProjectMCPDoesNotLaunchASwappedDeclaredPathExecutable(t *testing.T) {
-	t.Parallel()
+	// Serial: the schema cache is a process-wide file named after the server, and
+	// these tests share the name "docs-helper", so running side by side they
+	// overwrite each other's cache entry.
 	if runtime.GOOS == "windows" {
 		t.Skip("the launcher script is POSIX shell")
 	}

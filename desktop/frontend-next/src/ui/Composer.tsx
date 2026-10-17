@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { t } from "../i18n";
 import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
@@ -59,6 +59,7 @@ interface Props {
   onSettings?: (section?: string) => void;
   side?: boolean;
   onSide?: () => void;
+  sidePanel?: ReactNode;
   changeCount?: number;
   countElsewhere?: boolean;
   // The work tree's Git state as git itself reports it, refreshed on the same
@@ -122,7 +123,7 @@ function releaseChip(c: Chip) {
 let chipSeq = 0;
 const chipId = () => `c${++chipSeq}`;
 
-export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, side = false, onSide, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, side = false, onSide, sidePanel, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const modelGroups = useModelFilter();
@@ -671,7 +672,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
               <span>{t("也可直接拖入或粘贴")}</span>
             </span>
           </button>
-          {onSide && <SideAskButton open={side} onToggle={onSide} />}
+          {onSide && <SideAskButton open={side} onToggle={onSide} panel={sidePanel} />}
           {refine.button}
         <div className="studio-mode-control">
           <Picker

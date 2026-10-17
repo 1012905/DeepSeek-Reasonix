@@ -14,6 +14,7 @@ import "./styles/tips.css";
 import "./styles/skillpin.css";
 import "./styles/waitnote.css";
 import "./styles/bring.css";
+import "./styles/line.css";
 import "./styles/notice.css";
 import "./styles/peers.css";
 import "./styles/contentmatches.css";

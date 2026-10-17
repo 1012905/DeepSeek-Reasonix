@@ -1,0 +1,2 @@
+- 修复：共享事件流迟迟打不开时（旧版内核或代理不认这条路径），窗格 10 秒后改读各自的事件流，页面不再停在“已连接却收不到事件”。关联 #13562。
+- Fixed: when the shared event stream never opens (an older kernel, or a proxy), panes read their own streams after 10 seconds instead of staying silent. Refs #13562.
