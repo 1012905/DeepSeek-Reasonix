@@ -140,7 +140,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # egress_unlisted = "allow"    # unattended long tasks (user config only): hosts outside allowed_domains pass without asking, said once each; denied_domains still refuse
 
 [peers]
-# enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it (user config only)
+# enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it; also a switch in Settings, applied at the next turn (user config only)
 # dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled (user config only)
 # release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
 

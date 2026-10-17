@@ -387,6 +387,9 @@ type PeerMail interface {
 	SendPeerMessage(to, text string) (PeerReceipt, error)
 	HeldPeerMessages() []PeerHeld
 	ResolvePeerMessage(id string, approve bool) error
+	ResolvePeerMessageRemembering(id string, approve bool, remember PeerRemember) error
+	PeersSettings() PeersSettings
+	SavePeersSettings(patch PeersPatch) (PeersSettings, error)
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
