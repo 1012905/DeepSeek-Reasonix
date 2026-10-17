@@ -1418,6 +1418,7 @@ body { background: var(--page) !important; }
 .workbench-filebar .workbench-save { display: flex; align-items: center; gap: 5px; }
 .workbench-filebar .workbench-save { background: var(--accent); color: white; }
 .workbench-filebar .workbench-save:disabled { opacity: .35; }
+.workbench-filebar .workbench-readonly { padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font: var(--w-med) var(--fs-meta)/1.4 var(--ui); white-space: nowrap; }
 .workbench-filebar svg { width: 13px; height: 13px; }
 .workbench-editor { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--face-code); }
 .workbench-editor > .cm-editor { flex: 1; min-height: 0; }
