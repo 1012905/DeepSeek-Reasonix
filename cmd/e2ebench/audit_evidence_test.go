@@ -49,6 +49,7 @@ func killedRun(t *testing.T) result {
 // a snapshot: what it spent is simply gone, so nothing can bound it.
 func writeSilentAgentStub(t *testing.T, dir string) string {
 	t.Helper()
+	requireShellStub(t)
 	path := filepath.Join(dir, "silent-agent.sh")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write stub: %v", err)

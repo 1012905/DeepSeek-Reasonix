@@ -56,9 +56,9 @@ func runSegments(ctx context.Context, cfg suiteConfig, t task, work, trajDir str
 			r.Unaccounted = true
 		} else {
 			// A snapshot is real evidence, so the run stays accounted and only
-			// Partial says its numbers stop at the last write — the semantics
-			// swebench mode already uses. Unaccounted is for neither record.
-			r.Partial = partial || !m.Complete
+			// Partial says its numbers stop at the last write. It is sticky: a
+			// complete later leg cannot restore the tail an earlier one lost.
+			r.Partial = r.Partial || partial || !m.Complete
 			keepMetrics = keepMetrics || partial
 			foldSegmentMetrics(r, m, seg.index)
 		}

@@ -116,10 +116,10 @@ func renderMeterAccounting(results []result) string {
 		miss += r.Meter.CacheMissTokens
 		unmeasured += r.Meter.WithoutUsage
 		injected += r.Meter.Injected
-		// Whether the harness has a side to compare is the suite's Unaccounted
-		// state, not a token count: a persisted record saying zero is a real
-		// measurement of zero, so it belongs on both sides like any other.
-		if r.Unaccounted {
+		// Whether the harness has a side to compare is the suite's state, not a
+		// token count: Unaccounted has no record and Partial stops at its last
+		// snapshot, so neither side is whole. A persisted zero is a measurement.
+		if r.Unaccounted || r.Partial {
 			continue
 		}
 		selfReported++
