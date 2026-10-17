@@ -1320,7 +1320,6 @@ export const EN: Record<string, string> = {
   "置顶会话": "Pin session",
   "删除会话": "Delete session",
   "会话范围": "Session scope",
-  "按名称筛选会话": "Filter sessions by name",
   "运行统计": "Run metrics",
   "本轮": "This turn",
   "详情": "Details",
