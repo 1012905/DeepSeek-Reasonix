@@ -1,0 +1,2 @@
+- 修复：没有代理、读不到版本目录时，打开设置页会让「版本」等上 15 秒；现在各处共用一次读取，失败只记 20 秒，点「重试」才重新读。关联 #13565。
+- Fixed: With no proxy and an unreachable version catalog, opening Settings kept Versions waiting 15 s; callers now share one read, a failure is kept 20 s, and Retry reads again. Refs #13565.

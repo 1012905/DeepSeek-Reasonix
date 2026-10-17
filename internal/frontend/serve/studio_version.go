@@ -82,7 +82,7 @@ func (h *Hub) readStudioVersions(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusNotFound, codeNoInstall, "no Studio install was declared for this kernel", nil)
 		return
 	}
-	writeJSON(w, update.Hub(r.Context(), *h.opts.Install))
+	writeJSON(w, update.HubRefreshing(r.Context(), *h.opts.Install, r.URL.Query().Get("refresh") == "1"))
 }
 
 func (h *Hub) pinStudioVersion(w http.ResponseWriter, r *http.Request) {

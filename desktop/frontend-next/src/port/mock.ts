@@ -180,7 +180,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     this.mem = this.mem.filter((m) => m.name !== name);
   }
 
-  async versions(): Promise<VersionHub> {
+  async versions(_refresh?: boolean): Promise<VersionHub> {
     return { current: "dev", pinned: "", stalePin: false, latest: "", newer: false, versions: [] };
   }
 
