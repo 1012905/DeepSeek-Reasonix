@@ -24,7 +24,7 @@ const ROUTES = [
   "/fork", "/summarize", "/forget", "/bypass", "/auto-approve-tools",
   "/permissions", "/sandbox", "/progress-watch", "/ask-timeout", "/changed-files-settings", "/fold-work-settings", "/turn-narration-settings", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings", "/subagent-claims", "/write-lease", "/peers",
   "/host", "/notifications", "/share", "/pair", "/device",
-  "/slash", "/workspaces", "/welcome", "/usage", "/config", "/studio",
+  "/web-access-settings", "/slash", "/workspaces", "/welcome", "/usage", "/config", "/studio",
 ];
 
 // REASONIX_SERVE points at a running `reasonix serve`; without it the app boots
