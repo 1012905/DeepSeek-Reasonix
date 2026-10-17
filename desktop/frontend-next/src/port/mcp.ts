@@ -35,6 +35,9 @@ export interface McpEntry {
   held?: McpHeld[];
   heldDigest?: string;
   heldMore?: number;
+  // The user chose to accept this server's changes from now on: a changed or
+  // added tool is adopted by itself and announced, rather than withheld.
+  followsChanges?: boolean;
 }
 
 // One withheld tool and how it differs from what was approved: added, changed,

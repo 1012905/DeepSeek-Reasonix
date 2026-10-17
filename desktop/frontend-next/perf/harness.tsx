@@ -49,7 +49,7 @@ import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
-import type { AgentPort, Appearance, HistoryMessage } from "../src/port/port";
+import type { AgentPort, Appearance, HistoryMessage, McpEntry } from "../src/port/port";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
@@ -94,6 +94,17 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
+  constructor() {
+    super();
+    if (!query.has("mcpactions")) return;
+    (this as unknown as { servers: McpEntry[] }).servers.push(
+      { name: "notes", state: "ready", enabled: true, transport: "stdio", tools: 2, description: "Notes the agent can search and add to.",
+        held: [{ name: "mcp__notes__search", class: "changed" }, { name: "mcp__notes__add", class: "added" }], heldDigest: "digest-1" },
+      { name: "wiki", state: "ready", enabled: true, transport: "http", tools: 4, followsChanges: true, description: "The team wiki." },
+    );
+  }
+
   // ?checkfail=<name> makes a plain test of that source answer 401.
   protected async answerCheck(name: string) {
     if (query.get("checkfail") !== name) return super.answerCheck(name);

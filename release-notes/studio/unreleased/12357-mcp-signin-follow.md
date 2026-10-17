@@ -1,0 +1,2 @@
+- 新增：需要登录（401）的 MCP 服务器行上有“登录”按钮，点后等待浏览器登录；被暂挡工具旁新增“接受并以后都自动接受这个服务器的改动”，已跟随的服务器可“取消跟随”。关联 #12357。
+- Added: an MCP server that answered 401 has a Sign in button; withheld tools gain "accept and follow this server's changes", and a followed server can be un-followed. Refs #12357.
