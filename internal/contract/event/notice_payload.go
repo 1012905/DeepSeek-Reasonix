@@ -6,7 +6,7 @@ import "encoding/json"
 // sentence is worded from, so a sink that prints Text must not append it again.
 func DetailIsPayload(code string) bool {
 	return code == NoticeCodeUnappliedSteer || code == NoticeCodeExtensionSkipped || code == NoticeCodeInboxRecovered ||
-		code == NoticeCodePermissionRulesDormant || code == NoticeCodeSubagentWaiting || code == NoticeCodeContextComposition || code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed
+		code == NoticeCodePermissionRulesDormant || code == NoticeCodeSubagentWaiting || code == NoticeCodeContextComposition || code == NoticeCodeJobFinished || code == NoticeCodeJobKilled || code == NoticeCodeJobFailed || code == NoticeCodeJobStalled
 }
 
 // ExtensionSkipReasonNoLiveSidecar: the extension's companion process is not running.
@@ -64,7 +64,7 @@ func DecodeInboxRecovered(detail string) (InboxRecovered, bool) {
 	return p, true
 }
 
-// JobNotice is the Detail payload of the three NoticeCodeJob* notices:
+// JobNotice is the Detail payload of the NoticeCodeJob* notices:
 // which background job ended, by kind, id and the label it was started with.
 type JobNotice struct {
 	Kind  string `json:"kind"`
@@ -76,6 +76,8 @@ type JobNotice struct {
 	// knew: Signal is the signal number that ended it, zero when none did.
 	ExitCode *int `json:"exitCode,omitempty"`
 	Signal   int  `json:"signal,omitempty"`
+	// QuietSeconds is how long the job's own output has been silent, on a stalled notice only.
+	QuietSeconds int `json:"quietSeconds,omitempty"`
 }
 
 // Encode renders the payload as the notice's Detail.

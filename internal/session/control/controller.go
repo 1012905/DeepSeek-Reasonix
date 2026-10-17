@@ -647,6 +647,11 @@ const SandboxEscapeApprovalTool = "sandbox_escape"
 // may reach a host outside [sandbox] allowed_domains; the subject is the host.
 const NetworkEgressApprovalTool = permission.NetworkEgress
 
+// PaidSearchApprovalTool is the internal Tool name used to ask whether
+// web_search may use a backend the vendor charges for; the subject is the
+// backend.
+const PaidSearchApprovalTool = permission.PaidSearch
+
 // ManagedConfigWriteApprovalTool is the internal Tool name used for per-write
 // approval when a file tool targets a Reasonix-managed config file outside the
 // workspace write roots. It is a fresh human decision: config files control

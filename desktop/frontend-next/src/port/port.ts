@@ -4,7 +4,7 @@ import type { DeliveryFault } from "./http_error";
 
 /** What `subscribe` hands back: the disposer, and where the transport has one, a
  *  way to give its connection up and take it again without losing the cursor. */
-export type Subscription = (() => void) & { pause?: () => void; resume?: () => void };
+export type Subscription = (() => void) & { pause?: () => void; resume?: () => void; holdsConnection?: () => boolean };
 import type { Attachment, DroppedRef, KeptText } from "./attachment";
 export { DeliveryError, HttpError };
 export type { DeliveryFault };
@@ -545,7 +545,7 @@ export interface AgentPort {
   stageChanges(req: StageRequest): Promise<void>;
   // Dot entries are left out unless hidden is set; VCS stores never appear.
   workspaceFiles(path?: string, query?: string, hidden?: boolean): Promise<WorkspaceFiles>;
-  workspaceFile(path: string): Promise<WorkspaceFile>;
+  workspaceFile(path: string, root?: string): Promise<WorkspaceFile>;
   saveWorkspaceFile(file: WorkspaceFile): Promise<WorkspaceFile>;
   // Where an image in the workspace is served, for a rendered document to show.
   /** root names a folder the user granted this workspace; absent means the workspace itself. */

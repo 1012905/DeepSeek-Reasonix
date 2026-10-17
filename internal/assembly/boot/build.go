@@ -321,11 +321,13 @@ func (b *builder) wireTools() error {
 	env := t.env
 	// The full inventory registers for use_capability; the provider-visible surface narrows later.
 	addBuiltins(t.reg, cfg.Tools.Enabled, env.writeRoots, env.bash, env.bashTimeout, env.search, b.stderr, root, b.proxy, env.forbidReadRoots, env.readRoots, env.readPaths, env.sessionGuard, env.managedConfig, opts.FileOverlay, opts.TerminalRunner, env.sessionTemp, b.fileWriteReceipt)
+	addViewImage(t.reg, cfg, b.model.entry, env, root)
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
 	t.peerLink = addPeerTools(t.reg, cfg)
 	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
 	addWebSearch(t.reg, cfg, b.proxy, b.sink)
+	addFetchChain(t.reg, cfg, b.proxy, b.sink)
 	b.addBestOf()
 	if cfg.Agent.CodeMode {
 		t.reg.Add(script.New())

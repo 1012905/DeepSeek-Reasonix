@@ -1545,6 +1545,20 @@ what exists.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
 
+## Card shell
+
+- The cards a reader reads or acts on (approval, ask, remember, guardian review, extension card, receipt, compaction) share one shell: `--r-md` radius, a 1px `--border`, the `--surface` ground, and a header strip with no fill of its own.
+- State is never a border colour: a warning or error card keeps the shell's border and says so in the glyph ink or a chip.
+
+## Rows in place of cards
+
+- An allowed guardian review at low or unknown risk, and a remembered fact, are Lines (`LineRow`): glyph, title, mono subject, meta and, when there is one, the action, on one row over a hairline, with the rationale or description as a muted line under it.
+- A refusal, or an allow at medium risk or above, stays a card: it is something to read.
+
+## Opened step detail
+
+- An opened step shows its detail as an indented panel in place, bordered on all four sides by one `--hair` line with a `--r-sm` radius. A rule on one side only is a rail, and the conversation has none.
+
 ## Notice bar
 
 - A host notice is one sentence with a glyph and, under it, the kernel's diagnostic in the muted meta size.
@@ -1562,3 +1576,13 @@ what exists.
 
 - A prompt that can answer "this and every later one of its kind" draws those choices through one component (`RememberChoice`), only for the kinds the kernel says it will honour, as the quieter buttons beside the primary one.
 - A note under the footer (`RememberWhere`) says where each is kept: for the session only and never on disk, or as a permission rule in the user config that Settings can undo.
+
+## Brand lockup
+
+- The mark at the top of the rail is one row: the wordmark and a compact filled uppercase badge ("STUDIO" by CSS; the text and the aria label are unchanged), vertically centred on each other, gap 8px. The badge is `--text` on `--page` inverted, so it is dark on light and light on dark and never moves with the theme.
+- The badge is hidden at 760px and below. The wordmark box is cropped to its drawn width so the badge sits next to the letters, not next to the asset's padding.
+
+## Side question
+
+- The panel stays anchored above its own composer. Collapsing it leaves a header with separate expand and close controls so the conversation can be read without discarding the side question.
+- The mounted content keeps its draft, quotes, answers and pending request while collapsed. Errors, quotes and replies share the scroll region; the input stays outside it.

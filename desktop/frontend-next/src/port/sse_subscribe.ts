@@ -1,6 +1,7 @@
 import type { WireEvent } from "./wire";
 import type { Subscription } from "./port";
 import { openLiveStream } from "./livestream";
+import { mux } from "./muxclient";
 
 /** subscribe delivers the kernel's events, in order, with no holes it did not
  *  announce. Frames that matter are numbered, so a break in the numbers is
@@ -17,8 +18,10 @@ import { openLiveStream } from "./livestream";
  *  new as. Frames are held from before the transport is attached until the
  *  replay after that number has landed, so nothing between the two is
  *  skipped. The number is the whole stream's, never one model's — a frame of
- *  any kind carries the cursor past it, or the next number reads as a hole. */
-export function subscribeStream(base: string, onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>): Subscription {
+ *  any kind carries the cursor past it, or the next number reads as a hole.
+ *
+ *  lane is the pane id when the hub can carry that pane on its shared stream. */
+export function subscribeStream(base: string, onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>, lane?: string): Subscription {
   // Frames arriving while a recovery request is in flight wait for it: the
   // whole point is that the reducer sees one ordered stream, and delivering
   // the new frame first would put a result ahead of the dispatch it answers.
@@ -149,10 +152,10 @@ export function subscribeStream(base: string, onEvent: (ev: WireEvent) => void, 
   // saw, and the server replays from there. Recovery here is for the frames
   // shed without the connection ever dropping, and a replacement stream for
   // one that went silent without dropping resumes from the same cursor.
-  const detach = openLiveStream(
-    () => base + "/events" + (seen === null ? "" : `?lastEventId=${seen}`),
-    feed,
-  );
+  const own = () => openLiveStream(() => base + "/events" + (seen === null ? "" : `?lastEventId=${seen}`), feed);
+  // lane names a pane the hub runs locally: its frames ride the one shared
+  // stream instead of costing the window a connection each.
+  const detach = lane ? mux.attach(lane, { cursor: () => seen, onData: feed, own }) : own();
   if (bootstrap) void bootstrapFrom(bootstrap);
   // A subscription that gave its connection up before the stream ever stated a
   // position has nothing to resume from, so what went by is a hole it cannot
@@ -175,6 +178,7 @@ export function subscribeStream(base: string, onEvent: (ev: WireEvent) => void, 
           onGap?.();
         }
       },
+      holdsConnection: () => detach.holdsConnection?.() ?? true,
     },
   );
 }

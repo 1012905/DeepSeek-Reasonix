@@ -30,6 +30,7 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/line.css";
 import "../src/styles/notice.css";
 import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
@@ -104,7 +105,17 @@ class BenchPort extends MockPort {
     return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
   }
 
-  async workspaceFile(path: string) {
+  // ?grant=1 grants the workspace a folder, /library, holding one document.
+  async workspaceRoots() {
+    const roots = await super.workspaceRoots();
+    return query.has("grant") ? { ...roots, extra: ["/library"] } : roots;
+  }
+
+  async workspaceFile(path: string, root?: string) {
+    if (root) {
+      const content = "# Release plan\n\nThe plan lives in the library folder you granted this project.\n\n- freeze on Friday\n- tag after the checks are green\n- announce the next morning\n";
+      return { path, content, revision: "r1", root, readOnly: true };
+    }
     if (!query.has("doc") || !path.endsWith(".md")) return super.workspaceFile(path);
     const content = "# Install guide\n\nDownload the package for your system, then run the installer. It places the program in your user folder and does not need administrator rights.\n\nAfter the first start, open Settings and add a model service before you begin a conversation.";
     return { path, content, revision: "r1" };
