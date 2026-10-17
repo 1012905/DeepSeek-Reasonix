@@ -173,21 +173,27 @@ interface ReplayAnswer {
 }
 
 // Stands in for EventSource over the relay by polling /events/replay. A cursor
-// the URL carries is where a replacement stream resumes; without one it attaches
-// at the watermark, and asking past it returns no frames, not the whole log.
-// Frames the SSE transport writes on its own (the watermark, a gap) are said
-// here too, or the stream reads as silent to whoever watches it.
+// the URL carries is where a replacement stream resumes. Frames the SSE
+// transport writes on its own (the watermark, a gap) are said here too, or the
+// stream reads as silent to whoever watches it.
 export class RemoteEventSource {
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
   private closed = false;
   private after: number | null;
   private readonly replay: string;
+  // What an attach asks for. Only the main event stream carries connection-local
+  // state to hand back — the pending prompt — so only its attach asks for
+  // nothing and is answered with that prompt. The tree stream reads the tree,
+  // not history, so its attach asks past the watermark as it always has:
+  // replaying the tree's history would only re-read the tree.
+  private readonly attachQuery: string;
 
   constructor(url: string) {
     const target = new URL(url, location.origin);
     const cursor = Number(target.searchParams.get("lastEventId") ?? "");
     this.after = target.searchParams.has("lastEventId") && Number.isSafeInteger(cursor) && cursor >= 0 ? cursor : null;
     this.replay = `${target.pathname}/replay`;
+    this.attachQuery = target.pathname.endsWith("/tree/events") ? `?lastEventId=${Number.MAX_SAFE_INTEGER}` : "";
     queueMicrotask(() => void this.poll());
   }
 
@@ -203,11 +209,10 @@ export class RemoteEventSource {
     while (!this.closed) {
       let active = false;
       try {
-        // With no cursor the request is an attach, and the answer then carries
-        // what a run is stopped on — the approvals and asks a page has to show
-        // waiting. Asking past the watermark instead would attach to an empty
-        // answer and leave a question on screen nowhere.
-        const query = this.after === null ? "" : `?lastEventId=${this.after}`;
+        // No cursor yet is an attach; the main stream's attach asks for nothing
+        // so the kernel answers with the waiting prompt, the tree stream's asks
+        // past the watermark. Every later read resumes from where it stands.
+        const query = this.after !== null ? `?lastEventId=${this.after}` : this.attachQuery;
         const response = await fetch(`${this.replay}${query}`, { credentials: "same-origin" });
         if (response.ok && !this.closed) {
           const body = await response.json() as ReplayAnswer;
