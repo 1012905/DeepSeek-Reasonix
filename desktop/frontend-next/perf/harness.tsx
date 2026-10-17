@@ -30,6 +30,7 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/notice.css";
 import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
 import "../src/styles/skillpin.css";
@@ -239,6 +240,11 @@ class BenchPort extends MockPort {
       id: `job-${i}`,
       kind: "bash",
       label: i === 0 ? "npm run tauri:test 2>&1 | Select-Object -Last 40" : `go test ./internal/... -run Case${i}`,
+      // ?jobnames=1 gives each job the name its caller wrote and the full command.
+      ...(query.has("jobnames") ? {
+        description: i === 0 ? "运行桌面端测试并只看最后 40 行输出" : `跑第 ${i} 组内核测试`,
+        detail: i === 0 ? "npm run tauri:test 2>&1 | Select-Object -Last 40" : `go test ./internal/... -run Case${i} -count=1 -timeout 10m`,
+      } : {}),
       status: this.stopped.has(`job-${i}`) ? "killed" : "running",
       startedAt: this.jobsSince,
     }));

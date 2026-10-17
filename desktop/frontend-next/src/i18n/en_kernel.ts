@@ -81,6 +81,8 @@ export const EN_KERNEL: Record<string, string> = {
   "开关未能保存：其存储文件无法读取或写入": "The switch was not stored: its file could not be read or written",
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
+  "事件流连接已经关闭，需要重新打开并重新订阅各窗格": "The event stream has closed; open a new one and subscribe each pane again",
+  "这个窗格由另一台机器驱动，使用它自己的事件流": "This pane is driven from another machine and keeps its own event stream",
   "这个后台任务已经不在运行了": "That background job is no longer running",
   "这条调用已经结束了": "This call has already finished",
   "你停止了这条调用，它在外部已经做了什么无法确定": "You stopped this call; what it had already done outside the workspace is unknown",
@@ -331,7 +333,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这个会话不支持辅助提问": "Side questions are not available in this session",
   "这个辅助提问已经关闭，请重新打开": "That side question is closed; open it again",
   "上一个问题还在回答，请稍候再问": "The previous question is still being answered; wait a moment",
-  "同时打开的辅助提问太多，请先关闭几个": "Too many side questions are open; close some first",
+  "同时打开的辅助提问已到你设置的上限（agent.max_side_sessions），请先关闭几个": "The side questions open at once have reached your limit (agent.max_side_sessions); close some first",
   "会话间消息未开启": "Messages between sessions are not turned on",
   "这个客户端不能收发会话间消息": "This client cannot send or decide messages between sessions",
   "本机没有叫这个名字的会话": "No session on this machine has that name",
