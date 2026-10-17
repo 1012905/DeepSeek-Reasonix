@@ -103,6 +103,9 @@ async function main() {
   await wait(500);
   await keepsComposing("the agent clicking and typing in it");
 
+  const t0 = Date.now();
+  const wc = [...views.entries.values()][0].view.webContents;
+  for (const ev of ["did-start-loading", "did-stop-loading", "did-start-navigation", "did-fail-load", "did-navigate"]) wc.on(ev, () => process.stdout.write(`  [debug] +${Date.now() - t0}ms ${ev} attached=${[...views.entries.values()][0].attached}\n`));
   await compose("guaqi");
   await send({ method: "Page.navigate", params: { url: page.url + "/hang" } }, session);
   await wait(500);
