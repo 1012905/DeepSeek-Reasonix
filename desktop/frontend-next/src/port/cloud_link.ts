@@ -97,17 +97,18 @@ const MAX_UPLOAD = 16 * 1024 * 1024;
 const BUFFER_HIGH = 1024 * 1024;
 
 async function requestBytes(request: Request): Promise<Uint8Array> {
-  request.signal.throwIfAborted();
+  const uploadSignal: AbortSignal = request.signal;
+  uploadSignal.throwIfAborted();
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
-  const abort = () => { void reader.cancel(request.signal.reason); };
-  request.signal.addEventListener("abort", abort, { once: true });
+  const abort = () => { void reader.cancel(uploadSignal.reason); };
+  uploadSignal.addEventListener("abort", abort, { once: true });
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      request.signal.throwIfAborted();
+      uploadSignal.throwIfAborted();
       if (done) break;
       size += value.byteLength;
       if (size > MAX_UPLOAD) {
@@ -117,7 +118,7 @@ async function requestBytes(request: Request): Promise<Uint8Array> {
       chunks.push(value);
     }
   } finally {
-    request.signal.removeEventListener("abort", abort);
+    uploadSignal.removeEventListener("abort", abort);
     reader.releaseLock();
   }
   const body = new Uint8Array(size);
