@@ -72,6 +72,7 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_parallel_writers = 3            # concurrent writers with non-overlapping write_paths
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
+# plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
 # host_verification = "off"          # user file only; the host stops holding a turn that changed files to a check, a review and a sign-off; the receipt still says what was checked; default on
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
@@ -95,6 +96,7 @@ enabled = []   # omit/empty = all built-ins
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
 protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
 browser_tools = true   # built-in browser tools; the browser starts on first use
+# mcp_resources = true  # user file only; a read_mcp_resource tool for resources a connected MCP server lists or builds from its declared templates (a {+x} template is wide: read the full address on the card before approving); asks first; default off
 mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap
 mcp_call_timeout_seconds = 300   # default MCP call safety cap; per-plugin/tool overrides may raise it
 
@@ -132,6 +134,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # allow_write    = ["/tmp"]    # extra dirs write_file/edit_file/multi_edit/move_file may touch
 # forbid_read    = ["${HOME}/.ssh"]   # paths the agent must not read or list
 # allow_devices  = ["/dev/nvidia*"]   # host device nodes bound into the Linux bash sandbox (user config only)
+# egress_unlisted = "allow"    # unattended long tasks (user config only): hosts outside allowed_domains pass without asking, said once each; denied_domains still refuse
 
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes

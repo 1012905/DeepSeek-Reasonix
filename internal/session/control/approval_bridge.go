@@ -278,13 +278,19 @@ func (s sandboxEscapeApprover) SandboxEscapeSessionAllowed(_ context.Context, re
 // name. The user configured that list, so no approval mode answers for them;
 // only a person, once or for the rest of the session, widens it.
 func (s sandboxEscapeApprover) ApproveEgress(ctx context.Context, host string) (bool, error) {
+	if s.c.egressUnlistedAllowed(host) {
+		return true, nil
+	}
 	reply, err := s.c.requestApprovalDecision(ctx, approvalRequest{tool: NetworkEgressApprovalTool, subject: host,
 		reason: fmt.Sprintf(i18n.M.EgressApprovalReasonFmt, host), fresh: true})
 	if err != nil || !reply.allow {
 		return false, err
 	}
-	if reply.session {
+	if reply.session || reply.persist {
 		s.c.approval.grantSession(NetworkEgressApprovalTool, host)
+	}
+	if reply.persist && s.c.egressPersistable() {
+		s.c.emitRememberResult(s.c.rememberEgressHost(host))
 	}
 	return true, nil
 }

@@ -287,6 +287,8 @@ type RuntimeSettings interface {
 	SaveSubagentClaimsSettings(optimistic bool) error
 	WriteLeaseSettings() WriteLeaseSettings
 	SaveWriteLeaseSettings(optimistic bool) error
+	PlanApprovalSettings() PlanApprovalSettings
+	SavePlanApprovalSettings(auto bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings

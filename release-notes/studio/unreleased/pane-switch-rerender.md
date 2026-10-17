@@ -1,2 +1,0 @@
-- 开着多个会话标签时，切换标签和侧栏筛选更快：切换不再让所有隐藏会话整页重绘。关联 #13326。
-- With several session tabs open, switching tabs and filtering the sidebar is faster: a switch no longer redraws every hidden session. Refs #13326.

@@ -24,6 +24,8 @@ type heldScope struct {
 	updateMode     string
 	autoSubmit     bool
 	writeLease     string
+	planApproval   string
+	goalAutoRetry  int
 	subagentClaims string
 	hostVerif      string
 	shell          ShellConfig
@@ -42,6 +44,8 @@ type heldScope struct {
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
 	peers         bool
+	// mcpResources decides whether a server's resources are readable by the model.
+	mcpResources bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -60,6 +64,8 @@ func holdUserScope(c *Config) heldScope {
 		updateMode:      c.DesktopUpdateMode(),
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
+		planApproval:    c.Agent.PlanApproval,
+		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
 		shell:           shell,
@@ -73,6 +79,7 @@ func holdUserScope(c *Config) heldScope {
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
 		peers:           c.Peers.Enabled,
+		mcpResources:    c.Tools.MCPResources,
 	}
 }
 
@@ -164,8 +171,22 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("peers.enabled", fmt.Sprintf("%t", c.Peers.Enabled), ProjectUserOnly)
 		c.Peers.Enabled = h.peers
 	}
+	// Letting the model read what a server publishes widens what a third party
+	// can put in front of it, so a cloned repo must not turn it on.
+	if c.Tools.MCPResources != h.mcpResources {
+		c.ignoreProject("tools.mcp_resources", fmt.Sprintf("%t", c.Tools.MCPResources), ProjectUserOnly)
+		c.Tools.MCPResources = h.mcpResources
+	}
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.
+	if c.Agent.GoalAutoRetry != h.goalAutoRetry {
+		c.ignoreProject("agent.goal_auto_retry", fmt.Sprint(c.Agent.GoalAutoRetry), ProjectUserOnly)
+		c.Agent.GoalAutoRetry = h.goalAutoRetry
+	}
+	if c.Agent.PlanApproval != h.planApproval {
+		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
+		c.Agent.PlanApproval = h.planApproval
+	}
 	if c.Agent.WriteLease != h.writeLease {
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
 		c.Agent.WriteLease = h.writeLease
@@ -281,7 +302,10 @@ func (h heldScope) narrowSandbox(c *Config, ws string) {
 	// A cloned repo must not hand itself the container daemon socket. An egress
 	// allow list only narrows open network, so a repo may set one the user has
 	// not, but never replace the user's; its denials only add to the user's.
-	s.HostAuthorities, s.AllowDevices = u.HostAuthorities, u.AllowDevices
+	if s.EgressUnlisted != u.EgressUnlisted {
+		c.ignoreProject("sandbox.egress_unlisted", s.EgressUnlisted, ProjectUserOnly)
+	}
+	s.HostAuthorities, s.AllowDevices, s.EgressUnlisted = u.HostAuthorities, u.AllowDevices, u.EgressUnlisted
 	if len(u.AllowedDomains) > 0 {
 		s.AllowedDomains = u.AllowedDomains
 	}

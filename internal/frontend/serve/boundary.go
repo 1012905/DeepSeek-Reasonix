@@ -28,6 +28,8 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /subagent-claims", s.saveSubagentClaimsSettings)
 	mux.HandleFunc("GET /write-lease", s.writeLeaseSettings)
 	mux.HandleFunc("POST /write-lease", s.saveWriteLeaseSettings)
+	mux.HandleFunc("GET /plan-approval", s.planApprovalSettings)
+	mux.HandleFunc("POST /plan-approval", s.savePlanApprovalSettings)
 	// The file every one of these is written to, for when it is the thing that
 	// is wrong: each save above refuses with the same code, and this is where a
 	// surface reads it before trying, and repairs it after.

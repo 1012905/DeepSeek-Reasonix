@@ -599,7 +599,7 @@ body { background: var(--page) !important; }
 .studio-search > .studio-label { min-width: 0; display: block; overflow: hidden; color: inherit; font: inherit; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .studio-quicknav small { color: var(--faint); font: 500 9px/1 var(--ui); }
 .studio-session-filters {
-  min-height: 31px; display: grid; grid-template-columns: minmax(0, 1fr) 26px;
+  min-height: 31px; display: grid; grid-template-columns: minmax(0, 1fr);
   align-items: center; gap: 4px; margin: 0 0 8px; padding: 0; background: transparent;
 }
 .studio-session-segments {
@@ -623,12 +623,6 @@ body { background: var(--page) !important; }
   .studio-session-segments b { display: none; }
   .studio-session-segments button { flex-shrink: 1; }
 }
-.studio-session-filters .studio-filter-search {
-  width: 26px; height: 26px; display: grid; place-items: center; margin: 0; padding: 0;
-  border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer;
-}
-.studio-session-filters .studio-filter-search:hover { background: var(--overlay); color: var(--text); }
-.studio-session-filters .studio-filter-search .studio-icon { width: 13px; height: 13px; }
 .rail .wsfind {
   position: absolute; z-index: 4; left: 19px; right: 19px; width: auto; height: 31px; margin: 0;
   transform: translateY(-40px); opacity: 0; pointer-events: none; border: 0; background: var(--surface);
@@ -736,8 +730,6 @@ body { background: var(--page) !important; }
 .notice { background: var(--surface); border-color: var(--hair); box-shadow: none; }
 .call:hover { background: var(--raised); border-color: var(--border); }
 .flow .call { gap: 13px; }
-.flow .call > .g .line { width: 1px; background: var(--float-hi); }
-.flow .call[data-k="say"] > .g .line,
 .flow .call[data-k="me"] > .g { display: none; }
 .flow .call[data-k="say"] {
   position: relative; display: block; padding-inline-start: 6px; margin-inline-start: -6px;
@@ -898,7 +890,7 @@ body { background: var(--page) !important; }
               content-visibility 150ms allow-discrete;
 }
 .activity-group[open]::details-content { block-size: auto; opacity: 1; }
-.activity-body { margin-left: 5px; padding: 2px 0 2px 12px; border-left: 1px solid var(--hair); }
+.activity-body { margin-left: 5px; padding: 2px 0 2px 12px; }
 .activity-body .call { min-height: 38px; display: block; }
 .activity-body .call > .g { display: none; }
 .activity-body .call:not([data-k="me"]):not([data-k="say"]) > .c {
@@ -1037,7 +1029,6 @@ body { background: var(--page) !important; }
 .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) { display: block; position: relative; margin: 12px 0 !important; }
 .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .c { margin: 0 !important; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g { position: absolute; top: 1px; left: 1px; z-index: 1; width: 34px; height: 38px; display: grid; place-items: center; pointer-events: none; }
-.flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g .line, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g .line { display: none; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g .sym, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g .sym { width: 14px; height: 14px; margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--faint); }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g .sym svg, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g .sym svg { width: 12px; height: 12px; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"])[data-lvl="ok"] > .g .sym { color: var(--ok); }
@@ -1114,7 +1105,8 @@ body { background: var(--page) !important; }
 .turntools .policy .lb { display: inline-flex; align-items: center; min-width: 0; line-height: 1; }
 .turntools .policy > .mode[data-risk] { color: #bd9075; }
 .turntools .policy > .mode[data-risk] .ic,
-.turntools .policy > .mode[data-risk] .lb { color: #c99b7d; }
+.turntools .policy > .mode[data-risk] .lb,
+.turntools .policy > .mode[data-risk] .studio-control-chevron { color: #c99b7d; }
 .turntools .policy .polwarn { display: grid; width: 12px; height: 12px; place-items: center; font-style: normal; }
 .turntools .policy .polwarn .studio-icon { width: 12px; height: 12px; stroke-width: 1.65; }
 .turntools .policy[data-quiet] .lb { font-size: 0; }
@@ -2400,8 +2392,9 @@ body { font-size: 14px; line-height: 1.75; }
 }
 
 :root[data-theme="light"] .turntools .policy > .mode[data-risk] { color: var(--warn-ink); }
-:root[data-theme="light"] .turntools .policy > .mode[data-risk] .ic { color: var(--warn); }
-:root[data-theme="light"] .turntools .policy > .mode[data-risk] .lb { color: var(--warn-ink); }
+:root[data-theme="light"] .turntools .policy > .mode[data-risk] .ic,
+:root[data-theme="light"] .turntools .policy > .mode[data-risk] .lb,
+:root[data-theme="light"] .turntools .policy > .mode[data-risk] .studio-control-chevron { color: var(--warn-ink); }
 :root[data-theme="light"] .studio-effort-picker::before { color: #c0c1bc; }
 
 @container conversation (max-width: 470px) {
@@ -2560,7 +2553,7 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-policy-boundary small { color: var(--ghost); font: 500 9px/1.4 var(--ui); }
 .studio-policy-boundary:hover { color: var(--text); background: var(--overlay); }
 .studio-policy-note { margin: 5px 0 0; padding: 9px 7px; border-top: 1px solid var(--border); color: var(--ghost); font: 500 9px/1.55 var(--ui); }
-.studio-control-chevron { margin-left: 1px; color: var(--ghost); font-size: 10px; }
+.studio-control-chevron { margin-left: 1px; color: var(--ghost); }
 
 :root[data-theme="light"] .studio-wallet,
 :root[data-theme="light"] .studio-workspace-kind { color: var(--muted); }
@@ -2657,11 +2650,11 @@ body { font-size: 14px; line-height: 1.75; }
   margin-top: 6px; padding: 8px 10px; border: 1px solid var(--hair);
   border-radius: 6px; background: var(--surface); color: #d39a93;
 }
-.activity-body .call[data-call] > .c {
+.flow .activity-body .call[data-call] > .c {
   margin-bottom: 0; padding: 4px 0 5px !important; border: 0 !important;
   border-bottom: 1px solid var(--hair) !important; border-radius: 0 !important; background: transparent !important;
 }
-.activity-body .call[data-call]:last-child > .c { border-bottom-color: transparent !important; }
+.flow .activity-body .call[data-call]:last-child > .c { border-bottom-color: transparent !important; }
 
 /* A decision stays inside the transcript, but reads as a small choice surface
    rather than a full-page form. Each row carries its own hit area and state. */
@@ -2702,6 +2695,7 @@ body { font-size: 14px; line-height: 1.75; }
 }
 .flow .call[data-prompt] > .c > .out { margin-top: 0 !important; }
 .flow .call[data-approval] .apv { margin-top: 0; }
+.flow .apv-ft + .apv-note { margin-top: 0; padding: 8px 12px 10px; font-size: var(--fs-meta); }
 .flow .call[data-approval] .apv-hd {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -3026,7 +3020,6 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-session-segments button:hover { background: var(--float-hi); color: var(--text); }
 .studio-session-segments button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
 .studio-session-segments b { color: var(--muted); }
-.studio-filter-search { color: var(--ghost); }
 .rail .wsrow:hover,
 .rail .sessrow:hover { background: var(--overlay); color: var(--text); }
 .rail .wsname,
@@ -3062,7 +3055,6 @@ body { font-size: 14px; line-height: 1.75; }
 .flow .opt .ds { color: var(--muted); }
 .flow .call[data-k="say"] > .g .sym { background: var(--text); }
 .flow .call[data-k="say"] > .g .sym::after { color: var(--page); }
-.flow .call > .g .line { background: var(--border); }
 
 .flow .call[data-call] > .c,
 .flow .ask { background: var(--raised) !important; border-color: var(--border) !important; }

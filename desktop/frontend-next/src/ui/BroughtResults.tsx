@@ -32,16 +32,18 @@ export function BroughtResults({ items, ids, onDismiss, takeovers, onExtInvoke, 
               <StudioIcon name="close" />
             </button>
           </div>
-          <ToolCard
-            tool={it.tool}
-            running={it.running}
-            children={it.children}
-            takeover={it.tool.id ? takeovers[`tool:${it.tool.id}`] : undefined}
-            onExtInvoke={onExtInvoke}
-            onPrepareFileRevert={onPrepareFileRevert}
-            onCommitFileRevert={onCommitFileRevert}
-            pinned
-          />
+          <div className="activity-body brought-line">
+            <ToolCard
+              tool={it.tool}
+              running={it.running}
+              children={it.children}
+              takeover={it.tool.id ? takeovers[`tool:${it.tool.id}`] : undefined}
+              onExtInvoke={onExtInvoke}
+              onPrepareFileRevert={onPrepareFileRevert}
+              onCommitFileRevert={onCommitFileRevert}
+              pinned
+            />
+          </div>
         </div>
       ))}
     </section>
