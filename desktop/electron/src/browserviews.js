@@ -10,6 +10,12 @@ const { KeyboardKeeper } = require("./keyboard");
 // a phone layout or not at all.
 const AGENT_VIEWPORT = { width: 1280, height: 900 };
 
+// How long a page may be held out of the window while its navigation runs. A
+// server that accepts the connection and never answers would otherwise keep the
+// panel blank, with nothing turning, for as long as it likes; past this the page
+// is shown again, loaded or not.
+const LEAVE_LIMIT_MS = 4000;
+
 // CSS cannot clip a native view, so the page's corners are rounded here; the
 // value is .bview's border-radius in studio.css, whose rect the view fills.
 const PAGE_RADIUS = 8;
@@ -116,6 +122,7 @@ class BrowserViews {
       if (closed) return;
       closed = true;
       this.entries.delete(targetId);
+      clearTimeout(entry.returning);
       if (entry.attached && !this.win.isDestroyed()) this.win.contentView.removeChildView(view);
       entry.attached = false;
       if (!contents.isDestroyed()) contents.close();
@@ -197,9 +204,13 @@ class BrowserViews {
     if (!entry.attached || this.win.isDestroyed() || this.keyboard.owner !== "app") return;
     this.win.contentView.removeChildView(entry.view);
     entry.attached = false;
+    clearTimeout(entry.returning);
+    entry.returning = setTimeout(() => this.settle(entry), LEAVE_LIMIT_MS);
   }
 
   settle(entry) {
+    clearTimeout(entry.returning);
+    entry.returning = undefined;
     if (entry.attached || this.win.isDestroyed() || entry.view.webContents.isDestroyed()) return;
     this.win.contentView.addChildView(entry.view);
     entry.attached = true;
@@ -414,4 +425,4 @@ function validRect(rect) {
   return rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) && rect.width > 0 && rect.height > 0;
 }
 
-module.exports = { BrowserViews, AGENT_VIEWPORT };
+module.exports = { BrowserViews, AGENT_VIEWPORT, LEAVE_LIMIT_MS };

@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -2580,8 +2580,9 @@ function loadedViews() {
     return load.call(this, request, ...rest);
   };
   let BrowserViews;
+  let LEAVE_LIMIT_MS;
   try {
-    ({ BrowserViews } = require("../src/browserviews.js"));
+    ({ BrowserViews, LEAVE_LIMIT_MS } = require("../src/browserviews.js"));
   } finally {
     Module._load = load;
   }
@@ -2596,7 +2597,7 @@ function loadedViews() {
   };
   const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1" });
   const view = { setBounds: (b) => calls.push("bounds " + b.x), webContents: { isDestroyed: () => false } };
-  return { views, view, calls };
+  return { views, view, calls, LEAVE_LIMIT_MS };
 }
 
 test("a page navigating while the app page holds the keyboard is held out of the window, then put back where it was", () => {
@@ -2641,4 +2642,42 @@ test("a page still loading is not put back by a window event", () => {
   views.entries.set("t1", { view, at: null, attached: false });
   views.reattach();
   assert.deepEqual(calls, []);
+});
+
+test("a navigation that never finishes does not keep the page out of the window for good", () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { views, view, calls, LEAVE_LIMIT_MS } = loadedViews();
+    const entry = { view, at: { x: 10, y: 20, width: 600, height: 400 }, attached: true };
+    views.leave(entry);
+    assert.deepEqual(calls, ["remove"]);
+    mock.timers.tick(LEAVE_LIMIT_MS - 1);
+    assert.equal(entry.attached, false, "still out just before the limit");
+    mock.timers.tick(1);
+    assert.deepEqual(calls, ["remove", "add", "bounds 10"]);
+    assert.equal(entry.attached, true);
+    mock.timers.tick(LEAVE_LIMIT_MS * 3);
+    assert.equal(calls.length, 3, "and it is put back once");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a navigation that does finish cancels the limit, and a second one gets a fresh one", () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { views, view, calls, LEAVE_LIMIT_MS } = loadedViews();
+    const entry = { view, at: null, attached: true };
+    views.leave(entry);
+    mock.timers.tick(LEAVE_LIMIT_MS - 100);
+    views.settle(entry);
+    const back = calls.length;
+    mock.timers.tick(LEAVE_LIMIT_MS * 2);
+    assert.equal(calls.length, back, "the limit did not fire after the page came back");
+    views.leave(entry);
+    mock.timers.tick(LEAVE_LIMIT_MS);
+    assert.equal(entry.attached, true, "the second navigation was bounded by its own limit");
+  } finally {
+    mock.timers.reset();
+  }
 });

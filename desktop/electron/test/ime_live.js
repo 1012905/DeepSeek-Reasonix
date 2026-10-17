@@ -5,7 +5,7 @@
 // back: the composition is committed as the raw letters and the word they were
 // spelling is gone. Run with `pnpm ime-live`; it needs no network and no kernel.
 const { app, BrowserWindow } = require("electron");
-const { BrowserViews } = require("../src/browserviews");
+const { BrowserViews, LEAVE_LIMIT_MS } = require("../src/browserviews");
 const { BrowserProtocol } = require("../src/browserprotocol");
 const { checker, listen, wait } = require("./livekit");
 
@@ -22,7 +22,9 @@ const { check, failures } = checker();
 
 async function main() {
   await app.whenReady();
-  const page = await listen((_req, res) => {
+  const page = await listen((req, res) => {
+    // A server that takes the connection and never answers.
+    if (req.url === "/hang") return;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(PAGE);
   });
@@ -101,6 +103,17 @@ async function main() {
   await wait(500);
   await keepsComposing("the agent clicking and typing in it");
 
+  await compose("guaqi");
+  await send({ method: "Page.navigate", params: { url: page.url + "/hang" } }, session);
+  await wait(500);
+  const out = !win.contentView.children.includes([...views.entries.values()][0].view);
+  check("a navigation that has just started holds the page out of the window", out);
+  await wait(LEAVE_LIMIT_MS + 1000);
+  const back = win.contentView.children.includes([...views.entries.values()][0].view);
+  check("one that never answers does not keep it out for good", back);
+  await keepsComposing("and the composition is still open while it hangs");
+
+  page.server.closeAllConnections?.();
   page.server.close();
   app.exit(failures.length ? 1 : 0);
 }
