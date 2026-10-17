@@ -387,7 +387,7 @@ export interface AgentPort {
   welcomeSeen(): Promise<boolean>;
   markWelcomed(): Promise<void>;
   removeProvider(name: string): Promise<ProviderRemoval>;
-  versions(): Promise<VersionHub>;
+  versions(refresh?: boolean): Promise<VersionHub>;
   pinVersion(version: string): Promise<void>;
   updateMode(): Promise<UpdateMode>;
   setUpdateMode(mode: UpdateMode): Promise<UpdateMode>;
