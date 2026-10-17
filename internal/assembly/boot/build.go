@@ -40,6 +40,7 @@ import (
 // what the earlier ones settled and adds its own; none reaches back.
 type builder struct {
 	ctx              context.Context
+	closeLifetime    context.CancelFunc
 	opts             Options
 	timer            *phaseTimer
 	owner            *extension.RuntimeOwner
@@ -110,9 +111,16 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	b.timer.observe = opts.OnPhase
 	// The runtime outlives the request that built it (Studio opens a pane with
 	// one), and its MCP servers and sidecars start on that context later.
-	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(context.WithoutCancel(ctx), opts)
+	life, detach, closeLifetime := constructionLifetime(ctx)
+	b.closeLifetime = closeLifetime
+	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(life, opts)
 	defer b.retireUnownedSidecars()
 	delivered := false
+	defer func() {
+		if !delivered {
+			closeLifetime()
+		}
+	}()
 	if b.owner.Notices != nil && b.opts.Sink != nil {
 		window := b.owner.Notices.Begin(b.opts.Sink)
 		b.opts.Sink = window
@@ -131,6 +139,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	b.tools.candidates.bind(ctrl)
 	b.tools.isolation.bind(ctrl)
 	res, err := b.freeze(ctrl)
+	if err == nil {
+		if cancelErr := detach(); cancelErr != nil {
+			ctrl.Close()
+			return nil, cancelErr
+		}
+	}
 	delivered = err == nil
 	return res, err
 }
@@ -561,7 +575,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		Hooks:                          t.hookRunner,
 		Memory:                         b.prompt.memory,
 		// Read at Close time: freeze chains the extension runtime set onto it.
-		Cleanup:               func() { b.cleanup() },
+		Cleanup:               func() { defer b.closeLifetime(); b.cleanup() },
 		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, entry.APIKey()),
 		Feedback:              control.FeedbackOptions{Service: feedbackService(b.roots.Home(), b.proxy, opts.AccountsURL), ProviderKind: feedbackProviderKind(entry), Surface: opts.FeedbackSurface},
 		Jobs:                  b.session.jobs,

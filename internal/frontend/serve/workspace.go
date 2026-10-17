@@ -161,6 +161,10 @@ func resolveWorkspaceDir(dir string) (string, error) {
 // it. bindMu must be held. The outgoing controller keeps serving until the
 // replacement is fully built, so a failure leaves the session untouched.
 func (s *Server) switchWorkspaceLocked(ctx context.Context, dir string) error {
+	return s.switchWorkspaceCommit(ctx, dir, func(publish func() error) error { return publish() })
+}
+
+func (s *Server) switchWorkspaceCommit(ctx context.Context, dir string, commit func(func() error) error) error {
 	cur := s.ctl()
 	if cur.WorkspaceRoot() == dir {
 		return nil
@@ -193,11 +197,15 @@ func (s *Server) switchWorkspaceLocked(ctx context.Context, dir string) error {
 	}
 	newCtrl.SetOnSessionRecovered(sessionLeaseRecoveryHandler(s.leases))
 
-	if err := addRememberedWorkspace(ctx, dir); err != nil {
-		newCtrl.Close()
-		return err
-	}
-	if err := s.publishController(cur, newCtrl); err != nil {
+	if err := commit(func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := addRememberedWorkspace(ctx, dir); err != nil {
+			return err
+		}
+		return s.publishController(cur, newCtrl)
+	}); err != nil {
 		newCtrl.Close()
 		return err
 	}

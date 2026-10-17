@@ -407,6 +407,18 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.get<import("./workspace").WorktreeSources>("/workspace/worktree-sources");
   }
 
+  prepareWorktree(id: string, selection: import("./workspace").WorktreeSelection) {
+    return this.post0<import("./workspace").WorktreePreparation>("/workspace/prepare", { id, selection });
+  }
+
+  worktreePreparation(id: string) {
+    return this.get<import("./workspace").WorktreePreparation>(`/workspace/prepare/${encodeURIComponent(id)}`);
+  }
+
+  cancelWorktreePreparation(id: string) {
+    return this.post0<import("./workspace").WorktreePreparation>(`/workspace/prepare/${encodeURIComponent(id)}/cancel`);
+  }
+
   async openInEditor(): Promise<{ editor: string; root: string }> {
     return this.post0<{ editor: string; root: string }>("/workspace/editor");
   }

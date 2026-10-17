@@ -69,6 +69,7 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.esc-stop", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.configure", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-cancel", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.source-search", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-navigate", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-select", kind: "view", target: "none", proof: "interaction" },

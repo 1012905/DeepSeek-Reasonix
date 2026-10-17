@@ -446,6 +446,7 @@ func (h *Hub) Close(id string) error {
 	defer h.muxes.paneClosed(id)
 
 	if rt.Local() {
+		rt.Server.preparations.close()
 		rt.Server.bindMu.Lock()
 		defer rt.Server.bindMu.Unlock()
 	}

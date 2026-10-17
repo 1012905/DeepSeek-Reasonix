@@ -451,6 +451,9 @@ export interface AgentPort {
   setWorkspace(path: string): Promise<void>;
   isolateWorkspace(selection?: import("./workspace").WorktreeSelection): Promise<void>;
   worktreeSources(): Promise<import("./workspace").WorktreeSources>;
+  prepareWorktree(id: string, selection: import("./workspace").WorktreeSelection): Promise<import("./workspace").WorktreePreparation>;
+  worktreePreparation(id: string): Promise<import("./workspace").WorktreePreparation>;
+  cancelWorktreePreparation(id: string): Promise<import("./workspace").WorktreePreparation>;
   // The native folder picker, or "" where there is none (a browser tab) or
   // when the user cancelled. Only the shell can open one.
   // The native folder picker: the chosen path, "" when the user cancelled, and
