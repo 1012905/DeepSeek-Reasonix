@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -342,5 +343,38 @@ func TestMuxReconnectLosesAndRepeatsNoFramePerPane(t *testing.T) {
 		if strings.Join(got[rt.ID], ",") != strings.Join(emitted[rt.ID], ",") {
 			t.Fatalf("%s: got %d frames, want %d, in order and once each\n got: %v\nwant: %v", rt.ID, len(got[rt.ID]), len(emitted[rt.ID]), got[rt.ID], emitted[rt.ID])
 		}
+	}
+}
+
+// Resubscribing, unsubscribing and disconnecting each end the goroutines the
+// subscription started: none outlives the call that retired it.
+func TestMuxSubscriptionsLeaveNoGoroutinesBehind(t *testing.T) {
+	_, rts, srv := muxHub(t, 1)
+	c := openMux(t, srv)
+	settle := func() int {
+		time.Sleep(50 * time.Millisecond)
+		return runtime.NumGoroutine()
+	}
+	c.call(http.MethodPut, rts[0].ID, "")
+	baseline := settle()
+	for range 100 {
+		if code, _ := c.call(http.MethodPut, rts[0].ID, `{"after":0}`); code != http.StatusNoContent {
+			t.Fatalf("resubscribe = %d", code)
+		}
+	}
+	if got := settle(); got > baseline+3 {
+		t.Fatalf("goroutines after 100 resubscribes = %d, baseline %d", got, baseline)
+	}
+	c.call(http.MethodDelete, rts[0].ID, "")
+	if got := settle(); got > baseline+3 {
+		t.Fatalf("goroutines after unsubscribe = %d, baseline %d", got, baseline)
+	}
+	for range 20 {
+		c.call(http.MethodPut, rts[0].ID, "")
+		c.call(http.MethodDelete, rts[0].ID, "")
+	}
+	c.cancel()
+	if got := settle(); got > baseline-1+3 {
+		t.Fatalf("goroutines after disconnect = %d, baseline %d", got, baseline)
 	}
 }
