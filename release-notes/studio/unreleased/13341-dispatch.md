@@ -1,0 +1,2 @@
+- 新增（默认关闭）：模型可把任务交给你另一个项目里的会话（dispatch_to_project），对方用户批准后才看到。关联 #13341。
+- Added, off by default: the model can hand a task to a session in another of your projects (dispatch_to_project); that project's user approves first. Refs #13341.

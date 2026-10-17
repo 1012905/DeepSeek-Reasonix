@@ -44,7 +44,7 @@ type heldScope struct {
 	// turnNarration is the user's [agent] turn_narration. It adds output tokens
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
-	peers         bool
+	peers         PeersConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
 }
@@ -80,7 +80,7 @@ func holdUserScope(c *Config) heldScope {
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
-		peers:           c.Peers.Enabled,
+		peers:           clonePeers(c.Peers),
 		mcpResources:    c.Tools.MCPResources,
 	}
 }
@@ -169,10 +169,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	}
 	// Messages between sessions put other sessions' text in front of this one's
 	// model, so enabling them is the user's alone.
-	if c.Peers.Enabled != h.peers {
-		c.ignoreProject("peers.enabled", fmt.Sprintf("%t", c.Peers.Enabled), ProjectUserOnly)
-		c.Peers.Enabled = h.peers
-	}
+	h.narrowPeers(c)
 	// Letting the model read what a server publishes widens what a third party
 	// can put in front of it, so a cloned repo must not turn it on.
 	if c.Tools.MCPResources != h.mcpResources {

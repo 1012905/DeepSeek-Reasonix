@@ -146,6 +146,11 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # allow_devices  = ["/dev/nvidia*"]   # 放进 Linux bash 沙盒的宿主设备节点（只认用户级配置）
 # egress_unlisted = "allow"    # 无人值守长任务用（只认用户级配置）：allowed_domains 之外的主机不再询问，每个主机提示一次；denied_domains 仍然拒绝
 
+[peers]
+# enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准（只认用户级配置）
+# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled（只认用户级配置）
+# release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧（只认用户级配置）
+
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌
 # token = ""                   # 可选固定 token；token 模式为空时启动时自动生成
