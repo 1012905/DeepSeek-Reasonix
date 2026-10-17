@@ -28,7 +28,7 @@ func legacyUpgradeFixture(t *testing.T) (spec Spec, legacy, path string) {
 	if !ok || legacy == current {
 		t.Fatalf("fixture: spec has no legacy-key variant (legacy=%q current=%q)", legacy, current)
 	}
-	path = cachePath(spec.Name)
+	path = specCachePath(spec.Name, legacy)
 	if path == "" {
 		t.Skip("cachePath unavailable in this environment")
 	}
@@ -123,7 +123,8 @@ func TestLegacyCacheUpgradePersistsWhenWritable(t *testing.T) {
 	if !ok {
 		t.Fatal("legacy cache entry did not load from a writable directory")
 	}
-	persisted := cacheKeyOnDisk(t, p)
+	_ = p
+	persisted := cacheKeyOnDisk(t, specCachePath(spec.Name, current))
 	if persisted != current {
 		t.Fatalf("on-disk key = %q, want the persisted upgrade %q (legacy was %q)", persisted, current, legacy)
 	}
