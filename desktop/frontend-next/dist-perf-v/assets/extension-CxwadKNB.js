@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-BIpOPAEp.js";import{n as t,r as n,t as r}from"./view-DimcOPZS.js";var i=e();function a({body:e,onAction:a}){let o=t(e);return o?(0,i.jsx)(n,{children:(0,i.jsx)(r,{runtime:o,onAction:a})}):null}export{a as default};
