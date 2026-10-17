@@ -165,7 +165,6 @@ body { background: var(--page); }
 .studio-rail-head { flex: none; padding: 16px 12px 8px; }
 .studio-brand { display: flex; align-items: center; gap: 9px; padding: 0 4px 15px; color: var(--text); }
 .studio-brand-logo { display: block; width: 118px; height: 24px; object-fit: contain; object-position: left center; }
-.studio-brand-sub { color: var(--ghost); font: 500 10px/1 var(--ui); }
 .studio-new-task {
   width: 100%;
   height: 36px;
@@ -552,8 +551,6 @@ body { background: var(--page) !important; }
 .studio-icon[data-flip] { transform: rotate(180deg); }
 .studio-rail-head { padding: 23px 22px 5px; container-type: inline-size; }
 .studio-brand { padding: 0 0 19px; gap: 9px; }
-.studio-brand-logo { width: 118px; height: 24px; }
-.studio-brand-sub { display: block; color: var(--faint); font-size: 9px; line-height: 9px; letter-spacing: .08em; }
 .studio-new-task {
   height: 34px;
   padding: 0 10px;
@@ -958,8 +955,8 @@ body { background: var(--page) !important; }
 .activity-body .tool-fold { order: 10; margin-left: 0; }
 .activity-body .tool-disclosure[open] > summary.hl { background: var(--raised); }
 .activity-body .tool-disclosure > .out {
-  margin: 0 0 5px 7px !important; padding: 2px 0 9px 18px !important;
-  border-left: 1px solid var(--border) !important;
+  margin: 4px 0 6px 18px !important; padding: 6px 10px 8px !important;
+  border: 1px solid var(--hair) !important; border-radius: var(--r-sm);
 }
 .activity-call-meta,
 .activity-call-input > header,
@@ -1012,7 +1009,7 @@ body { background: var(--page) !important; }
 .flow .call:not([data-k="me"]):not([data-k="say"]) > .g .sym svg { width: 12px; height: 12px; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) { display: block; position: relative; margin: 12px 0; background: transparent; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]):hover { background: transparent; }
-.flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .c { margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--raised); box-shadow: none; overflow: clip; }
+.flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .c { margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); box-shadow: none; overflow: clip; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .c > .hl { min-height: 38px; box-sizing: border-box; padding: 0 12px 0 34px; gap: 8px; align-items: center; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .c > .hl .nm { color: var(--text); font: 590 11px/1.5 var(--ui); }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .c > .hl .tag { padding: 0; border: 0; border-radius: 0; background: none; color: var(--faint); font: 450 10px/1.5 var(--ui); letter-spacing: 0; text-transform: none; }
@@ -1024,8 +1021,6 @@ body { background: var(--page) !important; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .c > .out .find + .find { margin-top: 8px; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .c > .out .find .t { font-weight: var(--w-reg); }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) .guard-hd .verdict { font-weight: var(--w-reg); }
-.flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"])[data-lvl="warn"] > .c { border-color: color-mix(in srgb, var(--warn) 32%, var(--border)); }
-.flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"])[data-lvl="err"] > .c { border-color: color-mix(in srgb, var(--err) 32%, var(--border)); }
 .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) { display: block; position: relative; margin: 12px 0 !important; }
 .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .c { margin: 0 !important; }
 .flow .call:is([data-k="host"], [data-k="mem"], [data-k="extension"]):not([data-k="me"]):not([data-k="say"]) > .g, .flow .call[data-prompt]:not([data-k="me"]):not([data-k="say"]) > .g { position: absolute; top: 1px; left: 1px; z-index: 1; width: 34px; height: 38px; display: grid; place-items: center; pointer-events: none; }
@@ -1487,7 +1482,6 @@ body { background: var(--page) !important; }
 }
 :root[data-theme="light"] .flow .call[data-k="me"] .out .txt { background: var(--overlay); border-color: var(--border); color: var(--text); }
 :root[data-theme="light"] .activity-body .tool-disclosure[open] > summary.hl { background: var(--overlay); }
-:root[data-theme="light"] .activity-body .tool-disclosure > .out { border-left-color: var(--border) !important; }
 :root[data-theme="light"] .activity-call-input,
 :root[data-theme="light"] .activity-call-result { border-color: var(--border); }
 :root[data-theme="light"] .activity-call-input pre { background: var(--overlay); border-color: var(--border); color: var(--muted); }
@@ -2668,7 +2662,7 @@ body { font-size: 14px; line-height: 1.75; }
   padding: 0 !important;
   overflow: hidden;
   border: 1px solid var(--border) !important;
-  border-radius: 10px !important;
+  border-radius: var(--r-md) !important;
   background: var(--surface) !important;
   box-shadow: none !important;
 }
@@ -2678,8 +2672,7 @@ body { font-size: 14px; line-height: 1.75; }
   align-items: center;
   gap: 7px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--raised);
+  border-bottom: 1px solid var(--hair);
 }
 .flow .call[data-prompt] > .c > .hl .nm {
   font-size: 11.5px;
@@ -2840,7 +2833,6 @@ body { font-size: 14px; line-height: 1.75; }
 }
 :root[data-theme="light"] .flow .call[data-prompt] > .c > .hl {
   border-bottom-color: var(--hair);
-  background: var(--page);
 }
 :root[data-theme="light"] .flow .call[data-prompt] > .c > .hl .tag {
   color: #7d5d27; background: var(--hair);
@@ -2894,10 +2886,10 @@ body { font-size: 14px; line-height: 1.75; }
 /* Product wordmark: the interface face remains neutral; the brand gets its
    own tighter optical rhythm and one restrained accent instead of effects. */
 .studio-brand { gap: 10px; }
-.studio-brand-lockup { display: grid; grid-template-rows: 24px 9px; row-gap: 1px; align-content: center; }
+.studio-brand-lockup { display: flex; align-items: center; gap: 8px; }
 .studio-brand-logo {
-  flex: none; display: block; width: 118px; height: 24px;
-  object-fit: contain; object-position: left center;
+  flex: none; display: block; width: 90px; height: 24px;
+  object-fit: cover; object-position: left center;
   margin-left: -14px;
 }
 :root[data-theme="dark"] .studio-brand-logo { filter: brightness(0) invert(1); opacity: .94; }
@@ -2905,12 +2897,9 @@ body { font-size: 14px; line-height: 1.75; }
   :root:not([data-theme]) .studio-brand-logo { filter: brightness(0) invert(1); opacity: .94; }
 }
 .studio-brand-sub {
-  display: block; padding-left: 21px; color: var(--faint);
-  font-family: "Reasonix Display", var(--ui); font-size: 7.5px; font-weight: 650;
-  line-height: 9px; letter-spacing: .21em; text-transform: uppercase;
-  font-variation-settings: "wght" 650, "opsz" 12;
+  padding: 3px 6px 3px 7px; border-radius: var(--r-xs); background: var(--text);
+  color: var(--page); font: 700 9px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase;
 }
-:root[data-theme="light"] .studio-brand-sub { color: var(--ghost); }
 
 /* ──────────────────────────────────────────────────────────────────────────
    Theme token closure
@@ -2943,7 +2932,6 @@ body { font-size: 14px; line-height: 1.75; }
 .chrome .badge,
 .chrome .top-action[aria-pressed="true"] { background: var(--overlay); color: var(--muted); border-color: var(--border); }
 
-.studio-brand-sub { color: var(--faint); }
 .studio-settings:hover,
 .studio-search:hover,
 .studio-quicknav button:hover { color: var(--text); background: var(--overlay); }

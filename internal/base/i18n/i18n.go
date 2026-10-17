@@ -460,10 +460,6 @@ type Messages struct {
 	GoalNotPaused                string
 	GoalPaused                   string
 	AwaitingUserFmt              string
-	GoalRetryFmt                 string
-	GoalRetryGaveUpFmt           string
-	EgressAutoAllowedFmt         string
-	PlanAutoApproved             string
 	ImagesNotReadable            string
 	ImagesNeedVisionRole         string
 	ImagesDropped                string
