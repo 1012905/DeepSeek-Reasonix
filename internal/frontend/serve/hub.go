@@ -65,6 +65,9 @@ type Hub struct {
 	gcCtx     context.Context
 	// titles reads each project's cached session titles for the sidebar tree.
 	titles map[string]*titleCache
+	// orphanLogged remembers the panes already reported, so a tree read that keeps
+	// failing the same match writes one line, not one per read.
+	orphanLogged sync.Map
 	// titleFallback shares a successfully initialized provider and usage recorder.
 	titleFallback *Server
 
@@ -286,7 +289,7 @@ func (h *Hub) sameRootServers(self *Server) []*Server {
 	root := self.Controller().WorkspaceRoot()
 	var out []*Server
 	for _, rt := range h.localRuntimes() {
-		if rt.Server != nil && rt.Server != self && rt.Server.Controller().WorkspaceRoot() == root {
+		if rt.Server != nil && rt.Server != self && sameFolder(rt.Server.Controller().WorkspaceRoot(), root) {
 			out = append(out, rt.Server)
 		}
 	}
