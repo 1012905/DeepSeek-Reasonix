@@ -139,6 +139,11 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # allow_devices  = ["/dev/nvidia*"]   # host device nodes bound into the Linux bash sandbox (user config only)
 # egress_unlisted = "allow"    # unattended long tasks (user config only): hosts outside allowed_domains pass without asking, said once each; denied_domains still refuse
 
+[peers]
+# enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it (user config only)
+# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled (user config only)
+# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
+
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
 # token = ""                   # optional fixed token; empty token mode generates one at startup

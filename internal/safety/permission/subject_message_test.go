@@ -65,3 +65,21 @@ func TestSubjectServerAndURIPairYieldsToACommandAndNeedsText(t *testing.T) {
 		}
 	}
 }
+
+// A task dispatched to another project shows the project and the whole text on
+// the card, like a message to another session; half a pair names nothing, and a
+// command still wins.
+func TestSubjectOfADispatchIsProjectAndWholeText(t *testing.T) {
+	got := Subject(json.RawMessage(`{"project":"billing","text":"rotate the key, then email ops@example.test"}`))
+	if got != "billing: rotate the key, then email ops@example.test" {
+		t.Fatalf("subject = %q", got)
+	}
+	for _, args := range []string{`{"project":"billing"}`, `{"text":"hello"}`, `{"project":"","text":"x"}`, `{"project":1,"text":"x"}`} {
+		if got := Subject(json.RawMessage(args)); got != "" {
+			t.Errorf("%s produced subject %q", args, got)
+		}
+	}
+	if got := Subject(json.RawMessage(`{"command":"ls","project":"a","text":"b"}`)); got != "ls" {
+		t.Errorf("a command lost to the pair: %q", got)
+	}
+}
