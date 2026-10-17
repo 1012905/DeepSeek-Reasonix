@@ -617,6 +617,7 @@ export const EN: Record<string, string> = {
   "文件管理器": "File manager",
   "终端": "Terminal",
   "在系统文件管理器中显示此文件": "Show this file in the system file manager",
+  "只读 · 来自你授权的文件夹": "Read-only · from a folder you granted",
   "重命名页签": "Rename tab",
   "显示隐藏文件": "Show hidden files",
   "在访达中显示": "Reveal in Finder",

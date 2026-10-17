@@ -18,6 +18,11 @@ type workspaceFile struct {
 	Path     string `json:"path"`
 	Content  string `json:"content"`
 	Revision string `json:"revision"`
+	// Root is the granted folder the file was read from; empty for the workspace
+	// itself. A file read from a granted folder is ReadOnly: only the workspace
+	// may be written through this route.
+	Root     string `json:"root,omitempty"`
+	ReadOnly bool   `json:"readOnly,omitempty"`
 }
 
 func fileRevision(data []byte) string {
@@ -87,7 +92,12 @@ func (s *Server) workspaceFileRead(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "workspace.path_outside_tree", err.Error(), nil)
 		return
 	}
-	root, err := os.OpenRoot(s.ctl().WorkspaceRoot())
+	named := r.URL.Query().Get("root")
+	base, ok := s.readRoot(w, named)
+	if !ok {
+		return
+	}
+	root, err := os.OpenRoot(base)
 	if err != nil {
 		refuse(w, http.StatusInternalServerError, "workspace.file_failed", err.Error(), nil)
 		return
@@ -114,7 +124,11 @@ func (s *Server) workspaceFileRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("content-type", "application/json")
-	_ = json.NewEncoder(w).Encode(workspaceFile{Path: filepath.ToSlash(path), Content: string(data), Revision: fileRevision(data)})
+	out := workspaceFile{Path: filepath.ToSlash(path), Content: string(data), Revision: fileRevision(data)}
+	if base != s.ctl().WorkspaceRoot() {
+		out.Root, out.ReadOnly = base, true
+	}
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 func (s *Server) workspaceFileWrite(w http.ResponseWriter, r *http.Request) {
