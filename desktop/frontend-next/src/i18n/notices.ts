@@ -28,6 +28,8 @@ export const NOTICE_TEXT: Record<string, string> = {
   web_search_model_removed: "所选搜索模型已不在配置里，搜索已关闭；到模型偏好里重新选择，或恢复自动",
   web_search_model_unsupported: "所选搜索模型的协议不支持原生搜索，或已关闭搜索，搜索已关闭；到模型偏好里重新选择，或恢复自动",
   web_search_model_no_credentials: "所选搜索模型所在的连接没有凭据，搜索已关闭；到模型偏好里重新选择，或恢复自动",
+  web_search_backend_fallback: "搜索后端没有返回结果，已换用链里的下一个后端；详情见通知",
+  web_search_backend_unusable: "配置的搜索后端无法使用，已跳过；检查用户配置里的 web_search_backends 和 searxng_url",
   approval_mode_unrecognized: "配置里的默认审批档位本版本不认识，已按每次询问处理；在界面里选一个档位即可替换",
   memory_migration_backup: "旧版记忆文件没能先备份，所以没有迁移，保持原样；详情里有具体原因",
   inbox_recovered: "已恢复 {n} 条未完成的指令。待发送已暂停，请先在输入框上方的队列里查看，再点“继续派发”",

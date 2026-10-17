@@ -1,2 +1,0 @@
-- 修复：会话很多（约 2000 个）时左侧项目栏刷新很慢；Windows 上每次刷新从约 0.9 秒降到约 0.1 秒。关联 #13176。
-- Fixed: with thousands of sessions the sidebar refresh was slow; on Windows each refresh drops from about 0.9 s to about 0.1 s. Refs #13176.

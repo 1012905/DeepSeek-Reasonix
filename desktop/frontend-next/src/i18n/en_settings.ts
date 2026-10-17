@@ -1217,7 +1217,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "提问等待超时": "Question wait time",
   "长任务中途遇到提问时，不必一直停在那里等人。": "A long task need not stop at a question and wait for someone.",
   "提问超时后自动跳过": "Skip a question nobody answers",
-  "默认关闭：提问一直等你回答。开启后，超过下面的时间没有回答，这个问题会被跳过，任务继续；模型会被告知这是超时而不是你的回答，并按自己的假设往下做（全自动或目标模式下尤其如此）。终端界面读同一项设置，用 /ask-timeout 修改。": "Off by default: a question waits for you. When on, a question left unanswered for the time below is skipped and the task goes on; the model is told it was a timeout, not your answer, and carries on under its own assumption (especially in full-auto or goal runs). The terminal reads the same setting; change it there with /ask-timeout.",
+  "默认关闭：提问一直等你回答。开启后，超过下面的时间没有回答，这个问题会被跳过，任务继续；模型会被告知这是超时而不是你的回答，并按自己的假设往下做（全自动或目标模式下尤其如此）。模型把任务清单交还给你、等你输入时，同样等这么久，之后宿主让它按自己的判断继续并写明假设。终端界面读同一项设置，用 /ask-timeout 修改。": "Off by default: a question waits for you. When on, a question left unanswered for the time below is skipped and the task goes on; the model is told it was a timeout, not your answer, and carries on under its own assumption (especially in full-auto or goal runs). When the model hands its task list back and waits for you, it waits this long too, then the host has it continue on its own judgement and state its assumptions. The terminal reads the same setting; change it there with /ask-timeout.",
   "等待时长": "Wait time",
   "配置文件里的提问等待时长无效（须为 0 或 {min} 到 {max} 之间），现在按“一直等待”处理：{path}": "The question wait in the config file is not valid (it must be 0 or between {min} and {max}), so questions wait as long as it takes: {path}",
   "从内核发出问题时开始计时。默认 {n} 秒。": "Counted from when the kernel asks the question. Default {n} seconds.",

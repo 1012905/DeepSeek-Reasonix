@@ -540,7 +540,8 @@ func RenderTOMLProjectDelta(c *Config) string {
 		(c.Tools.MCPStartupTimeoutSeconds != nil && *c.Tools.MCPStartupTimeoutSeconds > 0) ||
 		(c.Tools.MCPCallTimeoutSeconds != nil && *c.Tools.MCPCallTimeoutSeconds > 0) ||
 		c.Tools.ProtectChangedFiles != nil ||
-		c.Tools.BrowserTools != nil || c.Tools.MCPResources {
+		c.Tools.BrowserTools != nil || c.Tools.MCPResources ||
+		len(c.Tools.WebSearchBackends) > 0 || c.Tools.SearxngURL != "" {
 		b.WriteString("[tools]\n")
 		if len(c.Tools.Enabled) > 0 {
 			fmt.Fprintf(&b, "enabled = %s\n", renderStringArray(c.Tools.Enabled))
