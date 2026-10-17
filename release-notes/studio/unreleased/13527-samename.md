@@ -1,2 +1,0 @@
-- 修复：同一仓库里多个项目声明同名 MCP 服务器（内容不同）时，各自启用互不覆盖，重启后都保持已启用。关联 #13527。
-- Fixed: projects of one repository that declare an MCP server by the same name with different contents keep their enables side by side across a restart. Refs #13527.

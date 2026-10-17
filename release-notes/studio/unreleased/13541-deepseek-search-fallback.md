@@ -1,2 +1,0 @@
-- 新增：免费搜索没有回答时，`web_search` 可回退到 DeepSeek 付费搜索接口；首次使用前弹出卡片，写明价格和搜索词，由你同意。关联 #13541。
-- Added: when the free search did not answer, `web_search` can fall back to DeepSeek's paid Search API, after a card shows the price and the query and you agree. Refs #13541.

@@ -1,2 +1,0 @@
-- 编辑器（ACP）可对单个会话重连、断开 MCP 服务器，并提交扩展表单；项目声明但未获批准的服务器不会被启动，只返回要运行的命令。关联 #13660。
-- ACP can reconnect or disconnect an MCP server for one session and submit extension forms; a project-declared server that is not approved is never started, only its command is reported. Refs #13660.

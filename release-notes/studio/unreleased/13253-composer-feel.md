@@ -1,2 +1,0 @@
-- 改进：输入框恢复 1.x 手感：悬停或聚焦时边框扫过一圈光（运行中、系统减弱动画时不播）；框内不再印“空闲/运行中”，状态仍读给读屏软件，运行时钟照旧。关联 #13253。
-- Improved: the composer border sweeps with light on hover or focus as in 1.x (not while running or with reduced motion); the idle/running word is no longer printed but still announced. Refs #13253.
