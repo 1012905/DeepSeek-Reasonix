@@ -236,13 +236,15 @@ jobs:
           pnpm exec playwright install --with-deps chromium
 
       - if: steps.scope.outputs.run == 'true'
-        name: Scenarios
+        name: Scenarios (hosted page over the relay; local page on a flapping network)
         working-directory: desktop/frontend-next
         env:
           RELAY_HOST_BIN: ${{ github.workspace }}/desktop/frontend-next/relay/bin/studio-host
           RELAY_FAKE_BIN: ${{ github.workspace }}/desktop/frontend-next/relay/bin/relayfake
           RELAY_DIST: ${{ github.workspace }}/desktop/frontend-next/dist-relay
-        run: node relay/live.mjs
+        run: |
+          node relay/live.mjs
+          node relay/storm.mjs
 
   # A pull request with no platform-relevant change (scripts/ci-platform-scope.sh)
   # moves the Windows and macOS legs onto an ubuntu runner with every step
