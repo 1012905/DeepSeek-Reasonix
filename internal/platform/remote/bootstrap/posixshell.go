@@ -35,6 +35,8 @@ func (posixShell) Launch(spec LaunchSpec, p StatePaths) string {
 	return LaunchCommand(spec, p)
 }
 
+func (posixShell) LaunchScript(LaunchSpec, StatePaths) (string, []byte) { return "", nil }
+
 func (posixShell) Fetch(d releaseasset.CLIDownload, dir, bin string) string {
 	return FetchCommand(d, dir, bin)
 }

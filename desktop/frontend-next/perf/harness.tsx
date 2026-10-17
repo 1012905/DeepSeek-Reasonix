@@ -30,6 +30,8 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/peerthreads.css";
+import "../src/styles/line.css";
 import "../src/styles/notice.css";
 import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
@@ -99,12 +101,37 @@ class BenchPort extends MockPort {
     return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
   }
 
+  // ?badprice=1: DeepSeek's flash price is a card the vendor's table does not have,
+  // under a pinned display currency.
+  async providers() {
+    const all = await super.providers();
+    if (!query.has("badprice")) return all;
+    return all.map((p) => p.name === "deepseek"
+      ? { ...p, officialPricing: true, modelPrices: { "deepseek-flash": { input: 0.3, output: 1.2, cacheHit: 0, currency: "USD", official: false } } }
+      : p);
+  }
+
+  async displayCurrency() {
+    const got = await super.displayCurrency();
+    return query.has("badprice") ? { ...got, mode: "CNY" as const, unconverted: [{ provider: "deepseek", model: "deepseek-flash", currency: "USD" }] } : got;
+  }
+
   async browserTabs() {
     if (!query.has("agentpage")) return super.browserTabs();
     return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
   }
 
-  async workspaceFile(path: string) {
+  // ?grant=1 grants the workspace a folder, /library, holding one document.
+  async workspaceRoots() {
+    const roots = await super.workspaceRoots();
+    return query.has("grant") ? { ...roots, extra: ["/library"] } : roots;
+  }
+
+  async workspaceFile(path: string, root?: string) {
+    if (root) {
+      const content = "# Release plan\n\nThe plan lives in the library folder you granted this project.\n\n- freeze on Friday\n- tag after the checks are green\n- announce the next morning\n";
+      return { path, content, revision: "r1", root, readOnly: true };
+    }
     if (!query.has("doc") || !path.endsWith(".md")) return super.workspaceFile(path);
     const content = "# Install guide\n\nDownload the package for your system, then run the installer. It places the program in your user folder and does not need administrator rights.\n\nAfter the first start, open Settings and add a model service before you begin a conversation.";
     return { path, content, revision: "r1" };
@@ -150,11 +177,29 @@ class BenchPort extends MockPort {
   }
 
   async peers() {
+    if (query.has("peerthreads")) {
+      const states = ["waiting", "working", "replied", "declined"] as const;
+      return {
+        enabled: true,
+        peers: [],
+        held: [],
+        threads: states.map((state, i) => ({ key: `s-${i}`, title: ["文档整理", "发布脚本", "拾音", "旧迁移"][i], project: "rx-archive", sessionPath: `/sessions/w0-s${i}.jsonl`, state, since: "2026-10-16T10:00:00Z", messageId: `m-${i}` })),
+      };
+    }
     if (!query.has("peers")) return super.peers();
     return {
       enabled: true,
       peers: [{ key: "s-1a2b3c4d", title: "拾音", project: "rx-archive" }, { key: "s-5e6f7a8b", title: "文档整理", project: "docs" }],
       held: [{ id: "m-1", fromSession: "s-1a2b3c4d", fromTitle: "拾音", fromProject: "rx-archive", sentAt: "2026-10-16T12:00:00Z", body: "迁移脚本跑完了，结果在 out/report.md，请你核对第三节再继续。" }],
+    };
+  }
+
+  async peersSettings() {
+    if (!query.has("peerset")) return super.peersSettings();
+    return {
+      enabled: true, dispatch: true, applies: "next_turn" as const, pending: query.has("pending"), available: true,
+      path: "/Users/you/.reasonix/config.toml",
+      release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
     };
   }
 
@@ -240,6 +285,11 @@ class BenchPort extends MockPort {
       id: `job-${i}`,
       kind: "bash",
       label: i === 0 ? "npm run tauri:test 2>&1 | Select-Object -Last 40" : `go test ./internal/... -run Case${i}`,
+      // ?jobnames=1 gives each job the name its caller wrote and the full command.
+      ...(query.has("jobnames") ? {
+        description: i === 0 ? "运行桌面端测试并只看最后 40 行输出" : `跑第 ${i} 组内核测试`,
+        detail: i === 0 ? "npm run tauri:test 2>&1 | Select-Object -Last 40" : `go test ./internal/... -run Case${i} -count=1 -timeout 10m`,
+      } : {}),
       status: this.stopped.has(`job-${i}`) ? "killed" : "running",
       startedAt: this.jobsSince,
     }));

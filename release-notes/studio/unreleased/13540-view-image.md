@@ -1,0 +1,2 @@
+- 新增：能读图的模型多了 view_image 工具，可直接看工作区里的 PNG/JPEG/GIF/WebP 文件；不读图的模型不受影响。关联 #13540。
+- Added: a model that reads images gets a view_image tool that shows it a PNG, JPEG, GIF or WebP file in the workspace; text-only models are unchanged. Refs #13540.

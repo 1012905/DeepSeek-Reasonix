@@ -55,6 +55,9 @@ func (c *Controller) offersPersist(tool string, persist bool) bool {
 	if tool == NetworkEgressApprovalTool {
 		return c.egressPersistable()
 	}
+	if tool == PaidSearchApprovalTool || tool == MCPSignInApprovalTool {
+		return true
+	}
 	return persist && c.onRemember != nil
 }
 

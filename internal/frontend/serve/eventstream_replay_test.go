@@ -109,9 +109,9 @@ func TestEventsReplayAddsNothingToAResume(t *testing.T) {
 
 	handler := operatorHandler(srv)
 	deadline := time.Now().Add(3 * time.Second)
-	for !ctrl.PendingPrompt() {
+	for !ctrl.PendingPrompt() || !loggedAsk(t, handler) {
 		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for the parked ask")
+			t.Fatal("timed out waiting for the parked ask to reach the log")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -235,4 +235,17 @@ func TestEventsReplayAttachCursorNeverSkipsAPromptRaisedDuringIt(t *testing.T) {
 	if !reached {
 		t.Fatalf("the resume from cursor %d never reached the prompt raised during the attach", answer.Watermark)
 	}
+}
+
+// loggedAsk reports whether the numbered log already holds the ask_request: the
+// ask is parked before its event is emitted, so the parked state alone does not
+// say the log has it yet.
+func loggedAsk(t *testing.T, handler http.Handler) bool {
+	t.Helper()
+	for _, f := range getReplay(t, handler, "?lastEventId=0").Frames {
+		if f.Kind == "ask_request" && f.Seq > 0 {
+			return true
+		}
+	}
+	return false
 }

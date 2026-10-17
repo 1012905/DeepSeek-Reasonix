@@ -33,7 +33,7 @@ func (p *failingTurnProvider) Name() string { return "boot-failing-turn" }
 func (p *failingTurnProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	p.mu.Lock()
 	p.reqs = append(p.reqs, req)
-	summary := len(req.Messages) > 0 && strings.Contains(req.Messages[0].Content, "compacting the earlier part")
+	summary := req.Summary
 	last := req.Messages[len(req.Messages)-1]
 	newTurn := !summary && last.Role == provider.RoleUser
 	if newTurn {
@@ -124,7 +124,7 @@ context_window = 32000
 		if len(req.Messages) == 0 {
 			continue
 		}
-		if strings.Contains(req.Messages[0].Content, "compacting the earlier part") {
+		if req.Summary {
 			afterFold = true
 			folds++
 			continue

@@ -228,6 +228,28 @@ func CurrentRate(provider, model, currency string) *RateCard {
 	return nil
 }
 
+// IsOfficialCard reports whether card is a rate this project has shipped for the
+// model in the card's own currency: any generation, its off-peak or its peak
+// card. A card that is none of them is the user's, or damaged, and cannot be
+// valued against the vendor's other-currency table.
+func IsOfficialCard(provider, model string, card RateCard) bool {
+	for _, row := range officialRateRowsFor(provider, model, card.Currency) {
+		if row.BillingMode == BillingModeSubscriptionEquivalent {
+			continue
+		}
+		for _, generation := range row.Rates {
+			if sameCard(generation.Base, card) || generation.Peak != nil && sameCard(*generation.Peak, card) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func sameCard(a, b RateCard) bool {
+	return a.CacheHit == b.CacheHit && a.Input == b.Input && a.Output == b.Output
+}
+
 // SupersededRates are the rates shipped for a model before the current one. A
 // stored price matching one came from this project rather than from its user, so
 // a refresh may replace it; anything else is theirs and is left alone.

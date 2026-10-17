@@ -59,6 +59,11 @@ func Subjects(args json.RawMessage) []string {
 		// the person approving reads what would leave this session.
 		return []string{to + ": " + text}
 	}
+	if project, text := stringArg(m, "project"), stringArg(m, "text"); project != "" && text != "" {
+		// A task handed to a session in another project: where it goes and every
+		// word of it, for the same reason as a message to another session.
+		return []string{project + ": " + text}
+	}
 	if server, uri := stringArg(m, "server"), stringArg(m, "uri"); server != "" && uri != "" {
 		// A resource read from an MCP server: the whole address, in the form
 		// the chat's @server:uri reference uses, so it is judged as written.

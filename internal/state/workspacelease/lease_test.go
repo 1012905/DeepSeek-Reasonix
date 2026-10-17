@@ -562,8 +562,22 @@ func TestACrossProcessWaitNamesTheHolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	o.BeginRun()
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	// The acquire runs until the first wait report arrives, however slowly the
+	// runner gets there; a fixed short deadline read a loaded machine as "no report".
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	go func() {
+		for ctx.Err() == nil {
+			log.mu.Lock()
+			n := len(log.seen)
+			log.mu.Unlock()
+			if n > 0 {
+				cancel()
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
 	_ = o.AcquireWrite(ctx)
 	log.mu.Lock()
 	defer log.mu.Unlock()

@@ -79,6 +79,7 @@ var (
 	ErrClosed              = errors.New("inbox is closed")
 	ErrEmpty               = errors.New("inbox item body is empty")
 	ErrPaused              = errors.New("inbox is paused")
+	ErrForeignRun          = errors.New("sessioninbox.foreign_run")
 	ErrIdempotencyConflict = errors.New("idempotency key was already used for different input")
 )
 

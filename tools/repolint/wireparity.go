@@ -29,6 +29,7 @@ const (
 	tsWorkspaceFile = "desktop/frontend-next/src/port/workspace.ts"
 	tsLookFile      = "desktop/frontend-next/src/port/look.ts"
 	tsHubFile       = "desktop/frontend-next/src/port/hub.ts"
+	tsMuxFile       = "desktop/frontend-next/src/port/mux.ts"
 	tsChartFile     = "desktop/frontend-next/src/ui/chart/spec.ts"
 	tsSurfaceFile   = "desktop/frontend-next/src/ui/surface/spec.ts"
 )
@@ -42,6 +43,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/worktree/source.go", "Source", tsWorkspaceFile, "WorktreeSource"},
 	{"internal/frontend/serve/workspace_source.go", "worktreeSourcesView", tsWorkspaceFile, "WorktreeSources"},
 	{"internal/frontend/serve/workspace_source.go", "worktreeSelection", tsWorkspaceFile, "WorktreeSelection"},
+	{"internal/session/control/workspace_preparation.go", "WorkspacePreparationStatus", tsWorkspaceFile, "WorktreePreparation"},
 	{"internal/contract/surfacespec/action_message.go", "Action", "desktop/frontend-next/src/port/surface.ts", "SurfaceAction"},
 	{"internal/session/control/surface_actions.go", "SurfaceActionRequest", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRequest"},
 	{"internal/session/control/surface_actions.go", "SurfaceActionRecord", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRecord"},
@@ -94,6 +96,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
 	{"internal/frontend/serve/session_usage.go", "SessionUsage", tsSessionFile, "SessionUsage"},
 	{"internal/frontend/serve/jobs.go", "JobOutput", tsSessionFile, "JobOutput"},
+	// The background-job list. A name or full command the page cannot read is
+	// a task it can only call by its short preview.
+	{"internal/tools/jobs/jobs_view.go", "View", tsSessionFile, "JobEntry"},
 	{"internal/frontend/serve/session_usage.go", "SourceUsage", tsSessionFile, "SourceUsage"},
 	// The agent's tabs. The target id is what the window draws a view by, so a
 	// tab the page cannot read one for is a tab it cannot show.
@@ -165,6 +170,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/remote_browse.go", "RemoteFolder", tsRemoteFile, "RemoteFolder"},
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
+	{"internal/frontend/serve/hub_mux.go", "muxOpened", tsMuxFile, "MuxOpened"},
+	{"internal/frontend/serve/hub_mux.go", "muxAttachRequest", tsMuxFile, "MuxAttachRequest"},
+	{"internal/frontend/serve/hub_mux.go", "muxEnvelopeView", tsMuxFile, "MuxEnvelope"},
 	{"internal/frontend/serve/hub_tree.go", "treeSession", tsHubFile, "TreeSession"},
 	// The folder's true size beside the rows loaded. A window that cannot read
 	// the total labels a truncated list as the whole history.

@@ -14,7 +14,10 @@ import (
 	"reasonix/internal/ext/pluginspec"
 )
 
-var mcpAuthorizeForCLI = plugin.AuthorizeHTTPMCP
+var (
+	mcpAuthorizeForCLI = plugin.AuthorizeHTTPMCP
+	mcpOpenForCLI      = openMCPAuthorizationURL
+)
 
 func mcpAuthCLI(args []string) int {
 	if len(args) == 0 {
@@ -58,7 +61,11 @@ func mcpAuthCLI(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	if err := mcpAuthorizeForCLI(ctx, specs[0], openMCPAuthorizationURL); err != nil {
+	announce := func(rawURL string) error {
+		fmt.Printf("opening %s in your browser to sign in to %q; close it if you do not recognise that site\n", plugin.AuthorizationHost(rawURL), name)
+		return mcpOpenForCLI(rawURL)
+	}
+	if err := mcpAuthorizeForCLI(ctx, specs[0], announce); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

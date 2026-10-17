@@ -286,6 +286,10 @@ export interface JobEntry {
   id: string;
   kind: string;
   label: string;
+  // The name the model gave the call for a person, and the full command or task
+  // behind it; label stays the short preview.
+  description?: string;
+  detail?: string;
   status: string;
   startedAt: number;
 }

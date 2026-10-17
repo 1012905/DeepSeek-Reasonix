@@ -12,9 +12,11 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/state/peermail"
 	"reasonix/internal/state/sessioninbox"
@@ -44,6 +46,12 @@ type PeersOptions struct {
 	Dir string
 	// Link, when set, is bound to this controller so the peer tools can reach it.
 	Link *tool.PeerLink
+	// Standby keeps the session off until the user turns messages on from settings;
+	// Dispatch is the initial state of the dispatch tool.
+	Standby, Dispatch bool
+	// Tools registers or withdraws the peer tools for the given switches. It runs
+	// only between turns, so the tool block never moves mid-request.
+	Tools func(enabled, dispatch bool)
 }
 
 // PeerHeld is a message another session sent that has not been approved or
@@ -61,7 +69,11 @@ type PeerHeld struct {
 // own spool directory read on a timer, and what is held for the user.
 type peerMail struct {
 	mu       sync.Mutex
-	dir      *peermail.Dir
+	root     string
+	dir      atomic.Pointer[peermail.Dir]
+	tools    func(enabled, dispatch bool)
+	dispatch bool
+	stale    atomic.Bool
 	link     *tool.PeerLink
 	instance string
 	key      string
@@ -73,7 +85,6 @@ type peerMail struct {
 	rejected  map[string]bool
 	sent      []time.Time
 	stop      chan struct{}
-	stopOnce  sync.Once
 }
 
 // sessionPeerKey is the address a session is filed under: a digest of its
@@ -88,42 +99,55 @@ func sessionPeerKey(path string) string {
 }
 
 func newPeerMail(opts PeersOptions) *peerMail {
-	p := &peerMail{link: opts.Link, held: map[string]peermail.Message{}, resolving: map[string]bool{}, rejected: map[string]bool{}, stop: make(chan struct{})}
+	p := &peerMail{link: opts.Link, tools: opts.Tools, dispatch: opts.Dispatch, held: map[string]peermail.Message{}, resolving: map[string]bool{}, rejected: map[string]bool{}}
 	if strings.TrimSpace(opts.Dir) == "" {
 		return p
 	}
-	dir, err := peermail.Open(opts.Dir)
-	if err != nil {
-		slog.Warn("controller: messages between sessions are off", "err", err)
-		return p
+	p.root = opts.Dir
+	if !opts.Standby {
+		p.open()
 	}
-	p.dir = dir
-	var token [8]byte
-	_, _ = rand.Read(token[:])
-	p.instance = hex.EncodeToString(token[:])
 	return p
 }
 
-// startPeers runs the ingest timer once the controller is built.
-func (c *Controller) startPeers() {
-	if c.peers.dir == nil {
-		return
+// open creates the spool directory and takes this process's identity; it is the
+// only way a session becomes reachable. The caller starts the ingest timer.
+func (p *peerMail) open() bool {
+	dir, err := peermail.Open(p.root)
+	if err != nil {
+		slog.Warn("controller: messages between sessions are off", "err", err)
+		return false
 	}
+	var token [8]byte
+	_, _ = rand.Read(token[:])
+	p.instance = hex.EncodeToString(token[:])
+	p.stop = make(chan struct{})
+	p.dir.Store(dir)
+	return true
+}
+
+// startPeers binds the peer tools to this controller and, unless the session is
+// on standby, runs the ingest timer.
+func (c *Controller) startPeers() {
 	if c.peers.link != nil {
 		c.peers.link.Bind(peerDirectory{c})
 	}
-	go func() {
-		tick := time.NewTicker(peerIngestEvery)
-		defer tick.Stop()
-		for {
-			select {
-			case <-c.peers.stop:
-				return
-			case <-tick.C:
-				c.peerIngest()
-			}
+	if c.peers.dir.Load() != nil {
+		go c.peerLoop(c.peers.stop)
+	}
+}
+
+func (c *Controller) peerLoop(stop <-chan struct{}) {
+	tick := time.NewTicker(peerIngestEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-tick.C:
+			c.peerIngest()
 		}
-	}()
+	}
 }
 
 // rebindPeers publishes the session now current and withdraws the one it
@@ -131,7 +155,8 @@ func (c *Controller) startPeers() {
 // they stay in the old spool, which nobody reads until that session is open again.
 func (c *Controller) rebindPeers() {
 	p := c.peers
-	if p == nil || p.dir == nil {
+	dir := p.dirOrNil()
+	if dir == nil {
 		return
 	}
 	path := c.SessionPath()
@@ -142,7 +167,7 @@ func (c *Controller) rebindPeers() {
 		return
 	}
 	if p.key != "" {
-		_ = p.dir.RemoveLiveIf(p.key, p.instance)
+		_ = dir.RemoveLiveIf(p.key, p.instance)
 	}
 	p.key = key
 	p.held, p.order, p.rejected = map[string]peermail.Message{}, nil, map[string]bool{}
@@ -156,9 +181,13 @@ func (c *Controller) rebindPeers() {
 // called when the session changes and on every ingest tick.
 func (c *Controller) publishPeerLiveLocked(path string) {
 	p := c.peers
+	dir := p.dir.Load()
+	if dir == nil {
+		return
+	}
 	host, _ := os.Hostname()
 	now := time.Now().UTC()
-	err := p.dir.PublishLive(peermail.Live{
+	err := dir.PublishLive(peermail.Live{
 		SessionID: p.key, Instance: p.instance, SessionPath: path, PID: os.Getpid(), Hostname: host,
 		Title: peerAttribute(sessionstore.BranchID(path)), Project: peerAttribute(filepath.Base(c.WorkspaceRoot())),
 		StartedAt: now, BeatAt: now, Inbound: "hold",
@@ -170,19 +199,34 @@ func (c *Controller) publishPeerLiveLocked(path string) {
 
 // closePeers withdraws this controller's record. Messages stay in the spool.
 func (c *Controller) closePeers() {
-	p := c.peers
-	if p == nil {
-		return
+	if c.peers != nil {
+		c.peers.shutdown()
 	}
-	p.stopOnce.Do(func() { close(p.stop) })
-	if p.dir == nil {
-		return
-	}
+}
+
+// shutdown stops the ingest timer and withdraws the record; it is safe to call
+// on a session that never opened and again after it has run.
+func (p *peerMail) shutdown() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.key != "" {
-		_ = p.dir.RemoveLiveIf(p.key, p.instance)
+	dir := p.dir.Swap(nil)
+	if dir == nil {
+		return
 	}
+	close(p.stop)
+	if p.key != "" {
+		_ = dir.RemoveLiveIf(p.key, p.instance)
+	}
+	p.key = ""
+	p.held, p.order, p.rejected = map[string]peermail.Message{}, nil, map[string]bool{}
+}
+
+// dirOrNil is the spool while the session is on, else nil.
+func (p *peerMail) dirOrNil() *peermail.Dir {
+	if p == nil {
+		return nil
+	}
+	return p.dir.Load()
 }
 
 // peerIngest reads this session's own spool and holds what it finds. Held is
@@ -191,7 +235,8 @@ func (c *Controller) closePeers() {
 // lock, so asking what is held never waits on a directory read.
 func (c *Controller) peerIngest() {
 	p := c.peers
-	if p == nil || p.dir == nil {
+	dir := p.dirOrNil()
+	if dir == nil {
 		return
 	}
 	p.mu.Lock()
@@ -203,17 +248,18 @@ func (c *Controller) peerIngest() {
 	if key == "" {
 		return
 	}
-	p.dir.SweepTemp(key, peerStaleTemp)
-	messages, rejected := p.dir.Pending(key)
+	dir.SweepTemp(key, peerStaleTemp)
+	messages, rejected := dir.Pending(key)
 	var fresh []peermail.Message
 	for _, m := range messages {
-		if p.dir.Seen(key, m.ID) {
-			_ = p.dir.Ack(key, m.ID)
+		if dir.Seen(key, m.ID) {
+			_ = dir.Ack(key, m.ID)
 			continue
 		}
 		fresh = append(fresh, m)
 	}
 	var audits []peermail.AuditRecord
+	var newlyHeld []string
 	p.mu.Lock()
 	if p.key != key {
 		p.mu.Unlock()
@@ -238,22 +284,38 @@ func (c *Controller) peerIngest() {
 		}
 		p.held[m.ID] = m
 		p.order = append(p.order, m.ID)
+		newlyHeld = append(newlyHeld, m.ID)
 		perSender[m.From.SessionID]++
 		audits = append(audits, peermail.AuditRecord{Receiver: key, Sender: m.From.SessionID, ID: m.ID, Decision: peermail.DecisionHeld, Bytes: len(m.Body), SHA256: peermail.Digest(m.Body)})
 	}
 	p.mu.Unlock()
 	for _, a := range audits {
-		_ = p.dir.Audit(a)
+		_ = dir.Audit(a)
+	}
+	c.releaseHeldPeerMessages(newlyHeld)
+}
+
+// releaseHeldPeerMessages approves what just arrived when the user's own file
+// lists this session's project. Only the asking is skipped: the message is the
+// same follow-up an approval would queue, and what it starts runs under this
+// session's own approvals and sandbox.
+func (c *Controller) releaseHeldPeerMessages(ids []string) {
+	if len(ids) == 0 || !config.LoadForEdit(config.UserConfigPath()).PeersReleasedProject(c.WorkspaceRoot()) {
+		return
+	}
+	for _, id := range ids {
+		_ = c.resolvePeerMessage(id, true, true)
 	}
 }
 
 // PeersEnabled reports whether this controller publishes and reads a spool.
-func (c *Controller) PeersEnabled() bool { return c.peers != nil && c.peers.dir != nil }
+func (c *Controller) PeersEnabled() bool { return c.peers.dirOrNil() != nil }
 
 // HeldPeerMessages lists what other sessions sent and the user has not decided.
 func (c *Controller) HeldPeerMessages() []PeerHeld {
 	p := c.peers
-	if p == nil || p.dir == nil {
+	dir := p.dirOrNil()
+	if dir == nil {
 		return nil
 	}
 	p.mu.Lock()
@@ -272,8 +334,45 @@ func (c *Controller) HeldPeerMessages() []PeerHeld {
 // acknowledged only after the queue holds it, and the queue de-duplicates on the
 // message id, so a crash between the two re-asks and never delivers twice.
 func (c *Controller) ResolvePeerMessage(id string, approve bool) error {
+	return c.resolvePeerMessage(id, approve, false)
+}
+
+// ResolvePeerMessageRemembering is ResolvePeerMessage that also writes the
+// choice down. The write comes first: if the user file cannot be saved the
+// message stays held and the click is reported, never half-applied.
+func (c *Controller) ResolvePeerMessageRemembering(id string, approve bool, remember PeerRemember) error {
+	if remember == PeerRememberNone {
+		return c.ResolvePeerMessage(id, approve)
+	}
+	if !approve {
+		return ErrPeerRememberDenied
+	}
+	if !c.heldPeerMessage(id) {
+		return ErrPeerNotHeld
+	}
+	if err := c.rememberPeerProject(); err != nil {
+		return err
+	}
+	return c.ResolvePeerMessage(id, true)
+}
+
+func (c *Controller) heldPeerMessage(id string) bool {
 	p := c.peers
-	if p == nil || p.dir == nil {
+	if p == nil || p.dirOrNil() == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.held[id]
+	return ok
+}
+
+// resolvePeerMessage is ResolvePeerMessage; released records that the user's own
+// file let this project take the message without a card, which the audit says.
+func (c *Controller) resolvePeerMessage(id string, approve, released bool) error {
+	p := c.peers
+	dir := p.dirOrNil()
+	if dir == nil {
 		return ErrPeersDisabled
 	}
 	p.mu.Lock()
@@ -305,14 +404,17 @@ func (c *Controller) ResolvePeerMessage(id string, approve bool) error {
 			return err
 		}
 		decision = peermail.DecisionApproved
+		if released {
+			decision = peermail.DecisionReleased
+		}
 		if !c.Running() {
 			c.maybeDispatchInbox()
 		}
 	}
-	if err := p.dir.Ack(key, m.ID); err != nil {
+	if err := dir.Ack(key, m.ID); err != nil {
 		return err
 	}
-	_ = p.dir.Audit(peermail.AuditRecord{Receiver: key, Sender: m.From.SessionID, ID: m.ID, Decision: decision, Bytes: len(m.Body), SHA256: peermail.Digest(m.Body)})
+	_ = dir.Audit(peermail.AuditRecord{Receiver: key, Sender: m.From.SessionID, ID: m.ID, Decision: decision, Bytes: len(m.Body), SHA256: peermail.Digest(m.Body)})
 	p.mu.Lock()
 	delete(p.held, m.ID)
 	for i, held := range p.order {

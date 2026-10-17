@@ -208,38 +208,12 @@ func resolveThroughExisting(p string) string {
 // FolderGrantRefusal or the forbid list rules out. The resolved path is stored.
 func (c *Config) VetExtraRoot(primary, dir string, existing []string) (string, error) {
 	dir = strings.TrimSpace(dir)
+	real, key, err := c.vetRoot(primary, dir, true)
+	if err != nil {
+		return "", err
+	}
 	refuse := func(code WorkspaceRootRefusal) (string, error) {
 		return "", &WorkspaceRootError{Code: code, Path: dir}
-	}
-	if !filepath.IsAbs(dir) || !ordinaryPath(dir) {
-		return refuse(RootNotDirectory)
-	}
-	real, err := filepath.EvalSymlinks(filepath.Clean(dir))
-	if err != nil {
-		return refuse(RootNotDirectory)
-	}
-	info, err := os.Stat(real)
-	if err != nil || !info.IsDir() {
-		return refuse(RootNotDirectory)
-	}
-	if isReparsePoint(real) {
-		return refuse(RootProtected)
-	}
-	key := rootKey(real)
-	if primary != "" && keyWithin(key, rootKey(primary)) {
-		return refuse(RootCoveredAlready)
-	}
-	if code, bad := c.Roots().FolderGrantRefusal(real); bad {
-		return refuse(code)
-	}
-	if !ownedByCurrentUser(info) {
-		return refuse(RootNotOwned)
-	}
-	for _, p := range c.ForbiddenRootsForRoot(primary) {
-		pk := rootKey(p)
-		if keyWithin(key, pk) || keyWithin(pk, key) {
-			return refuse(RootProtected)
-		}
 	}
 	held := append(c.writeRootsBeforeExtras(primary), os.TempDir())
 	held = append(held, hostwrite.Dirs()...)
@@ -258,4 +232,54 @@ func (c *Config) VetExtraRoot(primary, dir string, existing []string) (string, e
 		}
 	}
 	return real, nil
+}
+
+// VetReadableRoot is the part of VetExtraRoot that decides whether anything may
+// be read through a granted folder: an existing directory the user owns, not a
+// link, and not one FolderGrantRefusal or the forbid list rules out. It leaves
+// out what only matters to writes, so a grant that overlaps a write root still
+// reads. It returns the resolved path.
+func (c *Config) VetReadableRoot(primary, dir string) (string, error) {
+	real, _, err := c.vetRoot(primary, strings.TrimSpace(dir), false)
+	return real, err
+}
+
+// vetRoot runs the checks both uses share, in the order a refusal is reported;
+// forWrite adds the one that only a writer needs, that the folder is not already
+// inside the primary.
+func (c *Config) vetRoot(primary, dir string, forWrite bool) (real, key string, err error) {
+	refuse := func(code WorkspaceRootRefusal) (string, string, error) {
+		return "", "", &WorkspaceRootError{Code: code, Path: dir}
+	}
+	if !filepath.IsAbs(dir) || !ordinaryPath(dir) {
+		return refuse(RootNotDirectory)
+	}
+	real, err = filepath.EvalSymlinks(filepath.Clean(dir))
+	if err != nil {
+		return refuse(RootNotDirectory)
+	}
+	info, err := os.Stat(real)
+	if err != nil || !info.IsDir() {
+		return refuse(RootNotDirectory)
+	}
+	if isReparsePoint(real) {
+		return refuse(RootProtected)
+	}
+	key = rootKey(real)
+	if forWrite && primary != "" && keyWithin(key, rootKey(primary)) {
+		return refuse(RootCoveredAlready)
+	}
+	if code, bad := c.Roots().FolderGrantRefusal(real); bad {
+		return refuse(code)
+	}
+	if !ownedByCurrentUser(info) {
+		return refuse(RootNotOwned)
+	}
+	for _, p := range c.ForbiddenRootsForRoot(primary) {
+		pk := rootKey(p)
+		if keyWithin(key, pk) || keyWithin(pk, key) {
+			return refuse(RootProtected)
+		}
+	}
+	return real, key, nil
 }

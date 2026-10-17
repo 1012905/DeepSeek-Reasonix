@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import { useRailQuery } from "./railsearch";
 import { t } from "../i18n";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
+import { workspaceContains } from "../port/hub";
 import { REMOTE_STEP_LABEL, REMOTE_STEPS, type RemoteHost } from "../port/remote";
 import { RemoteDirs } from "./RemoteDirs";
 import { workspacesOf } from "./Remotes";
@@ -94,9 +95,9 @@ export interface RemoteWorkspace extends TreeWorkspace {
 // one opened over there still appears without having been written down here.
 export function remoteWorkspaces(host: RemoteHost, tree: TreeWorkspace[] | null | undefined): RemoteWorkspace[] {
   const known = workspacesOf(host);
-  const out: RemoteWorkspace[] = tree ? tree.map((ws) => ({ ...ws, booked: known.includes(ws.root) })) : [];
+  const out: RemoteWorkspace[] = tree ? tree.map((ws) => ({ ...ws, booked: known.some((root) => workspaceContains(ws, root)) })) : [];
   for (const dir of known) {
-    if (!out.some((ws) => ws.root === dir)) out.push({ root: dir, name: leaf(dir), sessions: [], booked: true });
+    if (!out.some((ws) => workspaceContains(ws, dir))) out.push({ root: dir, name: leaf(dir), sessions: [], booked: true });
   }
   return out;
 }
@@ -174,14 +175,16 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
 
   // Dropping a folder from this window's book. Nothing on the far machine is
   // touched, which is what makes it a one-click action rather than a question.
-  const drop = async (host: string, dir: string) => {
-    setBusy(host + dir);
+  const drop = async (host: RemoteHost, workspace: RemoteWorkspace) => {
+    setBusy(host.name + workspace.root);
     try {
       // Idle panes in the folder close here so this list stays in step; the
       // kernel refuses the removal while any of them is running.
-      const open = runtimes.filter((rt) => rt.host === host && rt.root === dir).map((rt) => rt.id);
+      const open = runtimes.filter((rt) => rt.host === host.name && workspaceContains(workspace, rt.root)).map((rt) => rt.id);
       if (open.length && liveIds(open).length === 0) await onClose(open);
-      await hub.removeRemoteWorkspace(host, dir);
+      for (const root of workspacesOf(host).filter((root) => workspaceContains(workspace, root))) {
+        await hub.removeRemoteWorkspace(host.name, root);
+      }
       await reload();
     } catch (e) {
       onError(e);
@@ -392,7 +395,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                               aria-label={t("不再列出 {path}", { path: ws.root })}
                               onClick={(ev) => {
                                 ev.stopPropagation();
-                                void drop(host.name, ws.root);
+                                void drop(host, ws);
                               }}
                             >
                               <Cross />
@@ -434,10 +437,10 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                                 data-live={held ? "" : undefined}
                                 data-unread={session.unread ? "" : undefined}
                                 data-busy={busy === host.name + session.path ? "" : undefined}
-                                onClick={() => (held ? onFocus(held.id) : void open(host, ws.root, session.path))}
+                                onClick={() => (held ? onFocus(held.id) : void open(host, session.workspaceRoot || ws.root, session.path))}
                               >
                                 <i className="pip" />
-                                <span className="sesstitle" title={name}><span>{name}</span></span>
+                                <span className="sesstitle" title={name}><span>{name}</span>{session.isolated && <em className="sessarch" title={session.workspaceRoot}>{t("隔离")}</em>}</span>
                                 {session.unread && <UnreadDot />}
                                 <span className="sessmeta">{session.turns ? t("{n} 轮", { n: session.turns }) : t("空会话")}</span>
                                 <button

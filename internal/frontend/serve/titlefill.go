@@ -30,27 +30,40 @@ type titleJob struct {
 type titleFiller struct {
 	mu      sync.Mutex
 	pending map[string]struct{}
-	queue   []titleJob
-	active  int
+	// latest is the first message most recently asked for per session: a result
+	// for any other is stale and is not stored over a newer one.
+	latest map[string]string
+	queue  []titleJob
+	active int
+}
+
+// wanted reports whether source is still the first message to title for name.
+func (f *titleFiller) wanted(name, source string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.latest[name] == source
 }
 
 func newTitleFiller() *titleFiller {
-	return &titleFiller{pending: map[string]struct{}{}}
+	return &titleFiller{pending: map[string]struct{}{}, latest: map[string]string{}}
 }
 
-// scheduleTitle queues one generation, deduplicated by session name so a burst
-// of list requests cannot stack N copies of the same call.
+// scheduleTitle queues one generation, deduplicated by session and first message
+// so a burst of list requests cannot stack N copies of the same call, while a
+// changed first message is a new request and is never taken for the old one.
 func (s *Server) scheduleTitle(name, source string, mod int64) {
 	if nilutil.IsNil(s.currentTitleProvider().prov) || source == "" {
 		return
 	}
 	f := s.fill
+	key := name + "\x00" + source
 	f.mu.Lock()
-	if _, dup := f.pending[name]; dup {
+	f.latest[name] = source
+	if _, dup := f.pending[key]; dup {
 		f.mu.Unlock()
 		return
 	}
-	f.pending[name] = struct{}{}
+	f.pending[key] = struct{}{}
 	f.queue = append(f.queue, titleJob{name: name, source: source, mod: mod})
 	spawn := f.active < titleFillWorkers
 	if spawn {
@@ -78,13 +91,15 @@ func (s *Server) drainTitles() {
 		ctx, cancel := context.WithTimeout(context.Background(), titleFillTimeout)
 		title := s.generateTitle(ctx, job.source)
 		cancel()
-		if title != "" {
-			s.titles.put(job.name, title, job.source, job.mod)
+		if title != "" && s.titles.putIf(job.name, title, job.source, job.mod, func() bool { return f.wanted(job.name, job.source) }) {
 			s.bc.treeChanged()
 		}
 
 		f.mu.Lock()
-		delete(f.pending, job.name)
+		delete(f.pending, job.name+"\x00"+job.source)
+		if f.latest[job.name] == job.source {
+			delete(f.latest, job.name)
+		}
 		f.mu.Unlock()
 	}
 }

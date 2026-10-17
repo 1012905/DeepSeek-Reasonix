@@ -30,7 +30,7 @@ func (h *Hub) titleRequest(w http.ResponseWriter, r *http.Request) (string, *str
 		refuse(w, http.StatusBadRequest, codeSessionBadPath, "the session path could not be resolved", nil)
 		return "", nil, false
 	}
-	for _, root := range h.roots() {
+	for _, root := range h.sessionRoots() {
 		dir, err := filepath.Abs(SessionDirFor(root.dir))
 		if err != nil || !strings.HasPrefix(requested, dir+string(os.PathSeparator)) || filepath.Dir(requested) != dir {
 			continue
