@@ -194,6 +194,16 @@ class BenchPort extends MockPort {
     };
   }
 
+  async webAccessSettings() {
+    if (!query.has("webaccess")) return super.webAccessSettings();
+    return {
+      search_backends: ["searxng", "deepseek_api"], searxng_url: "http://127.0.0.1:8080", search_paid_allowed: [],
+      fetch_backends: ["local", "deepseek_api"], fetch_paid_allowed: [],
+      known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"], paid_backends: ["deepseek_api"],
+      deepseek_api_ready: query.get("webaccess") !== "noready", path: "/Users/you/.reasonix/config.toml",
+    };
+  }
+
   async peersSettings() {
     if (!query.has("peerset")) return super.peersSettings();
     return {

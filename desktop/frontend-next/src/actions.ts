@@ -548,6 +548,10 @@ export const ACTIONS: UIAction[] = [
   // two different things a reader wants, however alike they look in CSS.
   { id: "appearance.language", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.zoom", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.backend", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.move", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.consent", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.searxng-url", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.measure", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

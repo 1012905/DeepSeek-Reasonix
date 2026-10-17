@@ -163,6 +163,7 @@ jobs:
           node perf/settings-rows.mjs
           node perf/narrow-steps.mjs
           node perf/job-names.mjs
+          node perf/web-access.mjs
           node perf/peers-settings.mjs
           node perf/peer-threads.mjs
           node perf/text-size.mjs
