@@ -737,9 +737,11 @@ func (m *Manager) recordStalled(parentSession, id, kind, label string) {
 	m.mu.Unlock()
 	if shouldEmit {
 		m.sink.Emit(event.Event{
-			Kind:  event.Notice,
-			Level: event.LevelWarn,
-			Text:  fmt.Sprintf("background %s %s has written nothing to its own output for %s — it may be writing to a file, or stuck; check with wait/bash_output or stop with kill_shell", kind, id, m.stalledWarning.Round(time.Second)),
+			Kind:   event.Notice,
+			Level:  event.LevelWarn,
+			Code:   event.NoticeCodeJobStalled,
+			Text:   fmt.Sprintf("background %s %s has written nothing to its own output for %s — it may be writing to a file, or stuck; check with wait/bash_output or stop with kill_shell", kind, id, m.stalledWarning.Round(time.Second)),
+			Detail: event.JobNotice{Kind: kind, ID: id, Label: label, QuietSeconds: int(m.stalledWarning / time.Second)}.Encode(),
 		})
 	}
 }
