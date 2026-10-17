@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
 import { keepPasteAsFile, PasteKeep, type PasteChip } from "./pastekeep";
-import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
+import type { AgentPort, ChipCall, ModelEntry, SessionStatus, WorkspaceGit } from "../port/port";
 import { Picker } from "./Menu";
 import { BranchChip } from "./BranchChip";
 import { WorktreeChip } from "./WorktreeChip";
-import { useWorktreeSetup } from "./useWorktreeSetup";
+import { useWorktreeSetup, WorktreeSetupFailure } from "./useWorktreeSetup";
+import { WorktreeSetupPage } from "./WorktreeSetupPage";
 import { Policy } from "./Policy";
 import { chosenGroups, groupHeadings, modelMenu, narrowToGroups } from "./modelmenu";
 import { ModelGroupChips } from "./ModelGroupChips";
@@ -32,8 +34,11 @@ import { useDraft } from "./useDraft";
 import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
 import { SideAskButton } from "./SideAskButton";
+import { chipId, chipName, isPicture, quoteBlock, releaseChip, type Chip } from "./composerChips";
 
 interface Props {
+  worktreeTarget?: HTMLElement | null;
+  onWorktreePhase?: (phase: string | null) => void;
   fresh?: boolean;
   port: AgentPort;
   status: SessionStatus | null;
@@ -73,62 +78,15 @@ interface Props {
   draftKey?: string;
 }
 
-// What is riding along with this turn. An attachment travels as bytes or a path
-// the kernel already saved; a long paste is held out of the box so eight hundred
-// lines of log do not become the composer.
-type Chip =
-  | {
-      k: "attachment";
-      id: string;
-      name: string;
-      state: "adding" | "ready" | "failed";
-      a?: Attachment;
-      blob?: File;
-      url?: string;
-      error?: string;
-    }
-  | PasteChip
-  | { k: "quote"; id: string; body: string; turn?: number; source?: string; lines: number };
-
-function chipName(c: Chip): string {
-  if (c.k === "quote" && c.source) return t("引用 {name}", { name: c.source.split("/").at(-1) ?? c.source });
-  if (c.k === "quote") return c.turn === undefined ? t("引用回复") : t("引用第 {n} 轮回复", { n: c.turn });
-  return c.k === "paste" ? c.name ?? t("粘贴的文本") : c.name;
-}
-
-// What the model reads instead of a bare blockquote. Which reply this is about
-// is the kernel's turn number, so it is stated rather than left to be inferred
-// from the words; a rebuilt transcript with no turn says nothing instead of
-// guessing one. English like the kernel's other host-authored prefixes: the
-// line is addressed to the model, not to the reader.
-function quoteBlock(c: Extract<Chip, { k: "quote" }>): string {
-  // The path is a file name the workspace chose, so it cannot end the line or close the bracket.
-  const where = c.source?.replace(/[\u0000-\u001f\u007f\u2028\u2029[\]]/g, " ").trim();
-  const head = where
-    ? `[Quoting text selected in the workspace file ${where}.]`
-    : c.turn === undefined
-      ? "[Quoting an earlier assistant reply in this conversation.]"
-      : `[Quoting the assistant reply from turn ${c.turn}.]`;
-  return [head, ...c.body.split("\n").map((line) => `> ${line}`)].join("\n");
-}
-
-function isPicture(c: Chip): boolean {
-  return c.k === "attachment" && (c.a?.image === true || (c.a?.image !== false && c.blob?.type.startsWith("image/") === true));
-}
-
-function releaseChip(c: Chip) {
-  if (c.k === "attachment" && c.url) URL.revokeObjectURL(c.url);
-}
-
-let chipSeq = 0;
-const chipId = () => `c${++chipSeq}`;
-
-export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, side = false, onSide, sidePanel, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false }: Props) {
+export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, side = false, onSide, sidePanel, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false, worktreeTarget, onWorktreePhase }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const modelGroups = useModelFilter();
   const [submitting, setSubmitting] = useState(false);
-  const worktree = useWorktreeSetup(port, fresh && !!git?.repo, status?.workspaceRoot ?? "", onChanged, onTreeChanged);
+  const worktree = useWorktreeSetup(port, fresh && !!git?.repo, status?.workspaceRoot ?? "", onChanged, onTreeChanged, status?.sessionPath ?? "");
+  const [setupDraft, setSetupDraft] = useState<{ text: string; files: string[] }>({ text: "", files: [] });
+  const setupPhase = worktree.stage?.phase ?? null;
+  useEffect(() => { onWorktreePhase?.(setupPhase); }, [onWorktreePhase, setupPhase]);
   const { text, setText, beginSubmit, finishSubmit } = useDraft(draftKey, submitting);
   // The caret decides which token is being completed, so it is state here
   // rather than something read off the element when a menu happens to open.
@@ -143,6 +101,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const chosenModelGroups = chosenGroups(menuItems, modelGroups);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const box = useRef<HTMLTextAreaElement>(null);
+  const hadSetup = useRef(false);
+  useEffect(() => {
+    if (hadSetup.current && !setupPhase) box.current?.focus();
+    hadSetup.current = !!setupPhase;
+  }, [setupPhase]);
   const refine = usePromptRefine(port, text, (next) => {
     setText(next);
     setCaret(next.length);
@@ -262,6 +225,15 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     const line = compose(v);
     const call = chips.call(compose);
     const draft = { text, shots, caret: caretRef.current, chips: chips.held() };
+    if (worktree.selection || worktree.stage) setSetupDraft({ text: v, files: shots.map(chipName) });
+    const restoreDraft = () => {
+      finishSubmit(false);
+      pending.current = draft.caret;
+      type(draft.text, draft.caret);
+      chips.restore(draft.chips);
+      setShots((current) => [...draft.shots, ...current]);
+      if (!worktree.selection && !worktree.stage) queueMicrotask(() => box.current?.focus());
+    };
     beginSubmit(text);
     submittingRef.current = true;
     setSubmitting(true);
@@ -269,28 +241,23 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     setShots([]);
     void (async () => {
       try {
-        if (worktree.selection) await worktree.prepare(draft.shots.flatMap((chip) => chip.k === "attachment" && chip.a ? [chip.a.path] : chip.k === "paste" && chip.saved ? [chip.saved.path] : []));
+        if (worktree.selection || worktree.stage) {
+          const prepared = await worktree.prepare(draft.shots.flatMap((chip) => chip.k === "attachment" && chip.a ? [chip.a.path] : chip.k === "paste" && chip.saved ? [chip.saved.path] : []));
+          if (!prepared) { restoreDraft(); return; }
+        }
         const sent = await (call ? onSubmit(line, call) : onSubmit(line));
         if (sent) {
           finishSubmit(true);
+          worktree.dismiss();
           draft.shots.forEach(releaseChip);
         }
         else {
-          finishSubmit(false);
-          pending.current = draft.caret;
-          type(draft.text, draft.caret);
-          chips.restore(draft.chips);
-          setShots((current) => [...draft.shots, ...current]);
-          queueMicrotask(() => box.current?.focus());
+          restoreDraft();
+          worktree.dismiss();
         }
       } catch (e) {
-        finishSubmit(false);
-        pending.current = draft.caret;
-        type(draft.text, draft.caret);
-        chips.restore(draft.chips);
-        setShots((current) => [...draft.shots, ...current]);
-        queueMicrotask(() => box.current?.focus());
-        onError(e);
+        restoreDraft();
+        if (!(e instanceof WorktreeSetupFailure)) onError(e);
       } finally {
         submittingRef.current = false;
         setSubmitting(false);
@@ -421,11 +388,13 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const hasDraft = text.trim().length > 0 || shots.some((c) => c.k !== "attachment" || c.state === "ready");
   const lines = countLines(text);
   const showCount = text.length >= 240 || lines > 3;
-  const sendDisabled = submitting || stopping || adding || failed || !hasDraft;
+  const sendDisabled = submitting || stopping || adding || failed || !hasDraft || !!worktree.stage;
   const warnPictures = status?.vision === false && shots.some((c) => c.k === "attachment" && c.state === "ready" && isPicture(c));
 
-  return (
-    <div className="dropzone" ref={dropzone}>
+  const setupPage = worktree.stage && <WorktreeSetupPage stage={worktree.stage} task={setupDraft.text} files={setupDraft.files} busy={submitting} onRetry={send} onCancel={() => void worktree.cancel()} onEdit={worktree.dismiss}/>;
+  return (<>
+    {setupPage && (worktreeTarget ? createPortal(setupPage, worktreeTarget) : setupPage)}
+    <div className="dropzone" ref={dropzone} data-worktree-setup={worktree.stage ? "" : undefined} inert={!!worktree.stage}>
       {menu.open && (
         <CompletionMenu
           id={completionId}
@@ -694,7 +663,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             label={<><StudioIcon name="agent" /><span className="studio-sr-label">{t("计划")}</span><span>{status?.plan ? "Plan" : "Agent"}</span><StudioIcon name="down" /></>}
           />
         </div>
-        {fresh && worktree.sources?.available ? <WorktreeChip changeCount={countElsewhere ? 0 : changeCount} sources={worktree.sources} selection={worktree.selection} branch={git?.branch ?? "HEAD"} busy={submitting || running} onSelect={worktree.setSelection} refresh={worktree.refresh} /> : <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />}
+        {git?.repo && (worktree.sources || status?.workspaceRoot) ? <WorktreeChip port={port} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} changeCount={countElsewhere ? 0 : changeCount} sources={worktree.sources ?? { available: false, sourceRoot: status?.workspaceRoot ?? "", sources: [] }} canCreate={fresh && !!worktree.sources?.available} selection={worktree.selection} branch={git.branch} busy={submitting || running} onSelect={worktree.setSelection} refresh={worktree.refresh} /> : <BranchChip port={port} git={git} changeCount={changeCount} countElsewhere={countElsewhere} onChanged={onChanged} onSwitched={onTreeChanged} onError={onError} />}
         {/* The toggle keeps its legacy meaning: it follows `plan`, which the
             kernel turns off the moment a plan is approved. The lifecycle is a
             separate reading — an approved plan is still running, and saying so
@@ -795,6 +764,6 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
           </button>}
         </span>
       </div>
-    </div>
+    </div></>
   );
 }

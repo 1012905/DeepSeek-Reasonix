@@ -4,7 +4,7 @@ import { approvalKind } from "./mock_approval";
 import { HttpError } from "./port";
 import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
-import { MockWorkspace, mockWorkspaces, mockWorktreeSources } from "./mock_workspace";
+import { MockWorkspace, mockWorkspaces, mockWorktreeSources, MockPreparations } from "./mock_workspace";
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
 import { MockExecutionHold, mockExecutionGraph } from "./mock_graph";
 import { mockStorage, mockStoragePlan } from "./mock_storage";
@@ -237,6 +237,11 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async worktreeSources(): Promise<import("./workspace").WorktreeSources> {
     return mockWorktreeSources(this.state.workspaceRoot ?? "", this.branchState.branch);
   }
+
+  private preparations = new MockPreparations();
+  prepareWorktree(id: string, selection: import("./workspace").WorktreeSelection) { return this.preparations.prepare(id, selection, async () => { await this.isolateWorkspace(selection); return (await this.status()).workspaceRoot ?? ""; }); }
+  worktreePreparation(id: string) { return this.preparations.read(id); }
+  cancelWorktreePreparation(id: string) { return this.preparations.read(id); }
 
   async isolateWorkspace(_selection?: import("./workspace").WorktreeSelection) {
     await this.setWorkspace((this.state.workspaceRoot ?? "") + " (隔离副本)");
