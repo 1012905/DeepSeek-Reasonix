@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ownFetch } from "../port/cloud_remote";
 
 const RECHECK_MS = 10 * 60 * 1000;
 
@@ -12,7 +13,10 @@ const runningEntry = () => document.querySelector('script[type="module"][src]')?
 // A hosted page keeps running the build it loaded, while the kernel it talks to
 // moves on. Whether it is behind is read from what the host serves now: a
 // different entry file is a different build. Only a clean answer says anything.
-export function useStalePage(enabled: boolean): boolean {
+// The read goes through ownFetch rather than the global one, which a remote page
+// has had replaced by a tunnel to the kernel — asking the kernel for its page
+// would compare this build against a different one and always look behind.
+export function useStalePage(enabled: boolean, fetchImpl: typeof fetch = ownFetch): boolean {
   const [stale, setStale] = useState(false);
   useEffect(() => {
     if (!enabled) return;
@@ -20,7 +24,7 @@ export function useStalePage(enabled: boolean): boolean {
     const check = async () => {
       if (document.visibilityState === "hidden") return;
       try {
-        const res = await fetch("/", { cache: "no-store", credentials: "same-origin" });
+        const res = await fetchImpl("/", { cache: "no-store", credentials: "same-origin" });
         if (!res.ok) return;
         const latest = entryScript(await res.text());
         const running = runningEntry();
