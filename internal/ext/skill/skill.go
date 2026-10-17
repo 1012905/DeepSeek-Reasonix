@@ -184,6 +184,7 @@ type Store struct {
 	disableDiscovery bool
 	suppressWarnings bool
 	stderr           io.Writer
+	said             *diagnosed
 	requiresReady    func([]string) []string
 	toolBindings     func(Skill) []tool.MCPBinding
 	hits             *PathHits
@@ -244,6 +245,7 @@ func New(opts Options) *Store {
 		disableDiscovery: opts.DisableDiscovery,
 		suppressWarnings: opts.SuppressWarnings,
 		stderr:           stderr,
+		said:             &diagnosed{},
 	}
 }
 
@@ -836,16 +838,16 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 	// key a field was written under, which is the whole of what a namespace is.
 	delivery, err := deliveryFromDocument(doc)
 	if err != nil {
-		fmt.Fprintf(s.stderr, "error: skill %q at %s: %v\n", name, path, err)
+		s.diagnose("error: skill %q at %s: %v\n", name, path, err)
 		return Skill{}, false
 	}
 	if misplaced := misplacedDeliveryField(doc); misplaced != "" && !s.suppressWarnings {
-		fmt.Fprintf(s.stderr, "warning: skill %q at %s declares %q at the top level, where it means nothing. Write it under its namespace:\n  delivery:\n    %s: review\n",
+		s.diagnose("warning: skill %q at %s declares %q at the top level, where it means nothing. Write it under its namespace:\n  delivery:\n    %s: review\n",
 			name, path, misplaced, misplaced)
 	}
 	desc := strings.TrimSpace(fm[skillFrontmatterDescription])
 	if desc == "" && !s.suppressWarnings {
-		fmt.Fprintf(s.stderr, "warning: skill %q at %s has no description: — it will load but won't appear in the skills index\n", name, path)
+		s.diagnose("warning: skill %q at %s has no description: — it will load but won't appear in the skills index\n", name, path)
 	}
 	sk := Skill{
 		Name:         name,
