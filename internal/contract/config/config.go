@@ -1239,6 +1239,9 @@ type ToolsConfig struct {
 	// server declares. The user file only; off by default.
 	MCPResources bool `toml:"mcp_resources"`
 	WebAccessSettings
+	// VideoNativeMaxBytes lowers the size of file read_video sends natively below
+	// what the endpoint documents; 0 keeps the documented limit. The user file only.
+	VideoNativeMaxBytes int64 `toml:"video_native_max_bytes"`
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`

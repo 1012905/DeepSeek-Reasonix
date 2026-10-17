@@ -101,6 +101,7 @@ var ChineseTraditional = Messages{
 	NoticeInboxRecoveredFmt:       "已恢復 %d 條未完成的指令。待發送已暫停，請先用 /queue 查看，再繼續派發。",
 	TUIQuestion:                   "提問",
 	TUISubagentCallsFmt:           "%d 次子代理呼叫",
+	TUIVideoSentFmt:               "影片 %s（%s）已原生傳送給 %s",
 	TUIChartMoreRowsFmt:           "… 還有 %d 行",
 	TUIChartMoreColsFmt:           "… 還有 %d 列",
 	TUIStallTokensFmt:             "自上次有可觀察的進展以來已用約 %d 倍上下文的輸入（%d tokens）。是否繼續由你決定。",

@@ -57,6 +57,7 @@ func (a *Agent) toolCallContext(ctx context.Context, plan *toolCallPlan) context
 	if a.svc.configWrite != nil {
 		cctx = tool.WithConfigWriteApprover(cctx, a.svc.configWrite)
 	}
+	cctx = tool.WithNativeVideo(cctx, a.svc.nativeVideo)
 	if a.svc.paidSearch != nil {
 		cctx = tool.WithPaidSearchApprover(cctx, a.svc.paidSearch)
 	}

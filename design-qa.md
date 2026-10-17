@@ -2,7 +2,7 @@
 status: active
 owner: @esengine
 backup: @SivanCola
-reviewed: 2026-10-17
+reviewed: 2026-10-18
 ---
 
 # Foundation palette verification
@@ -237,6 +237,10 @@ After the subsequent MCP-follow integration, the full frontend suite passes
 651 files and 5,347 tests. Provider-boundary and race regressions confirm that
 automatic server-tool approval cannot replace an existing composition's pinned
 contract; a new conversation can bind the updated catalog.
+
+The native-video integration passes 651 frontend files and 5,348 tests. Combined
+projection regressions retain bindings/video references in stored history while
+removing local binding metadata and answered video payloads from model requests.
 
 ## Workspace preparation / 工作目录准备
 
