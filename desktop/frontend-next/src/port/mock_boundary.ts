@@ -173,7 +173,7 @@ export class MockBoundary extends MockShell {
   protected peerState: PeersState = { enabled: false, peers: [], held: [] };
 
   async peers(): Promise<PeersState> {
-    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held] };
+    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held], threads: [...(this.peerState.threads ?? [])] };
   }
 
   async sendPeerMessage(to: string, text: string): Promise<PeerReceipt> {

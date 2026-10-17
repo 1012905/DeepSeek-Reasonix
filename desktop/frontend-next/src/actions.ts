@@ -410,6 +410,7 @@ export const ACTIONS: UIAction[] = [
   // Reached from the workspace tree and from the remote host tree, which are
   // two surfaces for one intent; opening an existing session is not starting a
   // new one, and the host asked differs.
+  { id: "peer.thread-open", kind: "navigation", target: "none", proof: "interaction" },
   { id: "session.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "remote.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Asking a machine whether it answers. Nothing on either side changes, and
