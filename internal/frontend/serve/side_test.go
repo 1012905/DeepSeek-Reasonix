@@ -62,6 +62,12 @@ func TestSideRoutesRefuseWithTheirOwnCodes(t *testing.T) {
 	if status, raw := postSide(t, none.URL+"/side", map[string]any{}); status != http.StatusNotFound || !strings.Contains(string(raw), codeSideUnavailable) {
 		t.Fatalf("no runner = %d %s", status, raw)
 	}
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	cfg.Agent.MaxSideSessions = 3
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
 	srv := sideServer(t, func() (control.SideConversation, error) { return &echoSide{}, nil })
 	_, raw := postSide(t, srv.URL+"/side", map[string]any{})
 	var opened struct{ ID string }
