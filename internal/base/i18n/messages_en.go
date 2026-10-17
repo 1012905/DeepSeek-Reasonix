@@ -198,6 +198,7 @@ var English = Messages{
 	NotifyMessages:                  notifyEN,
 	SlashHintMessages:               slashHintEN,
 	QueueMessages:                   queueEN,
+	GoalMessages:                    goalEN,
 	ApprovalNeededFmt:               "approval needed: %s",
 	ApprovalNeededWithSubjectFmt:    "approval needed: %s %s",
 	AnswerNeededFmt:                 "answer needed: %s",

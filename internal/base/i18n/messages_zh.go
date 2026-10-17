@@ -198,6 +198,7 @@ var Chinese = Messages{
 	NotifyMessages:                  notifyZH,
 	SlashHintMessages:               slashHintZH,
 	QueueMessages:                   queueZH,
+	GoalMessages:                    goalZH,
 	ApprovalNeededFmt:               "需要审批：%s",
 	ApprovalNeededWithSubjectFmt:    "需要审批：%s %s",
 	AnswerNeededFmt:                 "需要回答：%s",

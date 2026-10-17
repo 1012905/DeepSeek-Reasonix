@@ -1,0 +1,2 @@
+- 修复：命令行里输入斜杠命令时，同一条技能发现警告不再每次按键重复打印、盖住输入行和状态栏；每条警告每个会话只出现一次。关联 #13655。
+- Fixed: Typing slash commands no longer reprints the same skill-discovery warning on every keystroke over the input line and status bar; each warning appears once per session. Refs #13655.
