@@ -1,0 +1,2 @@
+- 对话里展开一个步骤后，详情改成四周细线的面板，不再是左边一条竖线。关联 #13456。
+- An opened step's detail is now a panel with a hairline on all four sides, instead of a rule down its left edge. Refs #13456.

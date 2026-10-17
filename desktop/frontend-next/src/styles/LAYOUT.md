@@ -1555,6 +1555,10 @@ what exists.
 - An allowed guardian review at low or unknown risk, and a remembered fact, are Lines (`LineRow`): glyph, title, mono subject, meta and, when there is one, the action, on one row over a hairline, with the rationale or description as a muted line under it.
 - A refusal, or an allow at medium risk or above, stays a card: it is something to read.
 
+## Opened step detail
+
+- An opened step shows its detail as an indented panel in place, bordered on all four sides by one `--hair` line with a `--r-sm` radius. A rule on one side only is a rail, and the conversation has none.
+
 ## Notice bar
 
 - A host notice is one sentence with a glyph and, under it, the kernel's diagnostic in the muted meta size.

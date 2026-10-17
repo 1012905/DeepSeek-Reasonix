@@ -958,8 +958,8 @@ body { background: var(--page) !important; }
 .activity-body .tool-fold { order: 10; margin-left: 0; }
 .activity-body .tool-disclosure[open] > summary.hl { background: var(--raised); }
 .activity-body .tool-disclosure > .out {
-  margin: 0 0 5px 7px !important; padding: 2px 0 9px 18px !important;
-  border-left: 1px solid var(--border) !important;
+  margin: 4px 0 6px 18px !important; padding: 6px 10px 8px !important;
+  border: 1px solid var(--hair) !important; border-radius: var(--r-sm);
 }
 .activity-call-meta,
 .activity-call-input > header,
@@ -1485,7 +1485,6 @@ body { background: var(--page) !important; }
 }
 :root[data-theme="light"] .flow .call[data-k="me"] .out .txt { background: var(--overlay); border-color: var(--border); color: var(--text); }
 :root[data-theme="light"] .activity-body .tool-disclosure[open] > summary.hl { background: var(--overlay); }
-:root[data-theme="light"] .activity-body .tool-disclosure > .out { border-left-color: var(--border) !important; }
 :root[data-theme="light"] .activity-call-input,
 :root[data-theme="light"] .activity-call-result { border-color: var(--border); }
 :root[data-theme="light"] .activity-call-input pre { background: var(--overlay); border-color: var(--border); color: var(--muted); }
