@@ -251,6 +251,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async openInEditor() {
     return { editor: "Visual Studio Code", root: "/work/demo" };
   }
+  async openDocument() {}
   revealsFiles() { return true; }
   async revealInFileManager() {}
 

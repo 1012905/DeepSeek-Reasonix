@@ -337,6 +337,10 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.post0<{ editor: string; root: string }>("/workspace/editor");
   }
 
+  async openDocument(path: string): Promise<void> {
+    await this.post0("/workspace/open-document", { path });
+  }
+
   revealsFiles() {
     return host().revealsFiles();
   }

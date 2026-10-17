@@ -1,0 +1,2 @@
+- 新增：工作台浏览器里打开本地网页、SVG 或 PDF 文件时，右上角按钮可用系统默认程序打开它，旁边注明网页脚本会照常运行。关联 #13665。
+- Added: A local HTML, SVG or PDF file in the workbench browser can now be opened in the system default program from the toolbar button; a note says page scripts run as usual. Refs #13665.
