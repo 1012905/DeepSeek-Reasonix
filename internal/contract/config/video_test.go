@@ -70,9 +70,6 @@ func TestVideoModelsKeepNilApartFromAnExplicitEmptyList(t *testing.T) {
 	if silent.VideoModels != nil {
 		t.Fatalf("an entry that never said anything gained %#v", silent.VideoModels)
 	}
-	if VideoDeclared(refused) != true || VideoDeclared(silent) != false || VideoDeclared(said) != true {
-		t.Fatalf("VideoDeclared must tell a refusal from a silence: refused=%v silent=%v said=%v", VideoDeclared(refused), VideoDeclared(silent), VideoDeclared(said))
-	}
 }
 
 func TestRenamingAModelFollowsItIntoVideoModels(t *testing.T) {

@@ -657,26 +657,9 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 	// carried by a synthetic user message injected after the turn's full run of
 	// tool results, before the next non-tool message (splitting a tool-result
 	// run would break the API's tool-call pairing validation).
-	var pendingToolImages []string
-	var pendingToolVideos []provider.VideoPart
+	var pending toolMedia
 	openCodeGo := provider.IsOpenCodeGoEndpoint(c.chatURL)
-	flushToolImages := func() {
-		if len(pendingToolVideos) > 0 {
-			msgs = append(msgs, chatMessage{
-				Role:    "user",
-				Content: videoContentParts("Video returned by the preceding tool call(s):", pendingToolVideos),
-			})
-			pendingToolVideos = nil
-		}
-		if len(pendingToolImages) == 0 {
-			return
-		}
-		msgs = append(msgs, chatMessage{
-			Role:    "user",
-			Content: imageContentParts("Images returned by the preceding tool call(s):", pendingToolImages, c.visionDetail),
-		})
-		pendingToolImages = nil
-	}
+	flushToolImages := func() { msgs = pending.flush(msgs, c.visionDetail) }
 	for _, m := range src {
 		if m.Role != provider.RoleTool {
 			flushToolImages()
@@ -714,11 +697,8 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 			cm.Content = m.Content
 		}
 		msgs = append(msgs, cm)
-		if c.vision && m.Role == provider.RoleTool {
-			pendingToolImages = append(pendingToolImages, m.Images...)
-		}
 		if m.Role == provider.RoleTool {
-			pendingToolVideos = append(pendingToolVideos, m.VideoParts...)
+			pending.add(m, c.vision)
 		}
 	}
 	flushToolImages()

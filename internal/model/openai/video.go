@@ -221,3 +221,29 @@ func (c *client) setUploadHeaders(req *http.Request) {
 	applyCustomHeaders(req.Header, c.headers)
 	provider.ApplyClientIdentity(req)
 }
+
+// toolMedia is what tool results returned beside their text, held until the run
+// of tool messages ends: the API takes only text under role "tool".
+type toolMedia struct {
+	images []string
+	videos []provider.VideoPart
+}
+
+func (p *toolMedia) add(m provider.Message, vision bool) {
+	if vision {
+		p.images = append(p.images, m.Images...)
+	}
+	p.videos = append(p.videos, m.VideoParts...)
+}
+
+// flush appends the held media as user messages and empties the hold.
+func (p *toolMedia) flush(msgs []chatMessage, detail string) []chatMessage {
+	if len(p.videos) > 0 {
+		msgs = append(msgs, chatMessage{Role: "user", Content: videoContentParts("Video returned by the preceding tool call(s):", p.videos)})
+	}
+	if len(p.images) > 0 {
+		msgs = append(msgs, chatMessage{Role: "user", Content: imageContentParts("Images returned by the preceding tool call(s):", p.images, detail)})
+	}
+	*p = toolMedia{}
+	return msgs
+}

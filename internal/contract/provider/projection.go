@@ -19,24 +19,10 @@ func ModelMessages(msgs []Message) []Message { return projectMessages(msgs, fals
 func ProjectionMessages(msgs []Message) []Message { return projectMessages(msgs, true) }
 
 func projectMessages(msgs []Message, keepExecution bool) []Message {
+	answered := videoAnswered(msgs, keepExecution)
 	needsCopy := false
-	// Which messages a video has been answered after is read once, up front: the
-	// scan below stops at the first reason to copy and must not leave it unknown.
-	var answered []bool
-	if !keepExecution {
-		for _, m := range msgs {
-			if len(m.Videos) > 0 {
-				answered = answeredAfter(msgs)
-				break
-			}
-		}
-	}
 	for i, m := range msgs {
-		if len(m.Videos) > 0 && answered != nil && answered[i] {
-			needsCopy = true
-			break
-		}
-		if (len(m.UnavailableImages) > 0 && !keepExecution) || m.LocalOnly || m.RawContent != "" || m.ProviderContent != "" || m.HostAuthored || m.ModelRef != "" || m.Via != nil || m.DecisionReceipt != nil || len(m.DecisionReceipts) > 0 || (m.ToolExecution != nil && !keepExecution) || (m.ToolFailure != nil && !keepExecution) {
+		if (answered != nil && len(m.Videos) > 0 && answered[i]) || needsProjection(m, keepExecution) {
 			needsCopy = true
 			break
 		}
@@ -49,7 +35,7 @@ func projectMessages(msgs []Message, keepExecution bool) []Message {
 		if candidate.LocalOnly {
 			continue
 		}
-		if !keepExecution && len(candidate.Videos) > 0 && answered != nil && answered[i] {
+		if answered != nil && answered[i] {
 			candidate = WithoutVideos(candidate, VideoShownNote)
 		}
 		if candidate.ProviderContent != "" {
@@ -74,6 +60,29 @@ func projectMessages(msgs []Message, keepExecution bool) []Message {
 		out = append(out, candidate)
 	}
 	return out
+}
+
+// needsProjection reports a host-only field this message carries.
+func needsProjection(m Message, keepExecution bool) bool {
+	if (len(m.UnavailableImages) > 0 || m.ToolExecution != nil || m.ToolFailure != nil) && !keepExecution {
+		return true
+	}
+	return m.LocalOnly || m.RawContent != "" || m.ProviderContent != "" || m.HostAuthored || m.ModelRef != "" || m.Via != nil || m.DecisionReceipt != nil || len(m.DecisionReceipts) > 0
+}
+
+// videoAnswered says, per message, whether the model has answered since it; nil
+// when no message carries a video or the projection is a stored one that keeps
+// the references.
+func videoAnswered(msgs []Message, keepExecution bool) []bool {
+	if keepExecution {
+		return nil
+	}
+	for _, m := range msgs {
+		if len(m.Videos) > 0 {
+			return answeredAfter(msgs)
+		}
+	}
+	return nil
 }
 
 // UnavailableImagesNote is what a request says in place of images the host

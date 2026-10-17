@@ -33,13 +33,6 @@ func EffectiveVideo(e *ProviderEntry) (protocol string, ok bool) {
 	return "", false
 }
 
-// VideoDeclared reports whether anyone answered the native-video question for
-// this entry, as opposed to nobody having said: an explicit empty list is an
-// answer, a missing one is not.
-func VideoDeclared(e *ProviderEntry) bool {
-	return e != nil && e.VideoModels != nil
-}
-
 // HasVideoModel reports whether model is declared in video_models.
 func (e *ProviderEntry) HasVideoModel(model string) bool {
 	model = strings.TrimSpace(model)

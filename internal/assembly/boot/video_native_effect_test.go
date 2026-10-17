@@ -95,8 +95,8 @@ type nativeRun struct {
 		SessionPath() string
 	}
 	session string
-	file   []byte
-	events func() []event.Event
+	file    []byte
+	events  func() []event.Event
 }
 
 func nativeSession(t *testing.T, providerExtra, userConfig, readArgs string) nativeRun {
