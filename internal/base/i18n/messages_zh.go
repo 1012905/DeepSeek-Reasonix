@@ -103,6 +103,7 @@ var Chinese = Messages{
 	NoticeInboxRecoveredFmt:         "已恢复 %d 条未完成的指令。待发送已暂停，请先用 /queue 查看，再继续派发。",
 	TUIQuestion:                     "提问",
 	TUISubagentCallsFmt:             "%d 次子代理调用",
+	TUIVideoSentFmt:                 "视频 %s（%s）已原生发送给 %s",
 	TUIChartMoreRowsFmt:             "… 还有 %d 行",
 	TUIChartMoreColsFmt:             "… 还有 %d 列",
 	TUIStallTokensFmt:               "自上次有可观察的进展以来已用约 %d 倍上下文的输入（%d tokens）。是否继续由你决定。",

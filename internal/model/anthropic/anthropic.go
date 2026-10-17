@@ -351,7 +351,7 @@ func (c *client) buildRequest(_ context.Context, req provider.Request) anthReque
 		msgs = append(msgs, anthMessage{Role: role, Content: blocks})
 	}
 
-	for _, m := range provider.SanitizeToolPairing(req.Messages) {
+	for _, m := range provider.SanitizeToolPairing(provider.WithoutVideosAll(req.Messages, provider.VideoNotSentNote)) {
 		switch m.Role {
 		case provider.RoleSystem:
 			if m.Content != "" {

@@ -63,6 +63,7 @@ export const EN: Record<string, string> = {
   "收回 {rule}": "Take back {rule}",
   "放大第 {n} 张": "Enlarge image {n}",
   "工具截图 {n}": "Tool screenshot {n}",
+  "视频 {name}（{detail}）已原生发送给 {model}": "Video {name} ({detail}) sent to {model} as a video file",
   "查看图片 {name}": "Preview image {name}",
   "关闭图片预览": "Close image preview",
   "放大的工具截图": "The enlarged tool screenshot",

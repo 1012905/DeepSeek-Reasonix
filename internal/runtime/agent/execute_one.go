@@ -668,7 +668,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	recoveryGen := plan.recoveryGen
 
 	var result string
-	var images []string
+	var media toolMedia
 	var execution *tool.ShellExecution
 	var err error
 	// A call that was authorized under reader classification carries that
@@ -689,7 +689,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// ctx would otherwise kill the hook before it runs.
 		defer func() { a.svc.hooks.SubagentStop(context.WithoutCancel(ctx), call.ID, result, err) }()
 	}
-	result, images, execution, err = a.executeStoppable(ctx, cctx, plan)
+	result, media, execution, err = a.executeStoppable(ctx, cctx, plan)
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
@@ -729,7 +729,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		body, bound, truncMsg := a.boundToolOutput(rawErr, call.Name, call.ID, call.Arguments, true)
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
-			output: body, images: images, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
+			output: body, images: media.images, videos: media.videos, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
 			execution: execution, provenance: origin, refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
 		if truncMsg != "" {
@@ -741,7 +741,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	result = silentSuccessDetail(evidenceName, evidenceArgs, result)
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
-		output: body, images: images, bound: bound, truncMsg: truncMsg,
+		output: body, images: media.images, videos: media.videos, bound: bound, truncMsg: truncMsg,
 		execution: execution, provenance: origin, checkpointErr: checkpointErr,
 	}
 	if truncMsg != "" {
@@ -766,14 +766,14 @@ func annotateShellSubject(execution *tool.ShellExecution, args json.RawMessage) 
 }
 
 // executeStoppable runs the call under a context CancelToolCall can end alone.
-func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan) (result string, images []string, execution *tool.ShellExecution, err error) {
+func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan) (result string, media toolMedia, execution *tool.ShellExecution, err error) {
 	runTool, runArgs := plan.runTool, plan.runArgs
 	cctx, endCall := a.stops.begin(cctx, plan.call.ID)
 	defer endCall()
 	if de, ok := runTool.(tool.DetailedExecutor); ok {
 		var detailed tool.DetailedResult
 		detailed, err = de.ExecuteDetailed(cctx, runArgs)
-		result, images, execution = detailed.Output, detailed.Images, detailed.Execution
+		result, media.images, execution = detailed.Output, detailed.Images, detailed.Execution
 		// Annotate verification outcome when the host classified this call as a
 		// verifier. The exit status answers for the whole command, so it is a
 		// verdict about the verifier only when no later stage can decide it.
@@ -791,10 +791,10 @@ func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan)
 			execution.MutationRisk == tool.ShellMutationMayHaveCompleted {
 			execution.MutationRisk = tool.ShellMutationUnknown
 		}
-	} else if it, ok := runTool.(tool.ImageTool); ok {
-		result, images, err = it.ExecuteWithImages(cctx, runArgs)
+	} else if run, ok := mediaTool(runTool); ok {
+		result, media, err = run(cctx, runArgs)
 	} else {
 		result, err = runTool.Execute(cctx, runArgs)
 	}
-	return result, images, execution, stoppedByUser(turn, cctx, err)
+	return result, media, execution, stoppedByUser(turn, cctx, err)
 }

@@ -2038,3 +2038,40 @@ web_fetch_backends = ["local", "deepseek_api"]
 - So are names that cannot be public, even when this machine cannot resolve them: a single label such as `jira`, or a name under `localhost`, `local`, `internal`, `lan`, `home.arpa`, `invalid`, `test`, `example` or `onion`. Both are refused with `fetch.internal_address`.
 - The whole address, including its query string, is sent to DeepSeek as written. The card shows it in full; after you choose always allow it is no longer shown each time.
 - Pages are third-party content. Each successful paid fetch is counted in the usage view as `deepseek-fetch`.
+
+## Letting a model watch a video file
+
+`read_video` has two ways to look at a video.
+
+- Frames: ffmpeg samples still images, which loses audio and the order of fast events.
+- Natively: the MP4 itself is handed to a model that watches video, with no ffmpeg in between.
+
+Native needs two declarations in the provider entry of your user config: the models, and how a file reaches them.
+
+```toml
+[[providers]]
+name = "dashscope"
+video_models = ["qwen3-vl-plus"]
+video_protocol = "inline_data_url"   # or "moonshot_file"
+```
+
+- `inline_data_url`: the file travels inside the request as a `video_url` data URL. DashScope's documentation (read 2026-10-17) limits the encoded string to under 10 MB, so Reasonix caps the file at 7.5 MB.
+- `moonshot_file`: the file is uploaded once (`POST /files`, `purpose = "video"`) and the request names it as `ms://<id>`.
+- Moonshot's file API (read 2026-10-17) allows 100 MiB per file and 10 GiB per organization, and does not say how long a file is kept.
+- A file the vendor no longer holds is uploaded again once. Files stay in your organization's storage until you delete them there.
+- A model that is not listed in `video_models`, or an entry with no `video_protocol`, keeps getting frames. Nothing is guessed from a model or host name; an explicit empty list means "no model here watches video".
+
+`read_video` takes `mode`: `auto` (default) sends natively when the selected model offers it and the file fits, otherwise samples frames and says why; `frames` always samples; `native` refuses with a code if the file cannot be handed over.
+
+- Only MP4 is sent natively; any other container is sampled into frames (`video.native_container_unsupported`).
+- To lower the size limit, set `[tools] video_native_max_bytes` in your user file; a project file cannot set it, and it can only be lower than the protocol's own limit. A refusal names which limit stopped it (`video.native_too_large`).
+- The model sees the video on the one request that follows the read. After it answers, later requests carry a one-line note instead, so a long file is not resent every turn; call `read_video` again to look again. The session file keeps a reference to the file, not its bytes.
+- The file is read from disk when the request is built. A file that changed since it was read is not sent (`video.file_changed`), and one that is gone is reported as `video.file_missing`.
+- Only a video this process's `read_video` handed out is ever opened; a reference from a restored or imported session is not, and is reported as `video.file_unavailable`.
+- Sub-agents do not get native video; they use frames.
+- Where there is no OS sandbox, `read_video` still asks before its first use, as before; choose always allow on that card or add a rule for `read_video` to stop being asked.
+
+Not built, and why:
+
+- Gemini: its video input is in the native Gemini API (inline data, the Files API, YouTube URLs); the OpenAI-compatible page does not list a video content part, and Reasonix reaches Gemini through that endpoint.
+- Zhipu GLM: the documentation shows `video_url` with a public HTTPS address only and says nothing about base64 or limits, so a local file cannot be sent without Reasonix uploading it somewhere.

@@ -53,6 +53,11 @@ type Message struct {
 	// builds. Loaders migrate it into Content/RawContent before normal use.
 	ProviderContent string   `json:"provider_content,omitempty"`
 	Images          []string `json:"images,omitempty"` // data URLs (data:<mime>;base64,…) on user (attachments) and tool (MCP image results) messages; embedded only for vision-capable models
+	// Videos are references to video files for the model to watch natively; the
+	// bytes are read per request, and only the one before the model answers.
+	Videos []VideoRef `json:"videos,omitempty"`
+	// VideoParts are Videos resolved for one request. Never stored.
+	VideoParts []VideoPart `json:"-"`
 	// UnavailableImages are images this message holds whose stored bytes the
 	// session store could not read back. Host-owned: ModelMessages says so to
 	// the model, and a stored copy that reappears restores the image.
