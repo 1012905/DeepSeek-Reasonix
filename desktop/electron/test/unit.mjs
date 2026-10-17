@@ -2267,7 +2267,7 @@ test("a parked page is attached again when it is shown, and a page already on sc
   };
   const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1" });
   const view = { setBounds: (b) => calls.push("bounds " + b.x), webContents: { isDestroyed: () => false } };
-  views.entries.set("t1", { view, at: null });
+  views.entries.set("t1", { view, at: null, attached: true });
   const rect = { x: 10, y: 20, width: 600, height: 400 };
 
   views.show("t1", rect);
@@ -2570,4 +2570,75 @@ test("reclaim hands the keyboard back only when nobody holds it and the app page
 
 test("a person's click is only a click for a moment", () => {
   assert.ok(PERSON_MS > 0 && PERSON_MS < 2000);
+});
+
+function loadedViews() {
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: class {}, session: { fromPartition: () => ({}) } };
+    return load.call(this, request, ...rest);
+  };
+  let BrowserViews;
+  try {
+    ({ BrowserViews } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const calls = [];
+  const win = {
+    on() {},
+    isDestroyed: () => false,
+    isFocused: () => true,
+    webContents: Object.assign(new EventEmitter(), { isFocused: () => true }),
+    getContentBounds: () => ({ width: 1200, height: 800 }),
+    contentView: { addChildView: () => calls.push("add"), removeChildView: () => calls.push("remove") },
+  };
+  const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1" });
+  const view = { setBounds: (b) => calls.push("bounds " + b.x), webContents: { isDestroyed: () => false } };
+  return { views, view, calls };
+}
+
+test("a page navigating while the app page holds the keyboard is held out of the window, then put back where it was", () => {
+  const { views, view, calls } = loadedViews();
+  const entry = { view, at: { x: 10, y: 20, width: 600, height: 400 }, attached: true };
+  views.leave(entry);
+  assert.deepEqual(calls, ["remove"]);
+  assert.equal(entry.attached, false);
+  views.settle(entry);
+  assert.deepEqual(calls, ["remove", "add", "bounds 10"]);
+  assert.equal(entry.attached, true);
+  views.settle(entry);
+  assert.equal(calls.length, 3, "settling a page that is already attached does nothing");
+});
+
+test("a parked page comes back parked", () => {
+  const { views, view, calls } = loadedViews();
+  const entry = { view, at: null, attached: true };
+  views.leave(entry);
+  calls.length = 0;
+  views.settle(entry);
+  assert.equal(calls[0], "add");
+  assert.match(calls[1], /^bounds -?\d+$/);
+  assert.equal(entry.at, null);
+});
+
+test("a page is left where it is when the person, not the app page, holds the keyboard, or when it is not attached", () => {
+  const { views, view, calls } = loadedViews();
+  const entry = { view, at: null, attached: true };
+  views.keyboard.owner = "view";
+  views.leave(entry);
+  assert.deepEqual(calls, []);
+  assert.equal(entry.attached, true);
+  views.keyboard.owner = "app";
+  const loading = { view, at: null, attached: false };
+  views.leave(loading);
+  assert.deepEqual(calls, []);
+});
+
+test("a page still loading is not put back by a window event", () => {
+  const { views, view, calls } = loadedViews();
+  views.entries.set("t1", { view, at: null, attached: false });
+  views.reattach();
+  assert.deepEqual(calls, []);
 });

@@ -108,7 +108,7 @@ class BrowserViews {
       }
       onEvent(method, params);
     });
-    const entry = { view, onDownload, typed: 0, synthUntil: 0 };
+    const entry = { view, onDownload, typed: 0, synthUntil: 0, attached: false };
     this.keyboard.watch(contents, () => Date.now() < entry.synthUntil);
     this.watchLoads(targetId, entry);
     let closed = false;
@@ -116,15 +116,17 @@ class BrowserViews {
       if (closed) return;
       closed = true;
       this.entries.delete(targetId);
-      if (!this.win.isDestroyed()) this.win.contentView.removeChildView(view);
+      if (entry.attached && !this.win.isDestroyed()) this.win.contentView.removeChildView(view);
+      entry.attached = false;
       if (!contents.isDestroyed()) contents.close();
       onClosed();
     };
     contents.once("destroyed", close);
     contents.on("render-process-gone", close);
     this.entries.set(targetId, entry);
-    this.win.contentView.addChildView(view);
-    this.putAway(view);
+    // The page loads before the window holds it: a page that finishes loading in a
+    // view already attached is given the keyboard by the platform, and the
+    // person's composition in the app page ends with it.
     void contents.loadURL(url).catch(() => {});
     return {
       targetId,
@@ -161,8 +163,9 @@ class BrowserViews {
     // A page that was parked comes back as a view that is attached but whose
     // widget never repaints until the window's geometry changes; attaching it
     // again is what wakes it, the same as after a minimize.
-    if (!entry.at) this.win.contentView.removeChildView(entry.view);
+    if (entry.attached && !entry.at) this.win.contentView.removeChildView(entry.view);
     this.win.contentView.addChildView(entry.view);
+    entry.attached = true;
     entry.view.setBounds(at);
     entry.at = at;
     this.keepKeyboard();
@@ -177,12 +180,31 @@ class BrowserViews {
 
   reattach() {
     for (const [id, entry] of this.entries) {
-      if (this.win.isDestroyed() || entry.view.webContents.isDestroyed()) continue;
+      if (this.win.isDestroyed() || entry.view.webContents.isDestroyed() || !entry.attached) continue;
       this.win.contentView.removeChildView(entry.view);
       this.win.contentView.addChildView(entry.view);
       if (id !== this.shown) this.putAway(entry.view, entry);
     }
     this.keepKeyboard();
+  }
+
+  // A navigation that starts in an attached view takes the keyboard from the app
+  // page when it finishes, and a composition in progress there is committed as
+  // the raw letters. While the app page holds the keyboard the view is held out of
+  // the window for the length of the navigation, and put back when it ends; a
+  // person who is in the page themselves keeps it where it is.
+  leave(entry) {
+    if (!entry.attached || this.win.isDestroyed() || this.keyboard.owner !== "app") return;
+    this.win.contentView.removeChildView(entry.view);
+    entry.attached = false;
+  }
+
+  settle(entry) {
+    if (entry.attached || this.win.isDestroyed() || entry.view.webContents.isDestroyed()) return;
+    this.win.contentView.addChildView(entry.view);
+    entry.attached = true;
+    if (entry.at) entry.view.setBounds(entry.at);
+    else this.putAway(entry.view, entry);
   }
 
   // freeze answers with a picture of the page on screen, taken before it is put
@@ -270,8 +292,11 @@ class BrowserViews {
   watchLoads(targetId, entry) {
     const contents = entry.view.webContents;
     contents.on("did-start-navigation", (details) => {
-      if (details.isMainFrame && !details.isSameDocument) this.report(targetId, null);
+      if (!details.isMainFrame || details.isSameDocument) return;
+      this.report(targetId, null);
+      this.leave(entry);
     });
+    contents.on("did-stop-loading", () => this.settle(entry));
     contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
       // -3 is ERR_ABORTED: a navigation replaced by another, or stopped. A
       // typed address reports through loadTyped, which may still retry it.
