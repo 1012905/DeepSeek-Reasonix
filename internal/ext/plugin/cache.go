@@ -294,15 +294,21 @@ func siblingCachePaths(name string) []string {
 	if base == "" {
 		return nil
 	}
-	matches, _ := filepath.Glob(filepath.Join(base, "mcp", slug(name)+".*.json"))
+	dir := filepath.Join(base, "mcp")
+	entries, _ := os.ReadDir(dir)
+	prefix := slug(name) + "."
 	type dated struct {
 		path string
 		at   time.Time
 	}
 	var list []dated
-	for _, m := range matches {
-		if st, err := os.Stat(m); err == nil {
-			list = append(list, dated{m, st.ModTime()})
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasPrefix(n, prefix) || !strings.HasSuffix(n, ".json") {
+			continue
+		}
+		if info, err := e.Info(); err == nil {
+			list = append(list, dated{filepath.Join(dir, n), info.ModTime()})
 		}
 	}
 	slices.SortFunc(list, func(a, b dated) int { return b.at.Compare(a.at) })
