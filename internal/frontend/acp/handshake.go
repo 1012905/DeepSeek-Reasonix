@@ -56,6 +56,8 @@ func (s *service) initialize(_ context.Context, raw json.RawMessage) (any, error
 				sessionStatusUpdateMethod:    ReasonixSchemaCapability{SchemaVersion: reasonixStatusSchemaVersion},
 				sessionMCPStatusMethod:       ReasonixSchemaCapability{SchemaVersion: mcpStatusSchemaVersion},
 				sessionMCPStatusUpdateMethod: ReasonixSchemaCapability{SchemaVersion: mcpStatusSchemaVersion},
+				sessionInfoMethod:            ReasonixSchemaCapability{SchemaVersion: sessionInfoSchemaVersion},
+				sessionMCPServersMethod:      ReasonixSchemaCapability{SchemaVersion: sessionInfoSchemaVersion},
 			}),
 		},
 		AgentInfo:   Implementation{Name: s.info.Name, Version: s.info.Version},
