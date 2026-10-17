@@ -50,6 +50,28 @@ func (c *Controller) WorkspaceRoots() (WorkspaceRoots, error) {
 	return out, nil
 }
 
+// ReadableExtraRoots is the granted extra roots that still pass the vetting a
+// grant had to pass when it was stored. A hand-edited grant naming a protected
+// or forbidden folder is still listed by WorkspaceRoots, so the person can remove
+// it, but nothing may be read through it.
+func (c *Controller) ReadableExtraRoots() ([]string, error) {
+	roots, err := c.WorkspaceRoots()
+	if err != nil || len(roots.Extra) == 0 {
+		return nil, err
+	}
+	cfg, err := config.LoadForRootReadOnly(roots.Primary)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, dir := range roots.Extra {
+		if _, err := cfg.VetReadableRoot(roots.Primary, dir); err == nil {
+			out = append(out, dir)
+		}
+	}
+	return out, nil
+}
+
 // AddWorkspaceRoot grants this workspace write access to dir and returns the
 // resolved path it recorded. The grant lives in the user's home, so a checkout
 // cannot add roots to itself. The caller rebuilds the runtime to apply it.
