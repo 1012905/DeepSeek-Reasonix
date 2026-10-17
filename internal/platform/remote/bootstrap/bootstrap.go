@@ -196,7 +196,19 @@ func launchServe(ctx context.Context, conn Conn, target remoteOS, fs *sftpfs.FS,
 		}
 	}
 	opts.progress("launch", "")
-	launchRes, err := conn.Exec(ctx, target.Launch(LaunchSpec{Bin: bin, Workspace: workspace, BrokerAddr: opts.Broker.Addr}, paths))
+	spec := LaunchSpec{Bin: bin, Workspace: workspace, BrokerAddr: opts.Broker.Addr}
+	if scriptPath, script := target.LaunchScript(spec, paths); scriptPath != "" {
+		if err := fs.WriteFileAtomic(ctx, scriptPath, script, 0o600); err != nil {
+			cleanupFailedLaunch(conn, target, fs, paths, 0)
+			return Result{}, fmt.Errorf("bootstrap: write launch script: %w", err)
+		}
+		defer func() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = fs.Remove(cleanup, scriptPath, false)
+		}()
+	}
+	launchRes, err := conn.Exec(ctx, target.Launch(spec, paths))
 	if err != nil {
 		cleanupFailedLaunch(conn, target, fs, paths, 0)
 		return Result{}, fmt.Errorf("bootstrap: launch: %w", err)

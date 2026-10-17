@@ -217,6 +217,19 @@ func NormalizeMaxSubagentDepth(depth int) int {
 	return depth
 }
 
+// UnlimitedSubagentDepth is the depth a user who set max_subagent_depth to 0
+// asked for: no layer count stops delegation, only cost does.
+const UnlimitedSubagentDepth = 1 << 20
+
+// SubagentDepthFromConfig reads the user's max_subagent_depth: 0 removes the
+// limit, a negative value reads as the single-layer boundary.
+func SubagentDepthFromConfig(depth int) int {
+	if depth == 0 {
+		return UnlimitedSubagentDepth
+	}
+	return NormalizeMaxSubagentDepth(depth)
+}
+
 // ToolHooks fires user-configured shell hooks around each tool call. PreToolUse
 // runs before the call and may block it (block=true; message is the reason fed
 // back to the model); PostToolUse runs after and only surfaces output to the
@@ -468,6 +481,15 @@ func (a *Agent) SetConfigWriteApprover(g tool.ConfigWriteApprover) {
 		g = nil
 	}
 	a.svc.configWrite = g
+}
+
+// SetPaidSearchApprover installs the path that asks the user before web_search
+// uses a backend the vendor charges for. Without it no paid backend is called.
+func (a *Agent) SetPaidSearchApprover(g tool.PaidSearchApprover) {
+	if nilutil.IsNil(g) {
+		g = nil
+	}
+	a.svc.paidSearch = g
 }
 
 func (a *Agent) withTurnPreferences(input string) string {

@@ -111,12 +111,18 @@ const (
 	NoticeCodeJobKilled = "job_killed"
 	// A background job failed; Detail is the JobNotice payload, its text the English fallback.
 	NoticeCodeJobFailed = "job_failed"
+	// A background job has been silent on its own output past the stalled threshold; Detail is the JobNotice payload with QuietSeconds, its text the English fallback.
+	NoticeCodeJobStalled = "job_stalled"
 	// The selected web search model cannot serve, so search is off; Detail is the provider/model, the code names why.
 	NoticeCodeWebSearchModelBadRef        = "web_search_model_bad_ref"
 	NoticeCodeWebSearchModelNotAdded      = "web_search_model_not_added"
 	NoticeCodeWebSearchModelRemoved       = "web_search_model_removed"
 	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
 	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
+	NoticeCodeWebSearchBackendFallback    = "web_search_backend_fallback"
+	NoticeCodeWebSearchBackendUnusable    = "web_search_backend_unusable"
+	NoticeCodeWebFetchBackendFallback     = "web_fetch_backend_fallback"
+	NoticeCodeWebFetchBackendUnusable     = "web_fetch_backend_unusable"
 )
 
 // A saved fold was not reused when its session was bound: the whole history is

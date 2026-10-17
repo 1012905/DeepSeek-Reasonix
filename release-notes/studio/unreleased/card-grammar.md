@@ -1,8 +1,0 @@
-- 对话里的批准、提问、记忆、守卫复核、扩展卡片等现在用同一种外壳：同样的圆角、边框和底色，标题栏不再单独填色，警告和错误也不再给整圈边框着色。关联 #13456。
-- Approval, ask, remember, guardian, extension and similar cards now share one shell: the same radius, border and ground, a header with no fill, and no state-tinted border. Refs #13456.
-- 对话里低风险的“守卫复核：已允许”和“记住了”改成一行（“忘记”按钮在行内）；被拦截或中高风险的复核仍是卡片。关联 #13456。
-- A low-risk allowed guardian review and a remembered fact are now a single row (the Forget button stays in it); refusals and medium-or-higher-risk reviews keep their cards. Refs #13456.
-- 对话里展开一个步骤后，详情改成四周细线的面板，不再是左边一条竖线。关联 #13456。
-- An opened step's detail is now a panel with a hairline on all four sides, instead of a rule down its left edge. Refs #13456.
-- 侧栏左上角的品牌标题改成一行：字标右边是紧凑的实心“STUDIO”徽章，与字标垂直居中，明暗主题下位置一致。关联 #13456。
-- The sidebar's top-left mark is one row: the wordmark with a compact filled STUDIO badge beside it, vertically centred and in the same place in both themes. Refs #13456.

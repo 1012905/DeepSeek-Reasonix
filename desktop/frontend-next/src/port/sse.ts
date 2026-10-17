@@ -474,8 +474,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.get<WorkspaceFiles>(`/workspace/files${params.size ? `?${params}` : ""}`);
   }
 
-  workspaceFile(path: string) {
-    return this.get<WorkspaceFile>(`/workspace/file?path=${encodeURIComponent(path)}`);
+  workspaceFile(path: string, root?: string) {
+    return this.get<WorkspaceFile>(`/workspace/file?path=${encodeURIComponent(path)}${root ? `&root=${encodeURIComponent(root)}` : ""}`);
   }
 
   workspaceImageURL(path: string, root?: string) {
@@ -525,7 +525,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
   /** The kernel's events in order, with no holes it did not announce; see
    *  subscribeStream for how a gap, a bootstrap and a paused connection work. */
   subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>) {
-    return subscribeStream(this.base, onEvent, onGap, bootstrap, this.rt && this.base === `/rt/${this.rt}` ? this.rt : undefined);
+    const lane = this.mux && this.rt && this.base === `/rt/${this.rt}` ? this.rt : undefined;
+    return subscribeStream(this.base, onEvent, onGap, bootstrap, lane);
   }
 
   submit(text: string, chips?: ChipCall) {

@@ -3,6 +3,7 @@ import type { MuxAttachRequest, MuxEnvelope, MuxOpened } from "./mux";
 
 const UNKNOWN_CONNECTION = "mux.unknown_connection";
 const RETRY_MS = 2_000;
+const OPEN_WAIT_MS = 10_000;
 
 /** What a pane gives the shared stream: where it stands, where its frames go,
  *  and how to open the stream of its own when the hub cannot carry it. */
@@ -26,12 +27,14 @@ interface Pane {
  *  stood. A pane the hub does not run locally keeps a stream of its own. */
 export class MuxClient {
   private conn: string | null = null;
+  private opening: ReturnType<typeof setTimeout> | null = null;
+  private refused = false;
   private stream: LiveStream | null = null;
   private readonly panes = new Map<string, Pane>();
   private readonly listeners = new Set<() => void>();
 
   attach(id: string, feed: PaneFeed): LiveStream {
-    const pane: Pane = { feed, paused: false, own: null };
+    const pane: Pane = { feed, paused: false, own: this.refused ? feed.own() : null };
     this.panes.set(id, pane);
     this.sync();
     void this.subscribe(id, pane);
@@ -79,10 +82,12 @@ export class MuxClient {
     const needed = this.carried().length > 0;
     if (needed && !this.stream) {
       this.stream = openLiveStream(() => "/events/mux", (raw) => this.hear(raw));
+      this.opening = setTimeout(() => this.giveUp(), OPEN_WAIT_MS);
     } else if (!needed && this.stream) {
       this.stream();
       this.stream = null;
       this.conn = null;
+      this.settled();
     }
   }
 
@@ -90,7 +95,30 @@ export class MuxClient {
     this.stream?.();
     this.stream = null;
     this.conn = null;
+    this.settled();
     this.sync();
+  }
+
+  private settled() {
+    if (this.opening) clearTimeout(this.opening);
+    this.opening = null;
+  }
+
+  // A stream that never says it is open is one nothing is subscribed through: an
+  // older kernel, or a proxy that answers the path with something else. Every
+  // pane then reads its own stream, as it did before there was a shared one.
+  private giveUp() {
+    this.opening = null;
+    if (this.conn || !this.stream) return;
+    this.refused = true;
+    this.stream();
+    this.stream = null;
+    for (const pane of this.panes.values()) {
+      if (pane.own) continue;
+      pane.own = pane.feed.own();
+      if (pane.paused) pane.own.pause();
+    }
+    this.listeners.forEach((l) => l());
   }
 
   private hear(raw: string) {
@@ -102,6 +130,7 @@ export class MuxClient {
     }
     if (msg.kind === "mux_open" && msg.conn) {
       this.conn = msg.conn;
+      this.settled();
       for (const [id, pane] of this.panes) void this.subscribe(id, pane);
       return;
     }

@@ -14,6 +14,7 @@ export function WorkbenchFileBar({
   readable,
   previewable,
   canSave,
+  readOnlyIn,
   onSave,
   openWith,
   onReveal,
@@ -24,6 +25,8 @@ export function WorkbenchFileBar({
   readable: boolean;
   previewable: boolean;
   canSave: boolean;
+  // Set for a file read from a granted folder: the folder, shown as why it cannot be saved.
+  readOnlyIn?: string;
   onSave: () => void;
   openWith?: ReactNode;
   // Present only where the kernel's own machine can show the file.
@@ -45,14 +48,18 @@ export function WorkbenchFileBar({
       <div role="group">
         {readable && view("read", t("阅读"))}
         {previewable && view("preview", t("预览"))}
-        {view("file", readable || previewable ? t("编辑") : t("文件"))}
-        {view("diff", "Diff")}
+        {view("file", !readOnlyIn && (readable || previewable) ? t("编辑") : t("文件"))}
+        {!readOnlyIn && view("diff", "Diff")}
       </div>
       {openWith}
-      <button className="workbench-save" data-action="workbench.save" data-target={path} disabled={!canSave} onClick={onSave}>
-        <StudioIcon name="check" />
-        {t("保存")}
-      </button>
+      {readOnlyIn ? (
+        <span className="workbench-readonly" title={readOnlyIn}>{t("只读 · 来自你授权的文件夹")}</span>
+      ) : (
+        <button className="workbench-save" data-action="workbench.save" data-target={path} disabled={!canSave} onClick={onSave}>
+          <StudioIcon name="check" />
+          {t("保存")}
+        </button>
+      )}
     </div>
   );
 }

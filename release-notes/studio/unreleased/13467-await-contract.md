@@ -1,2 +1,0 @@
-- 修复：模型用 await_user 交还清单后，系统不再因“改动没验证”等缺口自己开新一轮，回合停下等你输入。关联 #13467。
-- Fixed: after the model hands the list back with await_user, the host no longer starts new rounds for gaps like an unverified change; the turn waits for you. Refs #13467.

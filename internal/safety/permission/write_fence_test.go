@@ -144,6 +144,7 @@ func TestEverySubjectSensitiveToolActuallyAsksSomething(t *testing.T) {
 		ExtendWritePaths:  {"/ws/any/path"},
 		installSourceTool: {selfExtendHumanRisk + "sha256:abc"},
 		NetworkEgress:     {"pypi.org"},
+		PaidSearch:        {"deepseek_api"},
 	}
 	for tool := range subjectSensitiveTools {
 		subjects, ok := probes[tool]
@@ -232,5 +233,16 @@ func TestALowRiskInstallPlanStillRunsUnattended(t *testing.T) {
 	}
 	if !allow {
 		t.Error("a low-risk plan was refused unattended; the grade exists so that it need not be")
+	}
+}
+
+// Agreeing to be charged by one backend must not answer for another.
+func TestSessionGrantForPaidSearchNamesTheBackend(t *testing.T) {
+	rule := SessionGrantRuleForScope(PaidSearch, "deepseek_api")
+	if !SessionGrantMatches(rule, PaidSearch, "deepseek_api") {
+		t.Errorf("rule %q does not cover the backend it was granted for", rule)
+	}
+	if SessionGrantMatches(rule, PaidSearch, "other_paid_backend") {
+		t.Errorf("rule %q covers another backend", rule)
 	}
 }

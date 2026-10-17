@@ -428,7 +428,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这份备份已不存在": "That backup no longer exists",
   "备份数量已达上限，请先删除一份旧备份": "The backup limit is reached; delete an older backup first",
   "有会在本机运行程序或改变密钥去向的项目，需要逐项确认后才能恢复": "Some items run programs here or change where a key is sent; confirm each one before restoring",
-  "项目列表已满（32 个），请先移除一个项目再添加": "The project list is full (32 projects); remove one before adding another",
+  "项目列表已到你设置的上限（desktop.max_workspaces），请先移除一个项目再添加": "The project list is at the limit you set (desktop.max_workspaces); remove one before adding another",
   "{model} 的价格必须是不小于 0 的数字，并选择货币": "The price for {model} must be a number not below 0, with a currency chosen",
   "{model} 不在已选模型中，未保存价格": "{model} is not one of the selected models, so no price was saved",
   "这台服务器不支持切换工作区": "This server cannot switch workspaces",
@@ -551,6 +551,14 @@ export const EN_KERNEL: Record<string, string> = {
     "The chosen search model is no longer in the configuration, so search is off; choose one again in Model preferences, or set it back to automatic",
   "所选搜索模型的协议不支持原生搜索，或已关闭搜索，搜索已关闭；到模型偏好里重新选择，或恢复自动":
     "The chosen search model's protocol does not support native search, or search was turned off, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "网页抓取后端没有返回内容，已换用链里的下一个后端；详情见通知":
+    "A fetch backend did not answer; the next one in the chain was tried. See the notice for details",
+  "配置的网页抓取后端无法使用，已跳过；检查用户配置里的 web_fetch_backends":
+    "A configured fetch backend cannot be used and was skipped; check web_fetch_backends in your user config",
+  "搜索后端没有返回结果，已换用链里的下一个后端；详情见通知":
+    "A search backend did not answer; the next one in the chain was tried. See the notice for details",
+  "配置的搜索后端无法使用，已跳过；检查用户配置里的 web_search_backends 和 searxng_url":
+    "A configured search backend cannot be used and was skipped; check web_search_backends and searxng_url in your user config",
   "所选搜索模型所在的连接没有凭据，搜索已关闭；到模型偏好里重新选择，或恢复自动":
     "The connection of the chosen search model has no credentials, so search is off; choose one again in Model preferences, or set it back to automatic",
   "配置里的默认审批档位本版本不认识，已按每次询问处理；在界面里选一个档位即可替换":

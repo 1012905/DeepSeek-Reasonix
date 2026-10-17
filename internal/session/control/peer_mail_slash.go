@@ -57,6 +57,9 @@ func (c *Controller) peerListText() string {
 			b.WriteString("\n  " + peerLabel(p) + "  (" + p.Key + ")")
 		}
 	}
+	for _, th := range c.PeerThreads() {
+		fmt.Fprintf(&b, "\nyour message to %s: %s", peerLabel(PeerView{Key: th.Key, Title: th.Title, Project: th.Project}), th.State)
+	}
 	for _, h := range c.HeldPeerMessages() {
 		fmt.Fprintf(&b, "\nwaiting for your decision  %s  from %s: %s", h.ID, peerLabel(PeerView{Title: h.FromTitle, Project: h.FromProject, Key: h.FromSession}), h.Body)
 	}

@@ -781,7 +781,7 @@
     color: var(--faint); opacity: .92;
   }
   .hero .t {
-    margin-top: 26px; font: var(--w-reg) 25px/1.25 var(--ui);
+    margin-top: 26px; font: var(--w-reg) calc(25px * var(--fs-scale, 1))/1.25 var(--ui);
     letter-spacing: var(--track-display); color: var(--text);
   }
   .hero .s { margin-top: 12px; max-width: 48ch; font-size: var(--fs-ui); line-height: 1.75; color: var(--faint) }
@@ -1182,7 +1182,7 @@
   .term {
     margin-top: 8px; padding: 11px 13px 12px; border-radius: var(--r-lg);
     background: var(--face-sunk);
-    font: var(--w-reg) var(--fs-ui)/19px var(--mono); color: var(--muted); overflow-x: auto;
+    font: var(--w-reg) var(--fs-ui)/calc(19px * var(--fs-scale, 1)) var(--mono); color: var(--muted); overflow-x: auto;
   }
   .term-l { white-space: pre }
   .term[data-one] { margin: 5px 0 0; padding: 0; background: none; border-radius: 0 }
@@ -1258,7 +1258,7 @@
   .hits { margin-top: 7px; display: flex; flex-direction: column; gap: 1px }
   .hit-row { display: grid; grid-template-columns: 16px 1fr; gap: 9px; padding: 6px 8px; border-radius: var(--r-xs) }
   .hit-row:hover { background: var(--overlay) }
-  .hit-row .i { font: var(--w-reg) var(--fs-micro)/17px var(--mono); color: var(--ghost); text-align: right; font-variant-numeric: tabular-nums }
+  .hit-row .i { font: var(--w-reg) var(--fs-micro)/calc(17px * var(--fs-scale, 1)) var(--mono); color: var(--ghost); text-align: right; font-variant-numeric: tabular-nums }
   .hit-row .t { font-size: var(--fs-ui); color: var(--text); line-height: 1.45 }
   .hit-row .u { margin-top: 2px; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--link); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .hit-row .q { margin-top: 4px; font-size: var(--fs-ui); line-height: 1.55; color: var(--muted); border-left: 2px solid var(--border); padding-left: 8px }
@@ -1289,10 +1289,10 @@
   .dif-hd .ro { margin-left: auto; font-size: var(--fs-micro); letter-spacing: var(--track-cap); text-transform: uppercase; color: var(--ghost) }
 
   .dlwrap { overflow-x: auto; overscroll-behavior-x: contain }
-  .dl { display: grid; grid-template-columns: 42px 14px 1fr; font: var(--w-reg) var(--fs-ui)/20px var(--mono); white-space: pre; min-width: max-content }
+  .dl { display: grid; grid-template-columns: 42px 14px 1fr; font: var(--w-reg) var(--fs-ui)/calc(20px * var(--fs-scale, 1)) var(--mono); white-space: pre; min-width: max-content }
 
   .dhunk {
-    display: grid; grid-template-columns: 42px 1fr; font: var(--w-reg) var(--fs-micro)/18px var(--mono);
+    display: grid; grid-template-columns: 42px 1fr; font: var(--w-reg) var(--fs-micro)/calc(18px * var(--fs-scale, 1)) var(--mono);
     color: var(--ghost); background: color-mix(in srgb, var(--overlay) 55%, transparent);
     border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair);
   }
@@ -3838,7 +3838,7 @@
   .code-body { display: flex; align-items: flex-start }
   .code-gutter {
     flex: none; padding: 11px 10px 12px 12px; text-align: end;
-    font: var(--w-reg) var(--fs-ui)/19px var(--mono); color: var(--ghost); user-select: none;
+    font: var(--w-reg) var(--fs-ui)/calc(19px * var(--fs-scale, 1)) var(--mono); color: var(--ghost); user-select: none;
     border-inline-end: 1px solid var(--hair);
   }
   .code-gutter > span { display: block }
@@ -4081,7 +4081,7 @@
   .pal-nm b, .pal-nm em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 16px }
   .pal-nm b { font-weight: var(--w-reg) }
   .pal[data-on] .pal-nm b { color: var(--text) }
-  .pal-nm em { margin-top: 2px; font: var(--w-reg) var(--fs-meta)/16px var(--ui); font-style: normal; color: var(--ghost) }
+  .pal-nm em { margin-top: 2px; font: var(--w-reg) var(--fs-meta)/calc(16px * var(--fs-scale, 1)) var(--ui); font-style: normal; color: var(--ghost) }
 
   .extpanel { display: flex; flex-direction: column; gap: 4px; padding: 6px 0 }
   .extpanel + .extpanel { border-top: 1px solid var(--hair) }
@@ -4230,7 +4230,7 @@
 
   .oobe-lines { position: relative; height: 96px; width: 100%; margin-top: 4px }
   .oobe-line { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0 }
-  .oobe-line b { display: block; font: 300 30px/1.35 var(--ui); color: #fff }
+  .oobe-line b { display: block; font: 300 calc(30px * var(--fs-scale, 1))/1.35 var(--ui); color: #fff }
   .oobe-line span { display: block; margin-top: 12px; max-width: 40ch;
                     font: 300 var(--fs-lead)/1.7 var(--ui); color: rgb(255 255 255 / .5) }
   .oobe[data-play] .l1 { animation: oobesay 2.6s var(--ease-out) 4s forwards }
@@ -4404,7 +4404,7 @@
     text-align: center; color: var(--faint);
     animation: card var(--t-card) var(--ease-out) both;
   }
-  .panes-empty .mk { font: 300 30px/1 var(--ui); color: var(--ghost); margin-bottom: 2px }
+  .panes-empty .mk { font: 300 calc(30px * var(--fs-scale, 1))/1 var(--ui); color: var(--ghost); margin-bottom: 2px }
   .panes-empty .t { margin: 0; font: var(--w-med) var(--fs-lead) var(--ui); color: var(--muted) }
   .panes-empty .h { margin: 0 0 4px; font: var(--w-reg) var(--fs-ui)/1.6 var(--ui); color: var(--faint); max-width: 34ch }
   .panes-empty button {
@@ -5420,7 +5420,7 @@
 .uhero { padding: 22px 24px; background: var(--raised); border: 1px solid var(--border); border-radius: var(--r-md) }
 .uhero-k { color: var(--muted); font: var(--w-med) var(--fs-meta) var(--ui); letter-spacing: var(--track-lead); text-transform: uppercase }
 .uhero-fig { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-top: 10px }
-.uhero-v { font: var(--w-med) 38px/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: var(--track-tight) }
+.uhero-v { font: var(--w-med) calc(38px * var(--fs-scale, 1))/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: var(--track-tight) }
 .uhero-scope {
   padding: 4px 10px; border-radius: var(--r-pill); background: var(--overlay);
   color: var(--muted); font: var(--w-med) var(--fs-ui) var(--ui);
@@ -5498,7 +5498,7 @@
   .uranges { width: 100%; overflow-x: auto }
   .uspan { width: 100%; text-align: center }
   .uhero { padding: 18px 16px }
-  .uhero-v { font-size: 30px; overflow-wrap: anywhere }
+  .uhero-v { font-size: calc(30px * var(--fs-scale, 1)); overflow-wrap: anywhere }
   .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .ucard { padding: 14px 12px 10px }
   .utwo { grid-template-columns: minmax(0, 1fr) }

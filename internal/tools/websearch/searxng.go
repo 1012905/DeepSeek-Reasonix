@@ -1,0 +1,86 @@
+package websearch
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+)
+
+// These caps bound what one search puts into the model's context and memory:
+// ten results of at most 500 bytes each is a few thousand tokens however many
+// results the instance returns. They are protections, not product limits; whether
+// a user should be able to change them is tracked as a follow-up.
+const (
+	searxngMaxBody    = 2 << 20
+	searxngMaxHits    = 10
+	searxngMaxSnippet = 500
+)
+
+// Searxng queries the user's own SearXNG instance through its JSON format. It is
+// free, so it is the first backend a chain offers.
+type Searxng struct {
+	base   *url.URL
+	client *http.Client
+}
+
+// NewSearxng validates the instance address: an http(s) origin, optionally with
+// a path prefix, and nothing that could redirect a query elsewhere.
+func NewSearxng(raw string, client *http.Client) (*Searxng, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return nil, errors.New("searxng_url must be an http(s) address with a host, without credentials, query or fragment")
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &Searxng{base: u, client: client}, nil
+}
+
+func (*Searxng) Name() string { return "searxng" }
+func (*Searxng) Paid() bool   { return false }
+
+type searxResponse struct {
+	Results []struct {
+		Title   string `json:"title"`
+		URL     string `json:"url"`
+		Content string `json:"content"`
+	} `json:"results"`
+}
+
+func (s *Searxng) Search(ctx context.Context, query string) ([]Hit, error) {
+	endpoint := *s.base
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/search"
+	endpoint.RawQuery = url.Values{"q": {query}, "format": {"json"}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return nil, &BackendError{Backend: s.Name(), Kind: FailTransport, Err: err}
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, &BackendError{Backend: s.Name(), Kind: FailTransport, Err: err}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, &BackendError{Backend: s.Name(), Kind: FailStatus, Status: resp.StatusCode}
+	}
+	var body searxResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, searxngMaxBody)).Decode(&body); err != nil {
+		return nil, &BackendError{Backend: s.Name(), Kind: FailDecode, Err: err}
+	}
+	hits := make([]Hit, 0, searxngMaxHits)
+	for _, r := range body.Results {
+		if r.URL == "" || len(hits) == searxngMaxHits {
+			continue
+		}
+		hits = append(hits, Hit{Title: r.Title, URL: r.URL, Snippet: truncateBytes(r.Content, searxngMaxSnippet)})
+	}
+	if len(hits) == 0 {
+		return nil, &BackendError{Backend: s.Name(), Kind: FailEmpty}
+	}
+	return hits, nil
+}

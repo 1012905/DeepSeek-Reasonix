@@ -553,6 +553,10 @@ const (
 	UsageSourceAdvisor          = "advisor"
 	UsageSourceBestOf           = "best-of"
 	UsageSourceBestOfJudge      = "best-of-judge"
+	// UsageSourceDeepSeekSearch is a request to the DeepSeek Search API, billed per successful request.
+	UsageSourceDeepSeekSearch = "deepseek-search"
+	// UsageSourceDeepSeekFetch is a request to the DeepSeek Fetch API, billed per successful request.
+	UsageSourceDeepSeekFetch = "deepseek-fetch"
 	// UsageSourceSide is a side conversation: asked beside the session, billed to it.
 	UsageSourceSide = "side"
 )

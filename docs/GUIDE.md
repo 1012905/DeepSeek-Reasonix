@@ -67,9 +67,9 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # planner_model = "deepseek-pro"      # optional low-frequency planner
 # subagent_model = "deepseek-pro"     # optional default for runAs=subagent skills
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }
-# max_subagent_depth = 2              # nested delegation depth; set 1 for the old single-layer boundary
-# max_subagent_concurrency = 6        # session-wide sub-agent concurrency (task/fleet/skills)
-# max_parallel_writers = 3            # concurrent writers with non-overlapping write_paths
+# max_subagent_depth = 8              # nested delegation depth; a named stop against runaway recursion, 0 removes it; set 1 for the single-layer boundary (user config only)
+# max_subagent_concurrency = 0        # session-wide sub-agent concurrency (task/fleet/skills); 0 = no limit (user config only)
+# max_parallel_writers = 0            # concurrent writers with non-overlapping write_paths; 0 = no limit, write claims keep writers apart (user config only)
 # max_side_sessions = 0              # side conversations open at once; 0 = no limit (user config only)
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
@@ -98,6 +98,8 @@ bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local ca
 protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
 browser_tools = true   # built-in browser tools; the browser starts on first use
 # mcp_resources = true  # user file only; a read_mcp_resource tool for resources a connected MCP server lists or builds from its declared templates (a {+x} template is wide: read the full address on the card before approving); asks first; default off
+# web_search_backends = ["searxng"]  # user file only; ordered chain for web_search
+# searxng_url = "http://localhost:8888"  # your own SearXNG instance
 mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap
 mcp_call_timeout_seconds = 300   # default MCP call safety cap; per-plugin/tool overrides may raise it
 
@@ -137,11 +139,19 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # allow_devices  = ["/dev/nvidia*"]   # host device nodes bound into the Linux bash sandbox (user config only)
 # egress_unlisted = "allow"    # unattended long tasks (user config only): hosts outside allowed_domains pass without asking, said once each; denied_domains still refuse
 
+[peers]
+# enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it (user config only)
+# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled (user config only)
+# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
+
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
 # token = ""                   # optional fixed token; empty token mode generates one at startup
 # password_hash = ""           # bcrypt hash generated with reasonix serve --hash-password --password '...'
 # behind_proxy = false         # true only behind a trusted reverse proxy
+
+[desktop]
+# max_workspaces = 0           # most projects the sidebar remembers; 0 = no limit (user config only)
 
 [[plugins]]
 name    = "example"
@@ -1784,14 +1794,13 @@ Subagent skills inherit the executor model by default. Set `subagent_model` to
 run them on another configured model, or use `subagent_models` to override only
 specific skills such as `review` or `security_review`.
 
-Subagents may delegate one more layer by default: the root session is depth 0,
-first-layer subagents are depth 1, and the maximum `max_subagent_depth = 2`
-means a depth-1 workflow can dispatch a depth-2 reviewer or implementer. Depth-2
-subagents do not receive recursive agent/skill tools. Set
-`agent.max_subagent_depth = 1` to restore the old single-layer boundary. This is
-intended for workflows such as Superpowers where a workflow skill may dispatch a
-reviewer subagent, while still avoiding unbounded recursion and background
-fanout.
+Subagents delegate in layers: the root is depth 0, and `max_subagent_depth`
+(default 8, a stop against a model delegating to itself without bound; 0 removes
+it, 1 is the single-layer boundary) is the deepest layer with recursive tools.
+`max_subagent_concurrency` and `max_parallel_writers` default to 0, no limit:
+write claims, not a count, keep writers apart. A project's `reasonix.toml`
+cannot set any of the three. A 429 under heavy parallelism is retried with
+backoff and `Retry-After`.
 
 Use `read_only_task` when planning needs isolated, deeper research without
 granting write-capable delegation. Use `read_only_skill` when the same need is
@@ -1944,3 +1953,72 @@ project-local override.
 
 The why behind separate sessions (keeping each model's prefix cache-stable) is in
 [`SPEC.md` §3.5](./SPEC.md#35-two-model-collaboration-coordinator).
+
+## Free web search with SearXNG
+
+`web_search` can use a [SearXNG](https://docs.searxng.org/) instance that you run yourself, so searches cost nothing. Reasonix does not start it.
+
+```
+mkdir -p ./searxng/config/ ./searxng/data/ && cd ./searxng/
+docker run --name searxng -d -p 8888:8080 -v "./config/:/etc/searxng/" -v "./data/:/var/cache/searxng/" docker.io/searxng/searxng:latest
+```
+
+(the command is from the SearXNG documentation). SearXNG answers JSON only when its `settings.yml` allows it; put this in `./config/settings.yml` and restart the container:
+
+```yaml
+use_default_settings: true
+search:
+  formats: [html, json]
+```
+
+Then, in your user config file (a project file cannot set these):
+
+```toml
+[tools]
+web_search_backends = ["searxng"]
+searxng_url = "http://localhost:8888"
+```
+
+A backend counts as not answering when:
+
+- the request fails, or the status is not 200;
+- the body is not JSON, or no results came back.
+
+Each time that happens Reasonix shows a notice naming the backend and the cause, then tries the next one. If none answers, the model receives `search.all_backends_failed`.
+
+- Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
+- Results are third-party content and are labelled as such to the model.
+
+### Paid fallback: the DeepSeek Search API
+
+Add `"deepseek_api"` after `"searxng"` to let `web_search` fall back to DeepSeek's [Search API](https://api-docs.deepseek.com/guides/search) when the free backend did not answer.
+
+```toml
+[tools]
+web_search_backends = ["searxng", "deepseek_api"]
+```
+
+- It uses the key of a provider you configured for `api.deepseek.com`.
+- DeepSeek lists the price as $0.75 per 1,000 successful requests (pricing page, read 2026-10-17); it bills only a 200 response with results, and announces the billing start date separately.
+- The first time a search would reach it, a card shows the price and the query that would be sent to DeepSeek. Allow once, allow for the session, or always allow, which records `web_search_paid_allowed = ["deepseek_api"]` in your user file.
+- After you choose always allow, the queries the model sends are no longer shown one by one before they go to DeepSeek.
+- No approval mode answers that card for you, and a project file cannot record the allowance.
+- Without an answer the model receives `search.free_failed_paid_needs_consent`. A 402 reaches it as `search.insufficient_balance`.
+- Each successful paid request is counted in the usage view under its own source, `deepseek-search`.
+
+### Paid fallback for fetching pages
+
+`web_fetch` can fall back to DeepSeek's [Fetch API](https://api-docs.deepseek.com/guides/search) when this machine could not read a page.
+
+```toml
+[tools]
+web_fetch_backends = ["local", "deepseek_api"]
+```
+
+- `local` is the fetch from this machine and is free. It counts as not answering when the request fails, the status is not 2xx, or no text came back.
+- DeepSeek lists the same price as for search, $0.75 per 1,000 successful requests; a request is billed only when it returns page content.
+- The first time it would be used, a card shows the price and the address that would be sent to DeepSeek. Agreeing to search is not agreeing to fetch: always allow records `web_fetch_paid_allowed`.
+- An address on your own network is never sent. That covers loopback, private and link-local addresses, and names that resolve to them.
+- So are names that cannot be public, even when this machine cannot resolve them: a single label such as `jira`, or a name under `localhost`, `local`, `internal`, `lan`, `home.arpa`, `invalid`, `test`, `example` or `onion`. Both are refused with `fetch.internal_address`.
+- The whole address, including its query string, is sent to DeepSeek as written. The card shows it in full; after you choose always allow it is no longer shown each time.
+- Pages are third-party content. Each successful paid fetch is counted in the usage view as `deepseek-fetch`.

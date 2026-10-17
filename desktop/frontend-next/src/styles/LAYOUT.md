@@ -1581,3 +1581,8 @@ what exists.
 
 - The mark at the top of the rail is one row: the wordmark and a compact filled uppercase badge ("STUDIO" by CSS; the text and the aria label are unchanged), vertically centred on each other, gap 8px. The badge is `--text` on `--page` inverted, so it is dark on light and light on dark and never moves with the theme.
 - The badge is hidden at 760px and below. The wordmark box is cropped to its drawn width so the badge sits next to the letters, not next to the asset's padding.
+
+## Side question
+
+- The panel stays anchored above its own composer. Collapsing it leaves a header with separate expand and close controls so the conversation can be read without discarding the side question.
+- The mounted content keeps its draft, quotes, answers and pending request while collapsed. Errors, quotes and replies share the scroll region; the input stays outside it.
