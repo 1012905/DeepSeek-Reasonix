@@ -141,7 +141,8 @@ func (s *Server) runWorkspacePreparation(op *control.WorkspacePreparation, previ
 		return
 	}
 	repo := workspaceRepo(previous)
-	result, err := worktree.CreateFromProgress(ctx, repo, config.DeliveryWorktreeDir(), selection.Ref, op.Update)
+	managedRoot := config.DeliveryWorktreeDir()
+	result, err := worktree.CreateFromProgress(ctx, repo, managedRoot, selection.Ref, op.Update)
 	if err == nil {
 		op.Update(worktree.Progress{Phase: "copying_attachments", Branch: result.Branch, WorkspaceRoot: result.WorkspaceRoot})
 		err = control.CarryDraftAttachments(selection.SourceRoot, result.WorkspaceRoot, selection.Attachments)
@@ -154,7 +155,7 @@ func (s *Server) runWorkspacePreparation(op *control.WorkspacePreparation, previ
 	if op.Status().Phase != "ready" && result.WorktreeRoot != "" {
 		op.Update(worktree.Progress{Phase: "cleaning"})
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
-		cleanupErr := worktree.DiscardUnpublished(cleanupCtx, repo, result)
+		cleanupErr := worktree.DiscardUnpublished(cleanupCtx, repo, managedRoot, result)
 		cancel()
 		cleanupFailed = cleanupErr != nil
 		if cleanupFailed {

@@ -99,7 +99,8 @@ func (s *Server) workspace(w http.ResponseWriter, r *http.Request) {
 		if body.Worktree != nil {
 			ref = body.Worktree.Ref
 		}
-		res, err := worktree.CreateFrom(r.Context(), workspaceRepo(s.ctl()), config.DeliveryWorktreeDir(), ref)
+		managedRoot := config.DeliveryWorktreeDir()
+		res, err := worktree.CreateFrom(r.Context(), workspaceRepo(s.ctl()), managedRoot, ref)
 		if err != nil {
 			if errors.Is(err, worktree.ErrSourceUnknown) {
 				refuse(w, http.StatusConflict, "workspace.worktree_source_missing", "the source branch is no longer available; choose another branch", nil)
@@ -111,7 +112,7 @@ func (s *Server) workspace(w http.ResponseWriter, r *http.Request) {
 		repo := workspaceRepo(s.ctl())
 		defer func() {
 			if !published {
-				if err := worktree.DiscardUnpublished(context.WithoutCancel(r.Context()), repo, res); err != nil {
+				if err := worktree.DiscardUnpublished(context.WithoutCancel(r.Context()), repo, managedRoot, res); err != nil {
 					slog.Warn("retain unpublished worktree after rollback failure", "path", res.WorkspaceRoot, "err", err)
 				}
 			}

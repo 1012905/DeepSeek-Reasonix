@@ -47,8 +47,9 @@ func TestCreateCancellationStopsCheckoutDescendantsAndAllowsRollback(t *testing.
 		err    error
 	}
 	done := make(chan outcome, 1)
+	managedRoot := t.TempDir()
 	go func() {
-		result, err := CreateFromProgress(ctx, repo, t.TempDir(), "HEAD", nil)
+		result, err := CreateFromProgress(ctx, repo, managedRoot, "HEAD", nil)
 		done <- outcome{result, err}
 	}()
 	for {
@@ -71,7 +72,7 @@ func TestCreateCancellationStopsCheckoutDescendantsAndAllowsRollback(t *testing.
 	if _, err := os.Stat(survived); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("checkout descendant survived cancellation: %v", err)
 	}
-	if err := DiscardUnpublished(t.Context(), repo, got.result); err != nil {
+	if err := DiscardUnpublished(t.Context(), repo, managedRoot, got.result); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(got.result.WorktreeRoot); !errors.Is(err, os.ErrNotExist) {

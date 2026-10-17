@@ -61,14 +61,15 @@ func TestDiscardUnpublishedMatchesGitPathsOnWindows(t *testing.T) {
 	requireGit(t)
 	root := initRepo(t)
 	repo := opened(t, root)
-	result, err := Create(t.Context(), repo, testenv.TempDir(t))
+	managedRoot := testenv.TempDir(t)
+	result, err := Create(t.Context(), repo, managedRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(result.WorktreeRoot, `\`) {
 		t.Fatalf("fixture needs a native Windows path: %q", result.WorktreeRoot)
 	}
-	if err := DiscardUnpublished(t.Context(), repo, result); err != nil {
+	if err := DiscardUnpublished(t.Context(), repo, managedRoot, result); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(result.WorktreeRoot); !os.IsNotExist(err) {
@@ -82,7 +83,7 @@ func TestDiscardUnpublishedMatchesGitPathsOnWindows(t *testing.T) {
 	if err != nil || strings.Count(registered, "worktree ") != 1 {
 		t.Fatalf("partial registration retained: %q %v", registered, err)
 	}
-	if err := DiscardUnpublished(t.Context(), repo, result); err != nil {
+	if err := DiscardUnpublished(t.Context(), repo, managedRoot, result); err != nil {
 		t.Fatalf("repeated cleanup: %v", err)
 	}
 }
@@ -91,7 +92,8 @@ func TestDiscardUnpublishedRetainsChangedBranchOnWindows(t *testing.T) {
 	requireGit(t)
 	root := initRepo(t)
 	repo := opened(t, root)
-	result, err := Create(t.Context(), repo, testenv.TempDir(t))
+	managedRoot := testenv.TempDir(t)
+	result, err := Create(t.Context(), repo, managedRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +101,7 @@ func TestDiscardUnpublishedRetainsChangedBranchOnWindows(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("advance task branch: %v %s", err, out)
 	}
-	if err := DiscardUnpublished(t.Context(), repo, result); err == nil {
+	if err := DiscardUnpublished(t.Context(), repo, managedRoot, result); err == nil {
 		t.Fatal("cleanup accepted a changed task branch")
 	}
 	if _, err := os.Stat(filepath.Join(result.WorktreeRoot, "README.md")); err != nil {

@@ -74,7 +74,7 @@ func Create(ctx context.Context, repo gitcmd.Repo, managedRoot string) (Result, 
 func CreateFrom(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string) (Result, error) {
 	result, err := CreateFromProgress(ctx, repo, managedRoot, ref, nil)
 	if err != nil && result.WorktreeRoot != "" {
-		err = errors.Join(err, DiscardUnpublished(context.WithoutCancel(ctx), repo, result))
+		err = errors.Join(err, DiscardUnpublished(context.WithoutCancel(ctx), repo, managedRoot, result))
 		return Result{}, err
 	}
 	return result, err
