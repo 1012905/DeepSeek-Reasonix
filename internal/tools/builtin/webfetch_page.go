@@ -47,11 +47,10 @@ func (f LocalFetcher) Fetch(ctx context.Context, rawURL string) (FetchPage, erro
 }
 
 // VetFetchURL decides whether a URL may be handed to a third party to fetch.
-// Nothing that names this machine's own network leaves it: loopback, private,
-// link-local and shared-space addresses, names that cannot be public by
-// construction, and names that resolve to any of those. A public-shaped name
-// this machine cannot resolve passes, because reaching what it cannot is why a
-// remote fetch is asked at all.
+// Nothing that names this machine's own network leaves it: internal addresses,
+// names that cannot be public by construction, and names that resolve to either.
+// A public-shaped name this machine cannot resolve passes, since reaching what
+// it cannot is why a remote fetch is asked at all.
 func VetFetchURL(ctx context.Context, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
@@ -83,13 +82,10 @@ func internalForRemote(ip net.IP) bool {
 	return ip.IsLoopback() || blockedFetchIP(ip)
 }
 
-// nonPublicSuffixes are the top-level and special-use names the standards keep
-// out of the public DNS: localhost, invalid, test and example (RFC 6761), local
-// (RFC 6762), onion (RFC 7686), home.arpa (RFC 8375), and internal, which ICANN
-// reserved for private use. lan is the de-facto home-router suffix, never
-// delegated. A name under one is not fetched through a third party, resolvable
-// from here or not: off the company VPN an internal host resolves nowhere
-// either, and its name, path and query token would be what left the machine.
+// nonPublicSuffixes are names the standards keep out of the public DNS:
+// localhost, invalid, test, example (RFC 6761), local (6762), onion (7686),
+// home.arpa (8375), internal (ICANN private use), and lan, the home-router
+// suffix that is never delegated. Under one, an off-VPN host resolves nowhere.
 var nonPublicSuffixes = []string{"localhost", "local", "internal", "lan", "home.arpa", "invalid", "test", "example", "onion"}
 
 // publicByConstruction reports whether a hostname's shape allows it to be a
