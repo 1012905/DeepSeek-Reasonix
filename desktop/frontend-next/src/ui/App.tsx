@@ -11,7 +11,7 @@ import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
 import type { HubPort, RuntimeView } from "../port/hub";
 import { Chrome } from "./Chrome";
 import { RailToggle } from "./RailToggle";
-import { useLaunchHealth } from "./launchhealth";
+import { useFirstRunRead, useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
 import { useTreeWindow, type TreePaging } from "./treewindow";
 import { useNavRail } from "./navrail";
@@ -296,17 +296,7 @@ export function App({ hub }: { hub: HubPort }) {
   useEffect(() => startUpdateWatch(machinePort), [machinePort]);
   useFeedbackUnread(machineRt ? machinePort : null, machineRt?.id ?? "", feedbackUnread, setFeedbackUnread, feedback !== null);
 
-  useEffect(() => {
-    if (!activePort) return;
-    let alive = true;
-    activePort.providerSetup().then((v) => alive && setSetup(v)).catch(() => alive && setSetup(null));
-    // A machine that cannot answer has met the app before as far as we care:
-    // the sequence must never be what stands between someone and their session.
-    activePort.welcomeSeen().then((v) => alive && setWelcomed(v)).catch(() => alive && setWelcomed(true));
-    return () => {
-      alive = false;
-    };
-  }, [activePort]);
+  useFirstRunRead(activePort, setSetup, setWelcomed);
 
   // A kernel that does not carry sign-in refuses this with a code and a
   // sentence. Dropping it left the panel saying "checking…" for the rest of
