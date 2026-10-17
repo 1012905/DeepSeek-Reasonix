@@ -105,6 +105,23 @@ async function main() {
   await wait(300);
   await keepsTheKeyboard("putting the page away");
 
+  // The other half: a person who clicks into the agent's page is typing there,
+  // and the agent navigating it again does not take that away from them.
+  views.show(targetId, { x: 300, y: 100, width: 600, height: 400 });
+  await wait(500);
+  const theirs = [...views.entries.values()][0].view.webContents;
+  theirs.sendInputEvent({ type: "mouseDown", x: 40, y: 20, button: "left", clickCount: 1 });
+  theirs.sendInputEvent({ type: "mouseUp", x: 40, y: 20, button: "left", clickCount: 1 });
+  await wait(500);
+  const chosen = await where();
+  check("a click of the person's own into the agent's page gives it the keyboard", chosen.viewFocused && !chosen.appFocused, chosen);
+  await send({ method: "Page.navigate", params: { url: page.url + "/again" } }, session);
+  await wait(1200);
+  const stays = await where();
+  check("and the agent navigating it again does not pull the keyboard back", stays.viewFocused && !stays.appFocused, stays);
+
+  win.webContents.focus();
+  await wait(300);
   win.minimize();
   await wait(400);
   win.restore();
