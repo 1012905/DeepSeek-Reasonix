@@ -1,0 +1,2 @@
+- 安全加固：手写进收件夹的会话间消息正文，读取时同样清掉控制字符和方向覆盖符，假冒不了终端或审批界面。关联 #11376。
+- Hardening: a hand-written message body in the inbox folder is reduced on read like a sent one (controls and bidi overrides), so it cannot fake a terminal or the approval prompt. Refs #11376.
