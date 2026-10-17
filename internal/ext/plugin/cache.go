@@ -313,13 +313,28 @@ func writeKeys(h io.Writer, key string, m map[string]string) {
 // what it can do, what it said it is for, and the tools it listed.
 func (c *Client) saveHandshakeSchema(spec Spec, tools []tool.Tool) {
 	_ = SaveCachedSchema(spec.Name, CachedSchema{
-		CacheKey: SchemaCacheKey(spec),
-		Capabilities: map[string]bool{
-			"tools":     c.hasTools,
-			"prompts":   c.hasPrompts,
-			"resources": c.hasResources,
-		},
+		CacheKey:     SchemaCacheKey(spec),
+		Capabilities: c.advertisedCapabilities(),
 		Instructions: c.instructions,
 		Tools:        cacheableToolsOf(tools),
 	})
+}
+
+// advertisedCapabilities is what the server declared at initialize, in the form
+// the schema cache keeps it.
+func (c *Client) advertisedCapabilities() map[string]bool {
+	return map[string]bool{"tools": c.hasTools, "prompts": c.hasPrompts, "resources": c.hasResources}
+}
+
+// cachedCapabilities is advertisedCapabilities of the named live server. A
+// server with no live client keeps only what its tool list says.
+func (h *Host) cachedCapabilities(server string, haveTools bool) map[string]bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, c := range h.clients {
+		if c.name == server {
+			return c.advertisedCapabilities()
+		}
+	}
+	return map[string]bool{"tools": haveTools}
 }

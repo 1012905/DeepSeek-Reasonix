@@ -504,3 +504,45 @@ export function onShowsSessionTabsChange(fn: () => void): () => void {
     sessionTabListeners.delete(fn);
   };
 }
+
+// How many panes may hold a live event stream at once. Unset is automatic: the
+// most the browser's connection limit leaves room for. A browser opens six
+// connections to one origin and the session list holds one, so the number is held
+// between one and four; anything else reads as automatic.
+const LIVE_STREAM_BUDGET_KEY = "rx-live-stream-budget";
+export const MAX_LIVE_STREAM_BUDGET = 4;
+const liveStreamBudgetListeners = new Set<() => void>();
+
+/** The chosen number, or null for automatic. */
+export function liveStreamBudget(): number | null {
+  try {
+    const raw = localStorage.getItem(LIVE_STREAM_BUDGET_KEY);
+    if (raw === null || !/^[1-9][0-9]*$/.test(raw)) return null;
+    const n = Number(raw);
+    return n >= 1 && n <= MAX_LIVE_STREAM_BUDGET ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLiveStreamBudget(n: number | null): void {
+  try {
+    if (n !== null && Number.isSafeInteger(n) && n >= 1 && n <= MAX_LIVE_STREAM_BUDGET) localStorage.setItem(LIVE_STREAM_BUDGET_KEY, String(n));
+    else localStorage.removeItem(LIVE_STREAM_BUDGET_KEY);
+  } catch {
+    /* the choice holds for this window and is forgotten on the next */
+  }
+  liveStreamBudgetListeners.forEach((fn) => fn());
+}
+
+export function onLiveStreamBudgetChange(fn: () => void): () => void {
+  liveStreamBudgetListeners.add(fn);
+  const storage = (event: StorageEvent) => {
+    if (event.key === LIVE_STREAM_BUDGET_KEY || event.key === null) fn();
+  };
+  window.addEventListener("storage", storage);
+  return () => {
+    liveStreamBudgetListeners.delete(fn);
+    window.removeEventListener("storage", storage);
+  };
+}

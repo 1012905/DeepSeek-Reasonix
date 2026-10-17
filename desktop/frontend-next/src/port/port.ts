@@ -1,6 +1,10 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
+
+/** What `subscribe` hands back: the disposer, and where the transport has one, a
+ *  way to give its connection up and take it again without losing the cursor. */
+export type Subscription = (() => void) & { pause?: () => void; resume?: () => void };
 import type { Attachment, DroppedRef, KeptText } from "./attachment";
 export { DeliveryError, HttpError };
 export type { DeliveryFault };
@@ -42,7 +46,7 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -275,6 +279,8 @@ export interface AgentPort {
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
   subagentClaims(): Promise<SubagentClaimsSettings>;
   saveSubagentClaims(optimistic: boolean): Promise<SubagentClaimsSettings>;
+  planApproval(): Promise<PlanApprovalSettings>;
+  savePlanApproval(auto: boolean): Promise<PlanApprovalSettings>;
   writeLease(): Promise<WriteLeaseSettings>;
   saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
   peers(): Promise<PeersState>;
@@ -565,7 +571,7 @@ export interface AgentPort {
   // model folds one ordered stream and folds nothing twice. The number belongs
   // to the stream, not to the model — several snapshots resume from the lowest
   // of their watermarks, because a duplicate folds and a gap does not.
-  subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>): () => void;
+  subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>): Subscription;
 
   // chips carries skill chips beside the line; without it the line is parsed
   // as typed, so a kernel that predates chips still runs a leading one.

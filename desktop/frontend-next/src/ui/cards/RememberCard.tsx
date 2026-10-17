@@ -32,7 +32,6 @@ export const RememberCard = memo(function RememberCard({
     <div className="call" data-k="mem" data-gone={forgotten ? "" : undefined}>
       <div className="g">
         <Sym glyph="◇" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

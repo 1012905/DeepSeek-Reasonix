@@ -230,6 +230,8 @@ func (d *Dir) Pending(sessionID string) ([]Message, []Rejected) {
 			rejected = append(rejected, Rejected{name, ReasonInvalid})
 			continue
 		}
+		// Send cleans a body, but a file is whatever a process of this user wrote.
+		m.Body = cleanBody(m.Body)
 		out = append(out, m)
 	}
 	return out, rejected

@@ -1,0 +1,2 @@
+- 修复：设置 › 存储里“配置与凭据”一行不再把同一文件夹里的会话与归档也算进去，Windows 默认安装下它原先会显示成几十 GB。关联 #13345。
+- Fixed: Settings › Storage no longer counts the sessions and archive in the "Configuration and credentials" row when they share a folder, as on a default Windows install. Refs #13345.

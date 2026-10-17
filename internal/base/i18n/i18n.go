@@ -168,6 +168,7 @@ type Messages struct {
 	RecoveryTaskGrantChoices        string // Auto Guard list with a current-task semantic grant
 	SandboxEscapeApprovalChoices    string // approval choice list for OS sandbox escape prompts
 	NotifyMessages
+	SlashHintMessages
 	ApprovalNeededFmt              string // notification text for a pending approval, tool only
 	ApprovalNeededWithSubjectFmt   string // notification text for a pending approval with subject
 	AnswerNeededFmt                string // notification text for a pending ask question
@@ -459,6 +460,10 @@ type Messages struct {
 	GoalNotPaused                string
 	GoalPaused                   string
 	AwaitingUserFmt              string
+	GoalRetryFmt                 string
+	GoalRetryGaveUpFmt           string
+	EgressAutoAllowedFmt         string
+	PlanAutoApproved             string
 	ImagesNotReadable            string
 	ImagesNeedVisionRole         string
 	ImagesDropped                string

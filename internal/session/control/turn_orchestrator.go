@@ -381,7 +381,7 @@ func (o *turnOrchestrator) gatePlanApproval(ctx context.Context) error {
 	c.sharePlanRuntime()
 	// The plan is already visible as the assistant's answer, so the request
 	// carries no subject — it's purely the gate.
-	allow, _, err := c.requestApproval(ctx, approvalRequest{tool: planApprovalTool})
+	allow, err := c.planApproved(ctx)
 	if err != nil {
 		// A stop or timeout leaves the plan unapproved, which is the same state
 		// as a revise: awaiting approval has no card left to answer it.
@@ -473,6 +473,7 @@ func (o *turnOrchestrator) runTurnLoop(ctx context.Context, turn orchestratedTur
 // FSM. Without an active goal advanceGoalAfterTurn returns immediately and this
 // is one turn; with one it is the loop that keeps pursuing it.
 func (o *turnOrchestrator) runTurnLoopWithPreparedTurn(ctx context.Context, turn orchestratedTurn) error {
+	o.c.goalRetry.userSpoke(turn.synthetic)
 	o.c.liftUserGatedGoal(turn.synthetic)
 	expectedContinuationEpoch := o.c.goals.continuationToken()
 	ctx = o.c.withVisionRouting(agent.WithSubagentImageCandidates(ctx, turn.images.candidates))
@@ -655,6 +656,7 @@ func (o *turnOrchestrator) advanceGoalAfterTurn(ctx context.Context, expectedCon
 	if res.notice == goalCompleteNotice && c.executor != nil {
 		c.completeRemainingGoalTodos()
 	}
+	c.afterGoalTurn()
 	return res
 }
 
