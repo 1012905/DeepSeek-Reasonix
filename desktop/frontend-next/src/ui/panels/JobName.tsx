@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { JobEntry } from "../../port/port";
+import { listenAction } from "../listen";
 
 const LONG_PRESS_MS = 450;
 
@@ -9,8 +10,10 @@ const LONG_PRESS_MS = 450;
 export const jobName = (j: JobEntry) => j.description?.trim() || j.label || j.id;
 
 /** The name of a job with its full text on hover, focus, Escape to close and a
- *  long press on a touch screen. The popover is real text inside the same wrapper,
- *  so a pointer can move onto it and select or copy the command. */
+ *  long press on a touch screen. The tip is real text, so a pointer can move onto
+ *  it and select or copy the command (React sees the portal as a child, so
+ *  leaving the name for the tip is not leaving); it is placed in the window
+ *  because the list sits in a panel that clips what overflows it. */
 export function JobName({ job, children }: { job: JobEntry; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<CSSProperties>({});
@@ -19,10 +22,21 @@ export function JobName({ job, children }: { job: JobEntry; children: ReactNode 
   const id = useId();
   const name = jobName(job);
   const command = job.detail?.trim() || (job.description?.trim() ? job.label : "");
-  useEffect(() => () => { if (press.current) clearTimeout(press.current); }, []);
-  // The list sits in a panel that clips what overflows it, and a later row would
-  // paint over a tip drawn inside it, so the tip is placed in the window itself,
-  // under the name or above it when there is no room below.
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const stop = () => { if (press.current) { clearTimeout(press.current); press.current = null; } };
+    const off = [
+      listenAction(el, "keydown", { action: "job.tip", value: job.id, listener: (e) => { if ((e as KeyboardEvent).key === "Escape") { e.stopPropagation(); setOpen(false); } } }),
+      listenAction(el, "pointerdown", { action: "job.tip", value: job.id, listener: (e) => { if ((e as PointerEvent).pointerType === "touch") { stop(); press.current = setTimeout(() => setOpen(true), LONG_PRESS_MS); } } }),
+      listenAction(el, "pointerup", { action: "job.tip", value: job.id, listener: stop }),
+      listenAction(el, "pointercancel", { action: "job.tip", value: job.id, listener: stop }),
+    ];
+    return () => { stop(); off.forEach((f) => f()); };
+  }, [job.id]);
+
+  // Under the name, or above it when there is no room below.
   useEffect(() => {
     if (!open || !box.current) return;
     const r = box.current.getBoundingClientRect();
@@ -30,20 +44,16 @@ export function JobName({ job, children }: { job: JobEntry; children: ReactNode 
     const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
     setPlace(r.bottom + 120 > window.innerHeight ? { left, bottom: window.innerHeight - r.top + 4 } : { left, top: r.bottom + 4 });
   }, [open]);
-  const stop = () => { if (press.current) { clearTimeout(press.current); press.current = null; } };
+
   return (
     <span
       className="job-name"
+      ref={box}
+      aria-describedby={open ? id : undefined}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false); }}
-      onKeyDown={(e) => { if (e.key === "Escape" && open) { e.stopPropagation(); setOpen(false); } }}
-      onPointerDown={(e) => { if (e.pointerType === "touch") { stop(); press.current = setTimeout(() => setOpen(true), LONG_PRESS_MS); } }}
-      onPointerUp={stop}
-      onPointerCancel={stop}
-      aria-describedby={open ? id : undefined}
-      ref={box}
     >
       {children}
       {open && createPortal(
