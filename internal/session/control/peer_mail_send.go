@@ -68,6 +68,11 @@ func (c *Controller) Peers() []PeerView {
 func (c *Controller) livePeers() []peermail.Live {
 	now := time.Now()
 	live, _ := c.peers.dir.ListLive(func(l peermail.Live) bool { return now.Sub(l.BeatAt) <= peerBeatTTL })
+	// A record is a file any process of this user may have written, so the names
+	// are reduced here, where they are read, as the publisher reduces its own.
+	for i := range live {
+		live[i].Title, live[i].Project = peerAttribute(live[i].Title), peerAttribute(live[i].Project)
+	}
 	return live
 }
 

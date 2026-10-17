@@ -309,9 +309,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# allowed_domains = [\"github.com\", \"*.npmjs.org\"]   # limit bash egress to these hosts (macOS, Linux)\n")
 	}
-	if len(c.Sandbox.DeniedDomains) > 0 {
-		fmt.Fprintf(&b, "denied_domains = %s\n", renderStringArray(c.Sandbox.DeniedDomains))
-	}
+	renderDomainLists(&b, c.Sandbox)
 	b.WriteString("\n")
 
 	if scope != RenderScopeProject {

@@ -143,6 +143,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # allow_write    = ["/tmp"]    # write_file/edit_file/multi_edit/move_file 额外可写的目录
 # forbid_read    = ["${HOME}/.ssh"]   # agent 不可读取或列出的路径
 # allow_devices  = ["/dev/nvidia*"]   # 放进 Linux bash 沙盒的宿主设备节点（只认用户级配置）
+# egress_unlisted = "allow"    # 无人值守长任务用（只认用户级配置）：allowed_domains 之外的主机不再询问，每个主机提示一次；denied_domains 仍然拒绝
 
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌

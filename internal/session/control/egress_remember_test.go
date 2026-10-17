@@ -150,3 +150,44 @@ func TestRememberEgressHostRespectsTheDenyListAndDoesNotDuplicate(t *testing.T) 
 		t.Fatalf("with no user list, one host became the whole list: %+v %v", r, userAllowed(t))
 	}
 }
+
+// With the user's own file saying not to ask, a host outside the list passes
+// without a card, is said once, and is remembered for the session.
+func TestEgressUnlistedAllowSkipsTheCardAndSaysSo(t *testing.T) {
+	writeUserSandbox(t, []string{"pypi.org"}, nil)
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	cfg.Sandbox.EgressUnlisted = "allow"
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+	c, requests, notices := newEgressController(t)
+	for range 2 {
+		allow, err := sandboxEscapeApprover{c}.ApproveEgress(context.Background(), "files.example.org")
+		if err != nil || !allow {
+			t.Fatalf("ApproveEgress = %v, %v; want allowed", allow, err)
+		}
+	}
+	select {
+	case a := <-requests:
+		t.Fatalf("a card was shown: %+v", a)
+	default:
+	}
+	if n := <-notices; n.Code != event.NoticeCodeEgressAutoAllowed || n.Detail != "files.example.org" {
+		t.Fatalf("notice = %+v", n)
+	}
+	select {
+	case n := <-notices:
+		t.Fatalf("a second notice for the same host: %+v", n)
+	default:
+	}
+}
+
+func TestEgressUnlistedDefaultStillAsks(t *testing.T) {
+	writeUserSandbox(t, []string{"pypi.org"}, nil)
+	c, requests, _ := newEgressController(t)
+	ask := askEgress(t, c, requests, "files.example.org")
+	c.Approve(ask.approval.ID, false, false, false)
+	if <-ask.done {
+		t.Fatal("a declined card allowed the host")
+	}
+}

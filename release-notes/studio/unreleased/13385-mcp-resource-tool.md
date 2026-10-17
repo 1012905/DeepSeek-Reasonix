@@ -1,2 +1,0 @@
-- 新增：用户配置里设 `tools.mcp_resources = true` 后，模型可读已连接 MCP 服务器自己列出的资源，每次先请你批准（默认关闭）。关联 #13385。
-- Added: `tools.mcp_resources = true` in your user config lets the model read a resource a connected MCP server lists, asking you first each time (off by default). Refs #13385.

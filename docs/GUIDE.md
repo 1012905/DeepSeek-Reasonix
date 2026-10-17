@@ -134,6 +134,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # allow_write    = ["/tmp"]    # extra dirs write_file/edit_file/multi_edit/move_file may touch
 # forbid_read    = ["${HOME}/.ssh"]   # paths the agent must not read or list
 # allow_devices  = ["/dev/nvidia*"]   # host device nodes bound into the Linux bash sandbox (user config only)
+# egress_unlisted = "allow"    # unattended long tasks (user config only): hosts outside allowed_domains pass without asking, said once each; denied_domains still refuse
 
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
