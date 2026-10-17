@@ -27,6 +27,7 @@ type heldScope struct {
 	planApproval   string
 	limits         agentLimits
 	maxSideSession int
+	maxQueued      int
 	goalAutoRetry  int
 	subagentClaims string
 	hostVerif      string
@@ -80,6 +81,7 @@ func holdUserScope(c *Config) heldScope {
 		planApproval:    c.Agent.PlanApproval,
 		limits:          holdAgentLimits(c),
 		maxSideSession:  c.Agent.MaxSideSessions,
+		maxQueued:       c.Agent.MaxQueuedInputs,
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
@@ -210,6 +212,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Agent.MaxSideSessions != h.maxSideSession {
 		c.ignoreProject("agent.max_side_sessions", fmt.Sprint(c.Agent.MaxSideSessions), ProjectUserOnly)
 		c.Agent.MaxSideSessions = h.maxSideSession
+	}
+	if c.Agent.MaxQueuedInputs != h.maxQueued {
+		c.ignoreProject("agent.max_queued_inputs", fmt.Sprint(c.Agent.MaxQueuedInputs), ProjectUserOnly)
+		c.Agent.MaxQueuedInputs = h.maxQueued
 	}
 	h.narrowAgentLimits(c)
 	if c.Agent.PlanApproval != h.planApproval {

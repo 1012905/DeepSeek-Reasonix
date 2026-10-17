@@ -35,3 +35,34 @@ func TestProjectCannotSetTheSideSessionLimit(t *testing.T) {
 		t.Fatalf("the project file overrode the user's limit: %d", cfg.SideSessionLimit())
 	}
 }
+
+func TestQueuedInputLimitIsUnlimitedUnlessTheUserSetsOne(t *testing.T) {
+	for in, want := range map[int]int{-4: 0, 0: 0, 64: 64, 500: 500} {
+		cfg := &Config{}
+		cfg.Agent.MaxQueuedInputs = in
+		if got := cfg.QueuedInputLimit(); got != want {
+			t.Errorf("max_queued_inputs %d -> %d, want %d", in, got, want)
+		}
+	}
+	if Default().QueuedInputLimit() != 0 {
+		t.Error("the default limits the queue")
+	}
+	var none *Config
+	if none.QueuedInputLimit() != 0 {
+		t.Error("a nil config limits the queue")
+	}
+}
+
+func TestProjectCannotSetTheQueuedInputLimit(t *testing.T) {
+	cfg, _ := loadScoped(t, "", "[agent]\nmax_queued_inputs = 1\n")
+	if cfg.QueuedInputLimit() != 0 {
+		t.Fatal("a cloned repo's reasonix.toml limited the user's queue")
+	}
+	if !slices.Contains(ignoredKeys(cfg), "agent.max_queued_inputs") {
+		t.Fatalf("ignored = %v, want agent.max_queued_inputs reported", ignoredKeys(cfg))
+	}
+	cfg, _ = loadScoped(t, "[agent]\nmax_queued_inputs = 80\n", "[agent]\nmax_queued_inputs = 1\n")
+	if cfg.QueuedInputLimit() != 80 {
+		t.Fatalf("the project file overrode the user's limit: %d", cfg.QueuedInputLimit())
+	}
+}

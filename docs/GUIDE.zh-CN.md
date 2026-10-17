@@ -80,6 +80,7 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_subagent_concurrency = 0        # 会话级子代理总并发（task/fleet/skills）；0 = 不限制（只认用户级配置）
 # max_parallel_writers = 0            # 互不重叠 write_paths 时的并行写入上限；0 = 不限制，靠写入声明隔开写者（只认用户级配置）
 # max_side_sessions = 0              # 同时打开的辅助会话数；0 = 不限制（只认用户级配置）
+# max_queued_inputs = 0              # 会话队列里等待发送的消息条数；0 = 不限制，队列的字节上限仍然生效（只认用户级配置）
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
 # subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict
