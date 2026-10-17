@@ -61,6 +61,7 @@ import { SidePanel } from "./SidePanel";
 import { cancelJob } from "./jobcancel";
 import { ConnectNote } from "./ConnectNote";
 import { useStatusPoll } from "./useStatusPoll";
+import { useStatusRefresh } from "./useStatusRefresh";
 import { useCheckpointRefresh } from "./useCheckpointRefresh";
 import { LiveWork, useLiveWork } from "../state/foldpref";
 import { loadChangedFilesPref, useShowsChangedFiles } from "../state/changedfiles";
@@ -180,7 +181,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   }, []);
 
   const readJob = useCallback((id: string) => port.jobOutput(id), [port]);
-  const refreshStatus = useCallback(() => port.status().then((st) => { applyStatus(st); statusRead(); }).catch(() => {}), [port, applyStatus, statusRead]);
+  const refreshStatus = useStatusRefresh(port, applyStatus, statusRead);
 
   const [wallet, refreshWallet] = useWallet(port, accountOf(status?.modelRef));
   const hideAmounts = useHidesAmounts();
