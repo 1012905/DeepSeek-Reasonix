@@ -2,6 +2,7 @@ package opendoc
 
 import (
 	"errors"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -29,18 +30,19 @@ func TestCommandPassesThePathAsOneArgumentToThePlatformOpener(t *testing.T) {
 }
 
 func TestOpenStartsTheOpenerAndReportsWhyItCouldNot(t *testing.T) {
+	doc := filepath.Join(t.TempDir(), "a.html")
 	var gotName string
 	var gotArgs []string
 	t.Cleanup(func() { start = realStart })
 
 	start = func(name string, args ...string) error { gotName, gotArgs = name, args; return nil }
-	if err := Open("/work/a.html"); err != nil || gotName == "" || gotArgs[len(gotArgs)-1] != "/work/a.html" {
+	if err := Open(doc); err != nil || gotName == "" || gotArgs[len(gotArgs)-1] != doc {
 		t.Fatalf("Open = %v, started %q %q", err, gotName, gotArgs)
 	}
 
 	boom := errors.New("no opener")
 	start = func(string, ...string) error { return boom }
-	if err := Open("/work/a.html"); !errors.Is(err, boom) {
+	if err := Open(doc); !errors.Is(err, boom) {
 		t.Fatalf("a failed start was not reported: %v", err)
 	}
 }
