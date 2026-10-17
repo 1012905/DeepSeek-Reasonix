@@ -1,6 +1,6 @@
 import { SseShell } from "./sse_shell";
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
@@ -91,6 +91,12 @@ export class SseBoundary extends SseShell {
   }
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]) {
     return this.post0<TurnNarrationSettings>("/turn-narration-settings", { level });
+  }
+  webAccessSettings() {
+    return this.get<WebAccessSettings>("/web-access-settings");
+  }
+  saveWebAccessSettings(patch: WebAccessPatch) {
+    return this.post0<WebAccessSettings>("/web-access-settings", patch);
   }
   progressWatch() {
     return this.get<ProgressWatchSettings>("/progress-watch");
