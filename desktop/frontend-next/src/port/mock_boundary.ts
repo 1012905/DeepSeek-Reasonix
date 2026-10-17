@@ -173,7 +173,7 @@ export class MockBoundary extends MockShell {
   protected peerState: PeersState = { enabled: false, peers: [], held: [] };
 
   async peers(): Promise<PeersState> {
-    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held] };
+    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held], threads: [...(this.peerState.threads ?? [])] };
   }
 
   async sendPeerMessage(to: string, text: string): Promise<PeerReceipt> {
@@ -198,7 +198,7 @@ export class MockBoundary extends MockShell {
     return { ...this.archive };
   }
 
-  private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml" };
+  private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml", unconverted: [] };
 
   async displayCurrency(): Promise<DisplayCurrencySettings> {
     return { ...this.currency };

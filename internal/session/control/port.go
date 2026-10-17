@@ -367,6 +367,14 @@ type Status interface {
 	BrowserClose(ctx context.Context, tabID string) error
 }
 
+// MCPSignIn signs in to an MCP server that needs OAuth. The frontend supplies
+// how a browser opens; the controller decides whether it may, after the user has
+// seen which host they are sent to. An editor integration has no browser of its
+// own to offer, so only the full session port carries it.
+type MCPSignIn interface {
+	AuthorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
+}
+
 // BackgroundJobs stops work a session left running outside any turn.
 type BackgroundJobs interface {
 	CancelJob(id string) bool
@@ -387,6 +395,9 @@ type PeerMail interface {
 	SendPeerMessage(to, text string) (PeerReceipt, error)
 	HeldPeerMessages() []PeerHeld
 	ResolvePeerMessage(id string, approve bool) error
+	ResolvePeerMessageRemembering(id string, approve bool, remember PeerRemember) error
+	PeersSettings() PeersSettings
+	SavePeersSettings(patch PeersPatch) (PeersSettings, error)
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -507,6 +518,7 @@ type SessionAPI interface {
 	BackgroundJobs
 	ToolCallStopper
 	PeerMail
+	MCPSignIn
 	LocalShell
 	DiffRendering
 	Feedback
@@ -544,6 +556,7 @@ var (
 	_ BackgroundJobs     = (*Controller)(nil)
 	_ ToolCallStopper    = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
+	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)
 	_ SlashDispatch      = (*Controller)(nil)

@@ -30,6 +30,7 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/peerthreads.css";
 import "../src/styles/line.css";
 import "../src/styles/notice.css";
 import "../src/styles/peers.css";
@@ -100,6 +101,21 @@ class BenchPort extends MockPort {
     return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
   }
 
+  // ?badprice=1: DeepSeek's flash price is a card the vendor's table does not have,
+  // under a pinned display currency.
+  async providers() {
+    const all = await super.providers();
+    if (!query.has("badprice")) return all;
+    return all.map((p) => p.name === "deepseek"
+      ? { ...p, officialPricing: true, modelPrices: { "deepseek-flash": { input: 0.3, output: 1.2, cacheHit: 0, currency: "USD", official: false } } }
+      : p);
+  }
+
+  async displayCurrency() {
+    const got = await super.displayCurrency();
+    return query.has("badprice") ? { ...got, mode: "CNY" as const, unconverted: [{ provider: "deepseek", model: "deepseek-flash", currency: "USD" }] } : got;
+  }
+
   async browserTabs() {
     if (!query.has("agentpage")) return super.browserTabs();
     return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
@@ -161,6 +177,15 @@ class BenchPort extends MockPort {
   }
 
   async peers() {
+    if (query.has("peerthreads")) {
+      const states = ["waiting", "working", "replied", "declined"] as const;
+      return {
+        enabled: true,
+        peers: [],
+        held: [],
+        threads: states.map((state, i) => ({ key: `s-${i}`, title: ["文档整理", "发布脚本", "拾音", "旧迁移"][i], project: "rx-archive", sessionPath: `/sessions/w0-s${i}.jsonl`, state, since: "2026-10-16T10:00:00Z", messageId: `m-${i}` })),
+      };
+    }
     if (!query.has("peers")) return super.peers();
     return {
       enabled: true,

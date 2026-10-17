@@ -53,11 +53,13 @@ export function pricesToSend(picked: string[], text: Record<string, PriceText>, 
 }
 
 export function ModelPrices({
-  models, value, onChange,
+  models, value, onChange, official = false, stored = {},
 }: {
   models: string[];
   value: Record<string, PriceText>;
   onChange: (next: Record<string, PriceText>) => void;
+  official?: boolean;
+  stored?: Record<string, ModelRate>;
 }) {
   const set = (model: string, patch: Partial<PriceText>) =>
     onChange({ ...value, [model]: { ...(value[model] ?? blank()), ...patch } });
@@ -71,6 +73,8 @@ export function ModelPrices({
         {models.map((model) => {
           const cur = value[model] ?? blank();
           const own = cur.inp !== "" || cur.out !== "";
+          const foreign = official && own && stored[model] !== undefined && stored[model]!.official === false;
+          const freeCached = foreign && cur.hit !== "" && Number(cur.hit) === 0 && Number(cur.inp) > 0;
           return (
             <li key={model} className="ml-row mp-row" data-model={model} data-own={own || undefined}>
               <span className="me-name" title={model}>{shortId(model)}</span>
@@ -94,6 +98,14 @@ export function ModelPrices({
                 {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               {incomplete(cur) && <span className="why">{t("输入价和输出价需要都填写，才会保存这一行。")}</span>}
+              {foreign && (
+                <span className="why mp-foreign">
+                  <span>{t("这个价格不在官方价目表里，选了人民币或美元显示时无法换算。")}</span>
+                  {freeCached && <span>{t("缓存命中价是 0：命中的 token 会按免费计，费用会偏低。")}</span>}
+                  <button type="button" className="act" data-action="provider.draft" data-value="model-price-restore" aria-label={t("{model} 恢复官方价", { model })}
+                    onClick={() => set(model, { inp: "", out: "", hit: "" })}>{t("恢复官方价")}</button>
+                </span>
+              )}
             </li>
           );
         })}

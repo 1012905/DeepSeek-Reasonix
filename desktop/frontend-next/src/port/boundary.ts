@@ -137,10 +137,23 @@ export interface PeerHeld {
   body: string;
 }
 
+export type PeerThreadState = "waiting" | "working" | "replied" | "declined";
+
+export interface PeerThread {
+  key: string;
+  title: string;
+  project: string;
+  sessionPath?: string;
+  state: PeerThreadState;
+  since: string;
+  messageId: string;
+}
+
 export interface PeersState {
   enabled: boolean;
   peers: PeerView[];
   held: PeerHeld[];
+  threads?: PeerThread[];
 }
 
 export interface PeerReceipt {
@@ -158,9 +171,17 @@ export interface AutoArchiveSettings {
 export type DisplayCurrencyMode = "auto" | "CNY" | "USD";
 
 // Which currency costs are shown in; the user file holds it.
+export interface UnconvertedPrice {
+  provider: string;
+  model: string;
+  currency: string;
+}
+
 export interface DisplayCurrencySettings {
   mode: DisplayCurrencyMode;
   path: string;
+  // Models whose price cannot be shown in a pinned currency.
+  unconverted: UnconvertedPrice[];
 }
 
 // Whether the changed-files pill is drawn above the composer; the user file

@@ -95,6 +95,14 @@ try {
   const replies = (text.match(new RegExp(`word${WORDS - 1}`, "g")) ?? []).length;
   check("the open pane shows every reply it was sent while the network flapped", replies >= TURNS + 1, `${replies} of ${TURNS + 1} replies`);
   check("the open pane returns to idle", done);
+
+  // The sidebar counts what is running from the page's own state of every pane,
+  // open or not; the Studio, the shared stream's metrics and the tree already agree
+  // that nothing runs, so a count that stays up is the page not recovering.
+  const live = () => page.evaluate(() => document.querySelector('.studio-session-segments button[data-value="live"] b')?.textContent?.trim() ?? "0");
+  const quiet = await until("the sidebar's running count to reach zero", async () => (await live()) === "0", 45_000).then(() => true, () => false);
+  const stuck = quiet ? "" : await page.evaluate(() => [...document.querySelectorAll(".sessrow[data-run]")].map((r) => `${r.textContent.trim().slice(0, 18)}:${r.getAttribute("data-run")}`).join(" | "));
+  check("the sidebar's running count settles to zero once every turn has finished", quiet, quiet ? "" : `reads ${await live()}; rows ${stuck}`);
   if (process.env.RELAY_SHOT) {
     await page.mouse.move(700, 700);
     await page.waitForTimeout(2500);
