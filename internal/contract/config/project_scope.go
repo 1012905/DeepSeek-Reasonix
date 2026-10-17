@@ -25,6 +25,7 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
+	limits         agentLimits
 	maxSideSession int
 	goalAutoRetry  int
 	subagentClaims string
@@ -75,6 +76,7 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
+		limits:          holdAgentLimits(c),
 		maxSideSession:  c.Agent.MaxSideSessions,
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
@@ -202,6 +204,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.max_side_sessions", fmt.Sprint(c.Agent.MaxSideSessions), ProjectUserOnly)
 		c.Agent.MaxSideSessions = h.maxSideSession
 	}
+	h.narrowAgentLimits(c)
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
 		c.Agent.PlanApproval = h.planApproval

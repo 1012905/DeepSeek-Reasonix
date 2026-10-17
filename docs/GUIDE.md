@@ -67,9 +67,9 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # planner_model = "deepseek-pro"      # optional low-frequency planner
 # subagent_model = "deepseek-pro"     # optional default for runAs=subagent skills
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }
-# max_subagent_depth = 2              # nested delegation depth; set 1 for the old single-layer boundary
-# max_subagent_concurrency = 6        # session-wide sub-agent concurrency (task/fleet/skills)
-# max_parallel_writers = 3            # concurrent writers with non-overlapping write_paths
+# max_subagent_depth = 8              # nested delegation depth; a named stop against runaway recursion, 0 removes it; set 1 for the single-layer boundary (user config only)
+# max_subagent_concurrency = 0        # session-wide sub-agent concurrency (task/fleet/skills); 0 = no limit (user config only)
+# max_parallel_writers = 0            # concurrent writers with non-overlapping write_paths; 0 = no limit, write claims keep writers apart (user config only)
 # max_side_sessions = 0              # side conversations open at once; 0 = no limit (user config only)
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
@@ -1794,14 +1794,13 @@ Subagent skills inherit the executor model by default. Set `subagent_model` to
 run them on another configured model, or use `subagent_models` to override only
 specific skills such as `review` or `security_review`.
 
-Subagents may delegate one more layer by default: the root session is depth 0,
-first-layer subagents are depth 1, and the maximum `max_subagent_depth = 2`
-means a depth-1 workflow can dispatch a depth-2 reviewer or implementer. Depth-2
-subagents do not receive recursive agent/skill tools. Set
-`agent.max_subagent_depth = 1` to restore the old single-layer boundary. This is
-intended for workflows such as Superpowers where a workflow skill may dispatch a
-reviewer subagent, while still avoiding unbounded recursion and background
-fanout.
+Subagents delegate in layers: the root is depth 0, and `max_subagent_depth`
+(default 8, a stop against a model delegating to itself without bound; 0 removes
+it, 1 is the single-layer boundary) is the deepest layer with recursive tools.
+`max_subagent_concurrency` and `max_parallel_writers` default to 0, no limit:
+write claims, not a count, keep writers apart. A project's `reasonix.toml`
+cannot set any of the three. A 429 under heavy parallelism is retried with
+backoff and `Retry-After`.
 
 Use `read_only_task` when planning needs isolated, deeper research without
 granting write-capable delegation. Use `read_only_skill` when the same need is

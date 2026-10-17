@@ -36,7 +36,11 @@ func (s *Server) peers(w http.ResponseWriter, _ *http.Request) {
 	if held == nil {
 		held = []control.PeerHeld{}
 	}
-	writeJSON(w, map[string]any{"enabled": ctl.PeersEnabled(), "peers": peers, "held": held})
+	threads := ctl.PeerThreads()
+	if threads == nil {
+		threads = []control.PeerThread{}
+	}
+	writeJSON(w, map[string]any{"enabled": ctl.PeersEnabled(), "peers": peers, "held": held, "threads": threads})
 }
 
 // sendPeerMessage and resolvePeerMessage ride the provider-edit grant: a held

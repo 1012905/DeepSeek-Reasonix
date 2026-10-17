@@ -164,6 +164,9 @@ jobs:
           node perf/narrow-steps.mjs
           node perf/job-names.mjs
           node perf/peers-settings.mjs
+          node perf/text-size.mjs
+          node perf/fs-scale.mjs
+          node perf/composer-feel.mjs
           node perf/side-panel.mjs
           node perf/card-shell.mjs
           node perf/line-cards.mjs

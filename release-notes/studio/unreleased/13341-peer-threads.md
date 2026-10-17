@@ -1,0 +1,2 @@
+- `/peer` 和会话间消息的接口现在会说明你发出的消息处于等待、处理中、已回复还是被拒绝。关联 #13341。
+- `/peer` and the messages-between-sessions API now say whether a message you sent is waiting, being worked on, replied to or declined. Refs #13341.

@@ -277,6 +277,7 @@ type RuntimeSettings interface {
 	RevokeSessionGrant(rule string) int
 	RevokeRememberedProjectRule(rule string) error
 	WorkspaceRoots() (WorkspaceRoots, error)
+	ReadableExtraRoots() ([]string, error)
 	AddWorkspaceRoot(dir string) (string, error)
 	RemoveWorkspaceRoot(dir string) error
 	SandboxSettings() SandboxSettings
@@ -380,6 +381,7 @@ type ToolCallStopper interface {
 type PeerMail interface {
 	PeersEnabled() bool
 	Peers() []PeerView
+	PeerThreads() []PeerThread
 	SendPeerMessage(to, text string) (PeerReceipt, error)
 	HeldPeerMessages() []PeerHeld
 	ResolvePeerMessage(id string, approve bool) error
