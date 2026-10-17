@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 
@@ -16,9 +17,7 @@ import (
 // followed change is never accepted without leaving the record that says so.
 func recordFollowed(path string, pins toolPinFile, followed []HeldTool) bool {
 	next := make(map[string]string, len(pins.Tools)+len(followed))
-	for name, digest := range pins.Tools {
-		next[name] = digest
-	}
+	maps.Copy(next, pins.Tools)
 	for _, h := range followed {
 		next[h.RawName] = h.Digest
 	}
