@@ -63,6 +63,7 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.live-grace", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.legacy-sessions", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.open-session-limit", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.live-stream-budget", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.session-quick-actions", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { streamBudget } from "../port/streambudget";
 import { loadReceiptPref, receiptPrefOf } from "../state/receiptpref";
 import { ReceiptPrefContext } from "../state/foldpref";
 import { money } from "../i18n/format";
@@ -192,9 +193,8 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   // A hole in the stream is the transport's fact; which authority answers it is
   // each model's own. The transcript is rebuilt from /history, the run graph
   // from the read the kernel rebuilds — one gap, two different re-reads.
-  useEffect(
-    () =>
-      port.subscribe(
+  useEffect(() => {
+    const sub = port.subscribe(
         (ev) => {
           surfaceReplay.observe(ev);
           compact.onEvent(ev);
@@ -221,9 +221,18 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
           rebuild();
           refreshStatus();
         },
-      ),
-    [port, pacer, rt.id, onTurnDone, reloadMcp, rebuild, refreshStatus, revalue, compact.onEvent, compact.release, surfaceReplay.observe],
-  );
+      );
+    // Only a few panes keep a live stream (see streambudget.ts); this one says
+    // whether it is on screen or busy and the budget gives or takes its connection.
+    const release = streamBudget.attach(rt.id, sub, refreshStatus, wantRef.current);
+    return () => {
+      release();
+      sub();
+    };
+  }, [port, pacer, rt.id, onTurnDone, reloadMcp, rebuild, refreshStatus, revalue, compact.onEvent, compact.release, surfaceReplay.observe]);
+  const wantRef = useRef({ visible, busy: running });
+  wantRef.current = { visible, busy: running };
+  useEffect(() => streamBudget.update(rt.id, { visible, busy: running }), [rt.id, visible, running]);
 
   // What the rows cover is dispatched before the rows themselves, so the table
   // never spends a frame showing a prefix as if it were the whole record.
@@ -422,7 +431,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   // whether the run reads as moving.
   const blocked = hasPendingDecision(status);
   const run = runState({ blocked, running, hasItems: s.items.length > 0, terminal: s.terminal });
-  const cost = money(s.metrics.cost, s.metrics.currency);
+  const cost = s.metrics.coverage === "none" ? "" : money(s.metrics.cost, s.metrics.currency);
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : null;
   const walletDisplay = wallet.kind === "read" ? wallet.reading.display : "";
 

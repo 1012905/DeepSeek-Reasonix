@@ -909,6 +909,9 @@ type SandboxConfig struct {
 	AllowedDomains []string `toml:"allowed_domains"`
 	// DeniedDomains outrank AllowedDomains. The repo's are added to the user's.
 	DeniedDomains []string `toml:"denied_domains"`
+	// EgressUnlisted "allow" stops the question about hosts AllowedDomains does
+	// not name. User file only: a repo cannot switch its own prompts off.
+	EgressUnlisted string `toml:"egress_unlisted"`
 }
 
 // WriteRoots returns the directories file-writer tools may modify: the
@@ -1072,6 +1075,7 @@ type AgentConfig struct {
 	SubagentEffort   string            `toml:"subagent_effort"`
 	SubagentEfforts  map[string]string `toml:"subagent_efforts"`
 	MaxSubagentDepth int               `toml:"max_subagent_depth"`
+	MaxSideSessions  int               `toml:"max_side_sessions"` // 0 (default) opens as many side conversations as asked; the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.

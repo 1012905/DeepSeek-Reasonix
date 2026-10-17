@@ -25,6 +25,7 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
+	maxSideSession int
 	goalAutoRetry  int
 	subagentClaims string
 	hostVerif      string
@@ -65,6 +66,7 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
+		maxSideSession:  c.Agent.MaxSideSessions,
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
@@ -182,6 +184,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Agent.GoalAutoRetry != h.goalAutoRetry {
 		c.ignoreProject("agent.goal_auto_retry", fmt.Sprint(c.Agent.GoalAutoRetry), ProjectUserOnly)
 		c.Agent.GoalAutoRetry = h.goalAutoRetry
+	}
+	if c.Agent.MaxSideSessions != h.maxSideSession {
+		c.ignoreProject("agent.max_side_sessions", fmt.Sprint(c.Agent.MaxSideSessions), ProjectUserOnly)
+		c.Agent.MaxSideSessions = h.maxSideSession
 	}
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
@@ -302,7 +308,10 @@ func (h heldScope) narrowSandbox(c *Config, ws string) {
 	// A cloned repo must not hand itself the container daemon socket. An egress
 	// allow list only narrows open network, so a repo may set one the user has
 	// not, but never replace the user's; its denials only add to the user's.
-	s.HostAuthorities, s.AllowDevices = u.HostAuthorities, u.AllowDevices
+	if s.EgressUnlisted != u.EgressUnlisted {
+		c.ignoreProject("sandbox.egress_unlisted", s.EgressUnlisted, ProjectUserOnly)
+	}
+	s.HostAuthorities, s.AllowDevices, s.EgressUnlisted = u.HostAuthorities, u.AllowDevices, u.EgressUnlisted
 	if len(u.AllowedDomains) > 0 {
 		s.AllowedDomains = u.AllowedDomains
 	}
