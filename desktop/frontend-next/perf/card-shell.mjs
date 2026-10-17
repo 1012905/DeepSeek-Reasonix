@@ -48,7 +48,7 @@ for (const scheme of ["light", "dark"]) {
           head: hl ? getComputedStyle(hl).backgroundColor : "rgba(0, 0, 0, 0)",
         };
       }));
-  check(`${scheme}: five kinds of card found`, rows.length === 5, rows.map((r) => r.kind).join(","));
+  check(`${scheme}: four kinds of card found`, rows.length === 4, rows.map((r) => r.kind).join(","));
   const same = (key) => new Set(rows.map((r) => r[key])).size === 1;
   check(`${scheme}: one radius`, rows.length > 0 && same("radius"), [...new Set(rows.map((r) => r.radius))].join(" / "));
   check(`${scheme}: one border colour, whatever the state`, rows.length > 0 && same("border"), [...new Set(rows.map((r) => r.border))].join(" / "));
