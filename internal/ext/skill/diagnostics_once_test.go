@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"reasonix/internal/base/testenv"
 )
@@ -30,8 +31,12 @@ func TestADiagnosticAboutAnotherFileIsStillWritten(t *testing.T) {
 	writeSkill(t, home, ".claude/skills/first.md", "---\nname: first\n---\nbody")
 	var stderr bytes.Buffer
 	st := New(Options{HomeDir: home, DisableBuiltins: true, Stderr: &stderr})
+	now := time.Unix(1000, 0)
+	st.scans.now = func() time.Time { return now }
 	_ = st.SlashList()
 	writeSkill(t, home, ".claude/skills/second.md", "---\nname: second\n---\nbody")
+	// A file added outside the store shows once the memo of the slash list has aged out.
+	now = now.Add(scanTTL)
 	_ = st.SlashList()
 	_ = st.SlashList()
 	got := stderr.String()
