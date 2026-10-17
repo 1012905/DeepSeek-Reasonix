@@ -19,6 +19,12 @@ func (s *Server) webAccessSettings(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) saveWebAccessSettings(w http.ResponseWriter, r *http.Request) {
+	// A standing consent to be charged and the address queries go to are the
+	// window's to set: no paired or network client decides them for the user.
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "web_access.editing_disabled", "web search and fetch settings editing is not enabled on this server", nil)
+		return
+	}
 	var patch control.WebAccessPatch
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&patch); err != nil || patch.Empty() {
 		badBody(w)
