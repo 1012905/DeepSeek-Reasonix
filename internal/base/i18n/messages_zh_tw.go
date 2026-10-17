@@ -737,6 +737,8 @@ var ChineseTraditional = Messages{
 	GoalNotPaused:              "沒有已暫停或被阻擋的目標可恢復",
 	GoalPaused:                 "目標已暫停 — /goal resume 可繼續",
 	AwaitingUserFmt:            "等待你的輸入：%s",
+	GoalRetryFmt:               "目標的完成度檢查失敗，自動重試（第 %d 次）",
+	GoalRetryGaveUpFmt:         "完成度檢查連續失敗 %d 次，目標不再自動重試，等你處理",
 	PlanAutoApproved:           "計畫已自動批准（使用者設定 agent.plan_approval = \"auto\"）",
 	ImagesNotReadable:          "當前模型不讀圖 — 已附 %d 張，改由委派的子代理去看",
 	ImagesNeedVisionRole:       "當前模型不讀圖 — 已附 %d 張，現在沒人讀得了。%s 能讀圖：到 設定 › 模型 › 分工 裡把「看圖」指給它。",

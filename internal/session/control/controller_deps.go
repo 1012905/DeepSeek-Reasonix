@@ -121,6 +121,9 @@ type controllerDeps struct {
 	// stalls an approval or status poll on c.mu. See goal.go.
 	goals goalMachine
 
+	// goalRetry is the unattended retry of an evaluator pause; see goal_retry.go.
+	goalRetry goalRetry
+
 	// Base for @-refs and slash path refs, cwd for user "!" commands and command
 	// discovery, and the guard root for checkpoint restore writes. Frontends read
 	// it through WorkspaceRoot().

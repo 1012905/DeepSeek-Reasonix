@@ -1,0 +1,2 @@
+- 用户配置新增 `agent.goal_auto_retry`（默认 0）：目标因完成度检查不可用而暂停时，按退避间隔自动重试，最多这么多次。关联 #13478。
+- New user-config `agent.goal_auto_retry` (default 0): a Goal paused because its completion check could not run is retried with backoff, up to that many times. Refs #13478.

@@ -1092,6 +1092,7 @@ type AgentConfig struct {
 	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
 	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
+	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
