@@ -1592,3 +1592,32 @@ web_fetch_backends = ["local", "deepseek_api"]
 - 按构造不可能是公网的名称同样不发，即使本机解析不了：单段主机名如 `jira`，或位于 `localhost`、`local`、`internal`、`lan`、`home.arpa`、`invalid`、`test`、`example`、`onion` 之下。两类都会被 `fetch.internal_address` 拒绝。
 - 完整网址（包括问号后的参数）会原样发给 DeepSeek。卡片会完整显示；选择始终允许之后不再逐次显示。
 - 页面是第三方内容。每次成功的付费抓取会在用量视图里按 `deepseek-fetch` 计入。
+
+## 让模型原生看视频文件
+
+`read_video` 有两种看视频的方式。抽帧：用 ffmpeg 取若干静态图，会丢掉声音和快速动作的先后顺序。原生：把 MP4 文件本身交给能看视频的模型，中间不经过 ffmpeg。原生需要在用户配置的供应商条目里做两项声明（前一项是模型列表，后一项说明文件怎么送到这些模型）：
+
+```toml
+[[providers]]
+name = "dashscope"
+video_models = ["qwen3-vl-plus"]
+video_protocol = "inline_data_url"   # 或 "moonshot_file"
+```
+
+- `inline_data_url`：文件放在请求里，作为 `video_url` 的 data URL。阿里云文档（2026-10-17 读取）规定编码后的字符串要小于 10 MB，所以文件上限取 7.5 MB。
+- `moonshot_file`：文件先上传一次（`POST /files`，`purpose = "video"`），请求里写 `ms://<id>`。Moonshot 文件接口文档（2026-10-17 读取）允许单文件 100 MiB、组织默认总存储 10 GiB，没有写文件保留多久，所以供应商不再持有时会重传一次。文件会留在你组织的存储里，需要你自己去那边删除。
+- 没列进 `video_models` 的模型、或没写 `video_protocol` 的条目，仍然抽帧。不会按模型名或域名猜；写成空列表表示“这里没有能看视频的模型”。
+
+`read_video` 的 `mode`：`auto`（默认）在当前模型支持且文件够小时原生发送，否则抽帧并说明原因；`frames` 总是抽帧；`native` 在文件送不出去时带错误码拒绝。
+
+- 只有 MP4 走原生；其他容器改为抽帧（`video.native_container_unsupported`）。
+- 想把大小上限调低，在用户文件里设 `[tools] video_native_max_bytes`；项目文件不能设，且只能比协议自己的上限更低。拒绝时会说明是哪一层上限挡住的（`video.native_too_large`）。
+- 模型只在读取之后的那一次请求里看到视频；它回答之后，后续请求只带一行说明，长文件不会每一轮重发；想再看就再调用 `read_video`。会话文件里保存的是文件引用，不是文件内容。
+- 文件在构造请求时才从磁盘读取。读取后被改动过的文件不会发送（`video.file_changed`），已被删除的报告为 `video.file_missing`。
+- 子代理没有原生视频，使用抽帧。
+- 没有系统沙盒时 `read_video` 首次使用仍会先询问，与之前一致；在卡片上选“始终允许”，或给 `read_video` 添加规则，就不再询问。
+
+没有做的，以及原因：
+
+- Gemini：视频输入在原生 Gemini 接口里（内联数据、Files API、YouTube 链接）；OpenAI 兼容页没有列视频内容块，而 Reasonix 是通过那个端点接 Gemini 的。
+- 智谱 GLM：文档只给了公网 HTTPS 地址的 `video_url` 示例，没写 base64 与限制，所以不能在不替用户把文件传到别处的前提下发送本地文件。

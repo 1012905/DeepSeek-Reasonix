@@ -102,6 +102,7 @@ var English = Messages{
 	NoticeInboxRecoveredFmt:       "Recovered %d unfinished instruction(s). The inbox is paused: review them with /queue, then resume.",
 	TUIQuestion:                   "question",
 	TUISubagentCallsFmt:           "%d sub-agent call(s)",
+	TUIVideoSentFmt:               "video %s (%s) sent to %s as a video file",
 	TUIChartMoreRowsFmt:           "… %d more rows",
 	TUIChartMoreColsFmt:           "… %d more columns",
 	TUIStallTokensFmt:             "About %d context windows of input (%d tokens) since the run last did anything observable. Whether to keep going is your call.",
