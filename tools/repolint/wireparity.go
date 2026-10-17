@@ -70,6 +70,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/changes.go", "gitHistoryView", tsWorkspaceFile, "GitHistory"},
 	{"internal/platform/gitstatus/history.go", "Commit", tsWorkspaceFile, "GitCommit"},
 	{"internal/contract/eventwire/wire.go", "AskOrigin", tsWireFile, "AskOrigin"},
+	{"internal/session/control/goal_runtime_view.go", "GoalRuntimeView", tsSessionFile, "GoalRuntime"},
 	{"internal/contract/agentgraph/graph.go", "Node", tsWireFile, "GraphNode"},
 	{"internal/contract/agentgraph/graph.go", "Edge", tsWireFile, "GraphEdge"},
 	{"internal/contract/agentgraph/graph.go", "Delta", tsWireFile, "GraphDelta"},
