@@ -148,14 +148,14 @@ func (s *lazySpawn) run() {
 	// Save cache outside the critical path of tool dispatch. Register the write
 	// before this deferred spawn ends so Host.Close observes and drains it.
 	s.host.queueBackgroundWrite(func() {
-		saveLazyCachedSchema(s.spec, cacheTools, s.host.serverInstructions(s.spec.Name))
+		saveLazyCachedSchema(s.spec, cacheTools, s.host.serverInstructions(s.spec.Name), s.host.cachedCapabilities(s.spec.Name, len(cacheTools) > 0))
 	})
 }
 
-func saveLazyCachedSchema(spec Spec, real []tool.Tool, instructions string) {
+func saveLazyCachedSchema(spec Spec, real []tool.Tool, instructions string, capabilities map[string]bool) {
 	_ = SaveCachedSchema(spec.Name, CachedSchema{
 		CacheKey:     SchemaCacheKey(spec),
-		Capabilities: map[string]bool{"tools": len(real) > 0},
+		Capabilities: capabilities,
 		Instructions: instructions,
 		Tools:        cacheableToolsOf(real),
 	})

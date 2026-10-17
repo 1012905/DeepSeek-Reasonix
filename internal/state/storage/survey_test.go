@@ -233,3 +233,27 @@ func TestTruncatedRootKeepsTheErrorFoundBeforeTheBudgetRanOut(t *testing.T) {
 		t.Fatalf("truncated=%v err=%q: both must be reported", truncated, errText)
 	}
 }
+
+// State falls back to home, so on a default Windows install they are one folder.
+// Home declares no entries of its own, and it must not be credited with the
+// sessions and archive that state declares in that same folder.
+func TestRootSharingItsDirectoryIsNotCreditedWithTheNeighboursEntries(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REASONIX_STATE_HOME", "")
+
+	write(t, filepath.Join(home, "sessions", "a.jsonl"), 4000)
+	write(t, filepath.Join(home, "archive", "old.jsonl"), 2000)
+	write(t, filepath.Join(home, ".env"), 100)
+	write(t, filepath.Join(home, "browser", "profile.bin"), 500)
+
+	roots := Survey(t.Context())
+	state := find(t, roots, config.RootState)
+	if state.Bytes != 6000 || state.Files != 2 {
+		t.Fatalf("state = %d bytes / %d files, want 6000 / 2", state.Bytes, state.Files)
+	}
+	homeRoot := find(t, roots, config.RootHome)
+	if homeRoot.Bytes != 600 || homeRoot.Files != 2 {
+		t.Fatalf("home = %d bytes / %d files, want 600 / 2: it counted what state owns", homeRoot.Bytes, homeRoot.Files)
+	}
+}

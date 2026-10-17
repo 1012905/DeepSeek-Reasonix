@@ -29,7 +29,6 @@ export function NoticeCard({ item }: { item: Extract<Item, { t: "notice" }> }) {
     <div className="call" data-k="host" data-lvl={lvl}>
       <div className="g">
         <Sym glyph="·" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

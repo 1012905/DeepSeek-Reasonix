@@ -10,6 +10,7 @@ const (
 	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
 	NoticeCodeCheckpointRecordingFailed                         = "checkpoint_recording_failed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
+	NoticeCodePlanAutoApproved                                  = "plan_auto_approved"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
 	NoticeCodeExecutorHandoff                                   = "executor_handoff"
@@ -65,6 +66,12 @@ const (
 	NoticeCodeInputRefused = "input_refused"
 	// A turn handed its open list back to the user; Detail is the model's `need`, as it wrote it.
 	NoticeCodeAwaitUser = "await_user"
+	// A Goal paused on its completion check was retried by the host (user setting goal_auto_retry).
+	NoticeCodeGoalRetry = "goal_retry"
+	// The retry allowance ran out; the Goal waits for the user.
+	NoticeCodeGoalRetryGaveUp = "goal_retry_gave_up"
+	// Bash reached a host outside allowed_domains because the user's file says not to ask; Detail is the host.
+	NoticeCodeEgressAutoAllowed = "egress_auto_allowed"
 	// A slash command nothing resolves, refused rather than sent as prose.
 	NoticeCodeUnknownCommand = "unknown_command"
 	// The display currency preference changed; Detail is the stored value, "" for auto.

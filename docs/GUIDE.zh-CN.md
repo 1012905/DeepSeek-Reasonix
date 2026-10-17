@@ -80,6 +80,7 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_subagent_concurrency = 6        # 会话级子代理总并发（task/fleet/skills）
 # max_parallel_writers = 3            # 互不重叠 write_paths 时的并行写入上限
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
+# plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
 # subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict
 # host_verification = "off"          # 仅用户配置文件；改过文件的回合不再被要求先做检查、复核和签收；交付回执仍如实写明检查了什么，默认 on
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
@@ -104,6 +105,7 @@ enabled = []   # 省略/为空 = 全部内置工具
 bash_timeout_seconds = 120   # 前台安全上限；设为 0 表示不设工具层超时
 protect_changed_files = true   # 模型读过或写过的文件之后被改动时，拒绝整文件覆盖
 browser_tools = true   # 内置浏览器工具；浏览器在第一次使用时才启动
+# mcp_resources = true  # 仅用户配置文件；给模型一个 read_mcp_resource 工具，只能读已连接 MCP server 自己列出、或由它声明的模板拼出的资源（{+x} 模板范围很宽，批准前看清卡片上的完整地址），每次先询问；默认关闭
 mcp_startup_timeout_seconds = 30   # 后台 initialize + tools/list 安全上限
 mcp_call_timeout_seconds = 300   # MCP 调用默认安全上限；可用 plugin/tool 覆盖
 
@@ -141,6 +143,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # allow_write    = ["/tmp"]    # write_file/edit_file/multi_edit/move_file 额外可写的目录
 # forbid_read    = ["${HOME}/.ssh"]   # agent 不可读取或列出的路径
 # allow_devices  = ["/dev/nvidia*"]   # 放进 Linux bash 沙盒的宿主设备节点（只认用户级配置）
+# egress_unlisted = "allow"    # 无人值守长任务用（只认用户级配置）：allowed_domains 之外的主机不再询问，每个主机提示一次；denied_domains 仍然拒绝
 
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌
