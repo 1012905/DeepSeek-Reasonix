@@ -2694,6 +2694,7 @@ body { font-size: 14px; line-height: 1.75; }
 }
 .flow .call[data-prompt] > .c > .out { margin-top: 0 !important; }
 .flow .call[data-approval] .apv { margin-top: 0; }
+.flow .apv-ft + .apv-note { margin-top: 0; padding: 8px 12px 10px; font-size: var(--fs-meta); }
 .flow .call[data-approval] .apv-hd {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
