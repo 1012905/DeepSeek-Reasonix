@@ -33,6 +33,7 @@ import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
+import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
@@ -611,6 +612,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               >
                 <BrowserTools port={port} onChanged={onChanged} />
               </Group>
+              <WebAccess port={port} />
               <SessionCoordination port={port} onChanged={onChanged} />
             </>
           )}
