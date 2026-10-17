@@ -1,0 +1,2 @@
+- 子代理列表里已结束的任务现在写明状态“已交付”并带上耗时，用绿色标出，不再只显示一个秒数。关联 #13596。
+- A finished sub-agent in the list now says "Handed back" with its time, in green, instead of showing only a number of seconds. Refs #13596.
