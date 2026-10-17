@@ -869,7 +869,7 @@ Composer shortcuts:
 | `Cmd+Z` on macOS, `Ctrl+Z` on Windows/Linux | Undoes the latest composer edit | Native typing stays in the WebView history; Reasonix-managed paste, cut, folded blocks, and structured tokens are restored as complete transactions. |
 | `Cmd+Shift+Z` on macOS, `Ctrl+Shift+Z` on Windows/Linux | Redoes the latest composer edit | On Windows/Linux, `Ctrl+Y` is also accepted after the YOLO shortcut has been rebound. |
 | `Cmd+Y` / `Ctrl+Y` (default) | Toggles YOLO on/off | Turning YOLO off restores the previous Ask/Auto base when known. The current binding is shown in **Settings → Shortcuts**. |
-| `Cmd+V` on macOS, `Ctrl+V` on Windows/Linux | Pastes clipboard content | Clipboard images are attached. Dropping into the composer takes **any file or folder** and references it where it lives — the desktop app copies nothing, so the turn works on that file itself. Only sources with no path to offer, the clipboard and the add-image button, store bytes in the workspace. |
+| `Cmd+V` on macOS, `Ctrl+V` on Windows/Linux | Pastes clipboard content | Clipboard images are attached. Studio references ordinary files by their native path when available, including files selected with Add attachment, pasted, or dropped. Sources without a native path stream into the workspace. |
 | Plain `Up` / `Down` at the prompt boundary | Recalls older or newer submitted prompts | Modified arrows and native text navigation stay with the textarea. |
 | `Esc` while a turn is running | Cancels the running turn | If the turn has not produced a response yet, the draft is restored. |
 
@@ -889,6 +889,27 @@ Menus and controls:
 | Plan approval card | `Left` / `Right`, `Enter`, `1`-`3`, `Esc` | Move between Revise plan, Start execution, and Exit plan. The default highlighted action is Start execution. |
 | Plan control | Toggles Plan on/off | Same mode as `Shift+Tab`. |
 | Goal item in the collaboration menu | Starts, views, or clears Goal | Goal is not in any keyboard cycle. |
+
+#### Studio file attachments
+
+Ordinary local files, including large APKs, use path references whenever the
+desktop shell can identify the file. Selecting one external file grants read
+access to that file; selecting a folder grants its descendants.
+
+Files without a native path use binary streaming into `.reasonix/attachments`.
+Incomplete files are removed if the transfer fails or is canceled. Removing an uploading
+attachment cancels its transfer.
+
+| Entry point | Limit |
+| --- | --- |
+| Native ordinary-file references | No attachment size cap; the file stays where it is. |
+| Ordinary-file binary upload | No fixed attachment size cap; disk space and any upstream transport limits still apply. |
+| Image upload | 10 MiB per image, checked before upload and by the kernel. |
+| Legacy JSON/Base64 attachment endpoint | 25 MiB general-file limit; retained for older clients. |
+| Encrypted cloud relay | 16 MiB per request body; oversized uploads stop at that budget. This is a relay limit, separate from native references and direct uploads. |
+
+These limits govern attachment transport. A referenced file is read on demand;
+its full bytes do not become model input automatically.
 
 ### CLI / TUI
 

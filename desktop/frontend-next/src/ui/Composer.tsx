@@ -3,7 +3,8 @@ import { t } from "../i18n";
 import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
 import { keepPasteAsFile, PasteKeep, type PasteChip } from "./pastekeep";
-import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment, WorkspaceGit } from "../port/port";
+import type { AgentPort, ChipCall, ModelEntry, SessionStatus, WorkspaceGit } from "../port/port";
+import type { Chip } from "./composer_chip";
 import { Picker } from "./Menu";
 import { BranchChip } from "./BranchChip";
 import { WorktreeChip } from "./WorktreeChip";
@@ -72,23 +73,6 @@ interface Props {
   draftKey?: string;
 }
 
-// What is riding along with this turn. An attachment travels as bytes or a path
-// the kernel already saved; a long paste is held out of the box so eight hundred
-// lines of log do not become the composer.
-type Chip =
-  | {
-      k: "attachment";
-      id: string;
-      name: string;
-      state: "adding" | "ready" | "failed";
-      a?: Attachment;
-      blob?: File;
-      url?: string;
-      error?: string;
-    }
-  | PasteChip
-  | { k: "quote"; id: string; body: string; turn?: number; source?: string; lines: number };
-
 function chipName(c: Chip): string {
   if (c.k === "quote" && c.source) return t("引用 {name}", { name: c.source.split("/").at(-1) ?? c.source });
   if (c.k === "quote") return c.turn === undefined ? t("引用回复") : t("引用第 {n} 轮回复", { n: c.turn });
@@ -133,6 +117,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   // rather than something read off the element when a menu happens to open.
   const [caret, setCaret] = useState(0);
   const [shots, setShots] = useState<Chip[]>([]);
+  const uploads = useRef(new Map<string, AbortController>());
+  useEffect(() => () => {
+    uploads.current.forEach((upload) => upload.abort());
+    uploads.current.clear();
+  }, []);
   const [stopping, setStopping] = useState(false);
   const submittingRef = useRef(false);
   const stoppingRef = useRef(false);
@@ -309,20 +298,28 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   }, []);
 
   const discard = useCallback((c: Chip) => {
+    uploads.current.get(c.id)?.abort();
+    uploads.current.delete(c.id);
     releaseChip(c);
     setShots((prev) => prev.filter((x) => x !== c));
   }, []);
 
   const upload = useCallback(
     (id: string, blob: File) => {
+      const controller = new AbortController();
+      uploads.current.get(id)?.abort();
+      uploads.current.set(id, controller);
       void port
-        .attach(blob, blob.name)
+        .attach(blob, blob.name, controller.signal)
         .then((a) =>
           setShots((prev) => prev.map((c) => (c.k === "attachment" && c.id === id ? { ...c, a, state: "ready", error: "" } : c))),
         )
         .catch((e: unknown) =>
           setShots((prev) => prev.map((c) => (c.k === "attachment" && c.id === id ? { ...c, state: "failed", error: reason(e) } : c))),
-        );
+        )
+        .finally(() => {
+          if (uploads.current.get(id) === controller) uploads.current.delete(id);
+        });
     },
     [port],
   );

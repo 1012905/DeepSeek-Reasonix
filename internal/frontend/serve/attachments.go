@@ -17,8 +17,8 @@ import (
 // Bytes ride into a turn as path references, exactly as the CLI's do. This is
 // the door for a client that has bytes and no path: a browser tab, and the
 // clipboard everywhere. A window that knows the path uses POST /drop and copies
-// nothing. JSON rather than raw bytes because csrfGuard admits nothing else.
-// control enforces the real per-kind limit once these are decoded.
+// nothing. This legacy JSON endpoint remains bounded; /attachments/upload
+// streams files without aggregating their bytes in memory.
 const maxAttachmentUpload = 25 << 20
 
 // attachmentBytes takes the bytes from whichever half the client had. A desktop
