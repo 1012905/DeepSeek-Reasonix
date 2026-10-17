@@ -57,6 +57,8 @@ type heldScope struct {
 	webSearchPaid []string
 	webFetch      []string
 	webFetchPaid  []string
+	// videoNativeMax lowers what is sent to a vendor, so only the user sets it.
+	videoNativeMax int64
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -99,6 +101,7 @@ func holdUserScope(c *Config) heldScope {
 		webSearchPaid:     slices.Clone(c.Tools.WebSearchPaidAllowed),
 		webFetch:          slices.Clone(c.Tools.WebFetchBackends),
 		webFetchPaid:      slices.Clone(c.Tools.WebFetchPaidAllowed),
+		videoNativeMax:    c.Tools.VideoNativeMaxBytes,
 	}
 }
 
@@ -194,6 +197,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.Tools.MCPResources = h.mcpResources
 	}
 	c.keepUserSearchBackends(h)
+	if c.Tools.VideoNativeMaxBytes != h.videoNativeMax {
+		c.ignoreProject("tools.video_native_max_bytes", fmt.Sprint(c.Tools.VideoNativeMaxBytes), ProjectUserOnly)
+		c.Tools.VideoNativeMaxBytes = h.videoNativeMax
+	}
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.
 	if c.Agent.GoalAutoRetry != h.goalAutoRetry {
