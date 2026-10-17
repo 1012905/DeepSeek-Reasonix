@@ -381,6 +381,7 @@ type ToolCallStopper interface {
 type PeerMail interface {
 	PeersEnabled() bool
 	Peers() []PeerView
+	PeerThreads() []PeerThread
 	SendPeerMessage(to, text string) (PeerReceipt, error)
 	HeldPeerMessages() []PeerHeld
 	ResolvePeerMessage(id string, approve bool) error
