@@ -1,2 +1,0 @@
-- 修复：设置页左侧已选中的分区，鼠标停在上面时不再被悬停样式盖掉：浅色主题保持选中底色，两种主题下图标都保持选中时的颜色。关联 #13610。
-- Fixed: The selected settings section keeps its look while the pointer rests on it: its fill in the light theme, and its icon colour in both themes. Refs #13610.

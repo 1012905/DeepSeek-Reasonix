@@ -1,2 +1,0 @@
-- 新增：你发过消息的会话，侧栏行和标签上会出现小图标，标明对话走到哪一步（等批准、处理中、已回复、被拒绝），点它跳到该会话。关联 #13371。
-- Added: a session you have written to carries a small icon on its row and tab saying where the exchange stands (waiting, working, replied, declined); click it to open that session. Refs #13371.

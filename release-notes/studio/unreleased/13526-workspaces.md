@@ -1,2 +1,0 @@
-- 侧栏不再限制只能记住 32 个项目；想限制时在用户配置的 [desktop] 里设 max_workspaces。关联 #13526。
-- The sidebar no longer stops at 32 remembered projects; set max_workspaces under [desktop] in your user config to limit it. Refs #13526.
