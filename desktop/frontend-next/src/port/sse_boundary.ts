@@ -1,5 +1,5 @@
 import { SseShell } from "./sse_shell";
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
@@ -62,8 +62,14 @@ export class SseBoundary extends SseShell {
   sendPeerMessage(to: string, text: string) {
     return this.post0<PeerReceipt>("/peers/send", { to, text });
   }
-  resolvePeerMessage(id: string, approve: boolean) {
-    return this.post(`/peers/held/${encodeURIComponent(id)}`, { approve });
+  resolvePeerMessage(id: string, approve: boolean, remember: PeerRemember = "none") {
+    return this.post(`/peers/held/${encodeURIComponent(id)}`, { approve, remember });
+  }
+  peersSettings() {
+    return this.get<PeersSettings>("/peers/settings");
+  }
+  savePeersSettings(edit: PeersSettingsEdit) {
+    return this.post0<PeersSettings>("/peers/settings", edit);
   }
   saveSubagentClaims(optimistic: boolean) {
     return this.post0<SubagentClaimsSettings>("/subagent-claims", { optimistic });
