@@ -22,6 +22,7 @@ export const EN_COMPOSER: Record<string, string> = {
   "目录已经创建成功，取消未能撤回目录切换。任务尚未发送。": "The workspace was already created and bound. Cancellation could not reverse it. The task has not been sent.",
   "即将进入对话，自动开始任务。": "Opening the conversation and starting your task.",
   "暂不能确认操作或清理结果，请先查看详情并核对。": "The operation or cleanup outcome is unconfirmed. Check the details before proceeding.",
+  "请先保存任务与附件，在终端核对并处理保留的目录和任务分支。确认处理完成后，在会话菜单中关闭此会话，再从源目录新建会话重试。": "Save your task and attachments, then reconcile the retained folder and task branch in a terminal. Once reconciled, close this conversation from its menu and start a new one in the source folder to retry.",
   "正在中止操作并清理未完成的目录。": "Stopping the operation and cleaning up the incomplete workspace.",
   "创建耗时较长，尚未收到完成确认。": "Creation is taking longer. Completion has not been confirmed.",
   "准备完成后将自动开始任务。": "Your task will start automatically when the workspace is ready.",

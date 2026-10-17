@@ -111,6 +111,22 @@ to the controller. Changing panes or workspaces invalidates old client attempts.
 运行时构建阶段响应请求取消，成功后生命周期转交给控制器。切换页面或工作区会
 使旧前端操作失效。
 
+## Cleanup recovery / 清理失败后的恢复
+
+`cleanup_failed` deliberately blocks another preparation in the same runtime.
+
+1. Save the task and attachments, and reveal or copy the retained path.
+2. Reconcile that directory and task branch using Git in a terminal. Preserve
+   any external changes.
+3. Once reconciled, choose **Close conversation** from its menu and start a new
+   conversation in the source folder to retry. Closing retires the old runtime
+   and its operation registry.
+
+`cleanup_failed` 会阻止同一运行时再次创建目录。先保存任务与附件，展开或复制保留
+目录的路径，再在终端使用 Git 核对该目录与任务分支，保留外部产生的修改。确认处理
+完成后，在会话菜单中选择「关闭会话」，再从源目录新建会话重试；关闭会话会退役旧
+运行时及其操作记录。
+
 ## Regression evidence / 回归验证
 
 Regression coverage lives in `workspace_preparation_test.go`,

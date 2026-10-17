@@ -38,6 +38,9 @@ it("does not offer another creation while cleanup is uncertain", () => {
   expect(screen.queryByRole("button", { name: "重试创建" })).toBeNull();
   const cancel = screen.queryByRole("button", { name: "取消创建" }) as HTMLButtonElement | null;
   expect(cancel === null || cancel.disabled).toBe(true);
+  expect(screen.getByRole("note").textContent).toContain("会话菜单");
+  expect(screen.getByRole("note").textContent).toContain("源目录");
+  expect(screen.getByText("已保留")).toBeTruthy();
 });
 
 it("restores editing after confirmed cancellation and exposes the retained destination", () => {

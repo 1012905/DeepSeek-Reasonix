@@ -130,3 +130,36 @@ func TestWorkspacePreparationFailureCanRetryAfterCleanup(t *testing.T) {
 		t.Fatalf("failed attempt left another branch: %s %v", out, err)
 	}
 }
+
+func TestWorkspacePreparationCleanupFailureBlocksReplacement(t *testing.T) {
+	s, url, root := worktreeServer(t)
+	s.buildWorkspaceController = func(_ context.Context, target, _ string) (*control.Controller, error) {
+		cmd := exec.Command("git", "-C", target, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "external change")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return nil, errors.New(string(out))
+		}
+		return nil, errors.New("fixture build failure after external change")
+	}
+	startPreparation(t, url, root, "retained-test")
+	retained := awaitPreparation(t, url, "retained-test", "cleanup_failed")
+	if s.Controller().WorkspaceRoot() != root {
+		t.Fatal("failed build replaced the source controller")
+	}
+	body, _ := json.Marshal(map[string]any{"id": "replacement", "selection": worktreeSelection{Ref: "refs/heads/studio", SourceRoot: root}})
+	resp, err := http.Post(url+"/workspace/prepare", "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var refusal struct{ Code string }
+	if err := json.NewDecoder(resp.Body).Decode(&refusal); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusConflict || refusal.Code != "workspace.worktree_busy" {
+		t.Fatalf("replacement = %d %s", resp.StatusCode, refusal.Code)
+	}
+	out, err := exec.Command("git", "-C", retained.WorkspaceRoot, "log", "-1", "--format=%s").Output()
+	if err != nil || strings.TrimSpace(string(out)) != "external change" {
+		t.Fatalf("external work was not retained: %s %v", out, err)
+	}
+}

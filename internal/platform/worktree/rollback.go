@@ -25,7 +25,8 @@ func DiscardUnpublished(ctx context.Context, repo gitcmd.Repo, result Result) er
 	}
 	found := false
 	for entry := range strings.SplitSeq(registered, "\x00") {
-		if entry == "worktree "+root || entry == "worktree "+result.WorktreeRoot {
+		entry = filepath.ToSlash(entry)
+		if entry == "worktree "+filepath.ToSlash(root) || entry == "worktree "+filepath.ToSlash(result.WorktreeRoot) {
 			found = true
 		}
 	}
