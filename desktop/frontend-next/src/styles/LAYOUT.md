@@ -1545,6 +1545,11 @@ what exists.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
 
+## Card shell
+
+- The cards a reader reads or acts on (approval, ask, remember, guardian review, extension card, receipt, compaction) share one shell: `--r-md` radius, a 1px `--border`, the `--surface` ground, and a header strip with no fill of its own.
+- State is never a border colour: a warning or error card keeps the shell's border and says so in the glyph ink or a chip.
+
 ## Notice bar
 
 - A host notice is one sentence with a glyph and, under it, the kernel's diagnostic in the muted meta size.

@@ -1,0 +1,2 @@
+- 对话里的批准、提问、记忆、守卫复核、扩展卡片等现在用同一种外壳：同样的圆角、边框和底色，标题栏不再单独填色，警告和错误也不再给整圈边框着色。关联 #13456。
+- Approval, ask, remember, guardian, extension and similar cards now share one shell: the same radius, border and ground, a header with no fill, and no state-tinted border. Refs #13456.
