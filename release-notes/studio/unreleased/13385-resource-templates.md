@@ -1,2 +1,0 @@
-- 新增：读取 MCP 资源时，服务器声明的资源模板（如 `doc://item/{id}`）生成的地址也可读，其它地址仍被拒绝。关联 #13385。
-- Added: the MCP resource tool also reads addresses a server's declared resource templates (like `doc://item/{id}`) can build; any other address is still refused. Refs #13385.
