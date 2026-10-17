@@ -132,6 +132,18 @@ export interface WorktreeSelection {
   attachments?: string[];
 }
 
+export interface WorktreePreparation {
+  id: string;
+  phase: string;
+  sourceRoot: string;
+  ref: string;
+  startedAt: number;
+  branch?: string;
+  workspaceRoot?: string;
+  code?: string;
+  detail?: string;
+}
+
 export interface CommitFile {
   path: string;
   // git raw status letter: "A", "M", "D", "T".

@@ -12,7 +12,7 @@ import (
 
 func digestRequests(reqs []provider.Request) (summarizer, carrying int) {
 	for _, req := range reqs {
-		if len(req.Messages) > 0 && strings.Contains(req.Messages[0].Content, "compacting the earlier part") {
+		if req.Summary {
 			summarizer++
 			continue
 		}

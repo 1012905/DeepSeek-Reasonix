@@ -13,6 +13,7 @@ type NotifyMessages struct {
 	AskTimeoutMessages
 	UnattendedMessages
 	PaidSearchMessages
+	MCPSignInMessages
 }
 
 // AskTimeoutMessages is the /ask-timeout command's text.
@@ -29,4 +30,10 @@ type AskTimeoutMessages struct {
 type PaidSearchMessages struct {
 	PaidSearchApprovalReasonFmt string // %[1]s backend, %[2]s price, %[3]s query
 	PaidFetchApprovalReasonFmt  string // %[1]s backend, %[2]s price, %[3]s address
+}
+
+// MCPSignInMessages is the consent card shown before a browser opens for an MCP
+// server's sign-in.
+type MCPSignInMessages struct {
+	MCPSignInReasonFmt string // %[1]s server, %[2]s authorization host
 }

@@ -40,7 +40,8 @@ type PeerThread struct {
 // A session that was never written to is not listed.
 func (c *Controller) PeerThreads() []PeerThread {
 	p := c.peers
-	if p == nil || p.dir == nil {
+	dir := p.dirOrNil()
+	if dir == nil {
 		return nil
 	}
 	p.mu.Lock()
@@ -49,7 +50,7 @@ func (c *Controller) PeerThreads() []PeerThread {
 	if self == "" {
 		return nil
 	}
-	threads := peerThreadsFrom(self, p.dir.AuditSince(time.Now().Add(-peerThreadWindow)))
+	threads := peerThreadsFrom(self, dir.AuditSince(time.Now().Add(-peerThreadWindow)))
 	live := map[string]peermailLive{}
 	for _, l := range c.livePeers() {
 		live[l.SessionID] = peermailLive{title: l.Title, project: l.Project, path: l.SessionPath}

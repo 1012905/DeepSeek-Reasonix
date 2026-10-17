@@ -19,12 +19,47 @@ const (
 	codePeerTooLarge   = "peer.too_large"
 	codePeerNotHeld    = "peer.not_held"
 	codePeerSendFailed = "peer.send_failed"
+	codePeerBadProject = "peer.invalid_project"
+	codePeerRemember   = "peer.remember_denied"
+	codePeerSettings   = "peer.settings_unwritable"
 )
 
 func (s *Server) registerPeerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /peers", s.peers)
 	mux.HandleFunc("POST /peers/send", s.sendPeerMessage)
 	mux.HandleFunc("POST /peers/held/{id}", s.resolvePeerMessage)
+	mux.HandleFunc("GET /peers/settings", s.peersSettings)
+	mux.HandleFunc("POST /peers/settings", s.savePeersSettings)
+}
+
+func (s *Server) peersSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, s.ctl().PeersSettings())
+}
+
+// savePeersSettings rides the provider-edit grant like the other peer writes:
+// turning messages on opens this machine to its other sessions, which a
+// networked client must not decide for the machine's owner.
+func (s *Server) savePeersSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "peer.editing_disabled", "messages between sessions are not enabled for this client", nil)
+		return
+	}
+	var body struct {
+		Enabled         *bool     `json:"enabled"`
+		Dispatch        *bool     `json:"dispatch"`
+		ReleaseProjects *[]string `json:"release_projects"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil ||
+		(body.Enabled == nil && body.Dispatch == nil && body.ReleaseProjects == nil) {
+		badBody(w)
+		return
+	}
+	got, err := s.ctl().SavePeersSettings(control.PeersPatch{Enabled: body.Enabled, Dispatch: body.Dispatch, ReleaseProjects: body.ReleaseProjects})
+	if err != nil {
+		refusePeer(w, err)
+		return
+	}
+	writeJSON(w, got)
 }
 
 func (s *Server) peers(w http.ResponseWriter, _ *http.Request) {
@@ -73,13 +108,22 @@ func (s *Server) resolvePeerMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Approve *bool `json:"approve"`
+		Approve  *bool  `json:"approve"`
+		Remember string `json:"remember"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil || body.Approve == nil {
 		badBody(w)
 		return
 	}
-	if err := s.ctl().ResolvePeerMessage(r.PathValue("id"), *body.Approve); err != nil {
+	if body.Remember != "" && body.Remember != string(control.PeerRememberProject) && body.Remember != "none" {
+		badBody(w)
+		return
+	}
+	remember := control.PeerRemember(body.Remember)
+	if body.Remember == "none" {
+		remember = control.PeerRememberNone
+	}
+	if err := s.ctl().ResolvePeerMessageRemembering(r.PathValue("id"), *body.Approve, remember); err != nil {
 		refusePeer(w, err)
 		return
 	}
@@ -104,6 +148,12 @@ func refusePeer(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusBadRequest, codePeerEmpty, "a message needs some text", nil)
 	case errors.Is(err, control.ErrPeerTooLarge):
 		refuse(w, http.StatusRequestEntityTooLarge, codePeerTooLarge, "that message is too long", nil)
+	case errors.Is(err, control.ErrPeerProjectInvalid):
+		refuse(w, http.StatusBadRequest, codePeerBadProject, "a released project must be an absolute folder path", nil)
+	case errors.Is(err, control.ErrPeerSettingsUnwritable):
+		saveFailed(w, http.StatusInternalServerError, codePeerSettings, err)
+	case errors.Is(err, control.ErrPeerRememberDenied):
+		refuse(w, http.StatusBadRequest, codePeerRemember, "only an approval can be remembered", nil)
 	case errors.Is(err, control.ErrPeerNotHeld):
 		refuse(w, http.StatusNotFound, codePeerNotHeld, "that message is no longer waiting", nil)
 	default:

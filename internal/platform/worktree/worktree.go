@@ -1,6 +1,6 @@
 // Package worktree creates durable, Git-backed workspaces for parallel
 // Delivery sessions. Worktrees live under Reasonix-managed state, never inside
-// the source repository, and are never deleted automatically.
+// the source repository. Published worktrees are never deleted automatically.
 package worktree
 
 import (
@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/base/proc"
 	"reasonix/internal/platform/gitcmd"
 )
 
@@ -71,6 +72,27 @@ func Create(ctx context.Context, repo gitcmd.Repo, managedRoot string) (Result, 
 // CreateFrom starts an independent branch at a local or remote-tracking ref.
 // An empty ref retains Create's committed-HEAD behavior.
 func CreateFrom(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string) (Result, error) {
+	result, err := CreateFromProgress(ctx, repo, managedRoot, ref, nil)
+	if err != nil && result.WorktreeRoot != "" {
+		err = errors.Join(err, DiscardUnpublished(context.WithoutCancel(ctx), repo, managedRoot, result))
+		return Result{}, err
+	}
+	return result, err
+}
+
+// Progress reports only stages the worktree owner has actually entered.
+type Progress struct {
+	Phase         string
+	Branch        string
+	WorkspaceRoot string
+}
+
+func CreateFromProgress(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string, report func(Progress)) (Result, error) {
+	update := func(progress Progress) {
+		if report != nil {
+			report(progress)
+		}
+	}
 	info, err := inspectFrom(ctx, repo, ref)
 	if err != nil {
 		return Result{}, err
@@ -97,6 +119,8 @@ func CreateFrom(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string) 
 		}
 		branch := fmt.Sprintf("reasonix/delivery-%s-%s", time.Now().Format("20060102-150405"), id)
 		worktreeRoot := filepath.Join(managedRoot, repoKey, id, repoBase)
+		result := Result{WorkspaceRoot: worktreeRoot, WorktreeRoot: worktreeRoot, SourceRoot: info.RepoRoot, Branch: branch, Head: info.head, SourceDirty: info.SourceDirty}
+		update(Progress{Phase: "creating", Branch: branch, WorkspaceRoot: worktreeRoot})
 		if _, statErr := os.Stat(worktreeRoot); statErr == nil {
 			continue
 		} else if !os.IsNotExist(statErr) {
@@ -117,12 +141,11 @@ func CreateFrom(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string) 
 			if strings.Contains(strings.ToLower(stderr), "already exists") {
 				continue
 			}
-			return Result{}, fmt.Errorf("create Git worktree: %w%s", addErr, stderrSuffix(stderr))
+			return result, fmt.Errorf("create Git worktree: %w%s", addErr, stderrSuffix(stderr))
 		}
+		update(Progress{Phase: "checking_out", Branch: branch, WorkspaceRoot: worktreeRoot})
 		if resetStderr, resetErr := populate(ctx, worktreeRoot, info.head); resetErr != nil {
-			_, _, _ = runGit(ctx, info.repo, "worktree", "remove", "--force", worktreeRoot)
-			_, _, _ = runGit(ctx, info.repo, "update-ref", "-d", "refs/heads/"+branch, info.head)
-			return Result{}, fmt.Errorf("populate Git worktree: %w%s", resetErr, stderrSuffix(resetStderr))
+			return result, fmt.Errorf("populate Git worktree: %w%s", resetErr, stderrSuffix(resetStderr))
 		}
 
 		selectedRoot := worktreeRoot
@@ -130,7 +153,7 @@ func CreateFrom(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string) 
 			selectedRoot = filepath.Join(worktreeRoot, prefix)
 			st, statErr := os.Stat(selectedRoot)
 			if statErr != nil || !st.IsDir() {
-				return Result{}, fmt.Errorf("created worktree is missing selected project subdirectory %q", prefix)
+				return result, fmt.Errorf("created worktree is missing selected project subdirectory %q", prefix)
 			}
 		}
 		return Result{
@@ -262,6 +285,7 @@ func runGit(parent context.Context, repo gitcmd.Repo, args ...string) (stdout, s
 	ctx, cancel := context.WithTimeout(parent, gitTimeout(args))
 	defer cancel()
 	cmd := repo.Command(ctx, args...)
+	proc.SetCancelKillsTree(cmd)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

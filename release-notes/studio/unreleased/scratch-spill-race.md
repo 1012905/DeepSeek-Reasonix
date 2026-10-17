@@ -1,0 +1,2 @@
+- 修复：两个会话的清理与写入撞在一起时，超长工具输出会被截断而不是完整保存；清理不再删除临时溢出目录本身。见 a45f8abe4。
+- Fixed: An oversize tool result was truncated instead of saved whole when another session's startup sweep removed the scratch spill directory; the sweep keeps it now. Seen at a45f8abe4.

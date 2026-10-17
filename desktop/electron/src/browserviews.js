@@ -3,11 +3,18 @@ const crypto = require("node:crypto");
 const { WebContentsView, session } = require("electron");
 const { installPaneReload } = require("./reload");
 const { guestNavigationAllowed, typed } = require("./browserguard");
+const { KeyboardKeeper } = require("./keyboard");
 
 // The size a page lays out at while nobody is looking at it: the kernel drives
 // pages whether or not the panel is open, and a page sized to nothing reads as
 // a phone layout or not at all.
 const AGENT_VIEWPORT = { width: 1280, height: 900 };
+
+// How long a page may be held out of the window while its navigation runs. A
+// server that accepts the connection and never answers would otherwise keep the
+// panel blank, with nothing turning, for as long as it likes; past this the page
+// is shown again, loaded or not.
+const LEAVE_LIMIT_MS = 4000;
 
 // CSS cannot clip a native view, so the page's corners are rounded here; the
 // value is .bview's border-radius in studio.css, whose rect the view fills.
@@ -30,6 +37,7 @@ class BrowserViews {
     // for this run only: a restart, or a different certificate, asks again.
     this.trusted = new Set();
     this.shown = "";
+    this.keyboard = new KeyboardKeeper({ win });
     // Moves with every show and hide, so a freeze that finishes after one does
     // not put away a page shown since.
     this.placed = 0;
@@ -106,26 +114,33 @@ class BrowserViews {
       }
       onEvent(method, params);
     });
-    const entry = { view, onDownload, typed: 0 };
+    const entry = { view, onDownload, typed: 0, synthUntil: 0, attached: false };
+    this.keyboard.watch(contents, () => Date.now() < entry.synthUntil);
     this.watchLoads(targetId, entry);
     let closed = false;
     const close = () => {
       if (closed) return;
       closed = true;
       this.entries.delete(targetId);
-      if (!this.win.isDestroyed()) this.win.contentView.removeChildView(view);
+      clearTimeout(entry.returning);
+      if (entry.attached && !this.win.isDestroyed()) this.win.contentView.removeChildView(view);
+      entry.attached = false;
       if (!contents.isDestroyed()) contents.close();
       onClosed();
     };
     contents.once("destroyed", close);
     contents.on("render-process-gone", close);
     this.entries.set(targetId, entry);
-    this.win.contentView.addChildView(view);
-    this.putAway(view);
+    // The page loads before the window holds it: a page that finishes loading in a
+    // view already attached is given the keyboard by the platform, and the
+    // person's composition in the app page ends with it.
     void contents.loadURL(url).catch(() => {});
     return {
       targetId,
-      send: (method, params) => contents.debugger.sendCommand(method, params),
+      send: (method, params) => {
+        if (method.startsWith("Input.")) entry.synthUntil = Date.now() + 250;
+        return contents.debugger.sendCommand(method, params);
+      },
       close,
       mainFrame: () => mainFrame,
     };
@@ -155,19 +170,52 @@ class BrowserViews {
     // A page that was parked comes back as a view that is attached but whose
     // widget never repaints until the window's geometry changes; attaching it
     // again is what wakes it, the same as after a minimize.
-    if (!entry.at) this.win.contentView.removeChildView(entry.view);
+    if (entry.attached && !entry.at) this.win.contentView.removeChildView(entry.view);
     this.win.contentView.addChildView(entry.view);
+    entry.attached = true;
     entry.view.setBounds(at);
     entry.at = at;
+    this.keepKeyboard();
+  }
+
+  // Attaching a view can leave nobody holding the keyboard, and the platform
+  // settles that a moment later, so the page is handed it back twice.
+  keepKeyboard() {
+    this.keyboard.reclaim();
+    setTimeout(() => this.keyboard.reclaim(), 150);
   }
 
   reattach() {
     for (const [id, entry] of this.entries) {
-      if (this.win.isDestroyed() || entry.view.webContents.isDestroyed()) continue;
+      if (this.win.isDestroyed() || entry.view.webContents.isDestroyed() || !entry.attached) continue;
       this.win.contentView.removeChildView(entry.view);
       this.win.contentView.addChildView(entry.view);
       if (id !== this.shown) this.putAway(entry.view, entry);
     }
+    this.keepKeyboard();
+  }
+
+  // A navigation that starts in an attached view takes the keyboard from the app
+  // page when it finishes, and a composition in progress there is committed as
+  // the raw letters. While the app page holds the keyboard the view is held out of
+  // the window for the length of the navigation, and put back when it ends; a
+  // person who is in the page themselves keeps it where it is.
+  leave(entry) {
+    if (!entry.attached || this.win.isDestroyed() || this.keyboard.owner !== "app") return;
+    this.win.contentView.removeChildView(entry.view);
+    entry.attached = false;
+    clearTimeout(entry.returning);
+    entry.returning = setTimeout(() => this.settle(entry), LEAVE_LIMIT_MS);
+  }
+
+  settle(entry) {
+    clearTimeout(entry.returning);
+    entry.returning = undefined;
+    if (entry.attached || this.win.isDestroyed() || entry.view.webContents.isDestroyed()) return;
+    this.win.contentView.addChildView(entry.view);
+    entry.attached = true;
+    if (entry.at) entry.view.setBounds(entry.at);
+    else this.putAway(entry.view, entry);
   }
 
   // freeze answers with a picture of the page on screen, taken before it is put
@@ -255,8 +303,11 @@ class BrowserViews {
   watchLoads(targetId, entry) {
     const contents = entry.view.webContents;
     contents.on("did-start-navigation", (details) => {
-      if (details.isMainFrame && !details.isSameDocument) this.report(targetId, null);
+      if (!details.isMainFrame || details.isSameDocument) return;
+      this.report(targetId, null);
+      this.leave(entry);
     });
+    contents.on("did-stop-loading", () => this.settle(entry));
     contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
       // -3 is ERR_ABORTED: a navigation replaced by another, or stopped. A
       // typed address reports through loadTyped, which may still retry it.
@@ -374,4 +425,4 @@ function validRect(rect) {
   return rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) && rect.width > 0 && rect.height > 0;
 }
 
-module.exports = { BrowserViews, AGENT_VIEWPORT };
+module.exports = { BrowserViews, AGENT_VIEWPORT, LEAVE_LIMIT_MS };

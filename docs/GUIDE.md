@@ -140,7 +140,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # egress_unlisted = "allow"    # unattended long tasks (user config only): hosts outside allowed_domains pass without asking, said once each; denied_domains still refuse
 
 [peers]
-# enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it (user config only)
+# enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it; also a switch in Settings, applied at the next turn (user config only)
 # dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled (user config only)
 # release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
 
@@ -885,6 +885,19 @@ Composer shortcuts:
 
 Remembered projects have Move up / Move down in their project menu. Open it with the keyboard, navigate with arrows or Home/End, and use Escape to return to the trigger. Moving a project changes sidebar order without changing the launch project.
 
+Ordinary Reasonix-managed worktree chats appear under their original project,
+without a separate project row for each checkout. The chat header shows Local
+checkout or Worktree, with its actual working directory available on hover;
+worktree chats also carry a sidebar marker.
+
+Reopening history uses that chat's working directory, while starting a chat
+from the project uses the original directory. Ordering, search, paging, pins
+and archives span the project.
+
+Removing the project closes its idle panes and retains every directory and
+transcript. Existing transcripts stay in place and group on restart without migration.
+Worktrees added separately outside Reasonix-managed storage remain independent projects.
+
 The list holds up to 32 projects; adding another requires removing one first. `serve-workspaces.json` now stores an object with `paths` and `launch`. Older binaries read only arrays and cannot preserve this format: do not share the same state home with an older binary after reordering.
 
 Menus and controls:
@@ -1226,11 +1239,12 @@ headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 
 For a remote HTTP server without a static `Authorization` header, an
 authentication challenge (HTTP 401 with a `Bearer` challenge) is reported as
-needing sign-in. Run `reasonix mcp auth <name>` in the CLI; Studio has no
-sign-in control yet. Reasonix performs OAuth metadata discovery, dynamic
+needing sign-in. Run `reasonix mcp auth <name>` in the CLI. Reasonix performs OAuth metadata discovery, dynamic
 client registration, PKCE S256 authorization, and refresh-token
 rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
+
+Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
 
 OAuth client and token state is kept outside the workspace in the server's
 private Reasonix state directory, written with mode `0600`, and bound to the

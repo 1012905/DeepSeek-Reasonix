@@ -31,7 +31,7 @@ const (
 
 // foldSummary is what compaction reports about turning a fold into a digest.
 // It is populated even when the call fails, so telemetry still records how
-// large the attempt was and that exactly one call was used.
+// large the attempt was and what its bounded retries cost.
 type foldSummary struct {
 	Text       string
 	Mode       string
@@ -83,9 +83,8 @@ func (a *contextWindow) summaryInputBudget(instructions string) int {
 	return min(budget, summaryInputCeilingTokens)
 }
 
-// foldToSummary turns a fold region into one digest with at most one provider
-// request. Oversized input is shortened deterministically for the summarizer
-// only; multi-span merge and application-layer retries are gone.
+// foldToSummary turns one deterministically bounded input into a digest.
+// Summary retries keep this fold, never splitting or merging model outputs.
 func (a *contextWindow) foldToSummary(ctx context.Context, fold []provider.Message, instructions string) (foldSummary, error) {
 	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: a.summaryInputTokens(fold)}
 	budget := a.summaryInputBudget(instructions)

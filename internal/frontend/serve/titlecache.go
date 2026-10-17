@@ -99,6 +99,13 @@ func (c *titleCache) put(name, title, source string, mod int64) {
 	_ = c.store(name, titleEntry{Title: title, Mod: mod, SourceHash: titleSourceHash(source)})
 }
 
+// putIf stores the title only if keep still says it is wanted, asked while the
+// cache is locked so a stale result cannot land between the question and the write.
+func (c *titleCache) putIf(name, title, source string, mod int64, keep func() bool) bool {
+	stored, err := c.storeIf(name, titleEntry{Title: title, Mod: mod, SourceHash: titleSourceHash(source)}, keep)
+	return stored && err == nil
+}
+
 func (c *titleCache) putExplicit(name, title string) error {
 	return c.store(name, titleEntry{Title: title, Explicit: true})
 }
@@ -123,27 +130,36 @@ func (c *titleCache) clearExplicit(name string) error {
 }
 
 func (c *titleCache) store(name string, entry titleEntry) error {
+	_, err := c.storeIf(name, entry, nil)
+	return err
+}
+
+// storeIf reports whether the entry was written; a nil keep always writes.
+func (c *titleCache) storeIf(name string, entry titleEntry, keep func() bool) (bool, error) {
 	titleCacheMu.Lock()
 	defer titleCacheMu.Unlock()
 	entries, err := c.load()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if entries[name].Explicit && !entry.Explicit {
-		return nil
+		return false, nil
+	}
+	if keep != nil && !keep() {
+		return false, nil
 	}
 	entries[name] = entry
 	data, err := json.Marshal(entries)
 	if err != nil {
-		return err
+		return false, err
 	}
 	writeCache := func() error {
 		return fileutil.AtomicWriteFile(filepath.Join(c.dir, ".session-titles.json"), data, 0o644)
 	}
 	if entry.Explicit {
-		return writeSessionTitle(filepath.Join(c.dir, name), entry.Title, writeCache)
+		return true, writeSessionTitle(filepath.Join(c.dir, name), entry.Title, writeCache)
 	}
-	return writeCache()
+	return true, writeCache()
 }
 
 // Hold the metadata lock through both writes and rollback so a failed cache

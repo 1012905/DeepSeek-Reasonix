@@ -1,0 +1,2 @@
+- 修复：agent 打开、导航或显示内置浏览器页面时，不再把你正在输入的键盘焦点抢走；你自己点进那个页面则照常。关联 #13605。
+- Fixed: the agent opening, navigating or showing a built-in browser page no longer takes the keyboard from what you are typing in; clicking into that page yourself still works. Refs #13605.

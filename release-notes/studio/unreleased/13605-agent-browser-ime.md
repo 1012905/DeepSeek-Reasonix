@@ -1,0 +1,2 @@
+- 修复：agent 打开、刷新或翻页内置浏览器时，不再打断你正在进行的输入法输入（拼音不会被当成字母直接上屏）。关联 #13605。
+- Fixed: the agent opening, reloading or navigating the built-in browser no longer cuts off an input-method composition in progress (the pinyin is no longer committed as raw letters). Refs #13605.

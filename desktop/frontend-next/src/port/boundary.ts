@@ -137,10 +137,23 @@ export interface PeerHeld {
   body: string;
 }
 
+export type PeerThreadState = "waiting" | "working" | "replied" | "declined";
+
+export interface PeerThread {
+  key: string;
+  title: string;
+  project: string;
+  sessionPath?: string;
+  state: PeerThreadState;
+  since: string;
+  messageId: string;
+}
+
 export interface PeersState {
   enabled: boolean;
   peers: PeerView[];
   held: PeerHeld[];
+  threads?: PeerThread[];
 }
 
 export interface PeerProject {
@@ -186,9 +199,17 @@ export interface AutoArchiveSettings {
 export type DisplayCurrencyMode = "auto" | "CNY" | "USD";
 
 // Which currency costs are shown in; the user file holds it.
+export interface UnconvertedPrice {
+  provider: string;
+  model: string;
+  currency: string;
+}
+
 export interface DisplayCurrencySettings {
   mode: DisplayCurrencyMode;
   path: string;
+  // Models whose price cannot be shown in a pinned currency.
+  unconverted: UnconvertedPrice[];
 }
 
 // Whether the changed-files pill is drawn above the composer; the user file
@@ -205,6 +226,24 @@ export interface TurnNarrationSettings {
   level: "brief" | "detailed";
   path: string;
 }
+
+// Where web_search and web_fetch may send things. The lists are ordered; a paid
+// backend is tried only after the ones before it failed, and one named in a
+// paid-allowed list is used without asking each time.
+export interface WebAccessSettings {
+  search_backends: string[];
+  searxng_url: string;
+  search_paid_allowed: string[];
+  fetch_backends: string[];
+  fetch_paid_allowed: string[];
+  known_search_backends: string[];
+  known_fetch_backends: string[];
+  paid_backends: string[];
+  deepseek_api_ready: boolean;
+  path: string;
+}
+
+export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed">>;
 
 export interface ChangedFilesSettings {
   show: boolean;

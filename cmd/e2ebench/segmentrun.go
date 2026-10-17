@@ -51,15 +51,14 @@ func runSegments(ctx context.Context, cfg suiteConfig, t task, work, trajDir str
 
 		m, partial, err := legMetrics(metricsPath)
 		if err != nil {
-			// The leg left no record at all: its real spend is unknown, so the
-			// run is reported as unmeasured rather than priced at zero.
+			// The leg left no record at all: nothing survives to say what it
+			// spent, so the run is unmeasured rather than priced at zero.
 			r.Unaccounted = true
 		} else {
-			// A leg that finished wrote the final record; one that was killed
-			// only left the sidecar snapshot, so the account stops at the last
-			// write and the run's total is still incomplete.
-			r.Unaccounted = r.Unaccounted || partial
-			r.Partial = partial || !m.Complete
+			// A snapshot is real evidence, so the run stays accounted and only
+			// Partial says its numbers stop at the last write. It is sticky: a
+			// complete later leg cannot restore the tail an earlier one lost.
+			r.Partial = r.Partial || partial || !m.Complete
 			keepMetrics = keepMetrics || partial
 			foldSegmentMetrics(r, m, seg.index)
 		}
