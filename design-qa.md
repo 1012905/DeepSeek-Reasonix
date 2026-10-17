@@ -186,3 +186,34 @@ composer. / 本节替代上述独立选择器与管理按钮，按标注合并�
 
 Checklist complete: one entry, grouped choices/actions, clear current state,
 retained locks, keyboard access, themes, narrow viewport and regression checks.
+
+## Studio integration verification / Studio 合并验证
+
+The upstream integration preserves the top-row Agent composition trigger and
+the unified selection/management menu. The upstream screen-reader-only run
+label remains inside the live status region; interactive controls remain
+outside it. Composition menu text follows the shared text-size setting.
+
+合并后保留顶部 Agent 组合入口与统一的选择、管理菜单，同时沿用上游运行状态的
+读屏处理。浏览器复核覆盖组合切换、管理入口，以及菜单展开时从宽屏缩至窄屏
+的定位与换行。完整前端测试通过：651 个文件、5,342 个用例。
+
+| Browser | Light | Dark |
+| --- | --- | --- |
+| 1440 × 1000 | [Capture](docs/images/agent-compositions/merge-wide-light.png) | [Capture](docs/images/agent-compositions/merge-wide-dark.png) |
+| 390 × 844 | [Capture](docs/images/agent-compositions/merge-narrow-light.png) | [Capture](docs/images/agent-compositions/merge-narrow-dark.png) |
+
+These captures use synthetic Mock data. Native Electron shell behavior was
+not requalified by this browser integration check.
+
+## Workspace preparation / 工作目录准备
+
+The workspace palette and preparation states reuse existing typography and
+tokens. Real Git checks cover branches, creation, retry and cancellation; visual
+QA passed. Captures remain in
+[PR #13598](https://github.com/esengine/DeepSeek-Reasonix/pull/13598).
+
+工作目录面板与准备状态复用现有字号、图标和表面样式；真实 Git 验证了分支搜索、
+占用状态、路径展开、创建、成功、失败重试与取消。无残留的 P0/P1/P2 视觉问题，
+截图仅保留于 PR。清理失败时保留外部修改，并明确提示保存任务、核对目录后关闭
+会话，从源目录新建会话重试；安装包与上游 CI 验收单独记录。

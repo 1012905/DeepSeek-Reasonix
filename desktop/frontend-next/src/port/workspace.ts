@@ -92,6 +92,10 @@ export interface WorkspaceFile {
   path: string;
   content: string;
   revision: string;
+  // The granted folder the file was read from; absent for the workspace itself.
+  root?: string;
+  // True for a file read from a granted folder: it can be read here, never saved.
+  readOnly?: boolean;
 }
 
 export interface WorkspaceEntry {
@@ -126,6 +130,18 @@ export interface WorktreeSelection {
   ref: string;
   sourceRoot: string;
   attachments?: string[];
+}
+
+export interface WorktreePreparation {
+  id: string;
+  phase: string;
+  sourceRoot: string;
+  ref: string;
+  startedAt: number;
+  branch?: string;
+  workspaceRoot?: string;
+  code?: string;
+  detail?: string;
 }
 
 export interface CommitFile {

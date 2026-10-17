@@ -149,3 +149,40 @@ func TestPreviewTitleStripsOnlyLeadingPasteLabel(t *testing.T) {
 		t.Fatalf("inline label changed to %q", got)
 	}
 }
+
+// gatedTitleProvider holds its first request until released, so a test can ask
+// for a second title while the first generation is still running.
+type gatedTitleProvider struct {
+	recordingTitleProvider
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (p *gatedTitleProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+	p.once.Do(func() {
+		close(p.entered)
+		<-p.release
+	})
+	return p.recordingTitleProvider.Stream(ctx, req)
+}
+
+// A request for a different first message must not be taken for the one already
+// being generated: dropping it leaves the session showing a stale title until
+// some later list happens to ask again.
+func TestSessionTitleForNewSourceIsNotDroppedWhileTheOldOneGenerates(t *testing.T) {
+	prov := &gatedTitleProvider{entered: make(chan struct{}), release: make(chan struct{})}
+	s := &Server{titleModel: titleProviderState{prov: prov}, titles: newTitleCache(testenv.TempDir(t)), fill: newTitleFiller()}
+
+	s.sessionTitle("a.jsonl", "first prompt", 100, "")
+	<-prov.entered
+	if got := s.sessionTitle("a.jsonl", "replacement prompt", 300, ""); got != "replacement prompt" {
+		t.Fatalf("preview = %q", got)
+	}
+	close(prov.release)
+
+	waitTitle(t, s, "a.jsonl", "replacement prompt", 300)
+	if prov.count() != 2 {
+		t.Fatalf("generations = %d, want 2: the replacement was dropped as a duplicate of the first", prov.count())
+	}
+}

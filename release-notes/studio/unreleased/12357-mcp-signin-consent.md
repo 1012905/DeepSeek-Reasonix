@@ -1,0 +1,2 @@
+- MCP 登录：打开浏览器之前先告诉你服务器要把你带去哪个主机，批准后才打开；可选“始终允许”，只对这个服务器和这个主机生效。关联 #12357。
+- MCP sign-in names the host a server sends you to and asks before the browser opens; "always" is remembered per server and host only. Refs #12357.

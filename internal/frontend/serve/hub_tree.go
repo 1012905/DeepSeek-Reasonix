@@ -29,11 +29,11 @@ const maxRecoveryLineageWalk = 16
 type treeWorkspace struct {
 	Root string `json:"root"`
 	Name string `json:"name"`
-	// Isolated marks a delivery worktree. Its folder name is the project's, so
-	// without this the sidebar shows two rows with one name.
-	Isolated bool `json:"isolated,omitempty"`
-	Missing  bool `json:"missing,omitempty"`
-	Open     bool `json:"open,omitempty"`
+	// WorkspaceRoots are the working directories belonging to this project.
+	WorkspaceRoots []string `json:"workspaceRoots,omitempty"`
+	Isolated       bool     `json:"isolated,omitempty"`
+	Missing        bool     `json:"missing,omitempty"`
+	Open           bool     `json:"open,omitempty"`
 	// Remembered marks a folder the user chose. A window always has a root — the
 	// one it happened to launch in — and a client that cannot tell the two apart
 	// shows "never picked a project" as if it were a project.
@@ -54,13 +54,15 @@ type treeWorkspace struct {
 // open, which is what lets the sidebar focus that pane instead of opening a
 // second writer for the same transcript.
 type treeSession struct {
-	Path      string `json:"path"`
-	Name      string `json:"name"`
-	Title     string `json:"title,omitempty"`
-	Turns     int    `json:"turns,omitempty"`
-	RuntimeID string `json:"runtimeId,omitempty"`
-	Archived  bool   `json:"archived,omitempty"`
-	Pinned    bool   `json:"pinned,omitempty"`
+	Path          string `json:"path"`
+	WorkspaceRoot string `json:"workspaceRoot,omitempty"`
+	Isolated      bool   `json:"isolated,omitempty"`
+	Name          string `json:"name"`
+	Title         string `json:"title,omitempty"`
+	Turns         int    `json:"turns,omitempty"`
+	RuntimeID     string `json:"runtimeId,omitempty"`
+	Archived      bool   `json:"archived,omitempty"`
+	Pinned        bool   `json:"pinned,omitempty"`
 	// LastActiveAt is unix milliseconds of the last write to the conversation,
 	// which is what a recency-ordered list sorts by; absent when unknown.
 	LastActiveAt int64 `json:"lastActiveAt,omitempty"`
@@ -110,21 +112,25 @@ func (h *Hub) tree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	open := h.openSessions()
-	roots := h.roots()
+	roots := groupWorkspaces(h.roots())
 	out := make([]treeWorkspace, 0, len(roots))
 	for _, ref := range roots {
 		// Open means a pane is driving this folder — true from the moment one is
 		// opened, before its first turn has written a transcript to list.
 		node := treeWorkspace{
-			Root: ref.dir, Name: fileutil.RootName(ref.dir), Open: h.rootPanes(ref.dir) > 0,
-			Isolated:   worktree.IsManagedPath(ref.dir, config.DeliveryWorktreeDir()),
-			Remembered: ref.remembered,
-			Sessions:   []treeSession{},
+			Root: ref.root, Name: fileutil.RootName(ref.root),
+			WorkspaceRoots: ref.roots,
+			Isolated:       worktree.IsManagedPath(ref.root, config.DeliveryWorktreeDir()),
+			Remembered:     ref.remembered,
+			Sessions:       []treeSession{},
 		}
-		if st, err := os.Stat(ref.dir); err != nil || !st.IsDir() {
+		for _, root := range ref.roots {
+			node.Open = node.Open || h.rootPanes(root) > 0
+		}
+		if st, err := os.Stat(ref.root); err != nil || !st.IsDir() {
 			node.Missing = true
 		}
-		page := h.workspacePage(ref.dir, node.Name, open, window, window.limitFor(ref.dir))
+		page := h.projectPage(ref.roots, node.Name, open, window, window.limitFor(ref.root))
 		if !ref.remembered && !page.Said {
 			continue
 		}
@@ -143,6 +149,9 @@ func attachVersions(dir string, rows []treeSession, open map[string]string) {
 		return
 	}
 	for i := range rows {
+		if filepath.Dir(rows[i].Path) != dir {
+			continue
+		}
 		for _, v := range byParent[sessionstore.BranchID(rows[i].Path)] {
 			if open[sessionstore.CanonicalSessionPath(v.Path)] != "" {
 				continue
@@ -299,7 +308,7 @@ func (h *Hub) syncPins(w http.ResponseWriter, r *http.Request) {
 // through the value the kernel itself reported.
 func (h *Hub) listedSessionPaths() map[string]string {
 	out := map[string]string{}
-	for _, ref := range h.roots() {
+	for _, ref := range h.sessionRoots() {
 		infos, err := sessionstore.ListSessionOrder(SessionDirFor(ref.dir))
 		if err != nil {
 			continue
@@ -329,7 +338,7 @@ func (h *Hub) importLegacySessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	known := ""
-	for _, ref := range h.roots() {
+	for _, ref := range h.sessionRoots() {
 		if ref.dir == workspace {
 			known = ref.dir
 			break
@@ -447,7 +456,9 @@ func (h *Hub) removeWorkspace(w http.ResponseWriter, r *http.Request) {
 		missingField(w, "path")
 		return
 	}
-	inFolder := func(rt *Runtime) bool { return drivesRoot(rt, dir) }
+	inFolder := func(rt *Runtime) bool {
+		return rt.Local() && projectIdentity(rt.Server.Controller().WorkspaceRoot()) == projectIdentity(dir)
+	}
 	if !h.releaseOrRefuse(w, r, "workspace.running", "a conversation in this folder is running; stop it first", h.panesWhere(inFolder)) {
 		return
 	}
@@ -624,7 +635,7 @@ func (h *Hub) exportSession(w http.ResponseWriter, r *http.Request) {
 // ownsSessionDir reports whether dir is the session directory of a workspace
 // this hub lists, which is the boundary a delete may not reach past.
 func (h *Hub) ownsSessionDir(dir string) bool {
-	for _, ref := range h.roots() {
+	for _, ref := range h.sessionRoots() {
 		if known, err := filepath.Abs(SessionDirFor(ref.dir)); err == nil && known == dir {
 			return true
 		}

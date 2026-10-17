@@ -63,6 +63,8 @@ export interface ProviderEntry {
   // Per model: the price per million tokens it declares for itself. A model
   // with none is absent, which means unknown, not zero.
   modelPrices?: Record<string, ModelRate>;
+  // A vendor's own endpoint: its table can say whether a stored price is its own.
+  officialPricing?: boolean;
   // How the latest plain test of this saved entry ended, in this kernel process.
   // Absent when none ran or the entry changed since.
   lastCheck?: { at: number; ok: boolean; code?: string };
@@ -276,6 +278,8 @@ export interface ModelRate {
   output: number;
   cacheHit: number;
   currency: string;
+  // True when the card is one the vendor's table has; sent by the kernel, never back.
+  official?: boolean;
 }
 
 // One model's own context window and output cap; an absent field inherits.

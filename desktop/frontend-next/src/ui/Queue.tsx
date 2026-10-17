@@ -67,6 +67,9 @@ function label(it: QueueItem): string {
     case "uncertain":
       return t("状态不明");
     default:
+      // The kernel's own reason for not delivering mid-turn, read from what the
+      // entry froze rather than guessed from its text.
+      if (it.images && it.state === "queued") return t("含图片，本轮结束后发送");
       // A steer the kernel could not admit is converted to a follow-up, so an
       // entry still calling itself one is waiting on a held queue, not refused.
       return it.intent === "steer" ? t("插话排队") : t("排队");

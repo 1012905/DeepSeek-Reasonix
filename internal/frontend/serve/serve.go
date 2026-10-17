@@ -68,6 +68,7 @@ type Server struct {
 	compositionAssembly      *compositionAssembly
 	grants                   hostGrants  // what the embedding host has opened up
 	moves                    moveTracker // the one storage relocation this server may be running
+	preparations             workspacePreparations
 	titleModel               titleProviderState
 	titles                   *titleCache
 	fill                     *titleFiller

@@ -509,3 +509,18 @@ func TestCollectUsesOldestRequiredFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestTheInterfaceItemCarriesTheTextSize(t *testing.T) {
+	var src config.Config
+	src.Desktop.Appearance.Zoom = 1.2
+	src.Desktop.Appearance.TextSize = 1.15
+	raw, err := encodeTOML(lookOf(&src))
+	must(t, err)
+	var look interfaceSettings
+	must(t, decodeTOML(raw, &look))
+	var dst config.Config
+	look.applyTo(&dst)
+	if got := dst.Desktop.Appearance; got.Zoom != 1.2 || got.TextSize != 1.15 {
+		t.Fatalf("restored appearance = %+v, want the zoom and the text size", got)
+	}
+}

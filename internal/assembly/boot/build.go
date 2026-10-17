@@ -41,6 +41,7 @@ import (
 // what the earlier ones settled and adds its own; none reaches back.
 type builder struct {
 	ctx              context.Context
+	closeLifetime    context.CancelFunc
 	opts             Options
 	timer            *phaseTimer
 	owner            *extension.RuntimeOwner
@@ -82,6 +83,7 @@ type toolStage struct {
 	lsp         *lsp.Manager
 	browser     *browser.Session
 	peerLink    *tool.PeerLink
+	peerTools   func(enabled, dispatch bool)
 	maxSteps    int
 	policy      permission.Policy
 	gate        *control.SharedHeadlessGate
@@ -111,12 +113,15 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	b.timer.observe = opts.OnPhase
 	// The runtime outlives the request that built it (Studio opens a pane with
 	// one), and its MCP servers and sidecars start on that context later.
-	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(context.WithoutCancel(ctx), opts)
+	life, detach, closeLifetime := constructionLifetime(ctx)
+	b.closeLifetime = closeLifetime
+	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(life, opts)
 	defer b.retireUnownedSidecars()
 	delivered := false
 	var constructed *control.Controller
 	defer func() {
 		if !delivered {
+			closeLifetime()
 			if constructed != nil {
 				constructed.ReleaseResources()
 			} else {
@@ -146,6 +151,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	b.tools.candidates.bind(ctrl)
 	b.tools.isolation.bind(ctrl)
 	res, err := b.freeze(ctrl)
+	if err == nil {
+		if cancelErr := detach(); cancelErr != nil {
+			ctrl.Close()
+			return nil, cancelErr
+		}
+	}
 	delivered = err == nil
 	return res, err
 }
@@ -343,8 +354,9 @@ func (b *builder) wireTools() error {
 	env := t.env
 	// The full inventory registers for use_capability; the provider-visible surface narrows later.
 	addBuiltins(t.reg, cfg.Tools.Enabled, env.writeRoots, env.bash, env.bashTimeout, env.search, b.stderr, root, b.proxy, env.forbidReadRoots, env.readRoots, env.readPaths, env.sessionGuard, env.managedConfig, opts.FileOverlay, opts.TerminalRunner, env.sessionTemp, b.fileWriteReceipt)
+	addViewImage(t.reg, cfg, b.model.entry, env, root)
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
-	t.peerLink = addPeerTools(t.reg, cfg)
+	t.peerLink, t.peerTools = peerTools(t.reg, cfg)
 	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
 	addWebSearch(t.reg, cfg, b.proxy, b.sink)
@@ -586,7 +598,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		ModelEntry:                     entry,
 		SystemPrompt:                   b.prompt.prompt,
 		SessionDir:                     b.session.dir,
-		Peers:                          peersOptions(cfg, t.peerLink),
+		Peers:                          peersOptions(cfg, t.peerLink, t.peerTools),
 		Host:                           t.host,
 		Commands:                       t.cmds,
 		Skills:                         b.prompt.skills,
@@ -602,7 +614,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		Hooks:                          t.hookRunner,
 		Memory:                         b.prompt.memory,
 		// Read at Close time: freeze chains the extension runtime set onto it.
-		Cleanup:               func() { b.cleanup() },
+		Cleanup:               func() { defer b.closeLifetime(); b.cleanup() },
 		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, entry.APIKey()),
 		Feedback:              control.FeedbackOptions{Service: feedbackService(b.roots.Home(), b.proxy, opts.AccountsURL), ProviderKind: feedbackProviderKind(entry), Surface: opts.FeedbackSurface},
 		Jobs:                  b.session.jobs,

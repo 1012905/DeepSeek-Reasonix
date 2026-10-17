@@ -415,7 +415,7 @@ func (s *updateSink) requestPermission(ctx context.Context, a event.Approval) {
 	if a.Subject != "" {
 		title = a.Tool + " " + a.Subject
 	}
-	options := approvalOptions(a.Tool, a.Subject, a.Fresh)
+	options := approvalOptions(a.Tool, a.Subject, a.Fresh, a.AllowsPersist)
 	params := PermissionRequestParams{
 		SessionID: s.sessionID,
 		ToolCall: PermissionToolCall{
@@ -439,6 +439,8 @@ func (s *updateSink) requestPermission(ctx context.Context, a event.Approval) {
 				allow = true
 			case OptAllowAlways:
 				allow, session = true, true
+			case optAllowPersist:
+				allow, session, persist = true, true, true
 			}
 		}
 	}
@@ -569,6 +571,9 @@ func (s *updateSink) requestAskQuestion(ctx context.Context, askID string, q eve
 }
 
 func approvalSessionOptionName(tool, subject string) string {
+	if tool == control.PaidSearchApprovalTool {
+		return "Allow " + subject + " (charged per request) for this session"
+	}
 	if tool == control.SandboxEscapeApprovalTool {
 		return "Use real environment for this session"
 	}
@@ -579,7 +584,24 @@ func approvalSessionOptionName(tool, subject string) string {
 	return "Allow " + sessionRule + " for this session"
 }
 
-func approvalOptions(tool, subject string, fresh bool) []PermissionOption {
+// optAllowPersist is the choice that records the answer in the user's settings.
+// ACP names no such kind, so it travels as an allow_always option with its own id.
+const optAllowPersist PermissionOptionKind = "allow_persist"
+
+// approvalOptions renders what an answer may grant. persist is the host's own
+// statement that the answer can be written down; only a paid backend, whose
+// consent is meant to outlive the session, has the choice drawn.
+func approvalOptions(tool, subject string, fresh, persist bool) []PermissionOption {
+	if tool == control.PaidSearchApprovalTool {
+		options := []PermissionOption{
+			{OptionID: string(OptAllowOnce), Name: "Allow", Kind: OptAllowOnce},
+			{OptionID: string(OptAllowAlways), Name: approvalSessionOptionName(tool, subject), Kind: OptAllowAlways},
+		}
+		if persist {
+			options = append(options, PermissionOption{OptionID: string(optAllowPersist), Name: "Always allow " + subject + " (charged per request; saved to your settings)", Kind: OptAllowAlways})
+		}
+		return append(options, PermissionOption{OptionID: string(OptRejectOnce), Name: "Reject", Kind: OptRejectOnce})
+	}
 	if fresh || control.RequiresFreshHumanApprovalTool(tool) {
 		if tool == control.SandboxEscapeApprovalTool || tool == control.NetworkEgressApprovalTool {
 			return []PermissionOption{

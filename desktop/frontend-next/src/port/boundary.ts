@@ -137,11 +137,52 @@ export interface PeerHeld {
   body: string;
 }
 
+export type PeerThreadState = "waiting" | "working" | "replied" | "declined";
+
+export interface PeerThread {
+  key: string;
+  title: string;
+  project: string;
+  sessionPath?: string;
+  state: PeerThreadState;
+  since: string;
+  messageId: string;
+}
+
 export interface PeersState {
   enabled: boolean;
   peers: PeerView[];
   held: PeerHeld[];
+  threads?: PeerThread[];
 }
+
+export interface PeerProject {
+  path: string;
+  name: string;
+}
+
+/** The session-messages switches as the kernel holds them (snake_case on the
+ *  wire). Saved values reach the model only at the next turn boundary, so
+ *  `pending` stays true until then. */
+export interface PeersSettings {
+  enabled: boolean;
+  dispatch: boolean;
+  release_projects: PeerProject[];
+  path: string;
+  applies: "next_turn";
+  pending: boolean;
+  // False where the session has no folder to open (a headless run): there is
+  // nowhere for messages to be held, so the switches are inert.
+  available: boolean;
+}
+
+export interface PeersSettingsEdit {
+  enabled?: boolean;
+  dispatch?: boolean;
+  release_projects?: string[];
+}
+
+export type PeerRemember = "project" | "none";
 
 export interface PeerReceipt {
   id: string;
@@ -180,9 +221,17 @@ export type PersonaDraft = Pick<PersonaSettings, "prefix" | "suffix" | "complete
 export type DisplayCurrencyMode = "auto" | "CNY" | "USD";
 
 // Which currency costs are shown in; the user file holds it.
+export interface UnconvertedPrice {
+  provider: string;
+  model: string;
+  currency: string;
+}
+
 export interface DisplayCurrencySettings {
   mode: DisplayCurrencyMode;
   path: string;
+  // Models whose price cannot be shown in a pinned currency.
+  unconverted: UnconvertedPrice[];
 }
 
 // Whether the changed-files pill is drawn above the composer; the user file
@@ -199,6 +248,24 @@ export interface TurnNarrationSettings {
   level: "brief" | "detailed";
   path: string;
 }
+
+// Where web_search and web_fetch may send things. The lists are ordered; a paid
+// backend is tried only after the ones before it failed, and one named in a
+// paid-allowed list is used without asking each time.
+export interface WebAccessSettings {
+  search_backends: string[];
+  searxng_url: string;
+  search_paid_allowed: string[];
+  fetch_backends: string[];
+  fetch_paid_allowed: string[];
+  known_search_backends: string[];
+  known_fetch_backends: string[];
+  paid_backends: string[];
+  deepseek_api_ready: boolean;
+  path: string;
+}
+
+export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed">>;
 
 export interface ChangedFilesSettings {
   show: boolean;

@@ -1,8 +1,9 @@
-import { useCallback, useId, useState, type CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import { t } from "../i18n";
-import type { AgentPort, WorkspaceBranch, WorkspaceGit } from "../port/port";
+import type { AgentPort, WorkspaceGit } from "../port/port";
 import { Picker, type MenuItem } from "./Menu";
 import { StudioIcon } from "./StudioIcon";
+import { useWorkspaceBranches } from "./useWorkspaceBranches";
 
 interface Props {
   port: AgentPort;
@@ -51,15 +52,11 @@ function fitCard(anchor: HTMLDivElement) {
 // the pane's tree refresh; this component owns only the choosing.
 export function BranchChip({ port, git, changeCount, countElsewhere = false, onChanged, onSwitched, onError }: Props) {
   const branchTipId = useId();
-  const [moving, setMoving] = useState<string | null>(null);
+  const { locals, moving, loadBranches, switchTo } = useWorkspaceBranches(port, onChanged, onSwitched, onError);
   const busy = moving !== null;
-  const [locals, setLocals] = useState<WorkspaceBranch[]>([]);
   // The list re-reads on open: a terminal or another window can move HEAD
   // while this pane is not looking, and a stale list would offer a switch
   // the repository no longer means.
-  const loadBranches = useCallback(() => {
-    void port.branches().then((r) => setLocals(r.branches)).catch(() => setLocals([]));
-  }, [port]);
   // A branch another worktree holds is listed but closed: git would refuse
   // the switch, so the row says where the branch lives instead of failing.
   const branchItems: MenuItem[] = [
@@ -71,14 +68,6 @@ export function BranchChip({ port, git, changeCount, countElsewhere = false, onC
       desc: b.worktree ? t("已由其他工作树检出") : undefined,
     })),
   ];
-  const switchTo = (name: string) => {
-    if (busy) return;
-    setMoving(name);
-    void port.switchBranch(name)
-      .then((git) => { onChanged(); onSwitched?.(git); })
-      .catch(onError)
-      .finally(() => setMoving(null));
-  };
 
   if (git && !git.repo && git.absent) {
     const refused = git.absent === "refused";
