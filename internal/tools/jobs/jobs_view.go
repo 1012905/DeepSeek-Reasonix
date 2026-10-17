@@ -56,18 +56,26 @@ type Presentation struct {
 // visible to anything else.
 type StartOption func(*Job)
 
-// MaxDetailRunes bounds the full command a job keeps for display.
-const MaxDetailRunes = 4096
+// MaxDetailRunes bounds the full command a job keeps for display, and
+// MaxDescriptionRunes the one-line name the model gave it.
+const (
+	MaxDetailRunes      = 4096
+	MaxDescriptionRunes = 200
+)
+
+func bounded(s string, limit int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= limit {
+		return string(r)
+	}
+	return string(r[:limit]) + "…"
+}
 
 // WithPresentation names the job for a person and records what it runs in full.
 func WithPresentation(description, detail string) StartOption {
 	return func(j *Job) {
-		j.Present.Description = strings.TrimSpace(description)
-		if r := []rune(strings.TrimSpace(detail)); len(r) > MaxDetailRunes {
-			j.Present.Detail = string(r[:MaxDetailRunes]) + "…"
-		} else {
-			j.Present.Detail = string(r)
-		}
+		j.Present.Description = bounded(description, MaxDescriptionRunes)
+		j.Present.Detail = bounded(detail, MaxDetailRunes)
 	}
 }
 

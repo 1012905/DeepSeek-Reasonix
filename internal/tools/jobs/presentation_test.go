@@ -29,6 +29,19 @@ func TestPresentationRidesTheViewAndIsBounded(t *testing.T) {
 	}
 }
 
+func TestALongDescriptionIsCutForDisplay(t *testing.T) {
+	m := NewManager(event.Discard)
+	defer m.Close()
+	m.StartForSession("", "bash", "short", func(ctx context.Context, _ io.Writer) (string, error) {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}, WithPresentation(strings.Repeat("名", MaxDescriptionRunes+50), "cmd"))
+	got := []rune(m.Running()[0].Description)
+	if len(got) != MaxDescriptionRunes+1 || got[len(got)-1] != '…' {
+		t.Errorf("description is %d runes, want %d plus an ellipsis", len(got), MaxDescriptionRunes)
+	}
+}
+
 func TestAJobWithoutPresentationIsUnchanged(t *testing.T) {
 	m := NewManager(event.Discard)
 	defer m.Close()
