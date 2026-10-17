@@ -5,8 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"golang.org/x/sys/unix"
-
+	"reasonix/internal/base/filelock"
 	"reasonix/internal/base/testenv"
 )
 
@@ -16,17 +15,11 @@ import (
 // be created (permissions, ENOSPC), or on a transient filesystem error.
 func holdTransactionLock(t *testing.T, s *Store) {
 	t.Helper()
-	f, err := os.OpenFile(filepath.Join(s.Dir(), diskLockName), os.O_CREATE|os.O_RDWR, 0o600)
+	release, err := filelock.TryAcquire(filepath.Join(s.Dir(), diskLockName))
 	if err != nil {
-		t.Fatalf("open lock file: %v", err)
+		t.Fatalf("hold transaction lock: %v", err)
 	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		t.Fatalf("flock: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
-		_ = f.Close()
-	})
+	t.Cleanup(release)
 }
 
 // TestNextQueuedReportsLockContentionInsteadOfEmpty pins the contract that a
