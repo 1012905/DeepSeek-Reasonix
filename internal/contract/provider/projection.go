@@ -20,16 +20,21 @@ func ProjectionMessages(msgs []Message) []Message { return projectMessages(msgs,
 
 func projectMessages(msgs []Message, keepExecution bool) []Message {
 	needsCopy := false
+	// Which messages a video has been answered after is read once, up front: the
+	// scan below stops at the first reason to copy and must not leave it unknown.
 	var answered []bool
-	for i, m := range msgs {
-		if len(m.Videos) > 0 && !keepExecution {
-			if answered == nil {
+	if !keepExecution {
+		for _, m := range msgs {
+			if len(m.Videos) > 0 {
 				answered = answeredAfter(msgs)
-			}
-			if answered[i] {
-				needsCopy = true
 				break
 			}
+		}
+	}
+	for i, m := range msgs {
+		if len(m.Videos) > 0 && answered != nil && answered[i] {
+			needsCopy = true
+			break
 		}
 		if (len(m.UnavailableImages) > 0 && !keepExecution) || m.LocalOnly || m.RawContent != "" || m.ProviderContent != "" || m.HostAuthored || m.ModelRef != "" || m.Via != nil || m.DecisionReceipt != nil || len(m.DecisionReceipts) > 0 || (m.ToolExecution != nil && !keepExecution) || (m.ToolFailure != nil && !keepExecution) {
 			needsCopy = true

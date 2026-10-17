@@ -56,3 +56,18 @@ func TestWithoutVideosSaysWhyTheModelDoesNotSeeIt(t *testing.T) {
 		t.Fatalf("a provider that cannot take video must tell the model, not go silent: %+v", m)
 	}
 }
+
+// Another reason to copy the transcript must not hide that a video was answered:
+// a host-authored line earlier in the history stops the scan for reasons early.
+func TestAnsweredVideoIsStrippedEvenWhenAnEarlierMessageForcesACopy(t *testing.T) {
+	msgs := []Message{
+		{Role: RoleUser, Content: "host line", HostAuthored: true},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "v1", Name: "read_video"}}},
+		videoMsg("v1"),
+		{Role: RoleAssistant, Content: "a dog"},
+	}
+	got := ModelMessages(msgs)
+	if len(got[2].Videos) != 0 || !strings.Contains(got[2].Content, "is not attached again") {
+		t.Fatalf("the answered video survived a copy forced by another message: %+v", got[2])
+	}
+}

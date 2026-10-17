@@ -471,7 +471,7 @@ func (b *builder) controller() (*control.Controller, error) {
 func (b *builder) executor() *agent.Agent {
 	cfg, entry, t := b.cfg, b.model.entry, &b.tools
 	triageProv, triageRef, triagePrice := resolveTriage(cfg, b.model.ref, b.proxy)
-	return agent.New(b.execProv, t.reg, newObservedSession(b.prompt.prompt), agent.Options{
+	ag := agent.New(b.execProv, t.reg, newObservedSession(b.prompt.prompt), agent.Options{
 		MaxSteps:       t.maxSteps,
 		MaxStepsKey:    b.opts.MaxStepsKey,
 		Temperature:    cfg.Agent.Temperature,
@@ -511,6 +511,8 @@ func (b *builder) executor() *agent.Agent {
 		MaxSubagentDepth:             t.sub.maxDepth,
 		MissingReasoningWarnStateDir: b.roots.MissingReasoningWarnStateDir(),
 	}, b.sink)
+	ag.SetNativeVideo(nativeVideoSource(entry, cfg))
+	return ag
 }
 
 // perseverationRetries resolves the degenerate-generation-loop budget for the
