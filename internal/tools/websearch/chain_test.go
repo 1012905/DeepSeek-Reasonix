@@ -118,7 +118,7 @@ func TestChainCallsAPaidBackendOnceConsentIsGivenAndMarksTheResult(t *testing.T)
 	free := &fakeBackend{name: "searxng", err: &BackendError{Kind: FailStatus, Status: 429}}
 	paid := &fakeBackend{name: "deepseek_api", paid: true, hits: []Hit{{Title: "p", URL: "https://example.net"}}}
 	var asked []string
-	out, err := run(t, &Chain{Backends: []Backend{free, paid}, Consent: func(_ context.Context, b Backend) bool {
+	out, err := run(t, &Chain{Backends: []Backend{free, paid}, Consent: func(_ context.Context, b Backend, _ string) bool {
 		asked = append(asked, b.Name())
 		return true
 	}})

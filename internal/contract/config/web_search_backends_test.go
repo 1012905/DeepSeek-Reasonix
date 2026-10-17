@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -41,5 +42,53 @@ func TestWebSearchBackendsSurviveASave(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("rendered config lost %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestUserFileRecordsWhichPaidSearchBackendsAreAllowed(t *testing.T) {
+	if len(Default().Tools.WebSearchPaidAllowed) != 0 {
+		t.Fatal("a paid backend is allowed by default")
+	}
+	cfg, _ := loadScoped(t, "[tools]\nweb_search_paid_allowed = [\"deepseek_api\"]\n", "")
+	if !slices.Equal(cfg.Tools.WebSearchPaidAllowed, []string{"deepseek_api"}) {
+		t.Fatalf("user file's allowance was not honoured: %+v", cfg.Tools)
+	}
+	out := RenderTOMLForScope(cfg, RenderScopeUser)
+	if !strings.Contains(out, `web_search_paid_allowed = ["deepseek_api"]`) {
+		t.Fatalf("the allowance did not survive a save:\n%s", out)
+	}
+}
+
+// A cloned repo must not be able to say the user already agreed to be charged.
+func TestProjectCannotAllowAPaidSearchBackend(t *testing.T) {
+	cfg, _ := loadScoped(t, "", "[tools]\nweb_search_paid_allowed = [\"deepseek_api\"]\n")
+	if len(cfg.Tools.WebSearchPaidAllowed) != 0 {
+		t.Fatalf("a project file consented for the user: %+v", cfg.Tools.WebSearchPaidAllowed)
+	}
+	if !slices.Contains(ignoredKeys(cfg), "tools.web_search_paid_allowed") {
+		t.Fatalf("ignored = %v, want tools.web_search_paid_allowed reported", ignoredKeys(cfg))
+	}
+}
+
+func TestDeepSeekAPIResolvesFromAnOfficialConfiguredProvider(t *testing.T) {
+	cfg := Default()
+	cfg.Providers = []ProviderEntry{
+		{Name: "other", Kind: "openai", BaseURL: "https://api.example.com/v1", Model: "m", resolvedAPIKey: "sk-other"},
+		{Name: "lookalike", Kind: "openai", BaseURL: "https://api.deepseek.com.evil.example", Model: "m", resolvedAPIKey: "sk-evil"},
+		{Name: "ds", Kind: "openai", BaseURL: "https://api.deepseek.com", Model: "deepseek-flash", resolvedAPIKey: "sk-live"},
+	}
+	base, key, err := cfg.ResolveDeepSeekAPI()
+	if err != nil || base != "https://api.deepseek.com" || key() != "sk-live" {
+		t.Fatalf("base=%q err=%v", base, err)
+	}
+	bare := Default()
+	bare.Providers = []ProviderEntry{{Name: "ds", Kind: "openai", BaseURL: "https://api.deepseek.com", Model: "deepseek-flash", APIKeyEnv: "NOT_SET_ANYWHERE_FOR_TEST"}}
+	if _, _, err := bare.ResolveDeepSeekAPI(); !errors.Is(err, ErrDeepSeekAPIUnavailable) {
+		t.Fatalf("err = %v, want ErrDeepSeekAPIUnavailable for a provider with no key", err)
+	}
+	none := Default()
+	none.Providers = nil
+	if _, _, err := none.ResolveDeepSeekAPI(); !errors.Is(err, ErrDeepSeekAPIUnavailable) {
+		t.Fatalf("err = %v", err)
 	}
 }

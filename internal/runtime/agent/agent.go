@@ -470,6 +470,15 @@ func (a *Agent) SetConfigWriteApprover(g tool.ConfigWriteApprover) {
 	a.svc.configWrite = g
 }
 
+// SetPaidSearchApprover installs the path that asks the user before web_search
+// uses a backend the vendor charges for. Without it no paid backend is called.
+func (a *Agent) SetPaidSearchApprover(g tool.PaidSearchApprover) {
+	if nilutil.IsNil(g) {
+		g = nil
+	}
+	a.svc.paidSearch = g
+}
+
 func (a *Agent) withTurnPreferences(input string) string {
 	if a == nil {
 		return input

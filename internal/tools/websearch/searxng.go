@@ -73,11 +73,7 @@ func (s *Searxng) Search(ctx context.Context, query string) ([]Hit, error) {
 		if r.URL == "" || len(hits) == searxngMaxHits {
 			continue
 		}
-		snippet := r.Content
-		if len(snippet) > searxngMaxSnippet {
-			snippet = snippet[:searxngMaxSnippet]
-		}
-		hits = append(hits, Hit{Title: r.Title, URL: r.URL, Snippet: snippet})
+		hits = append(hits, Hit{Title: r.Title, URL: r.URL, Snippet: truncateBytes(r.Content, searxngMaxSnippet)})
 	}
 	if len(hits) == 0 {
 		return nil, &BackendError{Backend: s.Name(), Kind: FailEmpty}
