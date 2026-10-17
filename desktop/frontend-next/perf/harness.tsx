@@ -129,7 +129,8 @@ class BenchPort extends MockPort {
 
   async browserTabs() {
     if (!query.has("agentpage")) return super.browserTabs();
-    return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
+    const url = query.get("agentpage") === "file" ? "file:///Users/me/work/site/index.html" : "https://example.com/docs/install";
+    return [{ id: "t1", target: "view-a", url, title: "Install guide", active: true }];
   }
 
   // ?grant=1 grants the workspace a folder, /library, holding one document.
