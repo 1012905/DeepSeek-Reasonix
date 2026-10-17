@@ -1,0 +1,2 @@
+- 对话里的主机提示（切换模型、告警、失败等）改成一行提示条：没有边框、标题栏和底色，只有图标的颜色表示严重程度。关联 #13456。
+- Host notices in the conversation (model switches, warnings, failures) are now a single bar: no box, header strip or wash, and the glyph's colour alone shows severity. Refs #13456.

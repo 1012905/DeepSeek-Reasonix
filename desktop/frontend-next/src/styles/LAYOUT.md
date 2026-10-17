@@ -1550,6 +1550,13 @@ what exists.
 - The cards a reader reads or acts on (approval, ask, remember, guardian review, extension card, receipt, compaction) share one shell: `--r-md` radius, a 1px `--border`, the `--surface` ground, and a header strip with no fill of its own.
 - State is never a border colour: a warning or error card keeps the shell's border and says so in the glyph ink or a chip.
 
+## Notice bar
+
+- A host notice is one sentence with a glyph and, under it, the kernel's diagnostic in the muted meta size.
+- There is no header strip, box, wash or side rule. Info has a dot; warn and error share the warning glyph, and only its ink (`--warn-ink`, `--err-ink`) says which.
+- A screen reader gets the level as a visually hidden prefix, and an error is `role="alert"`.
+- The card shell (`data-k="host"`) is for receipts, guardian reviews and compaction; notices no longer use it.
+
 ## Transcript Line
 
 - A tool call is a Line: a bare status glyph, the title, the mono subject and the meta on one row over a `--hair` bottom border, with no box, icon square or vertical track. Expanding it opens the detail in place.
