@@ -23,6 +23,7 @@ import (
 // name so it does not invent a reason.
 const (
 	videoFileMissing  = "video.file_missing"
+	videoUnavailable  = "video.file_unavailable"
 	videoFileChanged  = "video.file_changed"
 	videoTooLarge     = "video.native_too_large"
 	videoUploadFailed = "video.upload_failed"
@@ -99,15 +100,17 @@ var beforeVideoOpen = func(string) {}
 
 var errVideoChanged = errors.New("the file no longer matches what the tool read")
 
-// resolve turns a reference into what the vendor reads. The file is opened once
-// and everything after that reads the opened file, so a path swapped for another
-// file between the check and the send cannot change the bytes that leave. A file
-// the vendor already holds by its hash needs no read at all: the id stands for
-// exactly the bytes that were verified when it was uploaded.
+// resolve turns a reference into what the vendor reads. Only a file a tool in
+// this process granted is opened, at the path the tool checked, once; a reference
+// never granted is reported as unavailable. A file the vendor already holds by
+// its hash needs no read: the id stands for the bytes verified at upload.
 func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http.Request), ref provider.VideoRef) (url string, fromCache bool, code string) {
 	_, limit := provider.VideoProtocolLimit(w.protocol)
 	if ref.Size > limit {
 		return "", false, videoTooLarge
+	}
+	if _, granted := provider.GrantedVideoPath(ref); !granted {
+		return "", false, videoUnavailable
 	}
 	if w.protocol == provider.VideoProtocolMoonshotFile {
 		w.mu.Lock()
@@ -117,13 +120,17 @@ func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http
 			return "ms://" + id, true, ""
 		}
 	}
-	beforeVideoOpen(ref.Path)
-	f, err := os.Open(ref.Path)
+	path, ok := provider.GrantedVideoPath(ref)
+	if !ok {
+		return "", false, videoUnavailable
+	}
+	beforeVideoOpen(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return "", false, readCode(err)
 	}
 	defer f.Close()
-	afterVideoOpen(ref.Path)
+	afterVideoOpen(path)
 	if w.protocol == provider.VideoProtocolInlineDataURL {
 		raw, err := io.ReadAll(io.LimitReader(f, ref.Size+1))
 		if err != nil {

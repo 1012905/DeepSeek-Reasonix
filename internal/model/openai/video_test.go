@@ -98,6 +98,12 @@ func writeVideo(t *testing.T, content string) provider.VideoRef {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256([]byte(content))
+	ref := ungrantedVideo(path, content, sum)
+	provider.GrantVideo(ref)
+	return ref
+}
+
+func ungrantedVideo(path, content string, sum [32]byte) provider.VideoRef {
 	return provider.VideoRef{Path: path, Name: "clip.mp4", SHA256: hex.EncodeToString(sum[:]), MIME: "video/mp4", Size: int64(len(content)), DurationMs: 3000}
 }
 
@@ -294,6 +300,7 @@ func TestUploadIsAbortedWhenTheBytesStopMatchingMidStream(t *testing.T) {
 	v := newVideoServer(t)
 	ref := writeVideo(t, "FAKE-MP4-BYTES")
 	ref.SHA256 = strings.Repeat("0", 64)
+	provider.GrantVideo(ref)
 	if err := run(t, v.provider(t, "moonshot_file"), readRound(ref)); err != nil {
 		t.Fatal(err)
 	}
@@ -348,5 +355,44 @@ func TestUploadSendsNotAByteOfAFileThePathBecameBeforeItWasOpened(t *testing.T) 
 	body, _ := json.Marshal(v.chats[0])
 	if !strings.Contains(string(body), "video.file_changed") {
 		t.Fatalf("the model was not told by code: %s", body)
+	}
+}
+
+func TestAReferenceNoToolGrantedSendsNotAByteOfItsFile(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "secret.mp4")
+	content := "NOT-A-VIDEO-BUT-READABLE-SECRET"
+	if err := os.WriteFile(outside, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ref := ungrantedVideo(outside, content, sha256.Sum256([]byte(content)))
+	for _, protocol := range []string{"inline_data_url", "moonshot_file"} {
+		v := newVideoServer(t)
+		if err := run(t, v.provider(t, protocol), readRound(ref)); err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(v.chats[0])
+		if strings.Contains(string(body), "video_url") || !strings.Contains(string(body), "video.file_unavailable") {
+			t.Fatalf("%s: an ungranted reference must be reported by code and not sent: %s", protocol, body)
+		}
+		if v.receivedBytes() != 0 || strings.Contains(string(body), base64.StdEncoding.EncodeToString([]byte(content))) {
+			t.Fatalf("%s: bytes of a file no tool handed out left the process", protocol)
+		}
+	}
+}
+
+func TestAGrantedHashIsOpenedAtTheGrantedPathNotTheOneTheReferenceNames(t *testing.T) {
+	v := newVideoServer(t)
+	ref := writeVideo(t, "GRANTED-BYTES")
+	other := filepath.Join(t.TempDir(), "other.mp4")
+	if err := os.WriteFile(other, []byte("OTHER"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ref.Path = other
+	if err := run(t, v.provider(t, "inline_data_url"), readRound(ref)); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(v.chats[0])
+	if !strings.Contains(string(body), base64.StdEncoding.EncodeToString([]byte("GRANTED-BYTES"))) {
+		t.Fatalf("the granted file must be the one sent: %s", body)
 	}
 }

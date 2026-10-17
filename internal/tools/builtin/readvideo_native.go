@@ -130,6 +130,7 @@ func (r readVideo) native(path string, plan tool.NativeVideo) (string, provider.
 		Path: abs, Name: filepath.Base(rp.Path), SHA256: hex.EncodeToString(sum.Sum(nil)),
 		MIME: nativeVideoMIME, Size: st.Size(), DurationMs: mp4DurationMs(f, st.Size()),
 	}
+	provider.GrantVideo(ref)
 	var b strings.Builder
 	fmt.Fprintf(&b, "video %s: %d bytes", rp.DisplayPath, ref.Size)
 	if ref.DurationMs > 0 {

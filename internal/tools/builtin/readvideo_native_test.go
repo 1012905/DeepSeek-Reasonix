@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 )
 
@@ -87,6 +88,9 @@ func TestNativeReadHandsOverAReferenceWithoutFFmpeg(t *testing.T) {
 	if ref.Name != "clip.mp4" || ref.MIME != "video/mp4" || ref.Size != int64(len(content)) || ref.DurationMs != 3000 ||
 		ref.SHA256 != hex.EncodeToString(sum[:]) || !filepath.IsAbs(ref.Path) || filepath.Base(ref.Path) != "clip.mp4" {
 		t.Fatalf("ref = %+v", ref)
+	}
+	if path, ok := provider.GrantedVideoPath(ref); !ok || path != ref.Path {
+		t.Errorf("the tool must grant the path it checked: got %q, %v", path, ok)
 	}
 	for _, want := range []string{"clip.mp4", "3.0s", "vid-model", "next request"} {
 		if !strings.Contains(text, want) {
