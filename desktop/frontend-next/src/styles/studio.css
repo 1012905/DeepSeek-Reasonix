@@ -2916,8 +2916,8 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   :root:not([data-theme]) .studio-brand-logo { filter: brightness(0) invert(1); opacity: .94; }
 }
 .studio-brand-sub {
-  padding: 3px 6px 3px 7px; border-radius: var(--r-xs); background: var(--text);
-  color: var(--page); font: 700 calc(9px * var(--fs-scale, 1))/1 var(--ui); letter-spacing: .12em; text-transform: uppercase;
+  padding: 2px 5px 2px 6px; border: 1px solid var(--hair); border-radius: var(--r-xs); background: transparent;
+  color: var(--muted); font: 700 calc(9px * var(--fs-scale, 1))/1 var(--ui); letter-spacing: .12em; text-transform: uppercase;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
