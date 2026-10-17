@@ -16,7 +16,6 @@ class KeyboardKeeper {
     this.now = now;
     this.owner = win.webContents.isFocused() ? "app" : "none";
     win.webContents.on("focus", () => {
-      if (process.env.KEYBOARD_DEBUG) process.stdout.write("[keeper] app focus\n");
       this.owner = "app";
     });
   }
@@ -32,13 +31,21 @@ class KeyboardKeeper {
       if (input && input.type === "mouseDown" && !synthetic()) personAt = this.now();
     });
     contents.on("focus", () => {
-      if (process.env.KEYBOARD_DEBUG) process.stdout.write(`[keeper] view focus owner=${this.owner} live=${this.live()} person=${this.now() - personAt < PERSON_MS}\n`);
       if (this.now() - personAt < PERSON_MS) {
         this.owner = "view";
         return;
       }
-      if (this.owner === "app" && this.live()) this.win.webContents.focus();
-      else this.owner = "view";
+      if (this.owner !== "app" || !this.live()) {
+        this.owner = "view";
+        return;
+      }
+      // The platform is still handing the page the keyboard while this event is
+      // delivered, and a focus asked for from inside it is lost; one a turn later
+      // is not, as long as nothing of the person's has arrived by then.
+      setTimeout(() => {
+        if (this.now() - personAt < PERSON_MS || this.owner !== "app" || !this.live()) return;
+        if (contents.isFocused()) this.win.webContents.focus();
+      }, 0);
     });
   }
 
