@@ -398,6 +398,7 @@ export const EN: Record<string, string> = {
   "暂停派发": "Hold",
   "继续派发": "Release",
   "排队": "Queued",
+  "含图片，本轮结束后发送": "Has an image: sent when this turn ends",
   "插话排队": "Steer queued",
   "后台任务续接": "Background job follow-on",
   "插话已收": "Steer accepted",

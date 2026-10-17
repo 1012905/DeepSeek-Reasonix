@@ -1,0 +1,2 @@
+- 带图片的排队消息不能在运行中途插入，要等本轮结束；队列里这一行现在写明“含图片，本轮结束后发送”，不再只显示“尚未送达”。关联 #13563。
+- A queued message with a picture cannot join a running turn and waits for it to end; its queue line now says "Has an image: sent when this turn ends", not just "not delivered yet". Refs #13563.
