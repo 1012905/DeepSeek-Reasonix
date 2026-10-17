@@ -47,6 +47,7 @@ func TestWebAccessSettingsStartEmptyAndNameWhatCanBeChosen(t *testing.T) {
 
 func TestWebAccessSettingsPersistInTheUserFileAndPatchOnlyWhatIsSent(t *testing.T) {
 	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
@@ -81,6 +82,7 @@ func TestWebAccessSettingsPersistInTheUserFileAndPatchOnlyWhatIsSent(t *testing.
 
 func TestWebAccessSettingsRefuseWhatNoSessionCouldBuildAndWriteNothing(t *testing.T) {
 	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	before, _ := os.ReadFile(config.UserConfigPath())
@@ -113,5 +115,40 @@ func TestWebAccessSettingsRefuseWhatNoSessionCouldBuildAndWriteNothing(t *testin
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("clearing the address = %d, want 200", resp.StatusCode)
+	}
+}
+
+// The settings carry a standing consent to be charged and the address queries
+// go to, so they are written only where the window granted editing.
+func TestWebAccessSettingsAreWrittenOnlyWithTheEditGrant(t *testing.T) {
+	body := `{"search_paid_allowed":["deepseek_api"],"searxng_url":"http://10.0.0.5:8080"}`
+	for name, wrap := range map[string]func(http.Handler) http.Handler{
+		"no grant": func(h http.Handler) http.Handler { return h },
+		"a paired device the window did grant": func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				h.ServeHTTP(w, r.WithContext(withDeviceReach(r.Context(), "phone", 1)))
+			})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newProviderEditServer(t)
+			if name != "no grant" {
+				s.AllowProviderEdit()
+			}
+			before, _ := os.ReadFile(config.UserConfigPath())
+			srv := httptest.NewServer(wrap(operatorHandler(s)))
+			defer srv.Close()
+			resp := postProvider(t, srv.URL, "/web-access-settings", body)
+			if resp.StatusCode != http.StatusForbidden || webAccessRefusal(t, resp) != "web_access.editing_disabled" {
+				t.Fatalf("%s: status %d, want 403 web_access.editing_disabled", name, resp.StatusCode)
+			}
+			after, _ := os.ReadFile(config.UserConfigPath())
+			if string(before) != string(after) {
+				t.Fatalf("%s: a refused request changed the user file", name)
+			}
+			if got := readJSON[control.WebAccessSettings](t, srv.URL, "/web-access-settings"); got.SearxngURL != "" {
+				t.Fatalf("%s: reading must stay open and show the file unchanged, got %+v", name, got)
+			}
+		})
 	}
 }
