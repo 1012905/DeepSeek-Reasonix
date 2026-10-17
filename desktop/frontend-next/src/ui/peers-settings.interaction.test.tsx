@@ -92,11 +92,13 @@ describe("the session messages switches", () => {
 
   it("names the file the switches live in, and shows a refusal beside them", async () => {
     const { port } = portWith(settings({ enabled: true }));
-    vi.spyOn(port, "savePeersSettings").mockRejectedValue(new HttpError(500, "x", { code: "peer.settings_unwritable", error: "could not save: /home/me/.reasonix/config.toml" }));
+    vi.spyOn(port, "savePeersSettings").mockRejectedValue(new HttpError(500, "x", { code: "peer.settings_unwritable", params: { detail: "/home/me/.reasonix/config.toml" } }));
     render(<PeerMessages port={port} />);
     expect(await screen.findByText("/home/me/.reasonix/config.toml")).toBeTruthy();
     await userEvent.click(await screen.findByRole("switch", { name: "允许模型把任务交给别的会话" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("/home/me/.reasonix/config.toml");
+    const alert = (await screen.findByRole("alert")).textContent ?? "";
+    expect(alert).toContain("没能保存");
+    expect(alert).toContain("/home/me/.reasonix/config.toml");
   });
 
   it("holds both switches and the revokes inert where the session has no folder to open", async () => {
