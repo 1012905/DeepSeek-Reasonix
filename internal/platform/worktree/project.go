@@ -26,7 +26,21 @@ func ProjectRoot(root, managedRoot string) string {
 }
 
 func registeredCheckout(info workspaceid.Info) bool {
-	body, err := os.ReadFile(filepath.Join(info.GitDir, "gitdir"))
+	rel, err := filepath.Rel(info.RepoDir, info.GitDir)
+	if err != nil || !filepath.IsLocal(rel) {
+		return false
+	}
+	repo, err := os.OpenRoot(info.RepoDir)
+	if err != nil {
+		return false
+	}
+	defer repo.Close()
+	git, err := repo.OpenRoot(rel)
+	if err != nil {
+		return false
+	}
+	defer git.Close()
+	body, err := git.ReadFile("gitdir")
 	if err != nil || strings.TrimSpace(string(body)) == "" {
 		return false
 	}
@@ -38,6 +52,6 @@ func registeredCheckout(info workspaceid.Info) bool {
 	if err != nil || filepath.Base(marker) != ".git" {
 		return false
 	}
-	rel, err := filepath.Rel(info.CheckoutRoot, filepath.Dir(marker))
+	rel, err = filepath.Rel(info.CheckoutRoot, filepath.Dir(marker))
 	return err == nil && rel == "."
 }

@@ -92,3 +92,67 @@ func TestProjectRootDoesNotBorrowRepositoryOutsideManagedStorage(t *testing.T) {
 		t.Fatalf("a Git marker outside managed storage claimed the folder: %s", got)
 	}
 }
+
+func TestProjectRootConfinesRegistrationReadsToItsGitDirectory(t *testing.T) {
+	requireGit(t)
+	for _, outside := range []bool{false, true} {
+		t.Run(map[bool]string{false: "inside symlink", true: "escaping symlink"}[outside], func(t *testing.T) {
+			repo, managed := initRepo(t), testenv.TempDir(t)
+			result, err := Create(t.Context(), opened(t, repo), managed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			info := workspaceid.Describe(result.WorktreeRoot)
+			registration := filepath.Join(info.GitDir, "gitdir")
+			body, err := os.ReadFile(registration)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := info.GitDir
+			if outside {
+				dir = testenv.TempDir(t)
+			}
+			backlink := filepath.Join(dir, "backlink")
+			if err := os.WriteFile(backlink, body, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(registration); err != nil {
+				t.Fatal(err)
+			}
+			link := backlink
+			if !outside {
+				link = filepath.Base(backlink)
+			}
+			if err := os.Symlink(link, registration); err != nil {
+				t.Skipf("file symlinks unavailable: %v", err)
+			}
+			want := result.SourceRoot
+			if outside {
+				want = result.WorkspaceRoot
+			}
+			if got := ProjectRoot(result.WorkspaceRoot, managed); got != want {
+				t.Fatalf("project root = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestProjectRootAcceptsRelativeRegistrationBacklink(t *testing.T) {
+	requireGit(t)
+	repo, managed := initRepo(t), testenv.TempDir(t)
+	result, err := Create(t.Context(), opened(t, repo), managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := workspaceid.Describe(result.WorktreeRoot)
+	backlink, err := filepath.Rel(info.GitDir, filepath.Join(info.CheckoutRoot, ".git"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(info.GitDir, "gitdir"), []byte(backlink+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProjectRoot(result.WorkspaceRoot, managed); got != result.SourceRoot {
+		t.Fatalf("relative backlink lost project membership: %q, want %q", got, result.SourceRoot)
+	}
+}
