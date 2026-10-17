@@ -163,6 +163,7 @@ jobs:
           node perf/settings-rows.mjs
           node perf/narrow-steps.mjs
           node perf/job-names.mjs
+          node perf/text-size.mjs
           node perf/fs-scale.mjs
           node perf/composer-feel.mjs
           node perf/side-panel.mjs
