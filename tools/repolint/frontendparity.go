@@ -42,6 +42,10 @@ var frontendScopes = []frontendScope{
 	{method: "ReleaseResources", pkg: "internal/frontend/serve", issue: "#13644", reason: "serve swaps and ends controllers through Close; only ACP rebuilds a session in place"},
 	{method: "CloseAfterDestroy", pkg: "internal/frontend/serve", issue: "#13644", reason: "serve closes a runtime through Close and does not split delete teardown from the close"},
 	{method: "NewSession", pkg: "internal/frontend/acp", issue: "#13644", reason: "an ACP client starts a conversation with session/new; the protocol has no in-place reset"},
+	{method: "InstallMCPServer", pkg: "internal/frontend/acp", issue: "#13660", reason: "writes user configuration and adds a program to run; an ACP client passes a session's servers in session/new"},
+	{method: "RemoveMCPServer", pkg: "internal/frontend/acp", issue: "#13660", reason: "deletes configuration and its recorded activation, which ACP does not edit"},
+	{method: "SetMCPServerEnabled", pkg: "internal/frontend/acp", issue: "#13660", reason: "enabling a project server approves its command and persists; approval belongs where the command is shown"},
+	{method: "ClearMCPServerOverride", pkg: "internal/frontend/acp", issue: "#13660", reason: "rewrites the persistent activation record that ACP leaves alone"},
 	{method: "SubmitHTTPFormat", pkg: "internal/frontend/acp", issue: "#13644", reason: "applies an HTTP request's response_format; ACP prompts carry no structured-output field"},
 }
 

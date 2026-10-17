@@ -15,7 +15,7 @@
     "essay": 2696,
     "file-size": 19628,
     "flat-view": 0,
-    "frontend-parity": 16,
+    "frontend-parity": 13,
     "function-size": 2652,
     "layer-order": 0,
     "layering": 0,
@@ -1268,8 +1268,7 @@
       "essay": 2
     },
     "internal/session/control/extension_ui.go": {
-      "essay": 4,
-      "frontend-parity": 1
+      "essay": 4
     },
     "internal/session/control/extensions.go": {
       "essay": 5
@@ -1302,12 +1301,8 @@
     "internal/session/control/mcp.go": {
       "essay": 7
     },
-    "internal/session/control/mcp_admin.go": {
-      "frontend-parity": 4
-    },
     "internal/session/control/mcp_servers.go": {
-      "essay": 2,
-      "frontend-parity": 2
+      "essay": 2
     },
     "internal/session/control/memory.go": {
       "essay": 12
@@ -1701,7 +1696,7 @@
       "file-size": 686
     },
     "tools/repolint/frontendparity.go": {
-      "frontend-parity": 4
+      "frontend-parity": 8
     }
   }
 }
