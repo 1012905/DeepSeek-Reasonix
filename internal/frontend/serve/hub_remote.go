@@ -314,12 +314,16 @@ func (h *Hub) openRemoteRuntime(w http.ResponseWriter, r *http.Request) {
 		refuseNoRemote(w)
 		return
 	}
-	if err := h.remoteHostDialable(req.Host); errors.Is(err, errRemoteDisabled) {
+	workspace, err := h.remoteHostWorkspace(req.Host)
+	if errors.Is(err, errRemoteDisabled) {
 		refuse(w, http.StatusConflict, "remote.disabled", "this machine is turned off in the host book", map[string]any{"host": req.Host})
 		return
 	} else if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	if strings.TrimSpace(req.Workspace) == "" {
+		req.Workspace = workspace
 	}
 	ep, release, err := h.opts.Remote.Attach(operationContext(r), req.Host, req.Workspace)
 	if err != nil {

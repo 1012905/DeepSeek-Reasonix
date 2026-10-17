@@ -315,33 +315,34 @@ func (h *Hub) remoteLink(r *http.Request, host string) (RemoteEndpoint, func(), 
 	// The far kernel outlives the link, and its book is on its own disk. A
 	// machine the book has turned off is not reached for at all, so a question
 	// about it fails the same way opening it would.
-	if err := h.remoteHostDialable(host); err != nil {
+	workspace, err := h.remoteHostWorkspace(host)
+	if err != nil {
 		return RemoteEndpoint{}, nil, err
 	}
-	return h.opts.Remote.Attach(operationContext(r), host, "")
+	return h.opts.Remote.Attach(operationContext(r), host, workspace)
 }
 
 // errRemoteDisabled is the typed refusal a machine the book has turned off gets,
 // so a read answers the same code an open does.
 var errRemoteDisabled = errors.New("this machine is turned off in the host book")
 
-// remoteHostDialable reports why the book will not dial name: nil when it will,
-// errRemoteDisabled when the machine is off, and the read error when the book
-// cannot be read at all — a switch that stops a machine has to keep stopping it
-// then too.
-func (h *Hub) remoteHostDialable(name string) error {
+// remoteHostWorkspace resolves the configured default and refuses disabled hosts.
+func (h *Hub) remoteHostWorkspace(name string) (string, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return err
+		return "", err
 	}
 	entry, ok := cfg.RemoteHost(name)
 	if !ok {
-		return nil
+		return "", nil
 	}
 	if !entry.IsEnabled() {
-		return errRemoteDisabled
+		return "", errRemoteDisabled
 	}
-	return nil
+	if dirs := entry.WorkspaceList(); len(dirs) > 0 {
+		return dirs[0], nil
+	}
+	return "", nil
 }
 
 // anyRemotePane returns an endpoint on host, for a question about the machine
