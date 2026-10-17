@@ -51,7 +51,6 @@ export const ACTIONS: UIAction[] = [
   {id:"agent-composition.select",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
   {id:"agent-composition.manage",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-composition.new",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
-  {id:"agent-composition.new-choice",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.reload",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.view",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.create",kind:"view",target:"none",proof:"interaction"},

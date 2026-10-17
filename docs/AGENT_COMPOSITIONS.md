@@ -14,7 +14,9 @@ It uses Reasonix's runtime; it does not load Harness's Cordis plugins.
 
 ## Choosing and editing
 
-Choose **Agent** beside the composer before the first prompt. Once a prompt is
+Choose the composition beside the run status at the top of the composer before
+the first prompt. One menu lists compositions with their sources and capabilities;
+**Manage Agent presets…** opens the management page below the choices. Once a prompt is
 accepted, the conversation keeps its binding.
 
 Queued work, pending questions and

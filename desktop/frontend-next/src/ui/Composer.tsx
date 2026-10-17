@@ -8,7 +8,7 @@ import { Picker } from "./Menu";
 import { BranchChip } from "./BranchChip";
 import { WorktreeChip } from "./WorktreeChip";
 import { useWorktreeSetup } from "./useWorktreeSetup";
-import { SessionControls } from "./SessionControls";
+import { Policy } from "./Policy";
 import { chosenGroups, groupHeadings, modelMenu, narrowToGroups } from "./modelmenu";
 import { ModelGroupChips } from "./ModelGroupChips";
 import { effortMenu, effortReading, effortsFor, forcesThinkingFor, routeEffortPick } from "./effort";
@@ -704,7 +704,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             <span className="lb">{t("执行计划中")}</span>
           </span>
         )}
-        <SessionControls port={port} status={status} running={running} onChanged={onChanged} onSettings={onSettings} onError={onError} />
+        <Policy port={port} status={status} onChanged={onChanged} onBoundary={() => onSettings("tools:sandbox")} />
         <div className="studio-model-group">
           <Picker
             wrapClassName="studio-model-control"

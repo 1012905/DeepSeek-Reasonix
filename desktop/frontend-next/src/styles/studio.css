@@ -3102,14 +3102,23 @@ body { font-size: 14px; line-height: 1.75; }
   font: 500 10px/1.35 var(--ui);
   letter-spacing: 0;
 }
+.compose-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-height: 28px;
+  margin: -3px 0 4px;
+}
 .studio-runstate {
   display: flex;
   align-items: center;
   gap: 7px;
   min-height: 26px;
-  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
-  margin: -3px 0 4px;
+  margin: 0;
   color: var(--muted);
   font: 550 10px/1.2 var(--ui);
 }

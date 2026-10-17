@@ -5596,8 +5596,13 @@
 .composition-modules legend { font-weight: 600; padding-inline: 4px; }
 .composition-module { margin-block: 8px; }
 .composition-module .in { flex: 1; min-width: 100px; }
-.composition-picker { display: inline-flex; align-items: center; min-width: 0; }
-.composition-picker select { max-width: 150px; }
+.composition-picker { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
+.composition-picker > .picker { min-width: 0; max-width: 100%; }
+.composition-trigger { max-width: 100%; }
+.composition-trigger .nm { max-width: 180px; }
+.composition-source { color: var(--faint); font-size: var(--fs-meta); }
+.composition-trigger > .studio-icon { width: 12px; height: 12px; flex: none; }
+.composition-picker [role="alert"] { overflow-wrap: anywhere; }
 .composition-editor :is(input, select), .composition-choice select {
   width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--raised); color: var(--text); padding: 6px 9px; font: var(--w-reg) var(--fs-ui)/1.5 var(--ui);
@@ -5605,4 +5610,3 @@
 .composition-editor :is(input, select):focus-visible, .composition-choice select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .composition-editor :is(input, select):disabled { opacity: .65; }
 .composition-editor h4 { margin: 10px 12px 0; font-size: var(--fs-ui); }
-.composition-picker { flex-wrap: wrap; gap: 4px; }
