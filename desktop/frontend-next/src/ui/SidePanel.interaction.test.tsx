@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { SidePanel } from "./SidePanel";
@@ -116,5 +116,56 @@ describe("the side conversation panel", () => {
     await waitFor(() => expect(send.disabled).toBe(true));
     release("done");
     await screen.findByText("done");
+  });
+});
+
+
+describe("collapsing a side question without discarding it", () => {
+  it("keeps draft and quotes while hiding the panel controls", async () => {
+    const { port } = draw();
+    const close = vi.spyOn(port, "closeSide");
+    const ask = vi.spyOn(port, "askSide");
+    const quoted = select("keep this quote");
+    await userEvent.click(screen.getByRole("button", { name: "引用选中内容" }));
+    quoted.remove();
+    await userEvent.type(screen.getByRole("textbox", { name: "向辅助会话提问" }), "draft");
+    const collapse = screen.getByRole("button", { name: "收起辅助会话" });
+    await userEvent.click(collapse);
+    expect(collapse.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(collapse);
+    expect(screen.queryByRole("textbox", { name: "向辅助会话提问" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "移除引用 1" })).toBeNull();
+    expect(close).not.toHaveBeenCalled();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "关闭辅助会话" }));
+    await userEvent.click(screen.getByRole("button", { name: "展开辅助会话" }));
+    expect((screen.getByRole("textbox", { name: "向辅助会话提问" }) as HTMLTextAreaElement).value).toBe("draft");
+    expect(screen.getByText("keep this quote")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(ask).toHaveBeenCalledWith(expect.any(String), "draft", ["keep this quote"]));
+  });
+
+  it.each([false, true])("finishes the pending answer while collapsed (failure=%s)", async (failure) => {
+    const { port } = draw();
+    let finish!: (text: string) => void;
+    let fail!: (reason: Error) => void;
+    vi.spyOn(port, "askSide").mockImplementation(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+    const open = vi.spyOn(port, "openSide");
+    const close = vi.spyOn(port, "closeSide");
+    await userEvent.type(screen.getByRole("textbox", { name: "向辅助会话提问" }), "question");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(open).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: "收起辅助会话" }));
+    if (failure) fail(new Error("answer failed")); else finish("answer finished");
+    await waitFor(() => expect(document.querySelector(failure ? ".sideerr" : '.sideturn[data-role="side"]')?.textContent).toContain(failure ? "answer failed" : "answer finished"));
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "向辅助会话提问" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "展开辅助会话" }));
+    expect((screen.getByRole("textbox", { name: "向辅助会话提问" }) as HTMLTextAreaElement).value).toBe(failure ? "question" : "");
+    expect(open).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("button", { name: "收起辅助会话" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "展开辅助会话" }), { key: "Escape" });
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
 });

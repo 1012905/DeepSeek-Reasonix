@@ -21,6 +21,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "浏览器标签": "Browser tabs",
   "辅助会话": "Side question",
   "只读 · 不写入主会话 · 关闭即丢": "Read-only · not in the main session · gone when closed",
+  "收起辅助会话": "Collapse the side question",
+  "展开辅助会话": "Expand the side question",
   "关闭辅助会话": "Close the side question",
   "移除引用 {n}": "Remove quote {n}",
   "向辅助会话提问": "Ask the side question",
