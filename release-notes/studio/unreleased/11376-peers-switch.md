@@ -1,2 +1,0 @@
-- 会话间消息有了真正的开关：在设置里打开或关闭，下个回合起生效，不用手改配置；批准消息时可选「此项目以后都放行」，并随时撤销。关联 #11376。
-- Messages between sessions get a real Settings switch, applied from the next turn; approving a message can release this project from now on, revocable. Refs #11376.
