@@ -40,6 +40,8 @@ type mcpManager struct {
 	// notice tells the model what a catalog refresh took away. It is the
 	// executor's turn tail, bound once at construction.
 	notice func(string)
+	// signingIn names the servers whose sign-in is in flight, under mu.
+	signingIn map[string]bool
 }
 
 // seal makes the manager refuse to connect or register any server.

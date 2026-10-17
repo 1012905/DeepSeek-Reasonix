@@ -382,6 +382,15 @@ const SAID: Record<string, string> = {
   "mcp.approval_owed": "这个服务要启动的内容在你启用后变了，请先查看命令并重新启用",
   "mcp.nothing_held": "这个服务没有被暂挡的工具定义",
   "mcp.digest_mismatch": "你看到的被挡定义已经变了，没有接受；请重新查看",
+  "mcp.editing_disabled": "这个客户端不能登录 MCP 服务器",
+  "mcp.signin_declined": "你没有同意前往该登录站点，已取消登录",
+  "mcp.signin_ineligible": "这个服务器不使用 OAuth 登录",
+  "mcp.signin_busy": "这个服务器已经在登录中",
+  "mcp.signin_no_host": "服务器给出的登录页没有主机名，已停止",
+  "mcp.signin_no_browser": "这台机器打不开浏览器",
+  "mcp.signin_timed_out": "登录没有在时限内完成",
+  "mcp.signin_cancelled": "登录已取消",
+  "mcp.signin_failed": "登录没有完成：{detail}",
   "activation.unavailable": "开关未能保存：其存储文件无法读取或写入",
 
   // ── 待送达：条目、队列、这份存档各自会拒 ─────────────────────────
