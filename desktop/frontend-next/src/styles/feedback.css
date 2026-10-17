@@ -277,7 +277,7 @@
 .fbk-level-bar { flex: 1 1 auto; height: 6px; border-radius: var(--r-pill); background: var(--hair); overflow: hidden; }
 .fbk-level-fill { display: block; height: 100%; border-radius: inherit; background: var(--badge-ink); }
 .fbk-level-next { display: inline-flex; align-items: center; gap: 5px; flex: none; font: var(--w-med) var(--fs-meta) var(--ui); color: var(--muted); }
-.fbk-level-limits, .fbk-level-note, .fbk-level-stale { margin: 0; font: var(--w-reg) var(--fs-meta)/1.55 var(--ui); color: var(--muted); }
+.fbk-level-limits, .fbk-level-note, .fbk-level-meaning, .fbk-level-stale { margin: 0; font: var(--w-reg) var(--fs-meta)/1.55 var(--ui); color: var(--muted); }
 .fbk-level-limits { color: var(--text); }
 .fbk-level-gone { margin: 0; }
 .fbk-reply-shots { display: grid; gap: 6px; margin-top: 8px; }
