@@ -144,7 +144,7 @@ func newSubagentConfig(opts Options, cfg *config.Config, entry *config.ProviderE
 		inheritedEffortDropped: inherited.dropped,
 		taskModel:              firstNonEmpty(cfg.Agent.SubagentModels["task"], cfg.Agent.SubagentModel),
 		taskEffort:             strings.TrimSpace(cfg.Agent.SubagentEfforts["task"]),
-		maxDepth:               agent.NormalizeMaxSubagentDepth(cfg.Agent.MaxSubagentDepth),
+		maxDepth:               agent.SubagentDepthFromConfig(cfg.Agent.MaxSubagentDepth),
 	}
 }
 
