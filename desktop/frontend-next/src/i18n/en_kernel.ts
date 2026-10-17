@@ -551,6 +551,10 @@ export const EN_KERNEL: Record<string, string> = {
     "The chosen search model is no longer in the configuration, so search is off; choose one again in Model preferences, or set it back to automatic",
   "所选搜索模型的协议不支持原生搜索，或已关闭搜索，搜索已关闭；到模型偏好里重新选择，或恢复自动":
     "The chosen search model's protocol does not support native search, or search was turned off, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "网页抓取后端没有返回内容，已换用链里的下一个后端；详情见通知":
+    "A fetch backend did not answer; the next one in the chain was tried. See the notice for details",
+  "配置的网页抓取后端无法使用，已跳过；检查用户配置里的 web_fetch_backends":
+    "A configured fetch backend cannot be used and was skipped; check web_fetch_backends in your user config",
   "搜索后端没有返回结果，已换用链里的下一个后端；详情见通知":
     "A search backend did not answer; the next one in the chain was tried. See the notice for details",
   "配置的搜索后端无法使用，已跳过；检查用户配置里的 web_search_backends 和 searxng_url":

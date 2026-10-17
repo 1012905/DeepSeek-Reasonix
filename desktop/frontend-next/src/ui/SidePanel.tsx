@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import type { AgentPort } from "../port/port";
+import { StudioIcon } from "./StudioIcon";
 import { listenAction } from "./listen";
 
 interface Turn {
@@ -19,6 +20,8 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
   const [turns, setTurns] = useState<Turn[]>([]);
   const [quotes, setQuotes] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
+  const [collapsed, setCollapsed] = useState(false);
+  const contentId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const panel = useRef<HTMLElement>(null);
@@ -30,16 +33,18 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
     if (open) void open.then((held) => port.closeSide(held)).catch(() => {});
   }, [port]);
 
-  // The room above the composer inside its pane is what the panel may fill: the
-  // pane's own top is the ceiling, so the panel never rides over what is above.
+  // Rectangles include interface zoom; the CSS height uses local pixels.
+  // The pane bounds the room above the composer in either coordinate space.
   useEffect(() => {
     const el = panel.current;
     const host = el?.offsetParent;
     const pane = host?.closest(".pane");
-    if (!el || !host || !pane) return;
+    if (!el || !(host instanceof HTMLElement) || !pane) return;
     const fit = () => {
-      const room = host.getBoundingClientRect().top - pane.getBoundingClientRect().top - 18;
-      el.style.setProperty("--side-room", `${Math.max(240, Math.min(520, Math.floor(room)))}px`);
+      const bounds = host.getBoundingClientRect();
+      const scale = bounds.width / host.offsetWidth || 1;
+      const room = (bounds.top - pane.getBoundingClientRect().top) / scale - 18;
+      el.style.setProperty("--side-room", `${Math.max(0, Math.min(520, Math.floor(room)))}px`);
     };
     fit();
     const watch = new ResizeObserver(fit);
@@ -104,6 +109,7 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
   return (
     <aside
       className="sidepanel"
+      data-collapsed={collapsed || undefined}
       ref={panel}
       role="complementary"
       aria-label={t("辅助会话")}
@@ -116,8 +122,14 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
     >
       <header>
         <span><b>{t("辅助会话")}</b><small>{t("只读 · 不写入主会话 · 关闭即丢")}</small></span>
+        <div className="sideactions">
+          <button type="button" className="sidecollapse" data-action="side.collapse" aria-expanded={!collapsed} aria-controls={contentId}
+            aria-label={t(collapsed ? "展开辅助会话" : "收起辅助会话")} title={t(collapsed ? "展开辅助会话" : "收起辅助会话")}
+            onClick={() => setCollapsed((held) => !held)}><StudioIcon name="down" /></button>
         <button type="button" data-action="side.close" aria-label={t("关闭辅助会话")} title={t("关闭辅助会话")} onClick={close}>×</button>
+        </div>
       </header>
+      <div className="sidecontent" id={contentId} hidden={collapsed}>
       <div className="sidebody" aria-live="polite">
         {turns.length === 0 && <p className="sidehint">{t("在这里问关于这段代码、这个报错的问题：它只能读文件和搜索，不会改动任何东西。")}</p>}
         {turns.map((turn, i) => (
@@ -127,7 +139,6 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
           </div>
         ))}
         {busy && <p className="sidehint">{t("正在读取并回答…")}</p>}
-      </div>
       {error && <p className="sideerr" role="alert">{error}</p>}
       {quotes.length > 0 && (
         <ul className="sidequotes">
@@ -139,6 +150,7 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
           ))}
         </ul>
       )}
+      </div>
       <footer>
         <button type="button" className="sidequote" data-action="side.quote" onClick={quoteSelection}>{t("引用选中内容")}</button>
         <textarea
@@ -159,6 +171,7 @@ export function SidePanel({ port, onClose }: { port: AgentPort; onClose: () => v
         />
         <button type="button" className="sidesend" data-action="side.send" disabled={busy || !draft.trim()} onClick={() => void send()}>{t("发送")}</button>
       </footer>
+      </div>
     </aside>
   );
 }

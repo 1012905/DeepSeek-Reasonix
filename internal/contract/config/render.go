@@ -82,7 +82,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 
 		renderProgressWatchSection(&b, c)
 		renderAutoArchiveSection(&b, c)
-		renderServeSection(&b, c)
+		renderServeAndPeers(&b, c)
 		b.WriteString("[notifications]\n")
 		fmt.Fprintf(&b, "enabled = %v   # system notifications for CLI and desktop turns; default off\n", c.Notifications.Enabled)
 		fmt.Fprintf(&b, "turn_done = %v   # notify when a turn finishes\n", c.Notifications.TurnDone)
@@ -540,8 +540,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 		(c.Tools.MCPStartupTimeoutSeconds != nil && *c.Tools.MCPStartupTimeoutSeconds > 0) ||
 		(c.Tools.MCPCallTimeoutSeconds != nil && *c.Tools.MCPCallTimeoutSeconds > 0) ||
 		c.Tools.ProtectChangedFiles != nil ||
-		c.Tools.BrowserTools != nil || c.Tools.MCPResources ||
-		len(c.Tools.WebSearchBackends) > 0 || c.Tools.SearxngURL != "" {
+		c.Tools.BrowserTools != nil || c.Tools.MCPResources || c.Tools.any() {
 		b.WriteString("[tools]\n")
 		if len(c.Tools.Enabled) > 0 {
 			fmt.Fprintf(&b, "enabled = %s\n", renderStringArray(c.Tools.Enabled))
