@@ -17,10 +17,7 @@ import (
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/platform/worktree"
 	"reasonix/internal/session/control"
-	"reasonix/internal/state/workspacelist"
 )
-
-const workspaceRecentMax = workspacelist.MaxPaths
 
 // AllowWorkspaceSwitch grants POST /workspace. It is off until a host asks for
 // it, and no config file can turn it on: a server reachable over the network

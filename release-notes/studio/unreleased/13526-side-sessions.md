@@ -1,2 +1,0 @@
-- 辅助会话不再限制同时打开 3 个；想限制时在用户配置里设 `agent.max_side_sessions`。关联 #13526。
-- Side conversations are no longer capped at 3 open at once; set `agent.max_side_sessions` in your user config to limit them. Refs #13526.

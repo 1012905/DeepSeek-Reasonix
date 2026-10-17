@@ -42,6 +42,9 @@ func renderDesktopSection(b *strings.Builder, c *Config) {
 	if c.Desktop.Welcomed {
 		b.WriteString("welcomed = true   # the opening sequence has played on this machine\n")
 	}
+	if c.Desktop.MaxWorkspaces > 0 {
+		fmt.Fprintf(b, "max_workspaces = %d   # desktop: most projects the sidebar remembers; 0 or absent = no limit\n", c.Desktop.MaxWorkspaces)
+	}
 	if opener := c.DesktopExternalOpener(); opener != "" {
 		fmt.Fprintf(b, "external_opener = %q   # desktop Open control: installed application id\n", opener)
 	} else {

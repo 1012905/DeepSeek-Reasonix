@@ -107,6 +107,8 @@ bash_timeout_seconds = 120   # 前台安全上限；设为 0 表示不设工具�
 protect_changed_files = true   # 模型读过或写过的文件之后被改动时，拒绝整文件覆盖
 browser_tools = true   # 内置浏览器工具；浏览器在第一次使用时才启动
 # mcp_resources = true  # 仅用户配置文件；给模型一个 read_mcp_resource 工具，只能读已连接 MCP server 自己列出、或由它声明的模板拼出的资源（{+x} 模板范围很宽，批准前看清卡片上的完整地址），每次先询问；默认关闭
+# web_search_backends = ["searxng"]  # 仅用户配置文件；web_search 的后端顺序
+# searxng_url = "http://localhost:8888"  # 你自己运行的 SearXNG 实例
 mcp_startup_timeout_seconds = 30   # 后台 initialize + tools/list 安全上限
 mcp_call_timeout_seconds = 300   # MCP 调用默认安全上限；可用 plugin/tool 覆盖
 
@@ -151,6 +153,9 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # token = ""                   # 可选固定 token；token 模式为空时启动时自动生成
 # password_hash = ""           # 用 reasonix serve --hash-password --password '...' 生成
 # behind_proxy = false         # 只在可信反向代理后方设为 true
+
+[desktop]
+# max_workspaces = 0           # 侧栏最多记住的项目数；0 = 不限制（只认用户级配置）
 
 [[plugins]]
 name    = "example"
@@ -1513,3 +1518,38 @@ reasoning-language 写项目级覆盖时，才给 shell 命令加 `--local`。
 
 分离 session（让各模型前缀缓存稳定）背后的取舍见
 [`SPEC.md` §3.5](./SPEC.md#35-two-model-collaboration-coordinator)。
+
+## 用 SearXNG 免费搜索
+
+`web_search` 可以使用你自己运行的 [SearXNG](https://docs.searxng.org/) 实例，搜索不产生费用。Reasonix 不负责启动它。
+
+```
+mkdir -p ./searxng/config/ ./searxng/data/ && cd ./searxng/
+docker run --name searxng -d -p 8888:8080 -v "./config/:/etc/searxng/" -v "./data/:/var/cache/searxng/" docker.io/searxng/searxng:latest
+```
+
+（命令取自 SearXNG 官方文档）。只有 `settings.yml` 允许时 SearXNG 才返回 JSON；把下面内容写进 `./config/settings.yml` 后重启容器：
+
+```yaml
+use_default_settings: true
+search:
+  formats: [html, json]
+```
+
+然后在你的用户配置文件里写（项目配置文件无法设置这两项）：
+
+```toml
+[tools]
+web_search_backends = ["searxng"]
+searxng_url = "http://localhost:8888"
+```
+
+下列情况都算后端没有回答：
+
+- 请求失败，或状态码不是 200；
+- 返回内容不是 JSON，或没有任何结果。
+
+每次发生时 Reasonix 会弹出通知，写明后端和原因，再尝试下一个；全部没有回答时，模型收到 `search.all_backends_failed`。
+
+- SearXNG 内部某些引擎被限流，只要还有一个引擎能回答，搜索就不算失败。
+- 搜索结果是第三方内容，会向模型标注为外部内容。
