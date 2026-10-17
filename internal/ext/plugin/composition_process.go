@@ -26,3 +26,10 @@ func CompositionProcessRoot(s Spec) (string, error) {
 	}
 	return s.ProcessStateDir, nil
 }
+
+func compositionTransportState(s Spec) string {
+	if s.ProcessStateDir != "" && s.Package != "" {
+		return filepath.Join(s.ProcessStateDir, "runtime")
+	}
+	return s.ProcessStateDir
+}

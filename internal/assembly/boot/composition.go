@@ -216,6 +216,9 @@ func (b *builder) finishComposition(ctrl *control.Controller, snap *extension.Ru
 	ctrl.BindComposition(binding)
 	ctrl.ConfigureCompositionValidation(func() error { return b.validateCompositionAvailability() })
 	b.tools.reg.Restrict(func(t tool.Tool) bool {
+		if tool.ReachOf(t) != tool.ReachHostControl && !member(binding.Resolved.Tools, t.Name()) {
+			return false
+		}
 		if !compositionAdmits(binding.Resolved)(t) {
 			return false
 		}

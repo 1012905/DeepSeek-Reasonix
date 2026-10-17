@@ -3,6 +3,8 @@ package control
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"reasonix/internal/contract/agentcomposition"
@@ -78,4 +80,78 @@ func TestCompositionQueueAdmissionSurvivesRestartAndDeletion(t *testing.T) {
 	if _, err := c.EnqueueInbox(InboxRequest{Submit: "stale controller"}); err == nil || errors.Is(err, sessioninbox.ErrEmpty) {
 		t.Fatalf("closed enqueue=%v", err)
 	}
+}
+
+func TestCompositionAdmissionRemainsLockedWhenExecutionFailsBeforeUserMessage(t *testing.T) {
+	for _, synchronous := range []bool{false, true} {
+		t.Run(map[bool]string{false: "async", true: "sync"}[synchronous], func(t *testing.T) {
+			c, _, done := newOneTurnController(t)
+			testComposition(t, c)
+			failure := errors.New("checkpoint failed before user message")
+			body := func(context.Context) error { return failure }
+			if synchronous {
+				if err := c.runSynchronousTurn(t.Context(), nil, body); !errors.Is(err, failure) {
+					t.Fatal(err)
+				}
+			} else {
+				if c.runGuarded(body) != turnStarted {
+					t.Fatal("turn not admitted")
+				}
+				waitForDone(t, done)
+			}
+			if !c.CompositionBinding().Started {
+				t.Fatal("accepted prompt unlocked after early execution failure")
+			}
+			saved, err := sessionstore.LoadSession(c.SessionPath())
+			if err != nil || !saved.Composition().Started {
+				t.Fatalf("admission was not durable: %v", err)
+			}
+		})
+	}
+}
+
+func TestCompositionAdmissionPersistenceFailureRejectsExecutionAndReleasesGate(t *testing.T) {
+	for _, synchronous := range []bool{false, true} {
+		t.Run(map[bool]string{false: "async", true: "sync"}[synchronous], func(t *testing.T) {
+			c, _, _ := newOneTurnController(t)
+			testComposition(t, c)
+			blocker := filepath.Join(t.TempDir(), "not-a-directory")
+			if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c.SetSessionPath(filepath.Join(blocker, "session.jsonl"))
+			called := false
+			body := func(context.Context) error { called = true; return nil }
+			if synchronous {
+				if err := c.runSynchronousTurn(t.Context(), nil, body); err == nil {
+					t.Fatal("failed latch save accepted a synchronous prompt")
+				}
+			} else if !c.runGuarded(body).Refused() {
+				t.Fatal("failed latch save accepted an asynchronous prompt")
+			}
+			if called || c.Running() || c.CompositionBinding().Started {
+				t.Fatal("failed admission ran or changed the old conversation")
+			}
+			release, err := c.BeginCompositionSwitch()
+			if err != nil {
+				t.Fatalf("failed admission stranded the old gate: %v", err)
+			}
+			release()
+		})
+	}
+}
+
+func TestCompositionPendingAdmissionCannotAcceptParkedWork(t *testing.T) {
+	c, _, _ := newOneTurnController(t)
+	testComposition(t, c)
+	c.mu.Lock()
+	c.gate.begin(func() {})
+	c.gate.bindingPending = true
+	c.mu.Unlock()
+	if got := c.runGuardedOrPark(func(context.Context) error { return nil }); got != turnDroppedRunning {
+		t.Fatalf("pending binding admitted volatile work: %v", got)
+	}
+	c.mu.Lock()
+	c.gate.end()
+	c.mu.Unlock()
 }

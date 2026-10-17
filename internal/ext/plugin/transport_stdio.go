@@ -94,7 +94,7 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 	stateTransferred := false
 	defer func() {
 		if !stateTransferred && s.ProcessStateDir != "" {
-			_ = os.RemoveAll(s.ProcessStateDir)
+			_ = os.RemoveAll(compositionTransportState(s))
 		}
 	}()
 	launchArgs := append([]string{exe}, effectiveLaunchArgs(s)...)
@@ -139,7 +139,7 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 	}
 	t := &stdioTransport{
 		name:         s.Name,
-		privateState: s.ProcessStateDir,
+		privateState: compositionTransportState(s),
 		roots:        mcpRoots(s.WorkspaceRoot),
 		cmd:          cmd,
 		job:          job,
@@ -162,10 +162,15 @@ func prepareMCPPrivateState(s Spec, processSandbox sandbox.Spec, env []string) (
 func prepareMCPPrivateStateForOS(s Spec, processSandbox sandbox.Spec, env []string, goos string) (sandbox.Spec, []string, error) {
 	root := strings.TrimSpace(s.StateDir)
 	if s.ProcessStateDir != "" {
-		var err error
-		root, err = CompositionProcessRoot(s)
-		if err != nil {
+		if _, err := CompositionProcessRoot(s); err != nil {
 			return processSandbox, env, err
+		}
+		root = compositionTransportState(s)
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return processSandbox, env, err
+		}
+		if info, err := os.Lstat(root); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return processSandbox, env, fmt.Errorf("invalid MCP transport state directory")
 		}
 	}
 	if root == "" {

@@ -10,9 +10,16 @@ import (
 	"testing"
 
 	"reasonix/internal/contract/agentcomposition"
+	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/state/agentpreset"
 )
+
+type compositionLateMCPTool struct{ tool.Tool }
+
+func (compositionLateMCPTool) Name() string           { return "mcp__docs__unbound" }
+func (compositionLateMCPTool) MCPServerName() string  { return "docs" }
+func (compositionLateMCPTool) MCPRawToolName() string { return "unbound" }
 
 func TestCompositionSessionsKeepIndependentMCPParametersAndConnections(t *testing.T) {
 	var mu sync.Mutex
@@ -70,6 +77,14 @@ func TestCompositionSessionsKeepIndependentMCPParametersAndConnections(t *testin
 			t.Fatal(err)
 		}
 		defer built.Controller.Close()
+		reader, ok := built.Assembly.Registry.Get("read_file")
+		if !ok {
+			t.Fatal("reader missing")
+		}
+		built.Assembly.Registry.Add(compositionLateMCPTool{Tool: reader})
+		if _, ok := built.Assembly.Registry.Get("mcp__docs__unbound"); ok {
+			t.Fatal("late tool widened a selected MCP server's bound surface")
+		}
 		results = append(results, built)
 	}
 	for _, step := range []struct {

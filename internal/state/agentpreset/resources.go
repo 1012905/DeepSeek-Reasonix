@@ -33,6 +33,12 @@ func CaptureDirectory(root string) (DirectorySnapshot, error) {
 		if err != nil {
 			return err
 		}
+		if entry.Name() == ".git" || entry.Name() == ".hg" || entry.Name() == ".svn" {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if entry.IsDir() {
 			return nil
 		}

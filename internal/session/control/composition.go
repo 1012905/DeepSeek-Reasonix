@@ -164,6 +164,25 @@ func (c *Controller) compositionEnqueueReady() error {
 	return c.ensureWriteAuthorityReady()
 }
 
+func (c *Controller) persistCompositionAdmission() error {
+	old := c.CompositionBinding()
+	if old == nil || old.Started {
+		return nil
+	}
+	binding := agentcomposition.Clone(old)
+	binding.Started = true
+	c.BindComposition(binding)
+	c.EnsureSessionPath()
+	if c.SessionPath() == "" {
+		return nil
+	}
+	if err := c.Snapshot(); err != nil {
+		c.BindComposition(old)
+		return errors.Join(err, c.SnapshotRewrite())
+	}
+	return nil
+}
+
 func (c *Controller) beginCompositionEnqueue() (func() error, error) {
 	old := c.CompositionBinding()
 	noop := func() error { return nil }
@@ -172,9 +191,7 @@ func (c *Controller) beginCompositionEnqueue() (func() error, error) {
 	}
 	binding := agentcomposition.Clone(old)
 	binding.Started = true
-	c.BindComposition(binding)
-	if err := c.Snapshot(); err != nil {
-		c.BindComposition(old)
+	if err := c.persistCompositionAdmission(); err != nil {
 		return nil, err
 	}
 	return func() error {

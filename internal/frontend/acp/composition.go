@@ -32,6 +32,7 @@ func (s *service) bindCompositionIO(sess *acpSession, ctrl *control.Controller) 
 	sess.sink.bindApprove(ctrl.Approve)
 	sess.sink.bindAnswer(ctrl.AnswerQuestion)
 	s.bindCompositionSelector(sess)
+	s.bindControllerIdle(sess)
 }
 
 func (s *service) newPersistedSession(ctx context.Context, p SessionParams, path string) (*control.Controller, error) {
@@ -132,6 +133,7 @@ func (s *service) switchComposition(ctx context.Context, sess *acpSession, cur *
 	sess.sink.bindApprove(next.Approve)
 	sess.sink.bindAnswer(next.AnswerQuestion)
 	s.bindCompositionSelector(sess)
+	s.bindControllerIdle(sess)
 	cur.ReleaseResources()
 	s.sendAvailableCommands(sess)
 	return nil

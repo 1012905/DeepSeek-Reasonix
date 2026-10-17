@@ -85,6 +85,7 @@ var errNoSessionPath = errors.New("session has content but no session path; conv
 type Controller struct {
 	composition           *compositionControl
 	compositionMutationMu sync.Mutex
+	idleObserver          func()
 	surfacePublications   liveSurfacePublications
 	controllerDeps
 

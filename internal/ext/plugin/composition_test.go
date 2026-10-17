@@ -1,9 +1,11 @@
 package plugin
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"reasonix/internal/safety/sandbox"
 )
@@ -49,5 +51,36 @@ func TestCompositionProcessStateRejectsSymlinkOwner(t *testing.T) {
 	}
 	if entries, err := os.ReadDir(outside); err != nil || len(entries) != 0 {
 		t.Fatalf("outside directory changed: %v %v", entries, err)
+	}
+}
+
+func TestCompositionMCPReconnectKeepsSessionOwnedPackageResources(t *testing.T) {
+	redirectCache(t)
+	spec := helperSpec()
+	spec.StateDir = t.TempDir()
+	spec.ProcessStateDir = filepath.Join(spec.StateDir, "sessions", "fixture")
+	spec.Package, spec.Authorized, spec.ProcessMode = "fixture", true, MCPProcessHost
+	entry := filepath.Join(spec.ProcessStateDir, "package", "entry")
+	if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, []byte("retained code"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := NewHost()
+	defer host.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	for range 2 {
+		if _, err := host.Add(ctx, spec); err != nil {
+			t.Fatal(err)
+		}
+		host.Remove(spec.Name)
+		if data, err := os.ReadFile(entry); err != nil || string(data) != "retained code" {
+			t.Fatalf("transport retired its session owner's package: %s %v", data, err)
+		}
+		if _, err := os.Stat(compositionTransportState(spec)); !os.IsNotExist(err) {
+			t.Fatalf("connection state was not retired: %v", err)
+		}
 	}
 }

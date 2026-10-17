@@ -72,6 +72,14 @@ Presets cannot replace an installed extension's executable declaration.
 Inherited choices resolve once at binding. Retained skill and hook files and
 extension code do not follow subsequent source edits.
 
+Hooks retain referenced files and sibling bundles for common script formats.
+Bundles must fit the resource limit and cannot contain credential files or
+symbolic links.
+
+Keep hook code in a dedicated directory; retain credentials
+through environment references. External interpreters and services keep their
+existing platform/authorization contracts.
+
 Credential lookups remain
 with the existing credential/configuration owner. Sessions use separate MCP
 connections and process state, and extensions run from private copies. Existing

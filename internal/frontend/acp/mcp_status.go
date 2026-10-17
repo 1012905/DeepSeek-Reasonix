@@ -20,6 +20,7 @@ func registerSessionHealthMethods(conn *Conn, s *service) {
 
 func (s *service) bindSessionHealthEvents(sess *acpSession) {
 	s.bindCompositionSelector(sess)
+	s.bindControllerIdle(sess)
 	s.bindStatusEvents(sess)
 	s.bindMCPStatusEvents(sess)
 }

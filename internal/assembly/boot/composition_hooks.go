@@ -35,7 +35,7 @@ func (b *builder) retainHook(id string, h hook.ResolvedHook) error {
 	if agentcomposition.Digest(original) != agentcomposition.Digest(redacted) {
 		return agentcomposition.Unavailable(id, "Hook credentials must use environment references.")
 	}
-	assets, paths, err := agentpreset.CaptureFiles(h.ResourcePaths(b.root))
+	assets, paths, err := agentpreset.CaptureHookResources(h.ResourcePaths(b.root))
 	plugin := h.Env["REASONIX_PLUGIN_NAME"]
 	if h.Scope == hook.ScopePlugin {
 		assets, paths, err = b.compositionHookPackage(h, plugin)

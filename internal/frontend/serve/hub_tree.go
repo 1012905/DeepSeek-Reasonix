@@ -593,6 +593,15 @@ func (h *Hub) exportSession(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusForbidden, "session.outside_workspace", "path outside a known workspace", nil)
 		return
 	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !info.Mode().IsRegular() {
+		refuse(w, http.StatusForbidden, "session.outside_workspace", "session export requires a regular transcript", nil)
+		return
+	}
 	loaded, err := sessionstore.LoadSession(path)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
