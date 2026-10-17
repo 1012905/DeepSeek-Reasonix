@@ -135,6 +135,44 @@ describe("paid backends and the consent to be billed", () => {
   });
 });
 
+describe("a window that was not granted editing", () => {
+  const refused = () => new HttpError(403, "x", { code: "web_access.editing_disabled", error: "editing is not enabled" });
+
+  it("shows the settings read-only after the first refusal, with the kernel's words", async () => {
+    const { port } = portWith(settings({ search_backends: ["deepseek_api"] }));
+    vi.spyOn(port, "saveWebAccessSettings").mockRejectedValue(refused());
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("switch", { name: "同意网页搜索按次计费" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("只有这台电脑上的窗口能改");
+    const group = screen.getByRole("group", { name: "网页搜索" });
+    for (const control of within(group).getAllByRole("switch")) expect((control as HTMLButtonElement).disabled).toBe(true);
+    for (const button of within(group).getAllByRole("button")) expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/这些设置现在是只读的/)).toBeTruthy();
+  });
+
+  it("holds the address field and the fetch side read-only too, and does not try again", async () => {
+    const { port } = portWith(settings({ search_backends: ["searxng"], searxng_url: "http://x", fetch_backends: ["local"] }));
+    const save = vi.spyOn(port, "saveWebAccessSettings").mockRejectedValue(refused());
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("switch", { name: "启用 SearXNG" }));
+    await screen.findByRole("alert");
+    expect((screen.getByRole("textbox", { name: "SearXNG 地址" }) as HTMLInputElement).disabled).toBe(true);
+    for (const control of within(screen.getByRole("group", { name: "网页抓取" })).getAllByRole("switch")) expect((control as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("switch", { name: "启用 SearXNG" }));
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("any other refusal leaves the controls live", async () => {
+    const { port } = portWith(settings({ search_backends: ["searxng"], searxng_url: "http://x" }));
+    vi.spyOn(port, "saveWebAccessSettings").mockRejectedValue(new HttpError(500, "x", { code: "web_access.save_failed", error: "disk full" }));
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("switch", { name: "启用 SearXNG" }));
+    await screen.findByRole("alert");
+    expect((screen.getByRole("switch", { name: "启用 SearXNG" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/这些设置现在是只读的/)).toBeNull();
+  });
+});
+
 describe("when the settings apply", () => {
   it("says a saved change reaches panes opened afterwards, and names the file", async () => {
     const { port } = portWith(settings());

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
+import { HttpError } from "../port/http_error";
 import type { AgentPort, WebAccessPatch, WebAccessSettings } from "../port/port";
 import { Group } from "./Group";
 import { Switch } from "./Switch";
@@ -26,6 +27,9 @@ export function WebAccess({ port }: { port: AgentPort }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // A window the server has not granted editing to is read-only; the first refused
+  // save is how that is learned, and nothing here asks again.
+  const [readOnly, setReadOnly] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -47,6 +51,7 @@ export function WebAccess({ port }: { port: AgentPort }) {
       setState(next);
       setUrl(next.searxng_url);
     } catch (e) {
+      if (e instanceof HttpError && e.reason?.code === "web_access.editing_disabled") setReadOnly(true);
       setError(reason(e));
     } finally {
       setBusy(false);
@@ -54,6 +59,7 @@ export function WebAccess({ port }: { port: AgentPort }) {
   }, [port]);
 
   if (!state) return null;
+  const locked = busy || readOnly;
 
   const section = (kind: Kind) => {
     const known = kind === "search" ? state.known_search_backends : state.known_fetch_backends;
@@ -77,13 +83,13 @@ export function WebAccess({ port }: { port: AgentPort }) {
                 <span className="tx"><span className="lb">{said(kind, id)}</span><span className="ds">{NOTE[kind][id] ? t(NOTE[kind][id]) : ""}</span></span>
                 {enabled && (
                   <span className="acts">
-                    <button className="act" data-action="web-access.move" data-value="up" disabled={busy || idx === 0} aria-label={t("上移 {name}", { name: said(kind, id) })}
+                    <button className="act" data-action="web-access.move" data-value="up" disabled={locked || idx === 0} aria-label={t("上移 {name}", { name: said(kind, id) })}
                       onClick={() => void order(on.map((x, i) => (i === idx - 1 ? id : i === idx ? on[idx - 1] : x)))}>↑</button>
-                    <button className="act" data-action="web-access.move" data-value="down" disabled={busy || idx === on.length - 1} aria-label={t("下移 {name}", { name: said(kind, id) })}
+                    <button className="act" data-action="web-access.move" data-value="down" disabled={locked || idx === on.length - 1} aria-label={t("下移 {name}", { name: said(kind, id) })}
                       onClick={() => void order(on.map((x, i) => (i === idx + 1 ? id : i === idx ? on[idx + 1] : x)))}>↓</button>
                   </span>
                 )}
-                <Switch data-action="web-access.backend" data-value={id} on={enabled} busy={busy}
+                <Switch data-action="web-access.backend" data-value={id} on={enabled} busy={locked}
                   label={t("启用 {name}", { name: said(kind, id) })}
                   onClick={() => void order(enabled ? on.filter((x) => x !== id) : [...on, id])} />
                 {paid && (enabled || allowed.includes(id)) && (
@@ -92,7 +98,7 @@ export function WebAccess({ port }: { port: AgentPort }) {
                       <span className="lb">{kind === "search" ? t("同意网页搜索按次计费") : t("同意网页抓取按次计费")}</span>
                       <span className="ds">{state.deepseek_api_ready || allowed.includes(id) ? t("同意后，前面的后端都失败时才会调用它，费用记在你的 DeepSeek 账户上。不勾选就不会用它。") : t("需要一个带密钥的 DeepSeek 提供方，才能使用并同意这一项。")}</span>
                     </span>
-                    <Switch data-action="web-access.consent" data-value={`${kind}:${id}`} on={allowed.includes(id)} busy={busy || (!state.deepseek_api_ready && !allowed.includes(id))}
+                    <Switch data-action="web-access.consent" data-value={`${kind}:${id}`} on={allowed.includes(id)} busy={locked || (!state.deepseek_api_ready && !allowed.includes(id))}
                       label={kind === "search" ? t("同意网页搜索按次计费") : t("同意网页抓取按次计费")}
                       onClick={() => void consent(allowed.includes(id) ? allowed.filter((x) => x !== id) : [...allowed, id])} />
                   </div>
@@ -105,7 +111,7 @@ export function WebAccess({ port }: { port: AgentPort }) {
           <div className="wa-url">
             <label className="peernote" htmlFor="searxng-url">{t("SearXNG 地址")}</label>
             <input id="searxng-url" className="peerfield" data-action-change="web-access.searxng-url" aria-label={t("SearXNG 地址")} placeholder="http://127.0.0.1:8080"
-              value={url} disabled={busy} onChange={(e) => setUrl(e.target.value)}
+              value={url} disabled={locked} onChange={(e) => setUrl(e.target.value)}
               onBlur={() => { if (url.trim() !== state.searxng_url) void apply({ searxng_url: url.trim() }); }} />
           </div>
         )}
@@ -119,6 +125,7 @@ export function WebAccess({ port }: { port: AgentPort }) {
         {section("search")}
         {section("fetch")}
         <div className="peernote">{t("保存后只对之后新开的窗格生效，已开的窗格沿用旧设置。这些设置写在用户配置文件里：")}<code>{state.path}</code></div>
+        {readOnly && <div className="peernote" role="status">{t("这些设置现在是只读的：这个窗口没有被授予编辑权限。")}</div>}
         {error && <div className="why" role="alert">{error}</div>}
       </div>
     </Group>

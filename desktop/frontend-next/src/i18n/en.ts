@@ -229,6 +229,7 @@ export const EN: Record<string, string> = {
   "需要一个带密钥的 DeepSeek 提供方，才能使用并同意这一项。": "This needs a DeepSeek provider with a key before it can be used or agreed to.",
   "SearXNG 地址": "SearXNG address",
   "保存后只对之后新开的窗格生效，已开的窗格沿用旧设置。这些设置写在用户配置文件里：": "A saved change reaches only panes opened afterwards; open panes keep the old settings. These settings are kept in the user config file: ",
+  "这些设置现在是只读的：这个窗口没有被授予编辑权限。": "These settings are read-only now: this window has not been granted editing.",
   "正文字号": "Body text size",
   "尚未派出": "None dispatched",
   "运行中 {live} / 共 {total}": "{live} running / {total} total",
