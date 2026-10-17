@@ -54,6 +54,7 @@ type toolOutcome struct {
 	output    string
 	rawOutput string // full original when different from output
 	images    []string
+	videos    []provider.VideoRef
 	blocked   bool
 	// endsRound marks a call whose result is a user decision. The pre-scheduling
 	// scan cannot see one an extension substituted in, so the call reports it.
@@ -117,6 +118,7 @@ type batchExecution struct {
 	results    []string
 	outcomes   []toolOutcome
 	images     [][]string
+	videos     [][]provider.VideoRef
 	executions []*tool.ShellExecution
 }
 
@@ -306,7 +308,7 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 			Args:         c.Arguments,
 			ResolvedName: c.ResolvedName,
 			CapabilityID: c.CapabilityID,
-			Output:       o.output, Images: o.images,
+			Output:       o.output, Images: o.images, Videos: shownVideos(o.videos, a.nativeVideoModel()),
 			Err: o.errMsg, RefusalCode: o.refusalCode, WorkspaceLease: o.workspaceLease,
 			ReadOnly:   readOnly,
 			Bound:      o.bound,
@@ -328,15 +330,18 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 	}
 	a.observeOutcomeShadow(cancelled, receiptMark)
 	images := make([][]string, len(calls))
+	videos := make([][]provider.VideoRef, len(calls))
 	executions := make([]*tool.ShellExecution, len(calls))
 	for i := range outcomes {
 		images[i] = outcomes[i].images
+		videos[i] = outcomes[i].videos
 		executions[i] = outcomes[i].execution
 	}
 	return batchExecution{
 		results:    results,
 		outcomes:   outcomes,
 		images:     images,
+		videos:     videos,
 		executions: executions,
 	}
 }

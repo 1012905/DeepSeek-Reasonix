@@ -1,17 +1,16 @@
 package config
 
-import "strings"
+import (
+	"strings"
 
-// How a video file reaches a model that reads video natively. A protocol is a
-// property of the endpoint's wire, so it is declared beside the models and never
-// read off a host name or a model name.
+	"reasonix/internal/contract/provider"
+)
+
+// The protocols a provider may declare; the wire code that speaks them lives
+// with the providers.
 const (
-	// VideoProtocolInlineDataURL sends the file in the request itself, as a
-	// video_url content part holding a data URL.
-	VideoProtocolInlineDataURL = "inline_data_url"
-	// VideoProtocolMoonshotFile uploads the file once and refers to it by id in
-	// a video_url content part.
-	VideoProtocolMoonshotFile = "moonshot_file"
+	VideoProtocolInlineDataURL = provider.VideoProtocolInlineDataURL
+	VideoProtocolMoonshotFile  = provider.VideoProtocolMoonshotFile
 )
 
 // KnownVideoProtocols lists the protocols a provider may declare.

@@ -343,7 +343,7 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 }
 
 func (c *client) buildRequestBodyWithContinuation(req provider.Request, allowPrevious bool) (map[string]any, bool, []provider.Message) {
-	messages := provider.SanitizeToolPairing(provider.ModelMessages(req.Messages))
+	messages := provider.SanitizeToolPairing(provider.WithoutVideosAll(provider.ModelMessages(req.Messages), provider.VideoNotSentNote))
 	body := map[string]any{"model": c.model, "stream": true}
 
 	effort := strings.ToLower(strings.TrimSpace(c.effort))

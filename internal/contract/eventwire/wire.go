@@ -433,11 +433,30 @@ var boundKindNames = map[event.BoundKind]string{
 	event.BoundTruncated: "truncated",
 }
 
+// VideoShown is the JSON form of an event.VideoShown.
+type VideoShown struct {
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	DurationMs int64  `json:"durationMs,omitempty"`
+	Model      string `json:"model"`
+}
+
+func toWireVideos(in []event.VideoShown) []VideoShown {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]VideoShown, len(in))
+	for i, v := range in {
+		out[i] = VideoShown{Name: v.Name, Size: v.Size, DurationMs: v.DurationMs, Model: v.Model}
+	}
+	return out
+}
+
 func toWireTool(t event.Tool) *Tool {
 	wt := &Tool{
 		ID: t.ID, Name: t.Name, Args: SurfaceArgs(t.Name, t.ResolvedName, t.Args),
 		ResolvedName: t.ResolvedName, CapabilityID: t.CapabilityID,
-		Output: t.Output, Images: t.Images, Err: t.Err, RefusalCode: t.RefusalCode,
+		Output: t.Output, Images: t.Images, Videos: toWireVideos(t.Videos), Err: t.Err, RefusalCode: t.RefusalCode,
 		WorkspaceLease: toWireWorkspaceLease(t.WorkspaceLease),
 		OutputDiff:     t.OutputDiff,
 		ReadOnly:       t.ReadOnly, Truncated: t.Bound.Lossy(),
@@ -489,7 +508,10 @@ type Tool struct {
 	Output       string `json:"output,omitempty" externalizable:"true"`
 	// Images the call showed the model, as data URLs.
 	Images []string `json:"images,omitempty"`
-	Err    string   `json:"err,omitempty" externalizable:"true"`
+	// Videos the call handed to the model to watch natively; the file's name and
+	// size, never its bytes.
+	Videos []VideoShown `json:"videos,omitempty"`
+	Err    string       `json:"err,omitempty" externalizable:"true"`
 	// RefusalCode is the host's dotted identity for a refusal. Err is only its
 	// wording, and a reader that has to tell one refusal from another cannot
 	// use a sentence.

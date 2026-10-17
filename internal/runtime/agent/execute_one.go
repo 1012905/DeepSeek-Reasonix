@@ -669,6 +669,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 
 	var result string
 	var images []string
+	var videos []provider.VideoRef
 	var execution *tool.ShellExecution
 	var err error
 	// A call that was authorized under reader classification carries that
@@ -689,7 +690,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		// ctx would otherwise kill the hook before it runs.
 		defer func() { a.svc.hooks.SubagentStop(context.WithoutCancel(ctx), call.ID, result, err) }()
 	}
-	result, images, execution, err = a.executeStoppable(ctx, cctx, plan)
+	result, images, videos, execution, err = a.executeStoppable(ctx, cctx, plan)
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
@@ -729,7 +730,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		body, bound, truncMsg := a.boundToolOutput(rawErr, call.Name, call.ID, call.Arguments, true)
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
-			output: body, images: images, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
+			output: body, images: images, videos: videos, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
 			execution: execution, provenance: origin, refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
 		if truncMsg != "" {
@@ -741,7 +742,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	result = silentSuccessDetail(evidenceName, evidenceArgs, result)
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
-		output: body, images: images, bound: bound, truncMsg: truncMsg,
+		output: body, images: images, videos: videos, bound: bound, truncMsg: truncMsg,
 		execution: execution, provenance: origin, checkpointErr: checkpointErr,
 	}
 	if truncMsg != "" {
@@ -766,7 +767,7 @@ func annotateShellSubject(execution *tool.ShellExecution, args json.RawMessage) 
 }
 
 // executeStoppable runs the call under a context CancelToolCall can end alone.
-func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan) (result string, images []string, execution *tool.ShellExecution, err error) {
+func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan) (result string, images []string, videos []provider.VideoRef, execution *tool.ShellExecution, err error) {
 	runTool, runArgs := plan.runTool, plan.runArgs
 	cctx, endCall := a.stops.begin(cctx, plan.call.ID)
 	defer endCall()
@@ -791,10 +792,12 @@ func (a *Agent) executeStoppable(turn, cctx context.Context, plan *toolCallPlan)
 			execution.MutationRisk == tool.ShellMutationMayHaveCompleted {
 			execution.MutationRisk = tool.ShellMutationUnknown
 		}
+	} else if vt, ok := runTool.(tool.VideoTool); ok {
+		result, images, videos, err = vt.ExecuteWithVideo(cctx, runArgs)
 	} else if it, ok := runTool.(tool.ImageTool); ok {
 		result, images, err = it.ExecuteWithImages(cctx, runArgs)
 	} else {
 		result, err = runTool.Execute(cctx, runArgs)
 	}
-	return result, images, execution, stoppedByUser(turn, cctx, err)
+	return result, images, videos, execution, stoppedByUser(turn, cctx, err)
 }

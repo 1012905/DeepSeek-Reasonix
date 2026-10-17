@@ -96,6 +96,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	// or extension-supplied capability flag may put pixels on a wire that will
 	// reject them, whatever config resolution decided upstream.
 	vision = vision && visionReachesModel(officialDeepSeek, cfg.Model)
+	videoProtocol, _ := cfg.Extra["video_protocol"].(string)
 	visionDetail, _ := cfg.Extra["vision_detail"].(string)
 	visionDetail = strings.ToLower(strings.TrimSpace(visionDetail))
 	if !detailAccepted(visionDetail, officialDeepSeek) {
@@ -252,6 +253,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		draft202012Schemas: IsMiMo(cfg.BaseURL),
 		thinkingType:       thinkingType,
 		vision:             vision,
+		video:              newVideoWire(videoProtocol, cfg.BaseURL),
 		visionDetail:       visionDetail,
 		maxOutputTokens:    maxOutputTokens,
 		autoMaxOutput:      autoMaxOutput,
@@ -293,6 +295,7 @@ type client struct {
 	kimiK3             bool          // true for the explicit K3 protocol or kimi-k3 on Moonshot's direct API hosts
 	draft202012Schemas bool          // the endpoint's dialect, not its vendor: rewrite pre-2020-12 tuple keywords
 	thinkingType       string        // explicit `thinking` config override (enabled|disabled); "" = no override
+	video              *videoWire    // how a video file reaches this model; nil when the endpoint declares none
 	vision             bool          // model accepts image input — embed attached images as image_url parts
 	visionDetail       string        // image_url detail hint (low|high); "" = auto/omit
 	maxOutputTokens    int           // resolved total output budget; <=0 omits the optional field
@@ -655,8 +658,16 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 	// tool results, before the next non-tool message (splitting a tool-result
 	// run would break the API's tool-call pairing validation).
 	var pendingToolImages []string
+	var pendingToolVideos []provider.VideoPart
 	openCodeGo := provider.IsOpenCodeGoEndpoint(c.chatURL)
 	flushToolImages := func() {
+		if len(pendingToolVideos) > 0 {
+			msgs = append(msgs, chatMessage{
+				Role:    "user",
+				Content: videoContentParts("Video returned by the preceding tool call(s):", pendingToolVideos),
+			})
+			pendingToolVideos = nil
+		}
 		if len(pendingToolImages) == 0 {
 			return
 		}
@@ -705,6 +716,9 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		msgs = append(msgs, cm)
 		if c.vision && m.Role == provider.RoleTool {
 			pendingToolImages = append(pendingToolImages, m.Images...)
+		}
+		if m.Role == provider.RoleTool {
+			pendingToolVideos = append(pendingToolVideos, m.VideoParts...)
 		}
 	}
 	flushToolImages()
@@ -1179,6 +1193,7 @@ type chatContentPart struct {
 	Type     string        `json:"type"`
 	Text     string        `json:"text,omitempty"`
 	ImageURL *chatImageURL `json:"image_url,omitempty"`
+	VideoURL *chatVideoURL `json:"video_url,omitempty"`
 }
 
 type chatImageURL struct {

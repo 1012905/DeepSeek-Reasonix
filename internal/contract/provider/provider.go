@@ -58,6 +58,9 @@ type Message struct {
 	// request is built, and only for the request that precedes the model's answer
 	// (see ModelMessages).
 	Videos []VideoRef `json:"videos,omitempty"`
+	// VideoParts are Videos resolved for one request by an adapter that can send
+	// them. Never stored or serialized.
+	VideoParts []VideoPart `json:"-"`
 	// UnavailableImages are images this message holds whose stored bytes the
 	// session store could not read back. Host-owned: ModelMessages says so to
 	// the model, and a stored copy that reappears restores the image.
