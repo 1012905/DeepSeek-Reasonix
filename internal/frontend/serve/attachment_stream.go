@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
 )
 
@@ -21,7 +22,12 @@ func (s *Server) attachmentUpload(w http.ResponseWriter, r *http.Request) {
 			saved, err = control.SaveImageBytesInRoot(root, mime, raw)
 		}
 	} else {
-		saved, err = control.SaveAttachmentStreamInRoot(r.Context(), root, name, r.Body)
+		limit, loadErr := config.LoadAttachmentStreamLimit()
+		if loadErr != nil {
+			refuse(w, http.StatusInternalServerError, "attachment.config_unavailable", "attachment upload limit could not be loaded", nil)
+			return
+		}
+		saved, err = control.SaveAttachmentStreamInRoot(r.Context(), root, name, r.Body, limit)
 	}
 	if err != nil {
 		var over *http.MaxBytesError

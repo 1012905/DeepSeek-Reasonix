@@ -196,6 +196,7 @@ var English = Messages{
 	SandboxEscapeApprovalChoices:    "1. Allow once\n2. Use real environment for this session\n3. Deny\nChoose [1/2/3] (y/a/n also work)",
 	NotifyMessages:                  notifyEN,
 	SlashHintMessages:               slashHintEN,
+	QueueMessages:                   queueEN,
 	ApprovalNeededFmt:               "approval needed: %s",
 	ApprovalNeededWithSubjectFmt:    "approval needed: %s %s",
 	AnswerNeededFmt:                 "answer needed: %s",

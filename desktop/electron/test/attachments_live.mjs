@@ -104,8 +104,33 @@ try {
   assert.equal(fs.statSync(path.join(workspace, ".reasonix/attachments", saved)).size, streamBytes);
   assert.equal(traffic.length, 4);
   assert.equal(traffic[3].contentType, "application/octet-stream");
+  const configPath = path.join(home, "config.toml");
+  fs.appendFileSync(configPath, "\n[attachments]\nmax_stream_bytes = 4\n");
+  const directory = path.join(workspace, ".reasonix/attachments");
+  const before = fs.readdirSync(directory).sort();
+  const refused = page.waitForResponse(response => response.url().includes("/attachments/upload") && response.status() === 413);
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["12345"], "over-limit.apk"));
+    const input = document.querySelector('.pane[data-active] input[type=file][data-action-change="session.attach"]');
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const rejection = await (await refused).json();
+  assert.equal(rejection.code, "attachment.too_large");
+  assert.equal(rejection.params.limit_bytes, 4);
+  assert.equal(rejection.params.limit_source, "user");
+  const failedChip = page.locator('.pane[data-active] .shot[data-state="failed"]');
+  await failedChip.locator(".why").waitFor({ state: "visible" });
+  assert.ok((await failedChip.locator(".why").textContent()).includes("MB"));
+  assert.deepEqual(fs.readdirSync(directory).sort(), before);
+  fs.writeFileSync(configPath, fs.readFileSync(configPath, "utf8").replace("max_stream_bytes = 4", "max_stream_bytes = 0"));
+  const retried = page.waitForResponse(response => response.url().includes("/attachments/upload"));
+  await failedChip.locator("button.retry").click();
+  assert.equal((await retried).status(), 200);
+  await ready(5);
   assert.ok(await page.locator('.pane[data-active] textarea[data-action-paste="session.attach"]').isVisible());
-  const result = { nativeBytes, nativeEntries: ["picker", "paste", "drop"], streamBytes, readyAttachments: 4, traffic };
+  const result = { nativeBytes, nativeEntries: ["picker", "paste", "drop"], streamBytes, readyAttachments: 5, limitRejection: rejection, unlimitedRetry: true, traffic };
   if (artifacts) {
     fs.mkdirSync(artifacts, { recursive: true });
     await page.screenshot({ path: path.join(artifacts, "attachments-live.png") });
@@ -114,6 +139,7 @@ try {
   console.log(JSON.stringify(result));
   passed = true;
 } finally {
+  await app?.evaluate(({ app }) => app.exit(0)).catch(() => {});
   await app?.close();
   if (passed) fs.rmSync(home, { recursive: true, force: true });
   else console.error("Failed run retained fixtures at " + home);

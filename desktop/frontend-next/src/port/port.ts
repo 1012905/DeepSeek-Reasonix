@@ -131,6 +131,9 @@ export interface QueueItem {
   // Files this entry froze at the moment it was queued. Their presence is what
   // makes re-freezing meaningful; the entry quotes them as they were.
   refs?: { path?: string }[];
+  // A picture was frozen with it. Such a line cannot be slipped into a running
+  // turn as guidance; it is sent as a turn of its own when the current one ends.
+  images?: boolean;
 }
 
 /** Both limits bite: the queue refuses on count and on total bytes, and a

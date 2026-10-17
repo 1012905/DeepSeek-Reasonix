@@ -917,20 +917,31 @@ Menus and controls:
 
 Ordinary local files, including large APKs, use path references whenever the
 desktop shell can identify the file. Selecting one external file grants read
-access to that file; selecting a folder grants its descendants.
+access to that file, not its siblings; selecting a folder grants its descendants,
+but a symlink inside it does not grant access outside that folder.
 
 Files without a native path use binary streaming into `.reasonix/attachments`.
-Streaming bounds memory use, not total stored bytes.
+Streaming bounds memory use. Ordinary uploads have a default 1 GiB safety ceiling
+per request to protect disk space; native path references do not copy bytes.
+
 Incomplete files are removed if the transfer fails or is canceled. Removing an uploading
 attachment cancels its transfer.
 
 | Entry point | Limit |
 | --- | --- |
 | Native ordinary-file references | No attachment size cap; the file stays where it is. |
-| Ordinary-file binary upload | No fixed attachment size cap; disk space and any upstream transport limits still apply. |
+| Ordinary-file binary upload | Default 1 GiB safety ceiling per request, adjustable in user config. Disk space and upstream limits still apply. |
 | Image upload | 10 MiB per image, checked before upload and by the kernel. |
 | Legacy JSON/Base64 attachment endpoint | 25 MiB general-file limit; retained for older clients. |
 | Encrypted cloud relay | 16 MiB per request body; oversized uploads stop at that budget. This is a relay limit, separate from native references and direct uploads. |
+
+In the user's `config.toml`, `[attachments] max_stream_bytes = 1073741824`
+sets the ordinary upload ceiling in bytes.
+
+- `0` removes that ceiling; negative values use the default. Project `reasonix.toml` cannot set this value.
+- An upload one byte over the limit is refused and its partial file removed.
+- The typed `attachment.too_large` response includes `limit_bytes` and `limit_source` (`default` or `user`).
+- A malformed user config refuses the upload until repaired. The image and relay limits remain independent.
 
 These limits govern attachment transport. A referenced file is read on demand;
 its full bytes do not become model input automatically.

@@ -70,7 +70,13 @@ func (e *attachmentRefusal) Error() string { return e.err.Error() }
 func refuseAttachment(w http.ResponseWriter, name string, err error) {
 	var pre *attachmentRefusal
 	var bad *control.AttachmentError
+	var streamLimit *control.AttachmentStreamLimitError
 	switch {
+	case errors.As(err, &streamLimit):
+		refuse(w, http.StatusRequestEntityTooLarge, "attachment.too_large", err.Error(), map[string]any{
+			"limit_bytes": streamLimit.LimitBytes, "limit_source": streamLimit.LimitSource,
+			"limit_mb": float64(streamLimit.LimitBytes) / (1 << 20),
+		})
 	case errors.Is(err, errBadAttachmentData):
 		badBody(w)
 	case errors.As(err, &pre):

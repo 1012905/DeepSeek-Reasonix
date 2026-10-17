@@ -2,12 +2,22 @@ package control
 
 import (
 	"context"
+	"errors"
 	"io"
 	"path/filepath"
 	"strings"
+
+	"reasonix/internal/contract/config"
 )
 
-func SaveAttachmentStreamInRoot(ctx context.Context, root, origName string, src io.Reader) (string, error) {
+func SaveAttachmentStreamInRoot(ctx context.Context, root, origName string, src io.Reader, limits ...config.AttachmentLimit) (string, error) {
+	if len(limits) > 1 {
+		return "", attachmentWriteError(errors.New("at most one attachment upload limit is supported"))
+	}
+	limit := config.AttachmentLimit{Bytes: config.DefaultAttachmentStreamBytes, Source: "default"}
+	if len(limits) == 1 {
+		limit = limits[0]
+	}
 	ext := strings.ToLower(filepath.Ext(origName))
 	if !safeAttachmentExt.MatchString(ext) {
 		ext = ".bin"
@@ -18,7 +28,7 @@ func SaveAttachmentStreamInRoot(ctx context.Context, root, origName string, src 
 	}
 	defer owned.cleanup()
 
-	n, err := io.CopyBuffer(owned, attachmentContextReader{ctx, src}, make([]byte, 64<<10))
+	n, err := copyAttachmentStream(owned, attachmentContextReader{ctx, src}, limit)
 	if err != nil {
 		return "", attachmentWriteError(err)
 	}
