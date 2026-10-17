@@ -20,7 +20,17 @@ func ProjectionMessages(msgs []Message) []Message { return projectMessages(msgs,
 
 func projectMessages(msgs []Message, keepExecution bool) []Message {
 	needsCopy := false
-	for _, m := range msgs {
+	var answered []bool
+	for i, m := range msgs {
+		if len(m.Videos) > 0 && !keepExecution {
+			if answered == nil {
+				answered = answeredAfter(msgs)
+			}
+			if answered[i] {
+				needsCopy = true
+				break
+			}
+		}
 		if (len(m.UnavailableImages) > 0 && !keepExecution) || m.LocalOnly || m.RawContent != "" || m.ProviderContent != "" || m.HostAuthored || m.ModelRef != "" || m.Via != nil || m.DecisionReceipt != nil || len(m.DecisionReceipts) > 0 || (m.ToolExecution != nil && !keepExecution) || (m.ToolFailure != nil && !keepExecution) {
 			needsCopy = true
 			break
@@ -30,9 +40,12 @@ func projectMessages(msgs []Message, keepExecution bool) []Message {
 		return msgs
 	}
 	out := make([]Message, 0, len(msgs))
-	for _, candidate := range msgs {
+	for i, candidate := range msgs {
 		if candidate.LocalOnly {
 			continue
+		}
+		if !keepExecution && len(candidate.Videos) > 0 && answered != nil && answered[i] {
+			candidate = WithoutVideos(candidate, VideoShownNote)
 		}
 		if candidate.ProviderContent != "" {
 			candidate.Content = candidate.ProviderContent
