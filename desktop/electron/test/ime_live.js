@@ -104,6 +104,8 @@ async function main() {
   await keepsComposing("the agent clicking and typing in it");
 
   const t0 = Date.now();
+  const realSettle = views.settle.bind(views);
+  views.settle = (entry) => { process.stdout.write(`  [debug] +${Date.now() - t0}ms settle called attached=${entry.attached} ${new Error().stack.split("\n").slice(2, 5).join(" <- ").replace(/\s+/g, " ")}\n`); realSettle(entry); };
   const wc = [...views.entries.values()][0].view.webContents;
   for (const ev of ["did-start-loading", "did-stop-loading", "did-start-navigation", "did-fail-load", "did-navigate"]) wc.on(ev, () => process.stdout.write(`  [debug] +${Date.now() - t0}ms ${ev} attached=${[...views.entries.values()][0].attached}\n`));
   await compose("guaqi");
