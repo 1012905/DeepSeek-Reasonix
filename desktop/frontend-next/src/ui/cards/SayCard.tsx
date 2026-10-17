@@ -137,7 +137,6 @@ export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { i
     <div className="call" data-k="say" data-quiet={quiet ? "" : undefined}>
       <div className="g">
         <Sym glyph="◦" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

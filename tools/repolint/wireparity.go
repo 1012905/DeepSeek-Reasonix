@@ -118,6 +118,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/browser_settings.go", "BrowserToolsSettings", tsBoundaryFile, "BrowserToolsSettings"},
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
 	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
+	{"internal/session/control/plan_approval_settings.go", "PlanApprovalSettings", tsBoundaryFile, "PlanApprovalSettings"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},

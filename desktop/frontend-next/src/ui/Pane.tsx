@@ -422,7 +422,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   // whether the run reads as moving.
   const blocked = hasPendingDecision(status);
   const run = runState({ blocked, running, hasItems: s.items.length > 0, terminal: s.terminal });
-  const cost = money(s.metrics.cost, s.metrics.currency);
+  const cost = s.metrics.coverage === "none" ? "" : money(s.metrics.cost, s.metrics.currency);
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : null;
   const walletDisplay = wallet.kind === "read" ? wallet.reading.display : "";
 

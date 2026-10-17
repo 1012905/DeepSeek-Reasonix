@@ -413,6 +413,7 @@ func (b *builder) wireMCP() {
 	t.mcp = resolveMCPSpecs(opts, cfg, root, t.specOptions)
 	reportProjectMCPAwaitingApproval(b.sink, cfg, root)
 	t.configSpecs, t.mcpSchemaKnown = registerMCPTools(b.ctx, t.host, t.reg, t.mcp, b.sink)
+	registerResourceTool(t.host, t.reg, cfg, t.mcp)
 	b.cleanup = t.host.Close
 	if opts.SharedHost != nil {
 		b.cleanup = func() {}

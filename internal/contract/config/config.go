@@ -909,6 +909,9 @@ type SandboxConfig struct {
 	AllowedDomains []string `toml:"allowed_domains"`
 	// DeniedDomains outrank AllowedDomains. The repo's are added to the user's.
 	DeniedDomains []string `toml:"denied_domains"`
+	// EgressUnlisted "allow" stops the question about hosts AllowedDomains does
+	// not name. User file only: a repo cannot switch its own prompts off.
+	EgressUnlisted string `toml:"egress_unlisted"`
 }
 
 // WriteRoots returns the directories file-writer tools may modify: the
@@ -1091,6 +1094,8 @@ type AgentConfig struct {
 	MaxParallelWriters int    `toml:"max_parallel_writers"`
 	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
+	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
+	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
@@ -1226,6 +1231,9 @@ type ToolsConfig struct {
 	SystemOne                SystemOneConfig      `toml:"system_one"`
 	ProtectChangedFiles      *bool                `toml:"protect_changed_files"`
 	BrowserTools             *bool                `toml:"browser_tools"`
+	// MCPResources offers the model a tool that reads a resource a connected
+	// server declares. The user file only; off by default.
+	MCPResources bool `toml:"mcp_resources"`
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`
@@ -1400,6 +1408,7 @@ func Default() *Config {
 			MaxParallelWriters:     3,
 			SubagentClaims:         "strict",
 			WriteLease:             "strict",
+			PlanApproval:           "ask",
 			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask

@@ -621,7 +621,7 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 	c.sink.Emit(c.approvalRequestEvent(event.Approval{
 		ID: id, Tool: req.tool, Subject: req.subject, Reason: req.reason, ReasonCode: ExplicitApprovalCode(req.tool, req.subject),
 		RawInput: append(json.RawMessage(nil), req.args...), Fresh: req.fresh,
-		AllowsSession: session, AllowsPersist: persist && c.onRemember != nil,
+		AllowsSession: session, AllowsPersist: c.offersPersist(req.tool, persist),
 	}))
 	c.approval.promptEmitMu.Unlock()
 	// The agent now needs the user's attention; a Notification hook can ping an

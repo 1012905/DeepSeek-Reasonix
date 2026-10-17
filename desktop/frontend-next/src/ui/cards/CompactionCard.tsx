@@ -112,7 +112,6 @@ export function CompactionCard({ c, done }: { c: Compaction; done: boolean }) {
     <div className="call" data-k="host">
       <div className="g">
         <Sym glyph="⊘" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

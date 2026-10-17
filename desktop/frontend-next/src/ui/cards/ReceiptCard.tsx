@@ -72,7 +72,6 @@ export function ReceiptCard({ r }: { r: Receipt }) {
     <div className="call" data-k="host" data-lvl={gaps.length > 0 ? "warn" : undefined}>
       <div className="g">
         <Sym glyph="✓" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">
