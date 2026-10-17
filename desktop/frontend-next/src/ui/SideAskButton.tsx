@@ -1,13 +1,14 @@
-import { useId } from "react";
+import { forwardRef, useId } from "react";
 import { t } from "../i18n";
 import { StudioIcon } from "./StudioIcon";
 
 /** The side question's switch, drawn beside attach. Whether the panel is open is
  *  the pane's to say; this only reports the press and the state it was given. */
-export function SideAskButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+export const SideAskButton = forwardRef<HTMLButtonElement, { open: boolean; onToggle: () => void }>(function SideAskButton({ open, onToggle }, ref) {
   const tip = useId();
   return (
     <button
+      ref={ref}
       type="button"
       className="mode plain attach studio-attach"
       data-action="side.toggle"
@@ -23,4 +24,4 @@ export function SideAskButton({ open, onToggle }: { open: boolean; onToggle: () 
       </span>
     </button>
   );
-}
+});
