@@ -67,6 +67,7 @@ type Server struct {
 	lastBuild                *boot.BuildResult // serving generation, guarded by bindMu; see reuseFromLastBuild
 	grants                   hostGrants        // what the embedding host has opened up
 	moves                    moveTracker       // the one storage relocation this server may be running
+	preparations             workspacePreparations
 	titleModel               titleProviderState
 	titles                   *titleCache
 	fill                     *titleFiller
@@ -402,6 +403,10 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusNotFound, "page.not_built", "this kernel is serving no built interface", nil)
 		return
 	}
+	// The shell names which build is current and the page's own out-of-date
+	// check reads this same file; a stored copy would look permanently behind,
+	// so only the content-named bundles under /assets keep a long cache.
+	w.Header().Set("Cache-Control", "no-store")
 	http.ServeFileFS(w, r, s.page, "index.html")
 }
 

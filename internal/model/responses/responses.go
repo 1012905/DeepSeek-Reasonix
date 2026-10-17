@@ -287,7 +287,7 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 	}
 	c.authed.Store(true)
 	out := make(chan provider.Chunk, 64)
-	go c.readStream(requestCtx, resp, out, wireMessages, downgrade)
+	go c.readStream(requestCtx, resp, out, wireMessages, downgrade, !req.Summary)
 	return out, nil
 }
 
@@ -343,7 +343,7 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 }
 
 func (c *client) buildRequestBodyWithContinuation(req provider.Request, allowPrevious bool) (map[string]any, bool, []provider.Message) {
-	messages := provider.SanitizeToolPairing(provider.ModelMessages(req.Messages))
+	messages := provider.SanitizeToolPairing(provider.WithoutVideosAll(provider.ModelMessages(req.Messages), provider.VideoNotSentNote))
 	body := map[string]any{"model": c.model, "stream": true}
 
 	effort := strings.ToLower(strings.TrimSpace(c.effort))
@@ -406,6 +406,7 @@ func (c *client) buildRequestBodyWithContinuation(req provider.Request, allowPre
 			})
 		}
 		body["tools"] = tools
+		applySummaryToolChoice(body, req.Summary)
 	}
 	instructions, rest := splitInstructions(messages)
 	if instructions != "" {
@@ -416,7 +417,7 @@ func (c *client) buildRequestBodyWithContinuation(req provider.Request, allowPre
 	previousID, expectedDigest := c.lastResponseID, c.expectedPrefixDigest
 	mode := c.effectiveModeLocked()
 	c.mu.Unlock()
-	if allowPrevious && mode == "stateful" && previousID != "" && len(messages) > 0 &&
+	if allowPrevious && !req.Summary && mode == "stateful" && previousID != "" && len(messages) > 0 &&
 		messages[len(messages)-1].Role == provider.RoleUser &&
 		c.conversationDigest(messages[:len(messages)-1]) == expectedDigest {
 		body["input"] = messages[len(messages)-1].Content

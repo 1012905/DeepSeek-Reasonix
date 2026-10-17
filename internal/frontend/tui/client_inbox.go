@@ -13,6 +13,8 @@ type InboxItem struct {
 	Intent  string `json:"intent"`
 	State   string `json:"state"`
 	Preview string `json:"preview"`
+	// Images marks a line that froze a picture: it cannot join a running turn.
+	Images bool `json:"images"`
 }
 
 // InboxSnapshot is the durable queue as GET /inbox answers it.

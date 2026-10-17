@@ -25,6 +25,7 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
+	limits         agentLimits
 	goalAutoRetry  int
 	subagentClaims string
 	hostVerif      string
@@ -43,9 +44,20 @@ type heldScope struct {
 	// turnNarration is the user's [agent] turn_narration. It adds output tokens
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
-	peers         bool
+	peers         PeersConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
+	// webSearchBackends and searxngURL decide where the user's queries go, so
+	// only the user file names them.
+	webSearchBackends []string
+	searxngURL        string
+	// webSearchPaid is the user's agreement to be charged; a cloned repo cannot
+	// give it on their behalf.
+	webSearchPaid []string
+	webFetch      []string
+	webFetchPaid  []string
+	// videoNativeMax lowers what is sent to a vendor, so only the user sets it.
+	videoNativeMax int64
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -65,6 +77,7 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
+		limits:          holdAgentLimits(c),
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
@@ -78,8 +91,15 @@ func holdUserScope(c *Config) heldScope {
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
-		peers:           c.Peers.Enabled,
+		peers:           clonePeers(c.Peers),
 		mcpResources:    c.Tools.MCPResources,
+
+		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
+		searxngURL:        c.Tools.SearxngURL,
+		webSearchPaid:     slices.Clone(c.Tools.WebSearchPaidAllowed),
+		webFetch:          slices.Clone(c.Tools.WebFetchBackends),
+		webFetchPaid:      slices.Clone(c.Tools.WebFetchPaidAllowed),
+		videoNativeMax:    c.Tools.VideoNativeMaxBytes,
 	}
 }
 
@@ -167,15 +187,17 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	}
 	// Messages between sessions put other sessions' text in front of this one's
 	// model, so enabling them is the user's alone.
-	if c.Peers.Enabled != h.peers {
-		c.ignoreProject("peers.enabled", fmt.Sprintf("%t", c.Peers.Enabled), ProjectUserOnly)
-		c.Peers.Enabled = h.peers
-	}
+	h.narrowPeers(c)
 	// Letting the model read what a server publishes widens what a third party
 	// can put in front of it, so a cloned repo must not turn it on.
 	if c.Tools.MCPResources != h.mcpResources {
 		c.ignoreProject("tools.mcp_resources", fmt.Sprintf("%t", c.Tools.MCPResources), ProjectUserOnly)
 		c.Tools.MCPResources = h.mcpResources
+	}
+	c.keepUserSearchBackends(h)
+	if c.Tools.VideoNativeMaxBytes != h.videoNativeMax {
+		c.ignoreProject("tools.video_native_max_bytes", fmt.Sprint(c.Tools.VideoNativeMaxBytes), ProjectUserOnly)
+		c.Tools.VideoNativeMaxBytes = h.videoNativeMax
 	}
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.
@@ -183,6 +205,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.goal_auto_retry", fmt.Sprint(c.Agent.GoalAutoRetry), ProjectUserOnly)
 		c.Agent.GoalAutoRetry = h.goalAutoRetry
 	}
+	h.narrowAgentLimits(c)
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
 		c.Agent.PlanApproval = h.planApproval
@@ -236,6 +259,19 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("tools.system_one.laya.local", "true", ProjectUserOnly)
 		c.Tools.SystemOne.Laya.Local = false
 	}
+	c.applyWorkspaceGrants(r, ws)
+	store := NewProjectProgramStore(r.Home())
+	h.gatePrograms(c, store, ws)
+	// Launcher arguments belong to the program the user chose them for.
+	if c.Tools.Shell.Path != h.shell.Path {
+		c.Tools.Shell.Args = nil
+	}
+	h.endpoints.gateEndpoints(c, store, ws)
+}
+
+// applyWorkspaceGrants adds what the user already granted this workspace, and
+// refuses a granted root that no longer resolves to itself.
+func (c *Config) applyWorkspaceGrants(r Roots, ws string) {
 	grant := grantedToWorkspace(r.Home(), ws)
 	c.Permissions.Allow = appendMissing(c.Permissions.Allow, grant.Allow...)
 	for _, entry := range grant.AllowWrite {
@@ -259,13 +295,6 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		}
 		c.projectScope.extraRoots = appendMissing(c.projectScope.extraRoots, resolved)
 	}
-	store := NewProjectProgramStore(r.Home())
-	h.gatePrograms(c, store, ws)
-	// Launcher arguments belong to the program the user chose them for.
-	if c.Tools.Shell.Path != h.shell.Path {
-		c.Tools.Shell.Args = nil
-	}
-	h.endpoints.gateEndpoints(c, store, ws)
 }
 
 func (h heldScope) narrowSandbox(c *Config, ws string) {
@@ -302,7 +331,10 @@ func (h heldScope) narrowSandbox(c *Config, ws string) {
 	// A cloned repo must not hand itself the container daemon socket. An egress
 	// allow list only narrows open network, so a repo may set one the user has
 	// not, but never replace the user's; its denials only add to the user's.
-	s.HostAuthorities, s.AllowDevices = u.HostAuthorities, u.AllowDevices
+	if s.EgressUnlisted != u.EgressUnlisted {
+		c.ignoreProject("sandbox.egress_unlisted", s.EgressUnlisted, ProjectUserOnly)
+	}
+	s.HostAuthorities, s.AllowDevices, s.EgressUnlisted = u.HostAuthorities, u.AllowDevices, u.EgressUnlisted
 	if len(u.AllowedDomains) > 0 {
 		s.AllowedDomains = u.AllowedDomains
 	}
@@ -385,4 +417,29 @@ func appendMissing(base []string, extra ...string) []string {
 		}
 	}
 	return out
+}
+
+// keepUserSearchBackends restores the user's search backends over a project
+// file's: they decide where the user's queries are sent.
+func (c *Config) keepUserSearchBackends(h heldScope) {
+	if !slices.Equal(c.Tools.WebSearchBackends, h.webSearchBackends) {
+		c.ignoreProject("tools.web_search_backends", strings.Join(c.Tools.WebSearchBackends, ","), ProjectUserOnly)
+		c.Tools.WebSearchBackends = slices.Clone(h.webSearchBackends)
+	}
+	if c.Tools.SearxngURL != h.searxngURL {
+		c.ignoreProject("tools.searxng_url", c.Tools.SearxngURL, ProjectUserOnly)
+		c.Tools.SearxngURL = h.searxngURL
+	}
+	if !slices.Equal(c.Tools.WebSearchPaidAllowed, h.webSearchPaid) {
+		c.ignoreProject("tools.web_search_paid_allowed", strings.Join(c.Tools.WebSearchPaidAllowed, ","), ProjectUserOnly)
+		c.Tools.WebSearchPaidAllowed = slices.Clone(h.webSearchPaid)
+	}
+	if !slices.Equal(c.Tools.WebFetchBackends, h.webFetch) {
+		c.ignoreProject("tools.web_fetch_backends", strings.Join(c.Tools.WebFetchBackends, ","), ProjectUserOnly)
+		c.Tools.WebFetchBackends = slices.Clone(h.webFetch)
+	}
+	if !slices.Equal(c.Tools.WebFetchPaidAllowed, h.webFetchPaid) {
+		c.ignoreProject("tools.web_fetch_paid_allowed", strings.Join(c.Tools.WebFetchPaidAllowed, ","), ProjectUserOnly)
+		c.Tools.WebFetchPaidAllowed = slices.Clone(h.webFetchPaid)
+	}
 }

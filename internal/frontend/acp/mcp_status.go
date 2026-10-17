@@ -16,6 +16,8 @@ const (
 func registerSessionHealthMethods(conn *Conn, s *service) {
 	conn.Handle(sessionStatusMethod, s.sessionStatus)
 	conn.Handle(sessionMCPStatusMethod, s.sessionMCPStatus)
+	registerSessionInfoMethods(conn, s)
+	registerSessionControlMethods(conn, s)
 }
 
 func (s *service) bindSessionHealthEvents(sess *acpSession) {

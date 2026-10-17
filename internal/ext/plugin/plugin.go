@@ -615,6 +615,7 @@ type Client struct {
 	toolsListed  bool
 	toolAdapters []tool.Tool
 	held         []HeldTool
+	followed     []HeldTool
 	// toolsFingerprint covers the published catalog, so a re-read after a
 	// list_changed notice can tell a real change from the same tools again.
 	toolsFingerprint [sha256.Size]byte
@@ -1094,6 +1095,12 @@ func (h *Host) addConnectedWithLifecycle(lifeCtx, callCtx context.Context, s Spe
 		return nil, err
 	}
 	h.clearFailure(s.Name)
+	// A server connected by hand leaves the same cache a started one does, so
+	// the next session registers it without a handshake. Added while h.closed is
+	// still false under h.mu, so Close, which sets it first, drains the write.
+	if deferredGeneration == 0 {
+		h.bgWrites.Go(func() { c.saveHandshakeSchema(s, ts) })
+	}
 	h.mu.Unlock()
 	h.bindToolListChanges(c)
 	// The status changed here, not when prompts finish arriving: a tools-only

@@ -1,0 +1,2 @@
+- 修复：多个会话同时运行时，超长输出偶尔被截断的问题。关联 #13620。
+- Fixed: Oversize output was occasionally truncated when several sessions ran at once. Refs #13620.

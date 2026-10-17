@@ -271,7 +271,7 @@ func (s *Store) snapshotLocked() InboxSnapshot {
 		Items:         items,
 		Capacity: Capacity{
 			Items:        len(items),
-			MaxItems:     s.limits.MaxItems,
+			MaxItems:     max(s.limits.MaxItems, 0),
 			Bytes:        m.totalBytes(),
 			MaxBytes:     s.limits.MaxTotalBytes,
 			MaxItemBytes: s.limits.MaxItemBytes,
@@ -333,7 +333,7 @@ func (s *Store) Enqueue(req EnqueueRequest) (InboxReceipt, error) {
 	if byteSize > s.limits.MaxItemBytes {
 		return InboxReceipt{}, ErrItemTooLarge
 	}
-	if len(s.man.Items) >= s.limits.MaxItems {
+	if s.limits.MaxItems > 0 && len(s.man.Items) >= s.limits.MaxItems {
 		return InboxReceipt{}, ErrCapacityItems
 	}
 	if s.man.totalBytes()+byteSize > s.limits.MaxTotalBytes {
@@ -359,6 +359,7 @@ func (s *Store) Enqueue(req EnqueueRequest) (InboxReceipt, error) {
 		Idempotency: idem,
 		Origin:      req.Origin,
 		Refs:        refSummaries(env.Refs),
+		Images:      len(env.FrozenImages) > 0,
 		RunID:       s.runID,
 	}
 
@@ -489,6 +490,7 @@ func (s *Store) UpdateItemWithIdempotency(id string, env PromptEnvelope, alias s
 	next.Items[i].Checksum = checksum
 	next.Items[i].Preview = PreviewText(env.DisplayText, DefaultPreviewRunes)
 	next.Items[i].Refs = refSummaries(env.Refs)
+	next.Items[i].Images = len(env.FrozenImages) > 0
 	next.Items[i].UpdatedAt = time.Now().UTC()
 	next.Items[i].Revision = next.Revision + 1
 	bindIdempotency(next, alias, id, aliasHash)

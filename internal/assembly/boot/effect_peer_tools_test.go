@@ -60,7 +60,7 @@ func (p *peerToolProvider) toolNames() []string {
 	return names
 }
 
-func buildPeerToolSession(t *testing.T, enabled bool, to, text string) (*peerToolProvider, *control.Controller, string, *struct {
+func buildPeerToolSession(t *testing.T, enabled bool, to, text string, peersExtra ...string) (*peerToolProvider, *control.Controller, string, *struct {
 	mu        sync.Mutex
 	approvals []event.Approval
 }) {
@@ -82,7 +82,7 @@ kind = "`+kind+`"
 model = "x"
 `)
 	if enabled {
-		writeFile(t, home, "config.toml", "[peers]\nenabled = true\n")
+		writeFile(t, home, "config.toml", "[peers]\nenabled = true\n"+strings.Join(peersExtra, ""))
 	}
 	approveWorkspaceAt(t, home, dir)
 	seen := &struct {
@@ -180,6 +180,33 @@ func TestEffectAnInjectedRequestToMessageAnotherSessionAsksFirstAndWritesNothing
 				t.Fatalf("after approval the spool holds %+v, want the one message", pending)
 			case !allow && len(pending) != 0:
 				t.Fatalf("a declined message was spooled: %+v", pending)
+			}
+		})
+	}
+}
+
+// Handing a task to another project is a second switch, off unless the user's
+// own file turns it on beside messages between sessions: without it the model's
+// tool block is exactly what it was.
+func TestEffectDispatchToolExistsOnlyWhereTheUserTurnedDispatchOn(t *testing.T) {
+	t.Parallel()
+	for _, dispatch := range []bool{true, false} {
+		t.Run(fmt.Sprintf("dispatch=%v", dispatch), func(t *testing.T) {
+			t.Parallel()
+			extra := ""
+			if dispatch {
+				extra = "dispatch = true\n"
+			}
+			rec, ctrl, _, _ := buildPeerToolSession(t, true, "nobody", "hello", extra)
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			_ = ctrl.Run(ctx, "hi")
+			cancel()
+			has := map[string]bool{}
+			for _, name := range rec.toolNames() {
+				has[name] = true
+			}
+			if has["dispatch_to_project"] != dispatch || !has["send_peer_message"] {
+				t.Fatalf("tools in the first request = %v", rec.toolNames())
 			}
 		})
 	}

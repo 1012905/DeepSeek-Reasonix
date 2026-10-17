@@ -19,8 +19,13 @@ export const isUnderReview = (item: Pick<FeedbackItem, "status" | "underReview" 
   item.status === "received" && item.underReview === true && !item.statusUnavailable;
 
 // Only these take a reply from the reporter; the service has the last word. A
-// reply to a fixed report says the fix did not hold and reopens it.
+// reply to a fixed report says the fix did not hold and reopens it. A received
+// report takes one once it is released: one still under review reads as received
+// too, and is not asked for anything.
 export const FEEDBACK_REPLYABLE: readonly FeedbackStatus[] = ["needs_info", "answered", "recorded", "in_progress", "fixed"];
+
+export const canReplyTo = (item: Pick<FeedbackItem, "status" | "underReview" | "statusUnavailable">): boolean =>
+  !item.statusUnavailable && (FEEDBACK_REPLYABLE.includes(item.status) || (item.status === "received" && !isUnderReview(item)));
 
 export interface FeedbackEnvInfo {
   version: string;

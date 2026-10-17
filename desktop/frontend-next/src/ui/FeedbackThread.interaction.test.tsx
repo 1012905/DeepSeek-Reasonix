@@ -212,13 +212,28 @@ describe("who may reply", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
-  it("offers nothing on received, wont-fix, duplicate, closed and unreadable reports", async () => {
-    const items = (["received", "wontfix", "duplicate", "closed"] as const).map((status, i) => item({ receipt: `FB-AAAA-000${i + 1}`, status }));
+  it("offers nothing on wont-fix, duplicate, closed and unreadable reports", async () => {
+    const items = (["wontfix", "duplicate", "closed"] as const).map((status, i) => item({ receipt: `FB-AAAA-000${i + 1}`, status }));
     items.push(item({ receipt: "FB-AAAA-0009", status: "needs_info", needsInput: true, statusUnavailable: true }));
     render(<FeedbackMine port={portWith(() => mine(items))} onFile={() => {}} />);
     await screen.findByText("FB-AAAA-0001");
     expect(screen.queryByRole("button", { name: "回复" })).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("takes a reply on a released received report, and none while it is under review", async () => {
+    const items = [
+      item({ receipt: "FB-AAAA-0001", status: "received", replies: [reply(5, "maintainer", "Which OS?")] }),
+      item({ receipt: "FB-AAAA-0002", status: "received", underReview: true }),
+    ];
+    const port = portWith(() => mine(items));
+    render(<FeedbackMine port={port} onFile={() => {}} />);
+    await screen.findByText("FB-AAAA-0001");
+    expect(within(row("FB-AAAA-0002")).queryByRole("button", { name: "回复" })).toBeNull();
+    await userEvent.click(within(row("FB-AAAA-0001")).getByRole("button", { name: "回复" }));
+    await userEvent.type(box(), "macOS 15");
+    await userEvent.click(sendButton());
+    await waitFor(() => expect(port.replyFeedback).toHaveBeenCalledWith("FB-AAAA-0001", "macOS 15"));
   });
 
   it("lets the reporter say a fix did not hold, and says that reopens the report", async () => {

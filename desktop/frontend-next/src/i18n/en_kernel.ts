@@ -78,9 +78,21 @@ export const EN_KERNEL: Record<string, string> = {
     "What this server launches changed since you enabled it; review the command and enable it again",
   "这个服务没有被暂挡的工具定义": "This server has no held tool definitions",
   "你看到的被挡定义已经变了，没有接受；请重新查看": "The held definitions changed since you saw them, so nothing was accepted; review them again",
+  "这个客户端不能登录 MCP 服务器": "This client cannot sign in to MCP servers",
+  "你没有同意前往该登录站点，已取消登录": "You did not agree to go to that sign-in site, so sign-in was cancelled",
+  "这个服务器不使用 OAuth 登录": "This server does not use OAuth sign-in",
+  "这个服务器已经在登录中": "A sign-in for this server is already open",
+  "服务器给出的登录页没有主机名，已停止": "The server's sign-in page names no host, so it was stopped",
+  "这台机器打不开浏览器": "This machine cannot open a browser",
+  "登录没有在时限内完成": "Sign-in was not completed in time",
+  "登录已取消": "Sign-in was cancelled",
+  "登录没有完成：{detail}": "Sign-in did not complete: {detail}",
+  "没能记下这个选择：{detail}": "The choice could not be recorded: {detail}",
   "开关未能保存：其存储文件无法读取或写入": "The switch was not stored: its file could not be read or written",
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
+  "事件流连接已经关闭，需要重新打开并重新订阅各窗格": "The event stream has closed; open a new one and subscribe each pane again",
+  "这个窗格由另一台机器驱动，使用它自己的事件流": "This pane is driven from another machine and keeps its own event stream",
   "这个后台任务已经不在运行了": "That background job is no longer running",
   "这条调用已经结束了": "This call has already finished",
   "你停止了这条调用，它在外部已经做了什么无法确定": "You stopped this call; what it had already done outside the workspace is unknown",
@@ -95,6 +107,7 @@ export const EN_KERNEL: Record<string, string> = {
   "该条没有正文": "That entry has no body",
   "该会话的待送达已关闭": "This session's pending queue is closed",
   "该待送达由更高版本写入，当前版本只能读取": "This queue was written by a newer version and is read-only here",
+  "这份待送达属于另一个运行，暂不能接管": "This pending queue belongs to another run and cannot be taken over here",
   "该提交标识已被使用，且当时的内容不同": "That submission key was already used, with different content",
   // 配置文件本身坏了，以及每一个写设置的面板被它挡住时
   "配置文件 {path} 无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复": "The config file {path} does not parse, so nothing was saved. Open Settings to see where it is broken and repair it",
@@ -331,7 +344,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这个会话不支持辅助提问": "Side questions are not available in this session",
   "这个辅助提问已经关闭，请重新打开": "That side question is closed; open it again",
   "上一个问题还在回答，请稍候再问": "The previous question is still being answered; wait a moment",
-  "同时打开的辅助提问太多，请先关闭几个": "Too many side questions are open; close some first",
+  "同时打开的辅助提问已到你设置的上限（agent.max_side_sessions），请先关闭几个": "The side questions open at once have reached your limit (agent.max_side_sessions); close some first",
   "会话间消息未开启": "Messages between sessions are not turned on",
   "这个客户端不能收发会话间消息": "This client cannot send or decide messages between sessions",
   "本机没有叫这个名字的会话": "No session on this machine has that name",
@@ -343,6 +356,9 @@ export const EN_KERNEL: Record<string, string> = {
   "这条消息太长": "That message is too long",
   "这条消息已经处理过了": "That message was already decided",
   "会话间消息没能完成：{detail}": "The message between sessions did not go through: {detail}",
+  "放行的项目必须是一个绝对路径的文件夹": "A released project must be a folder given as an absolute path",
+  "只有批准才能记住，拒绝只对这一条生效": "Only an approval can be remembered; a denial applies to this message alone",
+  "会话间消息的设置没能保存：{detail}": "The messaging settings could not be saved: {detail}",
   "地址换了域名，已保存的密钥不会发过去；请填入这个地址对应的密钥": "The address moved to another origin, so the saved key is not sent there; enter the key for this address",
   "请先写下要问的内容": "Write the question first",
   "辅助提问没能完成，请重试": "The side question could not be completed; try again",
@@ -426,7 +442,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这份备份已不存在": "That backup no longer exists",
   "备份数量已达上限，请先删除一份旧备份": "The backup limit is reached; delete an older backup first",
   "有会在本机运行程序或改变密钥去向的项目，需要逐项确认后才能恢复": "Some items run programs here or change where a key is sent; confirm each one before restoring",
-  "项目列表已满（32 个），请先移除一个项目再添加": "The project list is full (32 projects); remove one before adding another",
+  "项目列表已到你设置的上限（desktop.max_workspaces），请先移除一个项目再添加": "The project list is at the limit you set (desktop.max_workspaces); remove one before adding another",
   "{model} 的价格必须是不小于 0 的数字，并选择货币": "The price for {model} must be a number not below 0, with a currency chosen",
   "{model} 不在已选模型中，未保存价格": "{model} is not one of the selected models, so no price was saved",
   "这台服务器不支持切换工作区": "This server cannot switch workspaces",
@@ -518,6 +534,10 @@ export const EN_KERNEL: Record<string, string> = {
   "文件改动显示设置未能保存：{detail}": "The file-changes display setting was not saved: {detail}",
   "折叠中间过程的设置未能保存：{detail}": "The fold-the-work setting was not saved: {detail}",
   "回合间叙述的设置未能保存：{detail}": "The narration setting was not saved: {detail}",
+  "这台服务器没有开启联网搜索与抓取设置的编辑：只有这台电脑上的窗口能改。": "Editing the web search and fetch settings is not enabled on this server: only the window on this computer can change them.",
+  "联网搜索与抓取的设置未能保存：{detail}": "The web search and fetch settings were not saved: {detail}",
+  "“{backend}”不是可选的联网后端，未做任何修改。": "\u201c{backend}\u201d is not a web backend you can choose; nothing was changed.",
+  "SearXNG 地址必须是带主机名的 http(s) 地址，不能含账号、查询串或片段，未做任何修改。": "The SearXNG address must be an http(s) address with a host, without credentials, query or fragment; nothing was changed.",
   "无进展设置未能保存：{detail}": "The progress settings were not saved: {detail}",
   "提问等待时长未能保存：{detail}": "The question wait time was not saved: {detail}",
   "等待时长超出允许范围，未做任何修改：{detail}": "That wait time is out of range; nothing was changed: {detail}",
@@ -549,6 +569,14 @@ export const EN_KERNEL: Record<string, string> = {
     "The chosen search model is no longer in the configuration, so search is off; choose one again in Model preferences, or set it back to automatic",
   "所选搜索模型的协议不支持原生搜索，或已关闭搜索，搜索已关闭；到模型偏好里重新选择，或恢复自动":
     "The chosen search model's protocol does not support native search, or search was turned off, so search is off; choose one again in Model preferences, or set it back to automatic",
+  "网页抓取后端没有返回内容，已换用链里的下一个后端；详情见通知":
+    "A fetch backend did not answer; the next one in the chain was tried. See the notice for details",
+  "配置的网页抓取后端无法使用，已跳过；检查用户配置里的 web_fetch_backends":
+    "A configured fetch backend cannot be used and was skipped; check web_fetch_backends in your user config",
+  "搜索后端没有返回结果，已换用链里的下一个后端；详情见通知":
+    "A search backend did not answer; the next one in the chain was tried. See the notice for details",
+  "配置的搜索后端无法使用，已跳过；检查用户配置里的 web_search_backends 和 searxng_url":
+    "A configured search backend cannot be used and was skipped; check web_search_backends and searxng_url in your user config",
   "所选搜索模型所在的连接没有凭据，搜索已关闭；到模型偏好里重新选择，或恢复自动":
     "The connection of the chosen search model has no credentials, so search is off; choose one again in Model preferences, or set it back to automatic",
   "配置里的默认审批档位本版本不认识，已按每次询问处理；在界面里选一个档位即可替换":

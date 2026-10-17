@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"reasonix/internal/contract/tool"
 	"strings"
 
 	"reasonix/internal/contract/ablation"
@@ -29,6 +30,8 @@ type delegationInputs struct {
 	session      sessionRuntime
 	bashEnforced func() bool
 	extraRoots   []string
+	// childTools names what a child gets from its own model beyond the parent's.
+	childTools func(modelRef string) []tool.Tool
 }
 
 // delegation builds the task tool and the skill sub-agent runner. Wired after
@@ -91,6 +94,7 @@ func (w roleWiring) taskTool(in delegationInputs) *delegation.TaskTool {
 		WithProfileLookup(in.sub.profileLookup).
 		WithProfileConfigResolvers(in.sub.profileModel, in.sub.profileEffort).
 		WithBashSandboxEnforced(in.bashEnforced).
+		WithChildTools(in.childTools).
 		WithOptimisticClaims(w.cfg.SubagentClaimsOptimistic())
 }
 

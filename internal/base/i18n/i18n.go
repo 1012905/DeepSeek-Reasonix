@@ -96,6 +96,7 @@ type Messages struct {
 	NoticeInboxRecoveredFmt string // a reopened inbox came up paused with unfinished instructions — %d count
 	TUIQuestion             string // an answered question that carried no prompt
 	TUISubagentCallsFmt     string // calls a sub-agent made under its task — %d count
+	TUIVideoSentFmt         string // a video handed to the model natively — name, size and length, model
 	TUIChartMoreRowsFmt     string // rows of a chart table past the preview — %d count
 	TUIChartMoreColsFmt     string // columns of a chart table that did not fit — %d count
 	TUIStallTokensFmt       string // progress watch: %d context windows (%d tokens) with nothing observable
@@ -169,6 +170,8 @@ type Messages struct {
 	SandboxEscapeApprovalChoices    string // approval choice list for OS sandbox escape prompts
 	NotifyMessages
 	SlashHintMessages
+	QueueMessages
+	GoalMessages
 	ApprovalNeededFmt              string // notification text for a pending approval, tool only
 	ApprovalNeededWithSubjectFmt   string // notification text for a pending approval with subject
 	AnswerNeededFmt                string // notification text for a pending ask question
@@ -460,9 +463,6 @@ type Messages struct {
 	GoalNotPaused                string
 	GoalPaused                   string
 	AwaitingUserFmt              string
-	GoalRetryFmt                 string
-	GoalRetryGaveUpFmt           string
-	PlanAutoApproved             string
 	ImagesNotReadable            string
 	ImagesNeedVisionRole         string
 	ImagesDropped                string

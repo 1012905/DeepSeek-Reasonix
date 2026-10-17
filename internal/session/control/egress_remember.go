@@ -5,7 +5,9 @@ import (
 	"slices"
 	"strings"
 
+	"reasonix/internal/base/i18n"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/contract/event"
 	"reasonix/internal/safety/egress"
 )
 
@@ -53,5 +55,24 @@ func (c *Controller) offersPersist(tool string, persist bool) bool {
 	if tool == NetworkEgressApprovalTool {
 		return c.egressPersistable()
 	}
+	if tool == PaidSearchApprovalTool || tool == MCPSignInApprovalTool {
+		return true
+	}
 	return persist && c.onRemember != nil
+}
+
+// egressUnlistedAllowed answers for a host the allow list does not name when the
+// user's own file says not to ask. The first time a host passes this way it is
+// said once; the proxy's denials and address checks have already run or still
+// follow, so only the question is skipped.
+func (c *Controller) egressUnlistedAllowed(host string) bool {
+	if !config.LoadForEdit(config.UserConfigPath()).EgressUnlistedAllowed() {
+		return false
+	}
+	if !c.approval.preApprovedForDecision(NetworkEgressApprovalTool, host, nil, true) {
+		c.approval.grantSession(NetworkEgressApprovalTool, host)
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeEgressAutoAllowed,
+			Text: fmt.Sprintf(i18n.M.EgressAutoAllowedFmt, host), Detail: host})
+	}
+	return true
 }

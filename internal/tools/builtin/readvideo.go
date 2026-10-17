@@ -68,11 +68,11 @@ func (readVideo) Name() string   { return "read_video" }
 func (readVideo) ReadOnly() bool { return true }
 
 func (readVideo) Description() string {
-	return "Sample still frames from a video with ffmpeg: time-labelled images, no audio or motion. Needs a model that reads images."
+	return "Look at a video: native if the model watches video, else ffmpeg frames."
 }
 
 func (readVideo) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"frames":{"type":"integer","description":"default 8, max 12"},"start":{"type":"number","description":"seconds"},"end":{"type":"number","description":"seconds"}},"required":["path"],"additionalProperties":false}`)
+	return json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"mode":{"type":"string","enum":["auto","frames","native"]},"frames":{"type":"integer","description":"max 12"},"start":{"type":"number","description":"seconds"},"end":{"type":"number","description":"seconds"}},"required":["path"],"additionalProperties":false}`)
 }
 
 func (r readVideo) Execute(ctx context.Context, args json.RawMessage) (string, error) {

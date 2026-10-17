@@ -35,6 +35,8 @@ export interface McpEntry {
   held?: McpHeld[];
   heldDigest?: string;
   heldMore?: number;
+  // The user takes this server's definition changes without being asked.
+  followsChanges?: boolean;
 }
 
 // One withheld tool and how it differs from what was approved: added, changed,

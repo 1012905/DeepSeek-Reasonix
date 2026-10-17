@@ -1,3 +1,4 @@
+import { reason } from "../i18n/kernel";
 import { HttpError } from "./http_error";
 import type { KeptText } from "./attachment";
 import type { ChangeDiff, GitHistory, StageRequest, WorkspaceChange, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
@@ -117,4 +118,29 @@ export class MockWorkspace extends MockFeedback {
     };
   }
 
+}
+
+export class MockPreparations {
+  private items = new Map<string, import("./workspace").WorktreePreparation>();
+  async prepare(id: string, selection: import("./workspace").WorktreeSelection, create: () => Promise<string>) {
+    const found = this.items.get(id);
+    if (found) return found;
+    const value: import("./workspace").WorktreePreparation = { id, phase: "validating", sourceRoot: selection.sourceRoot, ref: selection.ref, startedAt: Date.now() };
+    try {
+      value.workspaceRoot = await create();
+      value.phase = "ready";
+      value.branch = "reasonix/demo";
+    } catch (error) {
+      value.phase = "failed";
+      value.code = "workspace.worktree_failed";
+      value.detail = reason(error);
+    }
+    this.items.set(id, value);
+    return value;
+  }
+  async read(id: string) {
+    const value = this.items.get(id);
+    if (!value) throw new Error("unknown worktree operation");
+    return value;
+  }
 }

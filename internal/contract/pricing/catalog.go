@@ -78,11 +78,12 @@ const mimoCheckedOn = "2026-10-06"
 
 // CatalogSourceURLs document public pricing pages.
 const (
-	DocDeepSeekPricing   = "https://api-docs.deepseek.com/quick_start/pricing"
-	DocLongCatPricingUSD = "https://longcat.chat/platform/docs/Pricing/LongCat-2.0.html"
-	DocLongCatPricingCNY = "https://longcat.chat/platform/docs/zh/pricing/long-cat-2.0"
-	DocMiMoPAYG          = "https://mimo.mi.com/docs/price/pay-as-you-go"
-	DocMiMoTokenPlan     = "https://platform.xiaomimimo.com/token-plan"
+	DocDeepSeekPricing    = "https://api-docs.deepseek.com/quick_start/pricing"
+	DocDeepSeekPricingCNY = "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+	DocLongCatPricingUSD  = "https://longcat.chat/platform/docs/Pricing/LongCat-2.0.html"
+	DocLongCatPricingCNY  = "https://longcat.chat/platform/docs/zh/pricing/long-cat-2.0"
+	DocMiMoPAYG           = "https://mimo.mi.com/docs/price/pay-as-you-go"
+	DocMiMoTokenPlan      = "https://platform.xiaomimimo.com/token-plan"
 )
 
 // officialEndpointHosts maps a vendor's own API hostnames to the catalog

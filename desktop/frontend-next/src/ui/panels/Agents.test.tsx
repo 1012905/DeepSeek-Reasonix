@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { initialState, reduce, type SessionEvent } from "../../state/session";
 import { railOf } from "./derive";
 import { Agents } from "./Agents";
+import { seconds } from "../../i18n/format";
 
 const prof = { name: "flash-fill" };
 const base: SessionEvent[] = [
@@ -84,5 +85,27 @@ describe("telling parallel sub-agents apart", () => {
     expect(html(row("a"))).not.toContain('class="lbl"');
     const fleet = [{ kind: "tool_dispatch", tool: { id: "f", name: "use_capability", profile: { name: "fleet", count: 3 } } }] as SessionEvent[];
     expect(html(fleet)).not.toContain('class="lbl"');
+  });
+});
+
+describe("a delegate that has finished", () => {
+  const finished = [
+    { kind: "tool_dispatch", tool: { id: "d1", name: "use_capability", profile: { name: "explore" } } },
+    { kind: "tool_result", tool: { id: "d1", name: "use_capability", output: "found it", durationMs: 1027000, profile: { name: "explore" } } },
+  ] as SessionEvent[];
+  const html = (evs: SessionEvent[]) => {
+    const s = evs.reduce(reduce, initialState);
+    return renderToStaticMarkup(<Agents tasks={railOf(s.items, s.executions, s.subagentPhase).tasks} />);
+  };
+
+  it("says it is delivered and how long it took, not only the duration", () => {
+    const out = html(finished);
+    expect(out).toContain("已交付");
+    expect(out).toContain(seconds(1027000, 0));
+  });
+
+  it("still says delivered when no duration was recorded", () => {
+    const out = html([finished[0], { ...finished[1], tool: { ...(finished[1] as { tool: object }).tool, durationMs: 0 } } as SessionEvent]);
+    expect(out).toContain("已交付");
   });
 });

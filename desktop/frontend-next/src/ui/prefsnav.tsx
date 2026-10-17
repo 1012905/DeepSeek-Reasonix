@@ -141,8 +141,11 @@ export const NAV: [string, [Section, string][]][] = [
  *  on-open         written and kept now; the running session keeps what it was
  *                  built with, and so does a rebuild, so the sessions opened
  *                  afterwards are the ones that start with it.
+ *  next-turn       written and kept now; the running session takes it at its
+ *                  next turn boundary, because it changes what the model is
+ *                  given (the tool table), which only moves between turns.
  *  none            nothing here changes anything: the block only reports. */
-export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "on-open" | "none";
+export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "on-open" | "next-turn" | "none";
 
 /** Who owns what a block governs — the other half of the contract, and the one
  *  the screen could not answer. "When does it take effect" was declared here
@@ -228,9 +231,10 @@ export const SETTINGS: SettingEntry[] = [
   // one. The shared [browser] enabled key belongs to the 1.x command line.
   // The lease is built with the session and a rebuild adopts the one it holds, so
   // the save reaches only sessions opened afterwards; the handler rebuilds nothing.
-  { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "none", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
+  { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
   { section: "tools", anchor: "write-lease", title: "多个会话同时写一个项目", scope: "machine", apply: "on-open", keywords: ["lease", "写锁", "并行", "多会话", "乐观", "optimistic", "write_lease", "等待"] },
   { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
+  { section: "tools", anchor: "web-access", title: "联网：搜索与抓取", scope: "machine", apply: "on-open", keywords: ["搜索", "searxng", "deepseek", "抓取", "计费", "付费", "web search", "fetch"] },
   { section: "tools", anchor: "browser-tools", title: "内置浏览器", scope: "machine", apply: "runtime-rebuild", keywords: ["browser", "网页", "chrome", "浏览器工具"] },
 
   // The four blocks below carry a scope control of their own, and the kernel
@@ -271,6 +275,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "appearance", anchor: "navrail", title: "图标栏", scope: "machine", apply: "immediate", keywords: ["侧边栏", "导航", "图标", "sidebar", "nav"] },
   { section: "appearance", anchor: "session-quick-actions", title: "会话行快捷按钮", scope: "machine", apply: "immediate", keywords: ["会话", "归档", "删除", "快捷", "按钮", "hover", "archive", "delete", "session", "row", "sidebar"] },
   { section: "appearance", anchor: "open-session-limit", title: "同时保留的会话标签数", scope: "machine", apply: "immediate", keywords: ["标签", "窗格", "收起", "保留", "tabs", "panes", "warm", "内存", "memory"] },
+  { section: "appearance", anchor: "live-stream-budget", title: "保持实时连接的会话标签数", scope: "machine", apply: "immediate", keywords: ["连接", "实时", "标签", "窗格", "卡死", "停止", "connection", "stream", "tabs", "stuck", "busy"] },
   { section: "appearance", anchor: "legacy-sessions", title: "1.x 旧会话", scope: "machine", apply: "immediate", keywords: ["1.x", "旧会话", "迁移", "隐藏", "legacy", "sessions", "sidebar"] },
   { section: "appearance", anchor: "live-grace", title: "进行中列表保留已完成会话", scope: "machine", apply: "immediate", keywords: ["进行中", "完成", "保留", "过滤", "running", "grace", "sidebar"] },
   { section: "appearance", anchor: "send-shortcut", title: "发送快捷键", scope: "machine", apply: "immediate", keywords: ["发送", "回车", "换行", "enter", "ctrl", "cmd"] },

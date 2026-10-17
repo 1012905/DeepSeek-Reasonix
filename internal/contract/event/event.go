@@ -267,7 +267,10 @@ type Tool struct {
 	// Images are what the call showed the model, as data URLs. The result text
 	// only names them, so a window with nothing else to go on shows a person a
 	// placeholder where the agent had a picture.
-	Images         []string
+	Images []string
+	// Videos are video files the call handed to the model to watch natively. A
+	// window shows the file and where it went; the bytes never ride an event.
+	Videos         []VideoShown
 	Err            string // ToolResult: non-empty when the call failed or was blocked
 	RefusalCode    string // ToolResult: dotted identity of a host refusal; Err is only its wording
 	WorkspaceLease *WorkspaceLease
@@ -553,6 +556,10 @@ const (
 	UsageSourceAdvisor          = "advisor"
 	UsageSourceBestOf           = "best-of"
 	UsageSourceBestOfJudge      = "best-of-judge"
+	// UsageSourceDeepSeekSearch is a request to the DeepSeek Search API, billed per successful request.
+	UsageSourceDeepSeekSearch = "deepseek-search"
+	// UsageSourceDeepSeekFetch is a request to the DeepSeek Fetch API, billed per successful request.
+	UsageSourceDeepSeekFetch = "deepseek-fetch"
 	// UsageSourceSide is a side conversation: asked beside the session, billed to it.
 	UsageSourceSide = "side"
 )
@@ -708,3 +715,12 @@ func (f FuncSink) Emit(e Event) {
 // Discard is a Sink that drops every event. Useful in tests and for runs that
 // only care about the final session state.
 var Discard Sink = FuncSink(func(Event) {})
+
+// VideoShown is one video a tool call handed to the model natively.
+type VideoShown struct {
+	Name       string
+	Size       int64
+	DurationMs int64
+	// Model is the model it was sent to.
+	Model string
+}

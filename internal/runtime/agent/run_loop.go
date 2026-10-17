@@ -702,6 +702,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 			Role:       provider.RoleTool,
 			Content:    results[i],
 			Images:     images[i],
+			Videos:     batch.videos[i],
 			ToolCallID: call.ID,
 			Name:       call.Name,
 		}

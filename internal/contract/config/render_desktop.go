@@ -42,6 +42,9 @@ func renderDesktopSection(b *strings.Builder, c *Config) {
 	if c.Desktop.Welcomed {
 		b.WriteString("welcomed = true   # the opening sequence has played on this machine\n")
 	}
+	if c.Desktop.MaxWorkspaces > 0 {
+		fmt.Fprintf(b, "max_workspaces = %d   # desktop: most projects the sidebar remembers; 0 or absent = no limit\n", c.Desktop.MaxWorkspaces)
+	}
 	if opener := c.DesktopExternalOpener(); opener != "" {
 		fmt.Fprintf(b, "external_opener = %q   # desktop Open control: installed application id\n", opener)
 	} else {
@@ -103,12 +106,12 @@ func renderDesktopSection(b *strings.Builder, c *Config) {
 // written.
 func renderAppearanceSection(b *strings.Builder, a AppearanceConfig) {
 	paper := strings.TrimSpace(a.Wallpaper.File)
-	if a.Zoom == 0 && a.ReadSize == 0 && a.FontUI == "" && a.FontMono == "" && paper == "" {
+	if a.Zoom == 0 && a.ReadSize == 0 && a.TextSize == 0 && a.FontUI == "" && a.FontMono == "" && paper == "" {
 		return
 	}
 	// The child table implies the parent, so an empty [desktop.appearance] is
 	// noise in a file people read.
-	if a.Zoom != 0 || a.ReadSize != 0 || a.FontUI != "" || a.FontMono != "" {
+	if a.Zoom != 0 || a.ReadSize != 0 || a.TextSize != 0 || a.FontUI != "" || a.FontMono != "" {
 		b.WriteString("\n[desktop.appearance]\n")
 	}
 	if a.Zoom != 0 {
@@ -116,6 +119,9 @@ func renderAppearanceSection(b *strings.Builder, a AppearanceConfig) {
 	}
 	if a.ReadSize != 0 {
 		fmt.Fprintf(b, "read_size = %g   # transcript body size in px\n", a.ReadSize)
+	}
+	if a.TextSize != 0 {
+		fmt.Fprintf(b, "text_size = %g   # interface text scale, %g..%g\n", a.TextSize, TextSizeMin, TextSizeMax)
 	}
 	if a.FontUI != "" {
 		fmt.Fprintf(b, "font_ui = %q   # interface font family\n", a.FontUI)

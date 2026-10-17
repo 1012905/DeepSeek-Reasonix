@@ -102,6 +102,8 @@ rules are written in.
 - The separator between crumbs is a written character, not the 1px hairline
   `.sep`. Sharing that name puts the glyph in a 1px-wide box with a background,
   and the strokes spill out of it.
+- Project and checkout context shrink together inside `.crumb-context`; the
+  conversation title keeps its four-em floor even when multiple labels are visible.
 - The desktop sidebar's divider owns collapse, expansion and width adjustment.
   - Its grip remains visible when collapsed; the separator supports Enter/Space for toggling, arrow keys for sizing,
     and Home or a double click for restoring the default width. The open width survives collapse and reload.
@@ -1545,6 +1547,27 @@ what exists.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
 
+## Card shell
+
+- The cards a reader reads or acts on (approval, ask, remember, guardian review, extension card, receipt, compaction) share one shell: `--r-md` radius, a 1px `--border`, the `--surface` ground, and a header strip with no fill of its own.
+- State is never a border colour: a warning or error card keeps the shell's border and says so in the glyph ink or a chip.
+
+## Rows in place of cards
+
+- An allowed guardian review at low or unknown risk, and a remembered fact, are Lines (`LineRow`): glyph, title, mono subject, meta and, when there is one, the action, on one row over a hairline, with the rationale or description as a muted line under it.
+- A refusal, or an allow at medium risk or above, stays a card: it is something to read.
+
+## Opened step detail
+
+- An opened step shows its detail as an indented panel in place, bordered on all four sides by one `--hair` line with a `--r-sm` radius. A rule on one side only is a rail, and the conversation has none.
+
+## Notice bar
+
+- A host notice is one sentence with a glyph and, under it, the kernel's diagnostic in the muted meta size.
+- There is no header strip, box, wash or side rule. Info has a dot; warn and error share the warning glyph, and only its ink (`--warn-ink`, `--err-ink`) says which.
+- A screen reader gets the level as a visually hidden prefix, and an error is `role="alert"`.
+- The card shell (`data-k="host"`) is for receipts, guardian reviews and compaction; notices no longer use it.
+
 ## Transcript Line
 
 - A tool call is a Line: a bare status glyph, the title, the mono subject and the meta on one row over a `--hair` bottom border, with no box, icon square or vertical track. Expanding it opens the detail in place.
@@ -1555,3 +1578,14 @@ what exists.
 
 - A prompt that can answer "this and every later one of its kind" draws those choices through one component (`RememberChoice`), only for the kinds the kernel says it will honour, as the quieter buttons beside the primary one.
 - A note under the footer (`RememberWhere`) says where each is kept: for the session only and never on disk, or as a permission rule in the user config that Settings can undo.
+
+## Brand lockup
+
+- The mark at the top of the rail is one row: the wordmark and a compact outlined uppercase badge ("STUDIO" by CSS; the text and the aria label are unchanged), vertically centred on each other, gap 8px.
+- The badge has a transparent fill, a 1px `--hair` border and `--muted` text, so it reads as a label and not as a notice; its outer size is unchanged.
+- The badge is hidden at 760px and below. The wordmark box is cropped to its drawn width so the badge sits next to the letters, not next to the asset's padding.
+
+## Side question
+
+- The panel stays anchored above its own composer. Collapsing it leaves a header with separate expand and close controls so the conversation can be read without discarding the side question.
+- The mounted content keeps its draft, quotes, answers and pending request while collapsed. Errors, quotes and replies share the scroll region; the input stays outside it.

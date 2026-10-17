@@ -61,6 +61,10 @@ type agentServices struct {
 	// configWrite can ask the user whether a file tool may write a
 	// Reasonix-managed config file outside the workspace roots.
 	configWrite tool.ConfigWriteApprover
+	// paidSearch can ask the user whether a paid search backend may be used.
+	paidSearch tool.PaidSearchApprover
+	// nativeVideo says whether the selected model watches a video file natively.
+	nativeVideo tool.NativeVideoSource
 	// hooks fires PreToolUse / PostToolUse shell hooks around each tool call.
 	hooks ToolHooks
 	// asker lets the `ask` tool put questions to the user; nil in headless runs.

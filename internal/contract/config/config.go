@@ -909,6 +909,9 @@ type SandboxConfig struct {
 	AllowedDomains []string `toml:"allowed_domains"`
 	// DeniedDomains outrank AllowedDomains. The repo's are added to the user's.
 	DeniedDomains []string `toml:"denied_domains"`
+	// EgressUnlisted "allow" stops the question about hosts AllowedDomains does
+	// not name. User file only: a repo cannot switch its own prompts off.
+	EgressUnlisted string `toml:"egress_unlisted"`
 }
 
 // WriteRoots returns the directories file-writer tools may modify: the
@@ -1071,7 +1074,9 @@ type AgentConfig struct {
 	DecisionModel    string            `toml:"decision_model"`
 	SubagentEffort   string            `toml:"subagent_effort"`
 	SubagentEfforts  map[string]string `toml:"subagent_efforts"`
-	MaxSubagentDepth int               `toml:"max_subagent_depth"`
+	MaxSubagentDepth int               `toml:"max_subagent_depth"` // delegation layers; default 8 stops runaway recursion, 0 removes the stop; the user file only
+	MaxSideSessions  int               `toml:"max_side_sessions"`  // 0 (default) opens as many side conversations as asked; the user file only
+	MaxQueuedInputs  int               `toml:"max_queued_inputs"`  // 0 (default) queues as many prompts as asked; the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.
@@ -1083,11 +1088,11 @@ type AgentConfig struct {
 	GoalTokenBudget int `toml:"goal_token_budget"`
 	// MaxSubagentConcurrency bounds how many sub-agents (task, fleet items,
 	// profile skills, nested children) may run at once in one session.
-	// 0 means the default (6). Values outside 1–32 are clamped on load.
+	// 0, the default, sets no limit. The user file only.
 	MaxSubagentConcurrency int `toml:"max_subagent_concurrency"`
 	// MaxParallelWriters bounds concurrent writer-capable sub-agents that
-	// declare non-overlapping write_paths. 0 means the default (3). Must not
-	// exceed MaxSubagentConcurrency after normalization.
+	// declare non-overlapping write_paths. 0, the default, sets no limit: the
+	// path claims keep writers apart, not a count. The user file only.
 	MaxParallelWriters int    `toml:"max_parallel_writers"`
 	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
@@ -1231,6 +1236,10 @@ type ToolsConfig struct {
 	// MCPResources offers the model a tool that reads a resource a connected
 	// server declares. The user file only; off by default.
 	MCPResources bool `toml:"mcp_resources"`
+	WebAccessSettings
+	// VideoNativeMaxBytes lowers the size of file read_video sends natively below
+	// what the endpoint documents; 0 keeps the documented limit. The user file only.
+	VideoNativeMaxBytes int64 `toml:"video_native_max_bytes"`
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`
@@ -1400,9 +1409,9 @@ func Default() *Config {
 			CompactRatio:           0.85,
 			CompactForceRatio:      0,
 			ContextEditing:         "",
-			MaxSubagentDepth:       2,
-			MaxSubagentConcurrency: 6,
-			MaxParallelWriters:     3,
+			MaxSubagentDepth:       8,
+			MaxSubagentConcurrency: 0,
+			MaxParallelWriters:     0,
 			SubagentClaims:         "strict",
 			WriteLease:             "strict",
 			PlanApproval:           "ask",

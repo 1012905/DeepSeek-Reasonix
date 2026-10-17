@@ -83,6 +83,10 @@ type ProviderEntry struct {
 	// provider, so one provider can expose text-only and multimodal chat models
 	// without enabling image payloads for every model.
 	VisionModels []string `toml:"vision_models"`
+	// VideoModels lists the models that read a video file natively and
+	// VideoProtocol how a file reaches them; nil is unsaid, an empty list a choice.
+	VideoModels   []string `toml:"video_models"`
+	VideoProtocol string   `toml:"video_protocol"`
 	// VisionDetail sets the openai image_url detail hint: low|high, plus DeepSeek's
 	// "original"; empty = auto. "low" caps an image at ~85 tokens for a cheap read.
 	VisionDetail string `toml:"vision_detail"`

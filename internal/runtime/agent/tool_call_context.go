@@ -57,6 +57,10 @@ func (a *Agent) toolCallContext(ctx context.Context, plan *toolCallPlan) context
 	if a.svc.configWrite != nil {
 		cctx = tool.WithConfigWriteApprover(cctx, a.svc.configWrite)
 	}
+	cctx = tool.WithNativeVideo(cctx, a.svc.nativeVideo)
+	if a.svc.paidSearch != nil {
+		cctx = tool.WithPaidSearchApprover(cctx, a.svc.paidSearch)
+	}
 	// Whoever answers this run's questions also fills an external party's form.
 	if e, ok := a.svc.asker.(tool.Elicitor); ok {
 		cctx = tool.WithElicitor(cctx, e)

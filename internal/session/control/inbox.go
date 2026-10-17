@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surfacespec"
@@ -191,7 +192,7 @@ func (s *inboxState) activeIDs() []string {
 // adoptInboxLocked opens the queue at path and wires its change listener, so
 // every path that binds a store reports movement. Callers hold c.inbox.mu.
 func (c *Controller) adoptInboxLocked(path string) (*sessioninbox.Store, error) {
-	st, err := sessioninbox.Open(path, sessioninbox.Limits{})
+	st, err := sessioninbox.Open(path, sessioninbox.Limits{MaxItems: queuedInputCeiling(config.LoadForEdit(config.UserConfigPath()).QueuedInputLimit())})
 	if err != nil {
 		return nil, err
 	}
@@ -732,4 +733,13 @@ func firstNonEmptyStr(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// queuedInputCeiling maps the user's setting, where 0 means no limit, onto the
+// store's, where 0 means its default.
+func queuedInputCeiling(limit int) int {
+	if limit <= 0 {
+		return sessioninbox.NoItemLimit
+	}
+	return limit
 }

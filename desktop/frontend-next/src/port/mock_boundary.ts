@@ -1,5 +1,5 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 
@@ -173,7 +173,7 @@ export class MockBoundary extends MockShell {
   protected peerState: PeersState = { enabled: false, peers: [], held: [] };
 
   async peers(): Promise<PeersState> {
-    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held] };
+    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held], threads: [...(this.peerState.threads ?? [])] };
   }
 
   async sendPeerMessage(to: string, text: string): Promise<PeerReceipt> {
@@ -182,8 +182,26 @@ export class MockBoundary extends MockShell {
     return { id: `m-${text.length}`, to: target };
   }
 
-  async resolvePeerMessage(id: string, _approve: boolean): Promise<void> {
+  async resolvePeerMessage(id: string, _approve: boolean, _remember: PeerRemember = "none"): Promise<void> {
     this.peerState = { ...this.peerState, held: this.peerState.held.filter((h) => h.id !== id) };
+  }
+
+  protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false, available: true };
+
+  async peersSettings(): Promise<PeersSettings> {
+    return { ...this.peerSettings, release_projects: [...this.peerSettings.release_projects] };
+  }
+
+  async savePeersSettings(edit: PeersSettingsEdit): Promise<PeersSettings> {
+    const keep = edit.release_projects;
+    this.peerSettings = {
+      ...this.peerSettings,
+      enabled: edit.enabled ?? this.peerSettings.enabled,
+      dispatch: edit.dispatch ?? this.peerSettings.dispatch,
+      release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
+      pending: true,
+    };
+    return this.peersSettings();
   }
 
   private archive: AutoArchiveSettings = { enabled: false, days: 30, defaultDays: 30, path: "/Users/you/.reasonix/config.toml" };
@@ -198,7 +216,7 @@ export class MockBoundary extends MockShell {
     return { ...this.archive };
   }
 
-  private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml" };
+  private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml", unconverted: [] };
 
   async displayCurrency(): Promise<DisplayCurrencySettings> {
     return { ...this.currency };
@@ -235,6 +253,21 @@ export class MockBoundary extends MockShell {
   async saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings> {
     this.narration = { ...this.narration, level };
     return { ...this.narration };
+  }
+
+  private webAccess: WebAccessSettings = {
+    search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
+    known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"],
+    paid_backends: ["deepseek_api"], deepseek_api_ready: false, path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async webAccessSettings(): Promise<WebAccessSettings> {
+    return { ...this.webAccess };
+  }
+
+  async saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings> {
+    this.webAccess = { ...this.webAccess, ...patch };
+    return { ...this.webAccess };
   }
 
   async saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings> {

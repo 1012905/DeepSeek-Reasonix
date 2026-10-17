@@ -474,11 +474,14 @@ func (o *turnOrchestrator) runTurnLoop(ctx context.Context, turn orchestratedTur
 // is one turn; with one it is the loop that keeps pursuing it.
 func (o *turnOrchestrator) runTurnLoopWithPreparedTurn(ctx context.Context, turn orchestratedTurn) error {
 	o.c.goalRetry.userSpoke(turn.synthetic)
+	o.c.awaitResume.cancel()
+	o.c.awaitResume.userSpoke(turn.synthetic)
 	o.c.liftUserGatedGoal(turn.synthetic)
 	expectedContinuationEpoch := o.c.goals.continuationToken()
 	ctx = o.c.withVisionRouting(agent.WithSubagentImageCandidates(ctx, turn.images.candidates))
 	err := o.runOrchestratedTurn(ctx, turn)
 	o.c.noticeUserGate()
+	o.c.armAwaitResume(userGateSkipDelay())
 	if err != nil {
 		if ctx.Err() != nil {
 			o.c.goalUsageTee.setActiveRecorder(nil)

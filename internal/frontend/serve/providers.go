@@ -136,6 +136,9 @@ type providerView struct {
 	InheritedLimits map[string]modelLimitsView `json:"inheritedLimits,omitempty"`
 	// Per chat model: the price per million tokens it declares for itself.
 	ModelPrices map[string]modelPriceView `json:"modelPrices,omitempty"`
+	// OfficialPricing marks a vendor's own endpoint, whose table can say whether
+	// a stored price is one it shipped.
+	OfficialPricing bool `json:"officialPricing,omitempty"`
 	// LastCheck is how the latest plain check of this saved entry ended; absent
 	// when none ran in this process or the entry changed since.
 	LastCheck *providerLastCheck `json:"lastCheck,omitempty"`
@@ -185,6 +188,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			ModelLimits:        modelLimitsOf(p),
 			InheritedLimits:    inheritedLimitsOf(p),
 			ModelPrices:        modelPricesOf(p),
+			OfficialPricing:    officialPricingOf(p),
 			ContextWindow:      p.ContextWindow,
 			MaxOutputTokens:    p.MaxOutputTokens,
 			IdleTimeoutSeconds: p.IdleTimeoutSeconds,

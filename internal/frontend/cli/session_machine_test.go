@@ -170,7 +170,7 @@ func saveMachineTestSession(t *testing.T, dir, id string, updatedAt time.Time) {
 	if err := session.Save(path); err != nil {
 		t.Fatalf("save session: %v", err)
 	}
-	if err := sessionstore.SaveBranchMeta(path, sessionstore.BranchMeta{
+	if err := sessionstore.SaveBranchMetaPreserveUpdated(path, sessionstore.BranchMeta{
 		ID:            id,
 		CreatedAt:     updatedAt.Add(-time.Hour),
 		UpdatedAt:     updatedAt,
@@ -180,5 +180,8 @@ func saveMachineTestSession(t *testing.T, dir, id string, updatedAt time.Time) {
 		Preview:       "PRIVATE prompt",
 	}); err != nil {
 		t.Fatalf("save branch meta: %v", err)
+	}
+	if got, _, _ := sessionstore.LoadBranchMeta(path); !got.UpdatedAt.Equal(updatedAt) {
+		t.Fatalf("saved meta says updated %v, the fixture asked for %v: ordering would follow the write clock", got.UpdatedAt, updatedAt)
 	}
 }

@@ -76,7 +76,7 @@ func (c *Controller) SaveNetworkSettings(in NetworkSettings, password string, cl
 		cfg.Network.Proxy.Password = password
 	}
 	if err := netclient.Validate(cfg.NetworkProxySpec()); err != nil {
-		return fmt.Errorf("这个代理设置用不了：%w", err)
+		return err
 	}
 	return cfg.SaveTo(config.UserConfigPath())
 }
