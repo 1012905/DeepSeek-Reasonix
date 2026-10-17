@@ -1235,12 +1235,7 @@ type ToolsConfig struct {
 	// MCPResources offers the model a tool that reads a resource a connected
 	// server declares. The user file only; off by default.
 	MCPResources bool `toml:"mcp_resources"`
-	// WebSearchBackends is the ordered chain web_search tries, free backends
-	// first. Empty keeps the model-side search. User file only: it decides where
-	// the user's queries are sent.
-	WebSearchBackends []string `toml:"web_search_backends"`
-	// SearxngURL is the user's own SearXNG instance, with its JSON format on.
-	SearxngURL string `toml:"searxng_url"`
+	WebSearchSettings
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`

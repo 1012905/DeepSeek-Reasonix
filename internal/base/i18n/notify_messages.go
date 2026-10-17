@@ -12,6 +12,7 @@ type NotifyMessages struct {
 	NotifyDiskLow       string // a volume is nearly full; formatted with the free space, then the folder's name
 	AskTimeoutMessages
 	UnattendedMessages
+	PaidSearchMessages
 }
 
 // AskTimeoutMessages is the /ask-timeout command's text.
@@ -21,4 +22,10 @@ type AskTimeoutMessages struct {
 	AskTimeoutOff    string // the word for the timeout being off
 	AskTimeoutBadFmt string // argument that is neither a number nor off, one %s
 	AskSkipFmt       string // the open question's countdown, one %s span
+}
+
+// PaidSearchMessages is the consent card for a search backend the vendor
+// charges for.
+type PaidSearchMessages struct {
+	PaidSearchApprovalReasonFmt string // %[1]s backend, %[2]s price, %[3]s query
 }
