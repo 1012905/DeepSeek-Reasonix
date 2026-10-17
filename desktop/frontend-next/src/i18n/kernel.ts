@@ -397,6 +397,7 @@ const SAID: Record<string, string> = {
   "inbox.closed": "该会话的待送达已关闭",
   "inbox.schema_readonly": "该待送达由更高版本写入，当前版本只能读取",
   "inbox.idempotency_conflict": "该提交标识已被使用，且当时的内容不同",
+  "inbox.foreign_run": "这份待送达属于另一个运行，暂不能接管",
 
   // ── 配置文件本身坏了，以及每一个写设置的面板被它挡住时 ─────────
   "config.unparsed": "配置文件 {path} 无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复",
