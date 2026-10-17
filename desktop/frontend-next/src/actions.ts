@@ -69,6 +69,9 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.esc-stop", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.configure", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-cancel", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "workspace.prepare-details", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-edit", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-search", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-navigate", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-select", kind: "view", target: "none", proof: "interaction" },
@@ -237,6 +240,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.contact", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.capture", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "side.collapse", kind: "view", target: "none", proof: "interaction" },
   { id: "side.toggle", kind: "view", target: "none", proof: "interaction" },
   { id: "side.quote", kind: "view", target: "none", proof: "interaction" },
   { id: "side.unquote", kind: "view", target: "none", proof: "interaction" },
@@ -409,6 +413,7 @@ export const ACTIONS: UIAction[] = [
   // Reached from the workspace tree and from the remote host tree, which are
   // two surfaces for one intent; opening an existing session is not starting a
   // new one, and the host asked differs.
+  { id: "peer.thread-open", kind: "navigation", target: "none", proof: "interaction" },
   { id: "session.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "remote.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Asking a machine whether it answers. Nothing on either side changes, and
@@ -544,6 +549,7 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.language", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.zoom", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.measure", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.background", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.font", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },

@@ -169,7 +169,8 @@ func TestWorkspaceListConcurrentUpdatesAndWriteFailure(t *testing.T) {
 
 func TestWorkspaceAddAtCapacityRefusesWithoutDroppingManuallyOrderedPaths(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
-	for i := range workspaceRecentMax {
+	limitWorkspaces(t, testWorkspaceLimit)
+	for i := range testWorkspaceLimit {
 		rememberWorkspace(fmt.Sprintf("/project-%d", i))
 	}
 	paths := Workspaces()

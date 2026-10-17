@@ -31,8 +31,17 @@ describe("the shape and rhythm scales", () => {
   });
 
   it("steps no type and no layout width", () => {
-    for (const name of ["--fs-ui", "--fs-meta", "--read", "--rail-open", "--side-open", "--dock-open", "--column"]) {
+    for (const name of ["--read", "--rail-open", "--side-open", "--dock-open", "--column"]) {
       expect(tokens, name).not.toMatch(new RegExp(`${name}:\\s*calc\\(`));
+    }
+  });
+
+  // Type moves with the reader's text size and with nothing a recipe sets.
+  it("moves type only by the text-size scale, never by a recipe's", () => {
+    for (const name of ["--fs-ui", "--fs-meta"]) {
+      const value = new RegExp(`${name}:\\s*([^;]*);`).exec(tokens)?.[1] ?? "";
+      expect(value, name).toMatch(/var\(--fs-scale, 1\)/);
+      expect(value.replace(/--fs-scale/g, ""), name).not.toMatch(/--[a-z]+-scale/);
     }
   });
 });

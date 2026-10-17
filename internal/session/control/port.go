@@ -277,6 +277,7 @@ type RuntimeSettings interface {
 	RevokeSessionGrant(rule string) int
 	RevokeRememberedProjectRule(rule string) error
 	WorkspaceRoots() (WorkspaceRoots, error)
+	ReadableExtraRoots() ([]string, error)
 	AddWorkspaceRoot(dir string) (string, error)
 	RemoveWorkspaceRoot(dir string) error
 	SandboxSettings() SandboxSettings
@@ -299,6 +300,8 @@ type RuntimeSettings interface {
 	SaveFoldWorkSettings(fold bool) error
 	TurnNarrationSettings() TurnNarrationSettings
 	SaveTurnNarrationSettings(level string) error
+	WebAccessSettings() WebAccessSettings
+	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings

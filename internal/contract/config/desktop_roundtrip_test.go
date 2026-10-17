@@ -35,6 +35,9 @@ func markDesktopField(t *testing.T, f reflect.Value, name string) bool {
 	case reflect.Bool:
 		f.SetBool(true)
 		return true
+	case reflect.Int:
+		f.SetInt(7)
+		return true
 	case reflect.Pointer:
 		if f.Type().Elem().Kind() != reflect.Bool {
 			return false

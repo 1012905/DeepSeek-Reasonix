@@ -1,0 +1,2 @@
+- 子代理并发数和并行写者数默认不再限制（原为 6 和 3），可在用户配置里设上限；嵌套深度默认 8，设 0 取消。关联 #13526。
+- Sub-agent concurrency and parallel writers are no longer capped by default (were 6 and 3); set limits in your user config. Nesting depth defaults to 8; 0 removes it. Refs #13526.

@@ -1,6 +1,6 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { PLAN_ACTIONS, type PlanAction } from "./session";
-import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
+import type { AccountState, AgentPort, ChipCall, CompactionSettings, Completion, DeviceGrant, UpdateProgress, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
 import { HttpError, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles } from "./port";
 import { SseWorkspace } from "./sse_workspace";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -66,38 +66,6 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return ((await res.json()) as { text: string }).text;
   }
 
-  async exportPlugin(name: string): Promise<PluginExport> {
-    const res = await fetch(this.base + "/plugins/" + encodeURIComponent(name) + "/export", {
-      credentials: "same-origin",
-    });
-    if (!res.ok) await SsePort.fail(`/plugins/${encodeURIComponent(name)}/export`, res);
-    const required = (res.headers.get("X-Reasonix-Required-Env") ?? "").split(",").filter(Boolean);
-    const blob = await res.blob();
-    // A shell with a save dialog puts the archive where it is asked to; the
-    // anchor below is the browser's own way and the only one a tab has.
-    const saved = await host().saveBytes(`${name}.zip`, new Uint8Array(await blob.arrayBuffer()));
-    if (saved !== null) return { required, savedTo: saved || undefined };
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${name}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
-    return { required };
-  }
-
-  async dryRunHook(h: HookEntry): Promise<HookDryRun> {
-    const res = await fetch(this.base + "/hooks/dry-run", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ event: h.event, match: h.match, command: h.command, timeout: h.timeout, cwd: h.cwd }),
-    });
-    const body = (await res.json().catch(() => ({}))) as HookDryRun & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/hooks/dry-run: ${res.status}`);
-    return body;
-  }
-
   usage(days: number, source?: string): Promise<UsageReport>;
   usage(query: UsageQuery): Promise<UsageReport>;
   usage(query: number | UsageQuery, source?: string) {
@@ -137,53 +105,6 @@ export class SsePort extends SseWorkspace implements AgentPort {
   }
   restoreMemory(name: string, revision: number) {
     return this.post("/memory/restore", { name, revision });
-  }
-
-  async trustMcp(name: string, digest: string) {
-    const res = await fetch(this.base + "/mcp/trust", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ name, digest }),
-    });
-    const body = (await res.json().catch(() => ({}))) as { state?: string; tools?: number | unknown[]; error?: string };
-    if (!res.ok && !body.error) throw new Error(`/mcp/trust: ${res.status}`);
-    return { state: body.state ?? (res.ok ? "ready" : "failed"), tools: typeof body.tools === "number" ? body.tools : body.tools?.length, error: body.error };
-  }
-  async reconnectMcp(name: string) {
-    const res = await fetch(this.base + "/mcp/reconnect", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ name }),
-    });
-    const body = (await res.json().catch(() => ({}))) as { state?: string; tools?: number; error?: string };
-    if (!res.ok && !body.error) throw new Error(`/mcp/reconnect: ${res.status}`);
-    return { state: body.state ?? (res.ok ? "ready" : "failed"), tools: body.tools, error: body.error };
-  }
-
-  async parseMcp(input: string): Promise<McpDraft> {
-    const res = await fetch(this.base + "/mcp/parse", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ input }),
-    });
-    const body = (await res.json().catch(() => ({}))) as McpDraft & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/mcp/parse: ${res.status}`);
-    return { servers: body.servers ?? [], risks: body.risks ?? [] };
-  }
-
-  async probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe> {
-    const res = await fetch(this.base + "/providers/probe", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ baseUrl, apiKey }),
-    });
-    const text = await res.text();
-    if (!res.ok) throw new Error(text.trim() || `/providers/probe: ${res.status}`);
-    return JSON.parse(text) as ProviderProbe;
   }
 
   async welcomeSeen(): Promise<boolean> {
@@ -407,6 +328,18 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.get<import("./workspace").WorktreeSources>("/workspace/worktree-sources");
   }
 
+  prepareWorktree(id: string, selection: import("./workspace").WorktreeSelection) {
+    return this.post0<import("./workspace").WorktreePreparation>("/workspace/prepare", { id, selection });
+  }
+
+  worktreePreparation(id: string) {
+    return this.get<import("./workspace").WorktreePreparation>(`/workspace/prepare/${encodeURIComponent(id)}`);
+  }
+
+  cancelWorktreePreparation(id: string) {
+    return this.post0<import("./workspace").WorktreePreparation>(`/workspace/prepare/${encodeURIComponent(id)}/cancel`);
+  }
+
   async openInEditor(): Promise<{ editor: string; root: string }> {
     return this.post0<{ editor: string; root: string }>("/workspace/editor");
   }
@@ -474,8 +407,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.get<WorkspaceFiles>(`/workspace/files${params.size ? `?${params}` : ""}`);
   }
 
-  workspaceFile(path: string) {
-    return this.get<WorkspaceFile>(`/workspace/file?path=${encodeURIComponent(path)}`);
+  workspaceFile(path: string, root?: string) {
+    return this.get<WorkspaceFile>(`/workspace/file?path=${encodeURIComponent(path)}${root ? `&root=${encodeURIComponent(root)}` : ""}`);
   }
 
   workspaceImageURL(path: string, root?: string) {
@@ -525,7 +458,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
   /** The kernel's events in order, with no holes it did not announce; see
    *  subscribeStream for how a gap, a bootstrap and a paused connection work. */
   subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>) {
-    return subscribeStream(this.base, onEvent, onGap, bootstrap);
+    const lane = this.mux && this.rt && this.base === `/rt/${this.rt}` ? this.rt : undefined;
+    return subscribeStream(this.base, onEvent, onGap, bootstrap, lane);
   }
 
   submit(text: string, chips?: ChipCall) {

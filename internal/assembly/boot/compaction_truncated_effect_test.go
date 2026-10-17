@@ -22,7 +22,7 @@ func (p *truncatingSummarizer) Stream(_ context.Context, req provider.Request) (
 	p.reqs = append(p.reqs, req)
 	p.mu.Unlock()
 	ch := make(chan provider.Chunk, 3)
-	if strings.Contains(req.Messages[0].Content, "compacting the earlier part") {
+	if req.Summary {
 		ch <- provider.Chunk{Type: provider.ChunkText, Text: "## partial"}
 		ch <- provider.Chunk{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "length"}}
 	} else {
@@ -37,7 +37,7 @@ func (p *truncatingSummarizer) summarizerRequests() (out []provider.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, r := range p.reqs {
-		if strings.Contains(r.Messages[0].Content, "compacting the earlier part") {
+		if r.Summary {
 			out = append(out, r)
 		}
 	}
@@ -48,7 +48,7 @@ func (p *truncatingSummarizer) turnRequests() (out []provider.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, r := range p.reqs {
-		if !strings.Contains(r.Messages[0].Content, "compacting the earlier part") {
+		if !r.Summary {
 			out = append(out, r)
 		}
 	}

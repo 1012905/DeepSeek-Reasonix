@@ -2260,6 +2260,8 @@ test("a parked page is attached again when it is shown, and a page already on sc
   const win = {
     on() {},
     isDestroyed: () => false,
+    isFocused: () => false,
+    webContents: Object.assign(new EventEmitter(), { isFocused: () => false }),
     getContentBounds: () => ({ width: 1200, height: 800 }),
     contentView: { addChildView: () => calls.push("add"), removeChildView: () => calls.push("remove") },
   };
@@ -2450,4 +2452,122 @@ test("a folder panel that closes before anyone could read it is reported as neve
   assert.equal(folderAnswer(closed, 20, "darwin"), "");
   assert.equal(folderAnswer(closed, 20, "win32"), "");
   assert.equal(folderAnswer({ canceled: false, filePaths: ["/home/a/p"] }, 20, "linux"), "/home/a/p");
+});
+
+// Who keeps the keyboard while the agent drives a page.
+const { KeyboardKeeper, PERSON_MS } = require("../src/keyboard.js");
+
+function keyboardWindow({ appFocused = true, windowFocused = true } = {}) {
+  const contents = Object.assign(new EventEmitter(), { focused: appFocused, focus() { this.focused = true; this.emit("focus"); }, isFocused() { return this.focused; } });
+  const win = { webContents: contents, isDestroyed: () => false, isFocused: () => windowFocused };
+  return { win, contents };
+}
+function keyboardPage() {
+  return new EventEmitter();
+}
+
+const turn = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test("a page the agent opens does not take the keyboard from the app page", async () => {
+  const { win, contents } = keyboardWindow();
+  const keeper = new KeyboardKeeper({ win });
+  const page = keyboardPage();
+  page.isFocused = () => true;
+  keeper.watch(page);
+  contents.focused = false;
+  page.emit("focus");
+  assert.equal(contents.focused, false, "not from inside the platform's own focus event");
+  await turn();
+  assert.equal(contents.focused, true);
+  assert.equal(keeper.owner, "app");
+});
+
+test("a click or a key from the person into the page is theirs to have chosen", () => {
+  for (const arrive of [(page) => page.emit("before-input-event", {}, { type: "keyDown" }), (page) => page.emit("input-event", {}, { type: "mouseDown" })]) {
+    const { win, contents } = keyboardWindow();
+    const keeper = new KeyboardKeeper({ win });
+    const page = keyboardPage();
+    keeper.watch(page);
+    arrive(page);
+    contents.focused = false;
+    page.emit("focus");
+    assert.equal(contents.focused, false);
+    assert.equal(keeper.owner, "view");
+  }
+});
+
+test("a click the agent itself sent over the protocol is not the person's", async () => {
+  const { win, contents } = keyboardWindow();
+  const keeper = new KeyboardKeeper({ win });
+  const page = keyboardPage();
+  page.isFocused = () => true;
+  keeper.watch(page, () => true);
+  page.emit("input-event", {}, { type: "mouseDown" });
+  contents.focused = false;
+  page.emit("focus");
+  await turn();
+  assert.equal(contents.focused, true);
+});
+
+test("the person's choice stands until they go back to the app page", async () => {
+  const { win, contents } = keyboardWindow();
+  const keeper = new KeyboardKeeper({ win });
+  const page = keyboardPage();
+  page.isFocused = () => true;
+  keeper.watch(page);
+  page.emit("input-event", {}, { type: "mouseDown" });
+  page.emit("focus");
+  assert.equal(keeper.owner, "view");
+  contents.focused = false;
+  page.emit("focus");
+  await turn();
+  assert.equal(contents.focused, false, "the agent navigating again does not pull it back");
+  contents.focus();
+  assert.equal(keeper.owner, "app");
+});
+
+test("nothing is taken back when the app page did not have the keyboard, or the window is not in front", async () => {
+  let { win, contents } = keyboardWindow({ appFocused: false });
+  let keeper = new KeyboardKeeper({ win });
+  let page = keyboardPage();
+  page.isFocused = () => true;
+  keeper.watch(page);
+  page.emit("focus");
+  await turn();
+  assert.equal(contents.focused, false);
+  ({ win, contents } = keyboardWindow({ windowFocused: false }));
+  keeper = new KeyboardKeeper({ win });
+  page = keyboardPage();
+  page.isFocused = () => true;
+  keeper.watch(page);
+  contents.focused = false;
+  page.emit("focus");
+  await turn();
+  assert.equal(contents.focused, false);
+  ({ win, contents } = keyboardWindow());
+  keeper = new KeyboardKeeper({ win });
+  page = keyboardPage();
+  page.isFocused = () => true;
+  keeper.watch(page);
+  contents.focused = false;
+  page.emit("focus");
+  page.emit("before-input-event", {}, { type: "keyDown" });
+  await turn();
+  assert.equal(contents.focused, false, "a key from the person in the meantime is theirs");
+});
+
+test("reclaim hands the keyboard back only when nobody holds it and the app page owned it", () => {
+  const { win, contents } = keyboardWindow();
+  const keeper = new KeyboardKeeper({ win });
+  contents.focused = false;
+  keeper.reclaim();
+  assert.equal(contents.focused, true);
+  keeper.owner = "view";
+  contents.focused = false;
+  keeper.reclaim();
+  assert.equal(contents.focused, false);
+});
+
+test("a person's click is only a click for a moment", () => {
+  assert.ok(PERSON_MS > 0 && PERSON_MS < 2000);
 });

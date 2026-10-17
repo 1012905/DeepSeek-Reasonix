@@ -499,7 +499,8 @@ func (a *approvalManager) waitContext(ctx context.Context) (context.Context, con
 }
 
 // snapshotPrompts copies the in-flight prompts for re-emission to a reconnected
-// frontend (ReplayPendingPrompts).
+// frontend (ReplayPendingPrompts). AllowsPersist is the tool's own grant; the
+// controller narrows it to what can be written down now.
 func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -509,7 +510,7 @@ func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 		approvals = append(approvals, event.Approval{
 			ID: id, Tool: p.tool, Subject: p.subject, Reason: p.reason, ReasonCode: ExplicitApprovalCode(p.tool, p.subject),
 			RawInput: append(json.RawMessage(nil), p.rawInput...), Fresh: p.fresh,
-			AllowsSession: session, AllowsPersist: persist && a.persists,
+			AllowsSession: session, AllowsPersist: persist,
 			Kind: p.kind, Recovery: p.recovery,
 		})
 	}
@@ -632,7 +633,7 @@ func ParseToolApprovalMode(mode string) (string, bool) {
 // narrow operation in interactive or headless mode.
 func RequiresFreshHumanApprovalTool(tool string) bool {
 	switch tool {
-	case planApprovalTool, memoryRememberTool, memoryForgetTool, SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool:
+	case planApprovalTool, memoryRememberTool, memoryForgetTool, SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool:
 		return true
 	default:
 		return false
@@ -670,7 +671,7 @@ func approvalGrantsForRequest(tool string, fresh, requireHuman bool) (session, p
 
 func allowsFreshSessionGrantTool(tool string) bool {
 	switch tool {
-	case SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool:
+	case SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool:
 		return true
 	default:
 		return false

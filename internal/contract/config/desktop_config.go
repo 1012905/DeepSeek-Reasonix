@@ -97,6 +97,8 @@ type DesktopConfig struct {
 	// config rather than browser storage because clearing a cache is not the
 	// same as meeting the app for the first time.
 	Welcomed bool `toml:"welcomed"`
+	// MaxWorkspaces caps the projects the sidebar remembers. 0, the default, is no cap.
+	MaxWorkspaces int `toml:"max_workspaces"`
 	// SurfaceSlots is where the user put an extension's surface, keyed
 	// "<pluginId>:<surfaceId>". It outranks the extension's own suggestion.
 	SurfaceSlots   map[string]string `toml:"surface_slots"`
@@ -143,6 +145,22 @@ func ClampZoom(v float64) float64 {
 	return min(max(v, ZoomMin), ZoomMax)
 }
 
+// The interface text size moves type alone, where Zoom moves everything, so its
+// range is narrower: past these ends spacing written in pixels stops keeping up.
+const (
+	TextSizeMin = 0.85
+	TextSizeMax = 1.6
+)
+
+// ClampTextSize holds a scale to TextSizeMin..TextSizeMax; zero stays zero
+// because it means "unset".
+func ClampTextSize(v float64) float64 {
+	if !(v > 0) {
+		return 0
+	}
+	return min(max(v, TextSizeMin), TextSizeMax)
+}
+
 // AppearanceConfig is what the user set for themselves, on top of whichever
 // theme pack is active: how large it all is, what it is set in, and their own
 // picture. A pack ships a palette; these are the reader's own eyes and desk.
@@ -151,6 +169,7 @@ func ClampZoom(v float64) float64 {
 type AppearanceConfig struct {
 	Zoom      float64         `toml:"zoom"`      // whole-interface scale within ZoomMin..ZoomMax; 0 = 1.0
 	ReadSize  float64         `toml:"read_size"` // transcript body size in px; 0 = the stylesheet's
+	TextSize  float64         `toml:"text_size"` // interface text scale within TextSizeMin..TextSizeMax, spacing untouched; 0 = 1.0
 	FontUI    string          `toml:"font_ui"`   // CSS font-family list for the interface
 	FontMono  string          `toml:"font_mono"` // CSS font-family list for code and output
 	Wallpaper WallpaperConfig `toml:"wallpaper"`
@@ -165,4 +184,12 @@ type WallpaperConfig struct {
 	Dim     float64 `toml:"dim"`     // scrim of page colour over it, 0..1
 	FocusX  float64 `toml:"focus_x"` // 0..1, the point that survives cropping
 	FocusY  float64 `toml:"focus_y"` // 0..1
+}
+
+// WorkspaceLimit is how many projects the sidebar may remember; zero is no limit.
+func (c *Config) WorkspaceLimit() int {
+	if c == nil {
+		return 0
+	}
+	return max(c.Desktop.MaxWorkspaces, 0)
 }

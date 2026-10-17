@@ -3422,6 +3422,9 @@ func TestRememberPermissionRuleProcessHelper(t *testing.T) {
 	for n := range rules {
 		rule := fmt.Sprintf("Edit(process-%d-file-%02d)", worker, n)
 		result := rememberPermissionRule(config.Roots{}, workspace, rule)
+		for time.Now().Before(deadline) && errors.Is(result.Err, config.ErrProjectGrantsUnavailable) {
+			result = rememberPermissionRule(config.Roots{}, workspace, rule)
+		}
 		if result.Err != nil || !result.Saved {
 			t.Fatalf("remember result = %+v, want saved without error", result)
 		}
