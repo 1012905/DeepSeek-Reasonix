@@ -14,6 +14,7 @@ export class SseLook extends SseHttp {
       language: look.language ?? "",
       zoom: look.zoom ?? 0,
       readSize: look.readSize ?? 0,
+      textSize: look.textSize ?? 0,
       fontUi: look.fontUi ?? "",
       fontMono: look.fontMono ?? "",
       width: look.width ?? "",
