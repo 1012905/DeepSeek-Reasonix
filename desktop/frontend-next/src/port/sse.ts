@@ -525,7 +525,7 @@ export class SsePort extends SseWorkspace implements AgentPort {
   /** The kernel's events in order, with no holes it did not announce; see
    *  subscribeStream for how a gap, a bootstrap and a paused connection work. */
   subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>) {
-    return subscribeStream(this.base, onEvent, onGap, bootstrap);
+    return subscribeStream(this.base, onEvent, onGap, bootstrap, this.rt && this.base === `/rt/${this.rt}` ? this.rt : undefined);
   }
 
   submit(text: string, chips?: ChipCall) {

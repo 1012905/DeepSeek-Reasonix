@@ -1,4 +1,5 @@
 import type { Subscription } from "./port";
+import { mux } from "./muxclient";
 import { liveStreamBudget, onLiveStreamBudgetChange } from "../state/prefs";
 
 // A browser talking HTTP/1.1 opens at most six connections to one origin, and an
@@ -72,8 +73,11 @@ export class StreamBudget {
 
   private settle() {
     const order = [...this.entries].sort(([, a], [, b]) => this.rank(a) - this.rank(b) || b.at - a.at);
-    order.forEach(([, entry], i) => {
-      const keep = !entry.sub.pause || i < this.limit();
+    let used = 0;
+    order.forEach(([, entry]) => {
+      const free = !entry.sub.pause || entry.sub.holdsConnection?.() === false;
+      const keep = free || used < this.limit();
+      if (!free && keep) used++;
       if (keep && !entry.live) entry.sub.resume?.();
       if (!keep && entry.live) entry.sub.pause?.();
       entry.live = keep;
@@ -93,4 +97,7 @@ export class StreamBudget {
 }
 
 export const streamBudget = new StreamBudget(() => liveStreamBudget() ?? LIVE_PANE_STREAMS);
-if (typeof window !== "undefined") onLiveStreamBudgetChange(() => streamBudget.resettle());
+if (typeof window !== "undefined") {
+  onLiveStreamBudgetChange(() => streamBudget.resettle());
+  mux.onFallback(() => streamBudget.resettle());
+}
