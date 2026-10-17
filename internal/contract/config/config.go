@@ -1072,6 +1072,7 @@ type AgentConfig struct {
 	SubagentEffort   string            `toml:"subagent_effort"`
 	SubagentEfforts  map[string]string `toml:"subagent_efforts"`
 	MaxSubagentDepth int               `toml:"max_subagent_depth"`
+	MaxSideSessions  int               `toml:"max_side_sessions"` // 0 (default) opens as many side conversations as asked; the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.

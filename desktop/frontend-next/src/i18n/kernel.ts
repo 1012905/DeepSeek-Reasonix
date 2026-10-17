@@ -262,7 +262,7 @@ const SAID: Record<string, string> = {
   "side.unavailable": "这个会话不支持辅助提问",
   "side.unknown": "这个辅助提问已经关闭，请重新打开",
   "side.busy": "上一个问题还在回答，请稍候再问",
-  "side.limit": "同时打开的辅助提问太多，请先关闭几个",
+  "side.limit": "同时打开的辅助提问已到你设置的上限（agent.max_side_sessions），请先关闭几个",
   "side.empty": "请先写下要问的内容",
   "side.failed": "辅助提问没能完成，请重试",
 
