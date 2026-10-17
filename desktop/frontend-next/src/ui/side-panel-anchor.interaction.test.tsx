@@ -60,3 +60,20 @@ it("keeps one panel per pane and a fresh one on reopening", async () => {
   fireEvent.click(first);
   expect((await screen.findByRole("textbox", { name: "向辅助会话提问" }) as HTMLTextAreaElement).value).toBe("");
 });
+
+
+it("closes the collapsed panel with Escape, restores focus and reopens expanded", async () => {
+  const view = mount();
+  const button = await ready(view);
+  fireEvent.click(button);
+  fireEvent.click(await screen.findByRole("button", { name: "收起辅助会话" }));
+  const expand = screen.getByRole("button", { name: "展开辅助会话" });
+  expand.focus();
+  expect(button.getAttribute("aria-pressed")).toBe("true");
+  fireEvent.keyDown(expand, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("complementary", { name: "辅助会话" })).toBeNull());
+  expect(document.activeElement).toBe(button);
+  fireEvent.click(button);
+  expect(await screen.findByRole("textbox", { name: "向辅助会话提问" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "收起辅助会话" }).getAttribute("aria-expanded")).toBe("true");
+});

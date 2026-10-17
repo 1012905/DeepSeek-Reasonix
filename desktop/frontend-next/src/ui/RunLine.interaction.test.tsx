@@ -1,46 +1,37 @@
 // @vitest-environment jsdom
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 import "./testkit";
-import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PaneShown } from "./shown";
 import { RunLine } from "./RunLine";
 
-const base = { label: "运行中", blocked: false, sent: 0, received: 0, estimated: false };
+afterEach(cleanup);
 
-beforeEach(() => vi.useFakeTimers({ now: 1_000_000 }));
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+const draw = (over: Partial<Parameters<typeof RunLine>[0]> = {}) =>
+  render(<RunLine label="运行中" running blocked={false} since={Date.now() - 12_000} sent={10} received={20} estimated={false} {...over} />);
 
-describe("the running chip above the composer", () => {
-  it("says how long the turn has been running and keeps counting", () => {
-    render(<RunLine {...base} running since={1_000_000 - 65_000} />);
-    expect(screen.getByText("1m 5s")).toBeTruthy();
-    act(() => { vi.advanceTimersByTime(3_000); });
-    expect(screen.getByText("1m 8s")).toBeTruthy();
+describe("the run state beside the composer", () => {
+  it("is announced to a screen reader and not printed as a word", () => {
+    draw();
+    const status = screen.getByRole("status");
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    const word = screen.getByText("运行中");
+    expect(status.contains(word)).toBe(true);
+    expect(word.classList.contains("sr-only")).toBe(true);
   });
 
-  it("shows no time for a turn this window did not see start", () => {
-    const { container } = render(<RunLine {...base} running />);
-    expect(container.querySelector(".studio-runclock")).toBeNull();
+  it("keeps the clock and the mark where the word used to be", () => {
+    draw();
+    expect(document.querySelector(".studio-runclock")).not.toBeNull();
+    expect(document.querySelector(".rmark")).not.toBeNull();
   });
 
-  it("shows no time and runs no timer when nothing is running", () => {
-    const { container } = render(<RunLine {...base} running={false} since={1_000_000 - 5_000} />);
-    expect(container.querySelector(".studio-runclock")).toBeNull();
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("keeps the time out of what a screen reader announces", () => {
-    const { container } = render(<RunLine {...base} running since={1_000_000 - 5_000} />);
-    expect(container.querySelector(".studio-runclock")?.getAttribute("aria-hidden")).toBe("true");
-  });
-
-  it("does not tick in a pane nobody is looking at", () => {
-    render(<PaneShown.Provider value={false}><RunLine {...base} running since={1_000_000 - 5_000} /></PaneShown.Provider>);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("keeps the time while the turn waits on a decision", () => {
-    render(<RunLine {...base} running blocked since={1_000_000 - 12_000} />);
-    expect(screen.getByText("12s")).toBeTruthy();
+  it("says idle and waiting the same way, and the state attributes still follow the run", () => {
+    const idle = draw({ label: "空闲", running: false, since: undefined });
+    expect(screen.getByText("空闲").classList.contains("sr-only")).toBe(true);
+    expect(document.querySelector(".studio-runstate[data-idle]")).not.toBeNull();
+    idle.unmount();
+    draw({ label: "等待你的决定", running: true, blocked: true });
+    expect(screen.getByText("等待你的决定").classList.contains("sr-only")).toBe(true);
+    expect(document.querySelector(".studio-runstate[data-waiting]")).not.toBeNull();
   });
 });

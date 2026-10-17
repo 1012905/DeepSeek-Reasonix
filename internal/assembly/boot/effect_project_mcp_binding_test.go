@@ -214,6 +214,8 @@ func TestEffectEnabledProjectMCPRefusesAWorkspaceFileChangedMidSession(t *testin
 	if runtime.GOOS == "windows" {
 		t.Skip("the launcher script is POSIX shell")
 	}
+	// Parallel fixtures share the schema cache, which is keyed by server name.
+	const serverName = "docs-helper-midsession"
 	home := statedBootHome(t)
 	dir := testenv.TempDir(t)
 	logPath := filepath.Join(testenv.TempDir(t), "argv.log")
@@ -221,7 +223,7 @@ func TestEffectEnabledProjectMCPRefusesAWorkspaceFileChangedMidSession(t *testin
 		writeFile(t, dir, "run.sh", "#!/bin/sh\nexec \""+os.Args[0]+"\" -test.run='^TestArgvRecordingMCPHelper$' -- "+phase+"\n")
 	}
 	launcher("approved")
-	body, err := json.Marshal(map[string]any{"mcpServers": map[string]any{"docs-helper": map[string]any{
+	body, err := json.Marshal(map[string]any{"mcpServers": map[string]any{serverName: map[string]any{
 		"command": "sh", "args": []string{"./run.sh"},
 		"env": map[string]string{"GO_WANT_HELPER_PROCESS": "1", argvLogEnv: logPath},
 	}}})
@@ -246,10 +248,10 @@ model = "x"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := first.SetMCPServerEnabled("docs-helper", config.ActivationProject, true); err != nil {
+	if err := first.SetMCPServerEnabled(serverName, config.ActivationProject, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.ConnectConfiguredMCPServer("docs-helper"); err != nil {
+	if _, err := first.ConnectConfiguredMCPServer(serverName); err != nil {
 		t.Fatalf("connect the enabled server: %v", err)
 	}
 	if !waitForPhase(logPath, "approved", 5*time.Second) {
@@ -272,7 +274,7 @@ model = "x"
 	}
 	launcher("swapped")
 	rec.mu.Lock()
-	rec.calls = []scriptedCall{{"use_capability", `{"action":"call","capability_id":"mcp-tool:docs-helper/echo","arguments":{"msg":"hi"}}`}}
+	rec.calls = []scriptedCall{{"use_capability", `{"action":"call","capability_id":"mcp-tool:` + serverName + `/echo","arguments":{"msg":"hi"}}`}}
 	rec.mu.Unlock()
 	if err := ctrl.Run(t.Context(), "use the docs helper"); err != nil {
 		t.Fatal(err)
@@ -284,8 +286,8 @@ model = "x"
 		t.Fatalf("the call reached a server: %q; log=%v", got, launchedPhases(logPath))
 	}
 	for _, h := range ctrl.MCPServerHealth() {
-		if h.Name == "docs-helper" && h.Status != control.MCPHealthPending {
-			t.Fatalf("docs-helper status = %s (%s), want pending", h.Status, h.Error)
+		if h.Name == serverName && h.Status != control.MCPHealthPending {
+			t.Fatalf("%s status = %s (%s), want pending", serverName, h.Status, h.Error)
 		}
 	}
 }
