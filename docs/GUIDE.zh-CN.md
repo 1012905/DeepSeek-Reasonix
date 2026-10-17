@@ -974,6 +974,8 @@ refresh token 轮换；发现和 token 请求与 MCP 连接使用相同的 Reaso
 
 打开浏览器之前，Reasonix 会先说明服务器指定的授权主机并询问；“始终允许”只对该服务器和该主机生效，记在其 OAuth 状态旁，清除认证时一并清掉。
 
+你批准之后定义被改动的工具会被暂挡，直到你接受（`reasonix mcp trust <name>`）。想让某个服务器的改动不再询问，运行时加 `--follow`（`--unfollow` 撤销）；每次改动仍会通知你。
+
 OAuth client 与 token 状态保存在工作区之外、该 server 私有的 Reasonix 状态目录中，文件权限
 为 `0600`，并绑定完整的 resource URL。显式静态 `Authorization` header 始终优先。
 **清除认证** 只删除 Reasonix 本地 OAuth 状态，不会退出第三方浏览器会话。Reasonix 仅在用户

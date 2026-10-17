@@ -1233,6 +1233,8 @@ settings as the MCP connection.
 
 Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
 
+Tools whose definitions change after you approved them are held back until you accept them (`reasonix mcp trust <name>`). To take one server's changes without being asked, run it with `--follow` (`--unfollow` undoes it); each change is still announced.
+
 OAuth client and token state is kept outside the workspace in the server's
 private Reasonix state directory, written with mode `0600`, and bound to the
 full configured resource URL. An explicit static `Authorization` header always

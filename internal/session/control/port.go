@@ -333,6 +333,7 @@ type Extensions interface {
 // that can show what changed.
 type MCPTrust interface {
 	AcceptMCPHeldTools(name, digest string) (int, error)
+	SetMCPFollowToolChanges(name string, follow bool) (int, error)
 }
 
 // Capabilities is the whole pluggable surface, for a frontend that drives all
