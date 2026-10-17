@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import { current, t } from "../i18n";
-import { FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, FEEDBACK_REPLYABLE, isUnderReview, type FeedbackItem, type FeedbackLimits, type FeedbackReply } from "../port/feedback";
+import { FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, canReplyTo, isUnderReview, type FeedbackItem, type FeedbackLimits, type FeedbackReply } from "../port/feedback";
 import type { AgentPort } from "../port/port";
 import { replyFailure, type FeedbackFailure } from "./feedbackfailure";
 import { FeedbackShot } from "./FeedbackShot";
@@ -123,7 +123,7 @@ export function FeedbackReplyBox({ port, item, limit, limits = null, offline, on
     },
     [limits],
   );
-  const replyable = !item.statusUnavailable && FEEDBACK_REPLYABLE.includes(item.status);
+  const replyable = canReplyTo(item);
   if (!replyable) return null;
   const reopens = item.status === "fixed";
   if (offline) return <p className="fbk-hint">{t("离线时暂时不能回复。")}</p>;

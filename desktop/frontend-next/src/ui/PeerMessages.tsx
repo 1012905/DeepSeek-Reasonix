@@ -4,6 +4,7 @@ import { reason } from "../i18n/kernel";
 import type { AgentPort } from "../port/port";
 import { HeldPeerMessage } from "./HeldPeerMessage";
 import { peerLabel } from "./peerKeys";
+import { PeerSettings } from "./PeerSettings";
 import { usePeers } from "./usePeers";
 
 const POLL_MS = 2000;
@@ -16,10 +17,9 @@ export function PeerMessages({ port }: { port: AgentPort }) {
   const [error, setError] = useState("");
   const [sent, setSent] = useState("");
 
-  if (failed && !state.enabled) return <div className="empty">{t("无法读取会话间消息的状态。")}</div>;
-  if (!state.enabled) {
-    return <div className="empty">{t("会话间消息没有开启。在用户配置里写入 [peers] enabled = true，重新打开会话后生效；默认关闭。")}</div>;
-  }
+  const switches = <PeerSettings port={port} onSaved={() => void refresh()} />;
+  if (failed && !state.enabled) return <>{switches}<div className="empty">{t("无法读取会话间消息的状态。")}</div></>;
+  if (!state.enabled) return switches;
   const target = to || state.peers[0]?.key || "";
   const send = async () => {
     setBusy(true);
@@ -36,6 +36,8 @@ export function PeerMessages({ port }: { port: AgentPort }) {
     }
   };
   return (
+    <>
+    {switches}
     <div className="box">
       {state.held.map((h) => (
         <HeldPeerMessage key={h.id} port={port} held={h} onDone={() => void refresh()} />
@@ -70,5 +72,6 @@ export function PeerMessages({ port }: { port: AgentPort }) {
         </div>
       )}
     </div>
+    </>
   );
 }

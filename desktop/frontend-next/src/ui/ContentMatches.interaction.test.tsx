@@ -8,11 +8,11 @@ import { RailSearch } from "./railsearch";
 const tree = [{ root: "/w/a", name: "a", sessions: [{ path: "/w/a/s1.jsonl", name: "s1", title: "Rotate keys" }] }] as unknown as TreeWorkspace[];
 const hit: HistoryHit = { path: "/w/a/s1.jsonl", id: "s1", snippet: "rotate the zebra credentials", role: "user", messageIndex: 0, score: 1 };
 
-function setup(search: (q: string) => Promise<HistoryHit[]>) {
+function setup(search: (q: string) => Promise<HistoryHit[]>, workspaces = tree) {
   const onOpen = vi.fn(() => Promise.resolve());
   render(
     <RailSearch>
-      <ContentMatches hub={{ searchHistory: search }} tree={tree} onOpen={onOpen} onError={() => {}} />
+      <ContentMatches hub={{ searchHistory: search }} tree={workspaces} onOpen={onOpen} onError={() => {}} />
     </RailSearch>,
   );
   return onOpen;
@@ -50,5 +50,15 @@ describe("ContentMatches", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zebra" } });
     await act(async () => void vi.advanceTimersByTime(400));
     expect(document.querySelector("[data-state='failed']")).not.toBeNull();
+  });
+
+  it("opens a grouped content match in the session's working directory", async () => {
+    const onOpen = setup(() => Promise.resolve([hit]), [{ ...tree[0], sessions: [
+      { ...tree[0].sessions[0], workspaceRoot: "/worktrees/a" },
+    ] }]);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zebra" } });
+    await act(async () => void vi.advanceTimersByTime(400));
+    fireEvent.click(document.querySelector("[data-action='session.open-match']")!);
+    expect(onOpen).toHaveBeenCalledWith({ root: "/worktrees/a", sessionPath: hit.path });
   });
 });

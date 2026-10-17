@@ -83,11 +83,18 @@ func RememberSignInHost(stateDir, host string) error {
 
 // ForgetSignInConsent withdraws every remembered host of one server.
 func ForgetSignInConsent(stateDir string) error {
-	path := signInConsentPath(stateDir)
-	if path == "" {
+	if strings.TrimSpace(stateDir) == "" {
 		return nil
 	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	root, err := os.OpenRoot(stateDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.Remove(signInConsentFile); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

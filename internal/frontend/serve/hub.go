@@ -429,63 +429,6 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	return rt, nil
 }
 
-// errRuntimeGone is Close's answer for an id the hub does not hold.
-var errRuntimeGone = errors.New("no such runtime")
-
-// Close retires a runtime: the conversation is persisted, the assembly torn
-// down, and the session file released for another window to open.
-func (h *Hub) Close(id string) error {
-	h.mu.Lock()
-	rt := h.runtimes[id]
-	if rt == nil {
-		h.mu.Unlock()
-		return fmt.Errorf("%w: %s", errRuntimeGone, id)
-	}
-	delete(h.runtimes, id)
-	h.order = removeString(h.order, id)
-	h.mu.Unlock()
-	defer h.treeChanged()
-	defer h.muxes.paneClosed(id)
-
-	if rt.Local() {
-		rt.Server.bindMu.Lock()
-		defer rt.Server.bindMu.Unlock()
-	}
-	if h.opts.OnClose != nil {
-		h.opts.OnClose(rt)
-	}
-	if rt.stop != nil {
-		rt.stop()
-	}
-	if rt.remote != nil {
-		// Retired before the forward that reaches it goes away: releasing first
-		// would strand a session lease over there, with nothing left that could
-		// reach the kernel holding it.
-		rt.closeFarRuntime()
-		if rt.remote.release != nil {
-			rt.remote.release()
-		}
-		return nil
-	}
-	if err := rt.Server.Controller().Snapshot(); err != nil {
-		slog.Warn("serve: snapshot before closing runtime", "id", id, "err", err)
-	}
-	rt.Server.Controller().Close()
-	if rt.leases != nil {
-		rt.leases.Release()
-	}
-	return nil
-}
-
-// Shutdown closes every runtime, newest first.
-func (h *Hub) Shutdown() {
-	for _, view := range h.List() {
-		if err := h.Close(view.ID); err != nil {
-			slog.Warn("serve: close runtime", "id", view.ID, "err", err)
-		}
-	}
-}
-
 // Get returns a runtime by ID, or nil.
 func (h *Hub) Get(id string) *Runtime {
 	h.mu.RLock()
@@ -747,39 +690,6 @@ func (h *Hub) findSession(path string) *Runtime {
 		}
 	}
 	return nil
-}
-
-// resolveRoot decides which folder a new runtime opens against: the one asked
-// for, the one that owns the session being opened, or the first runtime's.
-func (h *Hub) resolveRoot(req OpenRequest) (string, error) {
-	if root := strings.TrimSpace(req.Root); root != "" {
-		return resolveWorkspaceDir(root)
-	}
-	if path := strings.TrimSpace(req.SessionPath); path != "" {
-		if root := workspaceRootForSession(path); root != "" {
-			return root, nil
-		}
-	}
-	h.mu.RLock()
-	first := ""
-	if len(h.order) > 0 {
-		if rt := h.runtimes[h.order[0]]; rt != nil {
-			first = rt.Server.Controller().WorkspaceRoot()
-		}
-	}
-	h.mu.RUnlock()
-	if first != "" {
-		return first, nil
-	}
-	// Closing the last pane leaves nothing to infer from, and "open a session"
-	// is exactly what someone does next. Fall back to the remembered list, the
-	// same answer the window uses when it launches with no pane at all.
-	for _, dir := range LaunchWorkspaces() {
-		if st, err := os.Stat(dir); err == nil && st.IsDir() {
-			return dir, nil
-		}
-	}
-	return "", refusal(http.StatusConflict, "workspace.none", errors.New("no workspace to open in — add a folder first"), nil)
 }
 
 func (h *Hub) nextID() string {

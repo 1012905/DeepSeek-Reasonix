@@ -1,0 +1,2 @@
+- 新增：设置 > 工具与权限 里可设置网页搜索和抓取的后端与先后顺序；付费后端的计费同意是单独的开关，不会替你勾选。新开的窗格生效。关联 #13551。
+- Added: Settings > Tools and permissions sets the web search and fetch backends and their order; consent to be billed is its own switch, never ticked for you. New panes only. Refs #13551.

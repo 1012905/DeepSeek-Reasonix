@@ -201,7 +201,7 @@
   .btn.sm { padding: 2.5px 8px; font-size: var(--fs-meta); }
 
   .picker { position: relative; flex: none }
-  .isolab { font: var(--w-med) var(--fs-micro) var(--mono); letter-spacing: var(--track-cap); color: var(--ok-ink); padding: 1.5px 6px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--ok) 13%, transparent) }
+  .isolab { flex: none; white-space: nowrap; font: var(--w-med) var(--fs-micro) var(--mono); letter-spacing: var(--track-cap); color: var(--ok-ink); padding: 1.5px 6px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--ok) 13%, transparent) }
   .isolab[hidden] { display: none }
 
   .hostlab { color: var(--net-ink); background: color-mix(in srgb, var(--net) 13%, transparent) }
@@ -3111,6 +3111,7 @@
   .mp-row { grid-template-columns: repeat(4, minmax(0, 1fr)) }
   .mp-row .me-name { grid-column: 1 / -1 }
   .mp-row .why { grid-column: 1 / -1 }
+  .mp-foreign { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px }
   .mp-row select { padding: 6px 8px; font-size: var(--fs-meta) }
   .ml-row .me-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--w-med) var(--fs-ui) var(--mono); color: var(--text) }
   .ml-row input::placeholder { color: var(--ghost) }

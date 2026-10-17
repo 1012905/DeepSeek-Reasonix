@@ -43,6 +43,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/worktree/source.go", "Source", tsWorkspaceFile, "WorktreeSource"},
 	{"internal/frontend/serve/workspace_source.go", "worktreeSourcesView", tsWorkspaceFile, "WorktreeSources"},
 	{"internal/frontend/serve/workspace_source.go", "worktreeSelection", tsWorkspaceFile, "WorktreeSelection"},
+	{"internal/session/control/workspace_preparation.go", "WorkspacePreparationStatus", tsWorkspaceFile, "WorktreePreparation"},
 	{"internal/contract/surfacespec/action_message.go", "Action", "desktop/frontend-next/src/port/surface.ts", "SurfaceAction"},
 	{"internal/session/control/surface_actions.go", "SurfaceActionRequest", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRequest"},
 	{"internal/session/control/surface_actions.go", "SurfaceActionRecord", "desktop/frontend-next/src/port/surface.ts", "SurfaceActionRecord"},

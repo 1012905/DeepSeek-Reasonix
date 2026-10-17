@@ -69,6 +69,9 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.esc-stop", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.configure", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-cancel", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "workspace.prepare-details", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-edit", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-search", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-navigate", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-select", kind: "view", target: "none", proof: "interaction" },
@@ -413,6 +416,7 @@ export const ACTIONS: UIAction[] = [
   // Reached from the workspace tree and from the remote host tree, which are
   // two surfaces for one intent; opening an existing session is not starting a
   // new one, and the host asked differs.
+  { id: "peer.thread-open", kind: "navigation", target: "none", proof: "interaction" },
   { id: "session.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "remote.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Asking a machine whether it answers. Nothing on either side changes, and
@@ -547,7 +551,12 @@ export const ACTIONS: UIAction[] = [
   // two different things a reader wants, however alike they look in CSS.
   { id: "appearance.language", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.zoom", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.backend", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.move", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.consent", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.searxng-url", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.measure", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.background", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.font", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
@@ -646,6 +655,10 @@ export const ACTIONS: UIAction[] = [
   { id: "peers.expand", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.send", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.approve", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.approve-project", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.enable", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.dispatch", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.release-revoke", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "peers.deny", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.

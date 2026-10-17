@@ -23,6 +23,8 @@ RELAY_HOST_BIN=$PWD/relay/bin/studio-host RELAY_FAKE_BIN=$PWD/relay/bin/relayfak
   RELAY_DIST=$PWD/dist-relay node relay/live.mjs
 ```
 
+`relay/storm.mjs` is the other scenario: a page served by the Studio itself (no relay), nine panes on the shared stream, and the browser going offline and back across three turns. Run it the same way, with `RELAY_DIST` pointing at the same build.
+
 `CHROMIUM_PATH` selects a browser other than the one Playwright installed.
 A change to how events travel between a page and a kernel is judged by this
 run, not only by a unit test of one side. Add a scenario to `live.mjs` rather

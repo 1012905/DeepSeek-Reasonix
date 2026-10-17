@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -103,4 +104,43 @@ func TestAMessageSentOverOneServerIsHeldOnTheOther(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatal("the receiver never held the message")
+}
+
+// /peers carries the threads, empty (never null) until something was sent, and
+// the state of the one just written is waiting.
+func TestPeersRouteCarriesTheThreadsOfWhatWasSent(t *testing.T) {
+	peersDir := filepath.Join(testenv.TempDir(t), "peers")
+	a := peerServer(t, peersDir, "alpha")
+	b := peerServer(t, peersDir, "beta")
+	_ = b
+	type peersAnswer struct {
+		Peers   []control.PeerView   `json:"peers"`
+		Threads []control.PeerThread `json:"threads"`
+	}
+	read := func() peersAnswer {
+		res, err := http.Get(a.URL + "/peers")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out peersAnswer
+		if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	var first peersAnswer
+	for deadline := time.Now().Add(10 * time.Second); len(first.Peers) == 0 && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		first = read()
+	}
+	if len(first.Peers) != 1 || first.Threads == nil || len(first.Threads) != 0 {
+		t.Fatalf("before sending: %+v, want one peer and an empty (non-null) threads list", first)
+	}
+	if status, raw := postSide(t, a.URL+"/peers/send", map[string]any{"to": first.Peers[0].Key, "text": "look at the build"}); status != http.StatusOK {
+		t.Fatalf("send = %d %s", status, raw)
+	}
+	after := read()
+	if len(after.Threads) != 1 || after.Threads[0].Key != first.Peers[0].Key || after.Threads[0].State != control.PeerWaiting {
+		t.Fatalf("after sending: %+v, want one waiting thread on the peer", after.Threads)
+	}
 }

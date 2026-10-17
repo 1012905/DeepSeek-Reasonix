@@ -28,7 +28,7 @@ func VanishedMidWalk(path string, err error) bool {
 	if !racing {
 		return false
 	}
-	for range 50 {
+	for range 500 {
 		if _, serr := os.Lstat(path); errors.Is(serr, fs.ErrNotExist) {
 			return true
 		}

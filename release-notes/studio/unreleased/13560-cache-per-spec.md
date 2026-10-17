@@ -1,0 +1,2 @@
+- 修复：两个窗口或项目用同名但启动方式不同的 MCP 服务器时，不再每次启动互相冲掉握手缓存。关联 #13560。
+- Fixed: two windows or projects using an MCP server of the same name but a different launch spec no longer evict each other's handshake cache on every start. Refs #13560.
