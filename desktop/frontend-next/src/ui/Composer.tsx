@@ -424,18 +424,8 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const sendDisabled = submitting || stopping || adding || failed || !hasDraft;
   const warnPictures = status?.vision === false && shots.some((c) => c.k === "attachment" && c.state === "ready" && isPicture(c));
 
-  // A panel that closes takes the focus it held with it; the button that
-  // opened it is where the reader was.
-  const sideWas = useRef(side);
-  const sideButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (sideWas.current && !side && (!document.activeElement || document.activeElement === document.body)) sideButton.current?.focus();
-    sideWas.current = side;
-  }, [side]);
-
   return (
     <div className="dropzone" ref={dropzone}>
-      {sidePanel}
       {menu.open && (
         <CompletionMenu
           id={completionId}
@@ -682,7 +672,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
               <span>{t("也可直接拖入或粘贴")}</span>
             </span>
           </button>
-          {onSide && <SideAskButton ref={sideButton} open={side} onToggle={onSide} />}
+          {onSide && <SideAskButton open={side} onToggle={onSide} panel={sidePanel} />}
           {refine.button}
         <div className="studio-mode-control">
           <Picker
