@@ -549,6 +549,7 @@ export const ACTIONS: UIAction[] = [
   { id: "web-access.consent", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "web-access.searxng-url", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.measure", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.background", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.font", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },

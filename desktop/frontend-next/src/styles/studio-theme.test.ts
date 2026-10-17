@@ -59,8 +59,8 @@ describe("the Studio shell closes over the active theme", () => {
   it("pins the composer to the Studio type scale even when a theme pack is active", () => {
     expect(closure).toMatch(/\.compose textarea\s*\{[^}]*font:\s*var\(--w-reg\) var\(--read\)\/1\.65 var\(--ui\)/s);
     expect(closure).toMatch(/\.compose textarea::placeholder\s*\{[^}]*font:\s*inherit/s);
-    expect(closure).toMatch(/\.compose \.queue\s*\{[^}]*font:\s*500 10px\/1\.35 var\(--ui\)/s);
-    expect(closure).toMatch(/\.compose \.mode,[\s\S]*?font-size:\s*11px !important/s);
+    expect(closure).toMatch(/\.compose \.queue\s*\{[^}]*font:\s*500 calc\(10px \* var\(--fs-scale, 1\)\)\/1\.35 var\(--ui\)/s);
+    expect(closure).toMatch(/\.compose \.mode,[\s\S]*?font-size:\s*calc\(11px \* var\(--fs-scale, 1\)\) !important/s);
   });
 
   it("keeps the sidebar brand on the same title-bar row as the chrome", () => {

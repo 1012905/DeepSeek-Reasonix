@@ -611,21 +611,21 @@ func (a *contextWindow) summarize(ctx context.Context, region []provider.Message
 // cap that cannot exceed above is refused with errNoOutputHeadroom before any
 // request is made. Named returns so defer can attach RequestCount.
 func (a *contextWindow) summarizeAt(ctx context.Context, region []provider.Message, instructions string, limit, above int) (summary string, usage *provider.Usage, err error) {
+	return a.summarizeAtMode(ctx, region, instructions, limit, above, true)
+}
+
+func (a *contextWindow) summarizeAtMode(ctx context.Context, region []provider.Message, instructions string, limit, above int, allowPrefix bool) (summary string, usage *provider.Usage, err error) {
 	parent := ctx
 	bounds := SummaryBounds
 	ctx, cancel := context.WithTimeoutCause(ctx, bounds.Ceiling, errSummaryCeiling)
 	defer cancel()
-	ctx = provider.WithRequestAttemptCounter(ctx)
+	ctx = provider.WithIndependentRequestAttemptCounter(ctx)
 	defer func() {
 		if err != nil && parent.Err() == nil && errors.Is(context.Cause(ctx), errSummaryCeiling) {
 			err = summaryCeilingHit(bounds.Ceiling)
 		}
 		err = classifySummaryError(parent, err)
 	}()
-	sys := summarySystemPrompt
-	if strings.TrimSpace(instructions) != "" {
-		sys += "\n\nAdditional focus for this compaction (prioritize keeping this):\n" + strings.TrimSpace(instructions)
-	}
 	defer func() {
 		usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 		if usage != nil && (usage.TotalTokens > 0 || usage.RequestCount > 0) {
@@ -640,16 +640,7 @@ func (a *contextWindow) summarizeAt(ctx context.Context, region []provider.Messa
 	if a.maxOutputTokens > 0 && a.maxOutputTokens < maxOut {
 		maxOut = a.maxOutputTokens
 	}
-	req := provider.Request{
-		Messages: []provider.Message{
-			{Role: provider.RoleSystem, Content: sys},
-			{Role: provider.RoleUser, Content: renderTranscript(region) + summaryClosingInstruction},
-		},
-		MaxTokens:      maxOut,
-		EffortOverride: summaryEffort,
-		Summary:        true,
-		Temperature:    provider.OptionalTemperature(a.temperature),
-	}
+	req, reused := a.summaryRequest(region, instructions, maxOut, allowPrefix)
 	if budget, clipped, budgetErr := a.effectiveOutputBudget(req); budgetErr != nil {
 		return "", usage, budgetErr
 	} else if clipped {
@@ -690,6 +681,9 @@ func (a *contextWindow) summarizeAt(ctx context.Context, region []provider.Messa
 				s := strings.TrimSpace(b.String())
 				if s == "" {
 					return "", usage, fmt.Errorf("summarizer returned empty output")
+				}
+				if reused && !hasDigestHeading(s) {
+					return "", usage, errSummaryPrefixNotDigest
 				}
 				return s, usage, nil
 			}
