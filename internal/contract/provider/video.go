@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -42,9 +43,9 @@ func WithoutVideos(m Message, note string) Message {
 func answeredAfter(msgs []Message) []bool {
 	out := make([]bool, len(msgs))
 	seen := false
-	for i := len(msgs) - 1; i >= 0; i-- {
+	for i, m := range slices.Backward(msgs) {
 		out[i] = seen
-		if msgs[i].Role == RoleAssistant {
+		if m.Role == RoleAssistant {
 			seen = true
 		}
 	}
