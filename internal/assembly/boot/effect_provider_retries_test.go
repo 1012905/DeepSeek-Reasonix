@@ -25,7 +25,7 @@ func (p *flakyWireProvider) Name() string { return "boot-flaky-wire" }
 func (p *flakyWireProvider) Stream(ctx context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
 	cl := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		p.attempts.Add(1)
-		return &http.Response{StatusCode: 503, Body: io.NopCloser(strings.NewReader("busy")), Header: http.Header{"Retry-After": {"1"}}}, nil
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(strings.NewReader("busy")), Header: http.Header{"Retry-After": {"1"}}}, nil
 	})}
 	_, err := provider.SendWithRetry(ctx, cl, provider.SendOptions{Provider: "boot-flaky-wire"}, func(c context.Context) (*http.Request, error) {
 		return http.NewRequestWithContext(c, http.MethodPost, "http://provider.invalid/v1", nil)
