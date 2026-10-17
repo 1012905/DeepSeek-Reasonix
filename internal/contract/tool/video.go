@@ -28,6 +28,9 @@ type NativeVideo struct {
 	Protocol string
 	Model    string
 	Limits   []VideoLimit
+	// Unavailable is the identity of why the selected model does not take video
+	// natively, set when Protocol is empty.
+	Unavailable string
 }
 
 // Tightest is the limit that binds: the smallest of those named. No limits reads
@@ -58,7 +61,7 @@ func WithNativeVideo(ctx context.Context, src NativeVideoSource) context.Context
 }
 
 // NativeVideoFrom asks the source carried by ctx. ok is false when there is none
-// or when the model does not take video natively.
+// or when the model does not take video natively; the value still says why.
 func NativeVideoFrom(ctx context.Context) (NativeVideo, bool) {
 	if ctx == nil {
 		return NativeVideo{}, false
