@@ -29,6 +29,7 @@ const (
 	tsWorkspaceFile = "desktop/frontend-next/src/port/workspace.ts"
 	tsLookFile      = "desktop/frontend-next/src/port/look.ts"
 	tsHubFile       = "desktop/frontend-next/src/port/hub.ts"
+	tsMuxFile       = "desktop/frontend-next/src/port/mux.ts"
 	tsChartFile     = "desktop/frontend-next/src/ui/chart/spec.ts"
 	tsSurfaceFile   = "desktop/frontend-next/src/ui/surface/spec.ts"
 )
@@ -165,6 +166,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/remote_browse.go", "RemoteFolder", tsRemoteFile, "RemoteFolder"},
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
+	{"internal/frontend/serve/hub_mux.go", "muxOpened", tsMuxFile, "MuxOpened"},
+	{"internal/frontend/serve/hub_mux.go", "muxAttachRequest", tsMuxFile, "MuxAttachRequest"},
+	{"internal/frontend/serve/hub_mux.go", "muxEnvelopeView", tsMuxFile, "MuxEnvelope"},
 	{"internal/frontend/serve/hub_tree.go", "treeSession", tsHubFile, "TreeSession"},
 	// The folder's true size beside the rows loaded. A window that cannot read
 	// the total labels a truncated list as the whole history.
