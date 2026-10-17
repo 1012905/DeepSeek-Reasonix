@@ -248,13 +248,16 @@ class BenchPort extends MockPort {
       id: `seed-${i}`,
       // Lines the person queued: the panel leaves out the host's own queued
       // continuations, so a seed of those would draw nothing.
-      intent: "followup" as const,
+      intent: (QUEUE_IMAGES && i === 0 ? "steer" : "followup") as "steer" | "followup",
       state: "queued" as const,
+      ...(QUEUE_IMAGES && i === 0 ? { images: true } : {}),
       // 三种长度，各有各的对照：第一条没被截断（不该弹），第二条长到撞天花板
       // （浮层要自己滚），其余是寻常的被截断行。内核把 preview 截到 120 runes，
       // 所以第二条在队列里到不了 —— 但 .ovf 是通用的，天花板得有人证明它在。
       preview:
-        i === 0
+        QUEUE_IMAGES && i === 0
+          ? "@.reasonix/attachments/clipboard-20261017-141249.png reasonix 的你改好了？我这边看到的还是旧界面"
+          : i === 0
           ? "bash-1 — failed"
           : i === 1
             ? `bash-2 — failed: ${"error[E0308]: mismatched types in the trait implementation; ".repeat(14)}`
@@ -356,6 +359,8 @@ const SWITCH_MS = Number(query.get("switchms") ?? 0);
 // ?queue= is how many lines are already waiting when the window opens.
 const QUEUE = Number(query.get("queue") ?? 0);
 const QUEUE_BODY = query.has("queuebody");
+// ?queueimages makes the first seeded line a steer that carries a picture.
+const QUEUE_IMAGES = query.has("queueimages");
 const JOBS = Number(query.get("jobs") ?? 0);
 // ?treems= holds every tree read back until that long after load, so the
 // window can be seen before the kernel has named a single folder.

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"reasonix/internal/base/i18n"
 )
 
 const queueUsage = "usage: /queue list|show|edit|delete|move|pause|resume|retry|refresh"
@@ -170,7 +172,11 @@ func renderQueueList(snap InboxSnapshot) string {
 	}
 	b.WriteByte('\n')
 	for i, it := range snap.Items[:min(len(snap.Items), queueListLimit)] {
-		fmt.Fprintf(&b, "  %d. [%s/%s] %s #%s\n", i+1, it.Intent, it.State, it.Preview, shortID(it.ID))
+		fmt.Fprintf(&b, "  %d. [%s/%s] %s #%s", i+1, it.Intent, it.State, it.Preview, shortID(it.ID))
+		if it.Images && it.State == "queued" {
+			fmt.Fprintf(&b, " (%s)", i18n.M.QueueImageWait)
+		}
+		b.WriteByte('\n')
 	}
 	if more := len(snap.Items) - queueListLimit; more > 0 {
 		fmt.Fprintf(&b, "  … and %d more (use /queue show <n>)\n", more)
