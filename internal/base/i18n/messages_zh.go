@@ -496,6 +496,8 @@ var Chinese = Messages{
 	GoalNotPaused:                "没有已暂停或被阻塞的目标可恢复",
 	GoalPaused:                   "目标已暂停 — /goal resume 可继续",
 	AwaitingUserFmt:              "等待你的输入：%s",
+	GoalRetryFmt:                 "目标的完成度检查失败，自动重试（第 %d 次）",
+	GoalRetryGaveUpFmt:           "完成度检查连续失败 %d 次，目标不再自动重试，等你处理",
 	PlanAutoApproved:             "计划已自动批准（用户配置 agent.plan_approval = \"auto\"）",
 	ImagesNotReadable:            "当前模型不读图 — 已附 %d 张，改由委派的子代理去看",
 	ImagesNeedVisionRole:         "当前模型不读图 — 已附 %d 张，现在没人读得了。%s 能读图：到 设置 › 模型 › 分工 里把「看图」指给它。",
