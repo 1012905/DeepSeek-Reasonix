@@ -1595,6 +1595,8 @@ until the goal is complete, blocked, paused, or cleared. Ordinary chat never
 changes collaboration mode implicitly; choose Goal in the composer or use
 `/goal` to start a long-running objective.
 
+The desktop plan fold and the terminal footer show a goal's state, turns, requests, tokens and active work time, and name the stop cause when it is not running.
+
 Goal has no default model-round, cross-Run turn, wall-clock, or numeric
 no-progress limit. It continues until completion, a genuine user/external
 blocker, manual stop/pause, an unrecoverable external error, or an explicit

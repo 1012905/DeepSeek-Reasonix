@@ -15,7 +15,7 @@
     "essay": 2696,
     "file-size": 19628,
     "flat-view": 0,
-    "frontend-parity": 17,
+    "frontend-parity": 16,
     "function-size": 2652,
     "layer-order": 0,
     "layering": 0,
@@ -1281,8 +1281,7 @@
       "struct-state": 9
     },
     "internal/session/control/goal_control.go": {
-      "essay": 1,
-      "frontend-parity": 1
+      "essay": 1
     },
     "internal/session/control/goalusage.go": {
       "essay": 2
