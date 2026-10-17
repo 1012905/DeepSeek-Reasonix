@@ -47,6 +47,10 @@ type heldScope struct {
 	peers         bool
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
+	// webSearchBackends and searxngURL decide where the user's queries go, so
+	// only the user file names them.
+	webSearchBackends []string
+	searxngURL        string
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -82,6 +86,9 @@ func holdUserScope(c *Config) heldScope {
 		turnNarration:   c.TurnNarration(),
 		peers:           c.Peers.Enabled,
 		mcpResources:    c.Tools.MCPResources,
+
+		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
+		searxngURL:        c.Tools.SearxngURL,
 	}
 }
 
@@ -179,6 +186,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("tools.mcp_resources", fmt.Sprintf("%t", c.Tools.MCPResources), ProjectUserOnly)
 		c.Tools.MCPResources = h.mcpResources
 	}
+	c.keepUserSearchBackends(h)
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.
 	if c.Agent.GoalAutoRetry != h.goalAutoRetry {
@@ -394,4 +402,17 @@ func appendMissing(base []string, extra ...string) []string {
 		}
 	}
 	return out
+}
+
+// keepUserSearchBackends restores the user's search backends over a project
+// file's: they decide where the user's queries are sent.
+func (c *Config) keepUserSearchBackends(h heldScope) {
+	if !slices.Equal(c.Tools.WebSearchBackends, h.webSearchBackends) {
+		c.ignoreProject("tools.web_search_backends", strings.Join(c.Tools.WebSearchBackends, ","), ProjectUserOnly)
+		c.Tools.WebSearchBackends = slices.Clone(h.webSearchBackends)
+	}
+	if c.Tools.SearxngURL != h.searxngURL {
+		c.ignoreProject("tools.searxng_url", c.Tools.SearxngURL, ProjectUserOnly)
+		c.Tools.SearxngURL = h.searxngURL
+	}
 }
