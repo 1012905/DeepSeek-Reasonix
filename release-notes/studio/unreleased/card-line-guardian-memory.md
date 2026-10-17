@@ -1,0 +1,2 @@
+- 对话里低风险的“守卫复核：已允许”和“记住了”改成一行（“忘记”按钮在行内）；被拦截或中高风险的复核仍是卡片。关联 #13456。
+- A low-risk allowed guardian review and a remembered fact are now a single row (the Forget button stays in it); refusals and medium-or-higher-risk reviews keep their cards. Refs #13456.

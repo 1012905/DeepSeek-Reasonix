@@ -1550,6 +1550,11 @@ what exists.
 - The cards a reader reads or acts on (approval, ask, remember, guardian review, extension card, receipt, compaction) share one shell: `--r-md` radius, a 1px `--border`, the `--surface` ground, and a header strip with no fill of its own.
 - State is never a border colour: a warning or error card keeps the shell's border and says so in the glyph ink or a chip.
 
+## Rows in place of cards
+
+- An allowed guardian review at low or unknown risk, and a remembered fact, are Lines (`LineRow`): glyph, title, mono subject, meta and, when there is one, the action, on one row over a hairline, with the rationale or description as a muted line under it.
+- A refusal, or an allow at medium risk or above, stays a card: it is something to read.
+
 ## Notice bar
 
 - A host notice is one sentence with a glyph and, under it, the kernel's diagnostic in the muted meta size.

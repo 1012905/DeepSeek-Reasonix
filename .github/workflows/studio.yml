@@ -164,6 +164,7 @@ jobs:
           node perf/narrow-steps.mjs
           node perf/job-names.mjs
           node perf/card-shell.mjs
+          node perf/line-cards.mjs
           node perf/notice-line.mjs
           node perf/brought-line.mjs
           node perf/modal-focus.mjs
