@@ -19,29 +19,38 @@ import (
 type paidSearchApprover struct{ c *Controller }
 
 func (p paidSearchApprover) ApprovePaidSearch(ctx context.Context, req tool.PaidSearchRequest) (bool, error) {
-	if p.c.approval.preApprovedForDecision(PaidSearchApprovalTool, req.Backend, nil, true) {
+	fetch := req.Service == tool.PaidServiceFetch
+	subject, reasonFmt := req.Backend, i18n.M.PaidSearchApprovalReasonFmt
+	if fetch {
+		subject, reasonFmt = req.Backend+"/fetch", i18n.M.PaidFetchApprovalReasonFmt
+	}
+	if p.c.approval.preApprovedForDecision(PaidSearchApprovalTool, subject, nil, true) {
 		return true, nil
 	}
-	args, _ := json.Marshal(map[string]string{"backend": req.Backend, "query": req.Query})
-	reply, err := p.c.requestApprovalDecision(ctx, approvalRequest{tool: PaidSearchApprovalTool, subject: req.Backend, args: args,
-		reason: fmt.Sprintf(i18n.M.PaidSearchApprovalReasonFmt, req.Backend, req.Price, req.Query), fresh: true})
+	args, _ := json.Marshal(map[string]string{"backend": req.Backend, "service": req.Service, "query": req.Query})
+	reply, err := p.c.requestApprovalDecision(ctx, approvalRequest{tool: PaidSearchApprovalTool, subject: subject, args: args,
+		reason: fmt.Sprintf(reasonFmt, req.Backend, req.Price, req.Query), fresh: true})
 	if err != nil || !reply.allow {
 		return false, err
 	}
 	if reply.session || reply.persist {
-		p.c.approval.grantSession(PaidSearchApprovalTool, req.Backend)
+		p.c.approval.grantSession(PaidSearchApprovalTool, subject)
 	}
 	if reply.persist {
-		p.c.emitRememberResult(rememberPaidSearchBackend(req.Backend))
+		p.c.emitRememberResult(rememberPaidBackend(req.Backend, fetch))
 	}
 	return true, nil
 }
 
-// rememberPaidSearchBackend records the user's agreement to be charged by one
-// backend. A backend already recorded is not written again.
-func rememberPaidSearchBackend(backend string) RememberResult {
+// rememberPaidBackend records the user's agreement to be charged by one backend
+// for searching or for fetching. A backend already recorded is not written again.
+func rememberPaidBackend(backend string, fetch bool) RememberResult {
 	backend = strings.TrimSpace(backend)
-	rule := "tools.web_search_paid_allowed += " + backend
+	key := "web_search_paid_allowed"
+	if fetch {
+		key = "web_fetch_paid_allowed"
+	}
+	rule := "tools." + key + " += " + backend
 	if backend == "" {
 		return RememberResult{Rule: rule, Err: fmt.Errorf("no backend to allow")}
 	}
@@ -49,10 +58,14 @@ func rememberPaidSearchBackend(backend string) RememberResult {
 	defer unlock()
 	path := config.UserConfigPath()
 	cfg := config.LoadForEdit(path)
-	if slices.Contains(cfg.Tools.WebSearchPaidAllowed, backend) {
+	list := &cfg.Tools.WebSearchPaidAllowed
+	if fetch {
+		list = &cfg.Tools.WebFetchPaidAllowed
+	}
+	if slices.Contains(*list, backend) {
 		return RememberResult{Rule: rule, Path: path, CoveredBy: backend}
 	}
-	cfg.Tools.WebSearchPaidAllowed = append(slices.Clone(cfg.Tools.WebSearchPaidAllowed), backend)
+	*list = append(slices.Clone(*list), backend)
 	if err := cfg.SaveTo(path); err != nil {
 		return RememberResult{Rule: rule, Path: path, Err: err}
 	}

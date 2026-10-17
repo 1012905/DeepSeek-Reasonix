@@ -115,6 +115,8 @@ const (
 	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
 	NoticeCodeWebSearchBackendFallback    = "web_search_backend_fallback"
 	NoticeCodeWebSearchBackendUnusable    = "web_search_backend_unusable"
+	NoticeCodeWebFetchBackendFallback     = "web_fetch_backend_fallback"
+	NoticeCodeWebFetchBackendUnusable     = "web_fetch_backend_unusable"
 )
 
 // A saved fold was not reused when its session was bound: the whole history is

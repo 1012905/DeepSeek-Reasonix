@@ -1998,3 +1998,18 @@ web_search_backends = ["searxng", "deepseek_api"]
 - No approval mode answers that card for you, and a project file cannot record the allowance.
 - Without an answer the model receives `search.free_failed_paid_needs_consent`. A 402 reaches it as `search.insufficient_balance`.
 - Each successful paid request is counted in the usage view under its own source, `deepseek-search`.
+
+### Paid fallback for fetching pages
+
+`web_fetch` can fall back to DeepSeek's [Fetch API](https://api-docs.deepseek.com/guides/search) when this machine could not read a page.
+
+```toml
+[tools]
+web_fetch_backends = ["local", "deepseek_api"]
+```
+
+- `local` is the fetch from this machine and is free. It counts as not answering when the request fails, the status is not 2xx, or no text came back.
+- DeepSeek lists the same price as for search, $0.75 per 1,000 successful requests; a request is billed only when it returns page content.
+- The first time it would be used, a card shows the price and the address that would be sent to DeepSeek. Agreeing to search is not agreeing to fetch: always allow records `web_fetch_paid_allowed`.
+- An address on your own network is never sent: loopback, private and link-local addresses, `localhost`, and names that resolve there are refused with `fetch.internal_address`.
+- Pages are third-party content. Each successful paid fetch is counted in the usage view as `deepseek-fetch`.
