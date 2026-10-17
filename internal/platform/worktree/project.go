@@ -3,6 +3,7 @@ package worktree
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"reasonix/internal/base/workspaceid"
 )
@@ -17,20 +18,26 @@ func ProjectRoot(root, managedRoot string) string {
 	if info.RepoDir == "" || info.RepoDir == info.GitDir || filepath.Base(info.RepoDir) != ".git" {
 		return root
 	}
-	abs, err := filepath.Abs(root)
-	if err != nil {
+	managed, err := filepath.EvalSymlinks(managedRoot)
+	if err != nil || !IsManagedPath(info.CheckoutRoot, managed) || !filepath.IsLocal(info.Prefix) || !registeredCheckout(info) {
 		return root
 	}
-	for dir := abs; ; dir = filepath.Dir(dir) {
-		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
-			rel, err := filepath.Rel(dir, abs)
-			if err != nil {
-				return root
-			}
-			return filepath.Join(filepath.Dir(info.RepoDir), rel)
-		}
-		if filepath.Dir(dir) == dir {
-			return root
-		}
+	return filepath.Join(filepath.Dir(info.RepoDir), info.Prefix)
+}
+
+func registeredCheckout(info workspaceid.Info) bool {
+	body, err := os.ReadFile(filepath.Join(info.GitDir, "gitdir"))
+	if err != nil || strings.TrimSpace(string(body)) == "" {
+		return false
 	}
+	backlink := strings.TrimSpace(string(body))
+	if !filepath.IsAbs(backlink) {
+		backlink = filepath.Join(info.GitDir, backlink)
+	}
+	marker, err := filepath.EvalSymlinks(backlink)
+	if err != nil || filepath.Base(marker) != ".git" {
+		return false
+	}
+	rel, err := filepath.Rel(info.CheckoutRoot, filepath.Dir(marker))
+	return err == nil && rel == "."
 }

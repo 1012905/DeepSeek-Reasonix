@@ -1,6 +1,9 @@
 package serve
 
 import (
+	"errors"
+	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -28,14 +31,18 @@ func groupWorkspaces(refs []rootRef) []workspaceProject {
 	out := []workspaceProject{}
 	index := map[string]int{}
 	aliases := map[string]string{}
+	sources := map[string]string{}
 	for _, ref := range refs {
-		if projectRoot(ref.dir) == ref.dir {
-			aliases[projectIdentity(ref.dir)] = ref.dir
+		source := projectRoot(ref.dir)
+		sources[ref.dir] = source
+		if source == ref.dir {
+			aliases[sessionstore.CanonicalSessionPath(source)] = ref.dir
 		}
 	}
 	for _, ref := range refs {
-		root := projectRoot(ref.dir)
-		identity := projectIdentity(root)
+		source := sources[ref.dir]
+		root := source
+		identity := sessionstore.CanonicalSessionPath(source)
 		if alias := aliases[identity]; alias != "" {
 			root = alias
 		}
@@ -47,11 +54,28 @@ func groupWorkspaces(refs []rootRef) []workspaceProject {
 		}
 		p := &out[at]
 		p.remembered = p.remembered || ref.remembered
-		if !slices.Contains(p.roots, ref.dir) {
-			p.roots = append(p.roots, ref.dir)
+		for _, dir := range []string{source, ref.dir} {
+			if !slices.Contains(p.roots, dir) {
+				p.roots = append(p.roots, dir)
+			}
+		}
+	}
+	for i := range out {
+		if !projectDirectoryExists(out[i].root) {
+			for _, root := range out[i].roots {
+				if projectDirectoryExists(root) {
+					out[i].root = root
+					break
+				}
+			}
 		}
 	}
 	return out
+}
+
+func projectDirectoryExists(root string) bool {
+	info, err := os.Stat(root)
+	return err == nil && info.IsDir()
 }
 
 func rememberedProjects(paths []string) []workspaceProject {
@@ -90,8 +114,10 @@ func orderWorkspaceMembers(paths, order []string) []string {
 func (h *Hub) sessionRoots() []rootRef {
 	out := h.roots()
 	for _, p := range groupWorkspaces(out) {
-		if !slices.ContainsFunc(out, func(ref rootRef) bool { return ref.dir == p.root }) {
-			out = append(out, rootRef{dir: p.root, remembered: p.remembered})
+		for _, dir := range p.roots {
+			if !slices.ContainsFunc(out, func(ref rootRef) bool { return ref.dir == dir }) {
+				out = append(out, rootRef{dir: dir, remembered: p.remembered})
+			}
 		}
 	}
 	return out
@@ -109,4 +135,37 @@ func (h *Hub) listedSessionRoot(path, root string) string {
 		}
 	}
 	return ""
+}
+
+// resolveRoot decides which folder a new runtime opens against: the one asked
+// for, the one that owns the session being opened, or the first runtime's.
+func (h *Hub) resolveRoot(req OpenRequest) (string, error) {
+	if root := h.listedSessionRoot(req.SessionPath, req.Root); root != "" {
+		return resolveWorkspaceDir(root)
+	}
+	if root := strings.TrimSpace(req.Root); root != "" {
+		return resolveWorkspaceDir(root)
+	}
+	if path := strings.TrimSpace(req.SessionPath); path != "" {
+		if root := workspaceRootForSession(path); root != "" {
+			return root, nil
+		}
+	}
+	h.mu.RLock()
+	first := ""
+	if len(h.order) > 0 {
+		if rt := h.runtimes[h.order[0]]; rt != nil {
+			first = rt.Server.Controller().WorkspaceRoot()
+		}
+	}
+	h.mu.RUnlock()
+	if first != "" {
+		return first, nil
+	}
+	for _, dir := range LaunchWorkspaces() {
+		if projectDirectoryExists(dir) {
+			return dir, nil
+		}
+	}
+	return "", refusal(http.StatusConflict, "workspace.none", errors.New("no workspace to open in — add a folder first"), nil)
 }

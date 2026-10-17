@@ -1,6 +1,9 @@
 package tool
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // PeerView is another session on this machine that can be written to.
 type PeerView struct {
@@ -19,6 +22,19 @@ type PeerReceipt struct {
 type PeerDirectory interface {
 	Peers() []PeerView
 	SendPeerMessage(to, text string) (PeerReceipt, error)
+}
+
+// DispatchReceipt says a task was written into a session of another project.
+type DispatchReceipt struct {
+	Project string
+	Key     string
+	ID      string
+}
+
+// ProjectDispatcher is what the dispatch tool asks of the session that owns it:
+// hand a task to a session in another of the user's projects.
+type ProjectDispatcher interface {
+	DispatchToProject(ctx context.Context, project, text string) (DispatchReceipt, error)
 }
 
 // PeerLink joins the peer tools, built with the registry, to the controller

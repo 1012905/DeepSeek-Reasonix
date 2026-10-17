@@ -437,8 +437,7 @@ func (h *Hub) addWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	root := projectRoot(dir)
-	writeJSON(w, treeWorkspace{Root: root, Name: fileutil.RootName(root), Sessions: []treeSession{}})
+	writeJSON(w, treeWorkspace{Root: dir, Name: fileutil.RootName(dir), Sessions: []treeSession{}})
 }
 
 // removeWorkspace drops a folder from the sidebar. Nothing on disk is touched —

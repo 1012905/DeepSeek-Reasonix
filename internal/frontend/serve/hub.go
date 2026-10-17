@@ -75,6 +75,8 @@ type Hub struct {
 	stance  *approvalStance
 	changes *Broadcaster
 	muxes   *eventMuxes
+	// dispatch remembers the panes a task was handed to; see dispatch.go.
+	dispatch dispatchBook
 }
 
 // approvalStance is the Ask/Auto/YOLO posture the frontend is in, held by the
@@ -704,6 +706,9 @@ func (h *Hub) publish(rt *Runtime) error {
 				return err
 			}
 		}
+		if concrete {
+			ctrl.SetProjectDispatcher(h.dispatcherFor(rt))
+		}
 		rt.Server.bindMu.Unlock()
 		rt.Server.bc.observeTree(h.treeChanged)
 		// A local runtime a Hub publishes is driven by an interactive frontend,
@@ -742,42 +747,6 @@ func (h *Hub) findSession(path string) *Runtime {
 		}
 	}
 	return nil
-}
-
-// resolveRoot decides which folder a new runtime opens against: the one asked
-// for, the one that owns the session being opened, or the first runtime's.
-func (h *Hub) resolveRoot(req OpenRequest) (string, error) {
-	if root := h.listedSessionRoot(req.SessionPath, req.Root); root != "" {
-		return resolveWorkspaceDir(root)
-	}
-	if root := strings.TrimSpace(req.Root); root != "" {
-		return resolveWorkspaceDir(root)
-	}
-	if path := strings.TrimSpace(req.SessionPath); path != "" {
-		if root := workspaceRootForSession(path); root != "" {
-			return root, nil
-		}
-	}
-	h.mu.RLock()
-	first := ""
-	if len(h.order) > 0 {
-		if rt := h.runtimes[h.order[0]]; rt != nil {
-			first = rt.Server.Controller().WorkspaceRoot()
-		}
-	}
-	h.mu.RUnlock()
-	if first != "" {
-		return first, nil
-	}
-	// Closing the last pane leaves nothing to infer from, and "open a session"
-	// is exactly what someone does next. Fall back to the remembered list, the
-	// same answer the window uses when it launches with no pane at all.
-	for _, dir := range LaunchWorkspaces() {
-		if st, err := os.Stat(dir); err == nil && st.IsDir() {
-			return dir, nil
-		}
-	}
-	return "", refusal(http.StatusConflict, "workspace.none", errors.New("no workspace to open in — add a folder first"), nil)
 }
 
 func (h *Hub) nextID() string {

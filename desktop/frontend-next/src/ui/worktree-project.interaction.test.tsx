@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { Workspaces } from "./Workspaces";
@@ -57,4 +57,20 @@ it.each([[false, "原目录"], [true, "隔离目录"]])("identifies the conversa
     onFind={vi.fn()} view="flow" rows={0} surfaces={0} onView={vi.fn()} />);
   expect(await screen.findByText(label)).toBeTruthy();
   expect(screen.getByText(label).getAttribute("title")).toBe(current);
+});
+
+it("ignores old checkout metadata when switching conversations before it arrives", async () => {
+  const old = new MockPort();
+  const next = new MockPort();
+  let finish!: (value: Awaited<ReturnType<MockPort["workspaces"]>>) => void;
+  vi.spyOn(old, "workspaces").mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  vi.spyOn(next, "workspaces").mockResolvedValue({ current: root, isolated: false, canSwitch: true, canIsolate: true, recents: [] });
+  const props = { title: "工作", steer: 0, onSettings: vi.fn(), account: null, theme: "dark" as const,
+    onTheme: vi.fn(), onFind: vi.fn(), view: "flow" as const, rows: 0, surfaces: 0, onView: vi.fn() };
+  const { rerender } = render(<Chrome {...props} port={old} status={{ workspaceRoot: copy } as never} />);
+  rerender(<Chrome {...props} port={next} status={{ workspaceRoot: root } as never} />);
+  expect(await screen.findByText("原目录")).toBeTruthy();
+  await act(async () => finish({ current: copy, isolated: true, canSwitch: true, canIsolate: true, recents: [] }));
+  expect(screen.getByText("原目录").hidden).toBe(false);
+  expect(screen.queryByText("隔离目录")).toBeNull();
 });

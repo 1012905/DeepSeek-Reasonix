@@ -11,17 +11,6 @@ import (
 	"reasonix/internal/base/fileutil"
 )
 
-// DefaultMaxSubagentConcurrency is the session-wide sub-agent concurrency
-// default (task, fleet items, profile skills, nested children).
-const DefaultMaxSubagentConcurrency = 6
-
-// DefaultMaxParallelWriters is the default cap on concurrent writer-capable
-// sub-agents that declare non-overlapping write_paths.
-const DefaultMaxParallelWriters = 3
-
-// MaxSubagentConcurrencyLimit is the upper bound for both concurrency knobs.
-const MaxSubagentConcurrencyLimit = 32
-
 // WritePathSet is a normalized claim over workspace paths a sub-agent may write.
 // An Optimistic claim is scoped to the workspace for audit and bash, but each
 // write holds only its own path while it executes.
@@ -43,23 +32,13 @@ func (s WritePathSet) Empty() bool {
 	return !s.WholeWorkspace && len(s.Paths) == 0
 }
 
-// NormalizeConcurrencyLimits clamps total/writer limits into the public range
-// 1–32 and ensures writers never exceed total. Zero inputs become defaults so
-// old configs stay at 6/3 without migration.
+// NormalizeConcurrencyLimits reads the two user settings. Zero is no limit, the
+// default: the claims on write paths, not a count, are what keep writers from
+// colliding. A negative value reads as none, and a writer limit above a set total
+// is brought down to it, since a writer is also a sub-agent.
 func NormalizeConcurrencyLimits(total, writers int) (int, int) {
-	if total <= 0 {
-		total = DefaultMaxSubagentConcurrency
-	}
-	if writers <= 0 {
-		writers = DefaultMaxParallelWriters
-	}
-	if total > MaxSubagentConcurrencyLimit {
-		total = MaxSubagentConcurrencyLimit
-	}
-	if writers > MaxSubagentConcurrencyLimit {
-		writers = MaxSubagentConcurrencyLimit
-	}
-	if writers > total {
+	total, writers = max(total, 0), max(writers, 0)
+	if total > 0 && writers > total {
 		writers = total
 	}
 	return total, writers

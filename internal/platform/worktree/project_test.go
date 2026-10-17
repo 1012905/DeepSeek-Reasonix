@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"reasonix/internal/base/testenv"
+	"reasonix/internal/base/workspaceid"
 )
 
 func TestProjectRootUsesGitIdentityAndPreservesSelectedSubdirectory(t *testing.T) {
@@ -42,5 +43,52 @@ func TestProjectRootUsesGitIdentityAndPreservesSelectedSubdirectory(t *testing.T
 	}
 	if got := ProjectRoot(result.WorkspaceRoot, managed); got != result.WorkspaceRoot {
 		t.Errorf("an unreadable identity must retain its directory: %s", got)
+	}
+}
+
+func TestProjectRootRejectsCopiedAndMissingWorktreeRegistration(t *testing.T) {
+	requireGit(t)
+	repo, managed := initRepo(t), testenv.TempDir(t)
+	result, err := Create(t.Context(), opened(t, repo), managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker, err := os.ReadFile(filepath.Join(result.WorktreeRoot, ".git"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy := filepath.Join(managed, "restored", "project")
+	if err := os.MkdirAll(copy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(copy, ".git"), marker, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProjectRoot(copy, managed); got != copy {
+		t.Errorf("copied Git metadata borrowed another checkout's identity: %s", got)
+	}
+	info := workspaceid.Describe(result.WorktreeRoot)
+	if err := os.Remove(filepath.Join(info.GitDir, "gitdir")); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProjectRoot(result.WorkspaceRoot, managed); got != result.WorkspaceRoot {
+		t.Errorf("missing worktree registration must retain its own project: %s", got)
+	}
+}
+
+func TestProjectRootDoesNotBorrowRepositoryOutsideManagedStorage(t *testing.T) {
+	requireGit(t)
+	repo, managed := initRepo(t), testenv.TempDir(t)
+	result, err := Create(t.Context(), opened(t, repo), managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nestedManaged := filepath.Join(result.WorktreeRoot, "other-worktrees")
+	root := filepath.Join(nestedManaged, "unregistered")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProjectRoot(root, nestedManaged); got != root {
+		t.Fatalf("a Git marker outside managed storage claimed the folder: %s", got)
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/state/peermail"
 	"reasonix/internal/state/sessioninbox"
@@ -214,6 +215,7 @@ func (c *Controller) peerIngest() {
 		fresh = append(fresh, m)
 	}
 	var audits []peermail.AuditRecord
+	var newlyHeld []string
 	p.mu.Lock()
 	if p.key != key {
 		p.mu.Unlock()
@@ -238,12 +240,27 @@ func (c *Controller) peerIngest() {
 		}
 		p.held[m.ID] = m
 		p.order = append(p.order, m.ID)
+		newlyHeld = append(newlyHeld, m.ID)
 		perSender[m.From.SessionID]++
 		audits = append(audits, peermail.AuditRecord{Receiver: key, Sender: m.From.SessionID, ID: m.ID, Decision: peermail.DecisionHeld, Bytes: len(m.Body), SHA256: peermail.Digest(m.Body)})
 	}
 	p.mu.Unlock()
 	for _, a := range audits {
 		_ = p.dir.Audit(a)
+	}
+	c.releaseHeldPeerMessages(newlyHeld)
+}
+
+// releaseHeldPeerMessages approves what just arrived when the user's own file
+// lists this session's project. Only the asking is skipped: the message is the
+// same follow-up an approval would queue, and what it starts runs under this
+// session's own approvals and sandbox.
+func (c *Controller) releaseHeldPeerMessages(ids []string) {
+	if len(ids) == 0 || !config.LoadForEdit(config.UserConfigPath()).PeersReleasedProject(c.WorkspaceRoot()) {
+		return
+	}
+	for _, id := range ids {
+		_ = c.resolvePeerMessage(id, true, true)
 	}
 }
 
@@ -272,6 +289,12 @@ func (c *Controller) HeldPeerMessages() []PeerHeld {
 // acknowledged only after the queue holds it, and the queue de-duplicates on the
 // message id, so a crash between the two re-asks and never delivers twice.
 func (c *Controller) ResolvePeerMessage(id string, approve bool) error {
+	return c.resolvePeerMessage(id, approve, false)
+}
+
+// resolvePeerMessage is ResolvePeerMessage; released records that the user's own
+// file let this project take the message without a card, which the audit says.
+func (c *Controller) resolvePeerMessage(id string, approve, released bool) error {
 	p := c.peers
 	if p == nil || p.dir == nil {
 		return ErrPeersDisabled
@@ -305,6 +328,9 @@ func (c *Controller) ResolvePeerMessage(id string, approve bool) error {
 			return err
 		}
 		decision = peermail.DecisionApproved
+		if released {
+			decision = peermail.DecisionReleased
+		}
 		if !c.Running() {
 			c.maybeDispatchInbox()
 		}
