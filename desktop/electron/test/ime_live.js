@@ -103,15 +103,11 @@ async function main() {
   await wait(500);
   await keepsComposing("the agent clicking and typing in it");
 
-  const t0 = Date.now();
-  const realSettle = views.settle.bind(views);
   views.settle = (entry) => { process.stdout.write(`  [debug] +${Date.now() - t0}ms settle called attached=${entry.attached} ${new Error().stack.split("\n").slice(2, 5).join(" <- ").replace(/\s+/g, " ")}\n`); realSettle(entry); };
-  const wc = [...views.entries.values()][0].view.webContents;
-  for (const ev of ["did-start-loading", "did-stop-loading", "did-start-navigation", "did-fail-load", "did-navigate"]) wc.on(ev, () => process.stdout.write(`  [debug] +${Date.now() - t0}ms ${ev} attached=${[...views.entries.values()][0].attached}\n`));
   await compose("guaqi");
-  await send({ method: "Page.navigate", params: { url: page.url + "/hang" } }, session);
+  // Not awaited: the protocol answers a navigation only when the page does.
+  void send({ method: "Page.navigate", params: { url: page.url + "/hang" } }, session);
   await wait(500);
-  process.stdout.write(`  [debug] owner=${views.keyboard.owner} attached=${[...views.entries.values()][0].attached}\n`);
   const out = !win.contentView.children.includes([...views.entries.values()][0].view);
   check("a navigation that has just started holds the page out of the window", out);
   await wait(LEAVE_LIMIT_MS + 1000);
