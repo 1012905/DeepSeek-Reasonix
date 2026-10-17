@@ -143,6 +143,31 @@ export interface PeersState {
   held: PeerHeld[];
 }
 
+export interface PeerProject {
+  path: string;
+  name: string;
+}
+
+/** The session-messages switches as the kernel holds them (snake_case on the
+ *  wire). Saved values reach the model only at the next turn boundary, so
+ *  `pending` stays true until then. */
+export interface PeersSettings {
+  enabled: boolean;
+  dispatch: boolean;
+  release_projects: PeerProject[];
+  path: string;
+  applies: "next_turn";
+  pending: boolean;
+}
+
+export interface PeersSettingsEdit {
+  enabled?: boolean;
+  dispatch?: boolean;
+  release_projects?: string[];
+}
+
+export type PeerRemember = "project" | "none";
+
 export interface PeerReceipt {
   id: string;
   to: PeerView;

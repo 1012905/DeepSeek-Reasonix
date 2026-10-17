@@ -159,6 +159,15 @@ class BenchPort extends MockPort {
     };
   }
 
+  async peersSettings() {
+    if (!query.has("peerset")) return super.peersSettings();
+    return {
+      enabled: true, dispatch: true, applies: "next_turn" as const, pending: query.has("pending"),
+      path: "/Users/you/.reasonix/config.toml",
+      release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
+    };
+  }
+
   async foldWorkSettings() {
     return { ...(await super.foldWorkSettings()), fold: query.has("fold") };
   }

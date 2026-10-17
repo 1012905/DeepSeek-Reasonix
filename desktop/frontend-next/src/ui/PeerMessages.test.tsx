@@ -22,9 +22,9 @@ class PeerPort extends MockPort {
 const port = (state: PeersState) => new PeerPort(state) as unknown as AgentPort;
 
 describe("messages between sessions", () => {
-  it("says it is off, and how to turn it on, when the kernel has it disabled", async () => {
+  it("offers the switch to turn it on, and no sending, when the kernel has it disabled", async () => {
     render(<PeerMessages port={port({ enabled: false, peers: [], held: [] })} />);
-    expect(await screen.findByText(/会话间消息没有开启/)).toBeTruthy();
+    expect(await screen.findByRole("switch", { name: "启用会话间消息" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
   });
 
@@ -62,7 +62,7 @@ describe("messages between sessions", () => {
     expect(await screen.findByText(/不是你写的/)).toBeTruthy();
     expect(screen.getByText("请核对第三节")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "批准并交给模型" }));
-    expect(resolve).toHaveBeenCalledWith("m-1", true);
+    expect(resolve).toHaveBeenCalledWith("m-1", true, "none");
     await waitFor(() => expect(screen.queryByText("请核对第三节")).toBeNull());
   });
 
@@ -71,7 +71,7 @@ describe("messages between sessions", () => {
     const resolve = vi.spyOn(p, "resolvePeerMessage");
     render(<PeerMessages port={p} />);
     await userEvent.click(await screen.findByRole("button", { name: "拒绝" }));
-    expect(resolve).toHaveBeenCalledWith("m-1", false);
+    expect(resolve).toHaveBeenCalledWith("m-1", false, "none");
   });
 });
 

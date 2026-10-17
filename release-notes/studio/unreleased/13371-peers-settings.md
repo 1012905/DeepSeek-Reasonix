@@ -1,0 +1,2 @@
+- 新增：设置里有真正的“会话间消息”开关，可在页面里开启并允许模型交办任务；被拦下的消息可“批准并记住项目”，已记住的项目在设置里一键撤销。保存后下个回合起生效。关联 #13371。
+- Added: Settings has real session-message switches (turn on, let the model hand off tasks); a held message can be approved and its project remembered, and remembered projects are revoked there. Applies from the next turn. Refs #13371.

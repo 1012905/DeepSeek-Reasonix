@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
@@ -182,8 +182,26 @@ export class MockBoundary extends MockShell {
     return { id: `m-${text.length}`, to: target };
   }
 
-  async resolvePeerMessage(id: string, _approve: boolean): Promise<void> {
+  async resolvePeerMessage(id: string, _approve: boolean, _remember: PeerRemember = "none"): Promise<void> {
     this.peerState = { ...this.peerState, held: this.peerState.held.filter((h) => h.id !== id) };
+  }
+
+  protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false };
+
+  async peersSettings(): Promise<PeersSettings> {
+    return { ...this.peerSettings, release_projects: [...this.peerSettings.release_projects] };
+  }
+
+  async savePeersSettings(edit: PeersSettingsEdit): Promise<PeersSettings> {
+    const keep = edit.release_projects;
+    this.peerSettings = {
+      ...this.peerSettings,
+      enabled: edit.enabled ?? this.peerSettings.enabled,
+      dispatch: edit.dispatch ?? this.peerSettings.dispatch,
+      release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
+      pending: true,
+    };
+    return this.peersSettings();
   }
 
   private archive: AutoArchiveSettings = { enabled: false, days: 30, defaultDays: 30, path: "/Users/you/.reasonix/config.toml" };
