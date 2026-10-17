@@ -84,7 +84,7 @@ api_key_env = "DS_FETCH_FIXTURE_KEY"
 		notices: func() []event.Event { mu.Lock(); defer mu.Unlock(); return append([]event.Event(nil), notices...) }}
 }
 
-const unreachableHere = "https://blocked-locally.invalid/docs/page"
+const unreachableHere = "https://blocked-locally.zzzzqq/docs/page"
 
 // With the chain set but the local fetch answering, nothing is sent to DeepSeek
 // and the model sees the page exactly as web_fetch has always shown it.

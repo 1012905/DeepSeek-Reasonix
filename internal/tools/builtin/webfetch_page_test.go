@@ -104,7 +104,46 @@ func TestVetFetchURLAllowsPublicAndUnresolvableNames(t *testing.T) {
 	prev := lookupFetchHost
 	t.Cleanup(func() { lookupFetchHost = prev })
 	lookupFetchHost = func(context.Context, string) ([]net.IPAddr, error) { return nil, errors.New("no such host") }
-	if err := VetFetchURL(context.Background(), "https://blocked-locally.example/"); err != nil {
+	if err := VetFetchURL(context.Background(), "https://blocked-locally.org/"); err != nil {
 		t.Fatalf("a name this machine cannot resolve was refused, which is the case a remote fetch exists for: %v", err)
+	}
+}
+
+// A name this machine cannot resolve may still be an internal one: off the
+// company VPN, jira.corp.internal does not resolve either. What is refused is
+// decided by the shape of the name, from the standard special-use sets, so the
+// hostname, the path and the query token of an internal address stay home.
+func TestVetFetchURLRefusesNamesThatAreNotPublicByConstruction(t *testing.T) {
+	prev := lookupFetchHost
+	t.Cleanup(func() { lookupFetchHost = prev })
+	lookupFetchHost = func(context.Context, string) ([]net.IPAddr, error) { return nil, errors.New("no such host") }
+	for _, raw := range []string{
+		"https://jira/browse/ABC-1?token=secret",
+		"http://printer.local/status",
+		"https://jira.corp.internal/browse/ABC-1?token=secret",
+		"http://router.lan/",
+		"http://nas.home.arpa/",
+		"https://thing.invalid/",
+		"https://thing.test/",
+		"https://thing.example/",
+		"http://abcdef.onion/",
+		"http://LOCALHOST/",
+		"http://x.localhost./",
+		"http://Printer.LOCAL./",
+	} {
+		if err := VetFetchURL(context.Background(), raw); !errors.Is(err, ErrFetchInternalAddress) {
+			t.Errorf("%s: err = %v, want ErrFetchInternalAddress", raw, err)
+		}
+	}
+	for _, raw := range []string{
+		"https://blocked-by-the-firewall.org/page",
+		"https://docs.example.com/",
+		"https://news.example.net/story?id=1",
+		"https://locally-hosted.com/",
+		"https://internal-tools.io/",
+	} {
+		if err := VetFetchURL(context.Background(), raw); err != nil {
+			t.Errorf("%s: a public-shaped name was refused: %v", raw, err)
+		}
 	}
 }

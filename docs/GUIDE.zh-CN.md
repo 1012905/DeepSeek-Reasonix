@@ -1580,5 +1580,6 @@ web_fetch_backends = ["local", "deepseek_api"]
 - `local` 是在本机抓取，免费。请求失败、状态码不是 2xx、或没有取到文字，都算它没有回答。
 - DeepSeek 标价与搜索相同，每 1,000 次成功请求 $0.75；只有返回页面内容的请求才计费。
 - 第一次要用到它时会弹出卡片，写明价格和将发给 DeepSeek 的网址。同意搜索不等于同意抓取：始终允许会写入 `web_fetch_paid_allowed`。
-- 你自己网络里的地址绝不会发出去：回环、内网、链路本地地址、`localhost` 以及解析到这些地址的域名，都会被 `fetch.internal_address` 拒绝。
+- 你自己网络里的地址绝不会发出去：回环、内网、链路本地地址、解析到这些地址的域名，以及按构造不可能是公网的名称（单段主机名如 `jira`，或位于 `localhost`、`local`、`internal`、`lan`、`home.arpa`、`invalid`、`test`、`example`、`onion` 之下），即使本机解析不了，也会被 `fetch.internal_address` 拒绝。
+- 完整网址（包括问号后的参数）会原样发给 DeepSeek。卡片会完整显示；选择始终允许之后不再逐次显示。
 - 页面是第三方内容。每次成功的付费抓取会在用量视图里按 `deepseek-fetch` 计入。

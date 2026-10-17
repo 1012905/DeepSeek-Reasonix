@@ -48,16 +48,17 @@ func (f LocalFetcher) Fetch(ctx context.Context, rawURL string) (FetchPage, erro
 
 // VetFetchURL decides whether a URL may be handed to a third party to fetch.
 // Nothing that names this machine's own network leaves it: loopback, private,
-// link-local and shared-space addresses, "localhost", and names that resolve
-// there. A name this machine cannot resolve passes, because reaching what it
-// cannot is why a remote fetch is asked at all.
+// link-local and shared-space addresses, names that cannot be public by
+// construction, and names that resolve to any of those. A public-shaped name
+// this machine cannot resolve passes, because reaching what it cannot is why a
+// remote fetch is asked at all.
 func VetFetchURL(ctx context.Context, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
 		return errors.New("url must be an absolute http(s) address without credentials")
 	}
 	host := u.Hostname()
-	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
+	if ip := net.ParseIP(host); ip == nil && !publicByConstruction(host) {
 		return fmt.Errorf("%w %s", ErrFetchInternalAddress, host)
 	}
 	if ip := net.ParseIP(host); ip != nil {
@@ -80,4 +81,28 @@ func VetFetchURL(ctx context.Context, rawURL string) error {
 
 func internalForRemote(ip net.IP) bool {
 	return ip.IsLoopback() || blockedFetchIP(ip)
+}
+
+// nonPublicSuffixes are the top-level and special-use names the standards keep
+// out of the public DNS: localhost, invalid, test and example (RFC 6761), local
+// (RFC 6762), onion (RFC 7686), home.arpa (RFC 8375), and internal, which ICANN
+// reserved for private use. lan is the de-facto home-router suffix, never
+// delegated. A name under one is not fetched through a third party, resolvable
+// from here or not: off the company VPN an internal host resolves nowhere
+// either, and its name, path and query token would be what left the machine.
+var nonPublicSuffixes = []string{"localhost", "local", "internal", "lan", "home.arpa", "invalid", "test", "example", "onion"}
+
+// publicByConstruction reports whether a hostname's shape allows it to be a
+// public name: more than one label, and not under a special-use suffix.
+func publicByConstruction(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if !strings.Contains(host, ".") {
+		return false
+	}
+	for _, suffix := range nonPublicSuffixes {
+		if host == suffix || strings.HasSuffix(host, "."+suffix) {
+			return false
+		}
+	}
+	return true
 }
