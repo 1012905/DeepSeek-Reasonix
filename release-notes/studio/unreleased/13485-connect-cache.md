@@ -1,0 +1,2 @@
+- 修复：手动连接的 MCP 服务器现在也会像自动启动的那样记下握手结果，下一次会话不用重新握手；此前快速关闭会话会丢掉它。关联 #13485。
+- Fixed: an MCP server connected by hand now leaves its handshake in the cache like a started one, so the next session needs no handshake; a quick close used to lose it. Refs #13485.

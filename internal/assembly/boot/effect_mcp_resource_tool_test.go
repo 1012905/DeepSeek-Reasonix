@@ -132,6 +132,19 @@ func (p *resourceToolProvider) offered() bool {
 	return false
 }
 
+func (p *resourceToolProvider) firstTools() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.reqs) == 0 {
+		return []string{"(no request reached the provider)"}
+	}
+	var names []string
+	for _, t := range p.reqs[0].Tools {
+		names = append(names, t.Name)
+	}
+	return names
+}
+
 func (p *resourceToolProvider) lastToolResult() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -269,6 +282,11 @@ func TestEffectMCPResourceReadAsksWithTheFullAddressAndRefusesWhatTheServerDidNo
 				s.mu.Lock()
 				defer s.mu.Unlock()
 				if len(s.approvals) == 0 {
+					select {
+					case err := <-done:
+						t.Fatalf("the run ended without an approval card (err=%v); the first request offered %v", err, s.rec.firstTools())
+					default:
+					}
 					return false
 				}
 				request = s.approvals[0]
