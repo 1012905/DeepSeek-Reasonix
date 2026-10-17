@@ -158,19 +158,30 @@ func attachVersions(dir string, rows []treeSession, open map[string]string) {
 // session on disk is never unlisted: a scope, search or window that leaves its
 // row out is the view's choice.
 func (h *Hub) unlistedOpenSessions(root string, shown []treeSession, onDisk []sessionstore.SessionInfo) []treeSession {
-	seen := make(map[string]bool, len(shown)+len(onDisk))
-	for _, si := range onDisk {
-		seen[sessionstore.CanonicalSessionPath(si.Path)] = true
+	runtimes := h.localRuntimes()
+	// Transcript names are minted from a timestamp, so only a row named like an
+	// open pane's file can be that pane's; resolving thousands of others costs
+	// a filesystem walk each.
+	names := make(map[string]bool, len(runtimes))
+	for _, rt := range runtimes {
+		if path := rt.Server.Controller().SessionPath(); path != "" {
+			names[strings.ToLower(filepath.Base(path))] = true
+		}
 	}
-	listed := shown
-	for _, row := range listed {
+	seen := make(map[string]bool, len(names)+len(shown))
+	for _, si := range onDisk {
+		if names[strings.ToLower(filepath.Base(si.Path))] {
+			seen[sessionstore.CanonicalSessionPath(si.Path)] = true
+		}
+	}
+	for _, row := range shown {
 		seen[sessionstore.CanonicalSessionPath(row.Path)] = true
 		for _, cp := range row.Copies {
 			seen[sessionstore.CanonicalSessionPath(cp.Path)] = true
 		}
 	}
 	var out []treeSession
-	for _, rt := range h.localRuntimes() {
+	for _, rt := range runtimes {
 		ctrl := rt.Server.Controller()
 		path := ctrl.SessionPath()
 		canonical := sessionstore.CanonicalSessionPath(path)

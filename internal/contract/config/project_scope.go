@@ -302,7 +302,10 @@ func (h heldScope) narrowSandbox(c *Config, ws string) {
 	// A cloned repo must not hand itself the container daemon socket. An egress
 	// allow list only narrows open network, so a repo may set one the user has
 	// not, but never replace the user's; its denials only add to the user's.
-	s.HostAuthorities, s.AllowDevices = u.HostAuthorities, u.AllowDevices
+	if s.EgressUnlisted != u.EgressUnlisted {
+		c.ignoreProject("sandbox.egress_unlisted", s.EgressUnlisted, ProjectUserOnly)
+	}
+	s.HostAuthorities, s.AllowDevices, s.EgressUnlisted = u.HostAuthorities, u.AllowDevices, u.EgressUnlisted
 	if len(u.AllowedDomains) > 0 {
 		s.AllowedDomains = u.AllowedDomains
 	}

@@ -499,6 +499,7 @@ var English = Messages{
 	AwaitingUserFmt:              "waiting for you: %s",
 	GoalRetryFmt:                 "retrying the Goal after its completion check failed (attempt %d)",
 	GoalRetryGaveUpFmt:           "the completion check failed %d times in a row, so the Goal waits for you now",
+	EgressAutoAllowedFmt:         "bash reached %s without asking (sandbox.egress_unlisted = \"allow\" in your user config)",
 	PlanAutoApproved:             "plan approved automatically (agent.plan_approval = \"auto\" in your user config)",
 	ImagesNotReadable:            "this model cannot read images — %d attached, handed to a delegated read instead",
 	ImagesNeedVisionRole:         "this model cannot read images — %d attached and going nowhere. %s can read them: assign it to the vision role in Settings › Models › Roles.",
