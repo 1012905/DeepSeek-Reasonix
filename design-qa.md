@@ -233,6 +233,11 @@ explicit custom read-only fixtures for proxy, late-registration and child-agent
 ceilings. Minimal's terminal is intentionally allowed. Text-only models report
 an unavailable image dependency instead of silently changing the tool set.
 
+After the subsequent MCP-follow integration, the full frontend suite passes
+651 files and 5,347 tests. Provider-boundary and race regressions confirm that
+automatic server-tool approval cannot replace an existing composition's pinned
+contract; a new conversation can bind the updated catalog.
+
 ## Workspace preparation / 工作目录准备
 
 The workspace palette and preparation states reuse existing typography and

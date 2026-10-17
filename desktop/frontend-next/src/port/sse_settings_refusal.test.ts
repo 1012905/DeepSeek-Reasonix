@@ -17,6 +17,7 @@ it.each([
   ["saveNetwork", 400, "network.rejected", (p: SsePort) => p.saveNetwork(proxy, "", false)],
   ["uploadWallpaper", 422, "wallpaper.unsupported_type", (p: SsePort) => p.uploadWallpaper(new Blob(["BM"], { type: "image/bmp" }))],
   ["clearWallpaper", 403, "loopback.unauthorized", (p: SsePort) => p.clearWallpaper()],
+  ["accountPoll", 403, "account.signin_disabled", (p: SsePort) => p.accountPoll("device-secret")],
 ])("%s hands the refusal's code to the reader", async (_, status, code, call) => {
   refusing(status, { code, error: "refused" });
   const err = await call(new SsePort("", "r1")).catch((e: unknown) => e);

@@ -917,6 +917,7 @@ export const EN: Record<string, string> = {
   "无法读取登录状态": "Sign-in status could not be read",
   "登录状态不可用": "Sign-in status unavailable",
   "上次的登录已过期。": "The previous sign-in has expired.",
+  "这次登录请求已过期，再试一次。": "This sign-in request expired. Try again.",
   "只清除本地登录凭证，不影响会话、记忆和配置":
     "Clears the local credential only; sessions, memory and config are untouched",
   "用于社区发帖与崩溃问题跟进。与模型 API key 无关 —— 登录不会上传你的对话、代码或密钥。":
@@ -1238,6 +1239,8 @@ export const EN: Record<string, string> = {
   "工作区空出来了，这个会话已经继续": "The workspace is free again; this session has continued",
   "一个 MCP 服务有工具的定义是新增的或与你批准过的不同，已暂不提供给模型；详情里是这些工具，核对服务后再接受":
     "An MCP server has tools whose definitions are new or differ from what you approved; they are held out of the model's tools until you accept them (details list them)",
+  "你选择了跟随的一个 MCP 服务改了或新增了工具定义，已按你的选择直接采用；详情里是这些工具":
+    "An MCP server you follow changed or added tool definitions and they were taken as you chose; the details list them",
   "还没轮到这个会话写，这次等待就结束了": "The wait ended before this session's turn to write came",
 
   // ── 宿主通知卡片自己的头部（NoticeCard）───────────────────────

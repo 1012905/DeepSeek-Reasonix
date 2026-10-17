@@ -404,6 +404,7 @@ const SAID: Record<string, string> = {
   "mcp.signin_timed_out": "登录没有在时限内完成",
   "mcp.signin_cancelled": "登录已取消",
   "mcp.signin_failed": "登录没有完成：{detail}",
+  "mcp.follow_unwritable": "没能记下这个选择：{detail}",
   "activation.unavailable": "开关未能保存：其存储文件无法读取或写入",
 
   // ── 待送达：条目、队列、这份存档各自会拒 ─────────────────────────

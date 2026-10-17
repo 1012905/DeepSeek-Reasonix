@@ -21,6 +21,7 @@ type toolCatalog struct {
 	infos       []ToolInfo
 	tools       []tool.Tool
 	held        []HeldTool
+	followed    []HeldTool
 	fingerprint [sha256.Size]byte
 }
 
@@ -42,7 +43,7 @@ func (c *Client) readToolCatalog(ctx context.Context, settle bool) (toolCatalog,
 	if err := validateMCPToolNames(c.name, c.spec.StripRawPrefix, out); err != nil {
 		return toolCatalog{}, fmt.Errorf("plugin %q: %w", c.name, err)
 	}
-	held := judgeToolPins(c.spec, listed)
+	held, followed := judgeToolPins(c.spec, listed)
 	out = slices.DeleteFunc(out, func(t mcpTool) bool {
 		return slices.ContainsFunc(held, func(h HeldTool) bool { return h.RawName == t.Name })
 	})
@@ -54,7 +55,7 @@ func (c *Client) readToolCatalog(ctx context.Context, settle bool) (toolCatalog,
 		return toolCatalog{}, err
 	}
 	return toolCatalog{
-		infos: toolInfos, tools: sortedTools, held: held,
+		infos: toolInfos, tools: sortedTools, held: held, followed: followed,
 		fingerprint: fingerprint,
 	}, nil
 }
@@ -65,6 +66,7 @@ func (c *Client) readToolCatalog(ctx context.Context, settle bool) (toolCatalog,
 func (c *Client) publishToolCatalogLocked(cat toolCatalog) {
 	c.tools = cat.infos
 	c.held = cat.held
+	c.followed = cat.followed
 	c.toolAdapters = append([]tool.Tool(nil), cat.tools...)
 	c.toolsFingerprint = cat.fingerprint
 	c.toolsListed = true

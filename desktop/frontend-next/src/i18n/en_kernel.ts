@@ -87,6 +87,7 @@ export const EN_KERNEL: Record<string, string> = {
   "登录没有在时限内完成": "Sign-in was not completed in time",
   "登录已取消": "Sign-in was cancelled",
   "登录没有完成：{detail}": "Sign-in did not complete: {detail}",
+  "没能记下这个选择：{detail}": "The choice could not be recorded: {detail}",
   "开关未能保存：其存储文件无法读取或写入": "The switch was not stored: its file could not be read or written",
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
