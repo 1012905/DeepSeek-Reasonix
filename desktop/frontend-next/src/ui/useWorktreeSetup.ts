@@ -1,5 +1,5 @@
 import { reason } from "../i18n/kernel";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentPort, WorkspaceGit } from "../port/port";
 import type { WorktreePreparation, WorktreeSelection, WorktreeSources } from "../port/workspace";
 
@@ -25,6 +25,13 @@ export function useWorktreeSetup(port: AgentPort, fresh: boolean, root: string, 
   const attempt = useRef<Attempt | null>(null);
   const prepared = useRef("");
   const mounted = useRef(true);
+  const sourceRead = useRef(0);
+  const refresh = useCallback(async () => {
+    const read = ++sourceRead.current;
+    const value = await port.worktreeSources();
+    if (mounted.current && read === sourceRead.current) setSources(value);
+    return value;
+  }, [port]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -37,7 +44,7 @@ export function useWorktreeSetup(port: AgentPort, fresh: boolean, root: string, 
     };
   }, [port]);
   useEffect(() => {
-    let live = true;
+    sourceRead.current++;
     const current = attempt.current;
     const ownMove = current && root !== current.selection.sourceRoot && root === current.status.workspaceRoot;
     const same = current?.port === port && ((root === current.selection.sourceRoot && session === current.session) || ownMove);
@@ -52,17 +59,9 @@ export function useWorktreeSetup(port: AgentPort, fresh: boolean, root: string, 
       setSelection(null);
       setSources(null);
     }
-    if (fresh && !same) void port.worktreeSources().then((value) => {
-      if (live) setSources(value);
-    }).catch(() => { if (live) setSources(null); });
-    return () => { live = false; };
-  }, [port, fresh, root, session]);
-
-  const refresh = async () => {
-    const value = await port.worktreeSources();
-    setSources(value);
-    return value;
-  };
+    if (fresh && !same) void refresh().catch(() => {});
+    return () => { sourceRead.current++; };
+  }, [port, fresh, root, session, refresh]);
   const show = (current: Attempt, value: WorktreePreparation) => {
     current.status = value;
     if (mounted.current && current.valid && attempt.current === current) setStage(value);

@@ -3,12 +3,41 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MockPort } from "../port/mock";
 import { useWorktreeSetup } from "./useWorktreeSetup";
-import type { WorktreePreparation } from "../port/workspace";
+import type { WorktreePreparation, WorktreeSources } from "../port/workspace";
 
 afterEach(cleanup);
 
 const selection = { sourceRoot: "/source", ref: "refs/heads/main" };
 const state = (id: string, phase: string): WorktreePreparation => ({ id, phase, ...selection, startedAt: Date.now(), workspaceRoot: "/target", branch: "task" });
+const sources = (name: string, root = "/source"): WorktreeSources => ({ available: true, sourceRoot: root, sources: [{ ref: `refs/heads/${name}`, name, remote: false, current: true }] });
+
+it.each(["root", "port", "session"])("does not publish an old explicit source refresh after %s changes", async (change) => {
+  const old = new MockPort(), next = new MockPort();
+  const nextRoot = change === "root" ? "/target" : "/source";
+  const read = vi.spyOn(old, "worktreeSources").mockResolvedValue(sources("before"));
+  vi.spyOn(next, "worktreeSources").mockResolvedValue(sources("after", nextRoot));
+  const { result, rerender } = renderHook(({ port, root, session }) => useWorktreeSetup(port, true, root, vi.fn(), undefined, session),
+    { initialProps: { port: old, root: "/source", session: "before" } });
+  await waitFor(() => expect(result.current.sources?.sources[0].name).toBe("before"));
+  let resolve!: (value: WorktreeSources) => void;
+  read.mockImplementationOnce(() => new Promise((done) => { resolve = done; })).mockResolvedValue(sources("after", nextRoot));
+  let refresh!: Promise<WorktreeSources>;
+  act(() => { refresh = result.current.refresh(); });
+  rerender({ port: change === "port" ? next : old, root: nextRoot, session: change === "session" ? "after" : "before" });
+  await waitFor(() => expect(result.current.sources?.sources[0].name).toBe("after"));
+  await act(async () => { resolve(sources("stale")); await refresh; });
+  expect(result.current.sources?.sources[0].name).toBe("after");
+});
+
+it("keeps a manual source refresh when an older initial read completes later", async () => {
+  const port = new MockPort();
+  let resolve!: (value: WorktreeSources) => void;
+  vi.spyOn(port, "worktreeSources").mockImplementationOnce(() => new Promise((done) => { resolve = done; })).mockResolvedValue(sources("current"));
+  const { result } = renderHook(() => useWorktreeSetup(port, true, "/source", vi.fn()));
+  await act(async () => { await result.current.refresh(); });
+  await act(async () => { resolve(sources("stale")); });
+  expect(result.current.sources?.sources[0].name).toBe("current");
+});
 
 it("cancels an old port and never hands its completed workspace to the new pane", async () => {
   const old = new MockPort(), next = new MockPort();

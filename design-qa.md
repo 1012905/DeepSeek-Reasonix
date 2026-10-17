@@ -113,9 +113,12 @@ provided for these states; their behavior and consistency were inspected live.
 
 ## Validation and limits / 测试与边界
 
-- Frontend after syncing Studio: 633 files, 5,241 tests passed; typecheck and
+- Frontend after review fixes: 633 files, 5,245 tests passed; typecheck and
   production build passed.
 - 前端全量、类型检查和生产构建通过。
+- Source refresh regression: four deferred-response cases cover root, port,
+  session changes and initial/manual response ordering.
+- 起始分支刷新新增四项受控延迟回归，覆盖目录、端口、会话变化和初始/手动响应乱序。
 - Backend: focused race tests passed in worktree, serve, control and boot.
 - 后端相关四个包的定向并发测试通过。
 - macOS browser plus real Git; model replies use a local test service.
