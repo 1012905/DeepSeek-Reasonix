@@ -1,0 +1,2 @@
+- 新增用户设置 `agent.max_provider_retries`：模型接口连接失败后的重试次数，默认仍是 10；设为 0 则一直重试到你取消，适合无人值守的长任务。关联 #13526。
+- Added the user setting `agent.max_provider_retries`: how often a failed provider connection is retried, still 10 by default; 0 keeps trying until you cancel, for long unattended runs. Refs #13526.

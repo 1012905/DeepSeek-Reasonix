@@ -120,6 +120,7 @@ func (w roleWiring) skillRunOptions(in delegationInputs) func(context.Context, i
 			ReasoningLanguage:   langpref.ReasoningLanguageFromContext(sctx),
 			SubagentDepth:       childDepth,
 			MaxSubagentDepth:    in.sub.maxDepth,
+			ProviderRetries:     agent.ProviderRetriesFromConfig(w.cfg.Agent.MaxProviderRetries),
 			DeliveryProfile:     in.delivery,
 			Ablation:            in.opts.Ablation,
 			WorkspaceLease:      in.session.lease,

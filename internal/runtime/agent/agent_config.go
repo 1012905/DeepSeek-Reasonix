@@ -41,6 +41,7 @@ type agentConfig struct {
 	// agent/skill tools are excluded.
 	subagentDepth    int
 	maxSubagentDepth int
+	providerRetries  int
 	// contextWindow and compactRatio decide when at most one provider-visible
 	// checkpoint is installed; recentKeep and archiveDir shape what it keeps.
 	contextWindow int
