@@ -98,6 +98,8 @@ bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local ca
 protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
 browser_tools = true   # built-in browser tools; the browser starts on first use
 # mcp_resources = true  # user file only; a read_mcp_resource tool for resources a connected MCP server lists or builds from its declared templates (a {+x} template is wide: read the full address on the card before approving); asks first; default off
+# web_search_backends = ["searxng"]  # user file only; ordered chain for web_search
+# searxng_url = "http://localhost:8888"  # your own SearXNG instance
 mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap
 mcp_call_timeout_seconds = 300   # default MCP call safety cap; per-plugin/tool overrides may raise it
 
@@ -1947,3 +1949,38 @@ project-local override.
 
 The why behind separate sessions (keeping each model's prefix cache-stable) is in
 [`SPEC.md` §3.5](./SPEC.md#35-two-model-collaboration-coordinator).
+
+## Free web search with SearXNG
+
+`web_search` can use a [SearXNG](https://docs.searxng.org/) instance that you run yourself, so searches cost nothing. Reasonix does not start it.
+
+```
+mkdir -p ./searxng/config/ ./searxng/data/ && cd ./searxng/
+docker run --name searxng -d -p 8888:8080 -v "./config/:/etc/searxng/" -v "./data/:/var/cache/searxng/" docker.io/searxng/searxng:latest
+```
+
+(the command is from the SearXNG documentation). SearXNG answers JSON only when its `settings.yml` allows it; put this in `./config/settings.yml` and restart the container:
+
+```yaml
+use_default_settings: true
+search:
+  formats: [html, json]
+```
+
+Then, in your user config file (a project file cannot set these):
+
+```toml
+[tools]
+web_search_backends = ["searxng"]
+searxng_url = "http://localhost:8888"
+```
+
+A backend counts as not answering when:
+
+- the request fails, or the status is not 200;
+- the body is not JSON, or no results came back.
+
+Each time that happens Reasonix shows a notice naming the backend and the cause, then tries the next one. If none answers, the model receives `search.all_backends_failed`.
+
+- Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
+- Results are third-party content and are labelled as such to the model.
