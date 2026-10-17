@@ -163,6 +163,7 @@ jobs:
           node perf/settings-rows.mjs
           node perf/narrow-steps.mjs
           node perf/job-names.mjs
+          node perf/peer-threads.mjs
           node perf/notice-line.mjs
           node perf/brought-line.mjs
           node perf/modal-focus.mjs

@@ -137,10 +137,23 @@ export interface PeerHeld {
   body: string;
 }
 
+export type PeerThreadState = "waiting" | "working" | "replied" | "declined";
+
+export interface PeerThread {
+  key: string;
+  title: string;
+  project: string;
+  sessionPath?: string;
+  state: PeerThreadState;
+  since: string;
+  messageId: string;
+}
+
 export interface PeersState {
   enabled: boolean;
   peers: PeerView[];
   held: PeerHeld[];
+  threads?: PeerThread[];
 }
 
 export interface PeerReceipt {

@@ -30,6 +30,7 @@ import "../src/styles/gitgraph.css";
 import "../src/styles/tips.css";
 import "../src/styles/waitnote.css";
 import "../src/styles/bring.css";
+import "../src/styles/peerthreads.css";
 import "../src/styles/notice.css";
 import "../src/styles/peers.css";
 import "../src/styles/jsontext.css";
@@ -150,6 +151,15 @@ class BenchPort extends MockPort {
   }
 
   async peers() {
+    if (query.has("peerthreads")) {
+      const states = ["waiting", "working", "replied", "declined"] as const;
+      return {
+        enabled: true,
+        peers: [],
+        held: [],
+        threads: states.map((state, i) => ({ key: `s-${i}`, title: ["文档整理", "发布脚本", "拾音", "旧迁移"][i], project: "rx-archive", sessionPath: `/sessions/w0-s${i}.jsonl`, state, since: "2026-10-16T10:00:00Z", messageId: `m-${i}` })),
+      };
+    }
     if (!query.has("peers")) return super.peers();
     return {
       enabled: true,

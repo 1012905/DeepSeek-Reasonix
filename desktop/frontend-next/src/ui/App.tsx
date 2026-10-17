@@ -44,6 +44,7 @@ import { usePaint } from "./paint";
 import { useZoomKeys } from "./zoomkeys";
 import { rememberActivePane, savedActivePane } from "./activepane";
 import { Sidebar } from "./Sidebar";
+import { PeerThreadsProvider } from "./peerthreads";
 import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
@@ -391,6 +392,7 @@ export function App({ hub }: { hub: HubPort }) {
     [hub, reloadPanes],
   );
 
+  const openPeerSession = useCallback((path: string) => void openPane({ sessionPath: path }).catch(fail), [openPane, fail]);
   const adder = useAddWorkspace(hub, reloadTree, fail, (workspace) => openPane({ root: workspace.root }));
   // 每个窗口都有一个根 —— 没选过项目时那是它碰巧启动的地方。两者读起来一样，
   // 于是「从哪加项目」这句问题永远问不出口；只有内核说的 remembered 分得开。
@@ -559,6 +561,7 @@ export function App({ hub }: { hub: HubPort }) {
   }
 
   return (
+    <PeerThreadsProvider port={activePort} hub={hub} onOpen={openPeerSession}>
     <div
       className="app"
       data-run={report.run}
@@ -794,5 +797,6 @@ export function App({ hub }: { hub: HubPort }) {
       <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
       <StopHint armed={stopArmed} />
     </div>
+    </PeerThreadsProvider>
   );
 }

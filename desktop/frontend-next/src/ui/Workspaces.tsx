@@ -25,6 +25,7 @@ import { SessionMenu } from "./SessionMenu";
 import { pinnedFirst } from "./pinorder";
 import { Confirm, removeHint, sessionDeleteHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
+import { PeerThreadMark } from "./peerthreads";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
 import { LocalMachine } from "./LocalMachine";
@@ -591,6 +592,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             <span>{rowLabel(session)}</span>{session.archived && <em className="sessarch">{t("已归档")}</em>}
                           </span>
                         )}
+                        <PeerThreadMark path={session.path} />
                         {session.unread && <UnreadDot />}
                         {kept.length > 0 && (
                           <button
