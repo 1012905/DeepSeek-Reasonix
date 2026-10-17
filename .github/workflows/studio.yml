@@ -166,6 +166,7 @@ jobs:
           node perf/card-shell.mjs
           node perf/line-cards.mjs
           node perf/detail-panel.mjs
+          node perf/brand-lockup.mjs
           node perf/notice-line.mjs
           node perf/brought-line.mjs
           node perf/modal-focus.mjs
