@@ -615,6 +615,7 @@ type Client struct {
 	toolsListed  bool
 	toolAdapters []tool.Tool
 	held         []HeldTool
+	followed     []HeldTool
 	// toolsFingerprint covers the published catalog, so a re-read after a
 	// list_changed notice can tell a real change from the same tools again.
 	toolsFingerprint [sha256.Size]byte

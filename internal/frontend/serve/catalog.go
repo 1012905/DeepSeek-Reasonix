@@ -279,6 +279,9 @@ type mcpEntry struct {
 	Held       []mcpHeld `json:"held,omitempty"`
 	HeldDigest string    `json:"heldDigest,omitempty"`
 	HeldMore   int       `json:"heldMore,omitempty"`
+	// FollowsChanges is the user's choice to take this server's definition changes
+	// without being asked; each one is still announced.
+	FollowsChanges bool `json:"followsChanges,omitempty"`
 }
 
 // mcpHeld is one withheld tool: its visible name and how it differs from what
@@ -385,6 +388,7 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 		if configured {
 			row.Launch = launchText(st.Entry)
 			row.Held, row.HeldDigest, row.HeldMore = mcpHeldViews(st.Held)
+			row.FollowsChanges = st.FollowsToolChanges
 		}
 		out = append(out, row)
 	}
@@ -426,6 +430,7 @@ func (s *Server) mcpRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /mcp/reconnect", s.mcpReconnect)
 	mux.HandleFunc("POST /mcp/trust", s.mcpTrust)
 	mux.HandleFunc("POST /mcp/signin", s.mcpSignIn)
+	mux.HandleFunc("POST /mcp/follow", s.mcpFollow)
 	mux.HandleFunc("POST /mcp/enabled", s.mcpEnabled)
 	mux.HandleFunc("POST /mcp/load", s.mcpLoad)
 	mux.HandleFunc("POST /mcp/parse", s.mcpParse)
