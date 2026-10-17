@@ -106,6 +106,7 @@ async function main() {
   await compose("guaqi");
   await send({ method: "Page.navigate", params: { url: page.url + "/hang" } }, session);
   await wait(500);
+  process.stdout.write(`  [debug] owner=${views.keyboard.owner} attached=${[...views.entries.values()][0].attached}\n`);
   const out = !win.contentView.children.includes([...views.entries.values()][0].view);
   check("a navigation that has just started holds the page out of the window", out);
   await wait(LEAVE_LIMIT_MS + 1000);
