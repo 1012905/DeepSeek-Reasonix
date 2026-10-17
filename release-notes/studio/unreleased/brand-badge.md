@@ -1,2 +1,0 @@
-- 侧栏左上角的品牌标题改成一行：字标右边是紧凑的实心“STUDIO”徽章，与字标垂直居中，明暗主题下位置一致。关联 #13456。
-- The sidebar's top-left mark is one row: the wordmark with a compact filled STUDIO badge beside it, vertically centred and in the same place in both themes. Refs #13456.
