@@ -55,3 +55,36 @@ it("does not claim automatic submission when a late cancellation retained the wo
   expect(screen.getByText("目录已经创建成功，取消未能撤回目录切换。任务尚未发送。")).toBeTruthy();
   expect(screen.queryByText("即将进入对话，自动开始任务。")).toBeNull();
 });
+
+it("moves keyboard focus to the preparation heading on entry", () => {
+  draw("checking_out");
+  expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
+});
+
+it("recovers focus when cancellation removes its button without stealing focus from details", () => {
+  const { rerender } = draw("checking_out");
+  const props = { task: "task", files: [], busy: false, onRetry: vi.fn(), onCancel: vi.fn(), onEdit: vi.fn() };
+  screen.getByRole("button", { name: "查看详情" }).focus();
+  rerender(<WorktreeSetupPage {...props} stage={status("creating")}/>);
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "查看详情" }));
+  screen.getByRole("button", { name: "取消创建" }).focus();
+  rerender(<WorktreeSetupPage {...props} stage={status("cancelled")}/>);
+  expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
+});
+
+it.each(["failed", "cancelled", "retained", "ready", "unreachable", "cleanup_failed"])("does not describe %s as still waiting", (phase) => {
+  draw(phase);
+  expect(screen.queryByText(/已等待 \d+ 秒/)).toBeNull();
+});
+
+it("names retained cleanup failure directly even without an error code", () => {
+  draw("cleanup_failed");
+  expect(screen.getByText("清理未完成")).toBeTruthy();
+  expect(screen.queryByText("正在等待状态确认")).toBeNull();
+});
+
+it("identifies details disclosure separately from workspace configuration", () => {
+  draw("failed");
+  expect(screen.getByRole("button", { name: "查看详情" }).getAttribute("data-action")).toBe("workspace.prepare-details");
+  expect(screen.getByRole("button", { name: "返回编辑" }).getAttribute("data-action")).toBe("workspace.prepare-edit");
+});

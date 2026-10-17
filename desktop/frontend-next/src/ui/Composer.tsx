@@ -101,6 +101,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const chosenModelGroups = chosenGroups(menuItems, modelGroups);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const box = useRef<HTMLTextAreaElement>(null);
+  const hadSetup = useRef(false);
+  useEffect(() => {
+    if (hadSetup.current && !setupPhase) box.current?.focus();
+    hadSetup.current = !!setupPhase;
+  }, [setupPhase]);
   const refine = usePromptRefine(port, text, (next) => {
     setText(next);
     setCaret(next.length);
@@ -227,7 +232,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
       type(draft.text, draft.caret);
       chips.restore(draft.chips);
       setShots((current) => [...draft.shots, ...current]);
-      queueMicrotask(() => box.current?.focus());
+      if (!worktree.selection && !worktree.stage) queueMicrotask(() => box.current?.focus());
     };
     beginSubmit(text);
     submittingRef.current = true;

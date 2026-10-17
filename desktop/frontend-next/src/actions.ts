@@ -70,6 +70,8 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.esc-stop", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.configure", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.prepare-cancel", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "workspace.prepare-details", kind: "view", target: "none", proof: "interaction" },
+  { id: "workspace.prepare-edit", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-search", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-navigate", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.source-select", kind: "view", target: "none", proof: "interaction" },

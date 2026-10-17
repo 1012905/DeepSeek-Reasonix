@@ -27,6 +27,8 @@ export const EN_COMPOSER: Record<string, string> = {
   "创建耗时较长，尚未收到完成确认。": "Creation is taking longer. Completion has not been confirmed.",
   "准备完成后将自动开始任务。": "Your task will start automatically when the workspace is ready.",
   "正在等待状态确认": "Waiting for confirmation",
+  "清理未完成": "Cleanup did not finish",
+  "创建未完成": "Creation did not finish",
   "创建已中止，目录已清理": "Creation stopped and workspace cleaned up",
   "已等待 {n} 秒": "Waiting {n}s",
   "用户任务": "Your task",

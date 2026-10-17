@@ -8,7 +8,7 @@
 .worktree-setup-description { margin: 10px 0 22px; color: var(--muted); font-size: var(--fs-ui); line-height: 1.7 }
 .worktree-setup-phase { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 13px 14px; border-radius: 9px; background: var(--brand-wash); color: var(--brand); font-size: var(--fs-ui) }
 .worktree-setup-phase > span:first-child { display: flex; align-items: center; gap: 10px; min-width: 0 }
-.worktree-setup-phase > span:last-child { white-space: nowrap; color: var(--muted); font-size: var(--fs-micro) }
+.worktree-setup-elapsed { white-space: nowrap; color: var(--muted); font-size: var(--fs-micro) }
 .worktree-setup-phase .studio-icon { width: 19px; height: 19px; flex-shrink: 0 }
 .worktree-spinner { display: inline-block; width: 18px; height: 18px; flex-shrink: 0; border: 2px solid var(--hair); border-top-color: var(--brand); border-right-color: var(--brand); border-radius: 50%; animation: worktree-spin 1.2s linear infinite }
 .worktree-setup-branches { padding: 20px 0; border-bottom: 1px solid var(--hair) }
