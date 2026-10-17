@@ -152,6 +152,9 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # password_hash = ""           # 用 reasonix serve --hash-password --password '...' 生成
 # behind_proxy = false         # 只在可信反向代理后方设为 true
 
+[desktop]
+# max_workspaces = 0           # 侧栏最多记住的项目数；0 = 不限制（只认用户级配置）
+
 [[plugins]]
 name    = "example"
 command = "reasonix-plugin-example"
