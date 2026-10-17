@@ -141,3 +141,61 @@ func TestPaidSearchDecisionReceiptCarriesNoQuery(t *testing.T) {
 		t.Fatalf("subject = %q", got)
 	}
 }
+
+func askPaidFetch(c *Controller, backend, url string) chan paidAnswer {
+	done := make(chan paidAnswer, 1)
+	go func() {
+		allow, err := paidSearchApprover{c}.ApprovePaidSearch(context.Background(), tool.PaidSearchRequest{
+			Service: tool.PaidServiceFetch, Backend: backend, Query: url, Price: "$0.75 per 1,000 successful requests"})
+		done <- paidAnswer{allow, err}
+	}()
+	return done
+}
+
+// Agreeing to be charged for searching is not agreeing to be charged for
+// fetching, and the card for a fetch shows the address that would be sent.
+func TestPaidFetchIsAskedApartFromPaidSearch(t *testing.T) {
+	c, requests := paidSearchController(t)
+	search := askPaid(c, "deepseek_api", "q")
+	a := nextApproval(t, requests)
+	c.Approve(a.ID, true, true, false)
+	<-search
+	fetch := askPaidFetch(c, "deepseek_api", "https://example.com/private-ish/page")
+	card := nextApproval(t, requests)
+	if card.Subject == a.Subject {
+		t.Fatalf("a fetch rode the search grant: subject %q", card.Subject)
+	}
+	for _, want := range []string{"https://example.com/private-ish/page", "$0.75 per 1,000 successful requests", "fetch"} {
+		if !strings.Contains(strings.ToLower(card.Reason), strings.ToLower(want)) {
+			t.Fatalf("the fetch card lacks %q: %q", want, card.Reason)
+		}
+	}
+	c.Approve(card.ID, true, true, false)
+	if got := <-fetch; !got.allow {
+		t.Fatalf("approved fetch = %+v", got)
+	}
+	if got := <-askPaidFetch(c, "deepseek_api", "https://other.example/"); !got.allow {
+		t.Fatal("the fetch session grant did not cover the next fetch")
+	}
+}
+
+// "Always allow" for a fetch records the fetch list, not the search one.
+func TestPaidFetchAlwaysAllowWritesTheFetchSetting(t *testing.T) {
+	c, requests := paidSearchController(t)
+	done := askPaidFetch(c, "deepseek_api", "https://example.com")
+	a := nextApproval(t, requests)
+	c.Approve(a.ID, true, false, true)
+	<-done
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		cfg := config.LoadForEdit(config.UserConfigPath())
+		if len(cfg.Tools.WebFetchPaidAllowed) == 1 && len(cfg.Tools.WebSearchPaidAllowed) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			raw, _ := os.ReadFile(config.UserConfigPath())
+			t.Fatalf("the user config does not record the fetch allowance alone:\n%s", raw)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

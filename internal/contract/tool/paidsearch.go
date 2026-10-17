@@ -7,10 +7,20 @@ import "context"
 // they see what leaves the machine. Price says what each successful request
 // costs and where that was read.
 type PaidSearchRequest struct {
+	// Service is what is being bought: PaidServiceSearch (the default) or
+	// PaidServiceFetch. Agreeing to one is not agreeing to the other.
+	Service string
 	Backend string
-	Query   string
-	Price   string
+	// Query is the search term, or for a fetch the address that would be sent.
+	Query string
+	Price string
 }
+
+// The services a paid backend can be asked for.
+const (
+	PaidServiceSearch = "search"
+	PaidServiceFetch  = "fetch"
+)
 
 // PaidSearchApprover asks the user whether one backend may be charged. It is a
 // fresh human decision: no approval mode answers it, and a nil approver

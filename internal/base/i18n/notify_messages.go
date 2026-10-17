@@ -28,4 +28,5 @@ type AskTimeoutMessages struct {
 // charges for.
 type PaidSearchMessages struct {
 	PaidSearchApprovalReasonFmt string // %[1]s backend, %[2]s price, %[3]s query
+	PaidFetchApprovalReasonFmt  string // %[1]s backend, %[2]s price, %[3]s address
 }

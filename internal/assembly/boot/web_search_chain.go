@@ -64,7 +64,7 @@ func addSearchChain(reg *tool.Registry, cfg *config.Config, proxy netclient.Prox
 				Text:   fmt.Sprintf("Web search backend %s did not answer (%s); trying %s.", f.Backend, f.Kind, next),
 				Detail: fmt.Sprintf("%s|%s|%d|%s|%s", f.Backend, f.Kind, f.Status, f.Code, next)})
 		},
-		OnBilled: func(string) { reportSearchRequest(sink) },
+		OnBilled: func(string) { reportPaidRequest(sink, "search") },
 	})
 }
 
@@ -73,12 +73,17 @@ func addSearchChain(reg *tool.Registry, cfg *config.Config, proxy netclient.Prox
 // api.deepseek.com without sending it there.
 var searchTransportOverride http.RoundTripper
 
-const deepseekSearchModelRef = "deepseek-api/search"
+const (
+	deepseekSearchModelRef = "deepseek-api/search"
+	deepseekFetchModelRef  = "deepseek-api/fetch"
+)
 
 // paidSearchPrice is the price the consent card quotes, read from the price
 // book and never written here.
-func paidSearchPrice() string {
-	rate, ok := pricing.CurrentRequestRate("deepseek", "search")
+func paidSearchPrice() string { return paidPrice("search") }
+
+func paidPrice(service string) string {
+	rate, ok := pricing.CurrentRequestRate("deepseek", service)
 	if !ok {
 		return "an unpublished price"
 	}
@@ -86,16 +91,20 @@ func paidSearchPrice() string {
 		rate.Currency, rate.Per1000, rate.DocURL, rate.CheckedOn)
 }
 
-// reportSearchRequest records one successful paid request in the usage view,
-// under its own source, at the price book's rate.
-func reportSearchRequest(sink event.Sink) {
-	rate, ok := pricing.CurrentRequestRate("deepseek", "search")
+// reportPaidRequest records one successful paid request in the usage view, under
+// its own source, at the price book's rate.
+func reportPaidRequest(sink event.Sink, service string) {
+	rate, ok := pricing.CurrentRequestRate("deepseek", service)
 	if sink == nil || !ok {
 		return
 	}
-	quote := pricing.RequestQuote(rate, 1, deepseekSearchModelRef, event.UsageSourceDeepSeekSearch)
-	sink.Emit(event.Event{Kind: event.Usage, ModelRef: deepseekSearchModelRef, Usage: &provider.Usage{RequestCount: 1},
-		CostQuote: &quote, UsageSource: event.UsageSourceDeepSeekSearch})
+	source, ref := event.UsageSourceDeepSeekSearch, deepseekSearchModelRef
+	if service == "fetch" {
+		source, ref = event.UsageSourceDeepSeekFetch, deepseekFetchModelRef
+	}
+	quote := pricing.RequestQuote(rate, 1, ref, source)
+	sink.Emit(event.Event{Kind: event.Usage, ModelRef: ref, Usage: &provider.Usage{RequestCount: 1},
+		CostQuote: &quote, UsageSource: source})
 }
 
 func buildSearchBackend(name string, cfg *config.Config, proxy netclient.ProxySpec) (websearch.Backend, error) {

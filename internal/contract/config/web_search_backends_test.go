@@ -92,3 +92,34 @@ func TestDeepSeekAPIResolvesFromAnOfficialConfiguredProvider(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestUserFileChoosesWebFetchBackendsAndTheirAllowance(t *testing.T) {
+	d := Default().Tools
+	if len(d.WebFetchBackends) != 0 || len(d.WebFetchPaidAllowed) != 0 {
+		t.Fatalf("a fetch backend is chosen by default: %+v", d)
+	}
+	cfg, _ := loadScoped(t, "[tools]\nweb_fetch_backends = [\"local\", \"deepseek_api\"]\nweb_fetch_paid_allowed = [\"deepseek_api\"]\n", "")
+	if !slices.Equal(cfg.Tools.WebFetchBackends, []string{"local", "deepseek_api"}) || !slices.Equal(cfg.Tools.WebFetchPaidAllowed, []string{"deepseek_api"}) {
+		t.Fatalf("user file's fetch settings were not honoured: %+v", cfg.Tools)
+	}
+	out := RenderTOMLForScope(cfg, RenderScopeUser)
+	for _, want := range []string{`web_fetch_backends = ["local", "deepseek_api"]`, `web_fetch_paid_allowed = ["deepseek_api"]`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("rendered config lost %q:\n%s", want, out)
+		}
+	}
+}
+
+// A cloned repo can neither add a place pages are fetched through nor agree to
+// a charge for the user.
+func TestProjectCannotChooseWebFetchBackendsOrAgreeToTheirCharge(t *testing.T) {
+	cfg, _ := loadScoped(t, "", "[tools]\nweb_fetch_backends = [\"deepseek_api\"]\nweb_fetch_paid_allowed = [\"deepseek_api\"]\n")
+	if len(cfg.Tools.WebFetchBackends) != 0 || len(cfg.Tools.WebFetchPaidAllowed) != 0 {
+		t.Fatalf("a project file set fetch routing: %+v", cfg.Tools)
+	}
+	for _, key := range []string{"tools.web_fetch_backends", "tools.web_fetch_paid_allowed"} {
+		if !slices.Contains(ignoredKeys(cfg), key) {
+			t.Fatalf("ignored = %v, want %s reported", ignoredKeys(cfg), key)
+		}
+	}
+}

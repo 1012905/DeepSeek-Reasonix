@@ -17,6 +17,12 @@ func mcpResourcesLine(t ToolsConfig) string {
 	if len(t.WebSearchPaidAllowed) > 0 {
 		line += fmt.Sprintf("web_search_paid_allowed = %s   # paid search backends you agreed to be charged for; user file only\n", renderStringArray(t.WebSearchPaidAllowed))
 	}
+	if len(t.WebFetchBackends) > 0 {
+		line += fmt.Sprintf("web_fetch_backends = %s   # ordered chain web_fetch tries; local is free, deepseek_api is paid; user file only\n", renderStringArray(t.WebFetchBackends))
+	}
+	if len(t.WebFetchPaidAllowed) > 0 {
+		line += fmt.Sprintf("web_fetch_paid_allowed = %s   # paid fetch backends you agreed to be charged for; user file only\n", renderStringArray(t.WebFetchPaidAllowed))
+	}
 	return line
 }
 
@@ -37,5 +43,11 @@ func renderToolsSwitches(b *strings.Builder, t ToolsConfig) {
 	}
 	if len(t.WebSearchPaidAllowed) > 0 {
 		fmt.Fprintf(b, "web_search_paid_allowed = %s\n", renderStringArray(t.WebSearchPaidAllowed))
+	}
+	if len(t.WebFetchBackends) > 0 {
+		fmt.Fprintf(b, "web_fetch_backends = %s\n", renderStringArray(t.WebFetchBackends))
+	}
+	if len(t.WebFetchPaidAllowed) > 0 {
+		fmt.Fprintf(b, "web_fetch_paid_allowed = %s\n", renderStringArray(t.WebFetchPaidAllowed))
 	}
 }

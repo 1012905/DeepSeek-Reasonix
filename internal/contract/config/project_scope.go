@@ -54,6 +54,8 @@ type heldScope struct {
 	// webSearchPaid is the user's agreement to be charged; a cloned repo cannot
 	// give it on their behalf.
 	webSearchPaid []string
+	webFetch      []string
+	webFetchPaid  []string
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -93,6 +95,8 @@ func holdUserScope(c *Config) heldScope {
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
 		searxngURL:        c.Tools.SearxngURL,
 		webSearchPaid:     slices.Clone(c.Tools.WebSearchPaidAllowed),
+		webFetch:          slices.Clone(c.Tools.WebFetchBackends),
+		webFetchPaid:      slices.Clone(c.Tools.WebFetchPaidAllowed),
 	}
 }
 
@@ -422,5 +426,13 @@ func (c *Config) keepUserSearchBackends(h heldScope) {
 	if !slices.Equal(c.Tools.WebSearchPaidAllowed, h.webSearchPaid) {
 		c.ignoreProject("tools.web_search_paid_allowed", strings.Join(c.Tools.WebSearchPaidAllowed, ","), ProjectUserOnly)
 		c.Tools.WebSearchPaidAllowed = slices.Clone(h.webSearchPaid)
+	}
+	if !slices.Equal(c.Tools.WebFetchBackends, h.webFetch) {
+		c.ignoreProject("tools.web_fetch_backends", strings.Join(c.Tools.WebFetchBackends, ","), ProjectUserOnly)
+		c.Tools.WebFetchBackends = slices.Clone(h.webFetch)
+	}
+	if !slices.Equal(c.Tools.WebFetchPaidAllowed, h.webFetchPaid) {
+		c.ignoreProject("tools.web_fetch_paid_allowed", strings.Join(c.Tools.WebFetchPaidAllowed, ","), ProjectUserOnly)
+		c.Tools.WebFetchPaidAllowed = slices.Clone(h.webFetchPaid)
 	}
 }

@@ -1235,7 +1235,7 @@ type ToolsConfig struct {
 	// MCPResources offers the model a tool that reads a resource a connected
 	// server declares. The user file only; off by default.
 	MCPResources bool `toml:"mcp_resources"`
-	WebSearchSettings
+	WebAccessSettings
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`
