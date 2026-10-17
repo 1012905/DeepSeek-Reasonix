@@ -915,6 +915,7 @@ export const EN: Record<string, string> = {
   "无法读取登录状态": "Sign-in status could not be read",
   "登录状态不可用": "Sign-in status unavailable",
   "上次的登录已过期。": "The previous sign-in has expired.",
+  "这次登录请求已过期，再试一次。": "This sign-in request expired. Try again.",
   "只清除本地登录凭证，不影响会话、记忆和配置":
     "Clears the local credential only; sessions, memory and config are untouched",
   "用于社区发帖与崩溃问题跟进。与模型 API key 无关 —— 登录不会上传你的对话、代码或密钥。":

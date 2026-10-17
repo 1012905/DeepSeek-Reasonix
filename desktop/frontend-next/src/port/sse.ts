@@ -297,15 +297,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return (await res.json()) as TrayPrefs;
   }
 
-  async accountPoll(deviceCode: string) {
-    const res = await fetch(this.base + "/account/poll", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ deviceCode }),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return (await res.json()) as { status: "pending" | "complete"; slowDown?: boolean };
+  accountPoll(deviceCode: string) {
+    return this.post0<{ status: "pending" | "complete"; slowDown?: boolean }>("/account/poll", { deviceCode });
   }
 
   accountLogout() {
