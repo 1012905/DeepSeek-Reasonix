@@ -192,10 +192,12 @@ jobs:
 
       - name: Transport changed?
         id: scope
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           paths="desktop/frontend-next internal/frontend/serve internal/platform/remotecloud internal/platform/account tools/relayfake cmd/reasonix-studio-host"
-          if [ "${{ github.event_name }}" = "pull_request" ] &&
-             git diff --quiet "origin/${{ github.base_ref }}...HEAD" -- $paths; then
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] &&
+             git diff --quiet "origin/$BASE_REF...HEAD" -- $paths; then
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
