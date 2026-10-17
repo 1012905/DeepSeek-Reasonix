@@ -95,6 +95,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
 	{"internal/frontend/serve/session_usage.go", "SessionUsage", tsSessionFile, "SessionUsage"},
 	{"internal/frontend/serve/jobs.go", "JobOutput", tsSessionFile, "JobOutput"},
+	// The background-job list. A name or full command the page cannot read is
+	// a task it can only call by its short preview.
+	{"internal/tools/jobs/jobs_view.go", "View", tsSessionFile, "JobEntry"},
 	{"internal/frontend/serve/session_usage.go", "SourceUsage", tsSessionFile, "SourceUsage"},
 	// The agent's tabs. The target id is what the window draws a view by, so a
 	// tab the page cannot read one for is a tab it cannot show.

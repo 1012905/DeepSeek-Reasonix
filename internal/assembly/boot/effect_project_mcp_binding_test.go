@@ -253,15 +253,10 @@ model = "x"
 	if !waitForPhase(logPath, "approved", 5*time.Second) {
 		t.Fatalf("enabled server never launched; log=%v", launchedPhases(logPath))
 	}
+	// Connecting by hand left the schema in the cache before Close returned, so
+	// the next session registers the server from cache and starts nothing until
+	// a call.
 	first.Close()
-	// The next session discovers and caches the schema, so the one after it
-	// registers the server from cache and starts nothing until a call.
-	discovery, err := Build(t.Context(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard})
-	if err != nil {
-		t.Fatal(err)
-	}
-	waitForCond(t, "schema discovery", 10*time.Second, func() bool { return discovery.MCPCatalogTools()["docs-helper"] > 0 })
-	discovery.Close()
 	launches := len(launchedPhases(logPath))
 
 	ctrl, err := Build(t.Context(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard})

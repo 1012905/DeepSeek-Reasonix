@@ -1545,6 +1545,13 @@ what exists.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
 
+## Notice bar
+
+- A host notice is one sentence with a glyph and, under it, the kernel's diagnostic in the muted meta size.
+- There is no header strip, box, wash or side rule. Info has a dot; warn and error share the warning glyph, and only its ink (`--warn-ink`, `--err-ink`) says which.
+- A screen reader gets the level as a visually hidden prefix, and an error is `role="alert"`.
+- The card shell (`data-k="host"`) is for receipts, guardian reviews and compaction; notices no longer use it.
+
 ## Transcript Line
 
 - A tool call is a Line: a bare status glyph, the title, the mono subject and the meta on one row over a `--hair` bottom border, with no box, icon square or vertical track. Expanding it opens the detail in place.

@@ -1,0 +1,2 @@
+- 修复：会话很多时，刚启动后第一次载入左侧项目栏很慢；Windows 上约 2000 个会话从约 10 秒降到约 1 秒。关联 #13176。
+- Fixed: the first sidebar load after start was slow with thousands of sessions; on Windows about 2,000 sessions drop from about 10 s to about 1 s. Refs #13176.

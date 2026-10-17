@@ -1,0 +1,2 @@
+- 安全加固：会话间消息里的会话名和发件人名读取时清掉换行、转义序列和标记，伪造的记录文件塞不进模型或终端。关联 #11376。
+- Hardening: names in messages between sessions are reduced on read, so a forged record cannot put line breaks, escapes or markup before the model or a terminal. Refs #11376.

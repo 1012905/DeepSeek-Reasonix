@@ -110,14 +110,19 @@ func (m Message) Validate() error {
 }
 
 // cleanBody keeps the text and drops what could pass for terminal or framing
-// control: every control character except newline and tab.
+// control: every control character except newline and tab, and the bidirectional
+// marks that reorder what the reader sees.
 func cleanBody(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\t' || !unicode.IsControl(r) {
+		if r == '\n' || r == '\t' || (!unicode.IsControl(r) && !bidiControl(r)) {
 			return r
 		}
 		return -1
 	}, s)
+}
+
+func bidiControl(r rune) bool {
+	return r == '\u200e' || r == '\u200f' || (r >= '\u202a' && r <= '\u202e') || (r >= '\u2066' && r <= '\u2069')
 }
 
 func (l Live) validate() bool {
