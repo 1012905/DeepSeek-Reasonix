@@ -885,6 +885,19 @@ Composer shortcuts:
 
 Remembered projects have Move up / Move down in their project menu. Open it with the keyboard, navigate with arrows or Home/End, and use Escape to return to the trigger. Moving a project changes sidebar order without changing the launch project.
 
+Ordinary Reasonix-managed worktree chats appear under their original project,
+without a separate project row for each checkout. The chat header shows Local
+checkout or Worktree, with its actual working directory available on hover;
+worktree chats also carry a sidebar marker.
+
+Reopening history uses that chat's working directory, while starting a chat
+from the project uses the original directory. Ordering, search, paging, pins
+and archives span the project.
+
+Removing the project closes its idle panes and retains every directory and
+transcript. Existing transcripts stay in place and group on restart without migration.
+Worktrees added separately outside Reasonix-managed storage remain independent projects.
+
 The list holds up to 32 projects; adding another requires removing one first. `serve-workspaces.json` now stores an object with `paths` and `launch`. Older binaries read only arrays and cannot preserve this format: do not share the same state home with an older binary after reordering.
 
 Menus and controls:

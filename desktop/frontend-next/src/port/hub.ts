@@ -35,6 +35,8 @@ export interface RuntimeView {
 
 export interface TreeSession {
   path: string;
+  workspaceRoot?: string;
+  isolated?: boolean;
   name: string;
   title?: string;
   turns?: number;
@@ -98,8 +100,7 @@ export interface OpenWithTarget {
 export interface TreeWorkspace {
   root: string;
   name: string;
-  // A delivery worktree carries the project's own folder name, so the sidebar
-  // needs this to tell the copy from the original.
+  workspaceRoots?: string[];
   isolated?: boolean;
   missing?: boolean;
   open?: boolean;
@@ -115,6 +116,10 @@ export interface TreeWorkspace {
   // carry. Absent on a kernel that predates it, and then only `total` says.
   remaining?: number;
   sessions: TreeSession[];
+}
+
+export function workspaceContains(workspace: TreeWorkspace, root: string | undefined): boolean {
+  return root !== undefined && (workspace.root === root || !!workspace.workspaceRoots?.includes(root));
 }
 
 // How much of each folder tree() builds: `limit` for all of them (0 is every
