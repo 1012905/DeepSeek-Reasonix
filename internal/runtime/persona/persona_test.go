@@ -7,8 +7,6 @@ import (
 	"reasonix/internal/contract/config"
 )
 
-func boolPtr(v bool) *bool { return &v }
-
 func TestPresetsAreStableAndHitOnlyOnePlacement(t *testing.T) {
 	got := Presets()
 	want := []string{"engineer", "concise", "mentor", "critic"}
@@ -41,7 +39,7 @@ func TestFromConfigNormalizesAndResolvesRuntimeContext(t *testing.T) {
 	if s := FromConfig(config.PersonaConfig{}); (s != Settings{IncludeRuntimeContext: true}) {
 		t.Fatalf("zero config = %+v, want runtime context enabled", s)
 	}
-	s := FromConfig(config.PersonaConfig{Prefix: "  lead  ", Suffix: " trail ", IncludeRuntimeContext: boolPtr(false)})
+	s := FromConfig(config.PersonaConfig{Prefix: "  lead  ", Suffix: " trail ", IncludeRuntimeContext: new(false)})
 	if s.Prefix != "lead" || s.Suffix != "trail" || s.IncludeRuntimeContext {
 		t.Fatalf("FromConfig = %+v, want trimmed text and runtime context off", s)
 	}

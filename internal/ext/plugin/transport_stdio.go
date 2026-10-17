@@ -35,13 +35,14 @@ const (
 // forever) and calls overlap freely: no lock spans a round trip, so one slow
 // tool cannot hold the pipe against the whole server.
 type stdioTransport struct {
-	name   string
-	roots  []mcpRoot
-	cmd    *exec.Cmd
-	job    *proc.TrackedJob // reaps detached grandchildren on close; releases itself exactly once
-	stdin  io.WriteCloser
-	stdout *bufio.Reader
-	stderr *tailBuffer
+	name         string
+	roots        []mcpRoot
+	cmd          *exec.Cmd
+	job          *proc.TrackedJob // reaps detached grandchildren on close; releases itself exactly once
+	stdin        io.WriteCloser
+	stdout       *bufio.Reader
+	stderr       *tailBuffer
+	privateState string
 
 	writeMu sync.Mutex // client calls and server-request replies share stdin
 
@@ -90,6 +91,12 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 	if err != nil {
 		return nil, err
 	}
+	stateTransferred := false
+	defer func() {
+		if !stateTransferred && s.ProcessStateDir != "" {
+			_ = os.RemoveAll(s.ProcessStateDir)
+		}
+	}()
 	launchArgs := append([]string{exe}, effectiveLaunchArgs(s)...)
 	var argv []string
 	confined := false
@@ -131,17 +138,19 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 		proc.LowPriorityStarted(cmd)
 	}
 	t := &stdioTransport{
-		name:        s.Name,
-		roots:       mcpRoots(s.WorkspaceRoot),
-		cmd:         cmd,
-		job:         job,
-		stdin:       stdin,
-		stdout:      bufio.NewReader(stdout),
-		stderr:      stderr,
-		pending:     map[int]chan rpcResponse{},
-		releaseSlot: releaseSlot,
+		name:         s.Name,
+		privateState: s.ProcessStateDir,
+		roots:        mcpRoots(s.WorkspaceRoot),
+		cmd:          cmd,
+		job:          job,
+		stdin:        stdin,
+		stdout:       bufio.NewReader(stdout),
+		stderr:       stderr,
+		pending:      map[int]chan rpcResponse{},
+		releaseSlot:  releaseSlot,
 	}
 	releaseSlot = nil // ownership transferred to t; close() releases it
+	stateTransferred = true
 	go t.readLoop()
 	return t, nil
 }
@@ -152,6 +161,13 @@ func prepareMCPPrivateState(s Spec, processSandbox sandbox.Spec, env []string) (
 
 func prepareMCPPrivateStateForOS(s Spec, processSandbox sandbox.Spec, env []string, goos string) (sandbox.Spec, []string, error) {
 	root := strings.TrimSpace(s.StateDir)
+	if s.ProcessStateDir != "" {
+		var err error
+		root, err = CompositionProcessRoot(s)
+		if err != nil {
+			return processSandbox, env, err
+		}
+	}
 	if root == "" {
 		return processSandbox, env, nil
 	}
@@ -634,6 +650,11 @@ func waitFinishedWithinBudget(wait func(), budget time.Duration) bool {
 // inherited pipes open). Both paths are budgeted so one wedged server can never
 // stall a boot or turn teardown.
 func (t *stdioTransport) close() {
+	defer func() {
+		if t.privateState != "" {
+			_ = os.RemoveAll(t.privateState)
+		}
+	}()
 	if t.releaseSlot != nil {
 		t.releaseSlot() // idempotent; frees the bounded CodeGraph instance slot
 	}

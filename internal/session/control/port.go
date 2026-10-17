@@ -4,6 +4,7 @@ import (
 	"context"
 	"reasonix/internal/state/sessionstore"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -16,6 +17,7 @@ import (
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/safety/evidence"
+	"reasonix/internal/state/agentpreset"
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
 	"reasonix/internal/tools/jobs"
@@ -484,6 +486,8 @@ type SurfaceHistory interface {
 }
 
 type SessionAPI interface {
+	AgentCompositions
+	AgentPresetManagement
 	SurfaceActions
 	SurfaceHistory
 	Lifecycle
@@ -518,6 +522,7 @@ type SessionAPI interface {
 // point — an editor authors no skill, edits no hook, saves no sandbox rule, and files no
 // feedback: the report form belongs to the surfaces that own a screen for it.
 type EditorAPI interface {
+	AgentCompositions
 	Lifecycle
 	TurnControl
 	Approvals
@@ -527,6 +532,18 @@ type EditorAPI interface {
 	Extensions
 	Goals
 	SessionPersistence
+}
+
+type AgentCompositions interface {
+	AgentPresets() (agentpreset.Catalog, error)
+	SelectAgentComposition(context.Context, string) error
+	CompositionBinding() *agentcomposition.Binding
+}
+
+type AgentPresetManagement interface {
+	SaveAgentPreset(agentcomposition.Definition, string) (agentcomposition.Version, error)
+	DeleteAgentPreset(string, string) error
+	SetDefaultAgentPreset(string, bool) error
 }
 
 // Compile-time proof that the concrete controller satisfies each sub-port and

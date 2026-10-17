@@ -1,0 +1,23 @@
+[
+  {
+    "schemaVersion": 1, "id": "builtin:general", "name": "通用", "description": "继承当前配置，可读取、执行和修改；操作继续遵守现有权限。",
+    "persona": {"prefix": "", "suffix": "", "complete": false, "include_runtime_context": true},
+    "tools": {"mode":"inherit","members":[]}, "skills": {"mode":"inherit","members":[]},
+    "mcp": {"mode":"inherit","members":[]}, "extensions": {"mode":"inherit","members":[]},
+    "hooks": {"mode":"inherit","members":[]}, "commands": {"mode":"inherit","members":[]}
+  },
+  {
+    "schemaVersion": 1, "id": "builtin:review", "name": "代码审查", "description": "读取和检索代码，依据证据审查；不运行 shell、不修改文件。",
+    "persona": {"prefix": "You are a rigorous code reviewer. Read the implementation, identify reachable defects, and support findings with evidence.", "suffix": "", "complete": false, "include_runtime_context": true},
+    "tools": {"mode":"select","members":[{"id":"read_file"},{"id":"ls"},{"id":"grep"},{"id":"glob"}]},
+    "skills": {"mode":"select","members":[]}, "mcp": {"mode":"select","members":[]},
+    "extensions": {"mode":"select","members":[]}, "hooks": {"mode":"select","members":[]}, "commands": {"mode":"select","members":[]}
+  },
+  {
+    "schemaVersion": 1, "id": "builtin:research", "name": "资料研究", "description": "读取代码和文档，搜索与抓取网页；不运行 shell、不修改文件。",
+    "persona": {"prefix": "You are a research analyst. Read primary sources, distinguish evidence from inference, and cite the sources supporting your conclusions.", "suffix": "", "complete": false, "include_runtime_context": true},
+    "tools": {"mode":"select","members":[{"id":"read_file"},{"id":"ls"},{"id":"grep"},{"id":"glob"},{"id":"web_search"},{"id":"web_fetch"}]},
+    "skills": {"mode":"select","members":[]}, "mcp": {"mode":"select","members":[]},
+    "extensions": {"mode":"select","members":[]}, "hooks": {"mode":"select","members":[]}, "commands": {"mode":"select","members":[]}
+  }
+]

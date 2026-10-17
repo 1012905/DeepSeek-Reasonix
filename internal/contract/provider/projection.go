@@ -21,7 +21,7 @@ func ProjectionMessages(msgs []Message) []Message { return projectMessages(msgs,
 func projectMessages(msgs []Message, keepExecution bool) []Message {
 	needsCopy := false
 	for _, m := range msgs {
-		if (len(m.UnavailableImages) > 0 && !keepExecution) || m.LocalOnly || m.RawContent != "" || m.ProviderContent != "" || m.HostAuthored || m.ModelRef != "" || m.Via != nil || m.DecisionReceipt != nil || len(m.DecisionReceipts) > 0 || (m.ToolExecution != nil && !keepExecution) || (m.ToolFailure != nil && !keepExecution) {
+		if (m.AgentComposition != nil && !keepExecution) || (len(m.UnavailableImages) > 0 && !keepExecution) || m.LocalOnly || m.RawContent != "" || m.ProviderContent != "" || m.HostAuthored || m.ModelRef != "" || m.Via != nil || m.DecisionReceipt != nil || len(m.DecisionReceipts) > 0 || (m.ToolExecution != nil && !keepExecution) || (m.ToolFailure != nil && !keepExecution) {
 			needsCopy = true
 			break
 		}
@@ -45,6 +45,7 @@ func projectMessages(msgs []Message, keepExecution bool) []Message {
 		candidate.DecisionReceipt = nil
 		candidate.DecisionReceipts = nil
 		if !keepExecution {
+			candidate.AgentComposition = nil
 			// Local shell metadata must never enter provider request bytes.
 			candidate.ToolExecution = nil
 			candidate.ToolFailure = nil

@@ -58,6 +58,7 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Turn navigator | Have differently | Scroll rail with marks in `ui/Transcript.tsx` |
 | Model picker with vendor icons, search and favourites | Missing | #12354, #11403 |
 | Reasoning effort picker | Have differently | Names plus one-line descriptions, only levels the model supports; do not revert to raw `high` and `max` |
+| Agent composition / Agent 组合 | Have differently | Composer selector and Settings → Agent presets (`ui/AgentPresets.tsx`). 输入框选择组合，「Agent 预设」整合人设页并保留四个字段。 |
 | Approval card offering "allow matching actions this session" | Unverified | Mock fixture shows two buttons only; #12020 (closed) |
 | Plan and todo panel | Have | `ui/Plan.tsx` |
 | Subagents panel | Have differently | `ui/Pane.tsx`, `ui/delegation.ts`; running-state gaps in #12410, #12284 |

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,8 +34,8 @@ func TestPersonaSettingsRouteRoundTripAndValidation(t *testing.T) {
 	if got.Prefix != "" || got.Suffix != "" || got.Complete || !got.IncludeRuntimeContext {
 		t.Fatalf("unset persona reads %+v, want empty with runtime context enabled", got)
 	}
-	if got.Path != config.UserConfigPath() {
-		t.Fatalf("path = %q, want the user config", got.Path)
+	if got.Path != filepath.Join(config.MemoryUserDir(), "agent-presets") {
+		t.Fatalf("path = %q, want the canonical preset store", got.Path)
 	}
 	if len(got.Presets) == 0 || got.Presets[0].ID == "" {
 		t.Fatalf("GET served no presets: %+v", got.Presets)
@@ -66,9 +67,9 @@ func TestPersonaSettingsRouteRoundTripAndValidation(t *testing.T) {
 	if saved.Prefix != "IDENTITY" || saved.Suffix != "TAIL" || saved.Complete || saved.IncludeRuntimeContext {
 		t.Fatalf("saved response = %+v, want normalized values with runtime context off", saved)
 	}
-	stored := config.LoadForEdit(config.UserConfigPath()).Agent.Persona
-	if stored.Prefix != "IDENTITY" || stored.Suffix != "TAIL" || stored.RuntimeContextEnabled() {
-		t.Fatalf("user config holds %+v", stored)
+	stored := s.Controller().PersonaSettings()
+	if stored.Prefix != "IDENTITY" || stored.Suffix != "TAIL" || stored.IncludeRuntimeContext {
+		t.Fatalf("canonical persona holds %+v", stored)
 	}
 }
 

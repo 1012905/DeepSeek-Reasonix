@@ -48,6 +48,32 @@ export interface UIAction {
 }
 
 export const ACTIONS: UIAction[] = [
+  {id:"agent-composition.select",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-composition.manage",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-composition.new",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-composition.new-choice",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.reload",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.view",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.create",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.copy",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.scope",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.id",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.name",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.description",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.module-mode",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-id",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-parameters",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-add",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-choose",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-remove",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.save",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.default",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.workspace-default",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.delete-preview",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.delete",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.delete-cancel",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.export",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.import",kind:"view",target:"none",proof:"interaction"},
   // ── The window's own switches, and the way into the turn's policy ────────
   // Completion verification is adaptive now, rather than a user-facing preset.
   // The legacy endpoint remains in the port for older clients and sessions,
@@ -608,6 +634,7 @@ export const ACTIONS: UIAction[] = [
   { id: "posture-note.dismiss", kind: "view", target: "none", proof: "interaction" },
   { id: "storage.move", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "session.import-legacy", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "session.import-native", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "network.diagnose", kind: "repeatable", target: "none", proof: "interaction" },
 
   // ── Permissions, the sandbox, and the endpoints a session can reach.
@@ -652,10 +679,8 @@ export const ACTIONS: UIAction[] = [
   // persona is composed once at boot so the write is read by later sessions.
   { id: "persona.prefix", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.suffix", kind: "view", target: "none", proof: "interaction" },
-  { id: "persona.preset", kind: "view", target: "optional", proof: "interaction" },
   { id: "persona.complete", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.runtime-context", kind: "view", target: "none", proof: "interaction" },
-  { id: "persona.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // The kernel announces the change on the stream, so no rebuild stands between
   // the click and the canonical change.
   { id: "currency.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

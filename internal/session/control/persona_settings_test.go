@@ -3,7 +3,6 @@ package control
 import (
 	"errors"
 	"os"
-	"strings"
 	"testing"
 
 	"reasonix/internal/base/testenv"
@@ -21,7 +20,7 @@ func TestPersonaSettingsReadWriteAndValidation(t *testing.T) {
 	defer c.Close()
 
 	got := c.PersonaSettings()
-	if got.Path != path || got.Prefix != "" || got.Suffix != "" || got.Complete || !got.IncludeRuntimeContext {
+	if got.Path == "" || got.Error != "" || got.Prefix != "" || got.Suffix != "" || got.Complete || !got.IncludeRuntimeContext {
 		t.Fatalf("unset persona reads %+v", got)
 	}
 	if len(got.Presets) == 0 {
@@ -47,9 +46,11 @@ func TestPersonaSettingsReadWriteAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"# user note", "[agent.persona]", "include_runtime_context = false", "prefix = "} {
-		if !strings.Contains(string(onDisk), want) {
-			t.Fatalf("user config lacks %q:\n%s", want, onDisk)
-		}
+	if string(onDisk) != raw {
+		t.Fatal("legacy adapter rewrote the superseded TOML persona")
+	}
+	_, v, err := c.defaultPersonaVersion()
+	if err != nil || v.Definition.Persona.Prefix != "IDENTITY" {
+		t.Fatalf("canonical default not updated: %+v %v", v, err)
 	}
 }

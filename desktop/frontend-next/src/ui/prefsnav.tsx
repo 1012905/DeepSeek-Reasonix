@@ -98,7 +98,7 @@ export const NAV: [string, [Section, string][]][] = [
     "本轮执行",
     [
       ["session", "会话"],
-      ["persona", "人设"],
+      ["persona", "Agent 预设"],
       ["model", "模型偏好"],
       ["providers", "模型服务"],
       ["tools", "工具与权限"],
@@ -214,7 +214,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
   // Composed into the system prompt once at boot as part of the cache-stable
   // prefix: the save lands now, and only sessions opened afterwards read it.
-  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "on-open", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀", "complete", "预设"] },
+  { section: "persona", anchor: "agent-presets", title: "Agent 预设", scope: "machine", apply: "on-open", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀", "complete", "预设", "组合", "Agent"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
   { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "网页搜索", "web search", "system one", "typesafe", "laya", "自动命名", "思考强度", "推理", "reasoning", "档位"] },

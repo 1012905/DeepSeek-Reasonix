@@ -1,10 +1,19 @@
 import { SseShell } from "./sse_shell";
+import type { AgentComposition, AgentPresetVersion, AgentPresetCatalog, CompositionSummary } from "./composition";
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings, PersonaDraft, PersonaSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
 export class SseBoundary extends SseShell {
+  agentPresets() { return this.get<AgentPresetCatalog>("/agent-presets"); }
+  saveAgentPreset(definition: AgentComposition, expectedRevision: string) { return this.post0<AgentPresetVersion>("/agent-presets", { definition, expectedRevision }); }
+  deleteAgentPreset(id: string, revision: string) { return this.del(`/agent-presets/${encodeURIComponent(id)}?revision=${encodeURIComponent(revision)}`); }
+  setDefaultAgentPreset(id: string, workspace: boolean) { return this.post0<void>("/agent-presets/default", { id, workspace }); }
+  exportAgentPreset(id: string) { return this.get<AgentComposition>(`/agent-presets/${encodeURIComponent(id)}/export`); }
+  importAgentPreset(content: AgentComposition) { return this.post0<{definition:AgentComposition;diagnostics:AgentPresetCatalog["diagnostics"]}>("/agent-presets/import", { content }); }
+  agentComposition() { return this.get<CompositionSummary | null>("/agent-composition"); }
+  selectAgentComposition(id: string) { return this.post0<CompositionSummary>("/agent-composition", { id }); }
   adjudications() {
     return this.get<Adjudications>("/adjudications");
   }

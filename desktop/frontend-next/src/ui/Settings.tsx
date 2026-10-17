@@ -36,7 +36,7 @@ import { AskTimeout } from "./AskTimeout";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
-import { Persona } from "./Persona";
+import { AgentPresets } from "./AgentPresets";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
 import { BackupFile } from "./BackupFile";
@@ -531,7 +531,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
             </>
           )}
 
-          {at === "persona" && <Persona port={port} />}
+          {at === "persona" && <AgentPresets port={port} />}
 
           {at === "providers" && (
             <Group id="providers" title={t("模型服务")}

@@ -11,8 +11,6 @@ import (
 	"reasonix/internal/base/testenv"
 )
 
-func boolValue(v bool) *bool { return &v }
-
 func TestPersonaNormalizeTrimsAndCollapsesOnlyTheEmptyChoice(t *testing.T) {
 	zero := PersonaConfig{}.Normalize()
 	if !reflect.DeepEqual(zero, PersonaConfig{}) {
@@ -29,7 +27,7 @@ func TestPersonaNormalizeTrimsAndCollapsesOnlyTheEmptyChoice(t *testing.T) {
 	// An explicit runtime-context choice is a contribution by itself: the Studio
 	// switch may be the only field the user touched, and collapsing it would make
 	// the save read back as unchanged.
-	pointerOnly := PersonaConfig{IncludeRuntimeContext: boolValue(false)}.Normalize()
+	pointerOnly := PersonaConfig{IncludeRuntimeContext: new(false)}.Normalize()
 	if pointerOnly.IsZero() || pointerOnly.IncludeRuntimeContext == nil || *pointerOnly.IncludeRuntimeContext {
 		t.Fatalf("pointer-only persona collapsed or lost: %+v", pointerOnly)
 	}
@@ -70,10 +68,10 @@ func TestPersonaRuntimeContextDefaultsEnabled(t *testing.T) {
 	if !(PersonaConfig{}).RuntimeContextEnabled() {
 		t.Fatal("absent include_runtime_context reads as disabled")
 	}
-	if !(PersonaConfig{IncludeRuntimeContext: boolValue(true)}).RuntimeContextEnabled() {
+	if !(PersonaConfig{IncludeRuntimeContext: new(true)}).RuntimeContextEnabled() {
 		t.Fatal("explicit true reads as disabled")
 	}
-	if (PersonaConfig{IncludeRuntimeContext: boolValue(false)}).RuntimeContextEnabled() {
+	if (PersonaConfig{IncludeRuntimeContext: new(false)}).RuntimeContextEnabled() {
 		t.Fatal("explicit false reads as enabled")
 	}
 }
@@ -85,10 +83,10 @@ func TestPersonaRendersAndLoadsUnchanged(t *testing.T) {
 	t.Setenv("REASONIX_HOME", home)
 	path := UserConfigPath()
 	for _, want := range []PersonaConfig{
-		{Prefix: "IDENTITY", Suffix: "TAIL", Complete: true, IncludeRuntimeContext: boolValue(false)},
-		{Prefix: "IDENTITY", IncludeRuntimeContext: boolValue(true)},
+		{Prefix: "IDENTITY", Suffix: "TAIL", Complete: true, IncludeRuntimeContext: new(false)},
+		{Prefix: "IDENTITY", IncludeRuntimeContext: new(true)},
 		{Suffix: "TAIL"},
-		{IncludeRuntimeContext: boolValue(false)},
+		{IncludeRuntimeContext: new(false)},
 	} {
 		c := Default()
 		if err := c.SetPersona(want); err != nil {

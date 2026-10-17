@@ -1,4 +1,6 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
+import type { AgentComposition, AgentPresetVersion, AgentPresetCatalog, CompositionSummary } from "./composition";
+export type * from "./composition";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
 
@@ -304,6 +306,14 @@ export interface AgentPort {
   // Read by the kernel's background sweep on each pass; no rebuild.
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
   persona(): Promise<PersonaSettings>;
+  agentPresets(): Promise<AgentPresetCatalog>;
+  saveAgentPreset(definition: AgentComposition, expectedRevision: string): Promise<AgentPresetVersion>;
+  deleteAgentPreset(id: string, revision: string): Promise<void>;
+  setDefaultAgentPreset(id: string, workspace: boolean): Promise<void>;
+  exportAgentPreset(id: string): Promise<AgentComposition>;
+  importAgentPreset(content: AgentComposition): Promise<{definition:AgentComposition;diagnostics:AgentPresetCatalog["diagnostics"]}>;
+  agentComposition(): Promise<CompositionSummary | null>;
+  selectAgentComposition(id: string): Promise<CompositionSummary>;
   // The persona is part of the cache-stable prefix, composed once at boot:
   // saving is written now and read by the next session, not this one's runtime.
   savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings>;

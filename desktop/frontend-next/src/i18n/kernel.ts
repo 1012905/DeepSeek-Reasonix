@@ -27,6 +27,12 @@ export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_runni
 export const savedNotApplied = (e: unknown): boolean => e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
 
 const SAID: Record<string, string> = {
+  "agent_composition.invalid": "预设内容无效，请检查标识、模块和参数",
+  "agent_composition.unavailable": "组合所需资源不可用，无法继续执行",
+  "agent_composition.locked": "会话已开始或正在工作，不能切换组合",
+  "agent_composition.conflict": "预设已被其他操作修改，草稿已保留，请重新加载后再保存",
+  "agent_composition.not_found": "找不到该 Agent 预设",
+  "agent_composition.read_only": "内置预设只读，请复制后编辑",
   "surface.value_invalid": "填写内容不符合字段要求，请检查后重试",
   "surface.expired": "界面已失效，请等待新的请求",
   "surface.schema_invalid": "界面描述不符合约定",

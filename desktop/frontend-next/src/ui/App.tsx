@@ -1,4 +1,5 @@
 import { useBranchSession } from "./useBranchSession";
+import { CompositionNewContext } from "./CompositionNewContext";
 import { keepSame } from "./stable";
 import { usePaneCallbacks } from "./usePaneCallbacks";
 import { watchTreeWake } from "./treewake";
@@ -260,10 +261,10 @@ export function App({ hub }: { hub: HubPort }) {
   );
 
   const openRemotePane = useCallback(
-    async (host: string, workspace?: string, sessionPath?: string) => {
+    async (host: string, workspace?: string, sessionPath?: string, agentComposition?:string) => {
       setOpening((n) => n + 1);
       try {
-        const view = await hub.openRemote({ host, workspace, sessionPath });
+        const view = await hub.openRemote({ host, workspace, sessionPath, agentComposition });
         await reloadPanes();
         sw.cancel();
         setActive(view.id);
@@ -559,7 +560,7 @@ export function App({ hub }: { hub: HubPort }) {
   }
 
   return (
-    <div
+    <CompositionNewContext.Provider value={(id) => {const rt=runtimes.find((v)=>v.id===active);void (rt?.host?openRemotePane(rt.host,rt.root,undefined,id):openPane({root:newSessionRoot,agentComposition:id})).catch(fail);}}><div
       className="app"
       data-run={report.run}
       data-rail={rail ? "on" : "off"}
@@ -793,6 +794,6 @@ export function App({ hub }: { hub: HubPort }) {
       )}
       <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
       <StopHint armed={stopArmed} />
-    </div>
+    </div></CompositionNewContext.Provider>
   );
 }
