@@ -110,7 +110,10 @@ async function main() {
   views.show(targetId, { x: 300, y: 100, width: 600, height: 400 });
   await wait(500);
   const theirs = [...views.entries.values()][0].view.webContents;
+  // A click that reaches the page from the window, and the focus the platform
+  // gives the page because of it; sendInputEvent alone does not move focus.
   theirs.sendInputEvent({ type: "mouseDown", x: 40, y: 20, button: "left", clickCount: 1 });
+  theirs.focus();
   theirs.sendInputEvent({ type: "mouseUp", x: 40, y: 20, button: "left", clickCount: 1 });
   await wait(500);
   const chosen = await where();
