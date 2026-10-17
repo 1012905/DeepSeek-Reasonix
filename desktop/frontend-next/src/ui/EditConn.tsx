@@ -350,7 +350,7 @@ export function EditConn({
         {(picked.length > 1 || picked.some((m) => entry.modelLimits?.[m])) && (
           <ModelLimits models={picked} value={limitText} onChange={setLimitText} inherited={inheritedLimitsFor} />
         )}
-        {picked.length > 0 && <ModelPrices models={picked} value={priceText} onChange={setPriceText} />}
+        {picked.length > 0 && <ModelPrices models={picked} value={priceText} onChange={setPriceText} official={entry.officialPricing === true} stored={entry.modelPrices ?? {}} />}
       </div>
 
       <div className="mlist">

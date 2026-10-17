@@ -57,3 +57,29 @@ describe("pricing a model on a connection", () => {
     expect((edit.mock.calls[0]![0] as ProviderEdit).modelPrices).toEqual({ alpha: null });
   });
 });
+
+describe("a price on a vendor's own endpoint that is not one of the vendor's", () => {
+  const official: Partial<ProviderEntry> = { kind: "openai", baseUrl: "https://api.deepseek.com", models: ["deepseek-flash"], default: "deepseek-flash", officialPricing: true };
+  const damaged = { input: 0.3, output: 1.2, cacheHit: 0, currency: "USD", official: false };
+
+  it("says so, warns that a zero cached price makes cost too low, and restores the official price on a click", async () => {
+    const { edit } = await open(entry({ ...official, modelPrices: { "deepseek-flash": damaged } }));
+    expect(screen.getByText("这个价格不在官方价目表里，选了人民币或美元显示时无法换算。")).toBeTruthy();
+    expect(screen.getByText("缓存命中价是 0：命中的 token 会按免费计，费用会偏低。")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "deepseek-flash 恢复官方价" }));
+    expect(field("deepseek-flash 的输入单价").value).toBe("");
+    expect(screen.queryByText("这个价格不在官方价目表里，选了人民币或美元显示时无法换算。")).toBeNull();
+    await userEvent.click(save());
+    await waitFor(() => expect(edit).toHaveBeenCalled());
+    expect((edit.mock.calls[0]![0] as ProviderEdit).modelPrices).toEqual({ "deepseek-flash": null });
+  });
+
+  it("offers nothing for an official card or a relay, which has no table", async () => {
+    await open(entry({ ...official, modelPrices: { "deepseek-flash": { ...damaged, cacheHit: 0.006, official: true } } }));
+    expect(screen.queryByRole("button", { name: /恢复官方价/ })).toBeNull();
+    cleanup();
+    await open(entry({ ...official, officialPricing: false, baseUrl: "https://relay.example/v1", modelPrices: { "deepseek-flash": damaged } }));
+    expect(screen.queryByRole("button", { name: /恢复官方价/ })).toBeNull();
+  });
+});
+
