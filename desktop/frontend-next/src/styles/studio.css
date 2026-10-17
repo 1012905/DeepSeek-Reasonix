@@ -3384,6 +3384,12 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   background: var(--overlay);
   color: var(--text);
 }
+:root[data-theme="light"] .prefs-nav button[aria-selected="true"]:not(:disabled):hover {
+  background: var(--border);
+}
+.prefs-nav button[aria-selected="true"]:not(:disabled):hover svg {
+  color: var(--text);
+}
 
 /* Run analysis is the readable front door to the existing trajectory. Raw
    events and the execution graph stay in Runtime details; this surface answers
