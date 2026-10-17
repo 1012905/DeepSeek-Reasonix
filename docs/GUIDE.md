@@ -143,6 +143,9 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # password_hash = ""           # bcrypt hash generated with reasonix serve --hash-password --password '...'
 # behind_proxy = false         # true only behind a trusted reverse proxy
 
+[desktop]
+# max_workspaces = 0           # most projects the sidebar remembers; 0 = no limit (user config only)
+
 [[plugins]]
 name    = "example"
 command = "reasonix-plugin-example"

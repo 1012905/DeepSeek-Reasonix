@@ -98,10 +98,10 @@ describe("what a reader is told a refusal was", () => {
   // authority never actually left the kernel.
   it("explains the project limit in Chinese and English", () => {
     const error = coded("storage limit", "workspace.limit_reached");
-    expect(reason(error)).toBe("项目列表已满（32 个），请先移除一个项目再添加");
+    expect(reason(error)).toBe("项目列表已到你设置的上限（desktop.max_workspaces），请先移除一个项目再添加");
     localStorage.setItem(STORAGE, "en");
     boot();
-    expect(reason(error)).toBe("The project list is full (32 projects); remove one before adding another");
+    expect(reason(error)).toBe("The project list is at the limit you set (desktop.max_workspaces); remove one before adding another");
   });
 
   it("does not move when the kernel rewords the same code", () => {
