@@ -140,7 +140,7 @@ func (c *muxConn) note(data []byte) {
 // before the new one is registered, so one pane never feeds a connection twice.
 func (c *muxConn) attach(srv *Server, pane string, after int64, first bool) bool {
 	c.drop(pane)
-	ch, unsub := srv.subscribeEvents(after, first)
+	ch, unsub := srv.subscribeEvents(after, first, true)
 	p := &muxPane{id: pane, slot: make(chan Frame, 1), unsubscribe: unsub, stop: make(chan struct{}), bc: srv.bc}
 	c.mu.Lock()
 	if c.done {
