@@ -230,3 +230,67 @@ func TestWithoutAProtocolTheModelIsToldItWasNotSent(t *testing.T) {
 		t.Fatalf("an endpoint with no video protocol must say so to the model: %s", body)
 	}
 }
+
+// The file is opened once and everything after that reads the opened file: a
+// path swapped for another file in the gap sends none of the other file's bytes.
+func swapAfterOpen(t *testing.T, ref provider.VideoRef, other string) {
+	t.Helper()
+	elsewhere := filepath.Join(t.TempDir(), "other.mp4")
+	if err := os.WriteFile(elsewhere, []byte(other), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	afterVideoOpen = func(path string) {
+		if err := os.Rename(elsewhere, path); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { afterVideoOpen = func(string) {} })
+}
+
+func TestInlineSendsTheOpenedFileNotWhatThePathBecomes(t *testing.T) {
+	v := newVideoServer(t)
+	ref := writeVideo(t, "FAKE-MP4-BYTES")
+	swapAfterOpen(t, ref, "SECRET-OF-ANOTHER-FILE")
+	if err := run(t, v.provider(t, "inline_data_url"), readRound(ref)); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(v.chats[0])
+	other := base64.StdEncoding.EncodeToString([]byte("SECRET-OF-ANOTHER-FILE"))
+	if strings.Contains(string(body), other) || strings.Contains(string(body), "SECRET-OF-ANOTHER-FILE") {
+		t.Fatalf("bytes of the file the path became were sent: %s", body)
+	}
+	want := "data:video/mp4;base64," + base64.StdEncoding.EncodeToString([]byte("FAKE-MP4-BYTES"))
+	if got := videoURLOf(lastUserParts(t, v.chats[0])); got != want {
+		t.Fatalf("the opened file was not what was sent: %q", got)
+	}
+}
+
+func TestUploadSendsTheOpenedFileNotWhatThePathBecomes(t *testing.T) {
+	v := newVideoServer(t)
+	ref := writeVideo(t, "FAKE-MP4-BYTES")
+	swapAfterOpen(t, ref, "SECRET-OF-ANOTHER-FILE")
+	if err := run(t, v.provider(t, "moonshot_file"), readRound(ref)); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.uploads) != 1 || string(v.uploads[0].Body) != "FAKE-MP4-BYTES" {
+		t.Fatalf("uploads = %+v, want the opened file's bytes and nothing of the other file", v.uploads)
+	}
+}
+
+// An upload whose bytes stop matching what the tool saw is not completed, so the
+// vendor never holds a file that is not the one the model was told about.
+func TestUploadIsAbortedWhenTheBytesStopMatchingMidStream(t *testing.T) {
+	v := newVideoServer(t)
+	ref := writeVideo(t, "FAKE-MP4-BYTES")
+	ref.SHA256 = strings.Repeat("0", 64)
+	if err := run(t, v.provider(t, "moonshot_file"), readRound(ref)); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.uploads) != 0 {
+		t.Fatalf("a file that does not match its hash was uploaded: %+v", v.uploads)
+	}
+	body, _ := json.Marshal(v.chats[0])
+	if !strings.Contains(string(body), "video.file_changed") {
+		t.Fatalf("the model was not told by code: %s", body)
+	}
+}

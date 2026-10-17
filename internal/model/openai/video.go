@@ -90,6 +90,17 @@ func (w *videoWire) forget(shas []string) {
 	}
 }
 
+// afterVideoOpen is called with the path right after a video file is opened.
+// It exists so a test can swap the path there.
+var afterVideoOpen = func(string) {}
+
+var errVideoChanged = errors.New("the file no longer matches what the tool read")
+
+// resolve turns a reference into what the vendor reads. The file is opened once
+// and everything after that reads the opened file, so a path swapped for another
+// file between the check and the send cannot change the bytes that leave. A file
+// the vendor already holds by its hash needs no read at all: the id stands for
+// exactly the bytes that were verified when it was uploaded.
 func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http.Request), ref provider.VideoRef) (url string, fromCache bool, code string) {
 	_, limit := provider.VideoProtocolLimit(w.protocol)
 	if ref.Size > limit {
@@ -100,24 +111,30 @@ func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http
 		id, ok := w.ids[ref.SHA256]
 		w.mu.Unlock()
 		if ok {
-			if code := verifyVideo(ref); code != "" {
-				return "", false, code
-			}
 			return "ms://" + id, true, ""
 		}
 	}
-	if code := verifyVideo(ref); code != "" {
-		return "", false, code
+	f, err := os.Open(ref.Path)
+	if err != nil {
+		return "", false, readCode(err)
 	}
+	defer f.Close()
+	afterVideoOpen(ref.Path)
 	if w.protocol == provider.VideoProtocolInlineDataURL {
-		raw, err := os.ReadFile(ref.Path)
+		raw, err := io.ReadAll(io.LimitReader(f, ref.Size+1))
 		if err != nil {
-			return "", false, readCode(err)
+			return "", false, videoReadFailed
+		}
+		if sum := sha256.Sum256(raw); int64(len(raw)) != ref.Size || hex.EncodeToString(sum[:]) != ref.SHA256 {
+			return "", false, videoFileChanged
 		}
 		return "data:" + ref.MIME + ";base64," + base64.StdEncoding.EncodeToString(raw), false, ""
 	}
-	id, err := w.upload(ctx, h, auth, ref)
-	if err != nil {
+	id, err := w.upload(ctx, h, auth, ref, f)
+	switch {
+	case errors.Is(err, errVideoChanged):
+		return "", false, videoFileChanged
+	case err != nil:
 		return "", false, videoUploadFailed
 	}
 	w.mu.Lock()
@@ -133,31 +150,10 @@ func readCode(err error) string {
 	return videoReadFailed
 }
 
-// verifyVideo reads the file once, to its end, and compares it with what the
-// tool saw: a file edited since is not the one the model was told about.
-func verifyVideo(ref provider.VideoRef) string {
-	f, err := os.Open(ref.Path)
-	if err != nil {
-		return readCode(err)
-	}
-	defer f.Close()
-	h := sha256.New()
-	n, err := io.Copy(h, f)
-	if err != nil {
-		return videoReadFailed
-	}
-	if n != ref.Size || hex.EncodeToString(h.Sum(nil)) != ref.SHA256 {
-		return videoFileChanged
-	}
-	return ""
-}
-
-func (w *videoWire) upload(ctx context.Context, h *http.Client, auth func(*http.Request), ref provider.VideoRef) (string, error) {
-	f, err := os.Open(ref.Path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
+// upload streams the opened file as the multipart body. The bytes are hashed as
+// they go and the body is closed only if they match what the tool read, so a file
+// that changes under the upload is never completed on the vendor's side.
+func (w *videoWire) upload(ctx context.Context, h *http.Client, auth func(*http.Request), ref provider.VideoRef, f *os.File) (string, error) {
 	pr, pw := io.Pipe()
 	form := multipart.NewWriter(pw)
 	go func() {
@@ -165,7 +161,11 @@ func (w *videoWire) upload(ctx context.Context, h *http.Client, auth func(*http.
 		if err == nil {
 			var part io.Writer
 			if part, err = form.CreateFormFile("file", ref.Name); err == nil {
-				_, err = io.Copy(part, f)
+				sum := sha256.New()
+				var n int64
+				if n, err = io.Copy(part, io.TeeReader(f, sum)); err == nil && (n != ref.Size || hex.EncodeToString(sum.Sum(nil)) != ref.SHA256) {
+					err = errVideoChanged
+				}
 			}
 		}
 		if err == nil {
