@@ -300,6 +300,8 @@ type RuntimeSettings interface {
 	SaveFoldWorkSettings(fold bool) error
 	TurnNarrationSettings() TurnNarrationSettings
 	SaveTurnNarrationSettings(level string) error
+	WebAccessSettings() WebAccessSettings
+	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings

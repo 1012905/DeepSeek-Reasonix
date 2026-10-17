@@ -191,6 +191,24 @@ export interface TurnNarrationSettings {
   path: string;
 }
 
+// Where web_search and web_fetch may send things. The lists are ordered; a paid
+// backend is tried only after the ones before it failed, and one named in a
+// paid-allowed list is used without asking each time.
+export interface WebAccessSettings {
+  search_backends: string[];
+  searxng_url: string;
+  search_paid_allowed: string[];
+  fetch_backends: string[];
+  fetch_paid_allowed: string[];
+  known_search_backends: string[];
+  known_fetch_backends: string[];
+  paid_backends: string[];
+  deepseek_api_ready: boolean;
+  path: string;
+}
+
+export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed">>;
+
 export interface ChangedFilesSettings {
   show: boolean;
   path: string;

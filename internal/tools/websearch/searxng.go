@@ -3,11 +3,12 @@ package websearch
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"reasonix/internal/contract/config"
 )
 
 // These caps bound what one search puts into the model's context and memory:
@@ -30,10 +31,10 @@ type Searxng struct {
 // NewSearxng validates the instance address: an http(s) origin, optionally with
 // a path prefix, and nothing that could redirect a query elsewhere.
 func NewSearxng(raw string, client *http.Client) (*Searxng, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return nil, errors.New("searxng_url must be an http(s) address with a host, without credentials, query or fragment")
+	if err := config.ValidateSearxngURL(raw); err != nil {
+		return nil, err
 	}
+	u, _ := url.Parse(strings.TrimSpace(raw))
 	if client == nil {
 		client = http.DefaultClient
 	}
