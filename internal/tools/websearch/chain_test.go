@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"reasonix/internal/contract/tool"
 )
@@ -233,5 +234,21 @@ func TestSearxngRefusesAnUnusableURL(t *testing.T) {
 		if _, err := NewSearxng(raw, http.DefaultClient); err == nil {
 			t.Fatalf("%q accepted", raw)
 		}
+	}
+}
+
+// A snippet cut at the byte limit never ends inside a multi-byte character.
+func TestSearxngSnippetsAreCutOnACharacterBoundary(t *testing.T) {
+	long := strings.Repeat("搜", searxngMaxSnippet)
+	body, _ := json.Marshal(map[string]any{"results": []map[string]string{{"title": "t", "url": "https://a.example", "content": long}}})
+	srv := searxServer(t, 200, string(body), nil)
+	defer srv.Close()
+	b, _ := NewSearxng(srv.URL, srv.Client())
+	hits, err := b.Search(context.Background(), "q")
+	if err != nil || len(hits) != 1 {
+		t.Fatalf("hits=%v err=%v", hits, err)
+	}
+	if !utf8.ValidString(hits[0].Snippet) || len(hits[0].Snippet) > searxngMaxSnippet {
+		t.Fatalf("snippet is %d bytes, valid UTF-8: %v", len(hits[0].Snippet), utf8.ValidString(hits[0].Snippet))
 	}
 }

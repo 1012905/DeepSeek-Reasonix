@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// These caps bound what one search puts into the model's context and memory:
+// ten results of at most 500 bytes each is a few thousand tokens however many
+// results the instance returns. They are protections, not product limits; whether
+// a user should be able to change them is tracked as a follow-up.
 const (
 	searxngMaxBody    = 2 << 20
 	searxngMaxHits    = 10
