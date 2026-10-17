@@ -195,6 +195,7 @@ var Chinese = Messages{
 	RecoveryTaskGrantChoices:        "1. 继续一次\n2. 继续，并在本任务内允许同类操作\n3. 换个方案",
 	SandboxEscapeApprovalChoices:    "1. 允许一次\n2. 本会话使用真实环境\n3. 拒绝\n选择 [1/2/3]（兼容 y/a/n）",
 	NotifyMessages:                  notifyZH,
+	SlashHintMessages:               slashHintZH,
 	ApprovalNeededFmt:               "需要审批：%s",
 	ApprovalNeededWithSubjectFmt:    "需要审批：%s %s",
 	AnswerNeededFmt:                 "需要回答：%s",
