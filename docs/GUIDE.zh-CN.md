@@ -76,9 +76,9 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # planner_model = "deepseek-pro"      # 可选的低频规划器
 # subagent_model = "deepseek-pro"     # runAs=subagent skill 的默认模型
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }
-# max_subagent_depth = 2              # 子代理嵌套委派深度；设为 1 可恢复旧的单层边界
-# max_subagent_concurrency = 6        # 会话级子代理总并发（task/fleet/skills）
-# max_parallel_writers = 3            # 互不重叠 write_paths 时的并行写入上限
+# max_subagent_depth = 8              # 子代理嵌套委派深度；防止无限递归的有名字的上限，设 0 取消；设为 1 为单层边界（只认用户级配置）
+# max_subagent_concurrency = 0        # 会话级子代理总并发（task/fleet/skills）；0 = 不限制（只认用户级配置）
+# max_parallel_writers = 0            # 互不重叠 write_paths 时的并行写入上限；0 = 不限制，靠写入声明隔开写者（只认用户级配置）
 # max_side_sessions = 0              # 同时打开的辅助会话数；0 = 不限制（只认用户级配置）
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
@@ -147,6 +147,11 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # forbid_read    = ["${HOME}/.ssh"]   # agent 不可读取或列出的路径
 # allow_devices  = ["/dev/nvidia*"]   # 放进 Linux bash 沙盒的宿主设备节点（只认用户级配置）
 # egress_unlisted = "allow"    # 无人值守长任务用（只认用户级配置）：allowed_domains 之外的主机不再询问，每个主机提示一次；denied_domains 仍然拒绝
+
+[peers]
+# enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准（只认用户级配置）
+# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled（只认用户级配置）
+# release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧（只认用户级配置）
 
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌
@@ -1410,11 +1415,11 @@ task_time_budget_minutes = 60     # 整个任务累计的墙钟时长
 Subagent skills 默认继承执行器模型。设置 `subagent_model` 可让它们统一走另一个已配置
 模型；设置 `subagent_models` 则只覆盖 `review`、`security_review` 等指定 skill。
 
-Subagent 默认允许再委派一层：根会话是 depth 0，第一层 subagent 是 depth 1，
-`max_subagent_depth = 2` 表示 depth 1 的 workflow 可以再派 depth 2 的 reviewer
-或 implementer；depth 2 不再拿到递归 agent/skill 工具。设
-`agent.max_subagent_depth = 1` 可恢复旧的单层边界。这主要用于 Superpowers 这类
-workflow skill 派发 reviewer subagent 的场景，同时避免无限递归和后台 fanout。
+Subagent 按层委派：根会话是 depth 0，`max_subagent_depth`（默认 8，防止模型不停
+委派给自己；设 0 取消，设 1 为单层边界）是仍带递归工具的最深一层。
+`max_subagent_concurrency` 与 `max_parallel_writers` 默认 0，即不限制：让写者互不
+冲突的是写入声明，不是个数。三者都不能由项目的 `reasonix.toml` 设置。并行很高时
+遇到 429 会按退避并遵守 `Retry-After` 重试。
 
 当计划阶段需要**明确隔离为只读**的深度调研时，用 `read_only_task`；如果更适合复用已有 skill，
 用 `read_only_skill`。两者都会启动

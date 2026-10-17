@@ -16,6 +16,7 @@ const (
 	DecisionSent     Decision = "sent"
 	DecisionHeld     Decision = "held"
 	DecisionApproved Decision = "approved"
+	DecisionReleased Decision = "released"
 	DecisionDenied   Decision = "denied"
 	DecisionRejected Decision = "rejected"
 )

@@ -113,7 +113,8 @@ provided for these states; their behavior and consistency were inspected live.
 
 ## Validation and limits / 测试与边界
 
-- Frontend: 631 files, 5,231 tests passed; typecheck and production build passed.
+- Frontend after syncing Studio: 633 files, 5,241 tests passed; typecheck and
+  production build passed.
 - 前端全量、类型检查和生产构建通过。
 - Backend: focused race tests passed in worktree, serve, control and boot.
 - 后端相关四个包的定向并发测试通过。

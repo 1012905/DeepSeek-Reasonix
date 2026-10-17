@@ -386,7 +386,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     if (path === ".reasonix") return { files: [".reasonix/REASONIX.local.md"], directories: [] };
     return hidden ? { files: [".gitignore", "README.md"], directories: [".reasonix", "internal"] } : { files: ["README.md"], directories: ["internal"] };
   }
-  async workspaceFile(path: string) { return { path, content: `// ${path}\n`, revision: "fixture" }; }
+  async workspaceFile(path: string, _root?: string): Promise<import("./port").WorkspaceFile> { return { path, content: `// ${path}\n`, revision: "fixture" }; }
   workspaceImageURL(path: string) { return `/fixture/${path}`; }
   async saveWorkspaceFile(file: import("./port").WorkspaceFile) { return { ...file, revision: file.revision + "-saved" }; }
 

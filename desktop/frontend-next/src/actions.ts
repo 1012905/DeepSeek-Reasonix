@@ -238,6 +238,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.contact", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.capture", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "side.collapse", kind: "view", target: "none", proof: "interaction" },
   { id: "side.toggle", kind: "view", target: "none", proof: "interaction" },
   { id: "side.quote", kind: "view", target: "none", proof: "interaction" },
   { id: "side.unquote", kind: "view", target: "none", proof: "interaction" },

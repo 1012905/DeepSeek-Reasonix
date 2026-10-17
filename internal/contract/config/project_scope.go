@@ -25,6 +25,7 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
+	limits         agentLimits
 	maxSideSession int
 	goalAutoRetry  int
 	subagentClaims string
@@ -44,7 +45,7 @@ type heldScope struct {
 	// turnNarration is the user's [agent] turn_narration. It adds output tokens
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
-	peers         bool
+	peers         PeersConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
 	// webSearchBackends and searxngURL decide where the user's queries go, so
@@ -75,6 +76,7 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
+		limits:          holdAgentLimits(c),
 		maxSideSession:  c.Agent.MaxSideSessions,
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
@@ -89,7 +91,7 @@ func holdUserScope(c *Config) heldScope {
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
-		peers:           c.Peers.Enabled,
+		peers:           clonePeers(c.Peers),
 		mcpResources:    c.Tools.MCPResources,
 
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
@@ -184,10 +186,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	}
 	// Messages between sessions put other sessions' text in front of this one's
 	// model, so enabling them is the user's alone.
-	if c.Peers.Enabled != h.peers {
-		c.ignoreProject("peers.enabled", fmt.Sprintf("%t", c.Peers.Enabled), ProjectUserOnly)
-		c.Peers.Enabled = h.peers
-	}
+	h.narrowPeers(c)
 	// Letting the model read what a server publishes widens what a third party
 	// can put in front of it, so a cloned repo must not turn it on.
 	if c.Tools.MCPResources != h.mcpResources {
@@ -205,6 +204,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.max_side_sessions", fmt.Sprint(c.Agent.MaxSideSessions), ProjectUserOnly)
 		c.Agent.MaxSideSessions = h.maxSideSession
 	}
+	h.narrowAgentLimits(c)
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
 		c.Agent.PlanApproval = h.planApproval

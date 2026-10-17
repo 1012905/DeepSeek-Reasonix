@@ -2,6 +2,7 @@
 // and inside the conversation's own column — never over what sits beside or
 // above it, whether the file panel is open or not and at any width.
 import { chromium } from "playwright";
+import { mkdir } from "node:fs/promises";
 
 const PAGE = process.env.PERF_URL ?? "http://localhost:4399/perf.html?pref=zh&ws=2&sess=6&turns=3";
 const fails = [];
@@ -12,13 +13,14 @@ const check = (name, ok, detail = "") => {
 const shotDir = process.env.SHOTS;
 const box = (el) => (el ? (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(el.getBoundingClientRect()) : null);
 
-const browser = await chromium.launch();
+if (shotDir) await mkdir(shotDir, { recursive: true });
+const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL });
 for (const scheme of ["light", "dark"]) {
-  for (const [width, files] of [[1400, false], [1400, true], [760, false], [760, true]]) {
-    const label = `${scheme} ${width}px${files ? " with the file panel" : ""}`;
-    const page = await browser.newPage({ viewport: { width, height: 800 }, locale: "zh-CN", colorScheme: scheme });
+  for (const [width, files, height = 800, zoom = 1] of [[1400, false], [1400, true], [760, false], [760, true], [390, false, 700], [900, false, 480], [760, false, 800, 1.3]]) {
+    const label = `${scheme} ${width}x${height} zoom ${zoom}${files ? " with the file panel" : ""}`;
+    const page = await browser.newPage({ viewport: { width, height }, locale: "zh-CN", colorScheme: scheme });
     page.on("pageerror", (e) => fails.push("页面异常: " + e.message));
-    await page.goto(PAGE, { waitUntil: "networkidle" });
+    await page.goto(`${PAGE}&zoom=${zoom}`, { waitUntil: "networkidle" });
     await page.waitForSelector(".compose");
     if (files) {
       await page.locator('.navbtn[aria-label="文件"]').first().click();
@@ -41,7 +43,34 @@ for (const scheme of ["light", "dark"]) {
     check(`${label}: it stays inside the window`, p.left >= 0 && p.right <= r.vw && p.top >= 0 && p.bottom <= r.vh);
     check(`${label}: it does not cover the file panel`, r.beside.every((b) => p.right <= b.left || p.left >= b.right || p.bottom <= b.top || p.top >= b.bottom), files ? `${r.beside.length} file panel parts` : "no file panel");
     check(`${label}: it opens above the button that asked`, p.bottom <= r.button.top && p.left <= r.button.left + 1, `button ${Math.round(r.button.left)}`);
-    if (shotDir && !(width === 760 && files)) await page.screenshot({ path: `${shotDir}/${scheme}-${width}${files ? "-files" : ""}.png` });
+    const draft = page.locator('[data-action-change="side.draft"]');
+    await draft.fill("解释这个函数如何处理错误。".repeat(50));
+    await page.locator('[data-action="side.send"]').click();
+    await page.locator('.sideturn[data-role="side"]').waitFor();
+    await draft.fill("keep this draft");
+    const collapse = page.locator('[data-action="side.collapse"]');
+    await collapse.click();
+    const hidden = await draft.isHidden();
+    const compact = await page.locator(".sidepanel").evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      const button = el.querySelector('[data-action="side.collapse"]');
+      const c = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(c.x + c.width / 2, c.y + c.height / 2);
+      const flow = el.closest(".pane").querySelector('[data-pane="flow"]').getBoundingClientRect();
+      return { height: b.height, hit: hit === button || button.contains(hit), readable: b.top - flow.top, flowHeight: flow.height };
+    });
+    check(`${label}: collapse leaves a reachable header and hides inputs`, hidden && compact.hit && compact.height < 72, JSON.stringify(compact));
+    check(`${label}: collapse exposes the transcript`, compact.readable > 100 && compact.readable > compact.flowHeight / 2, JSON.stringify(compact));
+    await collapse.focus();
+    await page.keyboard.press("Tab");
+    check(`${label}: Tab skips the collapsed controls`, await page.locator('[data-action="side.close"]').evaluate((el) => el === document.activeElement));
+    if (shotDir && [1400, 390].includes(width) && !files) await page.screenshot({ path: `${shotDir}/${scheme}-${width}.png` });
+    await collapse.click();
+    await draft.waitFor({ state: "visible" });
+    check(`${label}: expansion keeps the draft`, await draft.inputValue() === "keep this draft");
+    await page.keyboard.press("Escape");
+    await page.locator(".sidepanel").waitFor({ state: "detached" });
+    check(`${label}: Escape returns focus`, await page.locator('[data-action="side.toggle"]').evaluate((el) => el === document.activeElement));
     await page.close();
   }
 }

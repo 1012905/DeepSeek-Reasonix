@@ -92,6 +92,10 @@ export interface WorkspaceFile {
   path: string;
   content: string;
   revision: string;
+  // The granted folder the file was read from; absent for the workspace itself.
+  root?: string;
+  // True for a file read from a granted folder: it can be read here, never saved.
+  readOnly?: boolean;
 }
 
 export interface WorkspaceEntry {
