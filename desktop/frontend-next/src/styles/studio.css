@@ -2552,7 +2552,7 @@ body { font-size: 14px; line-height: 1.75; }
 .studio-policy-boundary small { color: var(--ghost); font: 500 9px/1.4 var(--ui); }
 .studio-policy-boundary:hover { color: var(--text); background: var(--overlay); }
 .studio-policy-note { margin: 5px 0 0; padding: 9px 7px; border-top: 1px solid var(--border); color: var(--ghost); font: 500 9px/1.55 var(--ui); }
-.studio-control-chevron { margin-left: 1px; color: var(--ghost); font-size: 10px; }
+.studio-control-chevron { margin-left: 1px; color: var(--ghost); }
 
 :root[data-theme="light"] .studio-wallet,
 :root[data-theme="light"] .studio-workspace-kind { color: var(--muted); }

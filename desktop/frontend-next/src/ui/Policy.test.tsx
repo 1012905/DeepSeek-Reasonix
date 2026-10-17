@@ -32,6 +32,13 @@ describe("execution permission control", () => {
     expect(container.querySelector(".polwarn svg")).not.toBeNull();
   });
 
+  it("draws its chevron with the icon every other picker uses", () => {
+    const { container } = draw("yolo");
+    const chevron = container.querySelector(".studio-control-chevron");
+    expect(chevron?.tagName.toLowerCase()).toBe("svg");
+    expect(chevron?.querySelector("path")?.getAttribute("d")).toBe("m6 9 6 6 6-6");
+  });
+
   it("contains permission choices only", async () => {
     draw();
     await userEvent.click(screen.getByRole("button", { name: "执行权限：询问" }));
