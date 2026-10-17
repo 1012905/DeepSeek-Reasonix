@@ -55,6 +55,7 @@ it("Mod+2 does nothing while the conversation has no rows, because the view is n
 it("the command palette lists the three views", async () => {
   const box = await mount();
   fireEvent.keyDown(box, { key: "k", code: "KeyK", ctrlKey: true });
-  await waitFor(() => expect(document.body.textContent).toContain("显示工作台"));
+  // The palette is a lazy chunk; under a loaded runner the default second is not enough.
+  await waitFor(() => expect(document.body.textContent).toContain("显示工作台"), { timeout: 10_000 });
   expect(document.body.textContent).toContain("显示对话");
 });

@@ -169,7 +169,6 @@ export function AskCard({ item, onAnswer, onEngage }: Props) {
     <div className="call" data-k="ask" data-prompt={sealed ? "settled" : "pending"}>
       <div className="g">
         <Sym glyph="?" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

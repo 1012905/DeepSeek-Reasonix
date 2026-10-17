@@ -1549,3 +1549,14 @@ what exists.
 
 - An allowed guardian review at low or unknown risk, and a remembered fact, are Lines (`LineRow`): glyph, title, mono subject, meta and, when there is one, the action, on one row over a hairline, with the rationale or description as a muted line under it.
 - A refusal, or an allow at medium risk or above, stays a card: it is something to read.
+
+## Transcript Line
+
+- A tool call is a Line: a bare status glyph, the title, the mono subject and the meta on one row over a `--hair` bottom border, with no box, icon square or vertical track. Expanding it opens the detail in place.
+- A call brought to the end of the transcript is the same Line drawn open, under a small caption that says it was brought. It sits in `.activity-body` with the indent and left rule removed, so every rule that styles a row in the Execution group styles it.
+- The Line rules are keyed `.flow .activity-body .call[data-call] > .c` so they outrank the card shell in both themes; the card shell's surface background is for cards, never rows.
+
+## Remembering a choice
+
+- A prompt that can answer "this and every later one of its kind" draws those choices through one component (`RememberChoice`), only for the kinds the kernel says it will honour, as the quieter buttons beside the primary one.
+- A note under the footer (`RememberWhere`) says where each is kept: for the session only and never on disk, or as a permission rule in the user config that Settings can undo.

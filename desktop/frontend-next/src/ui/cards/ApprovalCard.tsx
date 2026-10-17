@@ -4,6 +4,7 @@ import { t } from "../../i18n";
 import type { ApprovalVerdict } from "../../port/port";
 import { useState } from "react";
 import { decisionSource } from "../source";
+import { RememberChoice, RememberWhere, type Remembered } from "./RememberChoice";
 import { useViewer } from "../../state/viewer";
 
 // The Tool name the kernel puts on a plan gate; its own comment says frontends
@@ -87,6 +88,7 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
   const [submitting, setSubmitting] = useState<ApprovalVerdict | "">("");
   const [confirmFullAccess, setConfirmFullAccess] = useState(false);
   const [switchingFullAccess, setSwitchingFullAccess] = useState(false);
+  const remembering: Remembered[] = [...(item.a.allowsSession ? ["session" as const] : []), ...(item.a.allowsPersist ? ["always" as const] : [])];
   const explicit = !!item.a.reasonCode || item.a.reason?.toLowerCase().includes("nested or indirect shell execution");
   const decide = async (verdict: ApprovalVerdict) => {
     if (submitting) return;
@@ -113,7 +115,6 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
     <div className="call" data-k="write" data-approval={sealed ? item.verdict : "pending"} data-prompt={sealed ? "settled" : "pending"}>
       <div className="g">
         <Sym glyph="⊛" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">
@@ -142,18 +143,8 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
                 {/* 后两颗比「这一次」安静一档：三颗同样大小挨在一起时，读者分不出
                     哪颗只管这一次、哪颗管到会话结束、哪颗写进配置。内核会说这次
                     认哪几种授权，不认的就不画 —— 画出来就是承诺它做不到的事。 */}
-                {item.a.allowsSession && (
-                  <button className="btn" data-weak="" data-action="decision.tool" data-target={item.a.id} data-value="session"
-                    disabled={!!submitting} onClick={() => void decide("session")}>
-                    {t("本会话允许此类操作，不再询问")}
-                  </button>
-                )}
-                {item.a.allowsPersist && (
-                  <button className="btn" data-weak="" data-action="decision.tool" data-target={item.a.id} data-value="always"
-                    disabled={!!submitting} onClick={() => void decide("always")}>
-                    {t("始终允许此类操作，不再询问")}
-                  </button>
-                )}
+                <RememberChoice options={remembering} target={item.a.id} busy={submitting}
+                  disabled={!!submitting} onChoose={(choice) => void decide(choice)} />
                 <button className="btn" data-deny="" data-action="decision.tool" data-target={item.a.id} data-value="deny"
                   disabled={!!submitting} onClick={() => void decide("deny")}>
                   {t("拒绝")}
@@ -166,6 +157,7 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
                 )}
               </div>
             )}
+            {!sealed && <RememberWhere options={remembering} target={item.a.id} />}
             {!sealed && confirmFullAccess && (
               <div className="apv-yolo-confirm" role="alertdialog" aria-label={t("确认切换全部放行")}>
                 <div><b>{t("全部放行会跳过后续工具确认")}</b><span>{t("拒绝规则与沙盒边界仍然生效。仅在完全信任当前工作区时使用。")}</span></div>
@@ -233,7 +225,6 @@ function PlanGate({ item, onPlan }: { item: Props["item"]; onPlan: Props["onPlan
     <div className="call" data-k="ask" data-prompt={sealed ? "settled" : "pending"}>
       <div className="g">
         <Sym glyph="?" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">

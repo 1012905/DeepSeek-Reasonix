@@ -9,6 +9,7 @@ import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { ICON, NAV, SECTION_NAME } from "./prefsnav";
 import { Group, SCOPE_SAID } from "./Group";
+import { PlanApproval } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -579,6 +580,12 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   ))}
                 </div>
                 <p className="note">{approvalNote(status?.toolApprovalMode)}</p>
+              </Group>
+              <Group id="plan-approval"
+                title={t("计划批准")}
+                hint={t("计划模式提交计划后，默认等你点批准才开始执行。长时间无人值守的任务可以改成自动批准。")}
+              >
+                <PlanApproval port={port} />
               </Group>
               <Group id="rules"
                 title={t("明确的规则")}

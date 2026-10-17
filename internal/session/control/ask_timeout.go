@@ -225,7 +225,7 @@ func askTimeoutArgItems(prior []string) []SlashItem {
 		return nil
 	}
 	return []SlashItem{
-		{Label: "off", Insert: "off", Hint: "wait for an answer as long as it takes"},
-		{Label: "300", Insert: "300", Hint: "skip after five minutes"},
+		{Label: "off", Insert: "off", Hint: i18n.M.ArgAskTimeoutOff},
+		{Label: "300", Insert: "300", Hint: i18n.M.ArgAskTimeout300},
 	}
 }
