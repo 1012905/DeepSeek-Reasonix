@@ -81,6 +81,7 @@ type toolStage struct {
 	lsp         *lsp.Manager
 	browser     *browser.Session
 	peerLink    *tool.PeerLink
+	peerTools   func(enabled, dispatch bool)
 	maxSteps    int
 	policy      permission.Policy
 	gate        *control.SharedHeadlessGate
@@ -322,7 +323,7 @@ func (b *builder) wireTools() error {
 	// The full inventory registers for use_capability; the provider-visible surface narrows later.
 	addBuiltins(t.reg, cfg.Tools.Enabled, env.writeRoots, env.bash, env.bashTimeout, env.search, b.stderr, root, b.proxy, env.forbidReadRoots, env.readRoots, env.readPaths, env.sessionGuard, env.managedConfig, opts.FileOverlay, opts.TerminalRunner, env.sessionTemp, b.fileWriteReceipt)
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
-	t.peerLink = addPeerTools(t.reg, cfg)
+	t.peerLink, t.peerTools = peerTools(t.reg, cfg)
 	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
 	addWebSearch(t.reg, cfg, b.proxy, b.sink)
@@ -544,7 +545,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		ModelEntry:                     entry,
 		SystemPrompt:                   b.prompt.prompt,
 		SessionDir:                     b.session.dir,
-		Peers:                          peersOptions(cfg, t.peerLink),
+		Peers:                          peersOptions(cfg, t.peerLink, t.peerTools),
 		Host:                           t.host,
 		Commands:                       t.cmds,
 		Skills:                         b.prompt.skills,
