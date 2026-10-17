@@ -55,6 +55,8 @@ const (
 	NoticeCodeProjectMCPAwaitingApproval, NoticeCodeProjectMCPChanged = "project_mcp_awaiting_approval", "project_mcp_changed"
 	// MCP tools whose definitions are new or changed since approval, withheld from the model; Detail lists them.
 	NoticeCodeMCPToolsHeld = "mcp_tools_held"
+	// Definitions of a server the user follows that changed and were taken without asking; Detail lists them.
+	NoticeCodeMCPToolsFollowed = "mcp_tools_followed"
 	// A conversation opened from a 1.x log went on in a new session of its own.
 	NoticeCodeSessionContinuedFrom1x = "session_continued_from_1x"
 	// The user config names a default approval mode this build does not know; it loads as ask.
