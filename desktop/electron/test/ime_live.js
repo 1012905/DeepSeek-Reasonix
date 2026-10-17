@@ -103,7 +103,6 @@ async function main() {
   await wait(500);
   await keepsComposing("the agent clicking and typing in it");
 
-  views.settle = (entry) => { process.stdout.write(`  [debug] +${Date.now() - t0}ms settle called attached=${entry.attached} ${new Error().stack.split("\n").slice(2, 5).join(" <- ").replace(/\s+/g, " ")}\n`); realSettle(entry); };
   await compose("guaqi");
   // Not awaited: the protocol answers a navigation only when the page does.
   void send({ method: "Page.navigate", params: { url: page.url + "/hang" } }, session);
