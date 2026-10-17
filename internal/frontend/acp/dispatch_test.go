@@ -634,7 +634,7 @@ func TestUpdateSinkApprovalUsesTurnContext(t *testing.T) {
 }
 
 func TestApprovalOptionsFreshDynamicToolOnlyAllowOnceOrReject(t *testing.T) {
-	options := approvalOptions("extension__wipe", "extension/wipe", true)
+	options := approvalOptions("extension__wipe", "extension/wipe", true, false)
 	if len(options) != 2 || options[0].Kind != OptAllowOnce || options[1].Kind != OptRejectOnce {
 		t.Fatalf("fresh dynamic-tool options = %+v, want allow-once/reject", options)
 	}
@@ -647,7 +647,7 @@ func TestApprovalOptionsFreshDynamicToolOnlyAllowOnceOrReject(t *testing.T) {
 
 func TestDynamicBashApprovalOptionsUseExactSessionLiteral(t *testing.T) {
 	const command = "git status $(touch /tmp/reasonix-dynamic-approval)"
-	options := approvalOptions("bash", command, false)
+	options := approvalOptions("bash", command, false, false)
 	if len(options) != 3 || options[1].Kind != OptAllowAlways {
 		t.Fatalf("dynamic Bash options = %+v, want ordinary options with session grant", options)
 	}

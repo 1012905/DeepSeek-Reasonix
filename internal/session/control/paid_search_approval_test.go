@@ -199,3 +199,19 @@ func TestPaidFetchAlwaysAllowWritesTheFetchSetting(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// A frontend that reconnects while the card is open is shown the same card: the
+// host's statement of what an answer may be saved as is part of it.
+func TestReplayedPaidSearchCardStillOffersToSaveTheAnswer(t *testing.T) {
+	c, requests := paidSearchController(t)
+	done := askPaid(c, "deepseek_api", "golang context cancel")
+	live := nextApproval(t, requests)
+	c.ReplayPendingPromptsWith(func() event.Sink { return c.sink })
+	replayed := nextApproval(t, requests)
+	if replayed.AllowsPersist != live.AllowsPersist || replayed.AllowsSession != live.AllowsSession {
+		t.Fatalf("replay says session=%v persist=%v, the live card said session=%v persist=%v",
+			replayed.AllowsSession, replayed.AllowsPersist, live.AllowsSession, live.AllowsPersist)
+	}
+	c.Approve(live.ID, false, false, false)
+	<-done
+}

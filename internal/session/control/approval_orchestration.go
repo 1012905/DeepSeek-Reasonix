@@ -434,6 +434,9 @@ func (c *Controller) ReplayPendingPromptsWith(sinkFactory func() event.Sink) {
 
 func (c *Controller) replayPendingPromptsTo(sink event.Sink) bool {
 	approvals, asks := c.approval.snapshotPrompts()
+	for i := range approvals {
+		approvals[i].AllowsPersist = c.offersPersist(approvals[i].Tool, approvals[i].AllowsPersist)
+	}
 	c.emitPendingPrompts(sink, approvals, asks)
 	return len(approvals) == 0
 }
