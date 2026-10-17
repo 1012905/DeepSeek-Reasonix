@@ -261,7 +261,7 @@ func (c *Controller) HeldPeerMessages() []PeerHeld {
 	out := make([]PeerHeld, 0, len(p.order))
 	for _, id := range p.order {
 		m := p.held[id]
-		out = append(out, PeerHeld{ID: m.ID, FromSession: m.From.SessionID, FromTitle: m.From.Title, FromProject: m.From.Project, SentAt: m.SentAt, Body: m.Body})
+		out = append(out, PeerHeld{ID: m.ID, FromSession: m.From.SessionID, FromTitle: peerAttribute(m.From.Title), FromProject: peerAttribute(m.From.Project), SentAt: m.SentAt, Body: m.Body})
 	}
 	return out
 }
