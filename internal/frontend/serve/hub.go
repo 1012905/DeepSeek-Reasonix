@@ -74,6 +74,7 @@ type Hub struct {
 	// stance is the Ask/Auto/YOLO posture every pane this hub opens starts in.
 	stance  *approvalStance
 	changes *Broadcaster
+	muxes   *eventMuxes
 }
 
 // approvalStance is the Ask/Auto/YOLO posture the frontend is in, held by the
@@ -231,6 +232,7 @@ func NewHub(opts HubOptions) *Hub {
 		wallets:  &billing.Store{},
 		stance:   &approvalStance{},
 		changes:  NewBroadcaster(),
+		muxes:    newEventMuxes(),
 	}
 }
 
@@ -441,6 +443,7 @@ func (h *Hub) Close(id string) error {
 	h.order = removeString(h.order, id)
 	h.mu.Unlock()
 	defer h.treeChanged()
+	defer h.muxes.paneClosed(id)
 
 	if rt.Local() {
 		rt.Server.bindMu.Lock()
@@ -578,6 +581,7 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("POST /runtimes", h.openRuntime)
 	mux.HandleFunc("POST /runtimes/{id}/close", h.closeRuntime)
 	h.registerTreeRoutes(mux)
+	h.registerMuxRoutes(mux)
 	h.registerStudioVersionRoutes(mux)
 	mux.HandleFunc("GET /device", notADevice)
 	mux.HandleFunc("POST /device/leave", notADevice)
