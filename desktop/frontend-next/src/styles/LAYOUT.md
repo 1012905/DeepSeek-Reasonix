@@ -102,6 +102,8 @@ rules are written in.
 - The separator between crumbs is a written character, not the 1px hairline
   `.sep`. Sharing that name puts the glyph in a 1px-wide box with a background,
   and the strokes spill out of it.
+- Project and checkout context shrink together inside `.crumb-context`; the
+  conversation title keeps its four-em floor even when multiple labels are visible.
 - The desktop sidebar's divider owns collapse, expansion and width adjustment.
   - Its grip remains visible when collapsed; the separator supports Enter/Space for toggling, arrow keys for sizing,
     and Home or a double click for restoring the default width. The open width survives collapse and reload.
@@ -1607,7 +1609,8 @@ what exists.
 
 ## Brand lockup
 
-- The mark at the top of the rail is one row: the wordmark and a compact filled uppercase badge ("STUDIO" by CSS; the text and the aria label are unchanged), vertically centred on each other, gap 8px. The badge is `--text` on `--page` inverted, so it is dark on light and light on dark and never moves with the theme.
+- The mark at the top of the rail is one row: the wordmark and a compact outlined uppercase badge ("STUDIO" by CSS; the text and the aria label are unchanged), vertically centred on each other, gap 8px.
+- The badge has a transparent fill, a 1px `--hair` border and `--muted` text, so it reads as a label and not as a notice; its outer size is unchanged.
 - The badge is hidden at 760px and below. The wordmark box is cropped to its drawn width so the badge sits next to the letters, not next to the asset's padding.
 
 ## Side question

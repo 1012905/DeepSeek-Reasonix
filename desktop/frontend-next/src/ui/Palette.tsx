@@ -71,7 +71,7 @@ export function Palette({ open, onClose, commands, tree, onOpenSession }: Props)
           label: title,
           icon: "clock",
           note: [workspace.name, workspace.host].filter(Boolean).join(" · "),
-          run: () => onOpenSession(session.path, workspace),
+          run: () => onOpenSession(session.path, { ...workspace, root: session.workspaceRoot || workspace.root }),
         });
       }
     }

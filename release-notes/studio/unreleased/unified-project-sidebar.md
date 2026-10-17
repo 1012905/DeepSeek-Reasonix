@@ -1,0 +1,4 @@
+- 本机与 SSH 项目统一展示；“打开项目”移至标题旁的加号，支持统一折叠与展开。提交 da051abb2。
+- 会话采用中性选中背景，左侧置顶、右侧归档，删除保留在菜单；修复环境切换、重复点击及焦点问题。提交 da051abb2。
+- Local and SSH projects share one list. Open Project moves to the heading's plus button, alongside collapse/expand all. Commit da051abb2.
+- Neutral session selection adds leading Pin and trailing Archive; Delete stays in the menu. Environment routing, repeated clicks, focus and stream budgets are fixed. Commit da051abb2.

@@ -2,6 +2,7 @@ package serve
 
 import (
 	"encoding/json"
+	"fmt"
 	"reasonix/internal/contract/pricing"
 	"sync"
 	"time"
@@ -193,7 +194,7 @@ func (b *Broadcaster) Subscribe() (<-chan Frame, func()) {
 // before Emit can see the subscriber, so the resume has no seam. A gap the log
 // cannot close is announced instead: the first sequence the client can trust.
 func (b *Broadcaster) SubscribeFrom(after int64) (<-chan Frame, func()) {
-	return b.subscribeFrom(after, false)
+	return b.subscribeFrom(after, false, false)
 }
 
 // SubscribeInitialNotices attaches a window without a resume cursor. Only the
@@ -201,10 +202,25 @@ func (b *Broadcaster) SubscribeFrom(after int64) (<-chan Frame, func()) {
 // They are unnumbered copies: skipped non-notice history must not look like a
 // gap that prompts the client to replay it.
 func (b *Broadcaster) SubscribeInitialNotices() (<-chan Frame, func()) {
-	return b.subscribeFrom(0, true)
+	return b.subscribeFrom(0, true, false)
 }
 
-func (b *Broadcaster) subscribeFrom(after int64, initialNotices bool) (<-chan Frame, func()) {
+// SubscribeAttached is SubscribeInitialNotices that also states where it
+// attached, as an unnumbered watermark ahead of every later frame. A client with
+// that number resumes from it, so a connection lost before its first numbered
+// frame costs nothing the log cannot return.
+func (b *Broadcaster) SubscribeAttached() (<-chan Frame, func()) {
+	return b.subscribeFrom(0, true, true)
+}
+
+// SubscribeResume resumes a window that stated its own position, so a cursor of
+// zero means it holds no numbered frame and is owed the whole log. SubscribeFrom
+// keeps zero as "no cursor", which the per-pane stream relies on.
+func (b *Broadcaster) SubscribeResume(after int64) (<-chan Frame, func()) {
+	return b.subscribeFrom(after, false, true)
+}
+
+func (b *Broadcaster) subscribeFrom(after int64, initialNotices, attached bool) (<-chan Frame, func()) {
 	s := newSubscriber()
 	b.mu.Lock()
 	if initialNotices && !b.initialNoticesReplayed {
@@ -223,7 +239,7 @@ func (b *Broadcaster) subscribeFrom(after int64, initialNotices bool) (<-chan Fr
 				s.push(Frame{Data: data}, false)
 			}
 		}
-	} else if after > 0 && after < b.seq {
+	} else if !initialNotices && (after > 0 || attached) && after < b.seq {
 		missed, complete := b.replay.since(after)
 		if gap, from := b.gapFrame(missed); !complete && gap != nil {
 			s.push(Frame{Seq: from, Data: gap}, false)
@@ -231,6 +247,9 @@ func (b *Broadcaster) subscribeFrom(after int64, initialNotices bool) (<-chan Fr
 		for _, f := range missed {
 			s.push(Frame{Seq: f.seq, Data: f.data}, false)
 		}
+	}
+	if attached {
+		s.push(Frame{Data: fmt.Appendf(nil, `{"kind":"stream_watermark","seq":%d}`, b.seq)}, false)
 	}
 	b.subs[s] = struct{}{}
 	b.mu.Unlock()

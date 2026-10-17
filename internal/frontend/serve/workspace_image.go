@@ -38,7 +38,7 @@ func (s *Server) workspaceImage(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "workspace.file_unreadable", "not an image this view shows", nil)
 		return
 	}
-	base, ok := s.imageRoot(w, r.URL.Query().Get("root"))
+	base, ok := s.readRoot(w, r.URL.Query().Get("root"))
 	if !ok {
 		return
 	}
@@ -66,20 +66,21 @@ func (s *Server) workspaceImage(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, io.LimitReader(file, maxWorkspaceImage))
 }
 
-// imageRoot is the folder a picture is read from: the workspace, or a folder the
-// user granted this workspace, named by its own path. A grant lives in the user's
-// home, so a checkout cannot add one to itself; anything not on that list is refused.
-func (s *Server) imageRoot(w http.ResponseWriter, named string) (string, bool) {
+// readRoot is the folder a read comes from: the workspace, or a folder the user
+// granted this workspace, named by its own path. A grant lives in the user's
+// home, so a checkout cannot add one to itself; a folder that is not on that
+// list, or no longer passes the vetting a grant had to pass, is refused.
+func (s *Server) readRoot(w http.ResponseWriter, named string) (string, bool) {
 	primary := s.ctl().WorkspaceRoot()
 	if strings.TrimSpace(named) == "" || filepath.Clean(named) == filepath.Clean(primary) {
 		return primary, true
 	}
-	roots, err := s.ctl().WorkspaceRoots()
+	extras, err := s.ctl().ReadableExtraRoots()
 	if err != nil {
 		refuse(w, http.StatusInternalServerError, "workspace.file_failed", err.Error(), nil)
 		return "", false
 	}
-	for _, extra := range roots.Extra {
+	for _, extra := range extras {
 		if filepath.Clean(extra) == filepath.Clean(named) {
 			return extra, true
 		}

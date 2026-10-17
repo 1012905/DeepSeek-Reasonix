@@ -28,7 +28,11 @@ type samplingRequest struct {
 }
 
 func (a *Agent) streamProviderRequest(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
-	return a.svc.prov.Stream(ctx, req)
+	ch, err := a.svc.prov.Stream(ctx, req)
+	if err == nil {
+		a.window().rememberSummaryPrefix(req)
+	}
+	return ch, err
 }
 
 func (a *Agent) handleSamplingError(

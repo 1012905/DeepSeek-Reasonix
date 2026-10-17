@@ -1,4 +1,4 @@
-// The product mark in the sidebar's top-left is one row: the wordmark and a bordered uppercase badge, vertically centred on
+// The product mark in the sidebar's top-left is one row: the wordmark and an outlined uppercase badge, vertically centred on
 // each other. Where the badge was hidden before it stays hidden.
 import { chromium } from "playwright";
 
@@ -30,13 +30,13 @@ for (const scheme of ["light", "dark"]) {
         top: r.top,
         dy: Math.abs(logo.top + logo.height / 2 - (r.top + r.height / 2)),
         after: r.left >= logo.right - 1,
-        fill: cs.backgroundColor, ink: cs.color, radius: cs.borderTopLeftRadius, upper: cs.textTransform, text: sub.textContent,
+        fill: cs.backgroundColor, ink: cs.color, border: cs.borderTopWidth, radius: cs.borderTopLeftRadius, upper: cs.textTransform, text: sub.textContent,
       };
     });
     const tag = `${scheme} ${width}px`;
     if (width >= 760) {
       check(`${tag}: the badge is on the wordmark's row, vertically centred on it`, m.shown && m.dy <= 1.5 && m.after, JSON.stringify(m));
-      check(`${tag}: it is a filled uppercase badge in both themes and the text is untouched`, m.fill !== "rgba(0, 0, 0, 0)" && m.fill !== m.ink && m.radius !== "0px" && m.upper === "uppercase" && m.text === "studio", JSON.stringify(m));
+      check(`${tag}: it is an outlined uppercase badge in both themes and the text is untouched`, m.fill === "rgba(0, 0, 0, 0)" && m.border !== "0px" && m.radius !== "0px" && m.upper === "uppercase" && m.text === "studio", JSON.stringify(m));
       if (!seen) seen = { left: m.left, top: m.top };
       check(`${tag}: it sits in the same place whichever theme is on`, Math.abs(m.left - seen.left) <= 0.5 && Math.abs(m.top - seen.top) <= 0.5, `${m.left},${m.top} vs ${seen.left},${seen.top}`);
     } else {

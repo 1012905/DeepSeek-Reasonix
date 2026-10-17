@@ -9,9 +9,10 @@ import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, ProviderSetup } from "../port/port";
 import type { HubPort, RuntimeView } from "../port/hub";
+import { workspaceContains } from "../port/hub";
 import { Chrome } from "./Chrome";
 import { RailToggle } from "./RailToggle";
-import { useLaunchHealth } from "./launchhealth";
+import { useFirstRunRead, useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
 import { useTreeWindow, type TreePaging } from "./treewindow";
 import { useNavRail } from "./navrail";
@@ -44,9 +45,11 @@ import { usePaint } from "./paint";
 import { useZoomKeys } from "./zoomkeys";
 import { rememberActivePane, savedActivePane } from "./activepane";
 import { Sidebar } from "./Sidebar";
+import { PeerThreadsProvider } from "./peerthreads";
 import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
+import { paneReader } from "../state/paneread";
 import { onShowsSessionTabsChange, showsSessionTabs } from "../state/prefs";
 import { useLiveGrace } from "./useLiveGrace";
 import { isUnread, useViewed, useUnreadBadge } from "./unread";
@@ -199,8 +202,9 @@ export function App({ hub }: { hub: HubPort }) {
 
   // Panes and tree move together: opening a session marks its row live, closing
   // one hands the row back.
+  const readPanes = useMemo(() => paneReader(() => hub.runtimes()), [hub]);
   const reloadPanes = useCallback(async () => {
-    const list = await hub.runtimes().catch(() => [] as RuntimeView[]);
+    const list = await readPanes(); if (!list) return;
     // Setup and the welcome are read through a pane's port. With none open
     // there is nothing to ask, and waiting on them would leave the window
     // blank; the next pane to open reads both again.
@@ -213,7 +217,7 @@ export function App({ hub }: { hub: HubPort }) {
     setActive((cur) => (list.some((rt) => rt.id === cur) ? cur : (list[0]?.id ?? "")));
     await reloadTree();
     void reloadRemoteTrees();
-  }, [hub, reloadTree, reloadRemoteTrees]);
+  }, [hub, readPanes, reloadTree, reloadRemoteTrees]);
   const refreshPanes = useMemo(() => singleFlight(reloadPanes), [reloadPanes]);
 
   useEffect(() => {
@@ -283,17 +287,7 @@ export function App({ hub }: { hub: HubPort }) {
   useEffect(() => startUpdateWatch(machinePort), [machinePort]);
   useFeedbackUnread(machineRt ? machinePort : null, machineRt?.id ?? "", feedbackUnread, setFeedbackUnread, feedback !== null);
 
-  useEffect(() => {
-    if (!activePort) return;
-    let alive = true;
-    activePort.providerSetup().then((v) => alive && setSetup(v)).catch(() => alive && setSetup(null));
-    // A machine that cannot answer has met the app before as far as we care:
-    // the sequence must never be what stands between someone and their session.
-    activePort.welcomeSeen().then((v) => alive && setWelcomed(v)).catch(() => alive && setWelcomed(true));
-    return () => {
-      alive = false;
-    };
-  }, [activePort]);
+  useFirstRunRead(activePort, setSetup, setWelcomed);
 
   // A kernel that does not carry sign-in refuses this with a code and a
   // sentence. Dropping it left the panel saying "checking…" for the rest of
@@ -379,6 +373,7 @@ export function App({ hub }: { hub: HubPort }) {
     [hub, reloadPanes],
   );
 
+  const openPeerSession = useCallback((path: string) => void openPane({ sessionPath: path }).catch(fail), [openPane, fail]);
   const adder = useAddWorkspace(hub, reloadTree, fail, (workspace) => openPane({ root: workspace.root }));
   // 每个窗口都有一个根 —— 没选过项目时那是它碰巧启动的地方。两者读起来一样，
   // 于是「从哪加项目」这句问题永远问不出口；只有内核说的 remembered 分得开。
@@ -451,7 +446,7 @@ export function App({ hub }: { hub: HubPort }) {
       for (const ws of rt.host ? viewed.remote[rt.host] ?? [] : tree) {
         for (const session of ws.sessions) {
           // An unwritten one has only a file name; the numbered fallback reads better.
-          const held = rt.host ? ws.root === rt.root && session.path === rt.sessionPath : session.runtimeId === rt.id;
+          const held = rt.host ? workspaceContains(ws, rt.root) && session.path === rt.sessionPath : session.runtimeId === rt.id;
           if (held && (session.title || session.turns)) return session.title || session.name;
         }
       }
@@ -479,7 +474,7 @@ export function App({ hub }: { hub: HubPort }) {
   const activePaneShown = !!activeRuntime && panePorts.has(activeRuntime.id);
   const errorBar = useMemo(() => (error ? <ErrorBar text={error} onDismiss={() => setError("")} onReport={() => setFeedback("send")} /> : null), [error]);
   const bar = useMemo(() => errorBar ?? <AutoArchiveNotice tree={tree} />, [errorBar, tree]);
-  const activeWorkspace = tree.find((ws) => ws.root === activeRuntime?.root) ?? tree[0];
+  const activeWorkspace = tree.find((ws) => !activeRuntime?.host && workspaceContains(ws, activeRuntime?.root)) ?? tree[0];
   const newSessionRoot = activeWorkspace?.root;
   const startConversation = useNewConversation(active, runtimes, newSessionRoot, openPane, openRemotePane);
 
@@ -547,6 +542,7 @@ export function App({ hub }: { hub: HubPort }) {
   }
 
   return (
+    <PeerThreadsProvider port={activePort} hub={hub} onOpen={openPeerSession}>
     <div
       className="app"
       data-run={report.run}
@@ -783,5 +779,6 @@ export function App({ hub }: { hub: HubPort }) {
       <RailToggle rail={rail} onRail={() => setRail((v) => !v)} />
       <StopHint armed={stopArmed} />
     </div>
+    </PeerThreadsProvider>
   );
 }

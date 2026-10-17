@@ -145,6 +145,22 @@ func ClampZoom(v float64) float64 {
 	return min(max(v, ZoomMin), ZoomMax)
 }
 
+// The interface text size moves type alone, where Zoom moves everything, so its
+// range is narrower: past these ends spacing written in pixels stops keeping up.
+const (
+	TextSizeMin = 0.85
+	TextSizeMax = 1.6
+)
+
+// ClampTextSize holds a scale to TextSizeMin..TextSizeMax; zero stays zero
+// because it means "unset".
+func ClampTextSize(v float64) float64 {
+	if !(v > 0) {
+		return 0
+	}
+	return min(max(v, TextSizeMin), TextSizeMax)
+}
+
 // AppearanceConfig is what the user set for themselves, on top of whichever
 // theme pack is active: how large it all is, what it is set in, and their own
 // picture. A pack ships a palette; these are the reader's own eyes and desk.
@@ -153,6 +169,7 @@ func ClampZoom(v float64) float64 {
 type AppearanceConfig struct {
 	Zoom      float64         `toml:"zoom"`      // whole-interface scale within ZoomMin..ZoomMax; 0 = 1.0
 	ReadSize  float64         `toml:"read_size"` // transcript body size in px; 0 = the stylesheet's
+	TextSize  float64         `toml:"text_size"` // interface text scale within TextSizeMin..TextSizeMax, spacing untouched; 0 = 1.0
 	FontUI    string          `toml:"font_ui"`   // CSS font-family list for the interface
 	FontMono  string          `toml:"font_mono"` // CSS font-family list for code and output
 	Wallpaper WallpaperConfig `toml:"wallpaper"`

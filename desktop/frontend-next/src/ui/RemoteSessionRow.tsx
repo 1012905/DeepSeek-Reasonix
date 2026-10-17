@@ -60,7 +60,7 @@ export function RemoteSessionRow({ host, target, session, held, active, busy, pe
     }}>
     <i className="pip" />
     <SessionPinAction target={target} title={title} pinned={!!session.pinned} enabled={quick} disabled={!!pending || busy} onPin={() => write("pin")} />
-    <span className="sesstitle" title={title}><span>{title}</span>{session.archived && <em className="sessarch">{t("已归档")}</em>}</span>
+    <span className="sesstitle" title={title}><span>{title}</span>{session.isolated && <em className="sessarch" title={session.workspaceRoot}>{t("隔离")}</em>}{session.archived && <em className="sessarch">{t("已归档")}</em>}</span>
     {session.unread && <UnreadDot />}
     <SessionAge at={session.lastActiveAt} />
     {session.legacy && <span className="sesslegacy" title={t("由 Reasonix 1.x 创建：Studio 只读打开，继续对话会另存为新会话")}

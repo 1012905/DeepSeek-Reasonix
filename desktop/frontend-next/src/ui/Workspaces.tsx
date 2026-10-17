@@ -5,6 +5,7 @@ import { onSessionQuickActionsChange, showsSessionQuickActions } from "../state/
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import type { HubPort, RuntimeView, TreeSession, TreeWorkspace } from "../port/hub";
+import { workspaceContains } from "../port/hub";
 import type { Adder } from "./addws";
 import { pinToViewport } from "./place";
 import { useRailQuery } from "./railsearch";
@@ -25,6 +26,7 @@ import { SessionMenu } from "./SessionMenu";
 import { pinnedFirst } from "./pinorder";
 import { Confirm, removeHint, sessionDeleteHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
+import { PeerThreadMark } from "./peerthreads";
 import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
 import { ProjectsHeader } from "./ProjectsHeader";
@@ -182,7 +184,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
       return;
     }
     try {
-      await onOpen({ root: ws.root, sessionPath: session.path });
+      await onOpen({ root: session.workspaceRoot || ws.root, sessionPath: session.path });
     } catch (e) {
       onError(e);
     }
@@ -209,7 +211,10 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
     }
   });
 
-  const panesOf = (root: string) => runtimes.filter((rt) => rt.root === root).map((rt) => rt.id);
+  const panesOf = (root: string) => {
+    const workspace = tree.find((ws) => ws.root === root);
+    return runtimes.filter((rt) => !rt.host && (workspace ? workspaceContains(workspace, rt.root) : rt.root === root)).map((rt) => rt.id);
+  };
 
   const dropWorkspace = async (ws: TreeWorkspace) => {
     if (confirm !== ws.root) {
@@ -600,9 +605,10 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             }} />
                         ) : (
                           <span className="sesstitle" title={rowLabel(session)}>
-                            <span>{rowLabel(session)}</span>{session.archived && <em className="sessarch">{t("已归档")}</em>}
+                            <span>{rowLabel(session)}</span>{session.isolated && <em className="sessarch" title={session.workspaceRoot}>{t("隔离")}</em>}{session.archived && <em className="sessarch">{t("已归档")}</em>}
                           </span>
                         )}
+                        <PeerThreadMark path={session.path} />
                         {session.unread && <UnreadDot />}
                         <SessionAge at={session.lastActiveAt} />
                         {kept.length > 0 && (
@@ -654,7 +660,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             }}
                             onArchive={() => archive(session)}
                             onBranch={onBranch && session.runtimeId ? () => { setSessionMenu(""); void onBranch(session.runtimeId!, `${rowLabel(session)} · ${t("分支")}`).catch(onError); } : undefined}
-                            onCopyInfo={() => { void copyText(sessionInfoText(session, ws.root)).catch(onError); setSessionMenu(""); }}
+                            onCopyInfo={() => { void copyText(sessionInfoText(session, session.workspaceRoot || ws.root)).catch(onError); setSessionMenu(""); }}
                             onExport={() => void saveSession(session)}
                             onDelete={() => { askDelete(session.path); setSessionMenu(""); }}
                           />

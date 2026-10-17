@@ -79,6 +79,7 @@ type desktopLook struct {
 	ConversationWidth    string   `toml:"conversation_width"`
 	Zoom                 float64  `toml:"zoom"`
 	ReadSize             float64  `toml:"read_size"`
+	TextSize             float64  `toml:"text_size"`
 	FontUI               string   `toml:"font_ui"`
 	FontMono             string   `toml:"font_mono"`
 	WallpaperOpacity     float64  `toml:"wallpaper_opacity"`
@@ -92,7 +93,7 @@ func lookOf(cfg *config.Config) interfaceSettings {
 		TerminalTheme: d.TerminalTheme, CloseBehavior: d.CloseBehavior, Tray: d.Tray,
 		DisplayMode: d.DisplayMode, StatusBarStyle: d.StatusBarStyle, StatusBarItems: d.StatusBarItems,
 		ReasoningDisplayMode: d.ReasoningDisplayMode, ConversationWidth: d.ConversationWidth,
-		Zoom: a.Zoom, ReadSize: a.ReadSize, FontUI: a.FontUI, FontMono: a.FontMono,
+		Zoom: a.Zoom, ReadSize: a.ReadSize, TextSize: a.TextSize, FontUI: a.FontUI, FontMono: a.FontMono,
 		WallpaperOpacity: a.Wallpaper.Opacity, WallpaperDim: a.Wallpaper.Dim,
 	}}
 }
@@ -105,7 +106,7 @@ func (s interfaceSettings) applyTo(cfg *config.Config) {
 	d.DisplayMode, d.StatusBarStyle, d.StatusBarItems = l.DisplayMode, l.StatusBarStyle, l.StatusBarItems
 	d.ReasoningDisplayMode, d.ConversationWidth = l.ReasoningDisplayMode, l.ConversationWidth
 	a := &d.Appearance
-	a.Zoom, a.ReadSize, a.FontUI, a.FontMono = l.Zoom, l.ReadSize, l.FontUI, l.FontMono
+	a.Zoom, a.ReadSize, a.TextSize, a.FontUI, a.FontMono = l.Zoom, l.ReadSize, l.TextSize, l.FontUI, l.FontMono
 	if a.Wallpaper.File != "" {
 		a.Wallpaper.Opacity, a.Wallpaper.Dim = l.WallpaperOpacity, l.WallpaperDim
 	}

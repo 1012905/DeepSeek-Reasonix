@@ -1,6 +1,7 @@
 package peermail
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -61,4 +62,26 @@ func (d *Dir) Audit(r AuditRecord) error {
 	defer f.Close()
 	_, err = f.Write(append(line, '\n'))
 	return err
+}
+
+// AuditSince reads the audit records at or after since, oldest first. A month
+// file that is missing or has a damaged line contributes what it can: the trail
+// is a record of what happened, and a gap in it must not stop a reader.
+func (d *Dir) AuditSince(since time.Time) []AuditRecord {
+	var out []AuditRecord
+	now := time.Now().UTC()
+	for m := time.Date(since.UTC().Year(), since.UTC().Month(), 1, 0, 0, 0, 0, time.UTC); !m.After(now); m = m.AddDate(0, 1, 0) {
+		data, err := os.ReadFile(filepath.Join(d.root, "audit", m.Format("2006-01")+".jsonl"))
+		if err != nil {
+			continue
+		}
+		for line := range bytes.SplitSeq(data, []byte{'\n'}) {
+			var r AuditRecord
+			if len(line) == 0 || json.Unmarshal(line, &r) != nil || r.At.Before(since) {
+				continue
+			}
+			out = append(out, r)
+		}
+	}
+	return out
 }

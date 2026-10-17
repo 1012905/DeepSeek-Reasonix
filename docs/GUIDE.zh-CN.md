@@ -149,7 +149,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 # egress_unlisted = "allow"    # 无人值守长任务用（只认用户级配置）：allowed_domains 之外的主机不再询问，每个主机提示一次；denied_domains 仍然拒绝
 
 [peers]
-# enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准（只认用户级配置）
+# enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准；设置里也有开关，下个回合起生效（只认用户级配置）
 # dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled（只认用户级配置）
 # release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧（只认用户级配置）
 
@@ -793,6 +793,15 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 
 已保存项目的操作菜单提供上移和下移。用键盘打开菜单后，方向键或 Home/End 可导航，Escape 会返回触发按钮。移动只改变侧栏顺序，不改变启动项目。
 
+Reasonix 管理的普通 worktree 会话统一列在原项目下，不再为隔离目录单列同名项目。
+会话顶部显示“原目录”或“隔离目录”，悬停可查看实际工作目录；侧栏也会标记隔离会话。
+
+打开历史会话仍使用它原来的工作目录，在项目上新建会话则使用原目录。
+排序、搜索、分页、置顶和归档覆盖整个项目。
+
+移除项目会关闭所属的空闲面板，但保留所有工作目录和会话文件。
+历史会话无需搬移，重启后直接按原项目归组；Reasonix 管理目录以外的 worktree 仍作为独立项目使用。
+
 项目列表最多保存 32 项，新增第 33 项前需先移除一项。`serve-workspaces.json` 现在使用含 `paths` 和 `launch` 的对象；旧版本只能读取数组，无法保留新格式。排序后不要与旧版本共用同一状态目录。
 
 ## 权限与沙盒
@@ -968,9 +977,11 @@ headers = { IJ_MCP_SERVER_PROJECT_PATH = "${REASONIX_WORKSPACE_ROOT}" }
 ```
 
 远程 HTTP server 未配置静态 `Authorization` header 时，认证要求（HTTP 401 且带 `Bearer` 质询）会被识别为需要登录。
-CLI 可运行 `reasonix mcp auth <name>`；Studio 暂时还没有登录入口。
+CLI 可运行 `reasonix mcp auth <name>`。
 Reasonix 会执行 OAuth 元数据发现、动态客户端注册、PKCE S256 授权与
 refresh token 轮换；发现和 token 请求与 MCP 连接使用相同的 Reasonix 网络代理设置。
+
+打开浏览器之前，Reasonix 会先说明服务器指定的授权主机并询问；“始终允许”只对该服务器和该主机生效，记在其 OAuth 状态旁，清除认证时一并清掉。
 
 OAuth client 与 token 状态保存在工作区之外、该 server 私有的 Reasonix 状态目录中，文件权限
 为 `0600`，并绑定完整的 resource URL。显式静态 `Authorization` header 始终优先。

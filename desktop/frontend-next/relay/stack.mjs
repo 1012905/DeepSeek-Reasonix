@@ -28,7 +28,7 @@ function firstLine(child, what) {
   });
 }
 
-function scriptedProvider() {
+function scriptedProvider(words, gapMs) {
   const requests = [];
   const server = http.createServer((req, res) => {
     let body = "";
@@ -45,7 +45,7 @@ function scriptedProvider() {
         `data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", model: "fake-m", choices: [{ index: 0, delta }] })}\n\n`;
       let n = 0;
       const timer = setInterval(() => {
-        if (n < 12) {
+        if (n < words) {
           res.write(chunk({ content: `word${n++} ` }));
           return;
         }
@@ -53,7 +53,7 @@ function scriptedProvider() {
         res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", model: "fake-m", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 12, total_tokens: 22 } })}\n\n`);
         res.write("data: [DONE]\n\n");
         res.end();
-      }, 120);
+      }, gapMs);
       res.on("close", () => clearInterval(timer));
     });
   });
@@ -76,13 +76,13 @@ function pageServer(dist) {
  * the real studio-host binary on a fresh data home, a stand-in accounts API and
  * relay, a scripted model provider, and a static server for the built page.
  */
-export async function startStack({ hostBin, fakeBin, dist }) {
+export async function startStack({ hostBin, fakeBin, dist, servePage = false, words = 12, gapMs = 120 }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "relay-stack-"));
   const home = path.join(root, "home");
   const workspace = path.join(root, "workspace");
   fs.mkdirSync(home, { recursive: true });
   fs.mkdirSync(workspace, { recursive: true });
-  const provider = await scriptedProvider();
+  const provider = await scriptedProvider(words, gapMs);
   fs.writeFileSync(path.join(home, "config.toml"), [
     'language = "en"',
     'default_model = "fake"',
@@ -95,7 +95,7 @@ export async function startStack({ hostBin, fakeBin, dist }) {
   const urls = JSON.parse(await firstLine(fake, "relayfake"));
   const ctl = async (route, method = "GET") => (await fetch(`${urls.accounts}/ctl/${route}`, { method })).json();
 
-  const host = spawn(hostBin, [], {
+  const host = spawn(hostBin, servePage ? ["-page", dist] : [], {
     stdio: ["pipe", "pipe", "inherit"],
     env: {
       ...process.env, HOME: root, USERPROFILE: root, REASONIX_HOME: home, REASONIX_STATE_HOME: home,
@@ -120,7 +120,7 @@ export async function startStack({ hostBin, fakeBin, dist }) {
   };
 
   return {
-    urls, deviceId: state.deviceId, pageOrigin: page.origin, workspace, provider, ctl, api,
+    urls, deviceId: state.deviceId, pageOrigin: page.origin, hostOrigin: handshake.origin, hostToken: handshake.token, workspace, provider, ctl, api,
     pageUrl: () => `${page.origin}/?device=${state.deviceId}`,
     async stop() {
       const gone = new Promise((resolve) => host.once("exit", resolve));

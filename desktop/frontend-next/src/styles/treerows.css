@@ -62,3 +62,5 @@
 .project-locations .pickrow .studio-icon { width: 18px; height: 18px; }
 .project-locations small { margin-left: auto; color: var(--faint); }
 @media (hover: none) { .rowbtns { opacity: 1; } }
+.studio-session-segments button { font-size: calc(12px * var(--fs-scale, 1)); }
+.studio-session-segments b { font-size: calc(10px * var(--fs-scale, 1)); }

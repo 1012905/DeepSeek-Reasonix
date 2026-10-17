@@ -95,11 +95,12 @@ func TestCreateFromDetachedHEADAndOccupiedBranch(t *testing.T) {
 	if _, _, err := runGit(ctx, repo, "checkout", "--detach"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := CreateFrom(ctx, repo, t.TempDir(), "")
+	managedRoot := t.TempDir()
+	result, err := CreateFrom(ctx, repo, managedRoot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := DiscardUnpublished(ctx, repo, result); err != nil {
+	if err := DiscardUnpublished(ctx, repo, managedRoot, result); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(result.WorktreeRoot); !os.IsNotExist(err) {

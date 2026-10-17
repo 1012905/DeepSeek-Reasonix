@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import logoWordmark from "../assets/logo-wordmark.svg";
 import type { AccountState } from "../port/port";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
+import { workspaceContains } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
 import type { Adder } from "./addws";
 import { AccountRow } from "./AccountRow";
@@ -210,7 +211,7 @@ export function Sidebar({
   const foldable = [
     ...tree.filter((ws) => ws.sessions.length || ws.remaining).map((ws) => ws.root),
     ...shownRemotes.flatMap((host) => remoteWorkspaces(host, remoteTrees[host.name], runtimes)
-      .filter((ws) => ws.sessions.length || ws.total || !remoteTrees[host.name] || runtimes.some((rt) => rt.host === host.name && rt.root === ws.root))
+      .filter((ws) => ws.sessions.length || ws.total || !remoteTrees[host.name] || runtimes.some((rt) => rt.host === host.name && workspaceContains(ws, rt.root)))
       .map((ws) => remoteProjectKey(host.name, ws.root))),
   ];
   const allFolded = foldable.length > 0 && foldable.every((key) => folded.has(key));

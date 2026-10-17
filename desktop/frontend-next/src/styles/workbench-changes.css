@@ -9,5 +9,5 @@
 .workbench-stage[aria-checked="mixed"]::after { content: ""; width: 8px; height: 2px; border-radius: 1px; background: currentColor; }
 .workbench-stage:disabled { opacity: .5; cursor: default; }
 .workbench-stage:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.workbench-explorer-head .workbench-stage-all { height: 20px; margin-inline: 8px; padding: 0 8px; font-size: 11px; }
+.workbench-explorer-head .workbench-stage-all { height: 20px; margin-inline: 8px; padding: 0 8px; font-size: calc(11px * var(--fs-scale, 1)); }
 .workbench-stage-error { margin: 4px 10px; }

@@ -67,6 +67,7 @@ type Server struct {
 	lastBuild                *boot.BuildResult // serving generation, guarded by bindMu; see reuseFromLastBuild
 	grants                   hostGrants        // what the embedding host has opened up
 	moves                    moveTracker       // the one storage relocation this server may be running
+	preparations             workspacePreparations
 	titleModel               titleProviderState
 	titles                   *titleCache
 	fill                     *titleFiller

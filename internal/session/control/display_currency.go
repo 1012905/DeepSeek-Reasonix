@@ -18,12 +18,19 @@ var ErrDisplayCurrencyInvalid = errors.New("display currency")
 type DisplayCurrencySettings struct {
 	Mode string `json:"mode"`
 	Path string `json:"path"`
+	// Unconverted are the models whose price cannot be shown in a pinned
+	// currency; always a list, so a frontend never reads null as "unknown".
+	Unconverted []config.UnconvertedPrice `json:"unconverted"`
 }
 
 func (c *Controller) DisplayCurrencySettings() DisplayCurrencySettings {
 	path := config.UserConfigPath()
 	cfg := config.LoadForEdit(path)
-	return DisplayCurrencySettings{Mode: currencyDisplay(cfg.DisplayCurrencyPref()), Path: path}
+	unconverted := cfg.UnconvertedPrices()
+	if unconverted == nil {
+		unconverted = []config.UnconvertedPrice{}
+	}
+	return DisplayCurrencySettings{Mode: currencyDisplay(cfg.DisplayCurrencyPref()), Path: path, Unconverted: unconverted}
 }
 
 // SaveDisplayCurrency stores the preference and announces it, which is what

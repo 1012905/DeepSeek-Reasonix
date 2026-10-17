@@ -20,13 +20,31 @@ type modelPriceView struct {
 	Output   float64 `json:"output"`
 	CacheHit float64 `json:"cacheHit"`
 	Currency string  `json:"currency,omitempty"`
+	// Official is true when the card is a rate this project shipped for the
+	// model; false for the user's own and for anything on an endpoint with no
+	// table to measure it against.
+	Official bool `json:"official,omitempty"`
+}
+
+// officialPricingOf reports whether the entry talks to a vendor's own endpoint,
+// the only place a stored card can be compared with that vendor's table.
+func officialPricingOf(p *config.ProviderEntry) bool {
+	return p != nil && pricing.OfficialProviderForEndpoint(p.BaseURL) != ""
 }
 
 func modelPricesOf(p *config.ProviderEntry) map[string]modelPriceView {
 	out := map[string]modelPriceView{}
+	vendor := ""
+	if p != nil {
+		vendor = pricing.OfficialProviderForEndpoint(p.BaseURL)
+	}
 	for _, model := range p.ChatModelList() {
 		if price := p.Prices[model]; price != nil {
-			out[model] = modelPriceView{Input: price.Input, Output: price.Output, CacheHit: price.CacheHit, Currency: pricing.NormalizeCurrency(price.Currency)}
+			card := pricing.RateCard{CacheHit: price.CacheHit, Input: price.Input, Output: price.Output, Currency: price.Currency}
+			out[model] = modelPriceView{
+				Input: price.Input, Output: price.Output, CacheHit: price.CacheHit, Currency: pricing.NormalizeCurrency(price.Currency),
+				Official: vendor != "" && pricing.IsOfficialCard(vendor, model, card),
+			}
 		}
 	}
 	return orNilMap(out)

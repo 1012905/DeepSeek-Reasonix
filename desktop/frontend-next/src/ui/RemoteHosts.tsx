@@ -3,10 +3,12 @@ import { hidesLegacySessions, onHidesLegacySessionsChange } from "../state/prefs
 import { useRailQuery } from "./railsearch";
 import { t } from "../i18n";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
+import { workspaceContains } from "../port/hub";
 import { REMOTE_STEP_LABEL, type RemoteHost } from "../port/remote";
 import { RemoteProjectMenu } from "./RemoteProjectMenu";
 import type { SessionScope } from "./sessionScope";
-import { remoteProjectKey, remoteProjects } from "./remoteProjects";
+import { remoteProjectKey, remoteProjects, type RemoteWorkspace } from "./remoteProjects";
+import { workspacesOf } from "./Remotes";
 export { remoteProjectKey, remoteWorkspaces } from "./remoteProjects";
 import { StudioIcon } from "./StudioIcon";
 import { Confirm } from "./WorkspaceConfirm";
@@ -109,14 +111,16 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
 
   // Dropping a folder from this window's book. Nothing on the far machine is
   // touched, which is what makes it a one-click action rather than a question.
-  const drop = async (host: string, dir: string) => {
-    setBusy(host + dir);
+  const drop = async (host: RemoteHost, workspace: RemoteWorkspace) => {
+    setBusy(host.name + workspace.root);
     try {
       // Idle panes in the folder close here so this list stays in step; the
       // kernel refuses the removal while any of them is running.
-      const open = runtimes.filter((rt) => rt.host === host && rt.root === dir).map((rt) => rt.id);
+      const open = runtimes.filter((rt) => rt.host === host.name && workspaceContains(workspace, rt.root)).map((rt) => rt.id);
       if (open.length && liveIds(open).length === 0) await onClose(open);
-      await hub.removeRemoteWorkspace(host, dir);
+      for (const root of workspacesOf(host).filter((root) => workspaceContains(workspace, root))) {
+        await hub.removeRemoteWorkspace(host.name, root);
+      }
       await reload();
     } catch (e) {
       onError(e);
@@ -154,9 +158,9 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
         const hint = note(host);
         return spaces.map(({ workspace: ws, loose, older }) => {
           const key = remoteProjectKey(host.name, ws.root);
-          const hasChildren = ws.sessions.length > 0 || (ws.total ?? 0) > 0 || (!tree && !working) || panes.some((rt) => rt.root === ws.root);
+          const hasChildren = ws.sessions.length > 0 || (ws.total ?? 0) > 0 || (!tree && !working) || panes.some((rt) => workspaceContains(ws, rt.root));
           const folded = hasChildren && !needle && (foldedProjects ?? shut).has(key);
-          const current = panes.some((rt) => rt.root === ws.root && rt.id === active);
+          const current = panes.some((rt) => workspaceContains(ws, rt.root) && rt.id === active);
           const visible = needle || scope !== "all" || expanded.has(key) ? ws.sessions
             : ws.sessions.filter((session, index) => index < previewLimit || panes.some((rt) => rt.id === active && rt.sessionPath === session.path));
           return (
@@ -181,7 +185,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                     </button>
                     <RemoteProjectMenu name={ws.name} root={ws.root} host={host.name} busy={!!busy}
                       onRefresh={() => void readBook(host.name)}
-                      onRemove={ws.booked ? () => void drop(host.name, ws.root) : undefined} />
+                      onRemove={ws.booked ? () => void drop(host, ws) : undefined} />
                   </span>
                 </span>
               </div>
@@ -203,7 +207,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                     <RemoteSessionRow key={session.path} host={host.name} target={key + ":" + session.path}
                       session={session} held={held} active={active} busy={!!busy} live={!!held && liveIds([held.id]).length > 0}
                       pending={mutations.pending.get(JSON.stringify([host.name, session.path]))}
-                      onOpen={() => void open(host, ws.root, session.path)} onFocus={onFocus}
+                      onOpen={() => void open(host, session.workspaceRoot || ws.root, session.path)} onFocus={onFocus}
                       onWrite={(kind, row) => void mutations.run(JSON.stringify([host.name, session.path]), kind, row, async () => {
                         if (kind === "pin") await hub.pinSession(session.path, !session.pinned, host.name);
                         else {
