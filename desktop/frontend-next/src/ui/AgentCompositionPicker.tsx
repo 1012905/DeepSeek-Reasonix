@@ -66,7 +66,7 @@ export function AgentCompositionPicker({ port, binding, locked: statusLocked, ru
       data-action={(id) => id === MANAGE ? "agent-composition.manage" : locked ? "agent-composition.new" : "agent-composition.select"}
       title={locked ? t("该会话已开始，组合保持原版本。请用其他组合新建会话。") : selected?.description ? (selected.id.startsWith("builtin:") ? t(selected.description) : selected.description) : t("首次提交前可切换 Agent 组合")}
       pending={busy}
-      label={<><span className="nm">{label}</span>{current && <span className="composition-source">{compositionSource(current.id)}</span>}{locked && <span className="composition-source">{t("已锁定")}</span>}<StudioIcon name="down" /></>}
+      label={<><span className="nm">{label}</span><StudioIcon name="down" /></>}
       menuTitle={<><b>{t("Agent 预设")}</b><small>{t(locked ? "已锁定" : "首次提交前可切换")}</small></>}
       head={locked && <p className="composition-menu-note">{t("该会话已开始，组合保持原版本。请用其他组合新建会话。")}</p>}
       items={items}

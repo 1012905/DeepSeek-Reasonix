@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { MockPort } from "../port/mock";
@@ -8,6 +8,26 @@ import { AgentPresets } from "./AgentPresets";
 afterEach(cleanup);
 
 describe("Agent preset management", () => {
+  it("shows only Standard and Minimal built-in cards and changes the default without changing this conversation", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    render(<AgentPresets port={port} />);
+    expect(await screen.findByRole("button", { name: "标准模式" })).toBeTruthy();
+    const minimal = screen.getByRole("button", { name: "精简模式" });
+    expect(document.querySelectorAll(".composition-card")).toHaveLength(2);
+    expect(screen.queryByText("代码审查")).toBeNull();
+    expect(screen.queryByText("资料研究")).toBeNull();
+    await user.click(within(minimal.closest("article")!).getByRole("button", { name: "设为个人默认" }));
+    await waitFor(async () => expect((await port.agentPresets()).default).toBe("builtin:minimal"));
+    expect((await port.agentComposition())?.id).toBe("builtin:general");
+    await user.click(minimal);
+    await user.click(screen.getByRole("button", { name: "复制为自定义预设" }));
+    await user.click(screen.getByRole("button", { name: "保存预设" }));
+    await screen.findByRole("status");
+    const copied = (await port.agentPresets()).presets.find((v) => v.definition.id === "user:custom")!;
+    expect(copied.definition.tools.members.map((m) => m.id)).toEqual(["bash", "view_image"]);
+    expect(copied.definition.mcp).toEqual({ mode: "select", members: [] });
+  });
   it("copies a built-in, saves literal fields and keeps the current session revision", async () => {
     const user = userEvent.setup();
     const port = new MockPort();

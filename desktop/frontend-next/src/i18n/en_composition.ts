@@ -1,4 +1,13 @@
 export const EN_COMPOSITION: Record<string,string> = {
+  "标准模式": "Standard mode",
+  "精简模式": "Minimal mode",
+  "处理代码、文件和资料，适合大多数任务。创建会话时继承当前配置，按需检索、编辑和运行工具。": "Work with code, files and research for everyday tasks. Inherit current configuration when creating the conversation, then search, edit and run tools as needed.",
+  "只使用终端和图片读取工具，保留上下文压缩，适合基础任务与效果对比。需要支持读图的模型；终端操作仍受现有权限约束。": "Use terminal and image-reading tools with context compaction for basic tasks and comparisons. Requires a vision-capable model; terminal operations follow existing permissions.",
+  "新会话默认": "Default for new conversations",
+  "模式说明": "Mode details",
+  "如何使用": "How to use",
+  "新建自定义预设": "New custom preset",
+  "在输入框顶部选择 Agent 模式，首次提交前可切换。开始对话后，请用其他模式新建会话。精简模式的终端仍可修改文件，并非只读模式。": "Choose an Agent mode above the input before the first message. Once a conversation starts, create another to use a different mode. Minimal mode can still edit files through its terminal; it is not read-only.",
   "导入原生会话": "Import a native session",
   "保留组合版本与资源；导入不会安装程序或授予权限。缺少授权的会话仅可查看历史。": "Keep the composition version and resources. Importing installs no programs and grants no permissions. Sessions without authorization open for history only.",
   "选择会话 JSON 文件": "Choose a session JSON file",

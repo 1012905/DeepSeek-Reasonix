@@ -2,7 +2,7 @@
 owner: "@SivanCola"
 backup: "@esengine"
 status: active
-reviewed: 2026-10-17
+reviewed: 2026-10-18
 ---
 
 # Session Agent compositions
@@ -14,24 +14,37 @@ It uses Reasonix's runtime; it does not load Harness's Cordis plugins.
 
 ## Choosing and editing
 
-Choose the composition beside the run status at the top of the composer before
+Choose the mode at the left of the composer status row before
 the first prompt. One menu lists compositions with their sources and capabilities;
 **Manage Agent presets…** opens the management page below the choices. Once a prompt is
 accepted, the conversation keeps its binding.
+
+The trigger shows only the mode name and arrow. Source and lock information stay
+in the menu and accessible label; run status and token counts sit at the right.
 
 Queued work, pending questions and
 background jobs also prevent switching. The locked selector offers a new
 conversation with another composition. Clearing or rewinding an existing
 composition does not unlock it.
 
-The built-ins are General (inherit current configuration), Code review (read
-files, list directories, glob and grep), and Research (the same readers plus
-web search and fetch).
+Two built-in cards sit above the separate custom-preset section:
 
-Review and Research load no custom skills, commands,
-MCP, extensions, hooks or subagents. They retain host controls needed to answer
-and ask questions. Unavailable web services report their existing runtime
-diagnostic.
+| Mode | Behavior |
+| --- | --- |
+| Standard (`builtin:general`) | Inherit current configuration for everyday code, file and research work. The stable ID preserves existing defaults. |
+| Minimal (`builtin:minimal`) | A concise system persona, terminal (`bash`) and image reading (`view_image`), with native context compaction. Requires a vision-capable model. |
+
+Minimal loads no custom skills, commands, MCP, extensions, hooks or subagents.
+It retains the host controls needed to answer and ask questions. Its terminal
+can still modify files and access the network under existing permissions and
+sandbox rules; Minimal is not a read-only mode.
+
+Missing image capability or
+disabled tools produce an explicit dependency error rather than another tool set.
+
+Code review and Research are no longer built-in catalog entries. Their existing
+conversations retain the original binding. An old default pointing to a retired
+entry reports a diagnostic until an available default is explicitly chosen.
 
 Copy a built-in to customize it. Each module group either inherits configuration
 when a conversation binds, or uses only the selected IDs. An empty explicit
@@ -116,7 +129,7 @@ reuse an already written revision and preserve conflicting personal IDs.
 
 ## Entry points
 
-CLI: `reasonix --agent-composition builtin:review`, or
+CLI: `reasonix --agent-composition builtin:minimal`, or
 `reasonix run --agent-composition user:my-agent "Review this change"`.
 `/agent` lists compositions; `/agent user:my-agent` selects one in a blank
 interactive conversation. `/preset` retains its balanced/delivery meaning.

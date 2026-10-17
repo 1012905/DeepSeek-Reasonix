@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"reasonix/internal/base/testenv"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 )
@@ -25,7 +27,7 @@ func TestEffectViewImageReachesOnlyAModelThatReadsImages(t *testing.T) {
 	}{
 		{true, ""}, {false, ""},
 		{true, "builtin:general"}, {false, "builtin:general"},
-		{true, "builtin:review"}, {true, "builtin:research"},
+		{true, "builtin:minimal"}, {false, "builtin:minimal"},
 	} {
 		t.Run(fmt.Sprintf("vision=%v/composition=%s", tc.vision, tc.composition), func(t *testing.T) {
 			t.Parallel()
@@ -53,6 +55,12 @@ vision = %v
 `, kind, tc.vision))
 			approveWorkspaceAt(t, home, dir)
 			ctrl, err := Build(context.Background(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard, AgentComposition: tc.composition})
+			if tc.composition == "builtin:minimal" && !tc.vision {
+				if !errors.Is(err, agentcomposition.ErrUnavailable) {
+					t.Fatalf("text-only model must report unavailable image capability: %v", err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -64,7 +72,7 @@ vision = %v
 			for _, name := range rec.toolNames() {
 				has = has || name == "view_image"
 			}
-			want := tc.vision && (tc.composition == "" || tc.composition == "builtin:general")
+			want := tc.vision
 			if has != want {
 				t.Fatalf("vision=%v composition=%s: tools in the first request = %v", tc.vision, tc.composition, rec.toolNames())
 			}

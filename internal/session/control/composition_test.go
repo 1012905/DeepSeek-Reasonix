@@ -28,7 +28,7 @@ func TestCompositionSwitchAndFirstTurnShareAdmission(t *testing.T) {
 	entered, finish := make(chan struct{}), make(chan struct{})
 	c.ConfigureCompositions(t.TempDir(), func(context.Context, string) error { close(entered); <-finish; return errors.New("candidate failed") })
 	result := make(chan error, 1)
-	go func() { result <- c.SelectAgentComposition(t.Context(), "builtin:research") }()
+	go func() { result <- c.SelectAgentComposition(t.Context(), "builtin:general") }()
 	<-entered
 	if got := c.SubmitHTTPFormat("first prompt", ""); got != turnDroppedRotating {
 		t.Fatalf("admission=%v", got)
@@ -42,13 +42,13 @@ func TestCompositionSwitchAndFirstTurnShareAdmission(t *testing.T) {
 	}
 	c.Submit("accepted prompt")
 	waitForDone(t, done)
-	if err := c.SelectAgentComposition(t.Context(), "builtin:research"); !errors.Is(err, agentcomposition.ErrLocked) {
+	if err := c.SelectAgentComposition(t.Context(), "builtin:general"); !errors.Is(err, agentcomposition.ErrLocked) {
 		t.Fatalf("started switch=%v", err)
 	}
 	if err := c.ClearSession(); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.SelectAgentComposition(t.Context(), "builtin:research"); !errors.Is(err, agentcomposition.ErrLocked) {
+	if err := c.SelectAgentComposition(t.Context(), "builtin:general"); !errors.Is(err, agentcomposition.ErrLocked) {
 		t.Fatalf("clear unlocked binding: %v", err)
 	}
 }

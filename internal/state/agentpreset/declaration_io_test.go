@@ -48,13 +48,13 @@ func TestDeclarationSizeBoundAndExplicitDefaultSurviveMigration(t *testing.T) {
 	if _, err := s.Get("user:large"); !errors.Is(err, agentcomposition.ErrInvalid) {
 		t.Fatalf("large declaration: %v", err)
 	}
-	if err := s.SetDefault("builtin:review", false); err != nil {
+	if err := s.SetDefault("builtin:minimal", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.MigratePersona(agentcomposition.Persona{Prefix: "old persona", IncludeRuntimeContext: true}); err != nil {
 		t.Fatal(err)
 	}
-	if id, err := s.Default(); err != nil || id != "builtin:review" {
+	if id, err := s.Default(); err != nil || id != "builtin:minimal" {
 		t.Fatalf("explicit default overwritten: %s %v", id, err)
 	}
 }

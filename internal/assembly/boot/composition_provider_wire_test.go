@@ -35,7 +35,8 @@ func TestCompositionIsStableAtOpenAIHTTPBoundary(t *testing.T) {
 	home, root := compositionTestWorkspace(t, "openai")
 	writeFile(t, root, "reasonix.toml", fmt.Sprintf("default_model = \"test-model\"\n[[providers]]\nname=\"test-model\"\nkind=\"openai\"\nbase_url=%q\nmodel=\"x\"\n", server.URL+"/v1"))
 	approveWorkspaceAt(t, home, root)
-	built, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: "builtin:review", resolvedShell: pinnedEffectShell()})
+	saveReadOnlyComposition(t, home, root)
+	built, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: "user:review", resolvedShell: pinnedEffectShell()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestCompositionIsStableAtOpenAIHTTPBoundary(t *testing.T) {
 		}
 		schemas = string(body["tools"])
 		raw, _ := json.Marshal(body)
-		if strings.Contains(string(raw), "agent_composition") || strings.Contains(string(raw), "builtin:review") {
+		if strings.Contains(string(raw), "agent_composition") || strings.Contains(string(raw), "user:review") {
 			t.Fatal("binding metadata entered request")
 		}
 		for _, name := range []string{"bash", "task", "write_file", "use_capability"} {

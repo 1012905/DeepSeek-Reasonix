@@ -53,7 +53,8 @@ func TestCompositionDeniesProxyLateRegistrationAndDelegationAtProviderBoundary(t
 	p := &compositionBoundaryProvider{}
 	provider.Register("composition-boundary", func(provider.Config) (provider.Provider, error) { return p, nil })
 	home, root := compositionTestWorkspace(t, "composition-boundary")
-	res, err := BuildRuntime(context.Background(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: "builtin:review", resolvedShell: pinnedEffectShell()})
+	saveReadOnlyComposition(t, home, root)
+	res, err := BuildRuntime(context.Background(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: "user:review", resolvedShell: pinnedEffectShell()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,8 @@ func TestCompositionDeniesProxyLateRegistrationAndDelegationAtProviderBoundary(t
 
 func TestCompositionReviewDoesNotStartHostSuppliedMCP(t *testing.T) {
 	home, root := compositionTestWorkspace(t, "openai")
-	res, err := BuildRuntime(context.Background(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: "builtin:review", resolvedShell: pinnedEffectShell(), ExtraPlugins: []plugin.Spec{{Name: "excluded", Type: "stdio", Command: "/composition-must-not-start"}}})
+	saveReadOnlyComposition(t, home, root)
+	res, err := BuildRuntime(context.Background(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: "user:review", resolvedShell: pinnedEffectShell(), ExtraPlugins: []plugin.Spec{{Name: "excluded", Type: "stdio", Command: "/composition-must-not-start"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

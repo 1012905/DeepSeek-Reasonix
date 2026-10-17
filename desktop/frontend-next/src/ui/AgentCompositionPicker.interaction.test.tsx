@@ -20,13 +20,15 @@ it("groups composition controls with the run state without announcing controls a
   const status=screen.getByRole("status");
   expect(status.parentElement?.contains(picker)).toBe(true);
   expect(status.contains(picker)).toBe(false);
+  expect(picker.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(picker.textContent).toBe("标准模式");
   expect(screen.queryByRole("button",{name:"管理 Agent 预设"})).toBeNull();
   await user.click(picker);
-  const review=screen.getByRole("menuitem",{name:/代码审查/});
+  const review=screen.getByRole("menuitem",{name:/精简模式/});
   expect(review.getAttribute("data-action")).toBe("agent-composition.select");
   await user.click(review);
   expect(changed).toHaveBeenCalledOnce();
-  expect(picker.getAttribute("aria-label")).toContain("代码审查");
+  expect(picker.getAttribute("aria-label")).toContain("精简模式");
   await user.click(picker);
   const manage=screen.getByRole("menuitem",{name:"管理 Agent 预设…"});
   expect(manage.getAttribute("data-action")).toBe("agent-composition.manage");
@@ -39,12 +41,14 @@ it("keeps started conversations locked and opens the chosen composition in a new
   const user=userEvent.setup();
   render(<CompositionNewContext.Provider value={create}><AgentCompositionPicker port={port} locked running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/></CompositionNewContext.Provider>);
   const picker=await screen.findByRole("button",{name:/^Agent 组合/});
+  expect(picker.textContent).toBe("标准模式");
+  expect(picker.getAttribute("aria-label")).toContain("已锁定");
   await user.click(picker);
   expect(screen.getByText("该会话已开始，组合保持原版本。请用其他组合新建会话。")).toBeTruthy();
-  const review=screen.getByRole("menuitem",{name:/代码审查/});
+  const review=screen.getByRole("menuitem",{name:/精简模式/});
   expect(review.getAttribute("data-action")).toBe("agent-composition.new");
   await user.click(review);
-  expect(create).toHaveBeenCalledWith("builtin:review");
+  expect(create).toHaveBeenCalledWith("builtin:minimal");
   expect(select).not.toHaveBeenCalled();
 });
 
@@ -54,7 +58,7 @@ it("supports keyboard selection and Escape with focus returning to the one trigg
   render(<AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>);
   const picker=await screen.findByRole("button",{name:/^Agent 组合/});
   picker.focus();await user.keyboard("{Enter}{ArrowDown}{Enter}");
-  await waitFor(()=>expect(select).toHaveBeenCalledWith("builtin:review"));
+  await waitFor(()=>expect(select).toHaveBeenCalledWith("builtin:minimal"));
   expect(document.activeElement).toBe(picker);
   await user.click(picker);await user.keyboard("{Escape}");
   expect(screen.queryByRole("menu")).toBeNull();
@@ -68,15 +72,15 @@ it("keeps a failed selection unchanged and prevents duplicate submissions while 
   const user=userEvent.setup();
   render(<AgentCompositionPicker port={port} running={false} onChanged={changed} onSettings={()=>{}} onError={error}/>);
   const picker=await screen.findByRole("button",{name:/^Agent 组合/});
-  await user.click(picker);await user.click(screen.getByRole("menuitem",{name:/代码审查/}));
+  await user.click(picker);await user.click(screen.getByRole("menuitem",{name:/精简模式/}));
   await user.click(picker);
-  expect((screen.getByRole("menuitem",{name:/资料研究/}) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("menuitem",{name:/标准模式/}) as HTMLButtonElement).disabled).toBe(true);
   expect(document.activeElement).toBe(screen.getByRole("menuitem",{name:"管理 Agent 预设…"}));
-  await user.click(screen.getByRole("menuitem",{name:/资料研究/}));
+  await user.click(screen.getByRole("menuitem",{name:/标准模式/}));
   expect(select).toHaveBeenCalledOnce();
   reject(new Error("fixture failure"));
   await waitFor(()=>expect(error).toHaveBeenCalledOnce());
-  expect(picker.textContent).toContain("通用");
+  expect(picker.textContent).toContain("标准模式");
   expect(changed).not.toHaveBeenCalled();
 });
 

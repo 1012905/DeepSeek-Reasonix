@@ -18,7 +18,8 @@ base_url = "https://example.invalid"
 model = "x"
 `)
 	approveWorkspaceAt(t, home, root)
-	first, err := BuildRuntime(context.Background(), Options{Home: home, WorkspaceRoot: root, AgentComposition: "builtin:review", resolvedShell: pinnedEffectShell()})
+	saveReadOnlyComposition(t, home, root)
+	first, err := BuildRuntime(context.Background(), Options{Home: home, WorkspaceRoot: root, AgentComposition: "user:review", resolvedShell: pinnedEffectShell()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +30,7 @@ model = "x"
 		}
 	}
 	b := first.Controller.CompositionBinding()
-	if b == nil || b.Version.Definition.ID != "builtin:review" {
+	if b == nil || b.Version.Definition.ID != "user:review" {
 		t.Fatalf("binding missing: %+v", b)
 	}
 	second, err := BuildRuntime(context.Background(), Options{Home: home, WorkspaceRoot: root, Composition: b, resolvedShell: pinnedEffectShell()})

@@ -6,7 +6,7 @@ import (
 )
 
 func compositionCompletionFlag() cliCompletionFlag {
-	return completionFlag("--agent-composition", cliCompletionStaticValue, "default", "builtin:general", "builtin:review", "builtin:research")
+	return completionFlag("--agent-composition", cliCompletionStaticValue, "default", "builtin:general", "builtin:minimal")
 }
 
 func withComposition(opts cliBuildOverrides, name string, s *sessionstore.Session) cliBuildOverrides {

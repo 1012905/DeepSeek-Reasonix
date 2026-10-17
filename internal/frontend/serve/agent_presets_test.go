@@ -15,8 +15,8 @@ func TestAgentPresetRoutesKeepRevisionsAndRejectStaleWrites(t *testing.T) {
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	catalog := readJSON[agentpreset.Catalog](t, srv.URL, "/agent-presets")
-	if len(catalog.Presets) != 3 {
-		t.Fatalf("templates: %d", len(catalog.Presets))
+	if len(catalog.Presets) != 2 || catalog.Presets[0].Definition.Name != "标准模式" || catalog.Presets[1].Definition.Name != "精简模式" {
+		t.Fatalf("templates: %+v", catalog.Presets)
 	}
 	d := agentcomposition.Builtins()[0]
 	d.ID, d.Name = "user:custom", "Custom"

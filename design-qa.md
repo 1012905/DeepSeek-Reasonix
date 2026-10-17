@@ -206,6 +206,33 @@ outside it. Composition menu text follows the shared text-size setting.
 These captures use synthetic Mock data. Native Electron shell behavior was
 not requalified by this browser integration check.
 
+## Standard and Minimal modes / 标准与精简模式
+
+The management page references the supplied Harness card hierarchy while using
+Studio typography and surface tokens. Only Standard and Minimal are shipped;
+custom definitions remain separate. Standard retains its existing stable ID.
+Minimal uses native terminal/image tools and compaction without Cordis plugins.
+
+管理页保留内置卡片、默认标记、模式说明与独立自定义区域。宽屏并排，390px
+窄屏纵向排列且可滚动。默认选择与当前会话绑定分离；复制后继续使用原编辑器。
+入口只展示模式名和箭头，位于左侧；运行状态与 token 位于右侧，来源与锁定
+信息保留在菜单、提示和无障碍名称中。
+
+| Browser | Light | Dark |
+| --- | --- | --- |
+| 1440 × 1000 | [Cards](docs/images/agent-compositions/modes-wide-light.png) | [Cards](docs/images/agent-compositions/modes-wide-dark.png) |
+| 390 × 844 | [Cards](docs/images/agent-compositions/modes-narrow-light.png) | [Cards](docs/images/agent-compositions/modes-narrow-dark.png) |
+
+[Composer idle](docs/images/agent-compositions/composer-modes-final.png) and
+[running](docs/images/agent-compositions/composer-modes-running.png) captures
+show the compact mode trigger with separate run information. These are browser
+Mock captures; the source annotation image is not published.
+
+The full frontend suite passes 651 files and 5,343 tests. Mechanism checks retain
+explicit custom read-only fixtures for proxy, late-registration and child-agent
+ceilings. Minimal's terminal is intentionally allowed. Text-only models report
+an unavailable image dependency instead of silently changing the tool set.
+
 ## Workspace preparation / 工作目录准备
 
 The workspace palette and preparation states reuse existing typography and

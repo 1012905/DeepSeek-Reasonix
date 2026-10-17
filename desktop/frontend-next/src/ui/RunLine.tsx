@@ -16,6 +16,7 @@ export function RunLine({ label, running, blocked, since, sent, received, estima
 }) {
   return (
     <div className="compose-context">
+      {children}
       <div
         className="studio-runstate"
         role="status"
@@ -27,7 +28,6 @@ export function RunLine({ label, running, blocked, since, sent, received, estima
         <span className="studio-runlabel"><RMark /><span className="sr-only">{t(label)}</span>{running && since !== undefined && <RunClock since={since} />}</span>
         <RunTokens sent={sent} received={received} estimated={estimated} />
       </div>
-      {children}
     </div>
   );
 }

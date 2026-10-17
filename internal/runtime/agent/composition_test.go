@@ -11,7 +11,9 @@ import (
 )
 
 func TestChildCompositionKeepsExactBindingAndIntersectsProfileCeiling(t *testing.T) {
-	d := agentcomposition.Builtins()[1]
+	d := agentcomposition.Builtins()[0]
+	d.ID = "user:reader"
+	d.Tools = agentcomposition.Selection{Mode: agentcomposition.Select, Members: []agentcomposition.Module{{ID: "read_file"}, {ID: "grep"}}}
 	d.Persona.Prefix = "PARENT PERSONA"
 	b := &agentcomposition.Binding{Resolved: d, Version: agentcomposition.Version{Definition: d, Revision: agentcomposition.Revision(d)}}
 	b.Seal()

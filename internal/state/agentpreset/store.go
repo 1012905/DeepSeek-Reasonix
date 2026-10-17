@@ -69,6 +69,9 @@ func (s *Store) Get(id string) (agentcomposition.Version, error) {
 			return agentcomposition.Version{Definition: d, Revision: agentcomposition.Revision(d)}, nil
 		}
 	}
+	if strings.HasPrefix(id, "builtin:") {
+		return agentcomposition.Version{}, ErrNotFound
+	}
 	path, err := s.declarationPath(id)
 	if err != nil {
 		return agentcomposition.Version{}, err

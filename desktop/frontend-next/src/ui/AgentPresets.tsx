@@ -6,6 +6,7 @@ import { t } from "../i18n";
 import { reason,say } from "../i18n/kernel";
 import { Group } from "./Group";
 import { CompositionEditor } from "./CompositionEditor";
+import { CompositionCatalog } from "./CompositionCatalog";
 
 export function AgentPresets({ port }: { port: AgentPort }) {
   const [catalog, setCatalog] = useState<AgentPresetCatalog | null>(null);
@@ -42,12 +43,8 @@ export function AgentPresets({ port }: { port: AgentPort }) {
   return <Group id="agent-presets" title={t("Agent 预设")} hint={t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。") }>
     <div className="box">
       {!catalog ? <><p>{error || t("读取预设中…")}</p><button className="act" data-action="agent-preset.reload" onClick={() => void load()}>{t("重新加载")}</button></> : <>
+        <CompositionCatalog catalog={catalog} selected={version?.definition.id} busy={busy} onSelect={select} onCreate={() => copy(builtinCompositions()[0])} onDefault={(id) => void perform(async () => { await port.setDefaultAgentPreset(id, false); setCatalog(await port.agentPresets()); setSaved(t("已设为个人默认预设")); })} />
         <div className="composition-toolbar">
-          <label className="pers-field composition-choice"><span className="lb">{t("查看预设")}</span><select aria-label={t("查看预设")} data-action-change="agent-preset.view" disabled={busy} value={version?.definition.id ?? ""} onChange={(e) => { const v = catalog.presets.find((v) => v.definition.id === e.target.value); if (v) select(v); }}>
-            {!version && <option value="">{t("未保存的预设")}</option>}
-            {catalog.presets.map((v) => <option key={v.definition.id} value={v.definition.id}>{v.definition.id.startsWith("builtin:") ? t(v.definition.name) : v.definition.name} · {v.definition.id}{v.definition.id === catalog.default ? ` · ${t("默认")}` : ""}</option>)}
-          </select></label>
-          <button className="act" data-action="agent-preset.create" disabled={busy} onClick={() => copy(builtinCompositions()[0])}>{t("新建预设")}</button>
           <button className="act" data-action="agent-preset.copy" disabled={!draft || busy} onClick={() => draft && copy(draft)}>{t("复制为自定义预设")}</button>
           <button className="act" data-action="agent-preset.reload" disabled={busy} onClick={() => void load()}>{t("重新加载")}</button>
         </div>

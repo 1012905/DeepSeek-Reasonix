@@ -35,17 +35,19 @@ func TestRevisionCanonicalizesParameterObjects(t *testing.T) {
 	}
 }
 
-func TestRestrictedTemplatesHaveNoAutomationOrDelegation(t *testing.T) {
+func TestMinimalTemplateHasNoAutomationOrDelegation(t *testing.T) {
+	definitions := Builtins()
+	if len(definitions) != 2 || definitions[0].Name != "标准模式" || definitions[1].Name != "精简模式" {
+		t.Fatalf("built-in modes = %+v", definitions)
+	}
 	for _, d := range Builtins()[1:] {
 		for _, s := range []Selection{d.Skills, d.MCP, d.Extensions, d.Hooks, d.Commands} {
 			if s.Mode != Select || len(s.Members) != 0 {
 				t.Fatalf("%s inherits modules", d.ID)
 			}
 		}
-		for _, m := range d.Tools.Members {
-			if m.ID == "bash" || m.ID == "task" || m.ID == "write_file" {
-				t.Fatalf("%s carries %s", d.ID, m.ID)
-			}
+		if d.Tools.Mode != Select || len(d.Tools.Members) != 2 || d.Tools.Members[0].ID != "bash" || d.Tools.Members[1].ID != "view_image" {
+			t.Fatalf("minimal tools = %+v", d.Tools)
 		}
 	}
 }

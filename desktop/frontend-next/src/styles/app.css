@@ -5590,9 +5590,8 @@
   }
 }
 .composition-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
-.composition-choice { flex: 1; min-width: 180px; }
 .composition-editor { display: grid; gap: 12px; margin-block: 16px; }
-.composition-editor input, .composition-editor select, .composition-choice select { min-width: 0; max-width: 100%; }
+.composition-editor input, .composition-editor select { min-width: 0; max-width: 100%; }
 .composition-modules { border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; }
 .composition-modules legend { font-weight: 600; padding-inline: 4px; }
 .composition-module { margin-block: 8px; }
@@ -5605,17 +5604,17 @@
   min-height: 28px;
   margin: -3px 0 4px;
 }
+.compose-context > .studio-runstate { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .composition-picker { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
 .composition-picker > .picker { min-width: 0; max-width: 100%; }
 .composition-trigger { max-width: 100%; }
 .composition-trigger .nm { max-width: 180px; }
-.composition-source { color: var(--faint); font-size: var(--fs-meta); }
 .composition-trigger > .studio-icon { width: 12px; height: 12px; flex: none; }
 .composition-picker [role="alert"] { overflow-wrap: anywhere; }
-.composition-editor :is(input, select), .composition-choice select {
+.composition-editor :is(input, select) {
   width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--raised); color: var(--text); padding: 6px 9px; font: var(--w-reg) var(--fs-ui)/1.5 var(--ui);
 }
-.composition-editor :is(input, select):focus-visible, .composition-choice select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.composition-editor :is(input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .composition-editor :is(input, select):disabled { opacity: .65; }
 .composition-editor h4 { margin: 10px 12px 0; font-size: var(--fs-ui); }

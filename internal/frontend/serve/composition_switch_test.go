@@ -40,7 +40,7 @@ func compositionSwitchFixture(t *testing.T) (*Server, *control.Controller) {
 		ctrl.ConfigureCompositions(home, nil)
 		return &boot.BuildResult{Controller: ctrl}, nil
 	}
-	first, err := build(t.Context(), boot.Options{AgentComposition: "builtin:review"})
+	first, err := build(t.Context(), boot.Options{AgentComposition: "builtin:minimal"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,11 +58,11 @@ func compositionSwitchFixture(t *testing.T) (*Server, *control.Controller) {
 
 func TestCompositionSwitchPersistsBeforePublicationAndUsesNewDefault(t *testing.T) {
 	s, old := compositionSwitchFixture(t)
-	if err := old.SelectAgentComposition(t.Context(), "builtin:research"); err != nil {
+	if err := old.SelectAgentComposition(t.Context(), "builtin:general"); err != nil {
 		t.Fatal(err)
 	}
 	next := s.ctl().(*control.Controller)
-	if next == old || next.CompositionBinding().Version.Definition.ID != "builtin:research" {
+	if next == old || next.CompositionBinding().Version.Definition.ID != "builtin:general" {
 		t.Fatal("replacement not published")
 	}
 	loaded, err := sessionstore.LoadSession(next.SessionPath())
@@ -76,7 +76,7 @@ func TestCompositionSwitchPersistsBeforePublicationAndUsesNewDefault(t *testing.
 		t.Fatal("same version rebuilt")
 		return nil, nil
 	}
-	if err := next.SelectAgentComposition(t.Context(), "builtin:research"); err != nil {
+	if err := next.SelectAgentComposition(t.Context(), "builtin:general"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -96,7 +96,7 @@ func TestCompositionSwitchFailureRestoresOldDurableBinding(t *testing.T) {
 					return errors.New("sidecar write failed")
 				}
 			}
-			if err := old.SelectAgentComposition(t.Context(), "builtin:research"); err == nil {
+			if err := old.SelectAgentComposition(t.Context(), "builtin:general"); err == nil {
 				t.Fatal("failure hidden")
 			}
 			if s.ctl() != old || old.CompositionBinding().Digest != original {
@@ -109,7 +109,7 @@ func TestCompositionSwitchFailureRestoresOldDurableBinding(t *testing.T) {
 			if loaded.Composition().Digest != original {
 				t.Fatal("failed publication changed durable binding")
 			}
-			if err := old.SelectAgentComposition(t.Context(), "builtin:review"); err != nil {
+			if err := old.SelectAgentComposition(t.Context(), "builtin:minimal"); err != nil {
 				t.Fatalf("old session unusable: %v", err)
 			}
 		})
@@ -118,14 +118,14 @@ func TestCompositionSwitchFailureRestoresOldDurableBinding(t *testing.T) {
 
 func TestCompositionNewSessionResolvesCurrentWorkspaceDefault(t *testing.T) {
 	s, old := compositionSwitchFixture(t)
-	if err := old.SetDefaultAgentPreset("builtin:research", true); err != nil {
+	if err := old.SetDefaultAgentPreset("builtin:general", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := old.NewSession(); err != nil {
 		t.Fatal(err)
 	}
 	next := s.ctl().(*control.Controller)
-	if next == old || next.CompositionBinding().Version.Definition.ID != "builtin:research" || next.SessionPath() == old.SessionPath() {
+	if next == old || next.CompositionBinding().Version.Definition.ID != "builtin:general" || next.SessionPath() == old.SessionPath() {
 		t.Fatal("new session reused old binding or path")
 	}
 }
