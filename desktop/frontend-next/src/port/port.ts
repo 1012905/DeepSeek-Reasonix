@@ -1,6 +1,10 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
+
+/** What `subscribe` hands back: the disposer, and where the transport has one, a
+ *  way to give its connection up and take it again without losing the cursor. */
+export type Subscription = (() => void) & { pause?: () => void; resume?: () => void };
 import type { Attachment, DroppedRef, KeptText } from "./attachment";
 export { DeliveryError, HttpError };
 export type { DeliveryFault };
@@ -567,7 +571,7 @@ export interface AgentPort {
   // model folds one ordered stream and folds nothing twice. The number belongs
   // to the stream, not to the model — several snapshots resume from the lowest
   // of their watermarks, because a duplicate folds and a gap does not.
-  subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>): () => void;
+  subscribe(onEvent: (ev: WireEvent) => void, onGap?: () => void, bootstrap?: () => Promise<number>): Subscription;
 
   // chips carries skill chips beside the line; without it the line is parsed
   // as typed, so a kernel that predates chips still runs a leading one.
