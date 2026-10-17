@@ -186,7 +186,7 @@ export class MockBoundary extends MockShell {
     this.peerState = { ...this.peerState, held: this.peerState.held.filter((h) => h.id !== id) };
   }
 
-  protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false };
+  protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false, available: true };
 
   async peersSettings(): Promise<PeersSettings> {
     return { ...this.peerSettings, release_projects: [...this.peerSettings.release_projects] };

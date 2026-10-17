@@ -35,6 +35,7 @@ export function PeerSettings({ port, onSaved }: { port: AgentPort; onSaved?: (ne
   }, [port, onSaved]);
 
   if (!state) return error ? <div className="why" role="alert">{error}</div> : null;
+  const off = busy || !state.available;
 
   return (
     <div className="box">
@@ -43,15 +44,16 @@ export function PeerSettings({ port, onSaved }: { port: AgentPort; onSaved?: (ne
           <span className="lb">{t("启用会话间消息")}</span>
           <span className="ds">{t("同一台机器上的会话互相发文字。收到的文字先挂起，等你批准才会交给模型。")}</span>
         </span>
-        <Switch data-action="peers.enable" on={state.enabled} busy={busy} label={t("启用会话间消息")} onClick={() => void save({ enabled: !state.enabled })} />
+        <Switch data-action="peers.enable" on={state.enabled} busy={off} label={t("启用会话间消息")} onClick={() => void save({ enabled: !state.enabled })} />
       </div>
       <div className="lrow">
         <span className="tx">
           <span className="lb">{t("允许模型把任务交给别的会话")}</span>
           <span className="ds">{state.enabled ? t("给模型一个把任务交给另一个项目里会话的工具；对方的用户批准后才会送到。") : t("先启用会话间消息。")}</span>
         </span>
-        <Switch data-action="peers.dispatch" on={state.dispatch} busy={busy || !state.enabled} label={t("允许模型把任务交给别的会话")} onClick={() => void save({ dispatch: !state.dispatch })} />
+        <Switch data-action="peers.dispatch" on={state.dispatch} busy={off || !state.enabled} label={t("允许模型把任务交给别的会话")} onClick={() => void save({ dispatch: !state.dispatch })} />
       </div>
+      {!state.available && <div className="peernote" role="status">{t("此会话不支持：没有可打开的收件夹，消息无处挂起。")}</div>}
       {state.release_projects.length > 0 && (
         <>
           <div className="peernote">{t("这些项目收到的消息不再询问，直接交给模型：")}</div>
@@ -59,7 +61,7 @@ export function PeerSettings({ port, onSaved }: { port: AgentPort; onSaved?: (ne
             {state.release_projects.map((p) => (
               <li key={p.path}>
                 <span className="tx"><span className="lb">{p.name}</span><span className="ds">{p.path}</span></span>
-                <button className="act" data-action="peers.release-revoke" data-target={p.path} disabled={busy}
+                <button className="act" data-action="peers.release-revoke" data-target={p.path} disabled={off}
                   aria-label={t("撤销放行：{name}", { name: p.name })}
                   onClick={() => void save({ release_projects: state.release_projects.filter((q) => q.path !== p.path).map((q) => q.path) })}>
                   {t("撤销")}

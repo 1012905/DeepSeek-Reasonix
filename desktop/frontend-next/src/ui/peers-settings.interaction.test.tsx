@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 const settings = (over: Partial<PeersSettings> = {}): PeersSettings => ({
-  enabled: false, dispatch: false, release_projects: [], path: "/home/me/.reasonix/config.toml", applies: "next_turn", pending: false, ...over,
+  enabled: false, dispatch: false, release_projects: [], path: "/home/me/.reasonix/config.toml", applies: "next_turn", pending: false, available: true, ...over,
 });
 
 function portWith(initial: PeersSettings) {
@@ -90,13 +90,21 @@ describe("the session messages switches", () => {
     expect(save).toHaveBeenCalledExactlyOnceWith({ release_projects: ["/work/api"] });
   });
 
-  it("names the file the switches live in, and words a refusal from its code", async () => {
+  it("names the file the switches live in, and shows a refusal beside them", async () => {
     const { port } = portWith(settings({ enabled: true }));
-    vi.spyOn(port, "savePeersSettings").mockRejectedValue(new HttpError(500, "x", { code: "peers.settings.unwritable", params: { path: "/home/me/.reasonix/config.toml" } }));
+    vi.spyOn(port, "savePeersSettings").mockRejectedValue(new HttpError(500, "x", { code: "peer.settings_unwritable", error: "could not save: /home/me/.reasonix/config.toml" }));
     render(<PeerMessages port={port} />);
     expect(await screen.findByText("/home/me/.reasonix/config.toml")).toBeTruthy();
     await userEvent.click(await screen.findByRole("switch", { name: "允许模型把任务交给别的会话" }));
     expect((await screen.findByRole("alert")).textContent).toContain("/home/me/.reasonix/config.toml");
+  });
+
+  it("holds both switches and the revokes inert where the session has no folder to open", async () => {
+    const { port } = portWith(settings({ enabled: true, available: false, release_projects: [{ path: "/work/site", name: "site" }] }));
+    render(<PeerMessages port={port} />);
+    expect(await screen.findByText(/此会话不支持/)).toBeTruthy();
+    for (const name of ["启用会话间消息", "允许模型把任务交给别的会话"]) expect((screen.getByRole("switch", { name }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /撤销放行/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

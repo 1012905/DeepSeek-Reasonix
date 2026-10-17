@@ -158,6 +158,9 @@ export interface PeersSettings {
   path: string;
   applies: "next_turn";
   pending: boolean;
+  // False where the session has no folder to open (a headless run): there is
+  // nowhere for messages to be held, so the switches are inert.
+  available: boolean;
 }
 
 export interface PeersSettingsEdit {

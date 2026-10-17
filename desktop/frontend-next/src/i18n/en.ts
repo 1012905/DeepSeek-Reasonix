@@ -222,6 +222,7 @@ export const EN: Record<string, string> = {
   "这些开关写在用户配置文件里：": "These switches are kept in the user config file: ",
   "批准并记住项目「{name}」": "Approve and remember project \"{name}\"",
   "“记住项目”记的是收到消息的项目「{name}」（{path}）：以后发到这个项目的消息不再询问。可在 设置 → 会话间消息 撤销。": "\"Remember project\" remembers the project that received the message, \"{name}\" ({path}): later messages sent to it are no longer asked about. Undo it in Settings → Session messages.",
+  "此会话不支持：没有可打开的收件夹，消息无处挂起。": "Not supported in this session: there is no folder to open, so a message has nowhere to be held.",
   "正文字号": "Body text size",
   "尚未派出": "None dispatched",
   "运行中 {live} / 共 {total}": "{live} running / {total} total",
