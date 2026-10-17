@@ -102,6 +102,8 @@ rules are written in.
 - The separator between crumbs is a written character, not the 1px hairline
   `.sep`. Sharing that name puts the glyph in a 1px-wide box with a background,
   and the strokes spill out of it.
+- Project and checkout context shrink together inside `.crumb-context`; the
+  conversation title keeps its four-em floor even when multiple labels are visible.
 - The desktop sidebar's divider owns collapse, expansion and width adjustment.
   - Its grip remains visible when collapsed; the separator supports Enter/Space for toggling, arrow keys for sizing,
     and Home or a double click for restoring the default width. The open width survives collapse and reload.

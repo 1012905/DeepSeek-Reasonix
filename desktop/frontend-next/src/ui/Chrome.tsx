@@ -84,27 +84,29 @@ export function Chrome({ port, status, title, steer, onSettings, account, host, 
     <div className="chrome" onDoubleClick={zoomOnTitleBar}>
 
       <div className="crumb">
-        <button
-          type="button"
-          className="crumb-folder"
-          data-action="chrome.open-project"
-          aria-label={t("打开项目文件夹")}
-          title={t("打开项目文件夹")}
-          disabled={!canOpenProject}
-          onClick={openProject}
-        >
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
-        </button>
-        <span className="crumb-proj" title={root}>
-          {project}
+        <span className="crumb-context">
+          <button
+            type="button"
+            className="crumb-folder"
+            data-action="chrome.open-project"
+            aria-label={t("打开项目文件夹")}
+            title={t("打开项目文件夹")}
+            disabled={!canOpenProject}
+            onClick={openProject}
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
+          </button>
+          <span className="crumb-proj" title={root}>
+            {project}
+          </span>
+          <span className="isolab" hidden={!ws || ws.current !== root} title={root}>
+            {ws?.isolated ? t("隔离目录") : t("原目录")}
+          </span>
+          <span className="isolab hostlab" hidden={!host}>
+            {host}
+          </span>
+          <span className="crumbsep">/</span>
         </span>
-        <span className="isolab" hidden={!ws || ws.current !== root} title={root}>
-          {ws?.isolated ? t("隔离目录") : t("原目录")}
-        </span>
-        <span className="isolab hostlab" hidden={!host}>
-          {host}
-        </span>
-        <span className="crumbsep">/</span>
         <b title={status?.sessionPath}>{sessionName(title, status?.sessionPath)}</b>
       </div>
 
