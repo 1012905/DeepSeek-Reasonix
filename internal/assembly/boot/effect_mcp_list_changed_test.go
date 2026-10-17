@@ -458,13 +458,17 @@ func containsMessage(req provider.Request, want string) bool {
 // holding the tools may not have cached them yet.
 func waitForCachedMCPTool(t *testing.T, server, tool string) {
 	t.Helper()
-	path := filepath.Join(config.CacheDir(), "mcp", server+".json")
+	// Entries are per spec (<server>.<key>.json); any of the server's entries will do.
+	pattern := filepath.Join(config.CacheDir(), "mcp", server+".*json")
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		if body, err := os.ReadFile(path); err == nil && strings.Contains(string(body), `"`+tool+`"`) {
-			return
+		entries, _ := filepath.Glob(pattern)
+		for _, path := range entries {
+			if body, err := os.ReadFile(path); err == nil && strings.Contains(string(body), `"`+tool+`"`) {
+				return
+			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("%s never reached the schema cache at %s", tool, path)
+	t.Fatalf("%s never reached the schema cache (%s)", tool, pattern)
 }
