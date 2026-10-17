@@ -1,2 +1,0 @@
-- 新增：用户配置里可设 `agent.plan_approval = "auto"`，计划提交后不再等批准点击，直接开始执行并在对话里留一条说明（默认询问）。关联 #13478。
-- Added: `agent.plan_approval = "auto"` in your user config starts a submitted plan without the approval click and notes it in the transcript (default asks). Refs #13478.

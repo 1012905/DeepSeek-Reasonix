@@ -1,2 +1,0 @@
-- 新增：设置 → 工具里有了“计划批准”开关，打开后提交的计划不再等你点批准（默认关闭，只写进你自己的用户配置）。关联 #13478。
-- Added: Settings → Tools has a "Plan approval" switch; when on, a submitted plan starts without waiting for your click (off by default, kept in your own user config). Refs #13478.

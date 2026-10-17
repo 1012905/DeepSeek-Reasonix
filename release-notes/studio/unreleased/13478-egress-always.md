@@ -1,2 +1,0 @@
-- 新增：命令要访问不在 `allowed_domains` 里的网站时，批准卡多了“始终允许”，把该网站写进你自己的列表，以后不再询问。关联 #13478。
-- Added: the card asking before a command reaches a site outside `allowed_domains` now offers "always allow", adding it to your own list (only if you have one). Refs #13478.
