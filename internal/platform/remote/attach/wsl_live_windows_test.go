@@ -62,5 +62,12 @@ func TestLiveAttachBringsUpAKernelInADistribution(t *testing.T) {
 		t.Fatalf("second attach = %+v, %v; want the same address %s", again, err, ep.Addr)
 	}
 	again.Release()
+
+	// The same folder named the Windows way reaches the same kernel.
+	unc, err := p.Attach(t.Context(), "dev", `\\wsl.localhost\`+name+`\tmp\reasonix-live-workspace`, Call{})
+	if err != nil || unc.Addr != ep.Addr || unc.Workspace != ep.Workspace {
+		t.Fatalf("UNC attach = %+v, %v; want the kernel at %s for %s", unc, err, ep.Addr, ep.Workspace)
+	}
+	unc.Release()
 	ep.Release()
 }

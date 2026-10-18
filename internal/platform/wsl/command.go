@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"reasonix/internal/base/proc"
 )
@@ -62,4 +63,18 @@ func SystemCommand() Command {
 // own argument, so it cannot become an option.
 func ExecArgs(distro string, argv ...string) []string {
 	return append([]string{"-d", distro, "--exec"}, argv...)
+}
+
+// IsWindowsPath reports whether p is spelled as an absolute Windows path: a
+// drive letter and a colon, or a UNC prefix. It reads the shape only, so a
+// Linux path with a colon in a later component is not mistaken for one.
+func IsWindowsPath(p string) bool {
+	if strings.HasPrefix(p, `\\`) {
+		return true
+	}
+	if len(p) < 2 || p[1] != ':' {
+		return false
+	}
+	c := p[0] | 0x20
+	return c >= 'a' && c <= 'z'
 }

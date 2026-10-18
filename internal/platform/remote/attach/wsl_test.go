@@ -286,3 +286,38 @@ func TestADetachedCommandRunsInTheHeldSessionAndReturnsItsOutput(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+func TestADistributionWithoutPsIsRefusedBeforeAnythingIsLaunched(t *testing.T) {
+	m := &wslMachine{t: t, script: func(args []string, _ io.Reader) (wsl.Result, error) {
+		return wsl.Result{Stdout: []byte("ps\n"), ExitCode: exitMissingTool}, nil
+	}}
+	l, _ := m.link(wslEntry())
+	err := l.Start(t.Context())
+	if !errors.Is(err, wsl.ErrUnsupported) || !strings.Contains(err.Error(), "no ps") {
+		t.Fatalf("Start = %v, want ErrUnsupported naming ps", err)
+	}
+	for _, c := range m.calls {
+		if slices.Equal(c, []string{"-d", "Ubuntu", "--exec", "/bin/sh"}) {
+			t.Fatal("a session was opened on a distribution that cannot run a kernel")
+		}
+	}
+}
+
+func TestAWindowsWorkspaceIsTranslatedByTheDistributionBeforeTheKernelIsAsked(t *testing.T) {
+	m := &wslMachine{t: t, script: func(args []string, _ io.Reader) (wsl.Result, error) {
+		if len(args) == 6 && args[3] == "wslpath" && args[5] == `C:\src\app` {
+			return wsl.Result{Stdout: []byte("/mnt/c/src/app\n")}, nil
+		}
+		return wsl.Result{}, nil
+	}}
+	l, _ := m.link(wslEntry())
+	w := l.(workspaceMapper)
+	for in, want := range map[string]string{`C:\src\app`: "/mnt/c/src/app", "/home/dev/app": "/home/dev/app", "~/app": "~/app"} {
+		if got, err := w.Workspace(t.Context(), in); err != nil || got != want {
+			t.Errorf("Workspace(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if _, err := w.Workspace(t.Context(), `Z:\none`); err == nil {
+		t.Fatal("a drive the distribution does not have was accepted")
+	}
+}

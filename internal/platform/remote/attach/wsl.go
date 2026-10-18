@@ -64,12 +64,33 @@ func (l *wslLink) publish(ev remote.StatusEvent) {
 	}
 }
 
+// requiredTools prints the first program a kernel launch depends on that the
+// distribution lacks and stops with exitMissingTool. Minimal images omit ps,
+// which is how the launched process is identified as the kernel.
+const (
+	requiredTools   = `for t in ps nohup; do command -v "$t" >/dev/null 2>&1 || { echo "$t"; exit 46; }; done`
+	exitMissingTool = 46
+)
+
+// Workspace spells a folder the way the distribution sees it: a Windows path
+// is translated by the distribution itself, anything else is already its own.
+func (l *wslLink) Workspace(ctx context.Context, p string) (string, error) {
+	if !wsl.IsWindowsPath(p) {
+		return p, nil
+	}
+	return l.ToLinux(ctx, p)
+}
+
 // Start wakes the distribution: the first command is what boots it, and a
 // distribution that cannot answer one is reported as the connect failing.
 func (l *wslLink) Start(ctx context.Context) error {
 	l.publish(remote.StatusEvent{Status: remote.StatusConnecting})
-	res, err := l.Exec(ctx, "exit 0")
-	if err == nil && res.ExitCode != 0 {
+	res, err := l.Exec(ctx, requiredTools)
+	switch {
+	case err != nil:
+	case res.ExitCode == exitMissingTool:
+		err = fmt.Errorf("%w: %q has no %s, which starting a kernel there needs", wsl.ErrUnsupported, l.Distro(), strings.TrimSpace(string(res.Stdout)))
+	case res.ExitCode != 0:
 		err = fmt.Errorf("%w: %q answered with status %d", wsl.ErrUnsupported, l.Distro(), res.ExitCode)
 	}
 	if err != nil {

@@ -458,6 +458,15 @@ func (p *Pool) holdSpace(l *link, workspace string) (*space, bool) {
 // that reaches it.
 func (p *Pool) serve(ctx context.Context, l *link, s *space, workspace string, call Call) {
 	defer close(s.ready)
+	if m, ok := l.client.(workspaceMapper); ok {
+		mapped, err := m.Workspace(ctx, workspace)
+		if err != nil {
+			s.err = err
+			p.forgetSpace(l, s)
+			return
+		}
+		workspace = mapped
+	}
 	install := p.opts.Install
 	if install == "" {
 		install = l.install

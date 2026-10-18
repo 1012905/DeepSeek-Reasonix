@@ -116,3 +116,14 @@ func TestSystemIsUnavailableOffWindows(t *testing.T) {
 		t.Fatalf("List = %v", err)
 	}
 }
+
+func TestAWindowsPathIsRecognizedByItsShape(t *testing.T) {
+	for p, want := range map[string]bool{
+		`C:\Users`: true, `c:/x`: true, `Z:`: true, `\\wsl.localhost\Ubuntu\x`: true, `\\server\share`: true,
+		`/mnt/c/x`: false, `/home/a:b`: false, `relative\dir`: false, `1:\x`: false, ``: false, `C`: false, `\x`: false,
+	} {
+		if got := IsWindowsPath(p); got != want {
+			t.Errorf("IsWindowsPath(%q) = %v, want %v", p, got, want)
+		}
+	}
+}

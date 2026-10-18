@@ -23,6 +23,13 @@ type Link interface {
 	Dirs(ctx context.Context, dir string) (at string, entries []sftpfs.Entry, err error)
 }
 
+// workspaceMapper is a Link whose machine spells folders its own way, so a path
+// chosen on this one has to be translated before the kernel there is asked to
+// open it.
+type workspaceMapper interface {
+	Workspace(ctx context.Context, p string) (string, error)
+}
+
 // Forwards is the part of a forward registry the pool drives.
 type Forwards interface {
 	Add(spec forward.Spec) (string, error)
