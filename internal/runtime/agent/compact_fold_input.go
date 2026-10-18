@@ -115,7 +115,7 @@ func (a *contextWindow) foldToSummary(ctx context.Context, fold []provider.Messa
 			return attempt, err
 		}
 	}
-	return attempt, fmt.Errorf("%w: the provider refused the summary request at every size tried (%v)", errSummaryInputTooLarge, err)
+	return attempt, fmt.Errorf("%w: the provider refused the summary request at every size tried: %w", errSummaryInputTooLarge, err)
 }
 
 // foldAtBudget shortens the fold to fit budget and asks for its summary once.
