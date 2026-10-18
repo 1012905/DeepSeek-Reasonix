@@ -32,6 +32,7 @@ function ModuleEditor({ kind, choices,value, disabled, onChange, onValidityChang
   };
   return <fieldset className="composition-modules" disabled={disabled}>
     <legend>{t(labels[kind])}</legend>
+    {kind === "hooks" && <p className="ds">{t("安全 Hook 和权限规则始终生效；此处仅选择非阻断型自动化。")}</p>}
     <select aria-label={`${t(labels[kind])} ${t("选择方式")}`} data-action-change="agent-preset.module-mode" data-target={kind} value={value.mode} onChange={(e) => { validate({});setRawParameters({});onChange({ mode: e.target.value as "inherit" | "select", members: [] }); }}>
       <option value="inherit">{t("创建会话时继承当前配置")}</option><option value="select">{t("仅使用所选项（空列表表示禁用）")}</option>
     </select>

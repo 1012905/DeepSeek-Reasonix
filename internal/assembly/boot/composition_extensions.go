@@ -179,7 +179,10 @@ func compositionPackages(home string, packages []pluginpkg.InstalledPackage, bin
 				return nil, fmt.Errorf("%w: extension has no configurable runtime", agentcomposition.ErrInvalid)
 			}
 		}
-		if p.Package.Manifest.Runtime != nil {
+		if rt := p.Package.Manifest.Runtime; rt != nil {
+			copy := *rt
+			copy.TightenOnly = true
+			p.Package.Manifest.Runtime = &copy
 			out = append(out, p)
 		}
 	}

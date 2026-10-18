@@ -73,8 +73,13 @@ func (b *builder) prepareCompositionHooks(selected []pluginpkg.InstalledPackage)
 		return nil
 	}
 	hooks := hook.Load(hook.LoadOptions{ProjectRoot: b.root, ReasonixHomeDir: b.roots.Home()})
+	available := []string{}
 	for i, h := range hooks {
 		id := fmt.Sprintf("%s:%s:%d", h.Scope, h.Event, i)
+		if h.IsPolicyGuard() {
+			available = append(available, id)
+			continue
+		}
 		if !member(binding.Resolved.Hooks, id) {
 			continue
 		}
@@ -93,6 +98,7 @@ func (b *builder) prepareCompositionHooks(selected []pluginpkg.InstalledPackage)
 			if err := b.retainHook(id, h); err != nil {
 				return err
 			}
+			available = append(available, id)
 		}
 	}
 	if binding.Digest == "" {
@@ -102,7 +108,7 @@ func (b *builder) prepareCompositionHooks(selected []pluginpkg.InstalledPackage)
 				ids = append(ids, r.ID)
 			}
 		}
-		if err := verifySelected(binding.Resolved.Hooks, ids, func(id string) string { return id }); err != nil {
+		if err := verifySelected(binding.Resolved.Hooks, available, func(id string) string { return id }); err != nil {
 			return err
 		}
 		binding.Resolved.Hooks = selectionOf(ids, func(id string) string { return id })

@@ -12,6 +12,7 @@ import (
 
 func TestAgentPresetRoutesKeepRevisionsAndRejectStaleWrites(t *testing.T) {
 	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	catalog := readJSON[agentpreset.Catalog](t, srv.URL, "/agent-presets")

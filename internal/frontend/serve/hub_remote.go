@@ -414,7 +414,7 @@ func remoteBaseName(p string) string {
 // remoteProxy forwards a pane's requests to the remote kernel.
 func remoteProxy(ep RemoteEndpoint) http.Handler {
 	target := &url.URL{Scheme: "http", Host: ep.Addr, Path: ep.Base}
-	return &httputil.ReverseProxy{
+	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// SetURL appends the inbound path to the target's, so the pane's
 			// own runtime prefix on the far side rides here.
@@ -437,4 +437,11 @@ func remoteProxy(ep RemoteEndpoint) http.Handler {
 				"the remote kernel is not answering", map[string]any{"host": ep.Host})
 		},
 	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !hostReach(r) && agentPresetMutation(r) {
+			refuseAgentPresetEdit(w)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	})
 }

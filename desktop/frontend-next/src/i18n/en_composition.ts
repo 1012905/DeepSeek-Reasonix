@@ -65,6 +65,7 @@ export const EN_COMPOSITION: Record<string,string> = {
   "参数需要有效的 JSON 对象": "Parameters must be a valid JSON object",
   "添加模块": "Add module",
   "自动化 Hook": "Automation hooks",
+  "安全 Hook 和权限规则始终生效；此处仅选择非阻断型自动化。": "Safety hooks and permission rules always apply; this selection controls non-blocking automation only.",
   "斜杠命令": "Slash commands",
   "用其他组合新建会话": "Start a conversation with another composition",
   "组合资源不可用，当前会话仅可查看历史。": "Composition resources are unavailable. This conversation is open for history only.",

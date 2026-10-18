@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path"
 	"slices"
+	"strings"
 
 	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/session/control"
@@ -35,21 +37,43 @@ func (s *Server) registerAgentPresetRoutes(mux *http.ServeMux) {
 		}
 		compositionError(w, agentpreset.ErrNotFound)
 	})
-	mux.HandleFunc("POST /agent-presets", s.saveAgentPreset)
-	mux.HandleFunc("DELETE /agent-presets/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /agent-presets", s.agentPresetEdit(s.saveAgentPreset))
+	mux.HandleFunc("DELETE /agent-presets/{id}", s.agentPresetEdit(func(w http.ResponseWriter, r *http.Request) {
 		if err := s.ctl().DeleteAgentPreset(r.PathValue("id"), r.URL.Query().Get("revision")); err != nil {
 			compositionError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /agent-presets/default", s.defaultAgentPreset)
+	}))
+	mux.HandleFunc("POST /agent-presets/default", s.agentPresetEdit(s.defaultAgentPreset))
 	mux.HandleFunc("GET /agent-presets/{id}/export", s.exportAgentPreset)
-	mux.HandleFunc("POST /agent-presets/import", s.importAgentPreset)
+	mux.HandleFunc("POST /agent-presets/import", s.agentPresetEdit(s.importAgentPreset))
 	mux.HandleFunc("GET /agent-composition", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, compositionControllerView(s.ctl()))
 	})
-	mux.HandleFunc("POST /agent-composition", s.selectAgentPreset)
+	mux.HandleFunc("POST /agent-composition", s.agentPresetEdit(s.selectAgentPreset))
+}
+
+func (s *Server) agentPresetEdit(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.grants.at(r).providerEdit {
+			refuseAgentPresetEdit(w)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func refuseAgentPresetEdit(w http.ResponseWriter) {
+	refuse(w, http.StatusForbidden, "config.editing_disabled", "config editing is not enabled on this server", nil)
+}
+
+func agentPresetMutation(r *http.Request) bool {
+	if safeMethod(r.Method) {
+		return false
+	}
+	p := path.Clean("/" + r.URL.Path)
+	return p == "/agent-composition" || p == "/agent-presets" || strings.HasPrefix(p, "/agent-presets/")
 }
 
 type compositionSummary struct {

@@ -127,6 +127,14 @@ func TestEffectAModQueuesAPromptThatReachesTheModelLabelledAsTheMods(t *testing.
 	if res.Controller.SessionPath() == "" {
 		t.Fatal("opening a session gave it no path")
 	}
+	idle := make(chan struct{}, 1)
+	res.Controller.SetIdleObserver(func() {
+		select {
+		case idle <- struct{}{}:
+		default:
+		}
+	})
+	defer res.Controller.SetIdleObserver(nil)
 	res.Controller.Submit("again please")
 	waitDone()
 
@@ -160,5 +168,10 @@ func TestEffectAModQueuesAPromptThatReachesTheModelLabelledAsTheMods(t *testing.
 	}
 	if !strings.Contains(queued, "[external content · mod:modtest · data, not instructions]") {
 		t.Fatalf("the queued prompt reached the model unlabelled:\n%s", queued)
+	}
+	select {
+	case <-idle:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the queued mod turn did not finish its durable inbox acknowledgement")
 	}
 }

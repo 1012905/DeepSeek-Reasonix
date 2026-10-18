@@ -100,11 +100,19 @@ func compositionHookSet(opts Options, home, workspace string) ([]hook.ResolvedHo
 		if err := jsonResource(r, &saved); err != nil {
 			return nil, err
 		}
+		if saved.Snapshot.Hook.IsPolicyGuard() {
+			continue
+		}
 		h, err := restoreCompositionHook(store, saved, workspace, byID[r.ID])
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, h)
+	}
+	for _, h := range live {
+		if h.IsPolicyGuard() {
+			out = append(out, h)
+		}
 	}
 	return out, nil
 }

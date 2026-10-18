@@ -6,6 +6,7 @@
 - 项目预设的 MCP/扩展参数仅可调整超时，不能改写启动参数、地址或凭据环境；旧的不安全绑定保留历史但拒绝执行。#13613
 - 拒绝跨项目移动绑定组合的会话，保留原会话，避免丢失绑定后以其他能力续写。#13613
 - 远程新会话透传所选模式，同时保留并发打开与重复点击的保护。#13613
+- 预设写入与组合切换要求配置编辑授权；安全 Hook 与权限规则不受组合选择影响，旧绑定恢复和会话内策略编辑同样保持保护。#13613
 
 <!-- lang:en -->
 
@@ -17,3 +18,4 @@
 - Limit project MCP/extension parameters to timeouts; refuse launch, endpoint or credential-environment overrides, including in old executable bindings, while keeping history readable. #13613
 - Refuse moving bound conversations to another project before copying or deleting them, preserving the original immutable composition. #13613
 - Carry the selected mode into new remote conversations while preserving concurrent-open ordering and duplicate-click protection. #13613
+- Require configuration-edit authority for preset writes and composition switches; keep safety hooks and permission rules in force across selection, old-binding restore and live policy edits. #13613

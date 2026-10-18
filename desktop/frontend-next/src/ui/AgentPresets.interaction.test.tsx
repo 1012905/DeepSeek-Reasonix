@@ -41,6 +41,7 @@ describe("Agent preset management", () => {
     expect(await port.agentComposition()).toBeNull();
     await user.click(minimal);
     await user.click(screen.getByRole("button", { name: "复制为自定义预设" }));
+    expect(screen.getByText("安全 Hook 和权限规则始终生效；此处仅选择非阻断型自动化。")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "保存预设" }));
     await screen.findByRole("status");
     const copied = (await port.agentPresets()).presets.find((v) => v.definition.id === "user:custom")!;

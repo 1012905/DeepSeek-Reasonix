@@ -121,7 +121,7 @@ readable as history but cannot execute, even with an old local authorization
 record. It is not silently rewritten. Valid timeout-only project bindings
 retain their original version.
 
-Inherited choices resolve once at binding. Retained skill and hook files and
+Inherited choices resolve once at binding. Retained skill and non-blocking hook files and
 extension code do not follow subsequent source edits.
 
 Hooks retain referenced files and sibling bundles for common script formats.
@@ -136,6 +136,28 @@ Credential lookups remain
 with the existing credential/configuration owner. Sessions use separate MCP
 connections and process state, and extensions run from private copies. Existing
 trust, revocation, authorization and sandbox checks still apply.
+
+### Safety policy stays outside the composition
+
+| Hook or rule | Can a composition deselect it? |
+| --- | --- |
+| `PreToolUse`, `UserPromptSubmit`, `PermissionRequest` hooks | No, in every scope, including imported Claude permission hooks |
+| Permission `ask`/`deny` rules and remembered revocations | No; ordinary permission policy still judges the resolved call |
+| Other Hook events | Yes; only selected non-blocking automation is retained |
+
+Extensions selected by a bound composition are also tighten-only: neither a
+permission interceptor nor a permission strategy may turn an `ask`/`deny` into
+an allow. Ordinary unbound extension behavior keeps its existing contract.
+
+Guards load from current authorized configuration at assembly and restore,
+including for old bindings with an empty Hook selection. They also apply when
+their installed package is outside the selected extension set.
+
+Saving safety hooks updates the live shared runner, including child roles,
+without replacing retained automation or the immutable composition digest.
+An authorized policy edit may change a guard; selecting a composition cannot.
+
+Project program approval and package activation still control which guards load.
 
 A binding is local transcript metadata and never enters provider messages.
 Only explicitly bound composition transcripts use native event-log schema 4; older readers refuse
@@ -211,6 +233,17 @@ send the selected composition ID to that host; local executable resources are no
 | `POST /tree/sessions/export` | `{path}` → `{name, content}`; native envelope for bound sessions |
 | `POST /tree/sessions/import-native` | `{workspace, content}` → imported `{path, agentComposition}` |
 | `POST /tree/sessions/move-to` | `{path, target}` → moved unbound conversation; bound conversations are refused |
+
+Preset save/delete/default/import and session composition selection require the
+request's provider-edit grant, just like configuration writes. Without it they
+return HTTP 403 `config.editing_disabled` before store access or selection.
+
+Paired devices do not inherit the host's grant. Catalog/detail/export and current
+binding reads remain available.
+
+The remote-pane proxy refuses paired-device preset mutations before forwarding
+under the host's remote credential. Reads and the host's own requests still reach
+the remote kernel, which checks its grant independently.
 
 `/status` and runtime listings include `agentComposition`. Refusals use stable
 `agent_composition.invalid`, `.not_found`, `.read_only`, `.conflict`, `.locked`
