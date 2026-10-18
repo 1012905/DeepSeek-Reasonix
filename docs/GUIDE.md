@@ -1758,6 +1758,41 @@ read-only: an explicit old path can be recovered as an ordinary Goal, but new
 runs never create or update those directories. Deprecated budget flags are
 accepted for compatibility but are hidden from help and completion.
 
+## Scheduled runs
+
+A schedule makes Reasonix run a read-only task for you at a time you chose and leave the result waiting. It is
+the command line only for now; Studio gets a list later.
+
+```bash
+reasonix schedule add --every 2h --prompt "Summarize what changed in the open TODOs" --workspace ~/src/app
+reasonix schedule list
+reasonix schedule pause <id>      # pause-all, resume, resume-all, renew and rm work the same way
+reasonix schedule tick            # claim and run what is due now, then exit
+```
+
+- **A person confirms it.** `add`, `resume`, `renew`, `rm` and `resume-all` need a terminal. `add` shows the whole
+  plan (prompt, folder, model, budget, expiry) and asks you to type back its short id; `list` shows who created
+  each one. A command run by a tool, a pipe or a scheduler is refused.
+  - The host marks every subprocess it starts for the agent with `REASONIX_AGENT_CHILD=1`, and these commands
+    refuse when it is set, so an agent that opens its own pty is stopped too.
+  - That is a guard against accidents and a trick, not a boundary: a child can clear its own environment, and
+    only the sandbox confines what an agent can do.
+- **Nothing runs by itself yet.** Call `reasonix schedule tick` from the operating system's scheduler (cron,
+  launchd, Task Scheduler). Every tick goes through the store's own budget and expiry checks, so a scheduler
+  that only calls `tick` cannot bypass them. An in-kernel ticker is a later change.
+- **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
+  for you and never answered on your behalf.
+- **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only
+  tighten them.
+  - One run at a time, and by default at least 60 minutes between runs (never under 10).
+  - Per run: 250,000 tokens, 40 steps and 15 minutes.
+  - 4 runs a day for one schedule and 6 for all of them, and a lifetime budget per schedule.
+  - A 30 day expiry that only you renew.
+- **Late and missed runs.** Only the latest slot counts. It still runs if it is at most 15 minutes late (never
+  more than a quarter of the interval); otherwise it is recorded as skipped and not made up.
+- **The model is pinned** when you create the schedule, from your own configuration. If it later becomes
+  unavailable the run fails and says so.
+
 ## @ references
 
 Embed `@` references in a message and Reasonix resolves them before sending, as
