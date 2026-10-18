@@ -360,7 +360,7 @@ function storedHistory(): HistoryMessage[] {
   const msgs: HistoryMessage[] = [];
   for (let i = 0; i < TURNS; i++) {
     const pinned = query.get("skill") === "1" && i === TURNS - 1;
-    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。` });
+    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。`, createdAt: new Date(2026, 9, 17, 18, 33 + i).getTime() });
     msgs.push({
       role: "assistant",
       content: `第 ${i} 段回答，说明刚才那一步做了什么。\n\n- 要点一\n- 要点二\n`,

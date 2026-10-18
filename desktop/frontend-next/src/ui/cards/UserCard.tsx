@@ -7,6 +7,7 @@ import { parseSkillPin } from "./skillpin";
 import { CopyButton } from "../CopyButton";
 import { reason } from "../../i18n/kernel";
 import { t } from "../../i18n";
+import { clock } from "../../i18n/format";
 import { StudioIcon } from "../StudioIcon";
 import { messageSource } from "../source";
 import { useSendShortcut } from "../../state/prefs";
@@ -150,6 +151,7 @@ export function UserCard({
           )}
         </div>
         <div className="user-acts">
+          {item.at && <time className="user-time" dateTime={new Date(item.at).toISOString()} title={new Date(item.at).toLocaleString()}>{clock(item.at)}</time>}
           <CopyButton text={item.text} iconOnly showFeedback label={t("复制")} />
           {reopen && (
             <button type="button" className="reask-open" data-action="turn.edit" data-target={item.id}
