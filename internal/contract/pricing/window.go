@@ -75,7 +75,7 @@ func (w *PeakWindow) NextChange(t time.Time) (time.Time, bool) {
 	}
 	now := w.IsPeak(t)
 	next := t.In(time.FixedZone("", w.OffsetSeconds)).Truncate(time.Hour).Add(time.Hour)
-	for i := 0; i < 14*24; i++ {
+	for range 14 * 24 {
 		if w.IsPeak(next) != now {
 			return next, true
 		}

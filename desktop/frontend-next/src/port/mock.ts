@@ -359,8 +359,8 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   async markSessionViewed() {}
 
-  async status() {
-    return { ...this.state };
+  async status(): Promise<SessionStatus> {
+    return { ...this.state, ...(location.search.includes("tariff") && { tariff: { peak: !location.search.includes("tariff=off"), changesAt: new Date(Date.now() + 130 * 60_000).toISOString() } }) };
   }
 
   async balance(): Promise<WalletReading | null> {

@@ -29,6 +29,10 @@ func (c *Controller) ModelVisibleMessages() []provider.Message {
 	return c.executor.ModelVisibleMessages()
 }
 
+// TariffSource reads the vendor schedule a model's rate is billed under at an
+// instant; false means no schedule applies. Nil answers false.
+type TariffSource func(time.Time) (pricing.Tariff, bool)
+
 // Tariff is the vendor schedule window the active model is billed in right now
 // and when it next flips; false where no vendor schedule applies to its rate.
 func (c *Controller) Tariff() (pricing.Tariff, bool) {

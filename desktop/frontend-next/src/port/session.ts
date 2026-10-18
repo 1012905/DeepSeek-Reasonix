@@ -222,7 +222,15 @@ export interface Decision {
   questions?: DecisionQuestion[];
 }
 
+// The vendor's billing window for the model's rate, sent only where the vendor's
+// own schedule applies. changesAt is absent when no flip is ahead.
+export interface Tariff {
+  peak: boolean;
+  changesAt?: string;
+}
+
 export interface SessionStatus {
+  tariff?: Tariff;
   // Whether the current model reads images at all, and whether that answer was
   // ever given: a relay forwards models nothing here has a label for, and an
   // undeclared one is not the same claim as a text-only one.
