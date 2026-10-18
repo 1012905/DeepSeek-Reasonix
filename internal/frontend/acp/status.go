@@ -697,7 +697,7 @@ func (s *service) sessionStatus(_ context.Context, raw json.RawMessage) (any, er
 }
 
 func (s *service) publishStatus(sess *acpSession, eventName string) {
-	if sess == nil {
+	if sess == nil || !s.statusUpdatesSupported() {
 		return
 	}
 	status := sess.statusSnapshot()

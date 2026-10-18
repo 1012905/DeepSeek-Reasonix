@@ -201,29 +201,6 @@ func (s *service) clientCapabilities() ClientCapabilities {
 	return s.clientCaps
 }
 
-// extensionSurfaceSupported reports whether the connected client advertised
-// reasonix.extensionSurface support in its initialize handshake.
-func (s *service) extensionSurfaceSupported() bool {
-	return clientExtensionSurfaceSupported(s.clientCapabilities())
-}
-
-// clientExtensionSurfaceSupported tolerantly parses the client's vendor
-// capability block: _meta["reasonix.io"]["extensionSurface"]["supported"] must
-// be an explicit true. Absent keys, wrong shapes, or a malformed block all
-// mean unsupported — the sink then sends only the text fallback.
-func clientExtensionSurfaceSupported(caps ClientCapabilities) bool {
-	vendor, ok := caps.Meta["reasonix.io"].(map[string]any)
-	if !ok {
-		return false
-	}
-	capability, ok := vendor["extensionSurface"].(map[string]any)
-	if !ok {
-		return false
-	}
-	supported, _ := capability["supported"].(bool)
-	return supported
-}
-
 // bindClientIO fills SessionParams' overlay/terminal fields from the client's
 // declared capabilities. The nil checks keep absent capabilities as nil
 // interface fields (a typed-nil *clientIO must never reach the interface).
