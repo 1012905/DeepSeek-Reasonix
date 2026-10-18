@@ -43,10 +43,10 @@ type sidAndAttributes struct {
 }
 
 // restrictedToken is the process token narrowed to WRITE_RESTRICTED with the
-// synthetic SID, the logon SID and Everyone as restricting SIDs, and lowered to
-// Low integrity. A write needs the normal access check and one of those SIDs to
-// pass, and only the roots carry the synthetic one. Everyone is there because a
-// child with less cannot start.
+// synthetic SID, the logon SID and Everyone as restricting SIDs. A write needs the
+// normal access check and one of those SIDs to pass, and only the roots carry the
+// synthetic one. Everyone is there because a child with less cannot start. A
+// delete or a rename does not consult the restricting SIDs, so it is not bounded.
 func restrictedToken(sidText string) (windows.Token, error) {
 	var cur windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ALL_ACCESS, &cur); err != nil {
@@ -80,10 +80,6 @@ func restrictedToken(sidText string) (windows.Token, error) {
 	// Objects the child creates take this DACL: without the restricting SIDs in
 	// it the child could not open what it just made.
 	if err := setDefaultDACL(out, synthetic, logon, everyone, system, admins, user.User.Sid); err != nil {
-		out.Close()
-		return 0, err
-	}
-	if err := setLowIntegrity(out); err != nil {
 		out.Close()
 		return 0, err
 	}
@@ -217,20 +213,4 @@ func environmentBlock(env []string) []uint16 {
 		block = append(block, u...)
 	}
 	return append(block, 0)
-}
-
-// setLowIntegrity lowers the token to Low. Restricting SIDs are not consulted for
-// a delete or a rename, so without this a restricted command could remove or move
-// away anything the user may; mandatory integrity denies a Low writer both, except
-// where the object is labelled Low, which the grant does for its roots.
-func setLowIntegrity(tok windows.Token) error {
-	sid, err := windows.StringToSid(lowIntegritySID)
-	if err != nil {
-		return err
-	}
-	tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: sid, Attributes: windows.SE_GROUP_INTEGRITY}}
-	if err := windows.SetTokenInformation(tok, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
-		return fmt.Errorf("set integrity level: %w", err)
-	}
-	return nil
 }

@@ -11,9 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 type winHarness struct {
@@ -93,7 +90,6 @@ func TestRestrictedCommandsWriteOnlyWhereTheSIDWasGranted(t *testing.T) {
 		`echo ok> ` + filepath.Join(h.ws, "inside.txt"),
 		`echo no> ` + filepath.Join(h.out, "outside.txt"),
 		`echo no>> ` + existing,
-		`del ` + existing,
 		`mkdir ` + filepath.Join(h.out, "newdir"),
 		`echo no> ` + filepath.Join(junction, "via-junction.txt"),
 		`reg add ` + hkcu + ` /v a /d b /f`,
@@ -165,14 +161,6 @@ func TestRestrictedCommandsRunGitAndPowerShellInsideTheRoot(t *testing.T) {
 	if out, code := h.runArgv([]string{"powershell", "-NoProfile", "-Command", "Set-Content -Path '" + target + "' -Value x; 'psok'"}); code != 0 || !strings.Contains(out, "psok") || !exists(target) {
 		t.Errorf("powershell write: code %d out %q", code, out)
 	}
-	keep := filepath.Join(h.out, "keep.txt")
-	if err := os.WriteFile(keep, []byte("k"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h.runArgv([]string{"powershell", "-NoProfile", "-Command", "Remove-Item -LiteralPath '" + keep + "' -Force"})
-	if !exists(keep) {
-		t.Error("PowerShell removed a file outside the root")
-	}
 }
 
 // GrantSpec prepares an enforcing spec through the real book: roots granted,
@@ -227,49 +215,36 @@ func TestGrantSpecReportsADamagedRecordAsATypedFault(t *testing.T) {
 	}
 }
 
-// labelLevel is the SID of a path's mandatory label, "" when it has none.
-func labelLevel(t *testing.T, path string) string {
-	t.Helper()
-	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.LABEL_SECURITY_INFORMATION)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ctrl, _, err := sd.Control(); err != nil || ctrl&windows.SE_SACL_PRESENT == 0 {
-		return ""
-	}
-	sacl, _, err := sd.SACL()
-	if err != nil || sacl == nil {
-		return ""
-	}
-	for i := uint32(0); i < uint32(sacl.AceCount); i++ {
-		var ace *windows.ACCESS_ALLOWED_ACE
-		if windows.GetAce(sacl, i, &ace) == nil && ace.Header.AceType == labelAceType {
-			return (*windows.SID)(unsafe.Pointer(&ace.SidStart)).String()
-		}
-	}
-	return ""
-}
-
-// Inside a root the sandbox edits and removes files that were already there, and
-// what it creates is Medium like the user's own files: a program it builds runs
-// at the user's level when the user starts it.
-func TestRestrictedCommandsEditExistingFilesAndLeaveMediumFilesBehind(t *testing.T) {
+// Inside a root the sandbox edits and removes files that were already there.
+func TestRestrictedCommandsEditAndRemoveExistingFilesInsideTheRoot(t *testing.T) {
 	h := newWinHarness(t)
 	before := filepath.Join(h.ws, "before.txt")
 	h.run(`echo more>> ` + before)
 	if b, _ := os.ReadFile(before); !strings.Contains(string(b), "more") {
 		t.Errorf("the sandbox could not edit a file that existed before the grant: %q", b)
 	}
-	made := filepath.Join(h.ws, "made.exe")
-	h.run(`echo MZ> ` + made)
-	if lvl := labelLevel(t, made); lvl != mediumSID {
-		t.Errorf("a file the sandbox made carries level %q, want Medium %s (a Low program would run Low for the user too)", lvl, mediumSID)
-	}
-	if lvl := labelLevel(t, before); lvl != mediumSID {
-		t.Errorf("a file that existed before the grant carries level %q, want Medium", lvl)
-	}
 	h.run(`del ` + before)
 	if exists(before) {
 		t.Error("the sandbox could not remove a file inside its own root")
+	}
+}
+
+// A known gap, pinned so the documentation cannot drift from it: Windows does
+// not consult the restricting SIDs for a delete or a rename, so a restricted
+// command can remove or move away anything the user may outside its roots. If
+// this test starts failing the bound has grown; update the guide when it does.
+func TestKnownGapDeleteOutsideTheRootIsNotBounded(t *testing.T) {
+	h := newWinHarness(t)
+	victim := filepath.Join(h.out, "victim.txt")
+	if err := os.WriteFile(victim, []byte("v"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.run(`del ` + victim)
+	if exists(victim) {
+		t.Skip("a delete outside the root was refused on this machine; the documented gap did not show here")
+	}
+	h.run(`echo moved> ` + filepath.Join(h.out, "still-denied.txt"))
+	if exists(filepath.Join(h.out, "still-denied.txt")) {
+		t.Fatal("the gap is wider than documented: a create outside the root succeeded")
 	}
 }

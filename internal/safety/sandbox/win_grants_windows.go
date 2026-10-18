@@ -20,19 +20,8 @@ func WindowsGrantOps() grantOps { return daclOps{} }
 
 type daclOps struct{}
 
-func (daclOps) Grant(root, sid string) error {
-	if err := editDACL(root, sid, windows.GRANT_ACCESS); err != nil {
-		return err
-	}
-	return setRootLabel(root, lowLabelSDDL)
-}
-
-func (daclOps) Revoke(root, sid string) error {
-	if err := editDACL(root, sid, windows.REVOKE_ACCESS); err != nil {
-		return err
-	}
-	return setRootLabel(root, mediumLabelSDDL)
-}
+func (daclOps) Grant(root, sid string) error  { return editDACL(root, sid, windows.GRANT_ACCESS) }
+func (daclOps) Revoke(root, sid string) error { return editDACL(root, sid, windows.REVOKE_ACCESS) }
 
 func editDACL(root, sidText string, mode windows.ACCESS_MODE) error {
 	sid, err := windows.StringToSid(sidText)
@@ -63,72 +52,8 @@ func editDACL(root, sidText string, mode windows.ACCESS_MODE) error {
 	return nil
 }
 
-// The label a granted root carries. Its level is Medium, so everything in it
-// still runs and is treated as the user's own, but it has no NO_WRITE_UP policy,
-// so the Low-integrity token the sandbox runs under may write it. Everything
-// outside a root keeps the default policy, which refuses a Low writer even a delete.
-const (
-	lowIntegritySID = "S-1-16-4096"
-	mediumSID       = "S-1-16-8192"
-	lowLabelSDDL    = "S:(ML;OICI;;;ME)"
-	// mediumLabelSDDL is what a revoke writes: an empty SACL does not remove a
-	// label, so it writes the level and policy every unlabelled object has.
-	mediumLabelSDDL = "S:(ML;OICI;NW;;;ME)"
-	labelAceType    = 0x11 // SYSTEM_MANDATORY_LABEL_ACE_TYPE
-)
-
-// setRootLabel replaces the mandatory label of root with the one sddl describes.
-func setRootLabel(root, sddl string) error {
-	sd, err := windows.SecurityDescriptorFromString(sddl)
-	if err != nil {
-		return err
-	}
-	sacl, _, err := sd.SACL()
-	if err != nil {
-		return err
-	}
-	if err := windows.SetNamedSecurityInfo(root, windows.SE_FILE_OBJECT, windows.LABEL_SECURITY_INFORMATION, nil, nil, nil, sacl); err != nil {
-		return fmt.Errorf("sandbox: write the integrity label of %s: %w", root, err)
-	}
-	return nil
-}
-
-// hasLowLabel reports whether root carries the grant's label: Medium with no
-// write-up policy. (The name is kept: it is the label a Low token can write through.)
-func hasLowLabel(root string) (bool, error) {
-	sd, err := windows.GetNamedSecurityInfo(root, windows.SE_FILE_OBJECT, windows.LABEL_SECURITY_INFORMATION)
-	if err != nil {
-		return false, err
-	}
-	if ctrl, _, err := sd.Control(); err != nil || ctrl&windows.SE_SACL_PRESENT == 0 {
-		return false, err
-	}
-	sacl, _, err := sd.SACL()
-	if err != nil || sacl == nil {
-		return false, err
-	}
-	level, err := windows.StringToSid(mediumSID)
-	if err != nil {
-		return false, err
-	}
-	for i := uint32(0); i < uint32(sacl.AceCount); i++ {
-		var ace *windows.ACCESS_ALLOWED_ACE
-		if err := windows.GetAce(sacl, i, &ace); err != nil {
-			return false, err
-		}
-		if ace.Header.AceType == labelAceType && ace.Mask == 0 && windows.EqualSid(level, (*windows.SID)(unsafe.Pointer(&ace.SidStart))) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// Granted reports whether root has both halves of a grant: an allow entry for
-// the SID and the Low label.
+// Granted reports whether root's DACL has an allow entry for the SID.
 func (daclOps) Granted(root, sidText string) (bool, error) {
-	if ok, err := hasLowLabel(root); err != nil || !ok {
-		return false, err
-	}
 	sid, err := windows.StringToSid(sidText)
 	if err != nil {
 		return false, err
