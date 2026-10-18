@@ -23,6 +23,15 @@ func TestUpsertRemoteHostHoldsAWSLEntryToItsOwnFields(t *testing.T) {
 		"no distro":        {Name: "w", Kind: "wsl"},
 		"blank distro":     {Name: "w", Kind: "wsl", Distro: "  "},
 		"newline":          {Name: "w", Kind: "wsl", Distro: "Ubuntu\nx"},
+		"option -d":        {Name: "w", Kind: "wsl", Distro: "-d"},
+		"option --exec":    {Name: "w", Kind: "wsl", Distro: "--exec"},
+		"leading dash":     {Name: "w", Kind: "wsl", Distro: "-Ubuntu"},
+		"a space":          {Name: "w", Kind: "wsl", Distro: "Ubuntu 24"},
+		"a double quote":   {Name: "w", Kind: "wsl", Distro: `Ubu"ntu`},
+		"a single quote":   {Name: "w", Kind: "wsl", Distro: "Ubu'ntu"},
+		"a path separator": {Name: "w", Kind: "wsl", Distro: `a\b`},
+		"non-ASCII":        {Name: "w", Kind: "wsl", Distro: "ünï"},
+		"too long":         {Name: "w", Kind: "wsl", Distro: strings.Repeat("a", 65)},
 		"an address":       {Name: "w", Kind: "wsl", Distro: "Ubuntu", Host: "198.51.100.4"},
 		"a port":           {Name: "w", Kind: "wsl", Distro: "Ubuntu", Port: 22},
 		"a login":          {Name: "w", Kind: "wsl", Distro: "Ubuntu", User: "dev"},
@@ -94,6 +103,18 @@ func TestRemoteTargetIsSpelledPerKind(t *testing.T) {
 	} {
 		if got := e.Target(); got != want {
 			t.Errorf("Target(%+v) = %q, want %q", e, got, want)
+		}
+	}
+}
+
+func TestADistroNameIsAWholeArgumentNeverAnOption(t *testing.T) {
+	for name, want := range map[string]bool{
+		"Ubuntu": true, "Ubuntu-24.04": true, "Debian_12": true, "a": true, strings.Repeat("a", 64): true,
+		"": false, "-d": false, "--exec": false, "-x": false, "a b": false, "a;b": false, "a$b": false,
+		"a\x00b": false, strings.Repeat("a", 65): false,
+	} {
+		if got := ValidWSLDistroName(name); got != want {
+			t.Errorf("ValidWSLDistroName(%q) = %v, want %v", name, got, want)
 		}
 	}
 }
