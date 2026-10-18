@@ -33,8 +33,8 @@ import (
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
-	"reasonix/internal/frontend/cli"
 	"reasonix/internal/frontend/remotehost"
+	"reasonix/internal/frontend/schedulerun"
 	"reasonix/internal/frontend/serve"
 	"reasonix/internal/frontend/traystate"
 	"reasonix/internal/platform/account"
@@ -124,10 +124,9 @@ func main() {
 	if handled, code := update.MaybeRunTreeHandoff(os.Args[1:]); handled {
 		os.Exit(code)
 	}
-	// A scheduled run is this same binary started by the in-kernel ticker; the
-	// CLI's own entry runs it.
+	// A scheduled run is this same binary started by the in-kernel ticker.
 	if scheduleChildArgs(os.Args[1:]) {
-		os.Exit(cli.Run(os.Args[1:], version))
+		os.Exit(schedulerun.Exec(os.Args[3:]))
 	}
 	page := flag.String("page", "", "directory holding the built Studio page")
 	identity := flag.Bool("instance-id", false, "print the Studio instance this data home belongs to, and exit")

@@ -78,3 +78,9 @@ func TestServeDirRefusesWhatItCannotEnter(t *testing.T) {
 		t.Fatalf("a refused --dir moved the working directory to %q", cwd)
 	}
 }
+
+func sameDir(a, b string) bool {
+	ai, errA := os.Stat(a)
+	bi, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ai, bi)
+}

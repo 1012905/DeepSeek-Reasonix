@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"reasonix/internal/base/i18n"
+	"reasonix/internal/frontend/schedulerun"
 )
 
 // readsLanguageFromConfig says whether the command may read configuration for
@@ -29,7 +30,7 @@ func unknownCommand(cmd string, rest []string) int {
 // child entry, not a command a person types; the rest manage and tick schedules.
 func scheduleCommand(args []string) int {
 	if len(args) > 0 && args[0] == "exec" {
-		return scheduleExec(args[1:])
+		return schedulerun.Exec(args[1:])
 	}
 	return scheduleManage(args, scheduleOS())
 }
