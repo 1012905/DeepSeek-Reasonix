@@ -237,3 +237,21 @@ func parseSessionUpdatedAt(s string) time.Time {
 	}
 	return t
 }
+
+// persistedSessionMeta reads what a saved session kept about itself, and the path
+// it was read from; both are empty when the agent keeps no sessions.
+func (s *service) persistedSessionMeta(method, id string) (acpSessionMeta, string, *RPCError) {
+	dir := s.sessionDir()
+	if dir == "" {
+		return acpSessionMeta{}, "", nil
+	}
+	path := resolveTranscriptPath(dir, id)
+	if sessionstore.IsCleanupPending(path) {
+		return acpSessionMeta{}, "", &RPCError{Code: ErrInvalidParams, Message: method + ": unknown session " + id}
+	}
+	meta, _, err := loadACPMeta(path)
+	if err != nil {
+		return acpSessionMeta{}, "", &RPCError{Code: ErrInternal, Message: method + ": " + err.Error()}
+	}
+	return meta, path, nil
+}

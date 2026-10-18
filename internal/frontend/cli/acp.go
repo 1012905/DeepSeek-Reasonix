@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -159,6 +160,9 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 	if root != "" && !filepath.IsAbs(root) {
 		return boot.Options{}, fmt.Errorf("session cwd must be an absolute path: %s", root)
 	}
+	if f.workspaceOnly && len(p.AdditionalDirs) > 0 {
+		return boot.Options{}, acp.ErrAdditionalDirectoriesDisabled
+	}
 	bashOverride := ""
 	if f.bashOverride == "enforce" {
 		bashOverride = "enforce"
@@ -174,6 +178,7 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 		Stderr:                   os.Stderr,
 		WorkspaceRoot:            root,
 		ExtraPlugins:             p.MCPServers,
+		AdditionalDirs:           p.AdditionalDirs,
 		CleanupPendingReconciler: acp.ReconcileCleanupPending,
 		OnSessionRecovered:       p.OnSessionRecovered,
 		FileOverlay:              p.FileOverlay,
@@ -194,6 +199,12 @@ func (f *acpFactory) SessionRuntimeState(_ context.Context, p acp.SessionRuntime
 	writeRoots := cfg.WriteRootsForRoot(p.Cwd)
 	if f.workspaceOnly {
 		writeRoots = []string{p.Cwd}
+	} else {
+		for _, dir := range p.AdditionalDirs {
+			if !slices.Contains(writeRoots, dir) {
+				writeRoots = append(writeRoots, dir)
+			}
+		}
 	}
 	networkEnabled := cfg.Sandbox.Network
 	if f.networkOverride != nil {

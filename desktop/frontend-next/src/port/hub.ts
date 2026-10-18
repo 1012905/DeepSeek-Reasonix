@@ -177,6 +177,7 @@ export interface HubPort extends SharePort {
   /** Open a listed project in one of those programs. */
   openWith(path: string, target: string): Promise<void>;
   moveWorkspace(path: string, direction: -1 | 1): Promise<void>;
+  moveSession(path: string, direction: -1 | 1): Promise<void>;
   /** Drop a project before another remembered one, or at the end when `before` is empty. */
   placeWorkspace(path: string, before: string): Promise<void>;
   removeSession(path: string): Promise<void>;
@@ -365,6 +366,10 @@ export class SseHub implements HubPort {
 
   async moveWorkspace(path: string, direction: -1 | 1) {
     await this.post<void>("/tree/workspaces/move", { path, direction });
+  }
+
+  async moveSession(path: string, direction: -1 | 1) {
+    await this.post<void>("/tree/sessions/move", { path, direction });
   }
 
   async placeWorkspace(path: string, before: string) {

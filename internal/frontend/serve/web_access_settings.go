@@ -12,6 +12,7 @@ import (
 func (s *Server) registerWebAccessRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /web-access-settings", s.webAccessSettings)
 	mux.HandleFunc("POST /web-access-settings", s.saveWebAccessSettings)
+	mux.HandleFunc("POST /web-access-settings/probe", s.probeSearxng)
 }
 
 func (s *Server) webAccessSettings(w http.ResponseWriter, _ *http.Request) {
@@ -42,4 +43,24 @@ func (s *Server) saveWebAccessSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, saved)
 	}
+}
+
+// probeSearxng sends one test search to the SearXNG address already saved, so a
+// window can say why the instance fails. The request names no address: what it
+// reaches is what the user saved, and a window saves the field first.
+func (s *Server) probeSearxng(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "web_access.editing_disabled", "web search and fetch settings editing is not enabled on this server", nil)
+		return
+	}
+	probe, err := s.ctl().ProbeSearxng(r.Context())
+	if errors.Is(err, config.ErrBadSearxngURL) {
+		refuse(w, http.StatusBadRequest, "web_access.bad_searxng_url", err.Error(), nil)
+		return
+	}
+	if err != nil {
+		saveFailed(w, http.StatusInternalServerError, "web_access.probe_failed", err)
+		return
+	}
+	writeJSON(w, probe)
 }
