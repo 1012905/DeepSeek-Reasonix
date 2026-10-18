@@ -1,2 +1,2 @@
 - 新增：浏览器和工作台可以全屏查看，会话与输入框暂时收起，按 Esc 或再点一次回到分栏；有事等你决定时自动退出全屏。关联 #11721。
-- Added: The browser and workbench can be viewed full screen with the conversation folded away; Esc or the button returns to the split, and it leaves full screen by itself when something needs your decision. Refs #11721.
+- Added: Full-screen browser and workbench with the conversation folded away; Esc or the button restores the split, and it exits by itself when something needs your decision. Refs #11721.
