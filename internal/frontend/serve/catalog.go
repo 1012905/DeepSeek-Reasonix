@@ -67,17 +67,21 @@ func (s *Server) slash(w http.ResponseWriter, r *http.Request) {
 // slash list answers "what can I type"; this answers "what may run", which is
 // the larger set: a skill with no slash name still fires on model discovery.
 type skillEntry struct {
-	Name        string   `json:"name"`
-	SlashName   string   `json:"slashName,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Scope       string   `json:"scope,omitempty"`
-	Plugin      string   `json:"plugin,omitempty"`
-	Path        string   `json:"path,omitempty"`
-	Subagent    bool     `json:"subagent,omitempty"`
-	ReadOnly    bool     `json:"readOnly,omitempty"`
-	Model       string   `json:"model,omitempty"`
-	Effort      string   `json:"effort,omitempty"`
-	AllowedURI  []string `json:"allowedTools,omitempty"`
+	Name        string `json:"name"`
+	SlashName   string `json:"slashName,omitempty"`
+	Description string `json:"description,omitempty"`
+	Scope       string `json:"scope,omitempty"`
+	Plugin      string `json:"plugin,omitempty"`
+	Path        string `json:"path,omitempty"`
+	// Removes is what uninstalling would delete from disk, and RemovesFolder says
+	// whether that is a whole folder; empty when the skill cannot be removed.
+	Removes       string   `json:"removes,omitempty"`
+	RemovesFolder bool     `json:"removesFolder,omitempty"`
+	Subagent      bool     `json:"subagent,omitempty"`
+	ReadOnly      bool     `json:"readOnly,omitempty"`
+	Model         string   `json:"model,omitempty"`
+	Effort        string   `json:"effort,omitempty"`
+	AllowedURI    []string `json:"allowedTools,omitempty"`
 	// License, Compatibility and Metadata are the specification's descriptive
 	// fields as the skill wrote them.
 	License       string            `json:"license,omitempty"`
@@ -123,20 +127,23 @@ func (s *Server) skills(w http.ResponseWriter, r *http.Request) {
 		if sk.DisableUserInvocation {
 			slashName = ""
 		}
+		removes, folder, _ := ctl.SkillRemoval(sk)
 		entries = append(entries, skillEntry{
-			SwitchScope: switchScope,
-			Name:        sk.Name,
-			SlashName:   slashName,
-			Description: sk.Description,
-			Scope:       string(sk.Scope),
-			Plugin:      sk.Plugin,
-			Path:        sk.Path,
-			Subagent:    sk.RunAs == skill.RunSubagent,
-			ReadOnly:    sk.ReadOnly,
-			Model:       sk.Model,
-			Effort:      sk.Effort,
-			AllowedURI:  sk.AllowedTools,
-			License:     sk.License, Compatibility: sk.Compatibility, Metadata: sk.Metadata,
+			Removes:       removes,
+			RemovesFolder: folder,
+			SwitchScope:   switchScope,
+			Name:          sk.Name,
+			SlashName:     slashName,
+			Description:   sk.Description,
+			Scope:         string(sk.Scope),
+			Plugin:        sk.Plugin,
+			Path:          sk.Path,
+			Subagent:      sk.RunAs == skill.RunSubagent,
+			ReadOnly:      sk.ReadOnly,
+			Model:         sk.Model,
+			Effort:        sk.Effort,
+			AllowedURI:    sk.AllowedTools,
+			License:       sk.License, Compatibility: sk.Compatibility, Metadata: sk.Metadata,
 			Manual:  sk.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(sk.Invocation), "manual"),
 			Enabled: enabled(sk.Name),
 			Source:  sources.of(sk.Name, string(sk.Scope), sk.Path),

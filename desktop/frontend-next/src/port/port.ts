@@ -190,6 +190,10 @@ export interface AgentPort {
   setSkillEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   planSkillUpdate(name: string): Promise<SkillUpdatePlan>;
   applySkillUpdate(name: string, planId: string, overwriteLocal: boolean): Promise<void>;
+  // Deletes the skill the person was shown, named by the scope and path the list
+  // drew. A built-in or a package's skill is refused (skill.not_removable), and
+  // one that changed since the list was read is too (skill.changed).
+  removeSkill(name: string, scope: string, path: string, root?: string): Promise<void>;
   // Drops this project's exception so the skill inherits again.
   clearSkillOverride(name: string, root?: string): Promise<void>;
   plugins(): Promise<PluginPackage[]>;

@@ -225,6 +225,12 @@ type Skills interface {
 	CreateSkill(name string, scope skill.Scope, content string) (string, error)
 	UpdateSkill(name string, scope skill.Scope, content string) error
 	DeleteSkill(name string, scope skill.Scope) error
+	// RemoveSkill deletes the skill the person was shown, named by scope and path;
+	// a package's skill or a built-in is refused (ErrSkillNotRemovable).
+	RemoveSkill(name string, scope skill.Scope, path string) error
+	// SkillRemoval says what RemoveSkill would delete for sk and whether it is a
+	// folder; ok is false for a skill that cannot be removed.
+	SkillRemoval(sk skill.Skill) (target string, folder, ok bool)
 }
 
 // Hooks covers the session's lifecycle hooks: the live runner, what is
