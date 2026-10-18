@@ -229,6 +229,8 @@ var table = []Entry{
 	{ID: "observability.otlp.header_name", Class: Guarded, Effect: OnOpen},
 	{ID: "observability.otlp.header_env", Class: Guarded, Effect: OnOpen},
 	{ID: "observability.otlp.service_name", Class: Preference, Effect: OnOpen},
+	{ID: "mods.enabled", Class: Elevated, Effect: OnOpen},
+	{ID: "mods.hook_budget_ms", Class: Preference, Effect: OnOpen},
 	{ID: "peers.enabled", Class: Elevated, Effect: NextTurn},
 	{ID: "peers.dispatch", Class: Elevated, Effect: NextTurn},
 	{ID: "peers.release_projects", Class: Guarded, Effect: NextTurn},
