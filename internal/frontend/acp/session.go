@@ -77,6 +77,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	sink := newUpdateSink(s.conn, id)
 	sink.bindCwd(cwd)
 	sink.bindExtensionSurface(s.extensionSurfaceSupported())
+	sink.bindElicitation(s.clientCapabilities())
 	sessionParams := SessionParams{
 		Cwd:                cwd,
 		MCPServers:         mcpServers,

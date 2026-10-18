@@ -1,0 +1,2 @@
+- 新增：ACP 支持 `$/cancel_request`、消息块 `messageId`、权限请求带工具名，并在客户端声明后用 `elicitation/create` 转交 MCP 服务器的表单和外部页面。关联 #13114。
+- Added: ACP supports `$/cancel_request`, `messageId` on message chunks and the tool name on permission requests, and forwards an MCP server's form or page through `elicitation/create` when the client advertises it. Refs #13114.

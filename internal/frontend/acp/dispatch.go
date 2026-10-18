@@ -68,6 +68,8 @@ type updateSink struct {
 	// parent sampling and background sub-agents may Emit concurrently.
 	speculativeToolIDs map[string]struct{}
 	activeAttemptID    string
+	msgIDs             messageIDs
+	elicitModes        elicitModes
 	mu                 sync.Mutex
 	turnCtx            context.Context
 }
@@ -150,7 +152,7 @@ func (s *updateSink) Emit(e event.Event) {
 		if e.Text == "" {
 			return
 		}
-		s.send(messageChunk{SessionUpdate: "agent_message_chunk", Content: textBlock(e.Text)})
+		s.send(messageChunk{SessionUpdate: "agent_message_chunk", MessageID: s.liveMessageID(), Content: textBlock(e.Text)})
 
 	case event.StreamAttempt:
 		// Attempt bookkeeping only. ACP still skips partial ToolDispatch (no
@@ -371,7 +373,7 @@ func (s *updateSink) replay(msgs []provider.Message) {
 			// Same display filter as live emission: goal markers and evidence
 			// blocks stay in history for parsing but never reach the client.
 			if display := agent.DisplayAssistantText(m.Content); display != "" {
-				s.send(messageChunk{SessionUpdate: "agent_message_chunk", Content: textBlock(display)})
+				s.send(messageChunk{SessionUpdate: "agent_message_chunk", MessageID: s.msgIDs.replayed(), Content: textBlock(display)})
 			}
 			for _, tc := range m.ToolCalls {
 				s.send(toolCall{
@@ -420,6 +422,7 @@ func (s *updateSink) requestPermission(ctx context.Context, a event.Approval) {
 		SessionID: s.sessionID,
 		ToolCall: PermissionToolCall{
 			ToolCallID: "gate-" + a.ID,
+			Name:       a.Tool,
 			Title:      title,
 			Kind:       toolKindFor(a.Tool),
 			Status:     "pending",
@@ -496,10 +499,11 @@ func (s *updateSink) requestAsk(ctx context.Context, a event.Ask) {
 	if s.answer == nil {
 		return
 	}
-	// ACP has nothing but the permission prompt to show a question in, and a
-	// server's form drawn there reads as the agent asking leave. It is declined.
+	// A server's form drawn in the permission prompt reads as the agent asking
+	// leave, so it goes through elicitation/create when the client advertised the
+	// mode and is declined otherwise.
 	if a.Origin != nil {
-		s.answer(a.ID, nil)
+		s.answer(a.ID, s.elicit(ctx, a))
 		return
 	}
 	answers := make([]event.AskAnswer, 0, len(a.Questions))
