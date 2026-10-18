@@ -2734,7 +2734,7 @@ test("a window the person focused meanwhile is not minimized under them", async 
   await wakeOf(win).run(async () => focus());
   await later(60);
   assert.ok(!calls.includes("minimize"));
-  assert.deepEqual(calls.slice(-3), ["ignore false", "opacity 1", "minimize"]);
+  assert.deepEqual(calls.slice(-2), ["ignore false", "opacity 1"]);
 });
 
 test("a failed input still lets the window go back", async () => {
