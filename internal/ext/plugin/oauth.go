@@ -154,6 +154,17 @@ func AuthorizeHTTPMCP(ctx context.Context, spec Spec, openURL func(string) error
 	if scope == "" {
 		scope = strings.Join(resourceMeta.ScopesSupported, " ")
 	}
+	if spec.OAuthScopeUpgrade {
+		asked := PendingScopeUpgrade(spec.StateDir)
+		if len(asked) == 0 {
+			return ErrNoScopeUpgradePending
+		}
+		granted := ""
+		if prior, loadErr := loadMCPOAuthState(spec.StateDir); loadErr == nil && sameCanonicalResource(prior.Resource, resource) {
+			granted = prior.Scope
+		}
+		scope = mergeScopes(granted, asked)
+	}
 
 	callbackResult := make(chan oauthCallbackResult, 1)
 	callbackServer := &http.Server{ReadHeaderTimeout: 5 * time.Second}
@@ -210,7 +221,13 @@ func AuthorizeHTTPMCP(ctx context.Context, spec Spec, openURL func(string) error
 		return err
 	}
 	applyTokenResponse(&state, token, time.Now())
-	return saveMCPOAuthStateIfGenerationUnchanged(ctx, spec.StateDir, generation, state)
+	if err := saveMCPOAuthStateIfGenerationUnchanged(ctx, spec.StateDir, generation, state); err != nil {
+		return err
+	}
+	if spec.OAuthScopeUpgrade {
+		ClearScopeUpgrade(spec.StateDir)
+	}
+	return nil
 }
 
 func validateHTTPMCPAuthorization(spec Spec, openURL func(string) error) error {
@@ -648,11 +665,16 @@ func authorizationServerMetadataURLs(issuer *url.URL) []string {
 }
 
 func parseBearerChallenge(header string) (metadataURL, scope string, ok bool) {
+	c, ok := parseBearerChallengeFull(header)
+	return c.MetadataURL, c.Scope, ok
+}
+
+func parseBearerChallengeFull(header string) (bearerChallenge, bool) {
 	lower := strings.ToLower(header)
 	for offset := 0; offset < len(header); {
 		idx := strings.Index(lower[offset:], "bearer")
 		if idx < 0 {
-			return "", "", false
+			return bearerChallenge{}, false
 		}
 		idx += offset
 		beforeOK := idx == 0 || header[idx-1] == ',' || header[idx-1] == ' ' || header[idx-1] == '\t'
@@ -660,11 +682,11 @@ func parseBearerChallenge(header string) (metadataURL, scope string, ok bool) {
 		afterOK := after == len(header) || header[after] == ' ' || header[after] == '\t'
 		if beforeOK && afterOK {
 			params := parseAuthParams(header[after:])
-			return params["resource_metadata"], params["scope"], true
+			return bearerChallenge{MetadataURL: params["resource_metadata"], Scope: params["scope"], Error: params["error"]}, true
 		}
 		offset = after
 	}
-	return "", "", false
+	return bearerChallenge{}, false
 }
 
 func parseAuthParams(raw string) map[string]string {

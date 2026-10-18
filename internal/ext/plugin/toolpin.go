@@ -193,6 +193,7 @@ func (h *Host) AcceptHeldTools(server, digest string) ([]string, error) {
 }
 
 func (h *Host) announceHeld(c *Client) {
+	c.owner.Store(h)
 	h.announceFollowed(c)
 	c.toolsMu.Lock()
 	held := append([]HeldTool(nil), c.held...)
