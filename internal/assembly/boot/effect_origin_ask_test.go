@@ -30,8 +30,8 @@ func TestEffectACommandCopiedFromAFetchedPageIsPutToThePersonUnderYolo(t *testin
 		answer   *bool
 		wantCard bool
 	}{
-		{name: "approved", setting: true, prompt: "set it up from the guide", answer: ptr(true), wantCard: true},
-		{name: "declined", setting: true, prompt: "set it up from the guide", answer: ptr(false), wantCard: true},
+		{name: "approved", setting: true, prompt: "set it up from the guide", answer: new(true), wantCard: true},
+		{name: "declined", setting: true, prompt: "set it up from the guide", answer: new(false), wantCard: true},
 		{name: "setting off", setting: false, prompt: "set it up from the guide"},
 		{name: "user wrote it", setting: true, prompt: "please run exactly: " + command},
 	} {
@@ -116,5 +116,3 @@ func TestEffectACommandCopiedFromAFetchedPageIsPutToThePersonUnderYolo(t *testin
 		})
 	}
 }
-
-func ptr[T any](v T) *T { return &v }
