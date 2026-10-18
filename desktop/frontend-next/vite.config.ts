@@ -22,7 +22,7 @@ const ROUTES = [
   "/changes", "/commit", "/attachments", "/drop", "/checkpoints", "/branches", "/compact", "/compaction", "/rewind", "/branch",
   "/extensions", "/themes", "/plugins", "/market", "/surfaces", "/feedback",
   "/fork", "/summarize", "/forget", "/bypass", "/auto-approve-tools",
-  "/permissions", "/subagent-steer-limits", "/sandbox", "/progress-watch", "/ask-timeout", "/session-ref-settings", "/changed-files-settings", "/schedules", "/observability", "/fold-work-settings", "/turn-narration-settings", "/display-currency", "/auto-archive", "/persona", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings", "/subagent-claims", "/write-lease", "/peers",
+  "/permissions", "/subagent-steer-limits", "/sandbox", "/progress-watch", "/ask-timeout", "/session-ref-settings", "/changed-files-settings", "/feedback-level-notices", "/schedules", "/observability", "/fold-work-settings", "/turn-narration-settings", "/display-currency", "/auto-archive", "/persona", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings", "/subagent-claims", "/write-lease", "/peers",
   "/mods",
   "/host", "/notifications", "/share", "/pair", "/device",
   "/web-access-settings", "/slash", "/workspaces", "/welcome", "/usage", "/config", "/studio",

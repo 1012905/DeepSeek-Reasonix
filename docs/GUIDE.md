@@ -418,6 +418,10 @@ startup, capability negotiation, session lifecycle, independent model/work/
 collaboration/approval controls, client filesystem and terminal capabilities,
 MCP servers, permission requests, and the Reasonix mid-turn steering extension.
 
+## Using Reasonix from DeepSeek Harness
+
+DeepSeek Harness (`dsh`) can delegate a task to Reasonix as a subagent over ACP, with configuration only. [Using Reasonix from DeepSeek Harness](./DSH.md) covers the install through DSH's plugin market or by hand, switching the plugin on, the permission policy and the limits.
+
 ## Remote SSH
 
 The remote module runs Reasonix on a remote host and reaches it over your own
@@ -436,6 +440,24 @@ a cloned repo can never steer where Reasonix opens SSH connections. Credentials
 follow the provider idiom: the host names an env var (`passphrase_env`,
 `password_env`) whose value lives in Reasonix's global `.env`; key material
 itself is never stored — `identity_file` is a path.
+
+Studio uses that host's explicit `workspace` as the default for host-level reads
+and opens that omit a workspace.
+
+Only when it is unset does the first nonempty
+`workspaces` entry supply the default; with neither set, the attach receives an
+empty workspace. An explicit open path takes precedence.
+
+Reordering other
+entries cannot override a declared `workspace`. These values come only from the
+user's host configuration, and disabled hosts are refused before any link reuse.
+
+The active SSH project's secondary line shows its actual connection directory,
+including isolated worktrees. Its project menu shows the default connection
+directory used by Refresh; these can differ. Settings' default action explicitly
+chooses a new default.
+
+A host-level read never borrows an unrelated pane's path.
 
 ```toml
 [remote]
@@ -470,8 +492,12 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
 - Model credentials come from the distribution's own configuration (`provider = "remote"`): under WSL's default
   networking the distribution cannot reach this machine's loopback, so this machine's provider is not shared.
 - A folder chosen as a Windows path (`C:\work\app` or `\\wsl.localhost\<distro>\home\me\app`) is translated by
-  the distribution; a folder it cannot see is refused. The command-line `reasonix remote connect` still dials
-  SSH only: such an entry fails with `remote: host is not reached over ssh`.
+  the distribution; a folder it cannot see is refused.
+- From the command line, `reasonix remote wsl add <name> <distribution>` adds one, and `remote test` and
+  `remote connect` then work as they do for an SSH host.
+  - `connect` keeps the session open until you press Ctrl-C, and the kernel stops with it.
+  - `status`, `forward`, `serve` and `fs` stay SSH-only and refuse a WSL machine with
+    `remote: host is not reached over ssh`.
 
 CLI:
 

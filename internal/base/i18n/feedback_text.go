@@ -30,6 +30,7 @@ type FeedbackText struct {
 	LinkLimit       string
 	NoInstall       string
 	OtherDeviceMark string
+	LevelUpFmt      string // level, name, previous level
 }
 
 var feedbackEnglish = FeedbackText{
@@ -68,6 +69,7 @@ var feedbackEnglish = FeedbackText{
 	LinkLimit:           "Your account is at its limit of linked devices; unlink one first.",
 	NoInstall:           "Send a report from this device first: a device with no report has nothing to link.",
 	OtherDeviceMark:     "  [other device]",
+	LevelUpFmt:          "Level up: level %d, %s — up from %d.",
 }
 
 var feedbackChinese = FeedbackText{
@@ -106,6 +108,7 @@ var feedbackChinese = FeedbackText{
 	LinkLimit:           "你的账号关联的设备已达上限，请先取消一台。",
 	NoInstall:           "请先从这台设备发出一条反馈：没有发过反馈的设备没有可关联的内容。",
 	OtherDeviceMark:     "  [其他设备]",
+	LevelUpFmt:          "等级提升：现在是等级 %d「%s」（原为 %d）。",
 }
 
 var feedbackTraditional = FeedbackText{
@@ -144,4 +147,5 @@ var feedbackTraditional = FeedbackText{
 	LinkLimit:           "你的帳號關聯的裝置已達上限，請先取消一台。",
 	NoInstall:           "請先從這台裝置送出一則回饋：沒有送過回饋的裝置沒有可關聯的內容。",
 	OtherDeviceMark:     "  [其他裝置]",
+	LevelUpFmt:          "等級提升：現在是等級 %d「%s」（原為 %d）。",
 }

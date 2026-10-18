@@ -554,7 +554,7 @@ func (h *Hub) Handler() http.Handler {
 	hostMux.HandleFunc("GET /remotes/candidates", h.remoteCandidates)
 	hostMux.HandleFunc("GET /remotes/wsl", h.remoteWSLDistros)
 	hostMux.HandleFunc("GET /remotes/{host}/tree", h.remoteTree)
-	hostMux.HandleFunc("POST /remotes/{host}/sessions/remove", h.removeRemoteSession)
+	h.registerRemoteSessionRoutes(hostMux)
 	hostMux.HandleFunc("GET /remotes/{host}/dirs", h.remoteDirs)
 	hostMux.HandleFunc("GET /remotes/{host}/probe", h.remoteProbe)
 	hostMux.HandleFunc("POST /remotes/{host}/workspaces", h.addRemoteWorkspace)

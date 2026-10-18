@@ -22,6 +22,7 @@ export const MOCK_MOD_PREVIEW: ModPreview = {
   api: [{ namespace: "process", method: "run" }, { namespace: "fs", method: "readFile" }, { namespace: "ui", method: "toast" }],
   imports: [{ spec: "./lib/rules.js", kind: "static" }, { spec: "minimatch", kind: "require" }],
   findings: [{ kind: "computed_member" }],
+  session: ["messages", "submit"],
   unserved: ["tool.rewrite"],
 };
 

@@ -95,6 +95,8 @@ export const ACTIONS: UIAction[] = [
   // The way out of a window whose assets an update replaced underneath it.
   { id: "chrome.reload", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.changed-files", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "chrome.feedback-level-notices", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "level-up.notice-dismiss", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "chrome.fold-work", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "chrome.turn-narration", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "changes.open", kind: "navigation", target: "none", proof: "interaction" },
@@ -430,8 +432,8 @@ export const ACTIONS: UIAction[] = [
   { id: "remote.hide", kind: "view", target: "entity", proof: "interaction" },
   { id: "remote.enable", kind: "view", target: "entity", proof: "interaction" },
   { id: "remote.read", kind: "repeatable", target: "entity", proof: "authority-effect" },
-  { id: "remote.group", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "workspace.fold-all", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "session.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },

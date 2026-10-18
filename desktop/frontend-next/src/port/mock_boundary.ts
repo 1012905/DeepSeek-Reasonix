@@ -1,6 +1,6 @@
 import type { ScheduleBoard, ScheduleDraft, SchedulePreview, ScheduleResultView, ScheduleView } from "./schedule";
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { mockMods } from "./mock_mods";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
@@ -17,6 +17,9 @@ function effectiveBash(s: SandboxSettings): string {
   if (s.platform === "windows") return "off";
   return s.bash.trim() === "off" ? "off" : "enforce";
 }
+
+// One file per machine, so every port of the demo reads the same answer.
+let levelNotices: FeedbackLevelNotices = { enabled: false, path: "/Users/you/.reasonix/config.toml" };
 
 export class MockBoundary extends MockShell {
   async decideWorkspaceTrust(_trust: "trusted" | "declined") {}
@@ -360,6 +363,15 @@ export class MockBoundary extends MockShell {
   async saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings> {
     this.changedFiles = { ...this.changedFiles, show };
     return { ...this.changedFiles };
+  }
+
+  async feedbackLevelNotices(): Promise<FeedbackLevelNotices> {
+    return { ...levelNotices };
+  }
+
+  async saveFeedbackLevelNotices(enabled: boolean): Promise<FeedbackLevelNotices> {
+    levelNotices = { ...levelNotices, enabled };
+    return { ...levelNotices };
   }
 
   private foldWork: FoldWorkSettings = { fold: false, path: "/Users/you/.reasonix/config.toml" };

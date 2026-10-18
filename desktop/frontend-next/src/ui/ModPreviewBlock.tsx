@@ -21,6 +21,11 @@ const FINDING: Record<string, string> = {
   no_register: "没有找到导出的 register",
 };
 
+// What a literal session call takes from the session (read) or puts in front of
+// the model (submit). Two lines, so a module that only reads usage is not
+// described as one that can queue prompts.
+const SESSION_READ = new Set(["messages", "usage"]);
+
 const IMPORT_KIND: Record<string, string> = { static: "import", require: "require", dynamic: "import()" };
 
 const list = (xs: string[]) => xs.join("、");
@@ -50,6 +55,8 @@ export function ModPreviewBlock({ mod }: { mod: ModPreview }) {
           <div className="risk"><span className="lb">{t("它挂钩的事件")}</span><span className="dt">{mod.events.filter((e) => !e.dynamic).map((e) => e.name).join(", ") || t("（没有列出）")}</span></div>
           {dynamic > 0 && <div className="risk" data-kind="secret"><span className="lb">{t("名字无法列出的事件")}</span><span className="dt">{dynamic}</span></div>}
           {calls.length > 0 && <div className="risk"><span className="lb">{t("它用到的接口")}</span><span className="dt">{calls.join(", ")}</span></div>}
+          {mod.session.some((m) => SESSION_READ.has(m)) && <div className="risk"><span className="lb">{t("读你的对话")}</span><span className="dt">{mod.session.filter((m) => SESSION_READ.has(m)).join(", ")}</span></div>}
+          {mod.session.includes("submit") && <div className="risk" data-kind="secret"><span className="lb">{t("往模型面前排提示")}</span><span className="dt">{t("以它自己的名义，不冒充你")}</span></div>}
           {mod.imports.length > 0 && (
             <div className="risk" data-kind="secret">
               <span className="lb">{t("它引入的代码（看不见）")}</span>

@@ -765,7 +765,7 @@ export const EN: Record<string, string> = {
   "已运行，但退出码来自命令中的其他片段": "it ran, but the exit code came from another stage of the command",
   "有改动；没有主机能读作证据的检查": "changed; no check the host could read as proof",
   "改动后未再检查": "changed, never looked at again",
-  "有 Claude Code mod 在运行；它写了什么不在主机观测范围内": "a Claude Code mod ran; what it wrote is outside what the host observes",
+  "有 Claude Code mod 在运行；它写了什么不在主机观测范围内": "a Claude Code mod was active; what it wrote is outside what the host observes",
   "自己申报未验证": "declared unverified by the turn itself",
   "同一账号的两种接入方式。当前这一种不支持联网搜索；这是协议差异，不是可配置项。": "Two ways in to the same account. This one has no web search — that is a difference between the protocols, not a setting.",
   "同一账号的两种接入方式。切换后下方的模型列表随之改变。": "Two ways in to the same account. Switching changes the model list below.",

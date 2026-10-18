@@ -1,0 +1,2 @@
+- 修复：模型偏好里的“网页搜索”不再列出尚未添加的连接下的模型；选不了时的提示也改为“还没有添加”，不再误称“已被移出”。关联 #13806。
+- Fixed: the web-search model picker no longer lists models from unadded connections, and a refused pick now says "not added" rather than "removed". Refs #13806.

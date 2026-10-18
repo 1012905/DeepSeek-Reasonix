@@ -142,7 +142,7 @@ const SAID: Record<string, string> = {
   "model.not_decision_source": "「{model}」是对话模型，不是决策来源；决策只能选择「模型服务」里添加的决策来源",
   "roles.override_not_in_user_config": "「{key}」不在用户配置里，可能已被清除，或来自项目配置",
   "roles.search_model_bad_ref": "搜索模型「{model}」的格式应为 服务/模型",
-  "roles.search_model_not_added": "搜索模型「{model}」所在的连接已被移出",
+  "roles.search_model_not_added": "搜索模型「{model}」所在的连接还没有添加：先添加这个连接，再选它",
   "roles.search_model_removed": "搜索模型「{model}」已不在配置里",
   "roles.search_model_unsupported": "搜索模型「{model}」的协议不支持原生搜索，或已关闭搜索",
   "roles.search_model_no_credentials": "搜索模型「{model}」所在的连接没有凭据",
@@ -377,6 +377,7 @@ const SAID: Record<string, string> = {
   "remote.wsl_unreadable": "读不到已安装的 WSL 发行版",
   "remote.kind_unsupported": "这台机器的接入方式与表单不同（SSH 或 WSL），不能这样修改它",
   "remote.disabled": "该主机已停用，启用后才能连接",
+  "remote.unknown_host": "主机 {host} 尚未保存，请先添加该主机再连接",
   "remote.has_open_panes": "该机器仍有 {n} 个打开的面板，请先关闭再移除",
   // 主机密钥变了没有「仍然连接」这条路：能绕过的警告等于没有警告。
   "remote.host_key_changed": "{host} 的主机密钥已变更。可能是该机器重装，也可能存在中间人。记录位于 {file} 第 {line} 行，核实前请勿连接。",
@@ -464,6 +465,7 @@ const SAID: Record<string, string> = {
   "inbox.schema_readonly": "该待送达由更高版本写入，当前版本只能读取",
   "inbox.idempotency_conflict": "该提交标识已被使用，且当时的内容不同",
   "inbox.foreign_run": "这份待送达属于另一个运行，暂不能接管",
+  "inbox.unrecovered": "待送达的正文读不出来，队列内容未知，已暂停等待检查",
 
   // ── 配置文件本身坏了，以及每一个写设置的面板被它挡住时 ─────────
   "config.unparsed": "配置文件 {path} 无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复",
@@ -525,6 +527,7 @@ const SAID: Record<string, string> = {
   "display_currency.runtime_changed": "运行时已更换，费用显示币种未保存，请重试",
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "changed_files.save_failed": "文件改动显示设置未能保存：{detail}",
+  "feedback_level_notices.save_failed": "等级提示的设置未能保存：{detail}",
   "fold_work.save_failed": "折叠中间过程的设置未能保存：{detail}",
   "turn_narration.save_failed": "回合间叙述的设置未能保存：{detail}",
   "web_access.editing_disabled": "这台服务器没有开启联网搜索与抓取设置的编辑：只有这台电脑上的窗口能改。",

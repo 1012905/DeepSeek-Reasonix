@@ -48,7 +48,7 @@ import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } fr
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
 import type { ScheduleBoard, ScheduleDraft, SchedulePreview, ScheduleResultView, ScheduleView } from "./schedule";
-import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -317,6 +317,8 @@ export interface AgentPort {
   saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
   changedFilesSettings(): Promise<ChangedFilesSettings>;
   saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings>;
+  feedbackLevelNotices(): Promise<FeedbackLevelNotices>;
+  saveFeedbackLevelNotices(enabled: boolean): Promise<FeedbackLevelNotices>;
   foldWorkSettings(): Promise<FoldWorkSettings>;
   saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings>;
   turnNarrationSettings(): Promise<TurnNarrationSettings>;
@@ -478,6 +480,8 @@ export interface AgentPort {
   replyFeedback(receipt: string, body: string, images?: FeedbackImage[]): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
+  // Records that the person was told about this level; only a dismissal calls it.
+  ackFeedbackPromotion(level: number): Promise<void>;
   // Takes one of this install's reports back; refused with feedback.not_withdrawable once it has an outcome.
   withdrawFeedback(receipt: string): Promise<void>;
   // Tying this install to the signed-in account is always the person's own

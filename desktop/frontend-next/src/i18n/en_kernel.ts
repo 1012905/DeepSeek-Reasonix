@@ -46,7 +46,7 @@ export const EN_KERNEL: Record<string, string> = {
   "参数不符合该工具的约定，本次调用没有执行；请按工具说明补全或更正参数后重试": "The arguments break this tool's contract, so the call did not run; complete or correct them per the tool description and retry",
   "另一个会话持有所需的写入范围。本次操作未执行；请结束当前轮次，待该范围释放后再重试": "Another session holds the requested write claim. This operation did not run; end the current turn and retry after the claim is released",
   "搜索模型「{model}」的格式应为 服务/模型": "Search model “{model}” must be written as service/model",
-  "搜索模型「{model}」所在的连接已被移出": "Search model “{model}”'s connection has been removed",
+  "搜索模型「{model}」所在的连接还没有添加：先添加这个连接，再选它": "Search model “{model}”'s connection has not been added yet: add that connection first, then pick it",
   "搜索模型「{model}」已不在配置里": "Search model “{model}” is no longer configured",
   "搜索模型「{model}」的协议不支持原生搜索，或已关闭搜索": "Search model “{model}” has no native search on its protocol, or search is turned off for it",
   "搜索模型「{model}」所在的连接没有凭据": "Search model “{model}”'s connection has no credentials",
@@ -117,6 +117,7 @@ export const EN_KERNEL: Record<string, string> = {
   "该会话的待送达已关闭": "This session's pending queue is closed",
   "该待送达由更高版本写入，当前版本只能读取": "This queue was written by a newer version and is read-only here",
   "这份待送达属于另一个运行，暂不能接管": "This pending queue belongs to another run and cannot be taken over here",
+  "待送达的正文读不出来，队列内容未知，已暂停等待检查": "The pending queue's contents could not be read, so they are unknown and the queue is paused for inspection",
   "该提交标识已被使用，且当时的内容不同": "That submission key was already used, with different content",
   // 配置文件本身坏了，以及每一个写设置的面板被它挡住时
   "配置文件 {path} 无法读取，因此本次未保存。到「设置」里可以看到出错的位置并修复": "The config file {path} does not parse, so nothing was saved. Open Settings to see where it is broken and repair it",
@@ -259,6 +260,7 @@ export const EN_KERNEL: Record<string, string> = {
   "读不到已安装的 WSL 发行版": "Could not read which WSL distributions are installed",
   "这台机器的接入方式与表单不同（SSH 或 WSL），不能这样修改它": "This machine is reached another way than this form describes (SSH or WSL), so it cannot be changed like this",
   "该主机已停用，启用后才能连接": "This machine is turned off; turn it on to connect",
+  "主机 {host} 尚未保存，请先添加该主机再连接": "Host {host} is not saved; add it before connecting",
   "该机器仍有 {n} 个打开的面板，请先关闭再移除": "This machine still has {n} open panes — close them before removing it",
   "{host} 的主机密钥已变更。可能是该机器重装，也可能存在中间人。记录位于 {file} 第 {line} 行，核实前请勿连接。":
     "The host key for {host} changed. That machine may have been rebuilt \u2014 or someone may be in the middle. The record is at {file} line {line}; do not connect until you have checked.",
@@ -563,6 +565,7 @@ export const EN_KERNEL: Record<string, string> = {
   "运行时已更换，费用显示币种未保存，请重试": "The runtime changed; the display currency was not saved. Try again.",
   "费用显示币种未能保存：{detail}": "The display currency was not saved: {detail}",
   "文件改动显示设置未能保存：{detail}": "The file-changes display setting was not saved: {detail}",
+  "等级提示的设置未能保存：{detail}": "The level notice setting was not saved: {detail}",
   "折叠中间过程的设置未能保存：{detail}": "The fold-the-work setting was not saved: {detail}",
   "回合间叙述的设置未能保存：{detail}": "The narration setting was not saved: {detail}",
   "这台服务器没有开启联网搜索与抓取设置的编辑：只有这台电脑上的窗口能改。": "Editing the web search and fetch settings is not enabled on this server: only the window on this computer can change them.",

@@ -2,7 +2,7 @@ import { SseShell } from "./sse_shell";
 import type { ScheduleBoard, ScheduleDraft, SchedulePreview, ScheduleResultView, ScheduleView } from "./schedule";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
@@ -126,6 +126,12 @@ export class SseBoundary extends SseShell {
   }
   saveChangedFilesSettings(show: boolean) {
     return this.post0<ChangedFilesSettings>("/changed-files-settings", { show });
+  }
+  feedbackLevelNotices() {
+    return this.get<FeedbackLevelNotices>("/feedback-level-notices");
+  }
+  saveFeedbackLevelNotices(enabled: boolean) {
+    return this.post0<FeedbackLevelNotices>("/feedback-level-notices", { enabled });
   }
   foldWorkSettings() {
     return this.get<FoldWorkSettings>("/fold-work-settings");

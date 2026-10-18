@@ -342,6 +342,10 @@ Goal、由 `todo_write` 工具驱动的实时 Todo 面板、扩展发布的 stat
 彼此独立的模型/工作/协作/审批控制轴、客户端文件与 terminal 能力、MCP server、权限请求，
 以及 Reasonix 的回合中引导扩展。
 
+## 在 DeepSeek Harness 中使用 Reasonix
+
+DeepSeek Harness（`dsh`）可以通过 ACP 把任务委派给 Reasonix 作为子智能体，只需要配置。[在 DeepSeek Harness 中使用 Reasonix](./DSH.md) 说明如何通过 DSH 的插件市场或手工安装、如何打开插件开关、权限策略和限制。
+
 ## 远程 SSH
 
 远程模块让 Reasonix 在远端主机上运行,并通过你自己的 SSH 连接访问它 —— 即 VS Code
@@ -355,6 +359,15 @@ Remote-SSH 式的体验。它在远端主机上引导一个常驻的 headless `r
 `reasonix.toml` 无法注入或覆盖远程主机 —— 克隆的仓库永远无法左右 Reasonix 向何处发起 SSH
 连接。凭据沿用 provider 惯例:主机只记录环境变量名(`passphrase_env`、`password_env`),其值
 存放在 Reasonix 全局 `.env` 中;私钥内容本身从不存储 —— `identity_file` 只是路径。
+
+Studio 的主机级读取与未指定目录的打开，共用该主机显式配置的 `workspace`。
+只有它未设置时，才回退到 `workspaces` 中第一个非空目录；两者均未设置时传入空目录。
+打开操作显式指定的路径优先。调整其他目录的顺序不会覆盖已声明的 `workspace`。
+这些值只来自用户级主机配置，禁用主机会在复用已有连接之前被拒绝。
+
+当前 SSH 项目的次级行显示实际连接目录，包括隔离工作树路径；项目菜单显示刷新所用的
+默认连接目录，两者可能不同。设置中的默认操作会明确选择新的默认目录。
+主机级读取不会借用其他会话的目录。
 
 ```toml
 [remote]

@@ -212,3 +212,24 @@ func TestThePreviewPinsTheBytesItRead(t *testing.T) {
 		t.Fatalf("hashes %q and %q: the hash must change with the bytes", a.SHA256, b.SHA256)
 	}
 }
+
+// A module that reads the conversation or queues a prompt says so in the
+// listing, in words the preview can show without reading the API list.
+func TestNamesWhatAModTakesFromTheSessionAndWhatItQueues(t *testing.T) {
+	p := analyze(t, `
+export function register(on) {
+  on('tool.call', async ($, e, next) => {
+    const msgs = await $.session.messages({ limit: 5 });
+    await $.session.usage();
+    await $.prompt.submit('run the tests');
+    return next(e);
+  });
+}`)
+	if want := []string{"messages", "submit", "usage"}; !slices.Equal(p.Session, want) {
+		t.Fatalf("session = %v, want %v", p.Session, want)
+	}
+	quiet := analyze(t, `export function register(on) { on('tool.call', async ($, e, next) => { $.ui.toast('x'); return next(e); }); }`)
+	if len(quiet.Session) != 0 {
+		t.Fatalf("a module that never touches the session lists %v", quiet.Session)
+	}
+}
