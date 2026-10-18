@@ -13,10 +13,8 @@ import (
 type rateGeneration struct {
 	Base RateCard
 	Peak *RateCard
-	// From is the first day (YYYY-MM-DD, UTC) the vendor bills this generation.
-	// Empty means it applies from the moment it was shipped. A vendor that
-	// announces a price change ahead of time gets the later generation appended
-	// now, with its date, rather than edited in when the day comes.
+	// From is the first day (YYYY-MM-DD, UTC) this generation is billed; empty
+	// means from when it shipped. An announced change is appended with its date.
 	From string
 }
 
@@ -110,11 +108,8 @@ var officialRates = []officialRateRow{
 		Rates: []rateGeneration{{Base: RateCard{CacheHit: 0.006, Input: 0.30, Output: 1.20, Currency: "USD"}}},
 	},
 
-	// Google bills one rate card per model; gemini-3.8-flash and gemini-3.6-flash
-	// double on 2027-01-01 per the page, which is why their second generation is
-	// dated. gemini-3.1-pro-preview bills more above 200k prompt tokens (cached
-	// 0.40, input 4.00, output 18.00), which one card cannot say, so the card is
-	// the rate up to 200k and Notes says so. gemini-4-argon shows no price.
+	// Google: the two flash models double on 2027-01-01, hence the dated generation.
+	// gemini-3.1-pro-preview is the rate up to 200k prompt tokens; gemini-4-argon has no price.
 	{
 		Provider: "google", Model: "gemini-3.8-flash", Currency: "USD",
 		BillingMode: BillingModePAYG, DocURL: DocGeminiPricing, CheckedOn: googleCheckedOn,

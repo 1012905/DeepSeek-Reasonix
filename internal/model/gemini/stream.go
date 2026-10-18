@@ -72,8 +72,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 
 	sink := &chunkSink{ctx: ctx, out: out}
 	send := sink.send
-	steps := map[int]*open{}
-	calls := 0
+	state := &streamState{steps: map[int]*open{}, sink: sink}
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -95,49 +94,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			send(provider.Chunk{Type: provider.ChunkError, Err: provider.StreamDecodeError(c.name, data, err)})
 			return
 		}
-		switch ev.EventType {
-		case "step.start":
-			if ev.Step == nil {
-				continue
-			}
-			st := &open{kind: ev.Step.Type, id: ev.Step.ID, name: ev.Step.Name}
-			switch ev.Step.Type {
-			case "model_output", "thought":
-			case "function_call":
-				if a := strings.TrimSpace(string(ev.Step.Arguments)); a != "" && a != "{}" && a != "null" {
-					st.started = a
-				}
-				if !send(provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: st.id, Name: st.name}}) {
-					return
-				}
-			default:
-				st.kind = "other"
-			}
-			steps[ev.Index] = st
-		case "step.delta":
-			st := steps[ev.Index]
-			if st == nil || ev.Delta == nil {
-				continue
-			}
-			if !c.delta(st, ev, send) {
-				return
-			}
-		case "step.stop":
-			st := steps[ev.Index]
-			if st == nil {
-				continue
-			}
-			delete(steps, ev.Index)
-			n, ok := c.stop(st, send)
-			if !ok {
-				return
-			}
-			calls += n
-		case "error":
-			send(provider.Chunk{Type: provider.ChunkError, Err: streamError(c.name, ev.Error, sink.emitted)})
-			return
-		case "interaction.completed":
-			c.finish(ctx, ev, calls, send)
+		if c.handle(ctx, ev, state) {
 			return
 		}
 	}
@@ -158,6 +115,59 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		fmt.Errorf("%s: stream ended before interaction.completed: %w", c.name, io.ErrUnexpectedEOF),
 		provider.StreamInterruptPrematureEOF,
 	)})
+}
+
+// streamState is what one stream has seen so far: the steps started and not yet
+// stopped, and how many function calls completed.
+type streamState struct {
+	steps map[int]*open
+	calls int
+	sink  *chunkSink
+}
+
+// handle applies one event and reports whether the stream is over.
+func (c *client) handle(ctx context.Context, ev streamEvent, state *streamState) bool {
+	send := state.sink.send
+	switch ev.EventType {
+	case "step.start":
+		if ev.Step == nil {
+			return false
+		}
+		st := &open{kind: ev.Step.Type, id: ev.Step.ID, name: ev.Step.Name}
+		switch ev.Step.Type {
+		case "model_output", "thought":
+		case "function_call":
+			if a := strings.TrimSpace(string(ev.Step.Arguments)); a != "" && a != "{}" && a != "null" {
+				st.started = a
+			}
+			if !send(provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: st.id, Name: st.name}}) {
+				return true
+			}
+		default:
+			st.kind = "other"
+		}
+		state.steps[ev.Index] = st
+	case "step.delta":
+		if st := state.steps[ev.Index]; st != nil && ev.Delta != nil && !c.delta(st, ev, send) {
+			return true
+		}
+	case "step.stop":
+		st := state.steps[ev.Index]
+		if st == nil {
+			return false
+		}
+		delete(state.steps, ev.Index)
+		n, ok := c.stop(st, send)
+		state.calls += n
+		return !ok
+	case "error":
+		send(provider.Chunk{Type: provider.ChunkError, Err: streamError(c.name, ev.Error, state.sink.emitted)})
+		return true
+	case "interaction.completed":
+		c.finish(ctx, ev, state.calls, send)
+		return true
+	}
+	return false
 }
 
 func (c *client) delta(st *open, ev streamEvent, send func(provider.Chunk) bool) bool {

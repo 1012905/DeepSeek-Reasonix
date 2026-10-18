@@ -15,11 +15,6 @@ const (
 	VideoProtocolGeminiFiles   = provider.VideoProtocolGeminiFiles
 )
 
-// KnownVideoProtocols lists every protocol a provider may declare.
-func KnownVideoProtocols() []string {
-	return []string{VideoProtocolInlineDataURL, VideoProtocolMoonshotFile, VideoProtocolGeminiInline, VideoProtocolGeminiFiles}
-}
-
 // VideoProtocolsFor lists the protocols a wire can speak: a protocol is a
 // property of the endpoint's wire, so a Gemini entry never takes the OpenAI
 // ones nor the reverse.

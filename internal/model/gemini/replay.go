@@ -8,11 +8,9 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
-// A turn's thought, model_output and function_call steps are stored as the
-// provider items of its assistant message. A thought's signature must go back
-// exactly as received, so while the message still says what the items say they
-// replay verbatim and in their order; once the text or the calls were rewritten
-// (a fold, an edit) the thoughts still go first and the rest is rebuilt.
+// A turn's steps are stored as provider items and replayed verbatim while the
+// message still matches them; a rewritten turn keeps its thoughts and rebuilds
+// the rest.
 
 type storedStep struct {
 	raw  json.RawMessage

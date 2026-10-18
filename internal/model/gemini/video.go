@@ -20,16 +20,8 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
-// How a video file reaches the model, from Google's pages (read 2026-10-17, not
-// run against the real endpoint):
-//   - inline: https://ai.google.dev/gemini-api/docs/video-understanding, a base64
-//     "data" with a "mime_type" in a video content block, for "shorter videos
-//     under 20MB total request size".
-//   - files: the Files API resumable protocol (X-Goog-Upload-Protocol: resumable,
-//     X-Goog-Upload-Command: start, then "upload, finalize" at X-Goog-Upload-Offset
-//     0 against the x-goog-upload-url the start returned), the file polled until
-//     its state is ACTIVE, referenced by uri, deleted with DELETE on its name.
-//     Files are kept 48 hours (https://ai.google.dev/gemini-api/docs/files).
+// Inline and Files API video follow https://ai.google.dev/gemini-api/docs/video-understanding
+// and /files (read 2026-10-17); not run against the real endpoint.
 
 // afterVideoOpen and beforeVideoOpen let a test move the path around the open.
 var (
