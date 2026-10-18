@@ -84,8 +84,11 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_side_sessions = 0              # 同时打开的辅助会话数；0 = 不限制（只认用户级配置）
 # max_provider_retries = 10          # 模型接口连接失败后的重试次数，用完这一轮就停；0 = 一直重试直到取消（只认用户级配置）
 # max_queued_inputs = 0              # 会话队列里等待发送的消息条数；0 = 不限制，队列的字节上限仍然生效（只认用户级配置）
+# max_subagent_steer_bytes = 16384    # 发给运行中子代理的单条指示的字节数，防止一条消息占满它的上下文；0 = 不限制（只认用户级配置）
+# max_subagent_steers_per_minute = 30  # 每分钟发给同一个运行中子代理的指示条数，用来刹住循环；0 = 不限制（只认用户级配置）
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
+# default_mode = "plan"              # 仅用户配置文件；新对话从计划模式开始（恢复的对话保持自己的模式；设置里有对应开关），默认 normal
 # subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict
 # host_verification = "off"          # 仅用户配置文件；改过文件的回合不再被要求先做检查、复核和签收；交付回执仍如实写明检查了什么，默认 on
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
@@ -154,10 +157,14 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 
 [peers]
 # enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准；设置里也有开关，下个回合起生效（只认用户级配置）
-# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled；打开就是你对这些会话的任务和回信的总同意，不再出审批卡（只认用户级配置）
+# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled；打开就是你对这些会话的任务和回信的总同意，不再出审批卡；新开的会话沿用发起方的模型、预设、审批档位和计划模式，所以 YOLO 的发起方开出的也是 YOLO 会话，会连目标项目的“要问我”规则一起答掉（拒绝规则仍然生效）（只认用户级配置）
 # max_dispatch_depth = 1       # 派发最多能连着开几层会话；0 表示不限（只认用户级配置）
 # max_dispatched_sessions = 8  # 一个会话通过派发最多同时开着几个会话；0 表示不限（只认用户级配置）
 # release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧（只认用户级配置）
+
+[mods]
+# enabled = false              # 运行已安装 Claude Code mod 的钩子模块；完全信任、不在沙盒内（只认用户级配置）
+# hook_budget_ms = 0           # 单个钩子自身的运行时限，毫秒；0 保持 10000（只认用户级配置）
 
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌
@@ -973,6 +980,23 @@ MCP 等独立沙盒继续使用自己的隔离规范，不继承父会话临时�
 没有可用 OS 沙盒时，`bash = "enforce"` 会拒绝 bash 执行，不会无沙盒运行。
 Windows 上兼容的值始终为 `off`。
 
+### 在开发容器或 Docker 里
+
+bubblewrap 需要创建用户命名空间和挂载命名空间（关闭网络时还要网络命名空间），默认容器会拦下这些。在
+Docker Desktop（Linux 虚拟机、Debian 12、bubblewrap 0.8.0）上，用每种配置各启动一条受限命令（`enforce`）实测：
+
+| 容器配置 | 沙盒 | 报告的原因 |
+|---|---|---|
+| 没装 bubblewrap | 不可用 | `sandbox.no_bubblewrap` |
+| 默认 `docker run`；只解除 seccomp；只加 `SYS_ADMIN`；解除 seccomp 和 AppArmor 但没有 `SYS_ADMIN` | 不可用 | `sandbox.bwrap_namespace_denied` |
+| `SYS_ADMIN` 加解除 seccomp 和 AppArmor | 网络开放时可用；关闭网络时不可用 | 关闭网络时为 `sandbox.bwrap_network_denied` |
+| 再加 `NET_ADMIN`，或 `--privileged` | 可用，网络开放或关闭都行 | 无 |
+
+- `CAP_SYS_ADMIN` 和解除 seccomp 两样都要，缺一不可。
+- Reasonix 不去判断是不是在容器里。提示来自 bubblewrap 实际能做什么、不能做什么：给了这些权限的容器能用上沙盒，没给的会被告知缺哪一项。
+- 给这些权限会放宽容器本身。另一条路是 `[sandbox] bash = "off"`；那时容器就是唯一的边界，你挂载成可写的东西（包括绑定挂载的工作区里的凭据文件）每条命令都能写。
+- 只测了 Linux 沙盒；没有跑真正的 Dev Containers / Codespaces、rootless Docker 和 SELinux 主机。
+
 反馈编码质量问题时，可运行 `reasonix doctor quality <branch-id-or-path>`（加
 `--json` 输出结构化结果）。命令会读取指定 session，但只输出不含内容的计数与
 Profile 分类：模型家族、运行模式、协作/审批模式、消息和工具调用数、验证与已持久化的
@@ -1184,6 +1208,14 @@ Context Engine v2 把上下文分成两个用途不同的层：
 - **常驻指令**来自分层加载的 `REASONIX.md`、`AGENTS.md` 和 `CLAUDE.md`。必须在每个
   相关回合都存在的规则应放在这里。用户全局文件先加载，再加载 workspace 和更深目标目录，
   同一目录内 `.local.md` 变体优先。
+- **规则**是放在 `.reasonix/rules/`、`.claude/rules/`（项目）和 `<Reasonix 主目录>/rules/`（用户）下的
+  Markdown 文件，含子目录。
+  - 没有 `paths:` 前置字段的规则，按常驻指令的方式送达。
+  - 带 `paths: ["src/**/*.ts"]`（列表或逗号分隔的字符串）的规则，在会话读写过匹配文件后的下一个回合送达，
+    不再适用时会被撤回。
+  - 加载顺序是先用户后项目，后出现的更具体。
+  - 单个文件上限 32 KB，两层各自上限 64 KB；超出的会被跳过并在能力诊断里显示；不跟随符号链接。
+  - 两层都不碰缓存前缀。
 - **背景记忆**每个 Markdown 文件只保存一条持久事实。每条事实都有不变 ID、单调 revision、
   时间戳、相互独立的 `type`（`user`、`feedback`、`project`、`reference`）与
   `scope`（`project`、`global`），以及 freshness。事实可能过时，因此永远不能覆盖
@@ -1523,6 +1555,14 @@ destructive MCP 目标、来自未授权 server 的 reader，以及一切会改�
 会话 lineage 与工作区约束。没有持久化父会话的 headless 运行仍保持 ephemeral，只返回公平
 分配的有界预览，不能生成持久引用。
 
+仍在运行的子代理可以收到补充指示：
+
+- 模型调用 `task` 时把 `task_id` 设为该子代理的 `sa_...` 引用、指示写在 `prompt` 里；你则在设置或子代理的界面里发送。
+- 子代理在下一次调用工具时读到它，标明来自委派它的会话（或来自你）；它自己的批准照常生效。
+- 子代理若已结束，`task_id` 的效果与 `continue_from` 相同，接着它的对话继续。
+- 单条大小和每分钟条数由 `max_subagent_steer_bytes`、`max_subagent_steers_per_minute` 限制（只认用户级配置，设置 → 工具 → 给运行中子代理的指示；填 `0` 表示不设上限）。
+- 配对设备不能发送这种指示。
+
 交互式双模型 Planner 使用专用构造路径（`NewPlannerAgent`）：仍阻止 bash、文件写入与普通
 writer，但可通过固定的 `use_capability` 代理调用已授权、非 destructive 的 MCP，不再要求
 `readOnlyHint`。直接 `mcp__*` schema 永不进入 Planner 工具列表，因此 MCP 安装/连接变动
@@ -1752,3 +1792,14 @@ Reasonix 按 Google 公布的标价计费，每百万 token（https://ai.google.
 | `gemini-3.1-pro-preview`（提示词不超过 200k token） | $2.00 | $0.20 | $12.00 |
 
 `gemini-3.1-pro-preview` 在提示词超过 200k token 后更贵（$4.00 / $0.40 / $18.00），一张费率卡表达不了，所以超长提示词会读低。`gemini-4-argon` 页面上没有价格，不计价。显式上下文缓存的存储费不计入。
+
+### 把视频地址交给模型厂商
+
+有的厂商从公开地址读取视频，而不是读文件。`read_video` 可以用 `url` 代替 `path`，但必须先在设置里打开（「联网」→「视频地址」，或用户文件里的 `[tools] video_url_passthrough = true`；项目文件无法设置它）。打开本身就是一次确认：模型也可以提议打开，每次都由你点卡片同意。
+
+- 地址由厂商自己去访问，本机不下载任何东西。只有接受“厂商的服务器会打开这个地址”才应打开。
+- 只交出你在对话里亲手写的地址。模型从网页、文件、工具结果里看到的或自己编的地址都会被拒绝（`video.url_not_from_user`），所以网页作者无法让厂商去访问他选的地址。
+- 地址必须是 `https` 且有公开主机名：不能带账号密码，不能是 IP、`localhost`、单段主机名或局域网名，长度不超过 2048 字符（`video.url_invalid`）。
+- 智谱 GLM 在 `video_url` 里接收公开 https 地址，不接收文件（[docs.bigmodel.cn](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v)，2026-10-17 读取）。在条目上写 `video_models = ["glm-4.6v"]` 和 `video_protocol = "zhipu_url"`；本地文件此时按帧读取。
+- Gemini 在 `gemini_inline` 和 `gemini_files` 下把公开的 YouTube 地址作为视频 `uri`；其他地址不会交给它（`video.url_unsupported_model`）。
+- 从存档或导入的会话里恢复出来的引用永远不会被发送：只发送在本进程里检查过的地址。

@@ -49,6 +49,7 @@ const (
 	StatusFixed      Status = "fixed"
 	StatusWontFix    Status = "wontfix"
 	StatusDuplicate  Status = "duplicate"
+	StatusWithdrawn  Status = "withdrawn"
 )
 
 // Limits are the ceilings the worker enforces, held here so a frontend states
@@ -182,6 +183,8 @@ type Item struct {
 	// UnreadReplies counts maintainer replies newer than the last one this
 	// machine marked seen; it is computed on read, never stored.
 	UnreadReplies int `json:"unreadReplies"`
+	// OtherInstall marks a report another install of the same account filed.
+	OtherInstall bool `json:"otherInstall,omitempty"`
 }
 
 // TrustState is why an install is admitted at the limits it is. Only active and

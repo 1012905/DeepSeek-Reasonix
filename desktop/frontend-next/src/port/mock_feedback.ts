@@ -1,6 +1,6 @@
 import { HttpError } from "./http_error";
 import { MockCommit } from "./mock_commit";
-import { FEEDBACK_CODE, type FeedbackEnv, type FeedbackImage, type FeedbackItem, type FeedbackLinkedInstall, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
+import { FEEDBACK_CODE, canWithdraw, type FeedbackEnv, type FeedbackImage, type FeedbackItem, type FeedbackLinkedInstall, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
 
 const LIMITS = { bodyBytes: 8192, nameChars: 40, contactChars: 120, images: 3, imageBytes: 2 << 20, uploadBytes: 10 << 20, replyBytes: 4096 };
 
@@ -28,6 +28,8 @@ const SEEDED: FeedbackItem[] = [
   item({ receipt: "FB-3F6G-2KV9", category: "idea", titleSnippet: "Fixed in the next build: quieter update banner", status: "fixed", issueNumber: 11390, issueUrl: "https://github.com/esengine/DeepSeek-Reasonix/issues/11390", resolvedVersion: "next", createdAt: ago(8), updatedAt: ago(0.5) }),
   item({ receipt: "FB-8Q2J-6PW4", category: "other", titleSnippet: "Please support a monorepo layout", status: "wontfix", issueNumber: 11288, issueUrl: "https://github.com/esengine/DeepSeek-Reasonix/issues/11288", createdAt: ago(12), updatedAt: ago(5) }),
   item({ receipt: "FB-4T7V-3ZH1", category: "bug", titleSnippet: "Crash when opening settings on a small window", status: "duplicate", issueNumber: 11301, issueUrl: "https://github.com/esengine/DeepSeek-Reasonix/issues/11301", duplicateOf: 11299, createdAt: ago(15), updatedAt: ago(9) }),
+  item({ receipt: "FB-2D8K-4HQ6", category: "idea", titleSnippet: "Sent by mistake, please ignore", status: "withdrawn", createdAt: ago(6), updatedAt: ago(5.5) }),
+  item({ receipt: "FB-7L3Q-2DM8", category: "idea", titleSnippet: "Filed from my other laptop: a calmer sidebar", status: "recorded", issueNumber: 11402, issueUrl: "https://github.com/esengine/DeepSeek-Reasonix/issues/11402", otherInstall: true, createdAt: ago(3), updatedAt: ago(2) }),
   item({ receipt: "FB-5R2T-6VB3", category: "bug", titleSnippet: "Settings sheet flickers when the window is dragged", status: "received", underReview: true, createdAt: ago(0.3), updatedAt: ago(0.3) }),
   item({ receipt: "FB-6M9R-5CE8", category: "question", titleSnippet: "How do I move my sessions to another disk?", status: "received", statusUnavailable: true, createdAt: ago(40), updatedAt: ago(40) }),
   item({ receipt: "FB-1C5W-7NB2", category: "bug", titleSnippet: "Terminal output is cut off after a resize", status: "needs_info", needsInput: true, createdAt: ago(2), updatedAt: ago(0.2),
@@ -182,6 +184,15 @@ export class MockFeedback extends MockCommit {
   async unlinkFeedbackInstall(id: string): Promise<void> {
     this.requireAccount();
     this.links = this.links.filter((l) => l.id !== id);
+  }
+
+  async withdrawFeedback(receipt: string): Promise<void> {
+    const row = this.rows.find((i) => i.receipt === receipt);
+    if (!row) throw refusal(FEEDBACK_CODE.notFound);
+    if (!canWithdraw(row)) throw refusal(FEEDBACK_CODE.notWithdrawable);
+    row.status = "withdrawn";
+    row.needsInput = false;
+    row.updatedAt = new Date().toISOString();
   }
 
   async feedbackSeen(receipt: string, upTo: number): Promise<void> {

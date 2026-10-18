@@ -1,16 +1,15 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useModalFocus } from "./useModalFocus";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
 import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
-import { arrowTabs } from "./tablist";
 import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV, SECTION_NAME } from "./prefsnav";
-import { UpdateDot } from "./UpdateDot";
+import { SECTION_NAME } from "./prefsnav";
+import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
-import { PlanApproval } from "./PlanApproval";
+import { PlanApproval, DefaultMode } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -35,10 +34,12 @@ import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
 import { SessionRef } from "./SessionRef";
+import { TraceExport } from "./TraceExport";
 import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
+import { Persona } from "./Persona";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
 import { BackupFile } from "./BackupFile";
@@ -295,6 +296,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   // each section rides on its own row, so the risky one is legible from here.
   const nav: Record<Section, string> = {
     session: status?.plan ? t("计划模式") : preset,
+    persona: "",
     model: status?.modelRef?.split("/").pop() ?? "—",
     providers: models.length ? t("{n} 个服务", { n: groupVendors(models).length }) : "",
     tools: ruleCount ? `${approval} · ${ruleCount}` : approval,
@@ -417,7 +419,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   <span className="cost">
                     {[
                       t(SCOPE_SAID[e.scope]),
-                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : e.apply === "next-turn" ? t("下个回合起生效") : "",
+                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : e.apply === "next-turn" ? t("下个回合起生效") : e.apply === "next-rebuild" ? t("下次会话构建时生效") : "",
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </button>
@@ -428,34 +430,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
       </div>
       <ConfigTrouble port={port} onRepaired={onChanged} />
       <div className="prefs-body">
-        <nav className="prefs-nav" role="tablist" aria-label={t("设置分类")} onKeyDown={arrowTabs}>
-          {NAV.map(([group, items]) => {
-            const rows = items.filter(([id]) => shown(id));
-            // A heading over nothing is worse than no heading: remote is absent
-            // on a kernel without it, advanced until something moves in.
-            if (rows.length === 0) return null;
-            return (
-              <Fragment key={group}>
-                <div className="navsec">{t(group)}</div>
-                {/* One tab stop for the list, arrows move inside it: twelve
-                    stops made Tab the wrong way through this screen. */}
-                {rows.map(([id, name]) => (
-                  <button key={id} id={`prefs-${id}`} role="tab" title={t(name)}
-                    data-action="settings.section" data-value={id}
-                    tabIndex={at === id ? 0 : -1}
-                    aria-selected={at === id} disabled={updatingPkg.applying} onClick={() => setAt(id)}>
-                    <svg viewBox="0 0 16 16" aria-hidden="true">{ICON[id]}</svg>
-                    {id === "versions" && <UpdateDot />}
-                    <span className="nm">{t(name)}</span>
-                    <span className="nv" title={nav[id] || undefined} data-danger={danger(id) ? "" : undefined}>
-                      {nav[id]}
-                    </span>
-                  </button>
-                ))}
-              </Fragment>
-            );
-          })}
-        </nav>
+        <SettingsNav at={at} values={nav} shown={shown} danger={danger} disabled={updatingPkg.applying} onSelect={setAt} />
 
         <div className="prefs-main" role="tabpanel" aria-labelledby={`prefs-${at}`} data-sec={at}>
           <Boundary
@@ -504,7 +479,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                     onClick={() => run("plan", () => port.setPlanMode(!status?.plan))}
                   />
                 </div>
-              </Group>
+              </Group><DefaultMode port={port} />
               <DisplaySettings port={port} />
               <AskTimeout port={port} />
               <SessionRef port={port} />
@@ -533,6 +508,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               </Group>
             </>
           )}
+
+          {at === "persona" && <Persona port={port} />}
 
           {at === "providers" && (
             <Group id="providers" title={t("模型服务")}
@@ -733,6 +710,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <Network port={networkPort ?? port} host={networkHost ?? ""} />
             </Group>
           )}
+          {at === "network" && <TraceExport port={port} />}
 
           {at === "remote" && (
             <Group id="remote"
@@ -758,9 +736,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <Backup port={port} />
             </Group>
           )}
-
           {at === "versions" && <About port={homePort} />}
-
           {at === "memory" && (
             <Group id="memory"
               title={t("记忆")}

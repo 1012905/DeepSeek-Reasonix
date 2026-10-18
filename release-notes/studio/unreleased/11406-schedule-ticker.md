@@ -1,0 +1,2 @@
+- 新增：Studio 打开且可见（窗口或托盘图标）时，会按计划自动运行已确认的定时任务；同一时刻只有一个内核执行。关联 #11406。
+- Added: While Studio is open and visible (a window or tray icon), it runs the schedules you confirmed; only one kernel ticks at a time. Refs #11406.

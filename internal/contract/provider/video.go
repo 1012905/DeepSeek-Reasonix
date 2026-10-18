@@ -10,6 +10,9 @@ import (
 // a transcript must not hold a hundred megabytes per read, and the file on disk
 // is the one copy.
 type VideoRef struct {
+	// URL, when set, is a public address the vendor itself visits. Such a
+	// reference has no file: Path, SHA256 and Size are empty.
+	URL        string `json:"url,omitempty"`
 	Path       string `json:"path"`
 	Name       string `json:"name"`
 	SHA256     string `json:"sha256"`
@@ -68,6 +71,10 @@ const (
 	// VideoProtocolGeminiFiles uploads the file to Google's Files API, refers to
 	// it by its uri in a video content block, and deletes it once the request ends.
 	VideoProtocolGeminiFiles = "gemini_files"
+	// VideoProtocolZhipuURL names a public HTTPS address in a video_url content
+	// part and nothing else: Zhipu's page shows no base64 or file form for video
+	// (docs.bigmodel.cn, GLM-4.6V, read 2026-10-17).
+	VideoProtocolZhipuURL = "zhipu_url"
 )
 
 // The ceilings the vendors document for each protocol, read from their own
@@ -100,6 +107,8 @@ func VideoProtocolLimit(protocol string) (source string, bytes int64) {
 		return "gemini_inline", VideoGeminiInlineRequestLimit / 4 * 3
 	case VideoProtocolGeminiFiles:
 		return "gemini_files", VideoGeminiFileLimit
+	case VideoProtocolZhipuURL:
+		return "zhipu_url", 0
 	}
 	return "", 0
 }

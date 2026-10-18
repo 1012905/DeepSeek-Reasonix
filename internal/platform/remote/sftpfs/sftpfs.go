@@ -26,6 +26,22 @@ type FS struct {
 	client *sftp.Client
 }
 
+// Files is the part of a remote filesystem the kernel bootstrap needs: state
+// files, tokens and the installed binary. Anything that can answer these eight
+// calls can host a kernel, whether the bytes travel over SFTP or another channel.
+type Files interface {
+	Stat(ctx context.Context, p string) (Entry, error)
+	ReadFile(ctx context.Context, p string, maxSize int64) (data []byte, truncated bool, kind Kind, err error)
+	WriteFileAtomic(ctx context.Context, p string, data []byte, perm fs.FileMode) error
+	MkdirAll(ctx context.Context, p string) error
+	MkdirExclusive(ctx context.Context, p string) error
+	Chmod(ctx context.Context, p string, perm fs.FileMode) error
+	Remove(ctx context.Context, p string, recursive bool) error
+	RealPath(ctx context.Context, p string) (string, error)
+}
+
+var _ Files = (*FS)(nil)
+
 // Entry is one directory entry.
 type Entry struct {
 	Name    string

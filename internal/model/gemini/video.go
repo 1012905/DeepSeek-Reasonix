@@ -108,6 +108,16 @@ func (c *client) resolveVideos(ctx context.Context, msgs []provider.Message) (ou
 // tool checked, and checks it end to end before a byte goes out. A reference
 // never granted is reported as unavailable.
 func (w *videoWire) resolve(ctx context.Context, c *client, ref provider.VideoRef) (part provider.VideoPart, uploaded string, code string) {
+	if ref.URL != "" {
+		// A public YouTube address Google reads itself; only one a tool granted.
+		switch {
+		case !provider.VideoAddressGranted(ref.URL):
+			return part, "", provider.VideoURLUnavailable
+		case !provider.VideoAddressAccepted(w.protocol, ref.URL):
+			return part, "", provider.VideoURLUnsupported
+		}
+		return provider.VideoPart{Name: ref.Name, URL: ref.URL}, "", ""
+	}
 	_, limit := provider.VideoProtocolLimit(w.protocol)
 	if ref.Size > limit {
 		return part, "", provider.VideoTooLarge

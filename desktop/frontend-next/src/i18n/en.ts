@@ -12,6 +12,7 @@ import { EN_WINDOW } from "./en_window";
 import { EN_GRAPH } from "./en_graph";
 import { EN_TRAJECTORY } from "./en_trajectory";
 import { EN_SETTINGS } from "./en_settings";
+import { EN_PERSONA } from "./en_persona";
 import { EN_METRICS } from "./en_metrics";
 import { EN_STORAGE } from "./en_storage";
 import { EN_USAGE } from "./en_usage";
@@ -34,9 +35,12 @@ export const EN: Record<string, string> = {
 
   "加宽浏览器": "Widen browser",
   "恢复浏览器分栏": "Restore browser split",
+  "全屏浏览器": "Full-screen browser",
+  "退出全屏": "Exit full screen",
   "工作台": "Workbench",
   "从右侧选择文件，或打开浏览器": "Choose a file on the right, or open a browser",
   ...EN_SETTINGS,
+  ...EN_PERSONA,
   ...EN_COMMUNITY,
   ...EN_SPONSOR,
   ...EN_METRICS,
@@ -214,9 +218,29 @@ export const EN: Record<string, string> = {
   "等待浏览器登录…": "Waiting for the browser sign-in…",
   "等待浏览器授权…": "Waiting for the browser authorization…",
   "授权更多权限": "Grant more access",
+  "追踪导出": "Trace export",
+  "把每轮对话以 OpenTelemetry 追踪的形式发给你自己的观测系统。默认关闭；只发送结构、耗时、数量和名称，不发送提示词、工具参数、结果或文件路径。": "Send each turn to your own observability stack as OpenTelemetry traces. Off by default; only structure, timing, counts and names are sent, never prompts, tool arguments, results or file paths.",
+  "导出追踪": "Export traces",
+  "已开启，但还没有收集器地址，所以不会发送任何东西。": "On, but there is no collector address yet, so nothing is sent.",
+  "现在是关闭的：开启并填写收集器地址后才会发送。": "Off now: nothing is sent until it is on and has a collector address.",
+  "已开启：之后新开的会话会把追踪发到下面的地址。": "On: sessions opened from now on send traces to the address below.",
+  "收集器地址": "Collector address",
+  "认证请求头名称": "Auth header name",
+  "保存凭据的环境变量": "Environment variable holding the credential",
+  "环境变量已设置；它的值不会显示，也不会写进配置文件。": "The variable is set; its value is never shown or written to the config file.",
+  "环境变量当前没有值：会不带凭据发送。": "The variable has no value now: traces are sent without a credential.",
+  "凭据不写在配置里：这里只填环境变量名，名称必须以 OTEL_ 或 REASONIX_OTEL_ 开头。": "The credential is never in the config: enter only a variable name, which must start with OTEL_ or REASONIX_OTEL_.",
+  "服务名": "Service name",
+  "保存后只对之后新开的会话生效，已开的会话沿用旧设置。这些设置写在用户配置文件里：": "A save applies to sessions opened afterwards; open ones keep the old setting. These settings live in your user config file:",
   "这个服务器要求更多权限": "This server asks for more access",
   "这个服务器拒绝了一次调用，并要求更多权限（以下是它自己写的名称）：": "This server refused a call and asks for more access (these names are its own words):",
   "这个服务器没有要求更多权限": "This server has not asked for more access",
+  "这个客户端不能修改追踪导出设置": "This client cannot change the trace export settings",
+  "收集器地址必须是带主机名的 http 或 https 地址": "The collector address must be an http or https address with a host name",
+  "收集器地址里不能带用户名、密码、查询串或片段": "The collector address must not contain a user name, password, query or fragment",
+  "这不是可用的请求头名称": "That is not a usable header name",
+  "凭据环境变量必须以 OTEL_ 或 REASONIX_OTEL_ 开头": "The credential variable must start with OTEL_ or REASONIX_OTEL_",
+  "追踪导出设置没有保存成功": "The trace export settings were not saved",
   "接受并以后都自动接受这个服务器的改动": "Accept, and accept this server's changes by themselves from now on",
   "自动接受这个服务器的改动": "Changes from this server are accepted by themselves",
   "这个服务器的改动会自动接受，并在通知里告诉你。": "This server's changes are accepted by themselves, and you are told in a notice.",
@@ -727,6 +751,7 @@ export const EN: Record<string, string> = {
   "已运行，但退出码来自命令中的其他片段": "it ran, but the exit code came from another stage of the command",
   "有改动；没有主机能读作证据的检查": "changed; no check the host could read as proof",
   "改动后未再检查": "changed, never looked at again",
+  "有 Claude Code mod 在运行；它写了什么不在主机观测范围内": "a Claude Code mod ran; what it wrote is outside what the host observes",
   "自己申报未验证": "declared unverified by the turn itself",
   "同一账号的两种接入方式。当前这一种不支持联网搜索；这是协议差异，不是可配置项。": "Two ways in to the same account. This one has no web search — that is a difference between the protocols, not a setting.",
   "同一账号的两种接入方式。切换后下方的模型列表随之改变。": "Two ways in to the same account. Switching changes the model list below.",
@@ -1670,4 +1695,8 @@ export const EN: Record<string, string> = {
   "每次都会询问": "Asked every time",
   "这项设置会放宽模型的权限，所以没有「本会话内不再问」，每次都要你亲自确认。": "This setting loosens what the model may do, so there is no \"don't ask again this session\": you confirm it yourself each time.",
   "打开设置": "Open settings",
+  "视频地址": "Video addresses",
+  "模型可以把你在对话里写的公开视频地址交给模型厂商读取。默认关闭，立即生效。": "The model can hand a public video address you wrote in the conversation to the model vendor to read. Off by default; applies at once.",
+  "把视频地址交给模型厂商": "Hand video addresses to the model vendor",
+  "开启后，该网址会被厂商直接访问：由厂商的服务器去打开它，不是本机下载。只有你自己写在对话里的地址才会交出去，且所选模型的厂商要支持。": "When on, the address is visited directly by the vendor: its servers open it, it is not downloaded here. Only an address you wrote in the conversation is handed over, and the selected model's vendor has to support it.",
 };

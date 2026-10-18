@@ -216,7 +216,7 @@ class BenchPort extends MockPort {
       search_backends: ["searxng", "deepseek_api"], searxng_url: "http://127.0.0.1:8080", search_paid_allowed: [],
       fetch_backends: ["local", "deepseek_api"], fetch_paid_allowed: [],
       known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"], paid_backends: ["deepseek_api"],
-      deepseek_api_ready: query.get("webaccess") !== "noready", path: "/Users/you/.reasonix/config.toml",
+      deepseek_api_ready: query.get("webaccess") !== "noready", video_url_passthrough: query.has("videourl"), path: "/Users/you/.reasonix/config.toml",
     };
   }
 
@@ -450,6 +450,11 @@ class BenchHub extends MockHub {
     );
   }
 
+  async moveSessionTo(path: string, target: string) {
+    (window.__moves ??= []).push({ path, target });
+    return super.moveSessionTo(path, target);
+  }
+
   tree(): Promise<TreeWorkspace[]> {
     const wait = TREE_AT - performance.now();
     if (wait > 0) return new Promise((resolve) => setTimeout(() => resolve(this.tree()), wait));
@@ -458,6 +463,7 @@ class BenchHub extends MockHub {
       Array.from({ length: WORKSPACES }, (_, w) => ({
         root: `~/projects/workspace-${w}`,
         name: `workspace-${w}`,
+        remembered: true,
         open: w === 0,
         sessions: this.placed(`~/projects/workspace-${w}`, Array.from({ length: SESSIONS }, (_, s) => ({
           path: `/sessions/w${w}-s${s}.jsonl`,
@@ -483,6 +489,7 @@ createRoot(document.getElementById("root")!).render(<App hub={hub} />);
 
 declare global {
   interface Window {
+    __moves?: { path: string; target: string }[];
     // Feeds every open pane, so a split-view measurement costs what two live
     // conversations really cost.
     __feed: (ev: WireEvent) => void;

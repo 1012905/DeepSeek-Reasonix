@@ -83,6 +83,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		renderProgressWatchSection(&b, c)
 		renderAutoArchiveSection(&b, c)
 		renderServeAndPeers(&b, c)
+		renderObservabilitySection(&b, c)
 		b.WriteString("[notifications]\n")
 		fmt.Fprintf(&b, "enabled = %v   # system notifications for CLI and desktop turns; default off\n", c.Notifications.Enabled)
 		fmt.Fprintf(&b, "turn_done = %v   # notify when a turn finishes\n", c.Notifications.TurnDone)
@@ -215,11 +216,16 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	agentSetting(&b, "subagent_claims", c.Agent.SubagentClaims, defaults.Agent.SubagentClaims, "optimistic: a sub-agent that declared no write_paths holds only the path it is writing, not the whole workspace; user file only")
 	agentSetting(&b, "write_lease", c.Agent.WriteLease, defaults.Agent.WriteLease, "optimistic: a writer that declared no path does not hold the whole workspace against other sessions; user file only")
 	agentSetting(&b, "plan_approval", c.Agent.PlanApproval, defaults.Agent.PlanApproval, "auto: the plan card answers itself and execution starts; user file only")
+	agentSetting(&b, "default_mode", c.Agent.DefaultMode, defaults.Agent.DefaultMode, "plan: a new conversation starts in plan mode (the mode picker still switches it); a resumed one keeps its own; user file only")
 	agentSetting(&b, "host_verification", c.Agent.HostVerification, defaults.Agent.HostVerification, "off: the host does not hold a turn open to ask for a check, a review or a sign-off on files it changed; the receipt still says what was and was not checked; user file only")
 	if c.Agent.OutputStyle != "" {
 		fmt.Fprintf(&b, "output_style = %q   # persona/tone folded into the prompt\n", c.Agent.OutputStyle)
 	} else {
 		b.WriteString("# output_style = \"explanatory\"   # explanatory | learning | concise | custom; empty = default\n")
+	}
+	// Persona is the user's own identity, so it never goes into a project file.
+	if p := c.Agent.Persona.Normalize(); scope != RenderScopeProject && !p.IsZero() {
+		renderPersonaTable(&b, p)
 	}
 	b.WriteString("\n")
 

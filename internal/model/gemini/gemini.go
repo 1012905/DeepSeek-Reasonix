@@ -211,7 +211,7 @@ func (c *client) userContent(m provider.Message) []content {
 		blocks = append(blocks, content{Type: "text", Text: m.Content})
 	}
 	for _, v := range m.VideoParts {
-		if c.video != nil && c.video.protocol == provider.VideoProtocolGeminiInline {
+		if c.video != nil && c.video.protocol == provider.VideoProtocolGeminiInline && v.MIME != "" {
 			blocks = append(blocks, content{Type: "video", Data: v.URL, MimeType: v.MIME})
 		} else {
 			blocks = append(blocks, content{Type: "video", URI: v.URL, MimeType: v.MIME})

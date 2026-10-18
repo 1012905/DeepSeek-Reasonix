@@ -12,6 +12,18 @@ type SlashHintMessages struct {
 	ArgFeedbackList       string
 	ArgFeedbackShow       string
 	ArgFeedbackReply      string
+	CmdBtw                string
+	BtwUsage              string
+	BtwSavedNote          string
+	BtwNoAnswer           string
+	BtwUnavailable        string
+	BtwLimit              string
+	BtwBusy               string
+	BtwFailedFmt          string
+	ArgFeedbackWithdraw   string
+	ArgFeedbackLink       string
+	ArgFeedbackUnlink     string
+	ArgFeedbackLinks      string
 	ArgFeedbackName       string
 	ArgMemoryRecall       string
 	ArgMemoryRevisions    string

@@ -25,12 +25,11 @@ func unknownCommand(cmd string, rest []string) int {
 	return 2
 }
 
-// scheduleCommand dispatches `reasonix schedule`. Only the supervisor's own
-// child entry exists here; it is not a command a person types.
+// scheduleCommand dispatches `reasonix schedule`. exec is the supervisor's own
+// child entry, not a command a person types; the rest manage and tick schedules.
 func scheduleCommand(args []string) int {
 	if len(args) > 0 && args[0] == "exec" {
 		return scheduleExec(args[1:])
 	}
-	fmt.Fprintln(os.Stderr, "usage: reasonix schedule exec <trigger-id>   (started by the scheduler, not by hand)")
-	return 2
+	return scheduleManage(args, scheduleOS())
 }

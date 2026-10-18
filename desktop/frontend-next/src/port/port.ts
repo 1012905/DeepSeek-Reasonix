@@ -47,11 +47,12 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 export type * from "./plugin";
 export type * from "./market";
@@ -190,6 +191,10 @@ export interface AgentPort {
   setSkillEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   planSkillUpdate(name: string): Promise<SkillUpdatePlan>;
   applySkillUpdate(name: string, planId: string, overwriteLocal: boolean): Promise<void>;
+  // Deletes the skill the person was shown, named by the scope and path the list
+  // drew. A built-in or a package's skill is refused (skill.not_removable), and
+  // one that changed since the list was read is too (skill.changed).
+  removeSkill(name: string, scope: string, path: string, root?: string): Promise<void>;
   // Drops this project's exception so the skill inherits again.
   clearSkillOverride(name: string, root?: string): Promise<void>;
   plugins(): Promise<PluginPackage[]>;
@@ -283,8 +288,12 @@ export interface AgentPort {
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
   subagentClaims(): Promise<SubagentClaimsSettings>;
   saveSubagentClaims(optimistic: boolean): Promise<SubagentClaimsSettings>;
+  subagentSteerSettings(): Promise<SubagentSteerSettings>;
+  saveSubagentSteerSettings(maxBytes: number, perMinute: number): Promise<SubagentSteerSettings>;
   planApproval(): Promise<PlanApprovalSettings>;
   savePlanApproval(auto: boolean): Promise<PlanApprovalSettings>;
+  defaultMode(): Promise<DefaultModeSettings>;
+  saveDefaultMode(plan: boolean): Promise<DefaultModeSettings>;
   writeLease(): Promise<WriteLeaseSettings>;
   saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
   peers(): Promise<PeersState>;
@@ -301,6 +310,8 @@ export interface AgentPort {
   saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings>;
   turnNarrationSettings(): Promise<TurnNarrationSettings>;
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings>;
+  observabilitySettings(): Promise<ObservabilitySettings>;
+  saveObservabilitySettings(patch: ObservabilityPatch): Promise<ObservabilitySettings>;
   webAccessSettings(): Promise<WebAccessSettings>;
   saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings>;
   probeSearxng(): Promise<SearxngProbe>;
@@ -314,6 +325,10 @@ export interface AgentPort {
   autoArchive(): Promise<AutoArchiveSettings>;
   // Read by the kernel's background sweep on each pass; no rebuild.
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
+  persona(): Promise<PersonaSettings>;
+  // The persona is part of the cache-stable prefix, composed once at boot:
+  // saving is written now and read by the next session, not this one's runtime.
+  savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings>;
   receiptSettings(): Promise<ReceiptSettings>;
   saveReceiptSettings(show: boolean): Promise<ReceiptSettings>;
   // null in a browser tab: there is no window to keep running.
@@ -452,6 +467,8 @@ export interface AgentPort {
   replyFeedback(receipt: string, body: string, images?: FeedbackImage[]): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
+  // Takes one of this install's reports back; refused with feedback.not_withdrawable once it has an outcome.
+  withdrawFeedback(receipt: string): Promise<void>;
   // Tying this install to the signed-in account is always the person's own
   // request. Linking changes no quota; unlinking only removes the join.
   feedbackLinks(): Promise<FeedbackLinkedInstall[]>;
@@ -640,6 +657,10 @@ export interface AgentPort {
   // live. A run of another conversation is refused (subagent.not_owned).
   subagents(): Promise<SubagentRun[]>;
   subagentTranscript(ref: string, after?: number, limit?: number): Promise<SubagentTranscript>;
+  // The person's guidance to a sub-agent that is still running, read at its next
+  // tool call. Refused with a code when it is not running (subagent.not_running),
+  // is empty, over the size or rate limit, or is another conversation's.
+  steerSubagent(ref: string, text: string): Promise<void>;
   // The end of a running job's output, for the person looking at it. It does
   // not take output from the model's own reader; a job that ended is refused
   // (job.not_running).

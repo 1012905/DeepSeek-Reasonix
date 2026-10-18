@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reasonix/internal/ext/modhost"
 	"strings"
 	"sync"
 	"syscall"
@@ -32,6 +33,7 @@ import (
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
+	"reasonix/internal/frontend/cli"
 	"reasonix/internal/frontend/remotehost"
 	"reasonix/internal/frontend/serve"
 	"reasonix/internal/frontend/traystate"
@@ -122,6 +124,11 @@ func main() {
 	if handled, code := update.MaybeRunTreeHandoff(os.Args[1:]); handled {
 		os.Exit(code)
 	}
+	// A scheduled run is this same binary started by the in-kernel ticker; the
+	// CLI's own entry runs it.
+	if scheduleChildArgs(os.Args[1:]) {
+		os.Exit(cli.Run(os.Args[1:], version))
+	}
 	page := flag.String("page", "", "directory holding the built Studio page")
 	identity := flag.Bool("instance-id", false, "print the Studio instance this data home belongs to, and exit")
 	// The shell around this process knows which build it is; this process does
@@ -141,6 +148,8 @@ func main() {
 	if *stripGrants {
 		os.Exit(stripPackageGrants(os.Stdout, os.Stderr, *studioApp))
 	}
+	// Studio's own binary runs a Claude Code mod's module as Node.
+	modhost.SetEmbedder(*studioApp, os.Environ())
 	// Which launches are the same Studio is Reasonix's question, not a shell's:
 	// the answer is the canonicalized data home, and a shell asks for it rather
 	// than working it out from an environment it does not resolve.
@@ -251,6 +260,7 @@ func run(lease io.Reader, handshakeTo, logs io.Writer, page string, shell shellI
 	// After the socket has drained, never before: a pane torn down under a live
 	// request answers it with a half-closed kernel.
 	defer hub.Shutdown()
+	startScheduleTicker(ctx, lease != nil, hub, logs)
 
 	bound, err := bind(hub.Handler())
 	phases.mark(startupBind)

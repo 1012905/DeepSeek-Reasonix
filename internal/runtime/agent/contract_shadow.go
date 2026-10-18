@@ -208,10 +208,23 @@ func (a *Agent) emitTurnShadows(input string, blocked bool) {
 // deliver, or nil when the turn had nothing to judge. The host renders it; the
 // agent never writes the user-facing text, which is the whole point.
 func (a *Agent) CompletionReceipt() *event.CompletionReceipt {
-	if a == nil || a.turn.completion == nil {
+	if a == nil {
 		return nil
+	}
+	mod := a.svc.extensions.HasMod()
+	if a.turn.completion == nil {
+		if !mod {
+			return nil
+		}
+		return &event.CompletionReceipt{Verdict: completion.VerdictUnknown.String(), Gaps: []event.ReceiptGap{{Kind: completion.GapModEffectsUnobserved.String()}}}
 	}
 	rep := *a.turn.completion
 	rep.Gaps = a.planCriterionGaps(rep.Gaps)
+	if mod {
+		rep.Gaps = append(rep.Gaps, completion.Gap{Kind: completion.GapModEffectsUnobserved})
+		if rep.Verdict == completion.VerdictUnknown {
+			return &event.CompletionReceipt{Verdict: rep.Verdict.String(), Gaps: []event.ReceiptGap{{Kind: completion.GapModEffectsUnobserved.String()}}}
+		}
+	}
 	return completionReceipt(rep)
 }

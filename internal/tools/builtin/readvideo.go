@@ -72,7 +72,7 @@ func (readVideo) Description() string {
 }
 
 func (readVideo) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"mode":{"type":"string","enum":["auto","frames","native"]},"frames":{"type":"integer","description":"max 12"},"start":{"type":"number","description":"seconds"},"end":{"type":"number","description":"seconds"}},"required":["path"],"additionalProperties":false}`)
+	return json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"url":{"type":"string","description":"public https address the user wrote"},"mode":{"type":"string","enum":["auto","frames","native"]},"frames":{"type":"integer","description":"max 12"},"start":{"type":"number","description":"seconds"},"end":{"type":"number","description":"seconds"}},"additionalProperties":false}`)
 }
 
 func (r readVideo) Execute(ctx context.Context, args json.RawMessage) (string, error) {

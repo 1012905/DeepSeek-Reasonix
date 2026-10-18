@@ -4,13 +4,21 @@ import { t } from "../i18n";
 /** The settings table of contents: which sections exist, what each is called,
  *  what mark it carries and which question it answers. Kept out of Settings
  *  itself because it is a table, not a screen — the screen reads it. */
-export type Section = "session" | "model" | "providers" | "tools" | "hooks" | "ext" | "network" | "remote" | "memory" | "usage" | "storage" | "account" | "versions" | "appearance" | "advanced";
+export type Section = "session" | "persona" | "model" | "providers" | "tools" | "hooks" | "ext" | "network" | "remote" | "memory" | "usage" | "storage" | "account" | "versions" | "appearance" | "advanced";
 
 // Drawn on the same 16-unit grid at 1.45 stroke as the rest of this screen's
 // marks. The rail in Nav.tsx draws a section's entry from this table, so one
 // destination carries one mark wherever it is shown.
 export const ICON: Record<Section, ReactNode> = {
   session: <path d="M2.6 8h10.8M8 2.6v10.8" />,
+  // An identity card: the section is about who the agent is, not what it does.
+  persona: (
+    <>
+      <rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.4" />
+      <circle cx="5.8" cy="7.2" r="1.3" />
+      <path d="M8.6 6.2h3.2M8.6 8.4h3.2M3.9 11.4c.5-1.1 1.5-1.7 2.7-1.7s2.2.6 2.7 1.7" />
+    </>
+  ),
   model: (
     <>
       <circle cx="8" cy="8" r="2.4" />
@@ -90,6 +98,7 @@ export const NAV: [string, [Section, string][]][] = [
     "本轮执行",
     [
       ["session", "会话"],
+      ["persona", "人设"],
       ["model", "模型偏好"],
       ["providers", "模型服务"],
       ["tools", "工具与权限"],
@@ -144,8 +153,9 @@ export const NAV: [string, [Section, string][]][] = [
  *  next-turn       written and kept now; the running session takes it at its
  *                  next turn boundary, because it changes what the model is
  *                  given (the tool table), which only moves between turns.
+ *  next-rebuild    saved without rebuilding now; the next runtime build reads it.
  *  none            nothing here changes anything: the block only reports. */
-export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "on-open" | "next-turn" | "none";
+export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "on-open" | "next-turn" | "next-rebuild" | "none";
 
 /** Who owns what a block governs — the other half of the contract, and the one
  *  the screen could not answer. "When does it take effect" was declared here
@@ -197,6 +207,7 @@ export const SETTINGS: SettingEntry[] = [
   // an internal policy look like a required work mode.
   { section: "session", anchor: "preset", title: "完成标准", scope: "session", apply: "immediate", keywords: ["自动", "验证", "复核", "完成判定"] },
   { section: "session", anchor: "plan-mode", title: "计划模式", scope: "session", apply: "immediate", keywords: ["只读", "先规划"] },
+  { section: "session", anchor: "default-mode", title: "新对话的起始模式", scope: "machine", apply: "on-open", keywords: ["plan", "默认模式", "协作方式", "default_mode", "新会话"] },
   { section: "session", anchor: "receipt", title: "交付验收卡片", scope: "machine", apply: "immediate", keywords: ["回执", "验收", "验证", "未验证", "receipt"] },
   // Written to the user file only, and read by the running turn at its next round.
   { section: "session", anchor: "ask-timeout", title: "提问等待超时", scope: "machine", apply: "immediate", keywords: ["ask", "跳过", "无人回答", "长任务", "超时", "自动继续"] },
@@ -207,6 +218,8 @@ export const SETTINGS: SettingEntry[] = [
   { section: "session", anchor: "fold-work", title: "折叠中间过程", scope: "machine", apply: "immediate", keywords: ["折叠", "中间过程", "工具调用", "思考", "最后一句", "收起", "摘要"] },
   // Written to the user file only; the kernel's background sweep reads it on each pass.
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
+  // Saving does not rebuild; any later runtime build reads the user persona.
+  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "next-rebuild", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀", "预设"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
   { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "网页搜索", "web search", "system one", "typesafe", "laya", "自动命名", "思考强度", "推理", "reasoning", "档位"] },
@@ -235,6 +248,8 @@ export const SETTINGS: SettingEntry[] = [
   { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
   { section: "tools", anchor: "write-lease", title: "多个会话同时写一个项目", scope: "machine", apply: "on-open", keywords: ["lease", "写锁", "并行", "多会话", "乐观", "optimistic", "write_lease", "等待"] },
   { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
+  { section: "network", anchor: "trace-export", title: "追踪导出", scope: "machine", apply: "on-open", keywords: ["追踪", "opentelemetry", "otlp", "观测", "遥测", "trace", "collector", "收集器"] },
+  { section: "tools", anchor: "subagent-steer", title: "给运行中子代理的指示", scope: "machine", apply: "immediate", keywords: ["subagent", "子代理", "指示", "补充", "steer", "上限", "频率", "字节"] },
   { section: "tools", anchor: "web-access", title: "联网：搜索与抓取", scope: "machine", apply: "on-open", keywords: ["搜索", "searxng", "deepseek", "抓取", "计费", "付费", "web search", "fetch"] },
   { section: "tools", anchor: "browser-tools", title: "内置浏览器", scope: "machine", apply: "runtime-rebuild", keywords: ["browser", "网页", "chrome", "浏览器工具"] },
 

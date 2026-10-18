@@ -1,0 +1,2 @@
+- 新增：ACP 支持 `$/cancel_request`、消息块 `messageId`、权限请求带工具名，并按客户端声明转交 MCP 的表单与外部页面。关联 #13114。
+- Added: ACP supports `$/cancel_request`, `messageId` on chunks and tool names on permission requests, and forwards MCP forms and pages when advertised. Refs #13114.

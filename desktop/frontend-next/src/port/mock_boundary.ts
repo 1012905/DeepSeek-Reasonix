@@ -1,7 +1,8 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
 // far an approved write reaches. It carries one rule of each kind already, so
@@ -148,6 +149,17 @@ export class MockBoundary extends MockShell {
     return { ...this.claims };
   }
 
+  private steerLimits: SubagentSteerSettings = { maxBytes: 16384, perMinute: 30, defaultMaxBytes: 16384, defaultPerMinute: 30, path: "/Users/you/.reasonix/config.toml" };
+
+  async subagentSteerSettings(): Promise<SubagentSteerSettings> {
+    return { ...this.steerLimits };
+  }
+
+  async saveSubagentSteerSettings(maxBytes: number, perMinute: number): Promise<SubagentSteerSettings> {
+    this.steerLimits = { ...this.steerLimits, maxBytes, perMinute };
+    return { ...this.steerLimits };
+  }
+
   private plans: PlanApprovalSettings = { auto: false, path: "/Users/you/.reasonix/config.toml" };
 
   async planApproval(): Promise<PlanApprovalSettings> {
@@ -157,6 +169,17 @@ export class MockBoundary extends MockShell {
   async savePlanApproval(auto: boolean): Promise<PlanApprovalSettings> {
     this.plans = { ...this.plans, auto };
     return { ...this.plans };
+  }
+
+  private modes: DefaultModeSettings = { plan: false, path: "/Users/you/.reasonix/config.toml" };
+
+  async defaultMode(): Promise<DefaultModeSettings> {
+    return { ...this.modes };
+  }
+
+  async saveDefaultMode(plan: boolean): Promise<DefaultModeSettings> {
+    this.modes = { ...this.modes, plan };
+    return { ...this.modes };
   }
 
   private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };
@@ -217,6 +240,32 @@ export class MockBoundary extends MockShell {
     this.archive = { ...this.archive, ...s };
     return { ...this.archive };
   }
+  private personaState: PersonaSettings = {
+    prefix: "", suffix: "", include_runtime_context: true,
+    path: "/Users/you/.reasonix/config.toml",
+    presets: [
+      {
+        id: "engineer",
+        prefix: "You are a rigorous staff engineer. Verify before claiming, make the smallest correct change, and state the residual risk.",
+        suffix: "", include_runtime_context: true,
+      },
+      {
+        id: "concise",
+        prefix: "",
+        suffix: "Be terse. Skip the preamble; prefer code and bullets.",
+        include_runtime_context: false,
+      },
+    ],
+  };
+
+  async persona(): Promise<PersonaSettings> {
+    return { ...this.personaState, presets: this.personaState.presets.map((p) => ({ ...p })) };
+  }
+
+  async savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings> {
+    this.personaState = { ...this.personaState, ...s };
+    return this.persona();
+  }
 
   private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml", unconverted: [] };
 
@@ -257,10 +306,24 @@ export class MockBoundary extends MockShell {
     return { ...this.narration };
   }
 
+  private observability: ObservabilitySettings = {
+    enabled: false, endpoint: "", headerName: "", headerEnv: "", serviceName: "", headerEnvSet: false,
+    path: "/Users/you/.reasonix/config.toml", applies: "next_session",
+  };
+
+  async observabilitySettings(): Promise<ObservabilitySettings> {
+    return { ...this.observability };
+  }
+
+  async saveObservabilitySettings(patch: ObservabilityPatch): Promise<ObservabilitySettings> {
+    this.observability = { ...this.observability, ...patch };
+    return { ...this.observability };
+  }
+
   private webAccess: WebAccessSettings = {
     search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
     known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"],
-    paid_backends: ["deepseek_api"], deepseek_api_ready: false, path: "/Users/you/.reasonix/config.toml",
+    paid_backends: ["deepseek_api"], deepseek_api_ready: false, video_url_passthrough: false, path: "/Users/you/.reasonix/config.toml",
   };
 
   async webAccessSettings(): Promise<WebAccessSettings> {

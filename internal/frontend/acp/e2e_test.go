@@ -517,6 +517,9 @@ func TestE2EApprovalRoundTrip(t *testing.T) {
 		if pr.ToolCall.Kind != "edit" {
 			t.Errorf("permission kind = %q, want edit", pr.ToolCall.Kind)
 		}
+		if pr.ToolCall.Name != "writeit" {
+			t.Errorf("permission tool name = %q, want the tool's own name beside its title", pr.ToolCall.Name)
+		}
 		if !strings.Contains(pr.ToolCall.Title, "writeit") {
 			t.Errorf("permission title = %q, want it to mention writeit", pr.ToolCall.Title)
 		}

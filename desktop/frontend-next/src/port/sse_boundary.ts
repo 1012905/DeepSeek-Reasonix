@@ -1,6 +1,7 @@
 import { SseShell } from "./sse_shell";
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
@@ -50,6 +51,12 @@ export class SseBoundary extends SseShell {
   savePlanApproval(auto: boolean) {
     return this.post0<PlanApprovalSettings>("/plan-approval", { auto });
   }
+  defaultMode() {
+    return this.get<DefaultModeSettings>("/default-mode");
+  }
+  saveDefaultMode(plan: boolean) {
+    return this.post0<DefaultModeSettings>("/default-mode", { plan });
+  }
   writeLease() {
     return this.get<WriteLeaseSettings>("/write-lease");
   }
@@ -73,6 +80,12 @@ export class SseBoundary extends SseShell {
   }
   saveSubagentClaims(optimistic: boolean) {
     return this.post0<SubagentClaimsSettings>("/subagent-claims", { optimistic });
+  }
+  subagentSteerSettings() {
+    return this.get<SubagentSteerSettings>("/subagent-steer-limits");
+  }
+  saveSubagentSteerSettings(maxBytes: number, perMinute: number) {
+    return this.post0<SubagentSteerSettings>("/subagent-steer-limits", { maxBytes, perMinute });
   }
   displayCurrency() {
     return this.get<DisplayCurrencySettings>("/display-currency");
@@ -98,6 +111,12 @@ export class SseBoundary extends SseShell {
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]) {
     return this.post0<TurnNarrationSettings>("/turn-narration-settings", { level });
   }
+  observabilitySettings() {
+    return this.get<ObservabilitySettings>("/observability");
+  }
+  saveObservabilitySettings(patch: ObservabilityPatch) {
+    return this.post0<ObservabilitySettings>("/observability", patch);
+  }
   webAccessSettings() {
     return this.get<WebAccessSettings>("/web-access-settings");
   }
@@ -118,6 +137,12 @@ export class SseBoundary extends SseShell {
   }
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">) {
     return this.post0<AutoArchiveSettings>("/auto-archive", s);
+  }
+  persona() {
+    return this.get<PersonaSettings>("/persona");
+  }
+  savePersonaSettings(s: PersonaDraft) {
+    return this.post0<PersonaSettings>("/persona", s);
   }
   askTimeout() {
     return this.get<AskTimeoutSettings>("/ask-timeout");

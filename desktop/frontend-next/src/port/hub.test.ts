@@ -13,7 +13,7 @@ function answer(status: number, body: string) {
   }));
 }
 
-it("routes pin and archive to the named host while keeping existing local calls local", async () => {
+it("keeps local project moves and host-qualified pin/archive calls on their owning routes", async () => {
   const fetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
   vi.stubGlobal("fetch", fetch);
   try {
@@ -22,11 +22,13 @@ it("routes pin and archive to the named host while keeping existing local calls 
     await hub.pinSession("/same/session.jsonl", false, "gpu box");
     await hub.archiveSession("/same/session.jsonl", true);
     await hub.archiveSession("/same/session.jsonl", false, "gpu box");
+    await hub.moveSessionTo("/same/session.jsonl", "/other-project");
     expect(fetch.mock.calls.map(([path, init]) => [path, JSON.parse(init.body)])).toEqual([
       ["/tree/sessions/pin", { path: "/same/session.jsonl", pinned: true }],
       ["/remotes/gpu%20box/sessions/pin", { path: "/same/session.jsonl", pinned: false }],
       ["/tree/sessions/archive", { path: "/same/session.jsonl", archived: true }],
       ["/remotes/gpu%20box/sessions/archive", { path: "/same/session.jsonl", archived: false }],
+      ["/tree/sessions/move-to", { path: "/same/session.jsonl", target: "/other-project" }],
     ]);
   } finally { vi.unstubAllGlobals(); }
 });

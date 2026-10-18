@@ -62,8 +62,7 @@ var Chinese = Messages{
 	NoticeCompactFailedFmt:   "压缩失败：%s",
 	NoticeCompactHeldFmt:     "自动压缩暂缓，上次尝试没有完成：%s",
 	ReceiptGapKinds: map[string]string{
-		"hint:gaps":                 "有未验证的改动",
-		"hint:declared":             "这一轮自己说明了风险或未验证项",
+		"hint:gaps": "有未验证的改动", "hint:declared": "这一轮自己说明了风险或未验证项",
 		"unbacked_claim":            "声称过但账本不支持",
 		"unproven_criterion":        "验收项没有证据",
 		"missing_check":             "预期的检查从未通过",
@@ -72,6 +71,7 @@ var Chinese = Messages{
 		"inconclusive_verification": "跑过，但退出码是命令里另一段的",
 		"unverified_change":         "有改动；没有主机能读作证据的检查",
 		"unreviewed_change":         "改动后再没看过",
+		"mod_effects_unobserved":    "有 Claude Code mod 在运行；它写了什么不在主机观测范围内",
 		"declared_unverified":       "自己申报未验证",
 	},
 	NoSessionToResume:               "没有可恢复的会话 — 用 `reasonix` 开一个新的",
