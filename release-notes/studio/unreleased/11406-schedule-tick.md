@@ -1,2 +1,2 @@
-- 新增：`reasonix schedule add|list|pause|resume|rm|tick`：由你在终端确认后，按时间只读地运行任务；默认不自动运行，用系统计划任务调用 `schedule tick`。关联 #11406。
-- Added: `reasonix schedule add|list|pause|resume|rm|tick`: a read-only task runs at the time you confirm in a terminal; nothing runs by itself, so call `schedule tick` from your OS scheduler. Refs #11406.
+- 新增：`reasonix schedule add|list|tick` 等命令，在终端确认后按时间只读地运行任务；需用系统计划任务调用 `schedule tick`。关联 #11406。
+- Added: `reasonix schedule add|list|tick` and friends: a read-only task runs when you confirm it in a terminal; call `tick` from your OS scheduler. Refs #11406.
