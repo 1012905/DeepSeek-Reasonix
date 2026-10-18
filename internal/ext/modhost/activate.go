@@ -24,6 +24,8 @@ var Served = map[string]bool{"tool.call": true, "tool.check": true, "prompt.subm
 // Settings are the user's switches for mods.
 type Settings struct {
 	Enabled bool
+	// Withheld: the user file says on but the switch is not available yet, so nothing runs.
+	Withheld bool
 	// HookBudgetMS bounds one hook's own running time; zero uses the reference's 10 s.
 	HookBudgetMS int
 }
@@ -53,8 +55,12 @@ func Packages(ctx context.Context, d Deps, installed []pluginpkg.InstalledPackag
 		return nil, nil
 	}
 	if !d.Settings.Enabled {
+		code := CodeSwitchOff
+		if d.Settings.Withheld {
+			code = CodeWithheld
+		}
 		for _, m := range mods {
-			reg.Set(Status{Plugin: m.Plugin, State: StateInactive, Code: CodeSwitchOff})
+			reg.Set(Status{Plugin: m.Plugin, State: StateInactive, Code: code})
 		}
 		return nil, nil
 	}

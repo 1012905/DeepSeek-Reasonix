@@ -8,7 +8,10 @@ import (
 	"reasonix/internal/session/control"
 )
 
-const codeModsBadBudget = "mods.invalid_budget"
+const (
+	codeModsBadBudget = "mods.invalid_budget"
+	codeModsWithheld  = "mods.withheld"
+)
 
 func (s *Server) registerModRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /mods", s.mods)
@@ -44,6 +47,8 @@ func (s *Server) saveModsSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	got, err := s.ctl().SaveModsSettings(control.ModsPatch{Enabled: body.Enabled, HookBudgetMS: body.HookBudgetMS})
 	switch {
+	case errors.Is(err, control.ErrModsWithheld):
+		refuse(w, http.StatusConflict, codeModsWithheld, "the Claude Code mods switch is not available yet", nil)
 	case errors.Is(err, control.ErrModsBudgetInvalid):
 		refuse(w, http.StatusBadRequest, codeModsBadBudget, "a hook budget is 0 to 55000 milliseconds", nil)
 	case errors.Is(err, control.ErrPeerSettingsUnwritable):

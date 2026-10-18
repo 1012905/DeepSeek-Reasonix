@@ -16,7 +16,7 @@ func ensureModHost() {
 	modhostOnce.Do(func() {
 		sidecar.SetPackageSource(modhost.Source(func() modhost.Settings {
 			cfg := config.LoadForEdit(config.UserConfigPath())
-			return modhost.Settings{Enabled: cfg.ModsEnabled(), HookBudgetMS: cfg.ModsHookBudgetMS()}
+			return modhost.Settings{Enabled: cfg.ModsEnabled() && modhost.Complete, Withheld: cfg.ModsEnabled() && !modhost.Complete, HookBudgetMS: cfg.ModsHookBudgetMS()}
 		}))
 		sidecar.OnCrash(func(pluginID string, _ error) {
 			if modhost.Default.Known(pluginID) {

@@ -72,6 +72,8 @@ func installMod(t *testing.T, module string) (home, workspace string, prov *modP
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is not installed")
 	}
+	modhost.Complete = true
+	t.Cleanup(func() { modhost.Complete = false })
 	source := robustTempDir(t)
 	for rel, body := range map[string]string{
 		".claude-plugin/plugin.json": `{"name":"modtest","version":"0.1.0","description":"a test mod"}`,

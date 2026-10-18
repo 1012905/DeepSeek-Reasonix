@@ -371,6 +371,8 @@ export interface ModsSettings {
   // One hook's own running time in milliseconds; 0 keeps Claude Code's 10000.
   hook_budget_ms: number;
   path: string;
+  // False until the switch can be turned on; the row is not drawn then.
+  available: boolean;
   applies: "next_session";
 }
 

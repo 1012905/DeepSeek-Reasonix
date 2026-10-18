@@ -19,6 +19,7 @@ const (
 // The typed causes a mod reports.
 const (
 	CodeSwitchOff        = "mod.switch_off"
+	CodeWithheld         = "mod.withheld"
 	CodeRuntimeMissing   = "mod.runtime_missing"
 	CodeRuntimeUnsupport = "mod.runtime_unsupported"
 	CodeBadModule        = "mod.bad_module"
