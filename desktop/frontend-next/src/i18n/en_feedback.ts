@@ -177,6 +177,7 @@ export const EN_FEEDBACK: Record<string, string> = {
   "较高的额度已经失效。等级和已落地的条数都保留，之后再有反馈落地就会续上。": "Your higher limits have lapsed. Your level and count are kept, and a later report that ships renews them.",
   "这是上次确认的等级（{date}），连上反馈服务后会更新。": "This is the last confirmed level ({date}); it updates once the feedback service is reachable.",
   "等级暂时无法显示。": "Your level cannot be shown right now.",
+  "等级 {n}": "Level {n}",
   "这一小时的反馈次数已用完。": "You have used this hour's feedback allowance.",
   "今天的反馈次数已用完。": "You have used today's feedback allowance.",
   "这个网络这一小时的提交次数已用完。": "This network has used this hour's submission allowance.",
