@@ -41,6 +41,9 @@ const (
 
 // Exec runs one claimed run named by args[0] and returns the process exit status.
 func Exec(args []string) int {
+	// The run's usage is recorded asynchronously; a process that ends after one
+	// run drains it before it goes. The command line does the same around Run.
+	defer clisession.CloseUsageCatalogs()
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
 		fmt.Fprintln(os.Stderr, "usage: reasonix schedule exec <trigger-id>")
 		return ExitUsage

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/frontend/schedulerun"
 	"reasonix/internal/runtime/schedrun"
 	"reasonix/internal/state/schedule"
@@ -369,5 +370,31 @@ func TestWatchSupervisorCancelsAndForcesTheProcessOut(t *testing.T) {
 	}
 	if !orphan.Load() {
 		t.Fatal("the flag did not record the supervisor leaving")
+	}
+}
+
+// The Studio host starts the child without the command line around it, so the
+// child has to leave its usage on disk itself: the run's tokens reach the
+// statistics whichever program started it.
+func TestScheduleExecStartedByTheHostStillRecordsItsUsage(t *testing.T) {
+	for name, asHost := range map[string]bool{"the command line": false, "the host": true} {
+		t.Run(name, func(t *testing.T) {
+			w := newExecWorld(t, "", "Summarize.", fakeModelRef, fakeTurn{text: "all quiet", prompt: 800, cl: 100})
+			w.asHost = asHost
+			rep, err := w.supervisor().Run(t.Context(), w.run.TriggerID)
+			if err != nil || rep.State != schedule.RunSucceeded || rep.Observed != 900 {
+				t.Fatalf("Run = %+v, %v", rep, err)
+			}
+			var recorded int64
+			files, _ := filepath.Glob(filepath.Join(config.StatsDir(), "*.jsonl"))
+			for _, f := range files {
+				if b, err := os.ReadFile(f); err == nil {
+					recorded += int64(strings.Count(string(b), "\n"))
+				}
+			}
+			if recorded == 0 {
+				t.Fatalf("no usage reached %s after a run started by %s", config.StatsDir(), name)
+			}
+		})
 	}
 }
