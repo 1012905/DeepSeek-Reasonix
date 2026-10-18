@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"slices"
+	"strings"
 
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
@@ -46,5 +49,20 @@ func (a *Agent) originCtx(ctx context.Context, plan *toolCallPlan) context.Conte
 	if len(origins) == 0 {
 		return ctx
 	}
-	return permission.WithOrigin(ctx, tool.ProvenanceLabel(origins[0]))
+	return permission.WithOrigin(ctx, originLabels(origins))
+}
+
+// originLabels names every origin the call repeats, at most three, then how many more.
+func originLabels(origins []tool.Provenance) string {
+	const shown = 3
+	var names []string
+	for _, o := range origins {
+		if l := tool.ProvenanceLabel(o); !slices.Contains(names, l) {
+			names = append(names, l)
+		}
+	}
+	if len(names) <= shown {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:shown], ", "), len(names)-shown)
 }

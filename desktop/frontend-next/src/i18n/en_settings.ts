@@ -1342,6 +1342,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "解析超时": "Parsing timed out",
   "不是本宿主支持的模块形式": "It is not a module form this host supports",
   "它挂钩的事件": "Events it hooks",
+  "来自外部的文字": "Text from outside",
+  "这条调用里的文字，和本次任务从外部读到的内容（网页或工具结果）逐字相同。自动放行、全部放行和记住的答案都不能代你回答；请只批准这一次调用，或拒绝。": "Text in this call is copied word for word from content the task read from outside (a web page or a tool result). Auto, full access and remembered answers cannot answer for you; approve this one call, or decline.",
   "（没有列出）": "(none listed)",
   "名字无法列出的事件": "Events whose names cannot be listed",
   "它用到的接口": "API it uses",

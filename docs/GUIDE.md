@@ -1138,8 +1138,9 @@ Text from outside is a separate question. `[permissions] ask_on_external_origin
   web page, MCP tool result or other external result the task read;
 - you did not write that string yourself.
 
-The question is fresh. Auto, YOLO and a remembered answer do not settle it, and
-with nobody to ask the call is refused with the origin named.
+The question is fresh. Auto, YOLO and a remembered answer do not settle it. With
+nobody to ask, such as a headless YOLO run, the call is refused with the origin
+named instead of being executed.
 
 Not asked about: a call your own `allow` rule covers, an installed MCP server,
 and any call that is not a verbatim copy (re-encoded, paraphrased, built by a

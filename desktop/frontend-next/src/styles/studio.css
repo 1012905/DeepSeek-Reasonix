@@ -2740,6 +2740,9 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   color: var(--text);
   font: 500 calc(10.5px * var(--fs-scale, 1))/1.5 var(--mono);
 }
+.flow .call[data-approval] .apv-hd[data-whole] .sub {
+  -webkit-line-clamp: unset;
+}
 .flow .call[data-approval] .apv-dt {
   display: grid;
   gap: 4px;
