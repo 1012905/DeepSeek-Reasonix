@@ -274,7 +274,7 @@ func (c *Controller) rebindInbox() {
 			return
 		}
 		// Pause the old session's queue so it is not auto-run if reopened.
-		_ = c.inbox.store.SetPaused(true)
+		_ = c.inbox.store.Pause(sessioninbox.PauseSessionChanged)
 		c.inbox.store.Close()
 		c.inbox.store = nil
 		c.inbox.clearActive()
@@ -311,7 +311,7 @@ func (c *Controller) pauseInboxOnRotate() {
 	st := c.inbox.store
 	c.inbox.mu.Unlock()
 	if st != nil {
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseSessionChanged)
 	}
 }
 
@@ -372,7 +372,7 @@ func (c *Controller) EnqueueInbox(req InboxRequest) (sessioninbox.InboxReceipt, 
 		if stateErr := st.SetState(rec.ItemID, sessioninbox.StateBlocked, reason); stateErr != nil {
 			return sessioninbox.InboxReceipt{}, stateErr
 		}
-		if pauseErr := st.SetPaused(true); pauseErr != nil {
+		if pauseErr := st.Pause(sessioninbox.PauseReferenceBlocked); pauseErr != nil {
 			return sessioninbox.InboxReceipt{}, pauseErr
 		}
 		rec.Paused = true
@@ -446,7 +446,7 @@ func (c *Controller) UpdateInboxItem(id, display, raw, submit string) (sessionin
 		if err := st.SetState(id, sessioninbox.StateBlocked, reason); err != nil {
 			return sessioninbox.InboxItemMeta{}, err
 		}
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseReferenceBlocked)
 		updated.State = sessioninbox.StateBlocked
 		updated.BlockReason = reason
 	}
@@ -502,7 +502,7 @@ func (c *Controller) AppendInboxItem(id, text, idempotency string, extra map[str
 		if err := st.SetState(id, sessioninbox.StateBlocked, reason); err != nil {
 			return sessioninbox.InboxItemMeta{}, err
 		}
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseReferenceBlocked)
 		updated.State = sessioninbox.StateBlocked
 		updated.BlockReason = reason
 	}
@@ -521,12 +521,19 @@ func (c *Controller) MoveInboxItem(id string, toIndex int) error {
 	return st.MoveItem(id, toIndex)
 }
 
+func setInboxPause(st *sessioninbox.Store, paused bool) error {
+	if paused {
+		return st.Pause(sessioninbox.PauseUser)
+	}
+	return st.Resume()
+}
+
 func (c *Controller) SetInboxPaused(paused bool) error {
 	st, err := c.ensureInbox()
 	if err != nil {
 		return err
 	}
-	if err := st.SetPaused(paused); err != nil {
+	if err := setInboxPause(st, paused); err != nil {
 		return err
 	}
 	if paused {
@@ -566,13 +573,20 @@ func (c *Controller) RefreshInboxReferences(id string) error {
 	if err == nil && len(env.ReferenceErrors) > 0 {
 		reason := strings.Join(env.ReferenceErrors, "; ")
 		err = st.SetState(id, sessioninbox.StateBlocked, reason)
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseReferenceBlocked)
 	}
 	return err
 }
 
 // TrySubmitInboxItem admits a queued item as a new turn when the session is idle.
 func (c *Controller) TrySubmitInboxItem(id string) (sessioninbox.InboxReceipt, error) {
+	return c.submitInboxItem(id, false)
+}
+
+// submitInboxItem is TrySubmitInboxItem; ignoringPause admits an item the person
+// has just let in although the queue is paused, and leaves the pause and every
+// other queued item as they were.
+func (c *Controller) submitInboxItem(id string, ignoringPause bool) (sessioninbox.InboxReceipt, error) {
 	c.inbox.admissionMu.Lock()
 	defer c.inbox.admissionMu.Unlock()
 	st, err := c.ensureInbox()
@@ -586,14 +600,14 @@ func (c *Controller) TrySubmitInboxItem(id string) (sessioninbox.InboxReceipt, e
 	if meta.State != sessioninbox.StateQueued {
 		return sessioninbox.InboxReceipt{}, sessioninbox.ErrInvalidState
 	}
-	if st.Snapshot().Paused {
+	if st.Snapshot().Paused && !ignoringPause {
 		return sessioninbox.InboxReceipt{}, sessioninbox.ErrPaused
 	}
 	// Refuse before claiming the durable item: claiming, requeuing and waking the
 	// dispatcher again stacks identical transcript notices for one pending
 	// message, and holding the queue keeps the text resumable after promotion.
 	if err := c.ensureWriteAuthorityReady(); err != nil {
-		if pauseErr := st.SetPaused(true); pauseErr != nil {
+		if pauseErr := st.Pause(sessioninbox.PauseWriteAuthority); pauseErr != nil {
 			return sessioninbox.InboxReceipt{}, pauseErr
 		}
 		snap := st.Snapshot()
@@ -610,14 +624,18 @@ func (c *Controller) TrySubmitInboxItem(id string) (sessioninbox.InboxReceipt, e
 	}
 	if block != "" {
 		_ = st.SetState(id, sessioninbox.StateBlocked, block)
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseReferenceBlocked)
 		return sessioninbox.InboxReceipt{}, fmt.Errorf("%w: %s", sessioninbox.ErrInvalidState, block)
 	}
 	// Persist the in-flight state before admission. Active tracking is installed
 	// only after Controller admission is reserved and before the turn can finish.
 	c.inbox.trackAdmission(id)
 	defer c.inbox.untrackAdmission(id)
-	if err := st.ClaimItem(id); err != nil {
+	claim := st.ClaimItem
+	if ignoringPause {
+		claim = st.ClaimItemOverPause
+	}
+	if err := claim(id); err != nil {
 		return sessioninbox.InboxReceipt{}, err
 	}
 	c.inbox.mu.Lock()
@@ -683,7 +701,7 @@ func (c *Controller) onInboxTurnDone() {
 		for _, id := range ids {
 			_ = st.SetStateCoded(id, sessioninbox.StateUncertain, sessioninbox.BlockSnapshotFailed, "turn completed but transcript snapshot failed")
 		}
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseTurnRecord)
 		c.inbox.mu.Lock()
 		c.inbox.untrackActiveSet(ids)
 		c.inbox.mu.Unlock()
@@ -708,7 +726,7 @@ func (c *Controller) onInboxTurnDone() {
 		}
 	}
 	if ackFailed {
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseTurnRecord)
 		sessioninbox.NoteUncertain()
 	}
 	c.inbox.mu.Lock()
