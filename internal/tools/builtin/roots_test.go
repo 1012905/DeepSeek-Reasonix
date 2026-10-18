@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,7 +94,7 @@ func TestGlobAndGrepOnAGoneRootAreRefusedNotAnsweredWithNoMatches(t *testing.T) 
 			args = map[string]any{"pattern": "hello", "path": token}
 		}
 		err := tool.MissingRoot(rootsOfTool(t, tools, name, args), os.Stat)
-		if !tool.IsRootMissing(err) {
+		if !errors.Is(err, tool.ErrRootMissing) {
 			t.Errorf("%s on a folder that is gone: %v, want a root-missing refusal", name, err)
 		}
 	}
@@ -105,7 +106,7 @@ func TestGlobAndGrepOnAGoneRootAreRefusedNotAnsweredWithNoMatches(t *testing.T) 
 		if name == "bash" {
 			args = map[string]any{"command": "ls"}
 		}
-		if err := tool.MissingRoot(rootsOfTool(t, tools, name, args), os.Stat); !tool.IsRootMissing(err) {
+		if err := tool.MissingRoot(rootsOfTool(t, tools, name, args), os.Stat); !errors.Is(err, tool.ErrRootMissing) {
 			t.Errorf("%s with the project folder gone: %v, want a root-missing refusal", name, err)
 		}
 	}

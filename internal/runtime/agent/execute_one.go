@@ -570,18 +570,9 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	}
 	// Hooks can write beyond a tool's paths, so permission precedes lease
 	// acquisition and hooks follow it under a conservative workspace claim.
-	if plan.mutates && a.svc.workspaceLease != nil {
-		heldCtx, end, err := a.svc.workspaceLease.HoldPaths(ctx, a.workspaceWritePaths(plan))
-		if err != nil {
-			return toolOutcome{
-				output:         fmt.Sprintf("blocked: %v", err),
-				blocked:        true,
-				errMsg:         "blocked: workspace write lease unavailable",
-				refusalCode:    workspaceLeaseRefusalCode(err),
-				workspaceLease: workspaceLeaseConflictScope(err),
-			}, true
-		}
-		ctx, plan.releaseLeaseHold = heldCtx, end
+	ctx, blocked, refused := a.holdWorkspaceLease(ctx, plan)
+	if refused {
+		return blocked, true
 	}
 	// Hold the parent claim before PreToolUse: hooks are user shell code and may
 	// mutate the same workspace. The reservation remains live through hooks,

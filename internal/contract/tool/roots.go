@@ -66,9 +66,6 @@ func (e *RootMissingError) Is(target error) bool { return target == ErrRootMissi
 // RefusalCode lets a frontend classify the failure without reading its sentence.
 func (e *RootMissingError) RefusalCode() string { return CodeRootMissing }
 
-// IsRootMissing reports whether err is a RootMissingError.
-func IsRootMissing(err error) bool { return errors.Is(err, ErrRootMissing) }
-
 // Which names the kind of directory that is gone.
 func (e *RootMissingError) Which() RootKind { return e.Root.Kind }
 
