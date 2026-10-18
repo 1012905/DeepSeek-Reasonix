@@ -59,6 +59,8 @@ type heldScope struct {
 	webFetchPaid  []string
 	// videoNativeMax lowers what is sent to a vendor, so only the user sets it.
 	videoNativeMax int64
+	// videoURLPass has a vendor visit an address, so only the user turns it on.
+	videoURLPass bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -102,6 +104,7 @@ func holdUserScope(c *Config) heldScope {
 		webFetch:          slices.Clone(c.Tools.WebFetchBackends),
 		webFetchPaid:      slices.Clone(c.Tools.WebFetchPaidAllowed),
 		videoNativeMax:    c.Tools.VideoNativeMaxBytes,
+		videoURLPass:      c.Tools.VideoURLPassthrough,
 	}
 }
 
@@ -201,6 +204,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.Tools.MCPResources = h.mcpResources
 	}
 	c.keepUserSearchBackends(h)
+	if c.Tools.VideoURLPassthrough != h.videoURLPass {
+		c.ignoreProject("tools.video_url_passthrough", fmt.Sprintf("%t", c.Tools.VideoURLPassthrough), ProjectUserOnly)
+		c.Tools.VideoURLPassthrough = h.videoURLPass
+	}
 	if c.Tools.VideoNativeMaxBytes != h.videoNativeMax {
 		c.ignoreProject("tools.video_native_max_bytes", fmt.Sprint(c.Tools.VideoNativeMaxBytes), ProjectUserOnly)
 		c.Tools.VideoNativeMaxBytes = h.videoNativeMax

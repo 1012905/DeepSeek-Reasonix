@@ -1168,6 +1168,8 @@ type ToolsConfig struct {
 	WebAccessSettings
 	// VideoNativeMaxBytes lowers the size read_video sends natively below the endpoint's limit; 0 keeps it. User file only.
 	VideoNativeMaxBytes int64 `toml:"video_native_max_bytes"`
+	// VideoURLPassthrough lets the model hand a public video address the user gave to the vendor, which then visits it. User file only; off by default.
+	VideoURLPassthrough bool `toml:"video_url_passthrough"`
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`
