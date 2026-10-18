@@ -149,6 +149,7 @@ jobs:
           node perf/session-move.mjs
           node perf/session-ref.mjs
           node perf/browser-full.mjs
+          node perf/mod-ui.mjs
           node perf/codeeditor-size.mjs
           node perf/action-icons.mjs
           node perf/rowhit.mjs
