@@ -36,6 +36,9 @@ export class SseMcp extends SseProvider {
   signinMcp(name: string) {
     return this.post0<{ name: string; state: string; host?: string; tools?: number }>("/mcp/signin", { name });
   }
+  upgradeMcp(name: string) {
+    return this.post0<{ name: string; state: string; host?: string; tools?: number }>("/mcp/upgrade", { name });
+  }
   followMcp(name: string, follow: boolean) {
     return this.post0<{ name: string; follow: boolean; tools?: number }>("/mcp/follow", { name, follow });
   }

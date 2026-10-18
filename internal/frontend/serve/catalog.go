@@ -273,6 +273,9 @@ type mcpEntry struct {
 	Launch string `json:"launch,omitempty"`
 	// PendingReason says why a pending server waits for the user, as a code.
 	PendingReason string `json:"pendingReason,omitempty"`
+	// ScopeUpgrade is the access a signed-in server asked for when it refused a
+	// call: its own words, shown as such and never acted on.
+	ScopeUpgrade []string `json:"scopeUpgrade,omitempty"`
 	// Held lists tools withheld from the model for a definition the user has not
 	// approved. HeldDigest names that whole set and comes back with the approval.
 	// HeldMore counts the withheld tools past the list's cap.
@@ -372,7 +375,7 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 			LocalOverride: st.LocalOverride, Transport: st.Entry.Type,
 			Source: string(st.Entry.Source), Error: health.Error, HTTPStatus: health.HTTPStatus,
 			Tools: health.Tools, AlwaysLoad: st.AlwaysLoad, InSchema: st.InSchema,
-			PendingReason: string(health.Reason),
+			PendingReason: string(health.Reason), ScopeUpgrade: health.ScopeUpgrade,
 		}
 		if srv, ok := live[health.Name]; ok && health.Status == control.MCPHealthReady {
 			row.Transport, row.Source = srv.Transport, srv.ConfigSource
@@ -430,6 +433,7 @@ func (s *Server) mcpRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /mcp/reconnect", s.mcpReconnect)
 	mux.HandleFunc("POST /mcp/trust", s.mcpTrust)
 	mux.HandleFunc("POST /mcp/signin", s.mcpSignIn)
+	mux.HandleFunc("POST /mcp/upgrade", s.mcpUpgrade)
 	mux.HandleFunc("POST /mcp/follow", s.mcpFollow)
 	mux.HandleFunc("POST /mcp/enabled", s.mcpEnabled)
 	mux.HandleFunc("POST /mcp/load", s.mcpLoad)

@@ -63,3 +63,15 @@ func TestANetworkedClientCannotStartAMCPSignIn(t *testing.T) {
 		t.Fatalf("without the grant = %d %s", status, raw)
 	}
 }
+
+func TestMCPUpgradeRouteNeedsTheGrantAndAnAskingServer(t *testing.T) {
+	body := "[[plugins]]\nname = \"figma\"\ntype = \"http\"\nurl = \"https://mcp.example.test/mcp\"\n"
+	status, raw := postSide(t, signInServer(t, false, body)+"/mcp/upgrade", map[string]any{"name": "figma"})
+	if status != http.StatusForbidden || !strings.Contains(string(raw), "mcp.editing_disabled") {
+		t.Fatalf("without the grant = %d %s", status, raw)
+	}
+	status, raw = postSide(t, signInServer(t, true, body)+"/mcp/upgrade", map[string]any{"name": "figma"})
+	if status != http.StatusConflict || !strings.Contains(string(raw), "mcp.no_scope_upgrade") {
+		t.Fatalf("nothing asked = %d %s", status, raw)
+	}
+}

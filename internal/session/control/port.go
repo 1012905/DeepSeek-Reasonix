@@ -377,6 +377,7 @@ type Status interface {
 // own to offer, so only the full session port carries it.
 type MCPSignIn interface {
 	AuthorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
+	UpgradeMCPServerAccess(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
 }
 
 // BackgroundJobs stops work a session left running outside any turn.
