@@ -231,6 +231,8 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
         </div>
       )}
 
+      {mine?.items.some((i) => i.otherInstall) && <p className="fbk-hint">{t("已读标记只记在这台电脑上，其他设备上的反馈在这里仍可能显示为新回复。")}</p>}
+
       {mine?.items.some((i) => i.statusUnavailable) && (
         <div className="fbk-note" role="status" data-tone="info">
           <StudioIcon name="warning" />
@@ -264,6 +266,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
                 <code className="fbk-code">{item.receipt}</code>
                 <CopyButton iconOnly text={item.receipt} label={t("复制回执号")} />
                 <span className="fbk-meta">{t(CATEGORY_LABEL[item.category])} · {day(item.createdAt)}</span>
+                {item.otherInstall && <span className="fbk-chip" data-device="other">{t("来自其他设备")}</span>}
                 {item.statusUnavailable ? (
                   <span className="fbk-chip" data-status="unavailable">{t("状态已无法追踪")}</span>
                 ) : item.needsInput ? (
@@ -294,7 +297,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
                 ))}
               </ol>}
               <FeedbackReviewNote item={item} />
-              <FeedbackThread item={item} fresh={fresh[item.receipt] ?? 0} onView={view} />
+              <FeedbackThread item={item} level={mine.profile?.level ?? null} fresh={fresh[item.receipt] ?? 0} onView={view} />
               <FeedbackWithdraw port={port} item={item} onDone={() => { setSaid(t("已撤回这条反馈。")); load(); }} onStale={load} />
               <FeedbackReplyBox port={port} item={item} limit={limits?.replyBytes ?? null} limits={limits} offline={mine.offline} onSent={sent} onFile={onFile} onStale={load} />
             </li>

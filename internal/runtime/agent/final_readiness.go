@@ -410,11 +410,12 @@ func (a *Agent) checkContract() evidence.CheckContract {
 }
 
 // unseenToolWriter reports a writer that runs around tool calls and names no
-// paths: a tool hook, or an extension sidecar on a point every call passes
-// (tool.before, permission.decision, tool.after), outside the bash sandbox.
+// paths: a tool hook, a live Claude Code mod, or an extension sidecar on a point
+// every call passes (tool.before, permission.decision, tool.after), outside the
+// bash sandbox.
 func (a *Agent) unseenToolWriter() bool {
 	d := a.svc.extensions
-	return toolHooksMayMutateWorkspace(a.svc.hooks) || d.Intercepts(extension.PointToolBefore) ||
+	return toolHooksMayMutateWorkspace(a.svc.hooks) || d.HasMod() || d.Intercepts(extension.PointToolBefore) ||
 		d.Intercepts(extension.PointPermissionDecision) || d.Intercepts(extension.PointToolAfter)
 }
 

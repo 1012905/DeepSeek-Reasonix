@@ -211,6 +211,21 @@ async function syncOne(row, issue, deps, dry) {
   deps.log(`${row.receipt} (#${number}) -> ${update.status}${update.resolvedVersion ? ` ${update.resolvedVersion}` : ""}`);
 }
 
+export const WITHDRAWN_NOTE = "The reporter withdrew this report in the app, so it is closed as not planned. Nothing here needs action.";
+
+// A withdrawn report's mirror issue is closed once. The worker only names the
+// issue; it is closed only if it is the bot's own mirror of that very receipt,
+// still open and not a pull request, so a wrong number never closes anything else.
+async function closeWithdrawn(row, deps, dry) {
+  const number = Number(row.issueNumber);
+  const issue = await deps.gh.getIssue(number);
+  if (!issue || issue.pull_request || issue.state === "closed" || !isOurs(issue) || !hasMarker(issue.body, row.receipt)) return;
+  if (dry) return deps.log(`[dry-run] would close #${number} (${row.receipt}), withdrawn by the reporter`);
+  await deps.gh.close(number);
+  deps.log(`closed #${number} for ${row.receipt}: withdrawn by the reporter`);
+  await deps.gh.comment(number, WITHDRAWN_NOTE);
+}
+
 async function mirrorOne(reply, deps, dry) {
   const number = Number(reply.issueNumber);
   const issue = await deps.gh.getIssue(number);
@@ -293,6 +308,9 @@ export async function run(deps, { dryRun = false, limit = 20, full = false, now 
   });
   await each("create", pending, (item) => createOne(item, deps, dryRun, state));
   await mirrorReplies(deps, { dryRun, limit, each, guarded });
+  const withdrawn = ((await guarded("withdrawn", () => deps.worker.withdrawn())) ?? []).slice(0, MAX_OPEN)
+    .filter((r) => RECEIPT.test(r?.receipt) && Number.isInteger(Number(r.issueNumber)) && Number(r.issueNumber) > 0);
+  await each("withdrawn", withdrawn, (row) => closeWithdrawn(row, deps, dryRun));
 
   const open = ((await guarded("open", () => deps.worker.open())) ?? []).slice(0, MAX_OPEN).filter((r) => RECEIPT.test(r.receipt) && Number.isInteger(Number(r.issueNumber)) && Number(r.issueNumber) > 0);
   const waiting = (r) => r.status === "fixed" && r.resolvedVersion === "next";
@@ -352,6 +370,7 @@ export function liveDeps(env) {
     worker: {
       pending: async (limit) => (await call("GET", `/v1/admin/feedback/pending?limit=${limit}`)).items ?? [],
       open: async () => (await call("GET", "/v1/admin/feedback/open")).items ?? [],
+      withdrawn: async () => (await call("GET", "/v1/admin/feedback/withdrawn")).items ?? [],
       recorded: (r, b) => call("POST", `/v1/admin/feedback/${r}/recorded`, b),
       status: (r, b) => call("POST", `/v1/admin/feedback/${r}/status`, b),
       replies: async (limit) => (await call("GET", `/v1/admin/feedback/replies/pending?limit=${limit}`)).items ?? [],
@@ -378,6 +397,7 @@ export function liveDeps(env) {
       },
       comment: async (n, body) => gh(["api", "-X", "POST", `repos/${REPO}/issues/${n}/comments`, "--input", "-"], JSON.stringify({ body })),
       updateComment: async (id, body) => gh(["api", "-X", "PATCH", `repos/${REPO}/issues/comments/${encodeURIComponent(id)}`, "--input", "-"], JSON.stringify({ body })),
+      close: async (n) => gh(["api", "-X", "PATCH", `repos/${REPO}/issues/${n}`, "--input", "-"], JSON.stringify({ state: "closed", state_reason: "not_planned" })),
       reopen: async (n) => gh(["api", "-X", "PATCH", `repos/${REPO}/issues/${n}`, "--input", "-"], JSON.stringify({ state: "open", state_reason: "reopened" })),
       getPull: async (n) => gh(["api", `repos/${REPO}/pulls/${n}`]),
     },
