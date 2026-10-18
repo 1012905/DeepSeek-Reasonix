@@ -14,6 +14,8 @@ var frontends = []string{
 	"internal/frontend/acp",
 	"internal/assembly/boot",
 	"internal/frontend/cli",
+	"internal/frontend/clisession",
+	"internal/frontend/schedulerun",
 	"internal/frontend/serve",
 	"internal/frontend/tui",
 }
