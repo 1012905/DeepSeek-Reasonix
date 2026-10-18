@@ -67,6 +67,15 @@ dsh plugin --profile <profile> add github:esengine/DeepSeek-Reasonix#path:/integ
 
 The bundle pins `@deepseek-ai/dsh-subagent-acp` and `dsh` to the same version (`0.2.1-rc.2` today) and uses `permission: reject`. Change the policy in your own `cordis.patch.yml`, never in the package.
 
+## After installing: switch it on
+
+An installed plugin starts **off**. Open its page in the DSH Web UI and turn its switch on.
+
+- The switch and both components (the provider and the `reasonix` tool) must read Running.
+- Turning the switch on in a running `dsh web` is enough: the next new session has the `reasonix` tool (observed on `dsh` 0.2.1-rc.2, 2026-10-18). Restart `dsh` only if it is still missing.
+- While it is off the model has no `reasonix` tool and may run `reasonix -p` in its own shell instead.
+- That looks like a delegation and is not one: there is no subagent, no `reasonix` tool call, and no permission policy applies.
+
 ## Finding it in Discover
 
 DSH ships an optional "Custom plugin markets" feature with no default index; a user adds index URLs themselves. This repository publishes one:
