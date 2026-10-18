@@ -4,16 +4,17 @@ import { leftoverDetail, noticeWording } from "../../i18n/notice_wording";
 import { workspaceLeaseDetail } from "../../i18n/workspace_lease";
 import { StudioIcon } from "../StudioIcon";
 import { LazyMarkdown } from "../LazyMarkdown";
+import { settingScreen } from "../settingScreens";
 
 // A host notice is a bar, not a card: one sentence with a glyph, and under it
 // the diagnostic the kernel wrote beside the headline it wrote for a person.
 // Severity is the glyph's ink and nothing else — no box, no wash, no side rule.
 // These name a rule as their detail: a command or target, set as code.
-const PERMISSION = new Set(["permission_saved", "permission_covered"]);
+const PERMISSION = new Set(["permission_saved", "permission_covered", "setting_changed", "setting_open"]);
 // These carry what the model wrote as their detail, so it reads the way the
 // model's own replies do.
 const AUTHORED = new Set(["await_user"]);
-export function NoticeCard({ item }: { item: Extract<Item, { t: "notice" }> }) {
+export function NoticeCard({ item, onSettings }: { item: Extract<Item, { t: "notice" }>; onSettings?: (at?: string) => void }) {
   const lvl = item.level === "error" ? "err" : item.level === "warn" ? "warn" : undefined;
   // The kernel writes in English for its own logs. Where this build has the
   // same notice in the reader's language, that is the one to show.
@@ -35,6 +36,9 @@ export function NoticeCard({ item }: { item: Extract<Item, { t: "notice" }> }) {
               before them. */}
           {item.count && item.count > 1 ? <b className="ntimes">×{item.count}</b> : null}
         </span>
+        {item.code === "setting_open" && onSettings && (
+          <button className="nbtn" data-action="settings.section" data-value={item.detail ?? ""} onClick={() => onSettings(settingScreen(item.detail ?? ""))}>{t("打开设置")}</button>
+        )}
         {detail && (PERMISSION.has(item.code ?? "")
           ? <code className="nrule" title={item.text}>{item.detail}</code>
           : AUTHORED.has(item.code ?? "")

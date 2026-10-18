@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/runtime/agent"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessioninbox"
 )
@@ -326,14 +327,25 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 	sess.persistAfterTurn(text)
 
 	stop := StopEndTurn
+	var meta map[string]any
 	if runErr != nil {
-		if runCtx.Err() != nil {
+		var readinessErr *agent.FinalReadinessError
+		switch {
+		case runCtx.Err() != nil:
 			stop = StopCancelled
-		} else {
-			stop = StopError
+		case errors.As(runErr, &readinessErr):
+			outcome := ReasonixTurnOutcome{Kind: "paused", Reason: clipStatusText(readinessErr.Error(), 2_048)}
+			sess.sink.send(readinessReceipt(outcome.Reason, readinessErr.Missing))
+			meta = map[string]any{"reasonix.io": map[string]any{"turnOutcome": outcome}}
+		default:
+			return nil, &RPCError{
+				Code:    ErrInternal,
+				Message: clipStatusText(runErr.Error(), 2_048),
+				Data:    TurnErrorData{Code: TurnFailed},
+			}
 		}
 	}
-	res := SessionPromptResult{StopReason: stop}
+	res := SessionPromptResult{StopReason: stop, Meta: meta}
 	if sess.transcript != "" {
 		res.TranscriptPath = &sess.transcript
 	}
@@ -671,4 +683,14 @@ func sessionInfoMatchesCwd(info SessionInfo, filter string) bool {
 		return true
 	}
 	return filepath.Clean(info.Cwd) == filepath.Clean(filter)
+}
+
+// readinessReceipt is the host-written line a text-only client sees when the
+// turn stopped before delivery was verified; the typed outcome rides _meta.
+func readinessReceipt(reason string, missing []string) messageChunk {
+	text := "\n\n[paused] Not verified, the work may be incomplete: " + reason
+	if len(missing) > 0 {
+		text += " (missing: " + strings.Join(redactStatusTexts(missing, 256), ", ") + ")"
+	}
+	return messageChunk{SessionUpdate: "agent_message_chunk", Content: textBlock(text)}
 }

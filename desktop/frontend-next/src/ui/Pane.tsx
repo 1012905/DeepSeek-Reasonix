@@ -482,6 +482,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       <PaneShown.Provider value={shown}>
       <LiveWork.Provider value={live}>
       <Transcript port={port}
+        onSettings={onSettings}
         brought={brought}
         foldWork={foldWork}
         turnRunning={running}

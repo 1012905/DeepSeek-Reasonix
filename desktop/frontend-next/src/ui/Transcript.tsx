@@ -55,6 +55,7 @@ interface Props {
   onPlan: (itemId: string, id: string, action: PlanAction) => Promise<void>;
   onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[]; value?: Record<string, unknown> }[]) => Promise<void>;
   onForget: (itemId: string, name: string) => void;
+  onSettings?: (at?: string) => void;
   // Takes a still-queued line back. Only rows the kernel has given an
   // item id can offer it, and only until the turn reads them.
   onExtInvoke: (name: string) => void;
@@ -90,7 +91,7 @@ interface Props {
   brought?: { ids: string[]; bring: (id: string) => void; dismiss: (id: string) => void };
 }
 
-export function Transcript({ items, port, entering, onEntered, brought, revision, waiting, scroll, hidden, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
+export function Transcript({ items, port, entering, onEntered, brought, revision, waiting, scroll, hidden, focus, find, query, onApprove, onFullAccess, onPlan, onAnswer, onForget, onSettings, onExtInvoke, onExtSubmit, reply, onResend, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere, foldWork = false, turnRunning = false }: Props) {
   // A block the selection touches must not leave the DOM. Unmounting the node a
   // selection is anchored to makes the browser remap that selection onto
   // whatever is still mounted — which reads as "I selected up there and the
@@ -453,7 +454,7 @@ export function Transcript({ items, port, entering, onEntered, brought, revision
 
   const bring = brought?.bring;
   const onBring = useMemo(() => (bring ? (id: string) => { bring(id); resume(); } : undefined), [bring, resume]);
-  const rowProps = { onBring, owed, echoes, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
+  const rowProps = { onBring, owed, echoes, port, onApprove, onFullAccess, onPlan, onAnswer, onForget, onSettings, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onPrepareFileRevert, onCommitFileRevert, reply, onResend };
 
   // What you said, and where it sits. Derived from the same blocks the
   // transcript renders, so a mark always knows which block holds it — that is
@@ -609,6 +610,7 @@ interface RowHandlers {
   onPlan: Props["onPlan"];
   onAnswer: Props["onAnswer"];
   onForget: Props["onForget"];
+  onSettings: Props["onSettings"];
   onExtInvoke: Props["onExtInvoke"];
   takeovers: Record<string, ExtensionSurface>;
   onExtSubmit: Props["onExtSubmit"];
@@ -684,6 +686,7 @@ const Row = memo(function Row({
   onFullAccess,
   onPlan,
   onForget,
+  onSettings,
   onAnswer,
   onExtInvoke,
   reply,
@@ -775,7 +778,7 @@ const Row = memo(function Row({
     case "extension":
       return <ExtensionCard ext={it.ext} onInvoke={onExtInvoke} onSubmit={onExtSubmit} />;
     case "notice":
-      return <NoticeCard item={it} />;
+      return <NoticeCard item={it} onSettings={onSettings} />;
   }
       })()}
     </div>

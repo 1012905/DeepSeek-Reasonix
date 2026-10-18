@@ -1,0 +1,2 @@
+- 新增：把鼠标移到你发的消息上，操作图标旁会显示这条消息的发送时间，长时间运行的任务可以据此核对起止时间。关联 #13697。
+- Added: Hovering your own message now shows when it was sent next to its action icons, so a long-running task's start can be checked against it. Refs #13697.

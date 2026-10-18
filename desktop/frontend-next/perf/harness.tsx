@@ -244,8 +244,15 @@ class BenchPort extends MockPort {
     return PREF === null ? look : { ...look, language: PREF };
   }
 
+  private settingCardSent = false;
+
   subscribe(on: (e: WireEvent) => void) {
     this.subs.add(on);
+    const card = query.get("settingcard");
+    if (card && !this.settingCardSent) {
+      this.settingCardSent = true;
+      setTimeout(() => this.feed(settingCardFrame(card)), 400);
+    }
     return () => this.subs.delete(on);
   }
 
@@ -360,7 +367,7 @@ function storedHistory(): HistoryMessage[] {
   const msgs: HistoryMessage[] = [];
   for (let i = 0; i < TURNS; i++) {
     const pinned = query.get("skill") === "1" && i === TURNS - 1;
-    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。` });
+    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。`, createdAt: new Date(2026, 9, 17, 18, 33 + i).getTime() });
     msgs.push({
       role: "assistant",
       content: `第 ${i} 段回答，说明刚才那一步做了什么。\n\n- 要点一\n- 要点二\n`,
@@ -506,3 +513,22 @@ window.__foldCost = () => {
   fromHistory(msgs);
   return performance.now() - t0;
 };
+
+// ?settingcard= draws what the kernel sends when the model asks to change a
+// setting: a preference card, an elevated one, or the notice that points at a
+// setting only the user may change.
+function settingCardFrame(kind: string): WireEvent {
+  if (kind === "open") {
+    return { kind: "notice", level: "info", code: "setting_open", text: "助手需要改动 permissions.mode，只有你本人能改。", detail: "permissions.mode" } as WireEvent;
+  }
+  const elevated = kind === "elevated";
+  const id = elevated ? "peers.dispatch" : "ui.show_receipt";
+  return {
+    kind: "approval_request",
+    approval: {
+      id: "s1", tool: elevated ? "setting_change_elevated" : "setting_change", subject: id, kind: "tool", fresh: true,
+      allowsSession: !elevated, allowsPersist: false,
+      reason: `助手请求把设置 ${id} 从 false 改为 true。${elevated ? "从下一回合起生效。" : "立即生效。"}\n它给出的理由：要把任务交给另一个项目里的会话。`,
+    },
+  } as WireEvent;
+}
