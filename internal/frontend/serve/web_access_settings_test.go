@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"sync/atomic"
 	"testing"
 
 	"reasonix/internal/contract/config"
@@ -171,15 +172,20 @@ func probeBody(t *testing.T, resp *http.Response) websearch.SearxngProbe {
 	return out
 }
 
-func TestProbeNamesWhyAnInstanceFailsWithoutSavingAnything(t *testing.T) {
+func saveSearxng(t *testing.T, base, addr string) {
+	t.Helper()
+	postProvider(t, base, "/web-access-settings", `{"searxng_url":"`+addr+`"}`).Body.Close()
+}
+
+func TestProbeNamesWhyTheSavedInstanceFailsWithoutWritingAnything(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
-	before, _ := os.ReadFile(config.UserConfigPath())
 
-	refusing := searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) })
-	resp := postProvider(t, srv.URL, "/web-access-settings/probe", `{"url":"`+refusing+`"}`)
+	saveSearxng(t, srv.URL, searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	before, _ := os.ReadFile(config.UserConfigPath())
+	resp := postProvider(t, srv.URL, "/web-access-settings/probe", `{}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("probe = %d", resp.StatusCode)
 	}
@@ -187,8 +193,9 @@ func TestProbeNamesWhyAnInstanceFailsWithoutSavingAnything(t *testing.T) {
 		t.Fatalf("probe = %+v, want the JSON format reported as not enabled", got)
 	}
 
-	working := searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"results":[]}`)) })
-	if got := probeBody(t, postProvider(t, srv.URL, "/web-access-settings/probe", `{"url":"`+working+`"}`)); !got.OK {
+	saveSearxng(t, srv.URL, searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"results":[]}`)) }))
+	before, _ = os.ReadFile(config.UserConfigPath())
+	if got := probeBody(t, postProvider(t, srv.URL, "/web-access-settings/probe", `{}`)); !got.OK {
 		t.Fatalf("an instance that answers must read as ok: %+v", got)
 	}
 	if after, _ := os.ReadFile(config.UserConfigPath()); string(after) != string(before) {
@@ -196,19 +203,34 @@ func TestProbeNamesWhyAnInstanceFailsWithoutSavingAnything(t *testing.T) {
 	}
 }
 
-func TestProbeUsesTheSavedAddressWhenTheRequestNamesNone(t *testing.T) {
+// Nothing in the request chooses where the probe goes: an address in the body is
+// ignored and the saved one is what is contacted.
+func TestProbeContactsOnlyTheSavedAddressWhateverTheRequestNames(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
-	saved := searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) })
-	postProvider(t, srv.URL, "/web-access-settings", `{"searxng_url":"`+saved+`"}`).Body.Close()
-	if got := probeBody(t, postProvider(t, srv.URL, "/web-access-settings/probe", `{}`)); got.Code != websearch.CodeSearxngStatus || got.Status != http.StatusTooManyRequests {
-		t.Fatalf("probe = %+v, want the saved instance's refusal", got)
+	var elsewhere atomic.Int32
+	named := searxngAt(t, func(http.ResponseWriter, *http.Request) { elsewhere.Add(1) })
+	saveSearxng(t, srv.URL, searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) }))
+	got := probeBody(t, postProvider(t, srv.URL, "/web-access-settings/probe", `{"url":"`+named+`"}`))
+	if got.Code != websearch.CodeSearxngStatus || got.Status != http.StatusTooManyRequests || elsewhere.Load() != 0 {
+		t.Fatalf("probe = %+v, the named address was contacted %d times", got, elsewhere.Load())
 	}
 }
 
-func TestProbeRefusesWithoutTheWindowsGrantAndForABadAddress(t *testing.T) {
+func TestProbeRefusesASavedMetadataAddressByCode(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	saveSearxng(t, srv.URL, "http://169.254.169.254")
+	if got := probeBody(t, postProvider(t, srv.URL, "/web-access-settings/probe", `{}`)); got.Code != websearch.CodeSearxngAddressRefused {
+		t.Fatalf("probe = %+v", got)
+	}
+}
+
+func TestProbeRefusesWithoutTheWindowsGrantAndWithNothingSaved(t *testing.T) {
 	denied := httptest.NewServer(operatorHandler(newProviderEditServer(t)))
 	defer denied.Close()
 	reached := make(chan struct{}, 1)
@@ -227,8 +249,8 @@ func TestProbeRefusesWithoutTheWindowsGrantAndForABadAddress(t *testing.T) {
 	s.AllowProviderEdit()
 	allowed := httptest.NewServer(operatorHandler(s))
 	defer allowed.Close()
-	resp = postProvider(t, allowed.URL, "/web-access-settings/probe", `{"url":"file:///etc/passwd"}`)
+	resp = postProvider(t, allowed.URL, "/web-access-settings/probe", `{}`)
 	if resp.StatusCode != http.StatusBadRequest || webAccessRefusal(t, resp) != "web_access.bad_searxng_url" {
-		t.Fatalf("a non-http address: %d", resp.StatusCode)
+		t.Fatalf("nothing saved: %d", resp.StatusCode)
 	}
 }

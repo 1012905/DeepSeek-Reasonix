@@ -303,7 +303,7 @@ type RuntimeSettings interface {
 	SaveTurnNarrationSettings(level string) error
 	WebAccessSettings() WebAccessSettings
 	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
-	ProbeSearxng(ctx context.Context, address string) (websearch.SearxngProbe, error)
+	ProbeSearxng(ctx context.Context) (websearch.SearxngProbe, error)
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings

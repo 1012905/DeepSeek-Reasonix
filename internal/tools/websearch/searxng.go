@@ -24,11 +24,12 @@ const (
 // Codes for why the user's own instance did not answer. SearXNG owns the first:
 // it refuses a format its settings do not list with 403.
 const (
-	CodeSearxngJSONDisabled = "search.searxng_json_disabled"
-	CodeSearxngUnreachable  = "search.searxng_unreachable"
-	CodeSearxngNotSearxng   = "search.searxng_not_searxng"
-	CodeSearxngRedirected   = "search.searxng_redirected"
-	CodeSearxngStatus       = "search.searxng_status"
+	CodeSearxngJSONDisabled   = "search.searxng_json_disabled"
+	CodeSearxngUnreachable    = "search.searxng_unreachable"
+	CodeSearxngNotSearxng     = "search.searxng_not_searxng"
+	CodeSearxngRedirected     = "search.searxng_redirected"
+	CodeSearxngStatus         = "search.searxng_status"
+	CodeSearxngAddressRefused = "search.searxng_address_refused"
 )
 
 // Searxng queries the user's own SearXNG instance through its JSON format. It is

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
@@ -46,22 +45,15 @@ func (s *Server) saveWebAccessSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// probeSearxng sends one test search to the address in the request, so a window
-// can say why an instance fails before the address is saved. It reaches out from
-// this machine to a place the caller names, which is the window's to ask for.
+// probeSearxng sends one test search to the SearXNG address already saved, so a
+// window can say why the instance fails. The request names no address: what it
+// reaches is what the user saved, and a window saves the field first.
 func (s *Server) probeSearxng(w http.ResponseWriter, r *http.Request) {
 	if !s.grants.at(r).providerEdit {
 		refuse(w, http.StatusForbidden, "web_access.editing_disabled", "web search and fetch settings editing is not enabled on this server", nil)
 		return
 	}
-	var body struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
-		badBody(w)
-		return
-	}
-	probe, err := s.ctl().ProbeSearxng(r.Context(), strings.TrimSpace(body.URL))
+	probe, err := s.ctl().ProbeSearxng(r.Context())
 	if errors.Is(err, config.ErrBadSearxngURL) {
 		refuse(w, http.StatusBadRequest, "web_access.bad_searxng_url", err.Error(), nil)
 		return

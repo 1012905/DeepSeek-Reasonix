@@ -118,12 +118,9 @@ func orEmpty(list []string) []string {
 	return list
 }
 
-// ProbeSearxng sends one test search to the address a window has in its field, or
-// to the saved one when that is empty, and reports why the instance did not
-// answer. The address is validated first and nothing is saved.
-func (c *Controller) ProbeSearxng(ctx context.Context, address string) (websearch.SearxngProbe, error) {
-	if address == "" {
-		address = c.WebAccessSettings().SearxngURL
-	}
-	return websearch.ProbeSearxng(ctx, address)
+// ProbeSearxng sends one test search to the SearXNG address already saved in the
+// user file and reports why the instance did not answer. Nothing a caller sends
+// chooses the address, so the probe can only reach what the user saved.
+func (c *Controller) ProbeSearxng(ctx context.Context) (websearch.SearxngProbe, error) {
+	return websearch.ProbeSearxng(ctx, c.WebAccessSettings().SearxngURL)
 }

@@ -21,6 +21,7 @@ const PROBE: Record<string, string> = {
   "search.searxng_unreachable": "连不上这个地址：检查它是否在运行，地址和端口是否写对。",
   "search.searxng_not_searxng": "这个地址有应答，但不是 SearXNG 的 JSON 搜索结果：确认地址指向 SearXNG 本身，而不是登录页或别的服务。",
   "search.searxng_redirected": "这个地址把请求转到了别处：请直接填 SearXNG 的最终地址。",
+  "search.searxng_address_refused": "测试不会连接这个地址：它是链路本地、云元数据或未指定地址。自托管实例请用本机或局域网地址。",
 };
 const probeSaid = (r: SearxngProbe) =>
   r.ok ? t("连通：这个 SearXNG 能返回 JSON 搜索结果。")
@@ -75,7 +76,13 @@ export function WebAccess({ port }: { port: AgentPort }) {
     setProbe(null);
     setError("");
     try {
-      setProbe(await port.probeSearxng(url.trim()));
+      const typed = url.trim();
+      if (typed !== state?.searxng_url) {
+        const next = await port.saveWebAccessSettings({ searxng_url: typed });
+        setState(next);
+        setUrl(next.searxng_url);
+      }
+      setProbe(await port.probeSearxng());
     } catch (e) {
       if (e instanceof HttpError && e.reason?.code === "web_access.editing_disabled") setReadOnly(true);
       setError(reason(e));

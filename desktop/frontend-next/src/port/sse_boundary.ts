@@ -101,8 +101,8 @@ export class SseBoundary extends SseShell {
   webAccessSettings() {
     return this.get<WebAccessSettings>("/web-access-settings");
   }
-  probeSearxng(url: string) {
-    return this.post0<SearxngProbe>("/web-access-settings/probe", { url });
+  probeSearxng() {
+    return this.post0<SearxngProbe>("/web-access-settings/probe", {});
   }
   saveWebAccessSettings(patch: WebAccessPatch) {
     return this.post0<WebAccessSettings>("/web-access-settings", patch);

@@ -302,7 +302,7 @@ export interface AgentPort {
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings>;
   webAccessSettings(): Promise<WebAccessSettings>;
   saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings>;
-  probeSearxng(url: string): Promise<SearxngProbe>;
+  probeSearxng(): Promise<SearxngProbe>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;

@@ -182,7 +182,7 @@ describe("when the settings apply", () => {
     expect(screen.getByText("/home/me/.reasonix/config.toml")).toBeTruthy();
   });
 
-  it("tests the address in the field and names why it fails", async () => {
+  it("saves the address in the field and tests the saved one, and names why it fails", async () => {
     const { port, save } = portWith(settings({ search_backends: ["searxng"], searxng_url: "http://127.0.0.1:8080" }));
     const probe = vi.spyOn(port, "probeSearxng").mockResolvedValue({ ok: false, code: "search.searxng_json_disabled", status: 403 });
     render(<WebAccess port={port} />);
@@ -190,9 +190,18 @@ describe("when the settings apply", () => {
     await userEvent.clear(field);
     await userEvent.type(field, "http://127.0.0.1:9999");
     await userEvent.click(screen.getByRole("button", { name: "测试连接" }));
-    expect(probe).toHaveBeenCalledExactlyOnceWith("http://127.0.0.1:9999");
+    expect(probe).toHaveBeenCalledExactlyOnceWith();
     expect((await screen.findByRole("status")).textContent).toMatch(/search\.formats/);
-    for (const [patch] of save.mock.calls) expect(Object.keys(patch)).toEqual(["searxng_url"]);
+    expect(save.mock.calls.length).toBeGreaterThan(0);
+    for (const [patch] of save.mock.calls) expect(patch).toEqual({ searxng_url: "http://127.0.0.1:9999" });
+  });
+
+  it("says why the test will not connect to a metadata address, and that a local one is fine", async () => {
+    const { port } = portWith(settings({ search_backends: ["searxng"], searxng_url: "http://169.254.169.254" }));
+    vi.spyOn(port, "probeSearxng").mockResolvedValue({ ok: false, code: "search.searxng_address_refused" });
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("button", { name: "测试连接" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/链路本地.*局域网/);
   });
 
   it("says plainly when the instance answers", async () => {

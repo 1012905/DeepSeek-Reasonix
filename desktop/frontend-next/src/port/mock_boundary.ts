@@ -270,8 +270,8 @@ export class MockBoundary extends MockShell {
     return { ...this.webAccess };
   }
 
-  async probeSearxng(url: string): Promise<SearxngProbe> {
-    return url.trim() ? { ok: true } : { ok: false, code: "search.searxng_unreachable" };
+  async probeSearxng(): Promise<SearxngProbe> {
+    return this.webAccess.searxng_url.trim() ? { ok: true } : { ok: false, code: "search.searxng_unreachable" };
   }
 
   async saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings> {

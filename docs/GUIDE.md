@@ -2041,7 +2041,9 @@ Each time that happens Reasonix shows a notice naming the backend and the cause,
 
 - Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
 
-In Settings, **Web access** has a **Test connection** button beside the address. It sends one search to the address in the field, follows no redirect, and says why the instance does not answer. The model is told the same code when a real search fails.
+In Settings, **Web access** has a **Test connection** button beside the address. It saves the field, then sends one search to the saved address, follows no redirect, uses no proxy, and says why the instance does not answer.
+
+It never connects to a link-local, cloud-metadata or unspecified address; a loopback or local-network address is fine. The model is told the same code when a real search fails.
 
 | Code | Meaning | What to do |
 |---|---|---|
@@ -2049,6 +2051,7 @@ In Settings, **Web access** has a **Test connection** button beside the address.
 | `search.searxng_unreachable` | Nothing answered at the address. | Check that it runs and that host and port are right. |
 | `search.searxng_not_searxng` | It answered 200 but not with SearXNG's JSON results. | Point at SearXNG itself, not a login page or another service. |
 | `search.searxng_redirected` | The address redirects. | Enter the final address, for example the `https` one. |
+| `search.searxng_address_refused` | The test will not connect to this address (link-local, cloud metadata or unspecified). | Use a loopback or local-network address for a self-hosted instance. |
 | `search.searxng_status` | Any other HTTP status, for example 429 or 500. | Retry later or read the instance's log. |
 - Results are third-party content and are labelled as such to the model.
 

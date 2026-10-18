@@ -17,15 +17,22 @@ type SearxngProbe struct {
 	Status int    `json:"status,omitempty"`
 }
 
-// ProbeSearxng sends one search to the address and reports why it did not
-// answer. It follows no redirect, so the address the user typed is the only
-// host it ever contacts, and it is bounded in time and in body size.
-func ProbeSearxng(ctx context.Context, raw string) (SearxngProbe, error) {
+// ProbeSearxng sends one search to the address the user saved and reports why it
+// did not answer. It follows no redirect, so that address is the only host it
+// contacts; it uses no proxy, so the address it checks is the one it connects
+// to; it connects only to an address that is not link-local, unspecified or a
+// metadata endpoint; and it is bounded in time and in body size.
+func ProbeSearxng(ctx context.Context, saved string) (SearxngProbe, error) {
+	return probeSearxng(ctx, saved, systemLookup)
+}
+
+func probeSearxng(ctx context.Context, saved string, lookup lookupFunc) (SearxngProbe, error) {
 	client := &http.Client{
 		Timeout:       searxngProbeTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		Transport:     &http.Transport{DialContext: guardedDial(lookup)},
 	}
-	backend, err := NewSearxng(raw, client)
+	backend, err := NewSearxng(saved, client)
 	if err != nil {
 		return SearxngProbe{}, err
 	}
@@ -34,6 +41,8 @@ func ProbeSearxng(ctx context.Context, raw string) (SearxngProbe, error) {
 	switch {
 	case err == nil, errors.As(err, &failed) && failed.Kind == FailEmpty:
 		return SearxngProbe{OK: true}, nil
+	case errors.Is(err, errAddressRefused):
+		return SearxngProbe{Code: CodeSearxngAddressRefused}, nil
 	case errors.As(err, &failed):
 		return SearxngProbe{Code: failed.Code, Status: failed.Status}, nil
 	}
