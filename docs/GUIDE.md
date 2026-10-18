@@ -466,8 +466,12 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
 - Model credentials come from the distribution's own configuration (`provider = "remote"`): under WSL's default
   networking the distribution cannot reach this machine's loopback, so this machine's provider is not shared.
 - A folder chosen as a Windows path (`C:\work\app` or `\\wsl.localhost\<distro>\home\me\app`) is translated by
-  the distribution; a folder it cannot see is refused. The command-line `reasonix remote connect` still dials
-  SSH only: such an entry fails with `remote: host is not reached over ssh`.
+  the distribution; a folder it cannot see is refused.
+- From the command line, `reasonix remote wsl add <name> <distribution>` adds one, and `remote test` and
+  `remote connect` then work as they do for an SSH host.
+  - `connect` keeps the session open until you press Ctrl-C, and the kernel stops with it.
+  - `status`, `forward`, `serve` and `fs` stay SSH-only and refuse a WSL machine with
+    `remote: host is not reached over ssh`.
 
 CLI:
 
