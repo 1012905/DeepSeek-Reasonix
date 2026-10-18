@@ -79,7 +79,7 @@ func alter(ctx context.Context, repo gitcmd.Repo, paths []string, all bool,
 		}
 		for _, p := range paths {
 			c, ok := listed[p]
-			if !ok || isDirectory(repo.Dir, p) {
+			if !ok || isDirectory(repo.Dir, c.Path) {
 				return fmt.Errorf("%w: %q", ErrUnknownPath, p)
 			}
 			chosen = append(chosen, c)

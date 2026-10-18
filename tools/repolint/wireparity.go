@@ -272,6 +272,14 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/commit.go", "CommitResult", tsWorkspaceFile, "CommitResult"},
 	{"internal/session/control/commit.go", "StageRequest", tsWorkspaceFile, "StageRequest"},
 	{"internal/platform/gitcommit/gitcommit.go", "File", tsWorkspaceFile, "CommitFile"},
+	{"internal/session/control/discard.go", "DiscardRequest", tsWorkspaceFile, "DiscardRequest"},
+	{"internal/session/control/git_push.go", "PushRequest", tsWorkspaceFile, "PushRequest"},
+	{"internal/platform/gitpush/plan.go", "Plan", tsWorkspaceFile, "PushPlan"},
+	{"internal/platform/gitpush/push.go", "Result", tsWorkspaceFile, "PushResult"},
+	{"internal/frontend/serve/changes.go", "gitRepoRow", tsWorkspaceFile, "GitRepoRow"},
+	{"internal/frontend/serve/changes.go", "gitReposView", tsWorkspaceFile, "GitRepos"},
+	{"internal/platform/gitstatus/commitdetail.go", "CommitFile", tsWorkspaceFile, "GitCommitFile"},
+	{"internal/frontend/serve/git_commit_detail.go", "commitFilesView", tsWorkspaceFile, "GitCommitFiles"},
 	// The scale range the slider is drawn from: a bound the page cannot read
 	// would leave it a range of its own.
 	{"internal/frontend/serve/appearance.go", "zoomRangeView", tsLookFile, "ZoomRange"},

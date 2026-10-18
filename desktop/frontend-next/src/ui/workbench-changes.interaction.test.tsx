@@ -66,7 +66,7 @@ describe("the changes list stages and unstages what a commit will record", () =>
 
   it("opening a file's diff still works from its name", async () => {
     const { onOpen } = draw();
-    await userEvent.click(screen.getByRole("button", { name: /edited\.go/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^M\s?edited\.go/ }));
     expect(onOpen).toHaveBeenCalledWith("src/edited.go");
   });
 

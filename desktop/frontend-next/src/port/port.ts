@@ -29,7 +29,7 @@ import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
 import type { SubagentRun, SubagentTranscript } from "./subagent";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
-import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
+import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
 // The port is one contract; its subjects each keep their own file, the way the
 // wire and the layers below already do. This is where a reader still finds
@@ -41,7 +41,7 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus, SessionUsage, SourceUsage,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan, UpdateProgress, VersionEntry,
-  StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
+  StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
@@ -576,13 +576,20 @@ export interface AgentPort {
   // What the working tree actually differs by. Tool events cannot answer it: a
   // file created and then removed by a shell command leaves both events behind
   // and nothing on disk.
-  changes(): Promise<WorkspaceChanges>;
+  // repo names a repository below the workspace as gitRepos lists it; absent is
+  // the workspace's own.
+  changes(repo?: string): Promise<WorkspaceChanges>;
+  // The workspace's repositories: itself when it is one, otherwise those found below it.
+  gitRepos(): Promise<GitRepos>;
   // The work tree's identity as git itself reports it: which branch, or which
   // commit when HEAD is detached. This is the composer's branch reading — the
   // capability scope's file-derived answer is for the picker's project name.
-  workspaceGit(): Promise<WorkspaceGit>;
+  workspaceGit(repo?: string): Promise<WorkspaceGit>;
   // The commit graph's newest page, read-only. `limit` bounds it (default 100).
-  workspaceGitLog(limit?: number): Promise<import("./workspace").GitHistory>;
+  workspaceGitLog(limit?: number, repo?: string): Promise<import("./workspace").GitHistory>;
+  // What one commit changed, and one path's diff within it. Read-only.
+  commitFiles(id: string, repo?: string): Promise<GitCommitFiles>;
+  commitDiff(id: string, path: string, repo?: string): Promise<ChangeDiff>;
   // The repository's local branches, the current one marked, for the composer's
   // branch menu. Re-read on open: a terminal or another window may have moved
   // HEAD since this pane last looked.
@@ -594,10 +601,16 @@ export interface AgentPort {
   // What one of those paths actually differs by. The list says a file moved;
   // only this says how, and asking per path is what keeps a session that
   // touched two hundred files from shipping two hundred diffs nobody opened.
-  changeDiff(path: string): Promise<ChangeDiff>;
+  changeDiff(path: string, repo?: string): Promise<ChangeDiff>;
+  // Puts one modified or deleted file back as the last commit has it. Nothing keeps a copy.
+  discardChange(req: DiscardRequest): Promise<void>;
   // Drafts a message for what is staged. Nothing is committed: the person edits
   // the text, and commitStaged records it locally once they confirm.
-  proposeCommit(signal?: AbortSignal): Promise<CommitProposal>;
+  proposeCommit(signal?: AbortSignal, repo?: string): Promise<CommitProposal>;
+  // Where the repository's current branch would be pushed and what it would send,
+  // read without reaching the remote; push sends exactly that plan and never forces.
+  pushPreview(repo?: string): Promise<PushPlan>;
+  push(req: PushRequest): Promise<PushResult>;
   commitStaged(req: CommitRequest): Promise<CommitResult>;
   // Moves changes the workspace lists into or out of the index, so a commit has
   // something to record without a terminal.
