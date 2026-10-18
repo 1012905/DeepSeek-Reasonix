@@ -1,4 +1,5 @@
 import { SseShell } from "./sse_shell";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
@@ -124,6 +125,12 @@ export class SseBoundary extends SseShell {
   }
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">) {
     return this.post0<AutoArchiveSettings>("/auto-archive", s);
+  }
+  persona() {
+    return this.get<PersonaSettings>("/persona");
+  }
+  savePersonaSettings(s: PersonaDraft) {
+    return this.post0<PersonaSettings>("/persona", s);
   }
   askTimeout() {
     return this.get<AskTimeoutSettings>("/ask-timeout");
