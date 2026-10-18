@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"reasonix/internal/runtime/scheduler"
@@ -147,8 +148,8 @@ func (c *Controller) Schedules(ctx context.Context) (ScheduleBoard, error) {
 	if len(runs) > 20 {
 		runs = runs[len(runs)-20:]
 	}
-	for i := len(runs) - 1; i >= 0; i-- {
-		out.Runs = append(out.Runs, scheduleRunView(runs[i]))
+	for _, r := range slices.Backward(runs) {
+		out.Runs = append(out.Runs, scheduleRunView(r))
 	}
 	return out, nil
 }
