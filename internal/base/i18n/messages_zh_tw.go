@@ -72,6 +72,7 @@ var ChineseTraditional = Messages{
 		"inconclusive_verification": "跑過，但退出碼是命令裡另一段的",
 		"unverified_change":         "有改動；沒有主機能讀作證據的檢查",
 		"unreviewed_change":         "改動後再沒看過",
+		"mod_effects_unobserved":    "有 Claude Code mod 在執行；它寫了什麼不在主機觀測範圍內",
 		"declared_unverified":       "自己申報未驗證",
 	},
 	NoSessionToResume:            "沒有可恢復的會話 — 用 `reasonix` 開一個新的",

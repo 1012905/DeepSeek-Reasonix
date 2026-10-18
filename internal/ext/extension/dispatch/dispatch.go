@@ -52,6 +52,9 @@ type Options struct {
 	// TightenOnly names runtimes whose permission rulings may only make a
 	// decision stricter; the host refuses the rest of what such a process says.
 	TightenOnly map[string]bool
+	// Mods names the live runtimes that are Claude Code mods. A mod is a
+	// full-trust process the host does not sandbox or observe.
+	Mods map[string]bool
 }
 
 func (o Options) warnFunc() func(string) {
@@ -154,6 +157,7 @@ type Dispatcher struct {
 	warn         func(string)
 	sidecarDown  func(string, extension.InterceptorPoint)
 	tightenOnly  map[string]bool
+	mods         map[string]bool
 
 	warnedMu sync.Mutex
 	warned   map[string]struct{}
@@ -188,6 +192,7 @@ func New(chain map[extension.InterceptorPoint][]extension.Contribution, replacem
 		warn:         opts.warnFunc(),
 		sidecarDown:  opts.SidecarDown,
 		tightenOnly:  maps.Clone(opts.TightenOnly),
+		mods:         maps.Clone(opts.Mods),
 		warned:       map[string]struct{}{},
 	}
 }
@@ -195,8 +200,11 @@ func New(chain map[extension.InterceptorPoint][]extension.Contribution, replacem
 // Options returns the reporting this dispatcher was built with, so a successor
 // built after a rebuild reports through the same channels.
 func (d *Dispatcher) Options() Options {
-	return Options{Warn: d.warn, SidecarDown: d.sidecarDown, TightenOnly: maps.Clone(d.tightenOnly)}
+	return Options{Warn: d.warn, SidecarDown: d.sidecarDown, TightenOnly: maps.Clone(d.tightenOnly), Mods: maps.Clone(d.mods)}
 }
+
+// HasMod reports whether a Claude Code mod is live. Nil-safe.
+func (d *Dispatcher) HasMod() bool { return d != nil && len(d.mods) > 0 }
 
 // Intercepts reports whether a sidecar sits on point: a plugin-backed
 // contribution the walk would call. Nil-safe.
