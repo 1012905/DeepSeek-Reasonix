@@ -433,7 +433,6 @@ type Messages struct {
 	EffortReadErrorFmt    string
 	EffortUnknownModelFmt string
 	EffortUnsupportedFmt  string
-	EffortUndeclaredFmt   string
 	EffortStatusFmt       string
 
 	// management listing notices (the Submit path: desktop / HTTP frontends)
