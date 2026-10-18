@@ -2,7 +2,7 @@ import { SseShell } from "./sse_shell";
 import type { AgentComposition, AgentPresetVersion, AgentPresetCatalog, CompositionSummary } from "./composition";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
@@ -107,6 +107,12 @@ export class SseBoundary extends SseShell {
   }
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]) {
     return this.post0<TurnNarrationSettings>("/turn-narration-settings", { level });
+  }
+  observabilitySettings() {
+    return this.get<ObservabilitySettings>("/observability");
+  }
+  saveObservabilitySettings(patch: ObservabilityPatch) {
+    return this.post0<ObservabilitySettings>("/observability", patch);
   }
   webAccessSettings() {
     return this.get<WebAccessSettings>("/web-access-settings");

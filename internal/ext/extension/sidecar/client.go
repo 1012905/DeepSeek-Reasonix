@@ -409,7 +409,10 @@ func (c *Client) validateHandshakeResult(result protocol.InitializeResult) error
 	if len(result.UIActions) > 0 && !containsString(rt.Capabilities, "ui") {
 		return capabilityErr("extension %s declared UI actions without the ui capability", c.pluginID)
 	}
-	if err := c.validateTools(result.Tools); err != nil {
+	if err := c.validateDynamicTools(result); err != nil {
+		return err
+	}
+	if err := c.validateTools(result.Tools, result.ToolSpecs); err != nil {
 		return err
 	}
 	// Manifest provides is the capability ceiling: handshake must not claim
@@ -445,6 +448,10 @@ func (c *Client) PluginID() string { return c.pluginID }
 // Required reports whether the plugin's manifest marked its runtime
 // required:true — the dispatcher treats such extensions as required-class.
 func (c *Client) Required() bool { return c.rt.Required }
+
+// TightenOnly reports whether the runtime's permission rulings may only make a
+// decision stricter.
+func (c *Client) TightenOnly() bool { return c.rt.TightenOnly }
 
 // Handshake returns the sidecar's validated initialize result — its declared
 // subscriptions, replacements, providers, and UI actions.
@@ -540,6 +547,9 @@ func (c *Client) Intercept(ctx context.Context, event protocol.InterceptEvent, p
 	raw, err := c.conn.Request(tctx, string(protocol.MethodExtensionIntercept), params)
 	if err != nil {
 		if errors.Is(tctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			if c.rt.KillOnTimeout {
+				go c.proc.kill()
+			}
 			return protocol.InterceptResult{}, &protocol.ProtocolError{
 				Reason:  protocol.ErrInterceptTimeout,
 				Message: fmt.Sprintf("extension %s did not answer %s within %s", c.pluginID, event, timeout),

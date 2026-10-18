@@ -145,10 +145,14 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [peers]
 # enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it; also a switch in Settings, applied at the next turn (user config only)
-# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card (user config only)
+# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card; the opened session keeps the sender's model, preset, approval mode and planning, so a YOLO sender opens a YOLO session that answers the target project's ask rules too (deny rules still hold) (user config only)
 # max_dispatch_depth = 1       # how many sessions deep a dispatch may chain; 0 removes the ceiling (user config only)
 # max_dispatched_sessions = 8  # sessions one session may keep open from its dispatches; 0 removes the ceiling (user config only)
 # release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
+
+[mods]
+# enabled = false              # run the hooks module of installed Claude Code mods; full trust, no sandbox (user config only)
+# hook_budget_ms = 0           # one hook's own running time in milliseconds; 0 keeps 10000 (user config only)
 
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
@@ -247,6 +251,44 @@ uploads nothing; it asks again the next time.
 Reasonix never uploads prompts, answers, reasoning, tool names/arguments/output,
 paths, repositories/branches, session IDs, exact token or cost values,
 Provider/model names, base URLs, or environment variables.
+
+### Trace export (OpenTelemetry)
+
+Reasonix can hand each turn to your own observability stack as OpenTelemetry
+GenAI traces. It is off, and nothing leaves the machine, until your user config
+switches it on and names a collector:
+
+```toml
+[observability.otlp]
+enabled = true
+endpoint = "http://localhost:4318"   # OTLP/HTTP; /v1/traces is appended
+header_name = "Authorization"        # optional: the header carrying a credential
+header_env = "OTEL_EXPORTER_AUTH"    # the variable holding its value, never the value
+service_name = "reasonix"            # optional
+```
+
+- **What is sent.** One trace per turn: an `invoke_agent` span, a `chat` span per
+  model attempt (provider, model, token counts, finish reason), and an
+  `execute_tool` span per tool call (tool name, failure class), nested under the
+  tool that delegated the work.
+- **What is never sent.** Prompts, answers, tool arguments and results, file
+  paths and error text. Spans are built from typed event fields through one fixed
+  attribute set, and a name that does not look like a name is sent as `unknown`.
+- **Who decides.** Only your user config. A repository's `reasonix.toml` cannot
+  switch it on or move it; the ignored key is reported at load.
+- **Credentials.** `header_env` must be an `OTEL_*` or `REASONIX_OTEL_*` variable, so no
+  setting can read an unrelated secret. A credential is refused over plain `http`
+  to any host but loopback, the endpoint may not contain user info, and redirects
+  are not followed.
+- **Failure.** Export never blocks a turn: a slow or dead collector drops spans
+  from a bounded queue.
+- **Stability.** The upstream conventions are marked Development (read
+  2026-10-18); every payload carries `reasonix.semconv_experimental = true` and
+  attribute names can change. Not run against a real backend: built against the
+  OTLP/HTTP JSON encoding and tested with a local collector.
+
+Studio has the same switches under Settings, Network. A save reaches sessions
+opened afterwards.
 
 ### CLI crash reports
 
@@ -1219,6 +1261,31 @@ execution instead of running unconfined. Install the platform sandbox backend
 `[sandbox] bash = "off"` to explicitly restore the pre-1.16 unconfined shell
 behavior. On Windows the compatible value is always `off`.
 
+### In a dev container or Docker
+
+Bubblewrap has to create user and mount namespaces (and a network namespace for
+a closed network), which a default container blocks. Measured on Docker Desktop
+(Linux VM, Debian 12, bubblewrap 0.8.0), by launching a confined command under
+`enforce` in each configuration:
+
+| Container configuration | Sandbox | Reported cause |
+|---|---|---|
+| bubblewrap not installed | unavailable | `sandbox.no_bubblewrap` |
+| default `docker run`; seccomp unconfined only; `SYS_ADMIN` only; seccomp and AppArmor unconfined without `SYS_ADMIN` | unavailable | `sandbox.bwrap_namespace_denied` |
+| `SYS_ADMIN` with seccomp and AppArmor unconfined | works with the network open; a closed network is unavailable | `sandbox.bwrap_network_denied` for the closed network |
+| the above plus `NET_ADMIN`, or `--privileged` | works, network open or closed | none |
+
+- Both `CAP_SYS_ADMIN` and an unconfined seccomp profile are needed; either alone is not enough.
+- Reasonix does not look for a container. The message comes from what bubblewrap
+  could and could not do, so a container granted those privileges gets its
+  sandbox, and one that is not is told which privilege is missing.
+- Granting them widens the container itself. The other choice is
+  `[sandbox] bash = "off"`; the container is then the only boundary, and what
+  you mount writable (a credentials file in a bind-mounted workspace included)
+  is writable by every command.
+- Only the Linux sandbox was measured. A Dev Containers or Codespaces session,
+  rootless Docker and SELinux hosts were not run.
+
 For coding-quality reports, run `reasonix doctor quality <branch-id-or-path>`
 (add `--json` for structured output). This reads the selected session but emits
 only content-free counts and profile categories: model family, runtime profile,
@@ -1690,6 +1757,41 @@ plus the bounded Goal evaluator. Legacy `.reasonix/autoresearch/<task-id>/` arch
 read-only: an explicit old path can be recovered as an ordinary Goal, but new
 runs never create or update those directories. Deprecated budget flags are
 accepted for compatibility but are hidden from help and completion.
+
+## Scheduled runs
+
+A schedule makes Reasonix run a read-only task for you at a time you chose and leave the result waiting. It is
+the command line only for now; Studio gets a list later.
+
+```bash
+reasonix schedule add --every 2h --prompt "Summarize what changed in the open TODOs" --workspace ~/src/app
+reasonix schedule list
+reasonix schedule pause <id>      # pause-all, resume, resume-all, renew and rm work the same way
+reasonix schedule tick            # claim and run what is due now, then exit
+```
+
+- **A person confirms it.** `add`, `resume`, `renew`, `rm` and `resume-all` need a terminal. `add` shows the whole
+  plan (prompt, folder, model, budget, expiry) and asks you to type back its short id; `list` shows who created
+  each one. A command run by a tool, a pipe or a scheduler is refused.
+  - The host marks every subprocess it starts for the agent with `REASONIX_AGENT_CHILD=1`, and these commands
+    refuse when it is set, so an agent that opens its own pty is stopped too.
+  - That is a guard against accidents and a trick, not a boundary: a child can clear its own environment, and
+    only the sandbox confines what an agent can do.
+- **Nothing runs by itself yet.** Call `reasonix schedule tick` from the operating system's scheduler (cron,
+  launchd, Task Scheduler). Every tick goes through the store's own budget and expiry checks, so a scheduler
+  that only calls `tick` cannot bypass them. An in-kernel ticker is a later change.
+- **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
+  for you and never answered on your behalf.
+- **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only
+  tighten them.
+  - One run at a time, and by default at least 60 minutes between runs (never under 10).
+  - Per run: 250,000 tokens, 40 steps and 15 minutes.
+  - 4 runs a day for one schedule and 6 for all of them, and a lifetime budget per schedule.
+  - A 30 day expiry that only you renew.
+- **Late and missed runs.** Only the latest slot counts. It still runs if it is at most 15 minutes late (never
+  more than a quarter of the interval); otherwise it is recorded as skipped and not made up.
+- **The model is pinned** when you create the schedule, from your own configuration. If it later becomes
+  unavailable the run fails and says so.
 
 ## @ references
 

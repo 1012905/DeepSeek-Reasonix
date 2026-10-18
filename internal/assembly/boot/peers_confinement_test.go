@@ -21,6 +21,14 @@ func TestAConfinedCommandCannotTouchThePeerSpool(t *testing.T) {
 	if runtime.GOOS == "windows" || !sandbox.Available() {
 		t.Skip("no OS-level bash confinement on this machine")
 	}
+	t.Run("workspace beside the state root", func(t *testing.T) { confinedSpoolCase(t, false) })
+	// The workspace being the state root's parent (a project opened at the home
+	// directory) puts the spool inside a writable root; the forbidden-root rule
+	// has to win there too.
+	t.Run("workspace above the state root", func(t *testing.T) { confinedSpoolCase(t, true) })
+}
+
+func confinedSpoolCase(t *testing.T, workspaceAbove bool) {
 	base, err := os.MkdirTemp(os.Getenv("HOME"), ".reasonix-peers-test-")
 	if err != nil {
 		t.Skipf("cannot create a work dir under home: %v", err)
@@ -31,6 +39,9 @@ func TestAConfinedCommandCannotTouchThePeerSpool(t *testing.T) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if workspaceAbove {
+		workspace = base
 	}
 	t.Setenv("REASONIX_HOME", home)
 	cfg, err := config.Load()

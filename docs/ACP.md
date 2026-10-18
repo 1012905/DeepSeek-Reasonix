@@ -187,6 +187,37 @@ Hosts should keep the `session/prompt` request open until Reasonix returns its
 stop reason, while continuing to process requests and notifications in both
 directions.
 
+- `agent_message_chunk` updates carry an opaque `messageId`.
+  - Chunks of one sampling attempt share it; a retried attempt gets a new one,
+    so a client never joins a discarded draft to the answer.
+  - A chunk outside any attempt carries none.
+- `tool_call` updates and permission requests carry the tool's own `name` beside
+  its `title`. The name is informational: it grants nothing and is not changed
+  later.
+- `$/cancel_request` with `{"requestId": <id>}` cancels that one in-flight request
+  without ending the session.
+  - It is answered with the request's own result if it has one, else with error
+    `-32800` (Request Cancelled).
+  - An id that is unknown or already answered is ignored.
+  - `session/cancel` still stops the active turn.
+- An MCP server's form or external-page request is sent as `elicitation/create`
+  when the client advertised `clientCapabilities.elicitation.form` or `.url`.
+  - A mode counts only when its key is present and not null; otherwise the
+    request is declined, as before.
+  - A form is never offered for a request that needs a page, and a page is never
+    offered to a client without `url`.
+  - The `message` begins "MCP server <name> asks:", so the person can tell the
+    server's words from the agent's. Control characters are removed and the text
+    is capped.
+  - The form's `requestedSchema` is a flat object: a string, an enum, or an array
+    of an enum per question.
+  - A value outside its enum, of the wrong shape or over the cap declines the
+    whole form rather than reaching the server.
+  - A page is an `http(s)` address the host already validated. The client should
+    show it and ask before opening it.
+  - `accept` for a page means the person agreed to open it, not that the
+    interaction finished.
+
 ### Vendor notifications are opt-in
 
 Reasonix pushes `_reasonix.io/session/status_update` and `_reasonix.io/session/mcpStatus_update`

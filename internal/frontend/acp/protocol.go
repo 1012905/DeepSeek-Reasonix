@@ -60,7 +60,10 @@ type InitializeParams struct {
 type ClientCapabilities struct {
 	FS       FSCapabilities `json:"fs,omitempty"`
 	Terminal bool           `json:"terminal,omitempty"`
-	Meta     map[string]any `json:"_meta,omitempty"`
+	// Elicitation names the interaction modes the client can show; a mode is
+	// supported only when its key is present and not null.
+	Elicitation *ElicitationCapabilities `json:"elicitation,omitempty"`
+	Meta        map[string]any           `json:"_meta,omitempty"`
 }
 
 // FSCapabilities reports which client filesystem methods are available.
@@ -583,6 +586,7 @@ type SessionUpdateParams struct {
 // messageChunk is agent_message_chunk / agent_thought_chunk.
 type messageChunk struct {
 	SessionUpdate string       `json:"sessionUpdate"`
+	MessageID     string       `json:"messageId,omitempty"`
 	Content       ContentBlock `json:"content"`
 	Metadata      *updateMeta  `json:"metadata,omitempty"`
 }
@@ -765,6 +769,7 @@ type PermissionRequestParams struct {
 // PermissionToolCall describes the call awaiting approval.
 type PermissionToolCall struct {
 	ToolCallID string             `json:"toolCallId"`
+	Name       string             `json:"name,omitempty"`
 	Title      string             `json:"title,omitempty"`
 	Kind       string             `json:"kind,omitempty"`
 	Status     string             `json:"status,omitempty"`

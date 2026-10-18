@@ -122,7 +122,7 @@ func (c *Controller) SendPeerMessage(to, text string) (PeerReceipt, error) {
 		From: peermail.Party{SessionID: self, Title: peerAttribute(sessionstore.BranchID(path)), Project: peerAttribute(baseName(c.WorkspaceRoot()))},
 		To:   peermail.Party{SessionID: target.SessionID, WriterID: target.WriterID, Title: target.Title, Project: target.Project},
 	}
-	msg.Proof = c.dispatchProof(msg)
+	c.signDispatch(&msg)
 	if err := dir.Send(msg); err != nil {
 		return PeerReceipt{}, err
 	}

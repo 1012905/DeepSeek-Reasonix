@@ -300,6 +300,8 @@ type RuntimeSettings interface {
 	SaveDisplayCurrency(mode string) error
 	ChangedFilesSettings() ChangedFilesSettings
 	SaveChangedFilesSettings(show bool) error
+	ObservabilitySettings() ObservabilitySettings
+	SaveObservabilitySettings(patch ObservabilityPatch) (ObservabilitySettings, error)
 	FoldWorkSettings() FoldWorkSettings
 	SaveFoldWorkSettings(fold bool) error
 	TurnNarrationSettings() TurnNarrationSettings
@@ -416,6 +418,14 @@ type PeerMail interface {
 type SubagentView interface {
 	SubagentRuns() ([]delegation.RunInfo, error)
 	SubagentTranscript(ref string, after, limit int) (delegation.RunTranscript, error)
+}
+
+// Mods is Claude Code mods: which are installed and what became of each, and the
+// user's switch and budget for running them.
+type Mods interface {
+	Mods() []ModStatus
+	ModsSettings() ModsSettings
+	SaveModsSettings(patch ModsPatch) (ModsSettings, error)
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -539,6 +549,7 @@ type SessionAPI interface {
 	ToolCallStopper
 	SubagentView
 	PeerMail
+	Mods
 	MCPSignIn
 	LocalShell
 	DiffRendering
@@ -591,6 +602,7 @@ var (
 	_ ToolCallStopper    = (*Controller)(nil)
 	_ SubagentView       = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
+	_ Mods               = (*Controller)(nil)
 	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)

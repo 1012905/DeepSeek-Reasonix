@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 import { MockCompositions } from "./mock_composition";
@@ -294,6 +294,20 @@ export class MockBoundary extends MockShell {
   async saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings> {
     this.narration = { ...this.narration, level };
     return { ...this.narration };
+  }
+
+  private observability: ObservabilitySettings = {
+    enabled: false, endpoint: "", headerName: "", headerEnv: "", serviceName: "", headerEnvSet: false,
+    path: "/Users/you/.reasonix/config.toml", applies: "next_session",
+  };
+
+  async observabilitySettings(): Promise<ObservabilitySettings> {
+    return { ...this.observability };
+  }
+
+  async saveObservabilitySettings(patch: ObservabilityPatch): Promise<ObservabilitySettings> {
+    this.observability = { ...this.observability, ...patch };
+    return { ...this.observability };
   }
 
   private webAccess: WebAccessSettings = {
