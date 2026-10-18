@@ -184,7 +184,6 @@ func TestProbeNamesWhyTheSavedInstanceFailsWithoutWritingAnything(t *testing.T) 
 	defer srv.Close()
 
 	saveSearxng(t, srv.URL, searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) }))
-	before, _ := os.ReadFile(config.UserConfigPath())
 	resp := postProvider(t, srv.URL, "/web-access-settings/probe", `{}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("probe = %d", resp.StatusCode)
@@ -194,7 +193,7 @@ func TestProbeNamesWhyTheSavedInstanceFailsWithoutWritingAnything(t *testing.T) 
 	}
 
 	saveSearxng(t, srv.URL, searxngAt(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"results":[]}`)) }))
-	before, _ = os.ReadFile(config.UserConfigPath())
+	before, _ := os.ReadFile(config.UserConfigPath())
 	if got := probeBody(t, postProvider(t, srv.URL, "/web-access-settings/probe", `{}`)); !got.OK {
 		t.Fatalf("an instance that answers must read as ok: %+v", got)
 	}

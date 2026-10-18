@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"slices"
 )
 
 // errAddressRefused is an address the probe will not connect to. The cause is the
@@ -31,12 +32,7 @@ func forbiddenAddr(a netip.Addr) bool {
 	case a.Is4() && (a.As4()[0] == 0 || a == netip.AddrFrom4([4]byte{255, 255, 255, 255})):
 		return true
 	}
-	for _, m := range metadataAddrs {
-		if a == m {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(metadataAddrs, a)
 }
 
 type lookupFunc func(ctx context.Context, host string) ([]netip.Addr, error)
@@ -62,10 +58,8 @@ func guardedDial(lookup lookupFunc) func(ctx context.Context, network, address s
 		if len(addrs) == 0 {
 			return nil, errAddressRefused
 		}
-		for _, a := range addrs {
-			if forbiddenAddr(a) {
-				return nil, errAddressRefused
-			}
+		if slices.ContainsFunc(addrs, forbiddenAddr) {
+			return nil, errAddressRefused
 		}
 		return d.DialContext(ctx, network, net.JoinHostPort(addrs[0].Unmap().String(), port))
 	}
