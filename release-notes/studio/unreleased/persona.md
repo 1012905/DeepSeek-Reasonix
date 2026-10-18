@@ -1,2 +1,2 @@
-- 新增：Studio 设置新增「人设」页：prefix 写在系统提示词最前、suffix 跟在内置指令之后，可选 complete 与运行时上下文开关；保存写用户配置，新会话生效。关联 #13588。
-- New: Studio gets a 人设 (Persona) page: prefix/suffix identity text with optional complete and runtime-context switches, saved to the user config for new sessions. Refs #13588.
+- 新增：Studio「人设」页提供用户级前后缀及运行时上下文开关；内置指令保留，项目不能设置人设。保存后在新会话或下次会话重建时生效。关联 #13588。
+- New: Studio Persona settings add user-level prefix/suffix text and a runtime-context switch, preserving built-in guidance. Applies at the next session build. Refs #13588.

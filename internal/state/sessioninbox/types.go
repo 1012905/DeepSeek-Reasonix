@@ -214,6 +214,10 @@ type EnqueueRequest struct {
 	SessionID   string
 }
 
+// NoItemLimit as Limits.MaxItems queues without counting; the byte limits still
+// bound the store.
+const NoItemLimit = -1
+
 // Limits configures capacity. Zero fields use defaults.
 type Limits struct {
 	MaxItems      int
@@ -222,7 +226,7 @@ type Limits struct {
 }
 
 func (l Limits) withDefaults() Limits {
-	if l.MaxItems <= 0 {
+	if l.MaxItems == 0 {
 		l.MaxItems = DefaultMaxItems
 	}
 	if l.MaxItemBytes <= 0 {

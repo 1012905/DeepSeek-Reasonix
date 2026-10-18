@@ -12,6 +12,13 @@ MCP servers, extensions, hooks and custom commands. A composition is independent
 of the model, reasoning effort and the existing balanced/delivery role setting.
 It uses Reasonix's runtime; it does not load Harness's Cordis plugins.
 
+Compositions are opt-in. No selection and Standard use the ordinary configuration
+without a binding, a new transcript schema or persona migration. Saved preset
+preferences do not activate themselves. Explicitly choose a non-Standard mode
+to bind a version.
+
+`--agent-composition default` explicitly chooses the saved preference.
+
 ## Choosing and editing
 
 Choose the mode at the left of the composer status row before
@@ -101,7 +108,7 @@ connections and process state, and extensions run from private copies. Existing
 trust, revocation, authorization and sandbox checks still apply.
 
 A binding is local transcript metadata and never enters provider messages.
-Composition transcripts use native event-log schema 4; older readers refuse
+Only explicitly bound composition transcripts use native event-log schema 4; older readers refuse
 them instead of continuing with another tool set. Legacy transcripts keep
 their compatibility path and are not assigned today's default on restore.
 
@@ -122,10 +129,14 @@ or reconnect blocks execution instead of silently replacing schemas. Package
 MCP processes and extension sidecars use private package copies; shutdown and
 failed assembly release their private directories.
 
-The nonempty legacy user persona migrates once to a personal default preset.
-The original configuration remains. `/persona` reads and edits that personal
-default rather than maintaining a second mutable persona. Migration retries
-reuse an already written revision and preserve conflicting personal IDs.
+The user persona is not migrated. `/persona` retains the user-config behavior
+from #13588, and Standard's settings reuse that Persona editor. Standard reads
+it on each runtime build. Explicit compositions
+retain their selected persona; saving either configuration does not rewrite
+an existing binding.
+
+Prefix/suffix supplement first-party guidance; there is
+no whole-prompt replacement switch.
 
 ## Entry points
 

@@ -12,9 +12,6 @@ import (
 type PersonaConfig struct {
 	Prefix string `toml:"prefix"`
 	Suffix string `toml:"suffix"`
-	// Complete uses Prefix as the whole system prompt. Every other section is
-	// suppressed, tools stay available.
-	Complete bool `toml:"complete"`
 	// IncludeRuntimeContext is a pointer so absent (nil) means true, matching
 	// zero-value-is-no-persona; explicit false suppresses the probed environment
 	// section and the offline note.
@@ -28,13 +25,7 @@ const (
 	maxPersonaTotalBytes = 64 << 10
 )
 
-var (
-	// ErrPersonaCompleteRequiresPrefix marks complete mode without an identity:
-	// suppressing every other section would leave the model with nothing.
-	ErrPersonaCompleteRequiresPrefix = errors.New("persona complete mode requires a prefix")
-	// ErrPersonaTooLarge marks a persona over the prefix/suffix size caps.
-	ErrPersonaTooLarge = errors.New("persona is too large")
-)
+var ErrPersonaTooLarge = errors.New("persona is too large")
 
 // Normalize trims the bodies and collapses a persona that contributes nothing,
 // so an empty [agent.persona] table and an absent one are the same config. An
@@ -43,19 +34,15 @@ var (
 func (p PersonaConfig) Normalize() PersonaConfig {
 	p.Prefix = strings.TrimSpace(p.Prefix)
 	p.Suffix = strings.TrimSpace(p.Suffix)
-	if p.Prefix == "" && p.Suffix == "" && !p.Complete && p.IncludeRuntimeContext == nil {
+	if p.Prefix == "" && p.Suffix == "" && p.IncludeRuntimeContext == nil {
 		return PersonaConfig{}
 	}
 	return p
 }
 
-// Validate rejects the two personas that cannot be honored: complete mode with
-// no prefix (it would erase the whole prompt) and bodies past the size caps.
+// Validate bounds the user-authored additions to the system prompt.
 func (p PersonaConfig) Validate() error {
 	p = p.Normalize()
-	if p.Complete && p.Prefix == "" {
-		return fmt.Errorf("%w: complete mode needs a non-empty prefix", ErrPersonaCompleteRequiresPrefix)
-	}
 	if len(p.Prefix) > maxPersonaPartBytes || len(p.Suffix) > maxPersonaPartBytes || len(p.Prefix)+len(p.Suffix) > maxPersonaTotalBytes {
 		return fmt.Errorf("%w: prefix and suffix must each be at most 32 KiB", ErrPersonaTooLarge)
 	}
@@ -69,11 +56,9 @@ func (p PersonaConfig) RuntimeContextEnabled() bool {
 }
 
 // IsZero reports whether the persona contributes anything, after trimming.
-// Complete without a prefix is not zero: the invalid config is preserved so the
-// user can repair it rather than having it silently disappear.
 func (p PersonaConfig) IsZero() bool {
 	p = p.Normalize()
-	return p.Prefix == "" && p.Suffix == "" && !p.Complete && p.IncludeRuntimeContext == nil
+	return p.Prefix == "" && p.Suffix == "" && p.IncludeRuntimeContext == nil
 }
 
 // SetPersona normalizes and stores the user's system persona. Persistence picks
@@ -97,9 +82,6 @@ func renderPersonaTable(b *strings.Builder, p PersonaConfig) {
 	}
 	if p.Suffix != "" {
 		b.WriteString("suffix = " + tomlMultilineBasicString(p.Suffix) + "\n")
-	}
-	if p.Complete {
-		b.WriteString("complete = true   # use prefix as the whole system prompt; every other section is suppressed\n")
 	}
 	if p.IncludeRuntimeContext != nil {
 		fmt.Fprintf(b, "include_runtime_context = %v   # false omits the probed environment section and offline note\n", *p.IncludeRuntimeContext)

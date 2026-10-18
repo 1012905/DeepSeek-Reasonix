@@ -1,2 +1,0 @@
-- 改进：选了人民币或美元显示费用、但模型价格不是官方价目表里的价格时，设置里会说明哪些模型无法换算；服务商页的价格行提供「恢复官方价」，缓存命中价为 0 时提示费用偏低。关联 #13513。
-- Improved: Settings names models whose price is not in the vendor's list and so cannot be converted to the pinned currency; the price row offers Restore official price. Refs #13513.

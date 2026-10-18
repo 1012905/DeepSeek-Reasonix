@@ -7,6 +7,7 @@ import (
 	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/state/agentpreset"
+	"reasonix/internal/state/sessionstore"
 	"slices"
 )
 
@@ -44,9 +45,6 @@ func (c *Controller) PresetStore() *agentpreset.Store {
 }
 
 func (c *Controller) AgentPresets() (agentpreset.Catalog, error) {
-	if _, err := c.migrateLegacyPersona(); err != nil {
-		return agentpreset.Catalog{}, err
-	}
 	catalog, err := c.PresetStore().List()
 	if err != nil {
 		return catalog, err
@@ -65,6 +63,9 @@ func (c *Controller) SetDefaultAgentPreset(id string, workspace bool) error {
 }
 
 func (c *Controller) SelectAgentComposition(ctx context.Context, id string) error {
+	if id == "builtin:general" && c.CompositionBinding() == nil {
+		return nil
+	}
 	if current := c.CompositionBinding(); current != nil && current.Version.Definition.ID == id {
 		if v, err := c.PresetStore().Get(id); err == nil && v.Revision == current.Version.Revision {
 			return nil
@@ -133,7 +134,7 @@ func (c *Controller) BeginCompositionSwitch() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if b := c.CompositionBinding(); b != nil && b.Started || c.Turn() != 0 || c.hasUnfinishedSessionJobs(c.SessionPath()) || c.PendingPrompt() {
+	if CompositionStarted(c) || c.hasUnfinishedSessionJobs(c.SessionPath()) || c.PendingPrompt() {
 		release()
 		return nil, agentcomposition.ErrLocked
 	}
@@ -209,7 +210,14 @@ func (c *Controller) beginCompositionEnqueue() (func() error, error) {
 
 func (c *Controller) compositionNeedsSnapshot(explicit bool) bool {
 	b := c.CompositionBinding()
-	return b != nil && (explicit || b.Started)
+	if b != nil {
+		return explicit || b.Started
+	}
+	if explicit && c.SessionPath() != "" {
+		previous, err := sessionstore.LoadSession(c.SessionPath())
+		return err == nil && previous.Composition() != nil
+	}
+	return false
 }
 
 func (c *Controller) BlockCompositionExecution(err error) {

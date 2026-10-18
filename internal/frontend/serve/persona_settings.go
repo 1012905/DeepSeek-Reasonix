@@ -1,6 +1,6 @@
 // persona_settings.go — the user's system persona as HTTP. Saving writes the
 // user config and rebuilds nothing: the prompt is the provider-cached prefix,
-// so the running session keeps it and new sessions get the saved persona.
+// so the saved persona applies at the next session rebuild or new session.
 package serve
 
 import (
@@ -22,9 +22,8 @@ func (s *Server) personaSettings(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) savePersonaSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Prefix   string `json:"prefix"`
-		Suffix   string `json:"suffix"`
-		Complete bool   `json:"complete"`
+		Prefix string `json:"prefix"`
+		Suffix string `json:"suffix"`
 		// A pointer so a client that omits the field keeps the default (enabled)
 		// instead of saving an explicit false it never showed the user.
 		IncludeRuntimeContext *bool `json:"include_runtime_context"`
@@ -36,13 +35,10 @@ func (s *Server) savePersonaSettings(w http.ResponseWriter, r *http.Request) {
 	p := config.PersonaConfig{
 		Prefix:                body.Prefix,
 		Suffix:                body.Suffix,
-		Complete:              body.Complete,
 		IncludeRuntimeContext: body.IncludeRuntimeContext,
 	}
 	if err := s.ctl().SavePersonaSettings(p); err != nil {
 		switch {
-		case errors.Is(err, config.ErrPersonaCompleteRequiresPrefix):
-			saveFailed(w, http.StatusBadRequest, "persona.complete_requires_prefix", err)
 		case errors.Is(err, config.ErrPersonaTooLarge):
 			saveFailed(w, http.StatusBadRequest, "persona.too_large", err)
 		default:

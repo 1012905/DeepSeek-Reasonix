@@ -38,41 +38,6 @@ func TestMCPRetainsParametersButOnlyReferencesCredentialValues(t *testing.T) {
 	}
 }
 
-func TestPersonaMigrationRetriesAndPreservesCollidingDeclarations(t *testing.T) {
-	s := New(t.TempDir(), t.TempDir())
-	d := agentcomposition.Builtins()[0]
-	d.ID, d.Name = "user:migrated-persona", "Existing unrelated preset"
-	if _, err := s.Save(d, ""); err != nil {
-		t.Fatal(err)
-	}
-	p := agentcomposition.Persona{Prefix: "old identity", Suffix: "old tail", Complete: true, IncludeRuntimeContext: false}
-	if err := s.MigratePersona(p); err != nil {
-		t.Fatal(err)
-	}
-	id, err := s.Default()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id == d.ID {
-		t.Fatal("migration replaced a colliding user declaration")
-	}
-	v, err := s.Get(id)
-	if err != nil || v.Definition.Persona != p {
-		t.Fatalf("migration lost persona: %+v %v", v, err)
-	}
-	if err := s.MigratePersona(agentcomposition.Persona{Prefix: "changed config"}); err != nil {
-		t.Fatal(err)
-	}
-	again, _ := s.Get(id)
-	if again.Revision != v.Revision {
-		t.Fatal("migration was not idempotent")
-	}
-	old, _ := s.Get(d.ID)
-	if old.Definition.Name != d.Name {
-		t.Fatal("collision was overwritten")
-	}
-}
-
 func TestRetainedResourceTamperingAndUntrustedBindingAreRefused(t *testing.T) {
 	s := New(t.TempDir(), t.TempDir())
 	asset := DirectorySnapshot{Files: []AssetFile{{Path: "script", Data: []byte("original"), Mode: 0o700}}}

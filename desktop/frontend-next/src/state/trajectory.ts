@@ -185,7 +185,7 @@ function record(ev: WireEvent): Made | null {
         kind: "protocol_recovery",
         payload: [
           { t: "retry " },
-          { n: `${ev.retryAttempt ?? 0}/${ev.retryMax ?? 0}` },
+          { n: `${ev.retryAttempt ?? 0}/${ev.retryMax ? ev.retryMax : "∞"}` },
           { t: " · scope=" },
           { b: ev.retryScope ?? "stream" },
           ...(ev.retryCause

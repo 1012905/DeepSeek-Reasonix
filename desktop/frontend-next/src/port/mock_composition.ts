@@ -6,12 +6,11 @@ import type { AgentComposition, AgentPresetVersion, AgentPresetCatalog, Composit
 type Library = { revision:number; user:AgentPresetVersion[]; projects:Map<string,AgentPresetVersion[]>; personalDefault:string; workspaceDefaults:Map<string,string> };
 
 export class MockCompositions {
-  private current: CompositionSummary;
+  private current: CompositionSummary | null = null;
+  private started = false;
   constructor(private readonly library:Library = {revision:0,user:[],projects:new Map(),personalDefault:"builtin:general",workspaceDefaults:new Map()},private readonly workspace = "") {
-    const catalog=this.catalog;
-    const v=catalog.presets.find((v)=>v.definition.id===catalog.default) ?? catalog.presets[0];
-    this.current=this.summary(v);
   }
+  get compositionStarted() { return this.started; }
   fork(workspace:string) { return new MockCompositions(this.library,workspace); }
   private get catalog():AgentPresetCatalog {
     return {presets:[...builtinCompositions().map((definition)=>({definition,revision:revisions[definition.id as keyof typeof revisions]})),...this.library.user,...(this.library.projects.get(this.workspace) ?? [])],default:this.library.workspaceDefaults.get(this.workspace) ?? this.library.personalDefault,diagnostics:[]};
@@ -23,7 +22,7 @@ export class MockCompositions {
     if (definition.id.startsWith("builtin:")) this.fail(403,"read_only");
     const prior=this.catalog.presets.find((v)=>v.definition.id===definition.id);
     if ((prior?.revision ?? "")!==expectedRevision) this.fail(409,"conflict");
-    if (!/^(user|project):[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(definition.id) || !definition.name.trim() || definition.persona.complete && !definition.persona.prefix.trim()) this.fail(400,"invalid");
+    if (!/^(user|project):[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(definition.id) || !definition.name.trim()) this.fail(400,"invalid");
     const version={definition:structuredClone(definition),revision:`mock-${++this.library.revision}`};
     const items=definition.id.startsWith("project:") ? this.library.projects.get(this.workspace) ?? [] : this.library.user;
     const next=[...items.filter((v)=>v.definition.id!==definition.id),version];
@@ -55,10 +54,10 @@ export class MockCompositions {
   async selectAgentComposition(id:string) {
     const v=this.catalog.presets.find((v)=>v.definition.id===id);
     if (!v) this.fail(404,"not_found");
-    if (this.current.id===id && this.current.revision===v.revision) return structuredClone(this.current);
-    if (this.current.started) this.fail(409,"locked");
-    this.current=this.summary(v);
+    if (this.current?.id===id && this.current.revision===v.revision || !this.current && id==="builtin:general") return structuredClone(this.current);
+    if (this.started) this.fail(409,"locked");
+    this.current=id==="builtin:general" ? null : this.summary(v);
     return structuredClone(this.current);
   }
-  markCompositionStarted() { this.current.started=true; }
+  markCompositionStarted() { this.started=true; if(this.current) this.current.started=true; }
 }

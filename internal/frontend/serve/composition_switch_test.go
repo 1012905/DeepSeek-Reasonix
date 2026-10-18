@@ -1,8 +1,10 @@
 package serve
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -21,20 +23,27 @@ func compositionSwitchFixture(t *testing.T) (*Server, *control.Controller) {
 	t.Helper()
 	home, root, dir := t.TempDir(), t.TempDir(), t.TempDir()
 	t.Setenv("REASONIX_HOME", home)
+	d := agentcomposition.Builtins()[0]
+	d.ID = "user:alternate"
+	if _, err := agentpreset.New(home, root).Save(d, ""); err != nil {
+		t.Fatal(err)
+	}
 	build := func(_ context.Context, opts boot.Options) (*boot.BuildResult, error) {
 		store := agentpreset.New(home, root)
 		id := opts.AgentComposition
 		if id == "default" {
 			id, _ = store.Default()
 		}
-		v, err := store.Get(id)
-		if err != nil {
-			return nil, err
+		session := sessionstore.NewSession("standard prompt")
+		if id != "" && id != "builtin:general" {
+			v, err := store.Get(id)
+			if err != nil {
+				return nil, err
+			}
+			binding := &agentcomposition.Binding{Version: v, Resolved: v.Definition, Workspace: root}
+			binding.Seal()
+			session.BindComposition(binding)
 		}
-		binding := &agentcomposition.Binding{Version: v, Resolved: v.Definition, Workspace: root}
-		binding.Seal()
-		session := sessionstore.NewSession(v.Definition.Name)
-		session.BindComposition(binding)
 		exec := agent.New(nil, tool.NewRegistry(), session, agent.Options{}, event.Discard)
 		ctrl := control.New(control.Options{Executor: exec, Runner: exec, Sink: event.Discard, WorkspaceRoot: root, SessionDir: dir})
 		ctrl.ConfigureCompositions(home, nil)
@@ -58,11 +67,11 @@ func compositionSwitchFixture(t *testing.T) (*Server, *control.Controller) {
 
 func TestCompositionSwitchPersistsBeforePublicationAndUsesNewDefault(t *testing.T) {
 	s, old := compositionSwitchFixture(t)
-	if err := old.SelectAgentComposition(t.Context(), "builtin:general"); err != nil {
+	if err := old.SelectAgentComposition(t.Context(), "user:alternate"); err != nil {
 		t.Fatal(err)
 	}
 	next := s.ctl().(*control.Controller)
-	if next == old || next.CompositionBinding().Version.Definition.ID != "builtin:general" {
+	if next == old || next.CompositionBinding().Version.Definition.ID != "user:alternate" {
 		t.Fatal("replacement not published")
 	}
 	loaded, err := sessionstore.LoadSession(next.SessionPath())
@@ -76,8 +85,51 @@ func TestCompositionSwitchPersistsBeforePublicationAndUsesNewDefault(t *testing.
 		t.Fatal("same version rebuilt")
 		return nil, nil
 	}
+	if err := next.SelectAgentComposition(t.Context(), "user:alternate"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCompositionSwitchToStandardRestoresLegacyBlankSession(t *testing.T) {
+	s, old := compositionSwitchFixture(t)
+	if err := old.SelectAgentComposition(t.Context(), "builtin:general"); err != nil {
+		t.Fatal(err)
+	}
+	next := s.ctl().(*control.Controller)
+	if next == old || next.CompositionBinding() != nil {
+		t.Fatal("Standard retained an implicit binding")
+	}
+	data, err := os.ReadFile(sessionstore.SessionEventLogPath(next.SessionPath()))
+	if err != nil || bytes.Contains(data, []byte(`"schema_version":4`)) {
+		t.Fatalf("blank Standard session retained the composition format: %v", err)
+	}
+	s.compositionAssembly.build = func(context.Context, boot.Options) (*boot.BuildResult, error) {
+		t.Fatal("unbound Standard selection rebuilt")
+		return nil, nil
+	}
 	if err := next.SelectAgentComposition(t.Context(), "builtin:general"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUnboundCompositionSwitchRollbackRemovesUnpublishedBinding(t *testing.T) {
+	s, old := compositionSwitchFixture(t)
+	if err := old.SelectAgentComposition(t.Context(), "builtin:general"); err != nil {
+		t.Fatal(err)
+	}
+	standard := s.ctl().(*control.Controller)
+	s.compositionAssembly.persist = func(next *control.Controller) error {
+		if err := next.SnapshotRewrite(); err != nil {
+			return err
+		}
+		return errors.New("publish persistence failed")
+	}
+	if err := standard.SelectAgentComposition(t.Context(), "user:alternate"); err == nil {
+		t.Fatal("candidate failure hidden")
+	}
+	loaded, err := sessionstore.LoadSession(standard.SessionPath())
+	if err != nil || loaded.Composition() != nil || s.ctl() != standard {
+		t.Fatalf("failed switch changed unbound session: %v", err)
 	}
 }
 
@@ -96,7 +148,7 @@ func TestCompositionSwitchFailureRestoresOldDurableBinding(t *testing.T) {
 					return errors.New("sidecar write failed")
 				}
 			}
-			if err := old.SelectAgentComposition(t.Context(), "builtin:general"); err == nil {
+			if err := old.SelectAgentComposition(t.Context(), "user:alternate"); err == nil {
 				t.Fatal("failure hidden")
 			}
 			if s.ctl() != old || old.CompositionBinding().Digest != original {
@@ -116,16 +168,16 @@ func TestCompositionSwitchFailureRestoresOldDurableBinding(t *testing.T) {
 	}
 }
 
-func TestCompositionNewSessionResolvesCurrentWorkspaceDefault(t *testing.T) {
+func TestCompositionNewSessionIsUnboundDespiteStoredDefault(t *testing.T) {
 	s, old := compositionSwitchFixture(t)
-	if err := old.SetDefaultAgentPreset("builtin:general", true); err != nil {
+	if err := old.SetDefaultAgentPreset("user:alternate", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := old.NewSession(); err != nil {
 		t.Fatal(err)
 	}
 	next := s.ctl().(*control.Controller)
-	if next == old || next.CompositionBinding().Version.Definition.ID != "builtin:general" || next.SessionPath() == old.SessionPath() {
+	if next == old || next.CompositionBinding() != nil || next.SessionPath() == old.SessionPath() {
 		t.Fatal("new session reused old binding or path")
 	}
 }

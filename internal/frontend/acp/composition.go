@@ -64,9 +64,9 @@ func withCompositionConfig(state SessionConfigState, ctrl acpController) Session
 	if err != nil {
 		return state
 	}
-	current := ""
-	locked := ctrl.Turn() != 0 || ctrl.PendingPrompt() || ctrl.RuntimeStatus().BackgroundJobs > 0
-	currentName := "Legacy session configuration"
+	current := "builtin:general"
+	locked := control.CompositionStarted(ctrl) || ctrl.PendingPrompt() || ctrl.RuntimeStatus().BackgroundJobs > 0
+	currentName := "Standard"
 	if b := ctrl.CompositionBinding(); b != nil {
 		current = b.Version.Definition.ID
 		currentName = b.Version.Definition.Name

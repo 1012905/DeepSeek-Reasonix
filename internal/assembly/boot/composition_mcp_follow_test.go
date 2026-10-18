@@ -8,6 +8,7 @@ import (
 
 	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/state/agentpreset"
 )
 
 func TestCompositionFollowingMCPChangesCannotRewriteAnExistingBinding(t *testing.T) {
@@ -34,7 +35,12 @@ load = "always"
 `, server.URL))
 	approveWorkspace(t, root)
 	approveProjectServer(t, root, "drift")
-	opts := Options{Home: home, WorkspaceRoot: root, AgentComposition: "builtin:general", resolvedShell: pinnedEffectShell()}
+	d := agentcomposition.Builtins()[0]
+	d.ID = "user:followed"
+	if _, err := agentpreset.New(home, root).Save(d, ""); err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{Home: home, WorkspaceRoot: root, AgentComposition: "user:followed", resolvedShell: pinnedEffectShell()}
 	first, err := BuildRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)

@@ -200,8 +200,8 @@ outside it. Composition menu text follows the shared text-size setting.
 
 | Browser | Light | Dark |
 | --- | --- | --- |
-| 1440 × 1000 | [Capture](docs/images/agent-compositions/merge-wide-light.png) | [Capture](docs/images/agent-compositions/merge-wide-dark.png) |
-| 390 × 844 | [Capture](docs/images/agent-compositions/merge-narrow-light.png) | [Capture](docs/images/agent-compositions/merge-narrow-dark.png) |
+| 1440 × 1000 | Capture (local capture) | Capture (local capture) |
+| 390 × 844 | Capture (local capture) | Capture (local capture) |
 
 These captures use synthetic Mock data. Native Electron shell behavior was
 not requalified by this browser integration check.
@@ -220,11 +220,11 @@ Minimal uses native terminal/image tools and compaction without Cordis plugins.
 
 | Browser | Light | Dark |
 | --- | --- | --- |
-| 1440 × 1000 | [Cards](docs/images/agent-compositions/modes-wide-light.png) | [Cards](docs/images/agent-compositions/modes-wide-dark.png) |
-| 390 × 844 | [Cards](docs/images/agent-compositions/modes-narrow-light.png) | [Cards](docs/images/agent-compositions/modes-narrow-dark.png) |
+| 1440 × 1000 | Cards (local capture) | Cards (local capture) |
+| 390 × 844 | Cards (local capture) | Cards (local capture) |
 
-[Composer idle](docs/images/agent-compositions/composer-modes-final.png) and
-[running](docs/images/agent-compositions/composer-modes-running.png) captures
+Composer idle (local capture) and
+running (local capture) captures
 show the compact mode trigger with separate run information. These are browser
 Mock captures; the source annotation image is not published.
 
@@ -253,3 +253,21 @@ QA passed. Captures remain in
 占用状态、路径展开、创建、成功、失败重试与取消。无残留的 P0/P1/P2 视觉问题，
 截图仅保留于 PR。清理失败时保留外部修改，并明确提示保存任务、核对目录后关闭
 会话，从源目录新建会话重试；安装包与上游 CI 验收单独记录。
+
+
+## Maintainer opt-in revision / 默认关闭调整
+
+Standard and Minimal cards, the left-side name-only picker and right-side run
+information are preserved. Preferences are labeled as preferences; they do not
+activate a mode. No selection and Standard remain unbound. Complete replacement
+is removed from the editor; selected personas supplement first-party guidance.
+
+保留标准／精简卡片、左侧仅模式名的入口及右侧运行信息。首选项不自动启用；
+未选择及标准模式不绑定。编辑器移除完整替换开关，人设仅补充内置指令。
+
+Per maintainer request, composition screenshots are local evidence and are not
+committed. Historical capture references above describe earlier verification.
+Current browser checks and hosted workflow results are reported separately.
+
+按维护者要求，组合截图仅保留为本地证据，不提交到仓库。上方记录为历史验证；
+当前浏览器检查与远端工作流结论分开报告。

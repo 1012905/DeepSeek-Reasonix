@@ -8,6 +8,25 @@ import { AgentPresets } from "./AgentPresets";
 afterEach(cleanup);
 
 describe("Agent preset management", () => {
+  it("edits the existing user persona in Standard without migration or binding", async () => {
+    const user = userEvent.setup();
+    const port = new MockPort();
+    render(<AgentPresets port={port} />);
+    await user.type(await screen.findByLabelText("系统提示词开头"), "User identity");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await screen.findByText("已保存，下次会话构建时生效");
+    expect((await port.persona()).prefix).toBe("User identity");
+    expect(await port.agentComposition()).toBeNull();
+    expect((await port.agentPresets()).presets).toHaveLength(2);
+  });
+  it("opens the user persona from settings search even with a different preferred preset", async () => {
+    const port = new MockPort();
+    await port.setDefaultAgentPreset("builtin:minimal", false);
+    render(<AgentPresets port={port} focusPersona />);
+    expect(await screen.findByLabelText("系统提示词开头")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "严谨工程师" })).toBeTruthy();
+    expect(await port.agentComposition()).toBeNull();
+  });
   it("shows only Standard and Minimal built-in cards and changes the default without changing this conversation", async () => {
     const user = userEvent.setup();
     const port = new MockPort();
@@ -17,9 +36,9 @@ describe("Agent preset management", () => {
     expect(document.querySelectorAll(".composition-card")).toHaveLength(2);
     expect(screen.queryByText("代码审查")).toBeNull();
     expect(screen.queryByText("资料研究")).toBeNull();
-    await user.click(within(minimal.closest("article")!).getByRole("button", { name: "设为个人默认" }));
+    await user.click(within(minimal.closest("article")!).getByRole("button", { name: "设为个人首选" }));
     await waitFor(async () => expect((await port.agentPresets()).default).toBe("builtin:minimal"));
-    expect((await port.agentComposition())?.id).toBe("builtin:general");
+    expect(await port.agentComposition()).toBeNull();
     await user.click(minimal);
     await user.click(screen.getByRole("button", { name: "复制为自定义预设" }));
     await user.click(screen.getByRole("button", { name: "保存预设" }));
@@ -37,13 +56,13 @@ describe("Agent preset management", () => {
     await user.type(screen.getByLabelText("预设名称"), "My agent");
     await user.type(screen.getByLabelText("系统提示词开头"), "Literal prefix");
     await user.type(screen.getByLabelText("第一方指令之后"), "Literal suffix");
-    await user.click(screen.getByRole("switch", { name: "用前缀替换整个系统提示词（complete）" }));
+    expect(screen.queryByRole("switch", { name: /complete/ })).toBeNull();
     await user.click(screen.getByRole("switch", { name: "注入运行环境与离线提示" }));
     await user.click(screen.getByRole("button", { name: "保存预设" }));
     expect((await screen.findByRole("status")).textContent).toContain("新会话使用新版");
     expect((await port.agentPresets()).presets.some((v) => v.definition.name === "My agent")).toBe(true);
-    expect((await port.agentComposition())?.id).toBe("builtin:general");
-    expect((await port.agentPresets()).presets.find((v)=>v.definition.name==="My agent")?.definition.persona).toEqual({prefix:"Literal prefix",suffix:"Literal suffix",complete:true,include_runtime_context:false});
+    expect(await port.agentComposition()).toBeNull();
+    expect((await port.agentPresets()).presets.find((v)=>v.definition.name==="My agent")?.definition.persona).toEqual({prefix:"Literal prefix",suffix:"Literal suffix",include_runtime_context:false});
   });
   it("keeps an unsaved draft after a conflict", async () => {
     const user = userEvent.setup();

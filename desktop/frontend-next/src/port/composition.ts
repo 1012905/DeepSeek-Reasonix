@@ -8,7 +8,7 @@ export interface AgentComposition {
   id: string;
   name: string;
   description: string;
-  persona: { prefix: string; suffix: string; complete: boolean; include_runtime_context: boolean };
+  persona: { prefix: string; suffix: string; include_runtime_context: boolean };
   tools: CompositionSelection;
   skills: CompositionSelection;
   mcp: CompositionSelection;

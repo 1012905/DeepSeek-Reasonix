@@ -28,7 +28,7 @@ func TestProjectDeclarationCannotFollowSymlinkOutsideWorkspace(t *testing.T) {
 	}
 }
 
-func TestDeclarationSizeBoundAndExplicitDefaultSurviveMigration(t *testing.T) {
+func TestDeclarationSizeBoundAndExplicitDefault(t *testing.T) {
 	s := New(t.TempDir(), t.TempDir())
 	path, err := s.declarationPath("user:large")
 	if err != nil {
@@ -49,9 +49,6 @@ func TestDeclarationSizeBoundAndExplicitDefaultSurviveMigration(t *testing.T) {
 		t.Fatalf("large declaration: %v", err)
 	}
 	if err := s.SetDefault("builtin:minimal", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.MigratePersona(agentcomposition.Persona{Prefix: "old persona", IncludeRuntimeContext: true}); err != nil {
 		t.Fatal(err)
 	}
 	if id, err := s.Default(); err != nil || id != "builtin:minimal" {

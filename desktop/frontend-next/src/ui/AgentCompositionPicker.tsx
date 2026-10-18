@@ -38,9 +38,9 @@ export function AgentCompositionPicker({ port, binding, locked: statusLocked, ru
     return () => { active = false; };
   }, [port, running, binding?.digest, binding?.started]);
   if (!catalog) return null;
-  const selected = catalog.presets.find((v) => v.definition.id === current?.id)?.definition;
+  const selected = catalog.presets.find((v) => v.definition.id === (current?.id ?? "builtin:general"))?.definition;
   const locked = running || statusLocked || !!current?.started;
-  const label = current ? compositionName(current.id, current.name) : t("原有会话配置");
+  const label = current ? compositionName(current.id, current.name) : t("标准模式");
   const items: MenuItem[] = locked && !createNew ? [] : catalog.presets.map(({ definition }) => ({
     value: definition.id,
     label: compositionName(definition.id, definition.name),
@@ -64,13 +64,13 @@ export function AgentCompositionPicker({ port, binding, locked: statusLocked, ru
       menuClassName="composer-menu composition-menu"
       ariaLabel={`${t("Agent 组合")}：${label}${current ? ` · ${compositionSource(current.id)}` : ""}${locked ? ` · ${t("已锁定")}` : ""}`}
       data-action={(id) => id === MANAGE ? "agent-composition.manage" : locked ? "agent-composition.new" : "agent-composition.select"}
-      title={locked ? t("该会话已开始，组合保持原版本。请用其他组合新建会话。") : selected?.description ? (selected.id.startsWith("builtin:") ? t(selected.description) : selected.description) : t("首次提交前可切换 Agent 组合")}
+      title={locked ? t("该会话已开始，模式已锁定。请用其他模式新建会话。") : selected?.description ? (selected.id.startsWith("builtin:") ? t(selected.description) : selected.description) : t("首次提交前可切换 Agent 组合")}
       pending={busy}
       label={<><span className="nm">{label}</span><StudioIcon name="down" /></>}
       menuTitle={<><b>{t("Agent 预设")}</b><small>{t(locked ? "已锁定" : "首次提交前可切换")}</small></>}
-      head={locked && <p className="composition-menu-note">{t("该会话已开始，组合保持原版本。请用其他组合新建会话。")}</p>}
+      head={locked && <p className="composition-menu-note">{t("该会话已开始，模式已锁定。请用其他模式新建会话。")}</p>}
       items={items}
-      current={locked ? undefined : current?.id}
+      current={locked ? undefined : current?.id ?? "builtin:general"}
       onPick={choose}
       place="bottom"
     />

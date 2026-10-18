@@ -25,7 +25,6 @@ var identifier = regexp.MustCompile(`^(builtin|user|project):[a-zA-Z0-9][a-zA-Z0
 type Persona struct {
 	Prefix                string `json:"prefix"`
 	Suffix                string `json:"suffix"`
-	Complete              bool   `json:"complete"`
 	IncludeRuntimeContext bool   `json:"include_runtime_context"`
 }
 
@@ -132,7 +131,7 @@ func (d Definition) Validate() error {
 	if d.SchemaVersion != SchemaVersion || !identifier.MatchString(d.ID) || strings.TrimSpace(d.Name) == "" || len(d.Name) > 1024 || len(d.Description) > 16384 {
 		return fmt.Errorf("%w: schemaVersion, id or name", ErrInvalid)
 	}
-	if len(d.Persona.Prefix) > 32768 || len(d.Persona.Suffix) > 32768 || d.Persona.Complete && strings.TrimSpace(d.Persona.Prefix) == "" {
+	if len(d.Persona.Prefix) > 32768 || len(d.Persona.Suffix) > 32768 {
 		return fmt.Errorf("%w: persona", ErrInvalid)
 	}
 	for _, s := range []Selection{d.Tools, d.Skills, d.MCP, d.Extensions, d.Hooks, d.Commands} {

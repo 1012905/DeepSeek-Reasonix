@@ -226,6 +226,9 @@ export const ACTIONS: UIAction[] = [
   { id: "mcp.enabled", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.retry", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "mcp.trust", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.signin", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.follow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.unfollow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.remove", kind: "destructive", target: "entity", proof: "interaction" },
   { id: "mcp.load", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.tool-search", kind: "view", target: "entity", proof: "interaction" },
@@ -692,7 +695,8 @@ export const ACTIONS: UIAction[] = [
   // persona is composed once at boot so the write is read by later sessions.
   { id: "persona.prefix", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.suffix", kind: "view", target: "none", proof: "interaction" },
-  { id: "persona.complete", kind: "view", target: "none", proof: "interaction" },
+  { id: "persona.preset", kind: "view", target: "optional", proof: "interaction" },
+  { id: "persona.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "persona.runtime-context", kind: "view", target: "none", proof: "interaction" },
   // The kernel announces the change on the stream, so no rebuild stands between
   // the click and the canonical change.

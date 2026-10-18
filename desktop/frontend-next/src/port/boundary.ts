@@ -202,21 +202,19 @@ export interface PersonaPreset {
   id: string;
   prefix: string;
   suffix: string;
-  complete: boolean;
   include_runtime_context: boolean;
 }
 
 export interface PersonaSettings {
   prefix: string;
   suffix: string;
-  complete: boolean;
   include_runtime_context: boolean;
   path: string;
   presets: PersonaPreset[];
 }
 
-/** The four fields a save writes; path and presets are the kernel's answer. */
-export type PersonaDraft = Pick<PersonaSettings, "prefix" | "suffix" | "complete" | "include_runtime_context">;
+/** The three fields a save writes; path and presets are the kernel's answer. */
+export type PersonaDraft = Pick<PersonaSettings, "prefix" | "suffix" | "include_runtime_context">;
 
 export type DisplayCurrencyMode = "auto" | "CNY" | "USD";
 

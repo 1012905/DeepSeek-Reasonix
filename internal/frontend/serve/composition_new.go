@@ -27,7 +27,7 @@ func (s *Server) newCompositionSession(ctx context.Context, cur *control.Control
 		return err
 	}
 	opts := s.rebuildOptions(cur, currentModelRef(cur))
-	opts.Composition, opts.AgentComposition = nil, "default"
+	opts.Composition, opts.AgentComposition = nil, ""
 	opts.SessionTemp, opts.BrowserSession = nil, nil
 	opts.RuntimeReload = boot.RuntimeReload{}
 	result, err := s.buildComposition(ctx, opts)

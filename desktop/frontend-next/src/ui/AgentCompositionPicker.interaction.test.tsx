@@ -44,7 +44,7 @@ it("keeps started conversations locked and opens the chosen composition in a new
   expect(picker.textContent).toBe("标准模式");
   expect(picker.getAttribute("aria-label")).toContain("已锁定");
   await user.click(picker);
-  expect(screen.getByText("该会话已开始，组合保持原版本。请用其他组合新建会话。")).toBeTruthy();
+  expect(screen.getByText("该会话已开始，模式已锁定。请用其他模式新建会话。")).toBeTruthy();
   const review=screen.getByRole("menuitem",{name:/精简模式/});
   expect(review.getAttribute("data-action")).toBe("agent-composition.new");
   await user.click(review);

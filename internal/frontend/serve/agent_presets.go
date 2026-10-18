@@ -72,10 +72,7 @@ func compositionControllerView(ctrl control.SessionAPI) *compositionSummary {
 }
 
 func compositionLocked(ctrl control.SessionAPI) bool {
-	if b := ctrl.CompositionBinding(); b != nil && b.Started {
-		return true
-	}
-	return ctrl.Turn() != 0 || ctrl.Running() || ctrl.PendingPrompt()
+	return control.CompositionStarted(ctrl) || ctrl.Running() || ctrl.PendingPrompt()
 }
 
 func compositionView(b *agentcomposition.Binding) *compositionSummary {

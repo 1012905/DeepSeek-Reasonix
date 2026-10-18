@@ -28,7 +28,7 @@ func newRunFlags() *runFlags {
 	f.model = fs.String("model", "", "provider name (default: config default_model)")
 	f.profileFlag = fs.String("profile", "", "deprecated: use --preset (economy|balanced|delivery)")
 	f.presetFlag = fs.String("preset", "balanced", presetFlagUsage())
-	f.agentComposition = fs.String("agent-composition", "default", "Agent composition ID (builtin:, user: or project:)")
+	f.agentComposition = fs.String("agent-composition", "", "Agent composition ID (builtin:, user: or project:)")
 	f.maxSteps = fs.Int("max-steps", 0, "one-off max tool-call rounds (0 = automatic)")
 	f.showThinking = fs.Bool("show-thinking", false, "show thinking text instead of the collapsed thinking marker")
 	fs.Var(new(debugLogFlag), "debug", "write diagnostic logs (assembly timing, cache state) to stderr")

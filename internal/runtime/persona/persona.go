@@ -7,7 +7,6 @@ import "reasonix/internal/contract/config"
 type Settings struct {
 	Prefix                string
 	Suffix                string
-	Complete              bool
 	IncludeRuntimeContext bool
 }
 
@@ -18,17 +17,13 @@ func FromConfig(c config.PersonaConfig) Settings {
 	return Settings{
 		Prefix:                p.Prefix,
 		Suffix:                p.Suffix,
-		Complete:              p.Complete,
 		IncludeRuntimeContext: p.RuntimeContextEnabled(),
 	}
 }
 
-// ApplyPrefix puts the identity ahead of base. Complete mode is not a prefix
-// addition — Final replaces the prompt with the prefix — so this returns base
-// unchanged there, letting the caller keep assembling the sections the runtime
-// still needs.
+// ApplyPrefix puts the identity ahead of the first-party guidance.
 func ApplyPrefix(base string, s Settings) string {
-	if s.Complete || s.Prefix == "" {
+	if s.Prefix == "" {
 		return base
 	}
 	if base == "" {
@@ -37,24 +32,13 @@ func ApplyPrefix(base string, s Settings) string {
 	return s.Prefix + "\n\n" + base
 }
 
-// ApplySuffix trails the first-party guidance with the user's suffix, and
-// likewise does nothing in complete mode.
+// ApplySuffix trails the first-party guidance with the user's suffix.
 func ApplySuffix(base string, s Settings) string {
-	if s.Complete || s.Suffix == "" {
+	if s.Suffix == "" {
 		return base
 	}
 	if base == "" {
 		return s.Suffix
 	}
 	return base + "\n\n" + s.Suffix
-}
-
-// Final returns the prompt the provider sees. In complete mode that is exactly
-// the trimmed prefix, which is the persona contract: every other section is
-// suppressed, while the memory and skill stores built alongside remain live.
-func Final(s Settings, assembled string) string {
-	if s.Complete {
-		return s.Prefix
-	}
-	return assembled
 }

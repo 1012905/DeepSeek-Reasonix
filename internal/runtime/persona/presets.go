@@ -7,7 +7,6 @@ type Preset struct {
 	ID                    string `json:"id"`
 	Prefix                string `json:"prefix"`
 	Suffix                string `json:"suffix"`
-	Complete              bool   `json:"complete"`
 	IncludeRuntimeContext bool   `json:"include_runtime_context"`
 }
 

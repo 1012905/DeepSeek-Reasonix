@@ -43,7 +43,7 @@ func (f *compositionFactory) NewSession(_ context.Context, p SessionParams) (*co
 	return ctrl, nil
 }
 
-func TestCompositionACPNewUsesDefaultAndLocksOnlyItsIndependentSelector(t *testing.T) {
+func TestCompositionACPNewIsUnboundAndLocksOnlyItsIndependentSelector(t *testing.T) {
 	home, root := t.TempDir(), t.TempDir()
 	t.Setenv("REASONIX_HOME", home)
 	f := &compositionFactory{home: home}
@@ -52,21 +52,26 @@ func TestCompositionACPNewUsesDefaultAndLocksOnlyItsIndependentSelector(t *testi
 	if _, err := svc.sessionNew(t.Context(), raw); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.params) != 1 || f.params[0].AgentComposition != "default" || f.params[0].Composition != nil {
-		t.Fatal("new ACP session did not request its workspace default")
+	if len(f.params) != 1 || f.params[0].AgentComposition != "" || f.params[0].Composition != nil {
+		t.Fatal("new ACP session implicitly selected a composition")
 	}
 	for _, sess := range svc.sessions {
 		ctrl := sess.currentCtrl().(*control.Controller)
 		defer ctrl.Close()
-		binding := ctrl.CompositionBinding()
-		binding.Started = true
-		ctrl.BindComposition(binding)
+		if ctrl.CompositionBinding() != nil {
+			t.Fatal("new ACP session was bound")
+		}
+		history := sessionstore.NewSession("standard")
+		history.Add(provider.Message{Role: provider.RoleUser, Content: "started"})
+		if err := ctrl.Resume(history, ""); err != nil {
+			t.Fatal(err)
+		}
 		state := withCompositionConfig(SessionConfigState{Model: "independent-model", ConfigOptions: []SessionConfigOption{{ID: "model"}}}, ctrl)
 		if state.Model != "independent-model" || state.ConfigOptions[0].ID != "model" {
 			t.Fatal("composition overwrote the model contract")
 		}
 		last := state.ConfigOptions[len(state.ConfigOptions)-1]
-		if last.ID != "agent_composition" || len(last.Options) != 1 || last.CurrentValue != binding.Version.Definition.ID {
+		if last.ID != "agent_composition" || len(last.Options) != 1 || last.CurrentValue != "builtin:general" {
 			t.Fatalf("started selector was not locked: %+v", last)
 		}
 	}

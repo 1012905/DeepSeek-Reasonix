@@ -32,7 +32,7 @@ func newTUIFlags() *tuiFlags {
 	f := &tuiFlags{fs: fs}
 	f.model = fs.String("model", "", "provider name (default: config default_model)")
 	f.preset = fs.String("preset", "balanced", presetFlagUsage())
-	f.agentComposition = fs.String("agent-composition", "default", "Agent composition ID (builtin:, user: or project:)")
+	f.agentComposition = fs.String("agent-composition", "", "Agent composition ID (builtin:, user: or project:)")
 	f.profile = fs.String("profile", "", "deprecated: use --preset")
 	f.dir = fs.String("dir", "", "change to this directory first (project root)")
 	f.inline = fs.Bool("inline", false, "write the conversation into the terminal's scrollback instead of taking the full screen")

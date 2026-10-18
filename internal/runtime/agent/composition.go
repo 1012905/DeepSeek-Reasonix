@@ -50,8 +50,8 @@ func ChildCompositionPrompt(ctx context.Context, base string) string {
 		return base
 	}
 	p := b.Resolved.Persona
-	settings := persona.Settings{Prefix: p.Prefix, Suffix: p.Suffix, Complete: p.Complete, IncludeRuntimeContext: p.IncludeRuntimeContext}
-	return persona.Final(settings, persona.ApplySuffix(persona.ApplyPrefix(base, settings), settings))
+	settings := persona.Settings{Prefix: p.Prefix, Suffix: p.Suffix, IncludeRuntimeContext: p.IncludeRuntimeContext}
+	return persona.ApplySuffix(persona.ApplyPrefix(base, settings), settings)
 }
 
 // BindChildComposition is called before the first child provider request.

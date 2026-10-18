@@ -218,6 +218,10 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if binding := compositionControllerView(s.ctl()); binding != nil {
 		sess["agentComposition"] = binding
 	}
+	if view := s.goalRuntime(); view != nil {
+		sess["goalRuntime"] = view
+	}
+
 	// Additive: planPhase absent means outside the workflow, so a client that
 	// reads it can say "executing an approved plan" while one that reads only
 	// `plan` keeps the behaviour it always had.
@@ -356,4 +360,14 @@ func providerLabel(ref string) string {
 		return strings.TrimSpace(p.DisplayName)
 	}
 	return ""
+}
+
+// goalRuntime is a goal's usage while there is a goal to account for; a session
+// without one reports none, so a window draws nothing for it.
+func (s *Server) goalRuntime() *control.GoalRuntimeView {
+	if s.ctl().Goal() == "" {
+		return nil
+	}
+	view := s.ctl().GoalRuntime()
+	return &view
 }

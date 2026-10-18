@@ -472,18 +472,17 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 // runtimeOptions is what the one pane this host launches with is built from.
 func runtimeOptions(root string, sink event.Sink, logs io.Writer, phases *startupPhases, driver *computer.Driver) boot.Options {
 	return boot.Options{
-		AgentComposition: "default",
-		ComputerDriver:   driver,
-		Version:          version,
-		WorkspaceRoot:    root,
-		SessionDir:       serve.SessionDirFor(root),
-		Sink:             sink,
-		NativeSurfaces:   true,
-		Stderr:           logs,
-		OnPhase:          phases.boot,
-		StatsSource:      surface.Desktop,
-		FeedbackSurface:  feedback.SurfaceStudio,
-		AccountsURL:      os.Getenv("REASONIX_ACCOUNTS_URL"),
+		ComputerDriver:  driver,
+		Version:         version,
+		WorkspaceRoot:   root,
+		SessionDir:      serve.SessionDirFor(root),
+		Sink:            sink,
+		NativeSurfaces:  true,
+		Stderr:          logs,
+		OnPhase:         phases.boot,
+		StatsSource:     surface.Desktop,
+		FeedbackSurface: feedback.SurfaceStudio,
+		AccountsURL:     os.Getenv("REASONIX_ACCOUNTS_URL"),
 		// A stale default_model must not keep the window from opening to fix it.
 		OpenOnFallbackModel: true,
 

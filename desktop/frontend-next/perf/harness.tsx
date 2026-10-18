@@ -50,7 +50,7 @@ import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
-import type { AgentPort, Appearance, HistoryMessage } from "../src/port/port";
+import type { AgentPort, Appearance, HistoryMessage, McpEntry } from "../src/port/port";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
@@ -95,6 +95,17 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
+  constructor() {
+    super();
+    if (!query.has("mcpactions")) return;
+    (this as unknown as { servers: McpEntry[] }).servers.push(
+      { name: "notes", state: "ready", enabled: true, transport: "stdio", tools: 2, description: "Notes the agent can search and add to.",
+        held: [{ name: "mcp__notes__search", class: "changed" }, { name: "mcp__notes__add", class: "added" }], heldDigest: "digest-1" },
+      { name: "wiki", state: "ready", enabled: true, transport: "http", tools: 4, followsChanges: true, description: "The team wiki." },
+    );
+  }
+
   // ?checkfail=<name> makes a plain test of that source answer 401.
   protected async answerCheck(name: string) {
     if (query.get("checkfail") !== name) return super.answerCheck(name);
@@ -118,7 +129,8 @@ class BenchPort extends MockPort {
 
   async browserTabs() {
     if (!query.has("agentpage")) return super.browserTabs();
-    return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
+    const url = query.get("agentpage") === "file" ? "file:///Users/me/work/site/index.html" : "https://example.com/docs/install";
+    return [{ id: "t1", target: "view-a", url, title: "Install guide", active: true }];
   }
 
   // ?grant=1 grants the workspace a folder, /library, holding one document.
@@ -291,7 +303,11 @@ class BenchPort extends MockPort {
   private readonly jobsSince = Date.now() - 739_000;
 
   async status() {
-    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}) };
+    const usage = query.get("goalusage");
+    const goalRuntime = usage
+      ? { turnsUsed: 4, tokensUsed: 128_400, requestsUsed: 9, workDurationMs: 12 * 60_000, noProgressTurns: usage === "blocked" ? 2 : 0, ...(usage === "blocked" ? { stopCause: "goal_stuck", lastReason: "测试一直没有通过，改动没有让失败的数量减少" } : {}) }
+      : undefined;
+    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}), ...(usage ? { goalStatus: usage, goalRuntime } : {}) };
     if (STATUS_MS > 0) await new Promise((r) => setTimeout(r, STATUS_MS));
     if (!JOBS) return st;
     const jobs = Array.from({ length: JOBS }, (_, i) => ({

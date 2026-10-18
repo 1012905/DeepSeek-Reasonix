@@ -1071,11 +1071,13 @@ type AgentConfig struct {
 	// DecisionModel names the backend system_one asks. It is on a decision
 	// wire, so it never falls back to the main model: a chat model has no
 	// answer for a question set, and falling back would hide that.
-	DecisionModel    string            `toml:"decision_model"`
-	SubagentEffort   string            `toml:"subagent_effort"`
-	SubagentEfforts  map[string]string `toml:"subagent_efforts"`
-	MaxSubagentDepth int               `toml:"max_subagent_depth"` // delegation layers; default 8 stops runaway recursion, 0 removes the stop; the user file only
-	MaxSideSessions  int               `toml:"max_side_sessions"`  // 0 (default) opens as many side conversations as asked; the user file only
+	DecisionModel      string            `toml:"decision_model"`
+	SubagentEffort     string            `toml:"subagent_effort"`
+	SubagentEfforts    map[string]string `toml:"subagent_efforts"`
+	MaxSubagentDepth   int               `toml:"max_subagent_depth"`   // delegation layers; default 8 stops runaway recursion, 0 removes the stop; the user file only
+	MaxSideSessions    int               `toml:"max_side_sessions"`    // 0 (default) opens as many side conversations as asked; the user file only
+	MaxQueuedInputs    int               `toml:"max_queued_inputs"`    // 0 (default) queues as many prompts as asked; the user file only
+	MaxProviderRetries int               `toml:"max_provider_retries"` // default 10; 0 retries until cancelled; the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.
@@ -1098,13 +1100,10 @@ type AgentConfig struct {
 	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
 	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
-	// OutputStyle selects a persona/tone block folded into the system prompt at
-	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
-	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
-	OutputStyle string `toml:"output_style"`
-	// Persona is the user's system persona, composed into the cache-stable
-	// prefix once at boot. User-config only; see PersonaConfig.
-	Persona PersonaConfig `toml:"persona"`
+	// OutputStyle selects built-in tone guidance or .reasonix/output-styles/<name>.md.
+	// Empty leaves the prompt unmodified.
+	OutputStyle string        `toml:"output_style"`
+	Persona     PersonaConfig `toml:"persona"`
 	// Deprecated compatibility field. Automatic plan mode was retired in config
 	// version 5; old TOML remains readable, but loading normalizes it to "off"
 	// and rendering omits it. Plan mode remains available as an explicit user
@@ -1412,6 +1411,7 @@ func Default() *Config {
 			CompactForceRatio:      0,
 			ContextEditing:         "",
 			MaxSubagentDepth:       8,
+			MaxProviderRetries:     10,
 			MaxSubagentConcurrency: 0,
 			MaxParallelWriters:     0,
 			SubagentClaims:         "strict",

@@ -9,13 +9,19 @@ import (
 )
 
 func (s *Store) Freeze(skills []Skill) *Store {
-	copy := *s
 	items := slices.Clone(skills)
 	for i := range items {
 		items[i] = items[i].Complete()
 	}
-	copy.snapshot = &items
-	return &copy
+	return &Store{
+		snapshot: &items, homeDir: s.homeDir, reasonixHomeDir: s.reasonixHomeDir,
+		projectRoot: s.projectRoot, customPaths: s.customPaths,
+		pluginPaths: s.pluginPaths, pluginAgentPaths: s.pluginAgentPaths,
+		excludedPaths: s.excludedPaths, disabled: s.disabled, maxDepth: s.maxDepth,
+		disableBuiltins: s.disableBuiltins, disableDiscovery: s.disableDiscovery,
+		suppressWarnings: s.suppressWarnings, stderr: s.stderr, said: s.said,
+		requiresReady: s.requiresReady, toolBindings: s.toolBindings, hits: s.hits,
+	}
 }
 
 func (s *Store) CompositionSkills() []Skill {

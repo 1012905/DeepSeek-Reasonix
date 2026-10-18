@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reasonix/internal/base/workspaceid"
 	"reasonix/internal/state/sessionstore"
 	"slices"
 	"strings"
@@ -137,6 +138,7 @@ func (h *Hub) tree(w http.ResponseWriter, r *http.Request) {
 		node.Sessions, node.Total, node.Archived, node.Remaining = page.Sessions, page.Total, page.Archived, page.Remaining
 		out = append(out, node)
 	}
+	h.reportOrphanPanes(out)
 	writeJSON(w, out)
 }
 
@@ -681,7 +683,19 @@ func (h *Hub) roots() []rootRef {
 // openSessions maps canonical session paths to the runtime driving them.
 // drivesRoot reports whether rt is a local pane working in root.
 func drivesRoot(rt *Runtime, root string) bool {
-	return rt.Local() && rt.Server.Controller().WorkspaceRoot() == root
+	return rt.Local() && sameFolder(rt.Server.Controller().WorkspaceRoot(), root)
+}
+
+// sameFolder says whether two spellings name one directory. The remembered
+// folders and a pane's own root are written by different code, and on Windows a
+// folder has several spellings (case, slash direction, a trailing separator, an
+// 8.3 short name), so string equality splits one folder into two.
+func sameFolder(a, b string) bool {
+	if a == b {
+		return true
+	}
+	fa := workspaceid.PathFingerprint(a)
+	return fa != "" && fa == workspaceid.PathFingerprint(b)
 }
 
 // openSessionsIn is openSessions for the panes drivesRoot accepts: the ones
@@ -712,7 +726,7 @@ func (h *Hub) openSessions() map[string]string {
 func (h *Hub) rootPanes(root string) int {
 	n := 0
 	for _, rt := range h.localRuntimes() {
-		if rt.Server.Controller().WorkspaceRoot() == root {
+		if sameFolder(rt.Server.Controller().WorkspaceRoot(), root) {
 			n++
 		}
 	}

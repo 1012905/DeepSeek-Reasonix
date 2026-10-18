@@ -72,7 +72,6 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	sink.bindCwd(cwd)
 	sink.bindExtensionSurface(s.extensionSurfaceSupported())
 	sessionParams := SessionParams{
-		AgentComposition:   "default",
 		Cwd:                cwd,
 		MCPServers:         mcpServers,
 		Sink:               sink,
@@ -201,7 +200,7 @@ func (s *service) sessionSetMode(ctx context.Context, raw json.RawMessage) (any,
 	}
 	sess.setGoalDraftMode(nextMode == sessionModeGoal && ctrl.GoalStatus() != control.GoalStatusRunning)
 	if legacyApproval != "" {
-		ctrl.SetToolApprovalMode(legacyApproval)
+		ctrl.SetAutoApproveTools(legacyApproval == control.ToolApprovalYolo)
 		sess.setToolApprovalMode(legacyApproval)
 		if cfgState, err := s.configStateForSession(ctx, sess); err == nil {
 			sess.sink.send(configOptionUpdate{SessionUpdate: "config_option_update", ConfigOptions: cfgState.ConfigOptions})

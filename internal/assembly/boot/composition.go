@@ -26,14 +26,6 @@ func (b *builder) prepareComposition() error {
 		b.opts.Composition = agentcomposition.Clone(b.opts.Composition)
 	} else {
 		store := agentpreset.New(b.roots.Home(), b.root)
-		userConfig, err := b.roots.LoadUserScopeForRoot(b.root)
-		if err != nil {
-			return err
-		}
-		p := userConfig.Agent.Persona.Normalize()
-		if err := store.MigratePersona(agentcomposition.Persona{Prefix: p.Prefix, Suffix: p.Suffix, Complete: p.Complete, IncludeRuntimeContext: p.RuntimeContextEnabled()}); err != nil {
-			return err
-		}
 		id := b.opts.AgentComposition
 		if id == "default" {
 			var err error
@@ -41,6 +33,9 @@ func (b *builder) prepareComposition() error {
 			if err != nil {
 				return err
 			}
+		}
+		if id == "builtin:general" {
+			return nil
 		}
 		v, err := store.Get(id)
 		if err != nil {
@@ -53,7 +48,7 @@ func (b *builder) prepareComposition() error {
 		return fmt.Errorf("%w: workspace changed", agentcomposition.ErrUnavailable)
 	}
 	p := binding.Resolved.Persona
-	b.cfg.Agent.Persona = config.PersonaConfig{Prefix: p.Prefix, Suffix: p.Suffix, Complete: p.Complete, IncludeRuntimeContext: &p.IncludeRuntimeContext}
+	b.cfg.Agent.Persona = config.PersonaConfig{Prefix: p.Prefix, Suffix: p.Suffix, IncludeRuntimeContext: &p.IncludeRuntimeContext}
 	// Independent MCP connections keep mutable server state out of sibling sessions.
 	b.opts.SharedHost = nil
 	return b.prepareCompositionMCP()

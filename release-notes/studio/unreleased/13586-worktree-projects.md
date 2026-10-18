@@ -1,2 +1,0 @@
-- 修复：原目录和隔离目录的会话归入同一项目，并标出实际目录；原目录失效时使用仍存在的目录，手动选择隔离目录仍打开该目录。关联 #13586。
-- Fixed: source and worktree chats share one project with checkout labels. A surviving checkout replaces a missing source; picking a worktree still opens it. Refs #13586.

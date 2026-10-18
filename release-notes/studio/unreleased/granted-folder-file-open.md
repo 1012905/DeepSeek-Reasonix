@@ -1,2 +1,0 @@
-- 对话里点一个你授权过的额外文件夹里的文件路径，现在能在工作台里只读打开它（不能保存）；文件夹之外的路径仍打不开。关联 #13582。
-- A path in the conversation that points into an extra folder you granted now opens read-only in the workbench (no saving); a path outside every granted folder still does not open. Refs #13582.

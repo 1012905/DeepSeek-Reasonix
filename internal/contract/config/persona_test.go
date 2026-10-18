@@ -31,9 +31,6 @@ func TestPersonaNormalizeTrimsAndCollapsesOnlyTheEmptyChoice(t *testing.T) {
 	if pointerOnly.IsZero() || pointerOnly.IncludeRuntimeContext == nil || *pointerOnly.IncludeRuntimeContext {
 		t.Fatalf("pointer-only persona collapsed or lost: %+v", pointerOnly)
 	}
-	if (PersonaConfig{Complete: true}).IsZero() {
-		t.Fatal("complete without a prefix must survive for repair, not read as absent")
-	}
 }
 
 func TestPersonaValidateRejectsUnhonorableValues(t *testing.T) {
@@ -43,8 +40,6 @@ func TestPersonaValidateRejectsUnhonorableValues(t *testing.T) {
 		p    PersonaConfig
 		want error
 	}{
-		{"complete without prefix", PersonaConfig{Complete: true}, ErrPersonaCompleteRequiresPrefix},
-		{"complete with blank prefix", PersonaConfig{Complete: true, Prefix: "   "}, ErrPersonaCompleteRequiresPrefix},
 		{"prefix over cap", PersonaConfig{Prefix: tooBig + "x"}, ErrPersonaTooLarge},
 		{"suffix over cap", PersonaConfig{Suffix: tooBig + "x"}, ErrPersonaTooLarge},
 	} {
@@ -56,8 +51,8 @@ func TestPersonaValidateRejectsUnhonorableValues(t *testing.T) {
 		t.Fatalf("two parts at the cap = %v, want accepted", err)
 	}
 	var c Config
-	if err := c.SetPersona(PersonaConfig{Complete: true}); !errors.Is(err, ErrPersonaCompleteRequiresPrefix) {
-		t.Fatalf("SetPersona = %v, want ErrPersonaCompleteRequiresPrefix", err)
+	if err := c.SetPersona(PersonaConfig{Prefix: tooBig + "x"}); !errors.Is(err, ErrPersonaTooLarge) {
+		t.Fatalf("SetPersona = %v, want ErrPersonaTooLarge", err)
 	}
 	if !c.Agent.Persona.IsZero() {
 		t.Fatalf("a rejected persona reached the config: %+v", c.Agent.Persona)
@@ -83,7 +78,7 @@ func TestPersonaRendersAndLoadsUnchanged(t *testing.T) {
 	t.Setenv("REASONIX_HOME", home)
 	path := UserConfigPath()
 	for _, want := range []PersonaConfig{
-		{Prefix: "IDENTITY", Suffix: "TAIL", Complete: true, IncludeRuntimeContext: new(false)},
+		{Prefix: "IDENTITY", Suffix: "TAIL", IncludeRuntimeContext: new(false)},
 		{Prefix: "IDENTITY", IncludeRuntimeContext: new(true)},
 		{Suffix: "TAIL"},
 		{IncludeRuntimeContext: new(false)},

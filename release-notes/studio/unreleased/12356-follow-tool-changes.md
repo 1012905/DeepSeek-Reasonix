@@ -1,2 +1,0 @@
-- MCP 工具定义被改动时不必每次点接受：可以对某个服务器选择「跟随」，它的改动直接采用，每次仍会通知；随时可取消。关联 #12356。
-- For an MCP server you trust, choose to follow it: its changed tool definitions are taken without a click, each still announced, and you can undo it. Refs #12356.

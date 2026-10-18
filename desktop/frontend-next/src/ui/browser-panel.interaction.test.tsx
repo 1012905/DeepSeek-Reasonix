@@ -57,7 +57,7 @@ async function settle(ms = 60) {
   });
 }
 
-async function panel(props: { tabs: BrowserTab[]; shown: boolean }) {
+async function panel(props: { tabs: BrowserTab[]; shown: boolean; onOpenDocument?: (path: string) => Promise<void> }) {
   vi.resetModules();
   (window as unknown as { reasonixHost: typeof bridge }).reasonixHost = bridge;
   const { BrowserPanel } = await import("./BrowserPanel");
@@ -111,6 +111,43 @@ describe("which page the shell draws, and where", () => {
     await panel({ tabs: [{ id: "t3", target: "view-c", url: "about:blank", title: "", active: true }], shown: true });
     expect((screen.getByRole("button", { name: "用默认浏览器打开此页" }) as HTMLButtonElement).disabled).toBe(true);
     expect(bridge.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("offers a local file to its default program, saying what that means beside the button", async () => {
+    bridge.openExternal.mockClear();
+    const open = vi.fn(async (_path: string) => {});
+    const file: BrowserTab = { id: "t4", target: "view-d", url: "file:///Users/me/work/site/index%20a.html", title: "", active: true };
+    await panel({ tabs: [file], shown: true, onOpenDocument: open });
+    expect(screen.getByText("用系统默认程序打开这个文件，网页里的脚本会照常运行")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "用系统默认程序打开这个文件" }));
+    expect(open).toHaveBeenCalledWith("/Users/me/work/site/index a.html");
+    expect(bridge.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("hands a Windows file address over as a drive path", async () => {
+    const open = vi.fn(async (_path: string) => {});
+    await panel({ tabs: [{ id: "t5", target: "view-e", url: "file:///E:/site/a.html", title: "", active: true }], shown: true, onOpenDocument: open });
+    await userEvent.click(screen.getByRole("button", { name: "用系统默认程序打开这个文件" }));
+    expect(open).toHaveBeenCalledWith("E:/site/a.html");
+  });
+
+  it("shows the kernel's refusal when the file cannot be opened", async () => {
+    let refusal: unknown;
+    const open = vi.fn(async (_path: string) => { throw refusal; });
+    await panel({ tabs: [{ id: "t6", target: "view-f", url: "file:///work/a.js", title: "", active: true }], shown: true, onOpenDocument: open });
+    const { HttpError } = await import("../port/http_error");
+    refusal = new HttpError(400, "refused", { code: "document.not_allowed_type", error: "refused" });
+    await userEvent.click(screen.getByRole("button", { name: "用系统默认程序打开这个文件" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("不能从这里打开这种类型的文件");
+  });
+
+  it("keeps a file address disabled when the host cannot open documents, and offers nothing for a network share", async () => {
+    await panel({ tabs: [{ id: "t7", target: "view-g", url: "file:///work/a.html", title: "", active: true }], shown: true });
+    expect((screen.getByRole("button", { name: "用默认浏览器打开此页" }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    const open = vi.fn(async (_path: string) => {});
+    await panel({ tabs: [{ id: "t8", target: "view-h", url: "file://server/share/a.html", title: "", active: true }], shown: true, onOpenDocument: open });
+    expect((screen.getByRole("button", { name: "用默认浏览器打开此页" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("draws the active page over the reserved rectangle, and the one picked after", async () => {

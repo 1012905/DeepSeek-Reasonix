@@ -42,7 +42,7 @@ func resumeACPControllerForWrite(ctrl acpController, loaded *sessionstore.Sessio
 
 func snapshotACPController(sess *acpSession, ctrl acpController) error {
 	var err error
-	if c, ok := ctrl.(*control.Controller); ok && c.CompositionBinding() != nil {
+	if c, ok := ctrl.(*control.Controller); ok {
 		err = c.SnapshotRewrite()
 	} else {
 		err = ctrl.Snapshot()
@@ -66,7 +66,7 @@ func (s *service) prepareACPReplacementAuthority(sess *acpSession, next *control
 	}
 	if err := snapshotACPController(sess, next); err != nil {
 		rollbackErr := bindACPWriteAuthority(current, lease)
-		if c, ok := current.(*control.Controller); ok && rollbackErr == nil && c.CompositionBinding() != nil {
+		if c, ok := current.(*control.Controller); ok && rollbackErr == nil {
 			rollbackErr = c.SnapshotRewrite()
 		}
 		return fmt.Errorf("%s: %w", snapshotAction, errors.Join(err, rollbackErr))

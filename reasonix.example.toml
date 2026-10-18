@@ -74,13 +74,10 @@ compact_ratio       = 0.85  # sole auto trigger; presets 0.70 (active) / 0.80 (s
 #                                  or a custom .reasonix/output-styles/<name>.md ; empty = default
 # [agent.persona]                  # the agent's identity, as opposed to output_style's tone.
 #                                  # prefix leads the system prompt, suffix follows the built-in guidance;
-#                                  # complete = true uses prefix as the whole system prompt (tools stay
-#                                  # available, every other prompt section is suppressed);
 #                                  # include_runtime_context = false drops the probed environment section and
-#                                  # the offline note. User-level only, and it lands in new sessions.
+#                                  # the offline note. User-level only; applies on the next session build.
 # prefix = "You are the staff engineer who owns this change end to end."
 # suffix = "Close with the risk you did not verify."
-# complete = false
 # include_runtime_context = true
 # embedded_diff_detection = true   # mark a shell result whose whole output is a unified diff (e.g. `git diff`)
 #                                  so the transcript renders it as a diff instead of flat text; default false

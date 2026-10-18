@@ -48,7 +48,7 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings, PersonaDraft, PersonaSettings, WebAccessPatch, WebAccessSettings, PeersSettings, PeersSettingsEdit, PeerRemember } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings, PersonaDraft, PersonaSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -320,7 +320,7 @@ export interface AgentPort {
   exportAgentPreset(id: string): Promise<AgentComposition>;
   importAgentPreset(content: AgentComposition): Promise<{definition:AgentComposition;diagnostics:AgentPresetCatalog["diagnostics"]}>;
   agentComposition(): Promise<CompositionSummary | null>;
-  selectAgentComposition(id: string): Promise<CompositionSummary>;
+  selectAgentComposition(id: string): Promise<CompositionSummary | null>;
   // The persona is part of the cache-stable prefix, composed once at boot:
   // saving is written now and read by the next session, not this one's runtime.
   savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings>;
@@ -343,6 +343,9 @@ export interface AgentPort {
   // Approves the withheld definitions the digest names, then reconnects. The
   // kernel refuses a digest that no longer matches what it withholds.
   trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
+  // Blocks until the browser sign-in ends (up to five minutes); a refusal is a thrown coded error.
+  signinMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
+  followMcp(name: string, follow: boolean): Promise<{ name: string; follow: boolean; tools?: number }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;
   setMcpLoad(name: string, load: McpLoad): Promise<void>;
@@ -401,7 +404,7 @@ export interface AgentPort {
   welcomeSeen(): Promise<boolean>;
   markWelcomed(): Promise<void>;
   removeProvider(name: string): Promise<ProviderRemoval>;
-  versions(): Promise<VersionHub>;
+  versions(refresh?: boolean): Promise<VersionHub>;
   pinVersion(version: string): Promise<void>;
   updateMode(): Promise<UpdateMode>;
   setUpdateMode(mode: UpdateMode): Promise<UpdateMode>;
@@ -489,6 +492,9 @@ export interface AgentPort {
    *  one it found, so a window with several installed can say. It refuses with
    *  a code rather than doing nothing when there is none. */
   openInEditor(): Promise<{ editor: string; root: string }>;
+  /** Open one workspace file (html, svg, pdf) with the machine's default
+   *  program. Only a click may call it; the kernel refuses other types. */
+  openDocument(path: string): Promise<void>;
   /** Whether this window can show a workspace entry in the system file manager:
    *  only a shell on the kernel's own machine can. */
   revealsFiles(): boolean;

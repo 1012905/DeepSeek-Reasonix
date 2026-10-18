@@ -180,7 +180,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     this.mem = this.mem.filter((m) => m.name !== name);
   }
 
-  async versions(): Promise<VersionHub> {
+  async versions(_refresh?: boolean): Promise<VersionHub> {
     return { current: "dev", pinned: "", stalePin: false, latest: "", newer: false, versions: [] };
   }
 
@@ -251,6 +251,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async openInEditor() {
     return { editor: "Visual Studio Code", root: "/work/demo" };
   }
+  async openDocument() {}
   revealsFiles() { return true; }
   async revealInFileManager() {}
 
@@ -355,8 +356,8 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   async markSessionViewed() {}
 
-  async status() {
-    return { ...this.state };
+  async status(): Promise<SessionStatus> {
+    return { ...this.state, agentCompositionLocked: this.compositions.compositionStarted };
   }
 
   async balance(): Promise<WalletReading | null> {

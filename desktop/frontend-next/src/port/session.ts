@@ -253,6 +253,8 @@ export interface SessionStatus {
   bypass: boolean;
   goal: string;
   goalStatus: string;
+  // Present while there is a goal; absent from a kernel that predates it.
+  goalRuntime?: GoalRuntime;
   cwd: string;
   workspaceRoot?: string;
   sessionPath?: string;
@@ -263,6 +265,17 @@ export interface SessionStatus {
   sessionCostQuote?: import("./wire").CostQuote;
   sessionUsage?: SessionUsage;
   jobs?: JobEntry[];
+}
+
+/** What a goal has used so far. work time counts active work, not pauses. */
+export interface GoalRuntime {
+  turnsUsed: number;
+  tokensUsed: number;
+  requestsUsed: number;
+  workDurationMs: number;
+  noProgressTurns: number;
+  lastReason?: string;
+  stopCause?: string;
 }
 
 /** One currency of a wallet, rendered where the symbol rules live. Two

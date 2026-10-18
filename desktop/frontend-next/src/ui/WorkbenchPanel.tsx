@@ -612,6 +612,7 @@ export function WorkbenchPanel({
               tabs={[active.tab]}
               shown={shown && !launcher}
               showTabs={false}
+              onOpenDocument={(path) => port.openDocument(path)}
             />
           )}
           {active?.kind === "file" && (isWorkspaceImage(active.path) ? <WorkspaceImage key={active.path} port={port} path={active.path} /> : (
@@ -635,7 +636,7 @@ export function WorkbenchPanel({
               )}
               {mode === "preview" ? (
                 previewTab ? (
-                  <AgentBrowserPanel tabs={[previewTab]} shown={shown && !launcher} showTabs={false} />
+                  <AgentBrowserPanel tabs={[previewTab]} shown={shown && !launcher} showTabs={false} onOpenDocument={(path) => port.openDocument(path)} />
                 ) : (
                   <div className="workbench-empty">{t("正在读取…")}</div>
                 )

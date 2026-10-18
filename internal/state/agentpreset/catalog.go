@@ -19,10 +19,9 @@ type Catalog struct {
 }
 
 type preferences struct {
-	Default         string            `json:"default,omitempty"`
-	Workspaces      map[string]string `json:"workspaces,omitempty"`
-	PersonaMigrated bool              `json:"personaMigrated,omitempty"`
-	DefaultChosen   bool              `json:"defaultChosen,omitempty"`
+	Default       string            `json:"default,omitempty"`
+	Workspaces    map[string]string `json:"workspaces,omitempty"`
+	DefaultChosen bool              `json:"defaultChosen,omitempty"`
 }
 
 func (s *Store) List() (Catalog, error) {
