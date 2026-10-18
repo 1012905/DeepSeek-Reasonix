@@ -146,6 +146,7 @@ jobs:
           node perf/explorersize.mjs
           node perf/git-panel.mjs
           node perf/session-move-to.mjs
+          node perf/shell-refused.mjs
           node perf/rail-search-hold.mjs
           node perf/session-move.mjs
           node perf/session-ref.mjs
