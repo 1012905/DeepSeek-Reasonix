@@ -9,10 +9,10 @@ export const FEEDBACK_CATEGORIES: readonly FeedbackCategory[] = ["bug", "idea", 
 // What a person may see. A report waiting for triage reads as received; one
 // the maintainers declined reads as closed, with no reason.
 export type FeedbackStatus =
-  | "received" | "needs_info" | "answered" | "recorded" | "in_progress" | "fixed" | "wontfix" | "duplicate" | "closed";
+  | "received" | "needs_info" | "answered" | "recorded" | "in_progress" | "fixed" | "wontfix" | "duplicate" | "closed" | "withdrawn";
 
 export const FEEDBACK_STATUSES: readonly FeedbackStatus[] = [
-  "received", "needs_info", "answered", "recorded", "in_progress", "fixed", "wontfix", "duplicate", "closed",
+  "received", "needs_info", "answered", "recorded", "in_progress", "fixed", "wontfix", "duplicate", "closed", "withdrawn",
 ];
 
 export const isUnderReview = (item: Pick<FeedbackItem, "status" | "underReview" | "statusUnavailable">): boolean =>
@@ -26,6 +26,12 @@ export const FEEDBACK_REPLYABLE: readonly FeedbackStatus[] = ["needs_info", "ans
 
 export const canReplyTo = (item: Pick<FeedbackItem, "status" | "underReview" | "statusUnavailable">): boolean =>
   !item.statusUnavailable && (FEEDBACK_REPLYABLE.includes(item.status) || (item.status === "received" && !isUnderReview(item)));
+
+// A report can be taken back until it has an outcome; the service has the last word.
+export const FEEDBACK_WITHDRAWABLE: readonly FeedbackStatus[] = ["received", "needs_info", "answered", "recorded", "in_progress"];
+
+export const canWithdraw = (item: Pick<FeedbackItem, "status" | "statusUnavailable">): boolean =>
+  !item.statusUnavailable && FEEDBACK_WITHDRAWABLE.includes(item.status);
 
 export interface FeedbackEnvInfo {
   version: string;
@@ -200,6 +206,8 @@ export const FEEDBACK_CODE = {
   badToken: "feedback.bad_token",
   replyLimit: "feedback.reply_limit",
   notReplyable: "feedback.not_replyable",
+  notWithdrawable: "feedback.not_withdrawable",
+  notFound: "feedback.not_found",
   challengeRequired: "feedback.challenge_required",
   accountRequired: "feedback.account_required",
   linkConflict: "feedback.link_conflict",
