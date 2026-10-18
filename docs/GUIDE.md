@@ -30,6 +30,7 @@
 - [Embedded documentation retrieval](#embedded-documentation-retrieval)
 - [@ references](#-references)
 - [Two-model collaboration](#two-model-collaboration)
+- [Google Gemini, native (experimental)](#google-gemini-native-experimental)
 
 ## Configuration
 
@@ -2112,3 +2113,51 @@ Not built, and why:
 
 - Gemini: its video input is in the native Gemini API (inline data, the Files API, YouTube URLs); the OpenAI-compatible page does not list a video content part, and Reasonix reaches Gemini through that endpoint.
 - Zhipu GLM: the documentation shows `video_url` with a public HTTPS address only and says nothing about base64 or limits, so a local file cannot be sent without Reasonix uploading it somewhere.
+
+## Google Gemini, native (experimental)
+
+The `gemini` provider kind speaks Google's Interactions API. It is experimental: it was written from Google's documentation (read 2026-10-17) and has not been run against the real endpoint, so expect rough edges and report them.
+
+Install the **Google Gemini, native (experimental)** preset, or write the entry yourself:
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- Every request carries the whole conversation and `store` is false, so the transcript stays yours; Google keeps nothing of it.
+- Thinking runs at the level the entry sets (`/effort`); the preset lists the levels each model documents. Thought summaries are streamed as reasoning, and the thought steps are sent back exactly as received, in order, on the next request.
+- `temperature` and `top_p` are never sent: Google's reference page does not list them for this API.
+- The preset lists only models whose own pages were read: `gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`, all with a 1,048,576-token window, image and video input. Others work if you list them and say what they read.
+- The older **Google Gemini** preset uses Google's OpenAI-compatible endpoint. That endpoint documents no video input.
+
+### Watching video
+
+Declare the models and how a file reaches them, as for any provider (see Letting a model watch a video file):
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # or "gemini_inline"
+```
+
+- `gemini_inline` puts the file in the request as base64. Google's page says "under 20MB total request size" while its table says 100 MB; the narrower reading is used, so the file is held to 15,000,000 bytes (the encoded request is a third larger). You can only lower it with `[tools] video_native_max_bytes`.
+- `gemini_files` uploads the file with the Files API resumable protocol, waits until Google reports it `ACTIVE`, refers to it by its uri, and deletes it when the request ends. Google allows 2 GB per file and 20 GB per project and removes files after 48 hours on its own.
+- MP4, WebM and MOV are sent natively on both protocols; any other container is sampled into frames. A file Google reports as `FAILED`, or in a state this build does not know, is not sent and the model is told `video.upload_failed`.
+- A public YouTube address cannot be given to the model through `read_video`: the host does not fetch addresses, and handing one to the vendor is a separate setting.
+
+### Cost
+
+Reasonix prices Google's list rates per 1M tokens (https://ai.google.dev/gemini-api/docs/pricing, read 2026-10-17):
+
+| Model | Input | Cached | Output (incl. thinking) |
+|---|---|---|---|
+| `gemini-3.8-flash`, `gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| the same two from 2027-01-01 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview` (up to 200k prompt tokens) | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` costs more above 200k prompt tokens ($4.00 / $0.40 / $18.00), which one rate card cannot say, so a long prompt reads low. `gemini-4-argon` shows no price on the page and is not priced. Storage for explicit context caching is not counted.

@@ -30,6 +30,7 @@
 - [内置文档检索](#内置文档检索)
 - [@ 引用](#-引用)
 - [双模型协同](#双模型协同)
+- [Google Gemini 原生接口（实验）](#google-gemini-原生接口实验)
 
 ## 配置
 
@@ -1667,3 +1668,51 @@ video_protocol = "inline_data_url"   # 或 "moonshot_file"
 
 - Gemini：视频输入在原生 Gemini 接口里（内联数据、Files API、YouTube 链接）；OpenAI 兼容页没有列视频内容块，而 Reasonix 是通过那个端点接 Gemini 的。
 - 智谱 GLM：文档只给了公网 HTTPS 地址的 `video_url` 示例，没写 base64 与限制，所以不能在不替用户把文件传到别处的前提下发送本地文件。
+
+## Google Gemini 原生接口（实验）
+
+`gemini` 提供方类型直接使用 Google 的 Interactions API。它是实验性的：按 Google 官方文档（2026-10-17 读取）编写，尚未用真实端点验证，可能有粗糙之处，欢迎反馈。
+
+安装预设「Google Gemini, native (experimental)」，或自己写一项：
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- 每次请求都带上完整对话，且 `store` 为 false：对话记录归你自己，Google 那边不留存。
+- 思考强度按条目设置（`/effort`），预设里是每个模型文档列出的档位。思考摘要作为推理内容流出，思考步骤会按收到的原样、原顺序随下一次请求发回。
+- 永远不发送 `temperature` 和 `top_p`：Google 的参考页没有为这个接口列出它们。
+- 预设只列读过各自模型页的模型：`gemini-3.8-flash`、`gemini-4-argon`、`gemini-3.6-flash`、`gemini-3.5-flash-lite`、`gemini-3.1-pro-preview`，都是 1,048,576 token 窗口、支持图像和视频输入。其他模型自己列出并声明能读什么即可。
+- 原有的「Google Gemini」预设走 Google 的 OpenAI 兼容端点，该端点文档里没有视频输入。
+
+### 看视频
+
+像其他提供方一样，声明模型和文件的送达方式（见「让模型原生看视频文件」）：
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # 或 "gemini_inline"
+```
+
+- `gemini_inline` 把文件以 base64 放进请求。Google 页面正文写“请求总大小 20MB 以内”，表格却写 100 MB；这里取更窄的读法，文件上限 15,000,000 字节（编码后请求会大三分之一），只能用 `[tools] video_native_max_bytes` 调低。
+- `gemini_files` 用 Files API 的可恢复上传协议上传，等 Google 报告 `ACTIVE`，用 uri 引用，请求结束后立即删除。Google 允许单文件 2 GB、每项目 20 GB，文件 48 小时后自动清除。
+- 两种协议都原生发送 MP4、WebM、MOV；其他容器会抽帧。Google 报告 `FAILED` 或本版本不认识的状态时不发送，并告诉模型 `video.upload_failed`。
+- 公开的 YouTube 地址不能通过 `read_video` 交给模型：宿主不抓取地址，把地址交给厂商是单独的一项设置。
+
+### 费用
+
+Reasonix 按 Google 公布的标价计费，每百万 token（https://ai.google.dev/gemini-api/docs/pricing，2026-10-17 读取）：
+
+| 模型 | 输入 | 缓存命中 | 输出（含思考） |
+|---|---|---|---|
+| `gemini-3.8-flash`、`gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| 这两个模型自 2027-01-01 起 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview`（提示词不超过 200k token） | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` 在提示词超过 200k token 后更贵（$4.00 / $0.40 / $18.00），一张费率卡表达不了，所以超长提示词会读低。`gemini-4-argon` 页面上没有价格，不计价。显式上下文缓存的存储费不计入。
