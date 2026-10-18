@@ -1,0 +1,2 @@
+- 修复：模型调用跨项目派发被拒时，会说明是“允许模型把任务交给别的会话”开关没开，并指出设置位置，不再和“此会话无法打开别的项目”混为一谈。关联 #13677。
+- Fixed: When cross-project dispatch is refused because the user's switch is off, the error now says so and names the setting, not a generic "cannot open sessions". Refs #13677.

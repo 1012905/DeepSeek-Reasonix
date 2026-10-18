@@ -166,8 +166,8 @@ func TestDispatchIsOffUnlessTheUserFileSaysSo(t *testing.T) {
 	f := newDispatchFixture(t, "[peers]\nenabled = true\n")
 	f.project("billing", true)
 	sender := f.sender(f.project("alpha", true))
-	if _, err := sender.DispatchToProject(context.Background(), "billing", "x"); !errors.Is(err, control.ErrDispatchUnavailable) {
-		t.Fatalf("dispatch with the switch off = %v, want ErrDispatchUnavailable", err)
+	if _, err := sender.DispatchToProject(context.Background(), "billing", "x"); !errors.Is(err, control.ErrDispatchDisabled) {
+		t.Fatalf("dispatch with the switch off = %v, want ErrDispatchDisabled", err)
 	}
 	if f.opened != 0 {
 		t.Fatal("a pane was opened with dispatch off")
