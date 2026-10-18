@@ -98,6 +98,14 @@ class BenchPort extends MockPort {
   // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
   constructor() {
     super();
+    // ?peerset=1 starts with session messages on and two projects already allowed through.
+    if (query.has("peerset")) {
+      this.peerSettings = {
+        enabled: true, dispatch: true, max_dispatch_depth: 1, max_dispatched_sessions: 8, applies: "next_turn", pending: query.has("pending"), available: true,
+        path: "/Users/you/.reasonix/config.toml",
+        release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
+      };
+    }
     if (!query.has("mcpactions")) return;
     (this as unknown as { servers: McpEntry[] }).servers.push(
       { name: "notes", state: "ready", enabled: true, transport: "stdio", tools: 2, description: "Notes the agent can search and add to.",
@@ -224,15 +232,6 @@ class BenchPort extends MockPort {
     const answer = query.get("probe");
     if (!answer || answer === "ok") return super.probeSearxng();
     return { ok: false, code: `search.searxng_${answer}`, status: answer === "status" ? 429 : answer === "json_disabled" ? 403 : undefined };
-  }
-
-  async peersSettings() {
-    if (!query.has("peerset")) return super.peersSettings();
-    return {
-      enabled: true, dispatch: true, max_dispatch_depth: 1, max_dispatched_sessions: 8, applies: "next_turn" as const, pending: query.has("pending"), available: true,
-      path: "/Users/you/.reasonix/config.toml",
-      release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
-    };
   }
 
   async foldWorkSettings() {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { PeerMessages } from "./PeerMessages";
@@ -77,19 +77,6 @@ describe("the session messages switches", () => {
     expect(save).toHaveBeenCalledExactlyOnceWith({ dispatch: true });
   });
 
-  it("lists the projects released for good, each with a way to take it back", async () => {
-    const { port, save } = portWith(settings({
-      enabled: true,
-      release_projects: [{ path: "/work/site", name: "site" }, { path: "/work/api", name: "api" }],
-    }));
-    render(<PeerMessages port={port} />);
-    const list = await screen.findByRole("list", { name: "已长期放行的项目" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(list).getByText("/work/site")).toBeTruthy();
-    await userEvent.click(within(within(list).getAllByRole("listitem")[0]).getByRole("button", { name: /撤销/ }));
-    expect(save).toHaveBeenCalledExactlyOnceWith({ release_projects: ["/work/api"] });
-  });
-
   it("names the file the switches live in, and shows a refusal beside them", async () => {
     const { port } = portWith(settings({ enabled: true }));
     vi.spyOn(port, "savePeersSettings").mockRejectedValue(new HttpError(500, "x", { code: "peer.settings_unwritable", params: { detail: "/home/me/.reasonix/config.toml" } }));
@@ -101,12 +88,11 @@ describe("the session messages switches", () => {
     expect(alert).toContain("/home/me/.reasonix/config.toml");
   });
 
-  it("holds both switches and the revokes inert where the session has no folder to open", async () => {
-    const { port } = portWith(settings({ enabled: true, available: false, release_projects: [{ path: "/work/site", name: "site" }] }));
+  it("holds both switches inert where the session has no folder to open", async () => {
+    const { port } = portWith(settings({ enabled: true, available: false }));
     render(<PeerMessages port={port} />);
     expect(await screen.findByText(/此会话不支持/)).toBeTruthy();
     for (const name of ["启用会话间消息", "允许模型把任务交给别的会话"]) expect((screen.getByRole("switch", { name }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /撤销放行/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

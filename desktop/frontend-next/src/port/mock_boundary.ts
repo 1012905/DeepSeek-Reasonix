@@ -266,7 +266,7 @@ export class MockBoundary extends MockShell {
       dispatch: edit.dispatch ?? this.peerSettings.dispatch,
       max_dispatch_depth: edit.max_dispatch_depth ?? this.peerSettings.max_dispatch_depth,
       max_dispatched_sessions: edit.max_dispatched_sessions ?? this.peerSettings.max_dispatched_sessions,
-      release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
+      release_projects: keep ? keep.map((path) => this.peerSettings.release_projects.find((p) => p.path === path) ?? { path, name: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path }) : this.peerSettings.release_projects,
       pending: true,
     };
     return this.peersSettings();

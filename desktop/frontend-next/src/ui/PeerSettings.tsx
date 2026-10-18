@@ -54,23 +54,6 @@ export function PeerSettings({ port, onSaved }: { port: AgentPort; onSaved?: (ne
         <Switch data-action="peers.dispatch" on={state.dispatch} busy={off || !state.enabled} label={t("允许模型把任务交给别的会话")} onClick={() => void save({ dispatch: !state.dispatch })} />
       </div>
       {!state.available && <div className="peernote" role="status">{t("此会话不支持：没有可打开的收件夹，消息无处挂起。")}</div>}
-      {state.release_projects.length > 0 && (
-        <>
-          <div className="peernote">{t("这些项目收到的消息不再询问，直接交给模型：")}</div>
-          <ul className="peerreleased" aria-label={t("已长期放行的项目")}>
-            {state.release_projects.map((p) => (
-              <li key={p.path}>
-                <span className="tx"><span className="lb">{p.name}</span><span className="ds">{p.path}</span></span>
-                <button className="act" data-action="peers.release-revoke" data-target={p.path} disabled={off}
-                  aria-label={t("撤销放行：{name}", { name: p.name })}
-                  onClick={() => void save({ release_projects: state.release_projects.filter((q) => q.path !== p.path).map((q) => q.path) })}>
-                  {t("撤销")}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
       {state.pending && <div className="peernote" role="status">{t("已保存，下个回合起生效。")}</div>}
       <div className="peernote">{t("这些开关写在用户配置文件里：")}<code>{state.path}</code></div>
       {error && <div className="why" role="alert">{error}</div>}

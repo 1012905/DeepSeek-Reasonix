@@ -5,7 +5,7 @@ import { t } from "../i18n";
 /** The settings table of contents: which sections exist, what each is called,
  *  what mark it carries and which question it answers. Kept out of Settings
  *  itself because it is a table, not a screen — the screen reads it. */
-export type Section = "session" | "persona" | "model" | "providers" | "tools" | "hooks" | "ext" | "network" | "remote" | "memory" | "usage" | "storage" | "account" | "versions" | "appearance" | "advanced";
+export type Section = "session" | "persona" | "model" | "providers" | "tools" | "peers" | "hooks" | "ext" | "network" | "remote" | "memory" | "usage" | "storage" | "account" | "versions" | "appearance" | "advanced";
 
 // Drawn on the same 16-unit grid at 1.45 stroke as the rest of this screen's
 // marks. The rail in Nav.tsx draws a section's entry from this table, so one
@@ -31,6 +31,14 @@ export const ICON: Record<Section, ReactNode> = {
       <rect x="2.4" y="2.6" width="11.2" height="4.2" rx="1.2" />
       <rect x="2.4" y="9.2" width="11.2" height="4.2" rx="1.2" />
       <path d="M5 4.7h3.4M5 11.3h3.4M11 4.7h.01M11 11.3h.01" />
+    </>
+  ),
+  // Two conversations with a line between them.
+  peers: (
+    <>
+      <rect x="2.2" y="2.8" width="6" height="4.6" rx="1.2" />
+      <rect x="7.8" y="8.6" width="6" height="4.6" rx="1.2" />
+      <path d="M5.2 7.4v1.6a1 1 0 0 0 1 1h1.6" />
     </>
   ),
   tools: (
@@ -103,6 +111,7 @@ export const NAV: [string, [Section, string][]][] = [
       ["model", "模型偏好"],
       ["providers", "模型服务"],
       ["tools", "工具与权限"],
+      ["peers", "会话间消息"],
       ["hooks", "自动化"],
       ["ext", "扩展"],
     ],
@@ -251,7 +260,8 @@ export const SETTINGS: SettingEntry[] = [
   // one. The shared [browser] enabled key belongs to the 1.x command line.
   // The lease is built with the session and a rebuild adopts the one it holds, so
   // the save reaches only sessions opened afterwards; the handler rebuilds nothing.
-  { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
+  { section: "peers", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
+  { section: "peers", anchor: "peer-projects", title: "放行的项目", scope: "machine", apply: "next-turn", keywords: ["放行", "项目", "不再询问", "长期", "撤销", "peer", "release", "会话间"] },
   { section: "tools", anchor: "write-lease", title: "多个会话同时写一个项目", scope: "machine", apply: "on-open", keywords: ["lease", "写锁", "并行", "多会话", "乐观", "optimistic", "write_lease", "等待"] },
   { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
   { section: "network", anchor: "trace-export", title: "追踪导出", scope: "machine", apply: "on-open", keywords: ["追踪", "opentelemetry", "otlp", "观测", "遥测", "trace", "collector", "收集器"] },
