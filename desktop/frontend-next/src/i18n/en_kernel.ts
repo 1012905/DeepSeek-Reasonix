@@ -622,4 +622,11 @@ export const EN_KERNEL: Record<string, string> = {
   "该会话被另一个进程占用（{host} 上的 pid {pid}），结束它之后再移动": "Another process holds this session open (pid {pid} on {host}); end it, then move it",
   "它已经在这个项目里了": "It is already in this project",
   "这个会话的记录不完整，不能移动；先让它自己恢复": "This conversation's record is incomplete and cannot be moved; let it recover first",
+  "「运行 Claude Code mod」没有打开，所以没有运行任何 mod": "\"Run Claude Code mods\" is off, so no mod is running",
+  "这台电脑上找不到能运行 mod 的 Node 运行时": "No Node runtime that can run mods was found on this computer",
+  "找到的 Node 运行时版本过低，不能运行这个 mod": "The Node runtime found is too old to run this mod",
+  "这个 mod 的进程崩溃了，正在按退避重新启动": "This mod's process crashed and is being restarted with backoff",
+  "它的某个钩子超过了时间预算，进程已被结束；多次发生后会被停用": "One of its hooks ran past its time budget and the process was ended; after repeats it is disabled",
+  "它的某个钩子抛出了异常": "One of its hooks threw an exception",
+  "它用到了本宿主不支持的功能": "It uses something this host does not support",
 };
