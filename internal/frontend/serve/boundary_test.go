@@ -444,6 +444,16 @@ func TestSaveWriteLeasePersistsAndSaysWhenItTakesEffect(t *testing.T) {
 	if got := readJSON[control.WriteLeaseSettings](t, srv.URL, "/write-lease"); !got.Optimistic {
 		t.Fatalf("read back = %+v, want optimistic", got)
 	}
+	wait := postProvider(t, srv.URL, "/write-lease", `{"maxWaitMinutes":45}`)
+	wait.Body.Close()
+	if got := readJSON[control.WriteLeaseSettings](t, srv.URL, "/write-lease"); got.MaxWaitMinutes != 45 || !got.Optimistic {
+		t.Fatalf("after saving only the wait, read back = %+v, want 45 and optimistic untouched", got)
+	}
+	negative := postProvider(t, srv.URL, "/write-lease", `{"maxWaitMinutes":-1}`)
+	negative.Body.Close()
+	if negative.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a negative wait = %d, want 400", negative.StatusCode)
+	}
 	back := postProvider(t, srv.URL, "/write-lease", `{"optimistic":false}`)
 	back.Body.Close()
 	if config.LoadForEdit(config.UserConfigPath()).WriteLeaseOptimistic() {

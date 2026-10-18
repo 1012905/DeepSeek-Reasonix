@@ -423,7 +423,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref, findTogglePulse);
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
-  const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
+  const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit: (line) => submit(line).then((r) => r === true), reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
   const fileReply = useMemo(() => ({ ...reply, files: conversationFiles.refs }), [reply, conversationFiles.refs]);
 
   // Where the bottom is moves as blocks mount under it, so this only asks the

@@ -55,6 +55,7 @@ export class MockProvider extends MockBoundary {
       modelEfforts: { "claude-sonnet-4": { supportedEfforts: ["low", "high", "max"], defaultEffort: "high" } },
       contextWindow: 131072,
       modelLimits: { "claude-sonnet-4": { contextWindow: 200000, maxOutputTokens: 64000 } },
+      modelPrices: { "gpt-4o": { input: 2.5, output: 10, cacheHit: 1.25, currency: "USD", sourceUrl: "https://relay.example.com/pricing", checked: "2026-10-17" } },
       inheritedLimits: { "gpt-4o": { contextWindow: 131072 }, "claude-sonnet-4": { contextWindow: 131072 } },
       inheritedEfforts: {
         "gpt-4o": { supportedEfforts: ["low", "medium", "high"] },

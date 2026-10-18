@@ -34,6 +34,8 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /plan-approval", s.savePlanApprovalSettings)
 	mux.HandleFunc("GET /default-mode", s.defaultModeSettings)
 	mux.HandleFunc("POST /default-mode", s.saveDefaultModeSettings)
+	mux.HandleFunc("GET /tools", s.toolSettings)
+	mux.HandleFunc("POST /tools/disabled", s.saveToolDisabled)
 	// The file every one of these is written to, for when it is the thing that
 	// is wrong: each save above refuses with the same code, and this is where a
 	// surface reads it before trying, and repairs it after.
@@ -247,17 +249,22 @@ func (s *Server) saveWriteLeaseSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var body struct {
-		Optimistic *bool `json:"optimistic"`
+		Optimistic     *bool `json:"optimistic"`
+		MaxWaitMinutes *int  `json:"maxWaitMinutes"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
 		badBody(w)
 		return
 	}
-	if body.Optimistic == nil {
-		refuse(w, http.StatusBadRequest, "write_lease.no_choice", "optimistic is required", nil)
+	if body.Optimistic == nil && body.MaxWaitMinutes == nil {
+		refuse(w, http.StatusBadRequest, "write_lease.no_choice", "optimistic or maxWaitMinutes is required", nil)
 		return
 	}
-	if err := s.ctl().SaveWriteLeaseSettings(*body.Optimistic); err != nil {
+	if body.MaxWaitMinutes != nil && *body.MaxWaitMinutes < 0 {
+		refuse(w, http.StatusBadRequest, "write_lease.bad_wait", "maxWaitMinutes cannot be negative", nil)
+		return
+	}
+	if err := s.ctl().SaveWriteLeaseSettings(body.Optimistic, body.MaxWaitMinutes); err != nil {
 		saveFailed(w, http.StatusInternalServerError, "write_lease.save_failed", err)
 		return
 	}

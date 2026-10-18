@@ -17,20 +17,37 @@ type FeedbackText struct {
 	RefusedLaterFmt     string // limit name
 	RefusedPermanentFmt string // limit name
 
-	LinkExplain     string
-	LinkDone        string
-	UnlinkExplain   string
-	UnlinkDone      string
-	LinksHeader     string
-	LinksNone       string
-	LinksRowFmt     string // short id, this-device mark, linked date
-	ThisDevice      string
-	NeedSignIn      string
-	LinkConflict    string
-	LinkLimit       string
-	NoInstall       string
-	OtherDeviceMark string
-	LevelUpFmt      string // level, name, previous level
+	LinkExplain         string
+	LinkDone            string
+	UnlinkExplain       string
+	UnlinkDone          string
+	LinksHeader         string
+	LinksNone           string
+	LinksRowFmt         string // short id, this-device mark, linked date
+	ThisDevice          string
+	NeedSignIn          string
+	LinkConflict        string
+	LinkLimit           string
+	NoInstall           string
+	OtherDeviceMark     string
+	LevelUpFmt          string // level, name, previous level
+	BoardHeaderFmt      string // view label
+	BoardRowFmt         string // place (or blank), name, credits
+	BoardRowReleasesFmt string // the releases a person shipped in
+	BoardNone           string
+	BoardOff            string
+	BoardAllView        string
+	BoardReleaseFmt     string // release
+	BoardJoinExplainFmt string // the name that would be shown
+	BoardJoinDone       string
+	BoardLeaveDone      string
+	BoardMeListedFmt    string // name
+	BoardMeNot          string
+	BoardNameInvalid    string
+	BoardNameReserved   string
+	BoardNameTaken      string
+	BoardDelisted       string
+	BoardNoLink         string
 }
 
 var feedbackEnglish = FeedbackText{
@@ -70,6 +87,23 @@ var feedbackEnglish = FeedbackText{
 	NoInstall:           "Send a report from this device first: a device with no report has nothing to link.",
 	OtherDeviceMark:     "  [other device]",
 	LevelUpFmt:          "Level up: level %d, %s — up from %d.",
+	BoardHeaderFmt:      "Contribution board, %s:",
+	BoardRowFmt:         "  %s %s - %d adopted%s",
+	BoardRowReleasesFmt: " (%s)",
+	BoardNone:           "Nobody is listed here yet.",
+	BoardOff:            "The service has no contribution board.",
+	BoardAllView:        "all releases, by name",
+	BoardReleaseFmt:     "release %s, ranked",
+	BoardJoinExplainFmt: "Joining shows the name \"%s\" on the public contribution board with how many of your suggestions shipped, and nothing else. You can leave at any time. Nothing was sent: run the same line again with --yes.",
+	BoardJoinDone:       "You are on the board.",
+	BoardLeaveDone:      "You are off the board.",
+	BoardMeListedFmt:    "You are listed as \"%s\". Leave with /feedback board leave.",
+	BoardMeNot:          "You are not on the board. Join with /feedback board join <name>.",
+	BoardNameInvalid:    "That name is not allowed: use 2 to 30 letters, digits, spaces, underscores or hyphens; no @ and no links.",
+	BoardNameReserved:   "That name is reserved because it could be mistaken for a maintainer; pick another.",
+	BoardNameTaken:      "Someone already uses that name.",
+	BoardDelisted:       "A maintainer removed this account from the board; it cannot join again for now.",
+	BoardNoLink:         "Link this device to your account first: /feedback link.",
 }
 
 var feedbackChinese = FeedbackText{
@@ -109,6 +143,23 @@ var feedbackChinese = FeedbackText{
 	NoInstall:           "请先从这台设备发出一条反馈：没有发过反馈的设备没有可关联的内容。",
 	OtherDeviceMark:     "  [其他设备]",
 	LevelUpFmt:          "等级提升：现在是等级 %d「%s」（原为 %d）。",
+	BoardHeaderFmt:      "贡献榜，%s：",
+	BoardRowFmt:         "  %s %s - %d 条被采纳%s",
+	BoardRowReleasesFmt: "（%s）",
+	BoardNone:           "这里还没有人上榜。",
+	BoardOff:            "服务端没有贡献榜。",
+	BoardAllView:        "全部版本，按名字排序",
+	BoardReleaseFmt:     "版本 %s，有名次",
+	BoardJoinExplainFmt: "加入后，公开的贡献榜上会显示名字「%s」和你被采纳的条数，不显示别的。随时可以退出。还没有发送：用同样的内容再加 --yes 运行一次。",
+	BoardJoinDone:       "已加入贡献榜。",
+	BoardLeaveDone:      "已退出贡献榜。",
+	BoardMeListedFmt:    "你在榜上，名字是「%s」。用 /feedback board leave 退出。",
+	BoardMeNot:          "你不在榜上。用 /feedback board join <名字> 加入。",
+	BoardNameInvalid:    "这个名字不能用：2 到 30 个字符，字母、数字、空格、下划线或连字符；不能含 @ 或链接。",
+	BoardNameReserved:   "这个名字是保留的，会让人误以为是维护者，换一个。",
+	BoardNameTaken:      "已经有人用这个名字了。",
+	BoardDelisted:       "维护者已把这个账号从榜单移除，暂时不能再加入。",
+	BoardNoLink:         "请先把这台设备关联到账号：/feedback link。",
 }
 
 var feedbackTraditional = FeedbackText{
@@ -148,4 +199,21 @@ var feedbackTraditional = FeedbackText{
 	NoInstall:           "請先從這台裝置送出一則回饋：沒有送過回饋的裝置沒有可關聯的內容。",
 	OtherDeviceMark:     "  [其他裝置]",
 	LevelUpFmt:          "等級提升：現在是等級 %d「%s」（原為 %d）。",
+	BoardHeaderFmt:      "貢獻榜，%s：",
+	BoardRowFmt:         "  %s %s - %d 條被採納%s",
+	BoardRowReleasesFmt: "（%s）",
+	BoardNone:           "這裡還沒有人上榜。",
+	BoardOff:            "服務端沒有貢獻榜。",
+	BoardAllView:        "全部版本，按名字排序",
+	BoardReleaseFmt:     "版本 %s，有名次",
+	BoardJoinExplainFmt: "加入後，公開的貢獻榜上會顯示名字「%s」和你被採納的條數，不顯示別的。隨時可以退出。還沒有送出：用同樣的內容再加 --yes 執行一次。",
+	BoardJoinDone:       "已加入貢獻榜。",
+	BoardLeaveDone:      "已退出貢獻榜。",
+	BoardMeListedFmt:    "你在榜上，名字是「%s」。用 /feedback board leave 退出。",
+	BoardMeNot:          "你不在榜上。用 /feedback board join <名字> 加入。",
+	BoardNameInvalid:    "這個名字不能用：2 到 30 個字元，字母、數字、空格、底線或連字號；不能含 @ 或連結。",
+	BoardNameReserved:   "這個名字是保留的，會讓人誤以為是維護者，換一個。",
+	BoardNameTaken:      "已經有人用這個名字了。",
+	BoardDelisted:       "維護者已把這個帳號從榜單移除，暫時不能再加入。",
+	BoardNoLink:         "請先把這台裝置關聯到帳號：/feedback link。",
 }

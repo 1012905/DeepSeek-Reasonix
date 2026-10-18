@@ -23,7 +23,7 @@ const DRAFT_NOTE: Record<CommitDraftFailure, string> = {
 // A proposal, not an action: the model drafts for what is staged, the person
 // edits, and only the confirm button records a local commit. Nothing here stages
 // a file or pushes.
-export function useCommitCard(port: AgentPort, onCommitted: () => void) {
+export function useCommitCard(port: AgentPort, onCommitted: () => void, repo?: string) {
   const [state, setState] = useState<Phase>({ phase: "idle" });
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
@@ -33,7 +33,7 @@ export function useCommitCard(port: AgentPort, onCommitted: () => void) {
     const ac = new AbortController();
     pending.current = ac;
     setState({ phase: "drafting" });
-    port.proposeCommit(ac.signal).then(
+    (repo ? port.proposeCommit(ac.signal, repo) : port.proposeCommit(ac.signal)).then(
       (proposal) =>
         !ac.signal.aborted && setState({ phase: "ready", proposal, message: proposal.message, ack: false, committing: false }),
       (e) => !ac.signal.aborted && setState({ phase: "failed", error: reason(e) }),
@@ -105,7 +105,7 @@ export function useCommitCard(port: AgentPort, onCommitted: () => void) {
   const confirm = () => {
     set({ committing: true, error: undefined });
     port
-      .commitStaged({ message, fingerprint: proposal.fingerprint, acknowledgeSecrets: ack })
+      .commitStaged({ ...(repo ? { repo } : {}), message, fingerprint: proposal.fingerprint, acknowledgeSecrets: ack })
       .then(
         (result) => {
           setState({ phase: "done", result });

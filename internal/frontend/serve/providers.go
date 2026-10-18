@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reasonix/internal/model/catalog"
 	"regexp"
@@ -143,6 +144,9 @@ type providerView struct {
 	InheritedLimits map[string]modelLimitsView `json:"inheritedLimits,omitempty"`
 	// Per chat model: the price per million tokens it declares for itself.
 	ModelPrices map[string]modelPriceView `json:"modelPrices,omitempty"`
+	// BillingMode is payg or subscription_equivalent: whether the figures shown
+	// are what is billed or an API-priced estimate of a plan.
+	BillingMode string `json:"billingMode"`
 	// OfficialPricing marks a vendor's own endpoint, whose table can say whether
 	// a stored price is one it shipped.
 	OfficialPricing bool `json:"officialPricing,omitempty"`
@@ -195,6 +199,7 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			ModelLimits:          modelLimitsOf(p),
 			InheritedLimits:      inheritedLimitsOf(p),
 			ModelPrices:          modelPricesOf(p),
+			BillingMode:          p.ProviderBillingMode(),
 			OfficialPricing:      officialPricingOf(p),
 			ContextWindow:        p.ContextWindow,
 			MaxOutputTokens:      p.MaxOutputTokens,
@@ -419,6 +424,9 @@ func (s *Server) removeProvider(w http.ResponseWriter, r *http.Request) {
 	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	if err := config.ForgetProviderKeys(config.UserConfigPath(), name); err != nil {
+		slog.Warn("serve: could not drop the record of a removed connection's keys", "provider", name, "err", err)
 	}
 	// With nothing left the runtime moves to the stand-in, which is what makes
 	// the window ask for a connection now, as it does on a first launch.

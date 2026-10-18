@@ -25,7 +25,7 @@ func editBalance(t *testing.T, srv *httptest.Server, fields string) (int, string
 
 func readBalanceLedger(t *testing.T) string {
 	t.Helper()
-	data, _ := os.ReadFile(filepath.Join(filepath.Dir(config.UserConfigPath()), "balance-formats.json"))
+	data, _ := os.ReadFile(filepath.Join(filepath.Dir(config.UserConfigPath()), "provider-keys.json"))
 	return string(data)
 }
 

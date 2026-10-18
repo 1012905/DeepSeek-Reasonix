@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reasonix/internal/state/sessionstore"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -73,7 +74,8 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, sessionOpenError("session/new", err)
 	}
-	cfgState = withToolApprovalConfig(cfgState, control.ToolApprovalAsk)
+	startPosture := s.startingPosture()
+	cfgState = s.withToolApprovalConfig(cfgState, startPosture)
 	runtimeState, err := s.sessionRuntimeState(ctx, SessionRuntimeStateParams{
 		Cwd: cwd, Model: cfgState.Model, RuntimeProfile: cfgState.RuntimeProfile,
 	})
@@ -105,27 +107,28 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, newSessionError("session/new", err)
 	}
 	ctrl.EnableInteractiveApproval()
+	ctrl.SetToolApprovalMode(startPosture)
 	sink.bindApprove(ctrl.Approve)
 	sink.bindAnswer(ctrl.AnswerQuestion)
 
 	startMode := startingModeID(ctrl)
 	now := time.Now().UTC()
 	sess := &acpSession{
-		id:               id,
-		ctrl:             ctrl,
-		sink:             sink,
-		cwd:              cwd,
-		mcpServers:       clonePluginSpecs(mcpServers),
-		additionalDirs:   additionalDirs,
-		model:            cfgState.Model,
-		effortOverride:   cloneStringPtr(cfgState.EffortOverride),
-		runtimeProfile:   cfgState.RuntimeProfile,
-		toolApprovalMode: control.ToolApprovalAsk,
-		runtimeState:     runtimeState,
-		status:           newStatusTelemetry(),
-		modeID:           startMode,
-		createdAt:        now,
-		updatedAt:        now,
+		id:             id,
+		ctrl:           ctrl,
+		sink:           sink,
+		cwd:            cwd,
+		mcpServers:     clonePluginSpecs(mcpServers),
+		additionalDirs: additionalDirs,
+		model:          cfgState.Model,
+		effortOverride: cloneStringPtr(cfgState.EffortOverride),
+		runtimeProfile: cfgState.RuntimeProfile,
+		posture:        approvalPosture{mode: startPosture},
+		runtimeState:   runtimeState,
+		status:         newStatusTelemetry(),
+		modeID:         startMode,
+		createdAt:      now,
+		updatedAt:      now,
 	}
 	s.bindSessionHealthEvents(sess)
 	// Pin a transcript file keyed by session id when the controller has a session
@@ -215,11 +218,17 @@ func (s *service) sessionSetMode(ctx context.Context, raw json.RawMessage) (any,
 	case sessionModeGoal:
 		ctrl.SetPlanMode(false)
 	case sessionModeLegacyDefault:
+		if ceiling := s.postureCeiling(); !withinCeiling(control.ToolApprovalAsk, ceiling) {
+			return nil, aboveCeilingError("session/set_mode", control.ToolApprovalAsk, ceiling)
+		}
 		nextMode = sessionModeNormal
 		legacyApproval = control.ToolApprovalAsk
 		ctrl.SetPlanMode(false)
 		ctrl.ClearGoal()
 	case sessionModeLegacyAuto:
+		if ceiling := s.postureCeiling(); !withinCeiling(control.ToolApprovalYolo, ceiling) {
+			return nil, aboveCeilingError("session/set_mode", control.ToolApprovalYolo, ceiling)
+		}
 		nextMode = sessionModeNormal
 		legacyApproval = control.ToolApprovalYolo
 		ctrl.SetPlanMode(false)
@@ -468,6 +477,11 @@ func (s *service) sessionSetConfigOption(ctx context.Context, raw json.RawMessag
 	option, ok := findConfigOption(cfgState.ConfigOptions, p.ConfigID)
 	if !ok {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/set_config_option: unknown config option " + p.ConfigID}
+	}
+	if configOptionCategory(option) == "tool_approval" && slices.Contains(toolApprovalOrder, p.Value) {
+		if ceiling := s.postureCeiling(); !withinCeiling(p.Value, ceiling) {
+			return nil, aboveCeilingError("session/set_config_option", p.Value, ceiling)
+		}
 	}
 	if !configOptionHasValue(option, p.Value) {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/set_config_option: invalid value " + p.Value + " for " + option.ID}

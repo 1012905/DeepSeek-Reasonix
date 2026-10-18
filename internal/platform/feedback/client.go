@@ -58,22 +58,27 @@ type wireError struct {
 }
 
 var codeSentinels = map[string]error{
-	"feedback.too_large":          ErrTooLarge,
-	"feedback.rate_limited":       ErrRateLimited,
-	"feedback.invalid":            ErrInvalid,
-	"feedback.disabled":           ErrDisabled,
-	"feedback.duplicate":          ErrDuplicate,
-	"feedback.bad_token":          ErrBadToken,
-	"feedback.busy":               ErrBusy,
-	"feedback.image_metadata":     ErrImageMetadata,
-	"feedback.reply_limit":        ErrReplyLimit,
-	"feedback.not_replyable":      ErrNotReplyable,
-	"feedback.challenge_required": ErrChallengeRequired,
-	"feedback.not_withdrawable":   ErrNotWithdrawable,
-	"feedback.not_found":          ErrNotFound,
-	"feedback.account_required":   ErrAccountRequired,
-	"feedback.link_conflict":      ErrLinkConflict,
-	"feedback.link_limit":         ErrLinkLimit,
+	"feedback.too_large":           ErrTooLarge,
+	"feedback.rate_limited":        ErrRateLimited,
+	"feedback.invalid":             ErrInvalid,
+	"feedback.disabled":            ErrDisabled,
+	"feedback.duplicate":           ErrDuplicate,
+	"feedback.bad_token":           ErrBadToken,
+	"feedback.busy":                ErrBusy,
+	"feedback.image_metadata":      ErrImageMetadata,
+	"feedback.reply_limit":         ErrReplyLimit,
+	"feedback.not_replyable":       ErrNotReplyable,
+	"feedback.challenge_required":  ErrChallengeRequired,
+	"feedback.not_withdrawable":    ErrNotWithdrawable,
+	"feedback.not_found":           ErrNotFound,
+	"feedback.account_required":    ErrAccountRequired,
+	"feedback.link_conflict":       ErrLinkConflict,
+	"feedback.link_limit":          ErrLinkLimit,
+	"feedback.board_name_invalid":  ErrBoardNameInvalid,
+	"feedback.board_name_reserved": ErrBoardNameReserved,
+	"feedback.board_name_taken":    ErrBoardNameTaken,
+	"feedback.board_delisted":      ErrBoardDelisted,
+	"feedback.board_no_link":       ErrBoardNoLink,
 }
 
 func (s *Service) post(ctx context.Context, body wireSubmit, token string) (wireReceipt, error) {
@@ -184,6 +189,9 @@ func refusalOf(resp *http.Response, body []byte) error {
 		default:
 			if resp.StatusCode >= 500 && resp.StatusCode < 600 {
 				return errTransientResponse
+			}
+			if resp.StatusCode == http.StatusNotFound {
+				return ErrRouteAbsent
 			}
 			return ErrUnavailable
 		}

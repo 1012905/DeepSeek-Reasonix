@@ -11,7 +11,7 @@ import { EffortShape } from "./EffortShape";
 import type { ModelEffort, ModelLimit, ProviderEdit } from "../port/port";
 import { KIND_LABEL } from "./vendors";
 import { ModelLimits, limitTextOf, limitsToSend, type LimitText } from "./ModelLimits";
-import { ModelPrices, incomplete, priceTextOf, pricesToSend, type PriceText } from "./ModelPrices";
+import { ModelPrices, incomplete, priceTextOf, pricesToSend, sourceBad, type PriceText } from "./ModelPrices";
 import { useModelBatch } from "./useModelBatch";
 import { EndpointSwitches, hasEndpointSwitches } from "./EndpointSwitches";
 import { BalanceFields } from "./BalanceFields";
@@ -268,7 +268,7 @@ export function EditConn({
   const [edited, setEdited] = useState(false);
   if (dirty && !edited) setEdited(true);
 
-  const canSave = (dirty || err?.kind === "unapplied") && busy === "" && !testing && picked.length > 0 && !extraBad && idle.ok && !picked.some((m) => incomplete(priceText[m]));
+  const canSave = (dirty || err?.kind === "unapplied") && busy === "" && !testing && picked.length > 0 && !extraBad && idle.ok && !picked.some((m) => incomplete(priceText[m]) || sourceBad(priceText[m]));
   const phase: Phase = saving ? "saving"
     : err?.kind === "save" && dirty ? "failed"
       : dirty ? "dirty"
@@ -355,7 +355,8 @@ export function EditConn({
         {(picked.length > 1 || picked.some((m) => entry.modelLimits?.[m])) && (
           <ModelLimits models={picked} value={limitText} onChange={setLimitText} inherited={inheritedLimitsFor} />
         )}
-        {picked.length > 0 && <ModelPrices models={picked} value={priceText} onChange={setPriceText} official={entry.officialPricing === true} stored={entry.modelPrices ?? {}} />}
+        {picked.length > 0 && <ModelPrices models={picked} value={priceText} onChange={setPriceText} official={entry.officialPricing === true} stored={entry.modelPrices ?? {}}
+          onOpenSource={(url) => void Promise.resolve(port.openExternal(url)).catch(() => {})} />}
       </div>
 
       <div className="mlist">

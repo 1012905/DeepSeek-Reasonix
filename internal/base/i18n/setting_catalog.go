@@ -9,6 +9,7 @@ var settingEN = SettingMessages{
 	SettingEffectNextTurn:  "Takes effect from the next turn.",
 	SettingEffectOnOpen:    "Takes effect in sessions opened afterwards.",
 	SettingEffectRestart:   "Takes effect after a restart.",
+	EffortUndeclaredFmt:    "%s declares no reasoning levels for this model. List the levels its provider documents as supported_efforts = [\"...\"] on its [[providers]] entry to configure them",
 }
 
 var settingZH = SettingMessages{
@@ -20,6 +21,7 @@ var settingZH = SettingMessages{
 	SettingEffectNextTurn:  "从下一回合起生效。",
 	SettingEffectOnOpen:    "之后新打开的会话生效。",
 	SettingEffectRestart:   "重启后生效。",
+	EffortUndeclaredFmt:    "%s 没有声明这个模型的推理档位。把服务商文档里的档位写进它的 [[providers]] 条目：supported_efforts = [\"...\"]，就能配置",
 }
 
 var settingZHTW = SettingMessages{
@@ -31,4 +33,5 @@ var settingZHTW = SettingMessages{
 	SettingEffectNextTurn:  "從下一回合起生效。",
 	SettingEffectOnOpen:    "之後新開啟的工作階段生效。",
 	SettingEffectRestart:   "重新啟動後生效。",
+	EffortUndeclaredFmt:    "%s 沒有宣告這個模型的推理檔位。把服務商文件裡的檔位寫進它的 [[providers]] 條目：supported_efforts = [\"...\"]，就能設定",
 }
