@@ -130,6 +130,8 @@ export interface Tool {
   truncated?: boolean;
   bound?: Bound;
   durationMs?: number;
+  // A sub-agent's estimated tokens per second on its status channel; not provider usage.
+  rate?: number;
   contextTokens?: number;
   startedAt?: number;
   endedAt?: number;

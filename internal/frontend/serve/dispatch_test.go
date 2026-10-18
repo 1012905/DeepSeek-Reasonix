@@ -26,6 +26,9 @@ type dispatchFixture struct {
 	// startMode is the approval posture a pane the hub opens starts in, as the
 	// user's own default would make it.
 	startMode string
+	// startPlan is whether a pane the hub opens starts in plan mode, as the
+	// user's default mode would make it.
+	startPlan bool
 }
 
 func newDispatchFixture(t *testing.T, userFile string) *dispatchFixture {
@@ -45,6 +48,7 @@ func newDispatchFixture(t *testing.T, userFile string) *dispatchFixture {
 		if f.startMode != "" {
 			rt.Server.Controller().(*control.Controller).SetToolApprovalMode(f.startMode)
 		}
+		rt.Server.Controller().(*control.Controller).SetPlanMode(f.startPlan)
 		return rt, nil
 	}
 	return f
@@ -217,16 +221,17 @@ func (f *dispatchFixture) paneOf(key string) *control.Controller {
 func TestAnOpenedSessionNeverOutranksTheOneThatOpenedIt(t *testing.T) {
 	for name, tc := range map[string]struct {
 		sender, start, want string
-		plan                bool
+		plan, startPlan     bool
 	}{
-		"a sender that asks caps a pane that would start in yolo": {sender: "ask", start: "yolo", want: "ask"},
-		"a read-only sender yields a read-only pane":              {sender: "readOnly", start: "yolo", want: "readOnly"},
-		"a sender in yolo passes its own posture, no more":        {sender: "yolo", start: "ask", want: "yolo"},
-		"a sender that is planning has the pane plan":             {sender: "ask", start: "ask", want: "ask", plan: true},
+		"a sender that asks caps a pane that would start in yolo":                                {sender: "ask", start: "yolo", want: "ask"},
+		"a read-only sender yields a read-only pane":                                             {sender: "readOnly", start: "yolo", want: "readOnly"},
+		"a sender in yolo passes its own posture, no more":                                       {sender: "yolo", start: "ask", want: "yolo"},
+		"a sender that is planning has the pane plan":                                            {sender: "ask", start: "ask", want: "ask", plan: true},
+		"a sender that is not planning yields a pane that is not, whatever new panes default to": {sender: "ask", start: "ask", want: "ask", startPlan: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newDispatchFixture(t, dispatchOn)
-			f.startMode = tc.start
+			f.startMode, f.startPlan = tc.start, tc.startPlan
 			f.project("billing", true)
 			sender := f.sender(f.project("alpha", true))
 			sender.SetToolApprovalMode(tc.sender)

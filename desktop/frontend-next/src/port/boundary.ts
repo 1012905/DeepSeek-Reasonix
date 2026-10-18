@@ -122,6 +122,13 @@ export interface PlanApprovalSettings {
   path: string;
 }
 
+// Whether a new conversation starts in plan mode, as the user file records it.
+// A project file cannot set it.
+export interface DefaultModeSettings {
+  plan: boolean;
+  path: string;
+}
+
 export interface PeerView {
   key: string;
   title: string;

@@ -48,6 +48,9 @@ type SessionParams struct {
 	EffortOverride     *string
 	RuntimeProfile     string
 	OnSessionRecovered func(control.SessionRecoveryInfo) error
+	// NewConversation is true for session/new only: a load, a resume and a
+	// rebuild continue a conversation and never take the user's default mode.
+	NewConversation bool
 	// FileOverlay and Terminal are non-nil when the client advertised the
 	// matching capability at initialize: file tools then see unsaved editor
 	// buffers, and foreground bash can run in a client-owned terminal.
