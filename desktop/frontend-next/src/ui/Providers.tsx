@@ -31,6 +31,7 @@ export type Port = {
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   editProvider(edit: ProviderEdit): Promise<void>;
   renameProvider(names: string[], displayName: string): Promise<void>;
+  openExternal(url: string): Promise<void>;
 };
 
 // One account: every configured entry that answers on the same host.

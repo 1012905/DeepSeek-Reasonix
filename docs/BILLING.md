@@ -49,6 +49,18 @@ original amount is shown with `fallback_original`. Mixed originals produce
 pricing (`unavailable`). Legacy scalar aliases (`cost`, `costUsd`,
 `total_cost`) are written only when `selected` exists.
 
+## Price sources
+
+A price you enter for a model can carry where it was read and when.
+
+- `source_url` is an `http` or `https` link without credentials, control characters or blanks, at most 500 characters.
+- `checked` is a calendar date, `YYYY-MM-DD`, not later than today in UTC.
+- Both describe the price and take no part in quoting it; changing them does not rebuild a running conversation.
+- The editor shows the host of the link and opens it only when you click it. Nothing fetches it, checks that it answers, or sends anything to it.
+- Reasonix 1.x rewrites the shared config file without keys it does not know.
+- The next start puts `source_url`, `checked` and `billing_mode` back from `provider-keys.json` beside the config.
+- A price you changed does not inherit the old source, and a key you cleared in the editor is not put back.
+
 ## Wallets and diagnostics
 
 Wallets are never converted or cross-added. An explicit target uses the exact

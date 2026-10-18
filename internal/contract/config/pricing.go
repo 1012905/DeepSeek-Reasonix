@@ -265,7 +265,7 @@ func ApplyUserConfigUpgradesOnStartup(path string) (bool, error) {
 	if err != nil {
 		return upgraded || released, err
 	}
-	declared, err := reconcileBalanceFormats(path)
+	declared, err := reconcileProviderKeys(path)
 	return upgraded || released || declared, err
 }
 

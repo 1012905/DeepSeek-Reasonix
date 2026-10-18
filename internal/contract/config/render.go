@@ -680,8 +680,14 @@ func renderPricingInline(p *provider.Pricing) string {
 	if p == nil {
 		return "{}"
 	}
-	return fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q }",
-		p.CacheHit, p.Input, p.Output, p.Symbol())
+	out := fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q", p.CacheHit, p.Input, p.Output, p.Symbol())
+	if p.SourceURL != "" {
+		out += fmt.Sprintf(", source_url = %q", p.SourceURL)
+	}
+	if p.Checked != "" {
+		out += fmt.Sprintf(", checked = %q", p.Checked)
+	}
+	return out + " }"
 }
 
 func renderPricingMap(prices map[string]*provider.Pricing) string {

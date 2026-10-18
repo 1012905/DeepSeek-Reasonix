@@ -98,7 +98,7 @@ func TestARemovedFormatOrAChangedAddressIsNotRestored(t *testing.T) {
 	for i := range cfg.Providers {
 		if cfg.Providers[i].Name == "relay" {
 			cfg.Providers[i].BalanceFormat = ""
-			if err := NoteBalanceFormat(path, &cfg.Providers[i]); err != nil {
+			if err := NoteProviderKeys(path, &cfg.Providers[i]); err != nil {
 				t.Fatal(err)
 			}
 		}
