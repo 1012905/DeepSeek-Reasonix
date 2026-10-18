@@ -1,0 +1,2 @@
+- 修复：OpenCode Go 的新地址（opencode.ai/inference/go/…）不再因缺少会话标识而返回 400。关联 #13849。
+- Fixed: OpenCode Go's documented endpoint (opencode.ai/inference/go/…) no longer fails with 400 for lack of the session header. Refs #13849.
