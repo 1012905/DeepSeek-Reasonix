@@ -153,3 +153,69 @@ func TestAutoSaysWhyItSampledFramesInsteadOfSendingTheFile(t *testing.T) {
 		t.Fatalf("the model is not told why frames were sampled:\n%s", text)
 	}
 }
+
+func nativeCtxOn(protocol string) context.Context {
+	return tool.WithNativeVideo(context.Background(), func() (tool.NativeVideo, bool) {
+		return tool.NativeVideo{Protocol: protocol, Model: "vid-model"}, true
+	})
+}
+
+func quickTimeOf(seconds, size int) []byte {
+	b := mp4Of(seconds, size)
+	copy(b[8:12], "qt  ")
+	return b
+}
+
+// An EBML header whose doctype element (0x4282) says webm; Matroska's own says matroska.
+func ebmlOf(doctype string, size int) []byte {
+	out := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x80 | byte(4+len(doctype)), 0x42, 0x82, 0x80 | byte(len(doctype))}
+	out = append(out, doctype...)
+	return append(out, make([]byte, size)...)
+}
+
+// https://ai.google.dev/gemini-api/docs/video-understanding (read 2026-10-17)
+// lists video/mp4, video/mpeg, video/mov, video/avi, video/x-flv, video/mpg,
+// video/webm, video/wmv and video/3gpp; the container sniff can tell three apart.
+func TestGeminiProtocolsSendMP4WebMAndMOVWithTheirOwnMIMEType(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content []byte
+		mime    string
+	}{
+		{"clip.mp4", mp4Of(3, 4096), "video/mp4"},
+		{"clip.mov", quickTimeOf(3, 4096), "video/mov"},
+		{"clip.webm", ebmlOf("webm", 4096), "video/webm"},
+	} {
+		for _, protocol := range []string{provider.VideoProtocolGeminiInline, provider.VideoProtocolGeminiFiles} {
+			v, _ := nativeTool(t, tc.content, tc.name)
+			raw, _ := json.Marshal(map[string]any{"path": tc.name, "mode": "native"})
+			_, _, videos, err := v.ExecuteWithVideo(nativeCtxOn(protocol), raw)
+			if err != nil || len(videos) != 1 || videos[0].MIME != tc.mime {
+				t.Errorf("%s on %s: videos=%+v err=%v, want %s", tc.name, protocol, videos, err, tc.mime)
+			}
+		}
+	}
+}
+
+func TestTheOtherProtocolsStillSendOnlyMP4(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content []byte
+	}{{"clip.mov", quickTimeOf(3, 4096)}, {"clip.webm", ebmlOf("webm", 4096)}} {
+		v, _ := nativeTool(t, tc.content, tc.name)
+		raw, _ := json.Marshal(map[string]any{"path": tc.name, "mode": "native"})
+		_, _, _, err := v.ExecuteWithVideo(nativeCtxOn(provider.VideoProtocolInlineDataURL), raw)
+		if refusalCode(err) != CodeVideoNativeContainer {
+			t.Errorf("%s: code = %q, want %q", tc.name, refusalCode(err), CodeVideoNativeContainer)
+		}
+	}
+}
+
+func TestMatroskaIsNotWebM(t *testing.T) {
+	v, _ := nativeTool(t, ebmlOf("matroska", 4096), "clip.mkv")
+	raw, _ := json.Marshal(map[string]any{"path": "clip.mkv", "mode": "native"})
+	_, _, _, err := v.ExecuteWithVideo(nativeCtxOn(provider.VideoProtocolGeminiFiles), raw)
+	if refusalCode(err) != CodeVideoNativeContainer {
+		t.Fatalf("code = %q, want %q", refusalCode(err), CodeVideoNativeContainer)
+	}
+}

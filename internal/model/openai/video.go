@@ -19,15 +19,13 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
-// The identities of why a video was not sent, said to the model beside the file's
-// name so it does not invent a reason.
 const (
-	videoFileMissing  = "video.file_missing"
-	videoUnavailable  = "video.file_unavailable"
-	videoFileChanged  = "video.file_changed"
-	videoTooLarge     = "video.native_too_large"
-	videoUploadFailed = "video.upload_failed"
-	videoReadFailed   = "video.read_failed"
+	videoFileMissing  = provider.VideoFileMissing
+	videoUnavailable  = provider.VideoUnavailable
+	videoFileChanged  = provider.VideoFileChanged
+	videoTooLarge     = provider.VideoTooLarge
+	videoUploadFailed = provider.VideoUploadFailed
+	videoReadFailed   = provider.VideoReadFailed
 )
 
 // videoWire sends the videos a request carries on the protocol its endpoint

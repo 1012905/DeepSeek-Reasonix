@@ -375,6 +375,7 @@ export const EN: Record<string, string> = {
   "失败": "Failed",
   "OpenAI 兼容": "OpenAI-compatible",
   "Anthropic 兼容": "Anthropic-compatible",
+  "Gemini 原生（实验）": "Gemini native (experimental)",
   "扩展": "Extension",
   "新增": "Added",
   "已删除": "Deleted",

@@ -45,6 +45,7 @@ import (
 	// Blank import registers the provider kind the same way cmd/reasonix's main
 	// does; importing builtin above registers the built-in tools.
 	_ "reasonix/internal/model/anthropic"
+	_ "reasonix/internal/model/gemini"
 	_ "reasonix/internal/model/openai"
 )
 
