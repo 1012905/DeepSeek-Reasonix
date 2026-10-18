@@ -24,7 +24,7 @@ import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
 import { nameQueued, withoutPendingRow } from "./queued";
-import { dropTool, foldLastRead, foldProgress, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
+import { dropTool, foldLastRead, foldProgress, foldTool, isSubagentProgress, mergeReads, notePhase, noteRan } from "./fold";
 import { rebuild } from "./rebuild";
 export { chipLabel };
 export { quoteAmount };
@@ -397,7 +397,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         : s;
 
     case "tool_progress":
-      if (ev.tool && isSubagentProgress(ev.tool.name)) return { ...s, subagentPhase: notePhase(s.subagentPhase, ev.tool) };
+      if (ev.tool && isSubagentProgress(ev.tool.name)) return { ...s, subagentPhase: notePhase(s.subagentPhase, ev.tool), items: noteRan(s.items, ev.tool) };
       return ev.tool
         ? { ...s, executions: noteTool(s.executions, ev.tool, false), items: foldProgress(s.items, ev.tool) }
         : s;
