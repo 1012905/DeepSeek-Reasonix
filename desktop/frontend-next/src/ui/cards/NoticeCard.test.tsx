@@ -270,6 +270,13 @@ describe("a background job notice", () => {
 });
 
 describe("a notice about a setting the model named", () => {
+  it.each(["agent.persona.prefix", "agent.persona.suffix", "agent.persona.include_runtime_context"])("opens the user persona editor for %s", (id) => {
+    const open = vi.fn();
+    const box = render(<NoticeCard item={notice({ level: "info", code: "setting_open", text: "Open the persona editor", detail: id })} onSettings={open} />).container;
+    fireEvent.click(box.querySelector("button")!);
+    expect(open).toHaveBeenCalledExactlyOnceWith("persona:persona");
+  });
+
   it("offers to open the setting where it is drawn", () => {
     const open = vi.fn();
     const box = render(<NoticeCard item={notice({ level: "info", code: "setting_open", text: "助手需要改动 permissions.mode", detail: "permissions.mode" })} onSettings={open} />).container;

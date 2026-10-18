@@ -302,6 +302,8 @@ type RuntimeSettings interface {
 	SaveFoldWorkSettings(fold bool) error
 	TurnNarrationSettings() TurnNarrationSettings
 	SaveTurnNarrationSettings(level string) error
+	PersonaSettings() PersonaSettings
+	SavePersonaSettings(in config.PersonaConfig) error
 	WebAccessSettings() WebAccessSettings
 	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
 	ProbeSearxng(ctx context.Context) (websearch.SearxngProbe, error)

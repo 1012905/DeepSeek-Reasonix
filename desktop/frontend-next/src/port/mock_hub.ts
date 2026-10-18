@@ -169,7 +169,7 @@ export class MockHub implements HubPort {
         name: root.split("/").pop() ?? root,
         open: this.views.some((v) => v.root === root),
         remembered: true,
-        sessions: this.placed(root, 
+        sessions: this.placed(root,
           i === 0
             ? [
                 { path: "/sessions/mock.jsonl", name: "mock", title: "并行会话演示", turns: 3, runtimeId: open.get("/sessions/mock.jsonl") },

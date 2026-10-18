@@ -1098,10 +1098,10 @@ type AgentConfig struct {
 	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
 	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
-	// OutputStyle selects a persona/tone block folded into the system prompt at
-	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
-	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
-	OutputStyle string `toml:"output_style"`
+	// OutputStyle selects built-in tone guidance or .reasonix/output-styles/<name>.md.
+	// Empty leaves the prompt unmodified.
+	OutputStyle string        `toml:"output_style"`
+	Persona     PersonaConfig `toml:"persona"`
 	// Deprecated compatibility field. Automatic plan mode was retired in config
 	// version 5; old TOML remains readable, but loading normalizes it to "off"
 	// and rendering omits it. Plan mode remains available as an explicit user
