@@ -43,7 +43,7 @@ describe("the changes tree", () => {
 });
 
 describe("which repository a path belongs to", () => {
-  const row = (dir: string) => ({ dir, name: dir || "ws", branch: "main", detached: false, added: 0, removed: 0, untracked: 0 });
+  const row = (dir: string) => ({ dir, name: dir || "ws", branch: "main", detached: false });
   it("gives a folder of projects' path to the deepest listed repository", () => {
     const repos = [row("api"), row("group/tools"), row("group")];
     expect(locate(repos, "api/main.go")).toEqual({ repo: "api", rel: "main.go" });

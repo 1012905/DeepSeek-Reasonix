@@ -12,7 +12,7 @@ import { WorkbenchGit } from "./WorkbenchGit";
 afterEach(cleanup);
 
 const mock = () => new MockPort();
-const row = (dir: string, name = dir || "ws", branch = "main"): GitRepoRow => ({ dir, name, branch, detached: false, added: 0, removed: 0, untracked: 0 });
+const row = (dir: string, name = dir || "ws", branch = "main"): GitRepoRow => ({ dir, name, branch, detached: false });
 const NO_COMMIT = { button: null, card: null };
 
 describe("the changes are a folder tree", () => {

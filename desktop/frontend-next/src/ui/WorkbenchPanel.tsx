@@ -170,7 +170,6 @@ export function WorkbenchPanel({
   const newTab = useRef<HTMLButtonElement>(null);
   const toggleLauncher = () => { supersede(); setLauncher((open) => !open); };
   const chooseFiles = () => { supersede(); setLauncher(false); setShowFiles(true); };
-  const repos = useGitRepos(port, wrote);
   const toggleExplorer = () => { supersede(); setLauncher(false); setShowFiles((on) => launcher || !on); };
   useOnBump(revealChanges, chooseFiles);
   useOnBump(toggleFiles, toggleExplorer);
@@ -232,6 +231,7 @@ export function WorkbenchPanel({
   // only as stale as the last time it asked. A delete in another application
   // tells nobody here; looking back at the window is when it can have happened.
   const glance = useGlance();
+  const gitRepos = useGitRepos(port, glance);
   useEffect(() => {
     if (!shown) return;
     folderRequests.clear();
@@ -359,7 +359,7 @@ export function WorkbenchPanel({
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
   const { file, draft, diff, busy, error: fileFailed, missing, setDraft, save } = useWorkbenchFiles({
-    port, workspaceRoot, repos, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
+    port, workspaceRoot, repos: gitRepos.repos, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
     poll: (readable && mode === "read") || (previewable && mode === "preview"),
   });
   const revision = file?.revision;
@@ -709,7 +709,9 @@ export function WorkbenchPanel({
           <WorkbenchGit
             port={port}
             changes={changes}
-            repos={repos}
+            repos={gitRepos.repos}
+            failure={gitRepos.failure}
+            onRetry={gitRepos.retry}
             wrote={wrote}
             current={active?.kind === "file" && mode === "diff" ? active.path : ""}
             onOpen={(path) => {

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 
@@ -116,7 +118,14 @@ func commitBase(ctx context.Context, repo gitcmd.Repo, id string) (string, error
 	}
 	top := repo.Top()
 	if err := top.Command(ctx, "rev-parse", "--verify", "--quiet", id+"^{commit}").Run(); err != nil {
-		return "", ErrNoSuchCommit
+		// With --quiet git answers an id that names no commit with exit status 1 and
+		// nothing else; any other failure is git not working, which says nothing
+		// about the commit.
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 {
+			return "", ErrNoSuchCommit
+		}
+		return "", fmt.Errorf("gitstatus: resolve commit: %w", err)
 	}
 	if out, err := top.Command(ctx, "rev-parse", "--verify", "--quiet", id+"^1").Output(); err == nil {
 		return strings.TrimSpace(string(out)), nil

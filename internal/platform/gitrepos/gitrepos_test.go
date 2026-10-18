@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"reasonix/internal/base/testenv"
 )
@@ -123,7 +124,7 @@ func TestTheNumberOfRepositoriesKeptIsBounded(t *testing.T) {
 	}
 }
 
-func TestResolveAnswersOnlyWhatDiscoverWouldHaveFound(t *testing.T) {
+func TestFindAnswersOnlyWhatTheSearchFound(t *testing.T) {
 	root, elsewhere := testenv.TempDir(t), testenv.TempDir(t)
 	initRepo(t, filepath.Join(root, "api"))
 	initRepo(t, filepath.Join(root, "group", "tools"))
@@ -132,28 +133,87 @@ func TestResolveAnswersOnlyWhatDiscoverWouldHaveFound(t *testing.T) {
 	if err := os.Symlink(filepath.Join(elsewhere, "outside"), filepath.Join(root, "link")); err != nil {
 		t.Skip("symlinks unavailable:", err)
 	}
-	ctx := context.Background()
+	found, err := Discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, ok := range []string{"api", "group/tools"} {
-		if repo, err := Resolve(ctx, root, ok); err != nil || !repo.Valid() {
-			t.Errorf("Resolve(%q) = %v, %v; want its repository", ok, repo.WorkTree, err)
+		if repo, err := found.Find(ok); err != nil || !repo.Valid() {
+			t.Errorf("Find(%q) = %v, %v; want its repository", ok, repo.WorkTree, err)
 		}
 	}
-	for _, bad := range []string{"", "..", "../" + filepath.Base(elsewhere) + "/outside", "/etc", "a/b/deep", "link", "api/..", "api//x", "group", "missing", "./api", "api/sub/x"} {
-		if _, err := Resolve(ctx, root, bad); !errors.Is(err, ErrNotListed) {
-			t.Errorf("Resolve(%q) err = %v, want ErrNotListed", bad, err)
+	for _, bad := range []string{"", "..", "../" + filepath.Base(elsewhere) + "/outside", "/etc", "a/b/deep", "link", "api/..", "api//x", "group", "missing", "./api", "api/sub/x", `api\x`, `..\api`} {
+		if _, err := found.Find(bad); !errors.Is(err, ErrNotListed) {
+			t.Errorf("Find(%q) err = %v, want ErrNotListed", bad, err)
 		}
 	}
 }
 
-func TestResolveNamesNoChildWhenTheWorkspaceIsTheRepository(t *testing.T) {
+func TestFindNamesNoChildWhenTheWorkspaceIsTheRepository(t *testing.T) {
 	root := testenv.TempDir(t)
 	initRepo(t, root)
 	initRepo(t, filepath.Join(root, "inner"))
-	ctx := context.Background()
-	if _, err := Resolve(ctx, root, ""); err != nil {
+	found, err := Discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := found.Find(""); err != nil {
 		t.Fatalf("the workspace's own repository: %v", err)
 	}
-	if _, err := Resolve(ctx, root, "inner"); !errors.Is(err, ErrNotListed) {
+	if _, err := found.Find("inner"); !errors.Is(err, ErrNotListed) {
 		t.Fatalf("a child of a repository workspace = %v, want ErrNotListed", err)
+	}
+}
+
+func TestTheSearchIsKeptUntilTheWorkspaceStructureChanges(t *testing.T) {
+	root := testenv.TempDir(t)
+	initRepo(t, filepath.Join(root, "api"))
+	var f Finder
+	ctx := context.Background()
+	first, err := f.Find(ctx, root)
+	if err != nil || len(first.Repos) != 1 {
+		t.Fatalf("first = %v, %v", dirsOf(first), err)
+	}
+	if _, err := f.Find(ctx, root); err != nil || f.runs != 1 {
+		t.Fatalf("an unchanged workspace searched again: runs = %d (%v)", f.runs, err)
+	}
+	// Work inside a repository is not a change of the structure.
+	if err := os.WriteFile(filepath.Join(root, "api", "main.go"), []byte("package a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Find(ctx, root); err != nil || f.runs != 1 {
+		t.Fatalf("a file written in a repository made the search run again: runs = %d", f.runs)
+	}
+	time.Sleep(20 * time.Millisecond)
+	initRepo(t, filepath.Join(root, "web"))
+	again, err := f.Find(ctx, root)
+	if err != nil || f.runs != 2 || fmt.Sprint(dirsOf(again)) != "[api web]" {
+		t.Fatalf("a new repository was not found: runs = %d, repos = %v, %v", f.runs, dirsOf(again), err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	initRepo(t, filepath.Join(root, "group", "tools"))
+	deep, err := f.Find(ctx, root)
+	if err != nil || f.runs != 3 || fmt.Sprint(dirsOf(deep)) != "[api group/tools web]" {
+		t.Fatalf("a new repository two levels down was not found: runs = %d, repos = %v, %v", f.runs, dirsOf(deep), err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if err := os.RemoveAll(filepath.Join(root, "web")); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := f.Find(ctx, root)
+	if err != nil || f.runs != 4 || fmt.Sprint(dirsOf(gone)) != "[api group/tools]" {
+		t.Fatalf("a removed repository is still listed: runs = %d, repos = %v, %v", f.runs, dirsOf(gone), err)
+	}
+}
+
+func TestACachedSearchIsOnlyForTheWorkspaceItWasMadeFor(t *testing.T) {
+	a, b := testenv.TempDir(t), testenv.TempDir(t)
+	initRepo(t, filepath.Join(a, "one"))
+	initRepo(t, filepath.Join(b, "two"))
+	var f Finder
+	ra, _ := f.Find(context.Background(), a)
+	rb, _ := f.Find(context.Background(), b)
+	if fmt.Sprint(dirsOf(ra)) != "[one]" || fmt.Sprint(dirsOf(rb)) != "[two]" || f.runs != 2 {
+		t.Fatalf("a = %v, b = %v, runs = %d", dirsOf(ra), dirsOf(rb), f.runs)
 	}
 }

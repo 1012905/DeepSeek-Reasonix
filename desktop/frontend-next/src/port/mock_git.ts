@@ -10,7 +10,7 @@ const refuse = (status: number, code: string, error: string) => new HttpError(st
 // write is seen by the next read the way the kernel's would be.
 export class MockGit extends MockFeedback {
   // One entry is the workspace being a repository; several are a folder of projects.
-  repoRows: GitRepoRow[] = [{ dir: "", name: "reasonix", branch: "main", detached: false, added: 2, removed: 1, untracked: 3 }];
+  repoRows: GitRepoRow[] = [{ dir: "", name: "reasonix", branch: "main", detached: false }];
 
   // The changes of each repository below the workspace; the workspace's own are MockWorkspace.changeList.
   repoChanges: Record<string, WorkspaceChange[]> = {};

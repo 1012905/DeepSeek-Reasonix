@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"reasonix/internal/platform/gitcmd"
 	"reasonix/internal/platform/gitrepos"
@@ -181,10 +182,6 @@ type gitRepoRow struct {
 	Name     string `json:"name"`
 	Branch   string `json:"branch"`
 	Detached bool   `json:"detached"`
-	Added    int    `json:"added"`
-	Removed  int    `json:"removed"`
-	// Untracked counts files git does not know yet.
-	Untracked int `json:"untracked"`
 }
 
 // gitReposView is the repositories of the workspace.
@@ -193,8 +190,8 @@ type gitReposView struct {
 	Truncated bool         `json:"truncated"`
 }
 
-// gitRepos lists the repositories of the workspace with the one-line identity of
-// each: the workspace itself when it is a repository, otherwise the repositories
+// gitRepos lists the repositories of the workspace with the identity of each,
+// which branch and no counts (a heading is all that is drawn from it): the workspace itself when it is a repository, otherwise the repositories
 // found below it. Truncated says a search bound ended the look early.
 func (s *Server) gitRepos(w http.ResponseWriter, r *http.Request) {
 	ctl, ok := s.ctl().(interface {
@@ -209,10 +206,14 @@ func (s *Server) gitRepos(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusInternalServerError, "git.repos_failed", err.Error(), nil)
 		return
 	}
-	rows := make([]gitRepoRow, 0, len(found.Repos))
-	for _, f := range found.Repos {
-		info, _ := gitstatus.Summary(r.Context(), f.Repo)
-		rows = append(rows, gitRepoRow{Dir: f.Dir, Name: info.Name, Branch: info.Branch, Detached: info.Detached, Added: info.Added, Removed: info.Removed, Untracked: info.Untracked})
+	rows := make([]gitRepoRow, len(found.Repos))
+	var reads sync.WaitGroup
+	for i, f := range found.Repos {
+		reads.Go(func() {
+			info, _ := gitstatus.Identity(r.Context(), f.Repo)
+			rows[i] = gitRepoRow{Dir: f.Dir, Name: info.Name, Branch: info.Branch, Detached: info.Detached}
+		})
 	}
+	reads.Wait()
 	writeJSON(w, gitReposView{Repos: rows, Truncated: found.Truncated})
 }

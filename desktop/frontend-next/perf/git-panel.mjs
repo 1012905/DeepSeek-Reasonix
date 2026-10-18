@@ -29,7 +29,9 @@ try {
         if (!shotDir) return;
         await page.mouse.move(width - 3, 995);
         await page.waitForTimeout(250);
-        await page.locator(".workbench-explorer").first().screenshot({ path: `${shotDir}/${scheme}-${width}-${name}.png` });
+        const box = await page.locator(".workbench-explorer").first().boundingBox();
+        // At phone width the composer's toolbar is drawn over the foot of the column; the panel's own picture stops above it.
+        await page.screenshot({ path: `${shotDir}/${scheme}-${width}-${name}.png`, clip: { x: box.x, y: box.y, width: box.width, height: box.height - (width <= 700 ? 150 : 0) } });
       };
 
       const one = await open("");

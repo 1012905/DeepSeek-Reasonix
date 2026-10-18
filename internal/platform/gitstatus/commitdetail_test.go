@@ -147,3 +147,18 @@ func TestACommitOfAFolderThatIsNotARepositoryAnswersNotOK(t *testing.T) {
 		t.Fatalf("ok=%v err=%v, want a quiet not-a-repository", ok, err)
 	}
 }
+
+func TestAGitThatCannotAnswerIsNotAMissingCommit(t *testing.T) {
+	dir := testenv.TempDir(t)
+	git(t, dir, "init", "-q")
+	write(t, dir, "a.go", "package a\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "base")
+	repo := opened(t, dir)
+	id := head(t, dir)
+	write(t, filepath.Join(dir, ".git"), "HEAD", "garbage that is not a ref\n")
+	_, _, _, err := CommitFiles(context.Background(), repo, id)
+	if err == nil || errors.Is(err, ErrNoSuchCommit) {
+		t.Fatalf("err = %v, want git's own failure and not ErrNoSuchCommit", err)
+	}
+}

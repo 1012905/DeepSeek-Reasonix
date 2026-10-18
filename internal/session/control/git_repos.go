@@ -10,7 +10,7 @@ import (
 // GitRepos lists the repositories of the workspace: the workspace itself when it
 // is one, otherwise the repositories found below it within the search bounds.
 func (c *Controller) GitRepos(ctx context.Context) (gitrepos.Result, error) {
-	return gitrepos.Discover(ctx, c.WorkspaceRoot())
+	return c.repos.Find(ctx, c.WorkspaceRoot())
 }
 
 // RepoFor is the repository a request named by its directory below the workspace,
@@ -21,5 +21,22 @@ func (c *Controller) RepoFor(ctx context.Context, dir string) (gitcmd.Repo, erro
 	if dir == "" {
 		return c.WorkspaceRepo(), nil
 	}
-	return gitrepos.Resolve(ctx, c.WorkspaceRoot(), dir)
+	found, err := c.repos.Find(ctx, c.WorkspaceRoot())
+	if err != nil {
+		return gitcmd.Repo{}, err
+	}
+	repo, err := found.Find(dir)
+	if err != nil {
+		return gitcmd.Repo{}, err
+	}
+	// A repository that was there when the answer was kept can have been replaced
+	// in place; its identity is checked against the files before it is used.
+	if repo.Verify() != nil {
+		fresh, err := gitrepos.Discover(ctx, c.WorkspaceRoot())
+		if err != nil {
+			return gitcmd.Repo{}, err
+		}
+		return fresh.Find(dir)
+	}
+	return repo, nil
 }

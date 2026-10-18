@@ -198,9 +198,6 @@ export interface GitRepoRow {
   name: string;
   branch: string;
   detached: boolean;
-  added: number;
-  removed: number;
-  untracked: number;
 }
 
 // The workspace's repositories; truncated says a search bound ended the look early.

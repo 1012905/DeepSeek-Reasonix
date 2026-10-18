@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"reasonix/internal/platform/gitcmd"
 )
@@ -33,6 +32,23 @@ type Found struct {
 type Result struct {
 	Repos     []Found
 	Truncated bool
+	// What a Finder compares to know the answer still holds: the directories whose
+	// entries decided it (by modification time), and each repository's .git (by
+	// being there). Work inside a repository changes neither.
+	watch   []string
+	present []string
+}
+
+// Find is the repository listed under dir, the folder below the workspace as
+// Repos names it, or ErrNotListed. Nothing is built from dir: it is matched
+// against what the search found.
+func (r Result) Find(dir string) (gitcmd.Repo, error) {
+	for _, f := range r.Repos {
+		if f.Dir == dir {
+			return f.Repo, nil
+		}
+	}
+	return gitcmd.Repo{}, ErrNotListed
 }
 
 // Discover lists the repositories of the workspace at root. A workspace that is
@@ -46,7 +62,7 @@ func Discover(ctx context.Context, root string) (Result, error) {
 		return Result{}, err
 	}
 	if repo, err := gitcmd.Open(ctx, abs); err == nil {
-		return Result{Repos: []Found{{Repo: repo}}}, nil
+		return Result{Repos: []Found{{Repo: repo}}, watch: []string{abs}, present: []string{filepath.Join(abs, ".git")}}, nil
 	} else if ctx.Err() != nil {
 		return Result{}, ctx.Err()
 	}
@@ -63,6 +79,7 @@ func Discover(ctx context.Context, root string) (Result, error) {
 		if cur.depth >= MaxDepth {
 			continue
 		}
+		out.watch = append(out.watch, cur.dir)
 		entries, err := os.ReadDir(cur.dir)
 		if err != nil {
 			continue
@@ -81,6 +98,7 @@ func Discover(ctx context.Context, root string) (Result, error) {
 			}
 			child := filepath.Join(cur.dir, e.Name())
 			if repo, ok := topOfItsOwnTree(ctx, child); ok {
+				out.present = append(out.present, filepath.Join(child, ".git"))
 				if len(out.Repos) >= MaxRepos {
 					out.Truncated = true
 					continue
@@ -89,6 +107,7 @@ func Discover(ctx context.Context, root string) (Result, error) {
 				out.Repos = append(out.Repos, Found{Dir: filepath.ToSlash(rel), Repo: repo})
 				continue
 			}
+			out.watch = append(out.watch, child)
 			queue = append(queue, level{child, cur.depth + 1})
 		}
 	}
@@ -114,61 +133,7 @@ func topOfItsOwnTree(ctx context.Context, dir string) (gitcmd.Repo, bool) {
 	return repo, true
 }
 
-// ErrNotListed is returned for a repository name Discover would not have found:
-// outside the workspace, deeper than MaxDepth, behind a link, not the top of
-// its own work tree, or named when the workspace is itself a repository.
+// ErrNotListed is returned for a repository name the search did not find: outside
+// the workspace, deeper than MaxDepth, behind a link, not the top of its own work
+// tree, or named when the workspace is itself a repository.
 var ErrNotListed = errors.New("gitrepos: not a repository of this workspace")
-
-// Resolve answers the repository a request named, by the same test Discover
-// applies and never by trusting the text: dir is a slash-separated path below
-// root, at most MaxDepth deep, with no link along it. An empty dir is the
-// workspace's own repository, if it is one.
-func Resolve(ctx context.Context, root, dir string) (gitcmd.Repo, error) {
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return gitcmd.Repo{}, err
-	}
-	if dir == "" {
-		repo, err := gitcmd.Open(ctx, abs)
-		if err != nil {
-			return gitcmd.Repo{}, errors.Join(ErrNotListed, err)
-		}
-		return repo, nil
-	}
-	if _, err := gitcmd.Open(ctx, abs); err == nil {
-		return gitcmd.Repo{}, ErrNotListed
-	}
-	parts := strings.Split(dir, "/")
-	if len(parts) > MaxDepth || !filepath.IsLocal(filepath.FromSlash(dir)) {
-		return gitcmd.Repo{}, ErrNotListed
-	}
-	at := abs
-	for _, p := range parts {
-		if p == "" || p == "." || p == ".." {
-			return gitcmd.Repo{}, ErrNotListed
-		}
-		// The name is taken from the directory's own listing, never built from the
-		// request: only an entry that is there, is a directory and is not a link
-		// can be stepped into.
-		entries, err := os.ReadDir(at)
-		if err != nil {
-			return gitcmd.Repo{}, ErrNotListed
-		}
-		next := ""
-		for _, e := range entries {
-			if e.Name() == p && e.IsDir() && e.Type()&os.ModeSymlink == 0 {
-				next = e.Name()
-				break
-			}
-		}
-		if next == "" {
-			return gitcmd.Repo{}, ErrNotListed
-		}
-		at = filepath.Join(at, next)
-	}
-	repo, ok := topOfItsOwnTree(ctx, at)
-	if !ok {
-		return gitcmd.Repo{}, ErrNotListed
-	}
-	return repo, nil
-}

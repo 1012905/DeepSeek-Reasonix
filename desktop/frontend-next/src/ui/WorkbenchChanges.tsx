@@ -117,6 +117,7 @@ export function WorkbenchChanges({ port, changes, repo, current, onOpen, onChang
           {asking === item.path && (
             <div className="workbench-discard-ask" role="group" aria-label={t("确认丢弃")}>
               <p>{t("丢弃 {path} 的改动？这个文件会回到上次提交的样子，改动无法恢复。", { path: item.path })}</p>
+              {item.staged && item.unstaged && <p>{t("它已暂存的部分和还没暂存的部分都会丢弃。")}</p>}
               <div>
                 <button type="button" className="btn sm" data-danger="" data-action="workbench.discard-confirm" data-target={item.path} disabled={busy} onClick={() => void discard(item.path)}>{t("丢弃")}</button>
                 <button type="button" className="btn sm" data-weak="" data-action="workbench.discard-cancel" disabled={busy} onClick={() => setAsking("")}>{t("取消")}</button>

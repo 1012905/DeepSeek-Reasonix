@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { t } from "../i18n";
 import type { AgentPort, WorkspaceChange } from "../port/port";
 import type { GitRepoRow } from "../port/workspace";
 import { useCommitCard } from "./CommitCard";
 import { usePushCard } from "./GitPushCard";
+import { useRepoChanges } from "./useRepoChanges";
 import { StudioIcon } from "./StudioIcon";
 import { WorkbenchChanges } from "./WorkbenchChanges";
 import { WorkbenchHistory } from "./WorkbenchHistory";
@@ -13,6 +15,9 @@ interface Props {
   // of projects has none of its own: each repository below it reads its own.
   changes: WorkspaceChange[];
   repos: GitRepoRow[];
+  // Why the repositories could not be listed, in words, and the way to ask again.
+  failure?: string;
+  onRetry?: () => void;
   // Moves when the agent has written, so a repository the pane does not watch is read again.
   wrote: number;
   // The workspace-relative path whose diff is on screen, "" when none is.
@@ -28,7 +33,20 @@ const join = (repo: string, path: string) => (repo ? `${repo}/${path}` : path);
 // stage, discard and commit, the push of the branch, and its history. A workspace
 // that is one repository shows just that; a folder of projects shows one section per
 // repository, each acting on its own.
-export function WorkbenchGit({ port, changes, repos, wrote, current, onOpen, onChanged, remote }: Props) {
+export function WorkbenchGit({ port, changes, repos, failure = "", onRetry, wrote, current, onOpen, onChanged, remote }: Props) {
+  // A list that could not be read says so, and the workspace is shown as the one
+  // repository it was before there was a list: the changes the pane holds are real.
+  if (failure) {
+    return (
+      <>
+        <p className="refine-error workbench-stage-error" role="alert">
+          {failure}
+          {onRetry && <button type="button" className="btn sm" data-action="workbench.repos-reload" onClick={onRetry}>{t("重新读取")}</button>}
+        </p>
+        <RepoSection port={port} repo="" changes={changes} current={current} onOpen={onOpen} onChanged={onChanged} remote={remote} />
+      </>
+    );
+  }
   if (repos.length === 0) return null;
   const several = repos.length > 1 || repos[0].dir !== "";
   if (!several) {
@@ -45,14 +63,7 @@ export function WorkbenchGit({ port, changes, repos, wrote, current, onOpen, onC
 
 function Folder({ port, row, wrote, current, onOpen, remote }: { port: AgentPort; row: GitRepoRow; wrote: number; current: string; onOpen: (path: string) => void; remote: boolean }) {
   const [open, setOpen] = useState(true);
-  const [changes, setChanges] = useState<WorkspaceChange[]>([]);
-  const [again, setAgain] = useState(0);
-  useEffect(() => {
-    let live = true;
-    port.changes(row.dir).then((r) => live && setChanges(r.changes), () => live && setChanges([]));
-    return () => { live = false; };
-  }, [port, row.dir, wrote, again]);
-  const reload = useCallback(() => setAgain((n) => n + 1), []);
+  const { changes, reload } = useRepoChanges(port, row.dir, open, wrote);
   return (
     <section className="workbench-repo" data-repo={row.dir}>
       <button type="button" className="workbench-repo-head" data-action="workbench.repo" data-target={row.dir} aria-expanded={open} onClick={() => setOpen(!open)}>

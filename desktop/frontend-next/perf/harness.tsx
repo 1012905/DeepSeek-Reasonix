@@ -101,9 +101,9 @@ class BenchPort extends MockPort {
     // ?git=multi is a folder of projects: three repositories, each with changes of its own.
     if (query.get("git") === "multi") {
       this.repoRows = [
-        { dir: "api", name: "api", branch: "main", detached: false, added: 3, removed: 1, untracked: 1 },
-        { dir: "web", name: "web", branch: "feature/login", detached: false, added: 5, removed: 2, untracked: 0 },
-        { dir: "tools/release", name: "release", branch: "main", detached: false, added: 0, removed: 0, untracked: 0 },
+        { dir: "api", name: "api", branch: "main", detached: false },
+        { dir: "web", name: "web", branch: "feature/login", detached: false },
+        { dir: "tools/release", name: "release", branch: "main", detached: false },
       ];
       this.repoChanges = {
         api: [

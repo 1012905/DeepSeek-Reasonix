@@ -146,6 +146,7 @@ export const EN: Record<string, string> = {
   "确认丢弃": "Confirm discard",
   "丢弃 {path} 的改动？这个文件会回到上次提交的样子，改动无法恢复。": "Discard the change to {path}? The file goes back to how the last commit has it, and the change cannot be recovered.",
   "丢弃": "Discard",
+  "它已暂存的部分和还没暂存的部分都会丢弃。": "Both its staged part and its unstaged part are discarded.",
   "无法读取这个仓库的提交历史": "Could not read this repository's commit history",
   "这不是一个提交编号": "That is not a commit id",
   "这个仓库里没有这个提交": "This repository has no such commit",

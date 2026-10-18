@@ -691,6 +691,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workbench.discard-confirm", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "workbench.discard-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.repo", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.repos-reload", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.commit", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.commit-file", kind: "view", target: "entity", proof: "interaction" },
   { id: "push.preview", kind: "view", target: "none", proof: "interaction" },
