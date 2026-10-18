@@ -363,7 +363,7 @@ jobs:
             arm64=false
             platform=$(git diff -z --name-only --no-renames "$BASE_SHA" HEAD | bash scripts/ci-platform-scope.sh)
             if git diff --name-only --no-renames "$BASE_SHA" HEAD |
-              grep -qE '^(desktop/electron/|desktop/packaging/|desktop/cmd/update-helper/|desktop/cmd/studio-manifest/|desktop/go\.(mod|sum)$|cmd/reasonix-studio-host/|internal/platform/(update|appupdate)/|go\.(mod|sum)$|scripts/(linux-install-smoke|verify-linux-package|verify-studio-artifacts)\.sh$|scripts/(windows-signing-lib|verify-windows-package|verify-windows-authenticode|install-smoke)\.ps1$|\.github/workflows/(studio|release-studio)\.yml$)'; then
+              grep -qE '^(desktop/electron/|desktop/packaging/|desktop/cmd/update-helper/|desktop/cmd/studio-manifest/|desktop/go\.(mod|sum)$|cmd/reasonix-studio-host/|internal/platform/(update|appupdate)/|go\.(mod|sum)$|scripts/(linux-install-smoke|verify-linux-package|verify-linux-appimage|verify-studio-artifacts)\.sh$|scripts/(windows-signing-lib|verify-windows-package|verify-windows-authenticode|install-smoke)\.ps1$|\.github/workflows/(studio|release-studio)\.yml$)'; then
               arm64=true
             fi
           fi
@@ -606,6 +606,10 @@ jobs:
       - name: The Linux package installs, runs, reinstalls and uninstalls
         if: runner.os == 'Linux'
         run: bash scripts/linux-install-smoke.sh "dist/ReasonixStudio-linux-${{ matrix.arch }}.deb" "${{ matrix.arch }}" 0.0.0-ci
+
+      - name: The AppImage carries its architecture, the kernel and the page
+        if: runner.os == 'Linux'
+        run: bash scripts/verify-linux-appimage.sh "dist/ReasonixStudio-linux-${{ matrix.arch }}.AppImage" "${{ matrix.arch }}"
 
       # Recorded, not asserted: the real bundle layout, so later work argues
       # from what electron-builder produced rather than from its documentation.

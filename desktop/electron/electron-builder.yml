@@ -99,6 +99,8 @@ linux:
   target:
     - deb
     - rpm
+    # Download only: it does not update itself, and nothing here installs it.
+    - AppImage
   icon: assets/icon.png
   category: Development
   maintainer: esengine <esengine@users.noreply.github.com>
