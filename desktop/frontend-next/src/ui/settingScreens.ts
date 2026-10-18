@@ -4,6 +4,9 @@ import { SETTINGS } from "./prefsnav";
 // sheet opens on and highlights. A setting with no row here opens the sheet at
 // its top; the kernel's own declaration says which ids exist.
 export const SETTING_SCREEN: Record<string, string> = {
+  "agent.persona.prefix": "persona:persona",
+  "agent.persona.suffix": "persona:persona",
+  "agent.persona.include_runtime_context": "persona:persona",
   "peers.enabled": "tools:peers",
   "peers.dispatch": "tools:peers",
   "peers.release_projects": "tools:peers",
