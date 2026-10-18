@@ -15,6 +15,7 @@ import (
 	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/command"
@@ -487,6 +488,7 @@ func (b *builder) controller() (*control.Controller, error) {
 	router := t.roles.semanticRouter(t.sub, b.execProv, b.model.ref, b.model.entry.Price, t.caps.audit)
 	ctrl.WireCapabilityRouting(b.cfg.Plugins, t.caps.specs, router, t.caps.audit)
 	ctrl.SetCapabilityProxyRouting(true)
+	reportKeptTools(b.sink, t.reg.DisableTools(b.cfg.DisabledTools()))
 	// Every role setting sees one provider-visible surface, fixed before the
 	// snapshot freezes registry schemas for cache diagnostics.
 	if b.opts.Observe == nil {
@@ -596,6 +598,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		// Read at Close time: freeze chains the extension runtime set onto it.
 		Cleanup:               func() { defer b.closeLifetime(); b.cleanup() },
 		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, billing.Format(entry.BalanceFormat), entry.APIKey()),
+		Tariff:                func(at time.Time) (pricing.Tariff, bool) { return b.cfg.LiveTariff(b.model.ref, at) },
 		Feedback:              control.FeedbackOptions{Service: feedbackService(b.roots.Home(), b.proxy, opts.AccountsURL), ProviderKind: feedbackProviderKind(entry), Surface: opts.FeedbackSurface},
 		Jobs:                  b.session.jobs,
 		TaskStore:             opts.TaskStore,

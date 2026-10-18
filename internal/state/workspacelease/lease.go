@@ -77,6 +77,15 @@ func WithoutWholeWorkspaceHold() Option {
 	return func(o *Owner) { o.undeclaredFree = true }
 }
 
+// WithFolderClaim makes a writer that declared no extent claim the folder the
+// session was opened on, not the repository that folds it into a larger domain.
+// It is for a session whose shell an OS sandbox confines to that folder; without
+// the confinement nothing stops the write landing beside it, so the whole
+// domain stays claimed.
+func WithFolderClaim() Option {
+	return func(o *Owner) { o.folderClaim = true }
+}
+
 // Owner is one Delivery session's re-entrant workspace lease. One Owner may be
 // shared by the root agent and all of its subagents. Different sessions must
 // use different Owners, even when they share a workspace.
@@ -87,8 +96,9 @@ type Owner struct {
 	// holder names this session to a session waiting on it. Read when the
 	// lease is taken, so a rename mid-hold shows on the next hold.
 	holder func() string
-	// undeclaredFree and maxWait are set at construction and never change.
+	// undeclaredFree, folderClaim and maxWait are set at construction and never change.
 	undeclaredFree bool
+	folderClaim    bool
 	maxWait        time.Duration
 
 	mu            sync.Mutex
@@ -169,6 +179,7 @@ func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Own
 	}
 	if selected != canonical {
 		o.scope.repository = canonical
+		o.scope.folder = selected
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -308,6 +319,9 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (*callHo
 		return nil, nil
 	}
 	claim := o.normalizePaths(paths)
+	if len(paths) == 0 && o.folderClaim && o.scope.folder != "" {
+		claim = []string{o.scope.folder}
+	}
 	for {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
