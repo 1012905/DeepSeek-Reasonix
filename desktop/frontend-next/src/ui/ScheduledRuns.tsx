@@ -182,8 +182,15 @@ export function ScheduledRuns({ port }: { port: AgentPort }) {
         {form && !preview && (
           <div className="peerform" role="group" aria-label={t("新建定时运行")}>
             <label className="peernote" htmlFor="sched-folder">{t("文件夹（它只能读这里）")}</label>
-            <input id="sched-folder" className="peerfield" data-action-change="schedule.folder" placeholder="/Users/you/src/app" value={form.workspace} disabled={busy}
-              onChange={(e) => draft({ workspace: e.target.value })} />
+            {board.folders.length === 0 ? (
+              <div className="peernote" id="sched-folder">{t("还没有受信任的项目。先在 Studio 或终端界面里打开一个项目并信任它，再回来选。")}</div>
+            ) : (
+              <select id="sched-folder" className="peerfield" data-action-change="schedule.folder" value={form.workspace} disabled={busy}
+                onChange={(e) => draft({ workspace: e.target.value })}>
+                <option value="">{t("选择一个受信任的项目")}</option>
+                {board.folders.map((f) => <option key={f.path} value={f.path}>{f.name} — {f.path}</option>)}
+              </select>
+            )}
             <label className="peernote" htmlFor="sched-prompt">{t("要做什么")}</label>
             <textarea id="sched-prompt" className="peerfield" data-action-change="schedule.prompt" value={form.prompt} disabled={busy}
               onChange={(e) => draft({ prompt: e.target.value })} />

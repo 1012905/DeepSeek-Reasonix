@@ -11,6 +11,7 @@ afterEach(cleanup);
 
 const board = (over: Partial<ScheduleBoard> = {}): ScheduleBoard => ({
   pausedAll: false,
+  folders: [{ path: "/Users/you/src/app", name: "app" }, { path: "/Users/you/src/docs", name: "docs" }],
   policy: { minIntervalMinutes: 60, maxSchedules: 8, globalTokensDay: 1_200_000, expiryDays: 30 },
   schedules: [{ id: "sch_a1", label: "Morning briefing", status: "active", everySec: 86_400, workspace: "/Users/you/src/app", model: "deepseek/v4", prompt: "p",
     perRunTokens: 250_000, lifetimeTokens: 3_000_000, spentLifetimeTokens: 410_000, expiresAtUnix: 1_793_000_000 }],
@@ -55,7 +56,7 @@ describe("scheduled runs", () => {
     const port = draw();
     await userEvent.click(await screen.findByRole("button", { name: "新建定时运行" }));
     expect((screen.getByRole("button", { name: "预览" }) as HTMLButtonElement).disabled).toBe(true);
-    await userEvent.type(screen.getByLabelText("文件夹（它只能读这里）"), " /Users/you/src/app ");
+    await userEvent.selectOptions(screen.getByLabelText("文件夹（它只能读这里）"), "/Users/you/src/app");
     await userEvent.type(screen.getByLabelText("要做什么"), "summarize");
     await userEvent.click(screen.getByRole("button", { name: "预览" }));
     expect(port.previewSchedule).toHaveBeenCalledWith(expect.objectContaining({ workspace: "/Users/you/src/app", prompt: "summarize", everySec: 86400 }));
@@ -66,10 +67,23 @@ describe("scheduled runs", () => {
     expect(port.createSchedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ workspace: "/Users/you/src/app" }), "tok-1");
   });
 
+  it("offers only the trusted projects, and says how to get one when there are none", async () => {
+    draw();
+    await userEvent.click(await screen.findByRole("button", { name: "新建定时运行" }));
+    const folder = screen.getByLabelText("文件夹（它只能读这里）") as HTMLSelectElement;
+    expect([...folder.options].map((o) => o.value)).toEqual(["", "/Users/you/src/app", "/Users/you/src/docs"]);
+    expect((screen.getByRole("button", { name: "预览" }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    draw({}, board({ folders: [] }));
+    await userEvent.click(await screen.findByRole("button", { name: "新建定时运行" }));
+    expect(screen.getByText(/还没有受信任的项目/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "预览" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("goes back from the preview without creating anything", async () => {
     const port = draw();
     await userEvent.click(await screen.findByRole("button", { name: "新建定时运行" }));
-    await userEvent.type(screen.getByLabelText("文件夹（它只能读这里）"), "/w");
+    await userEvent.selectOptions(screen.getByLabelText("文件夹（它只能读这里）"), "/Users/you/src/app");
     await userEvent.type(screen.getByLabelText("要做什么"), "x");
     await userEvent.click(screen.getByRole("button", { name: "预览" }));
     await userEvent.click(await screen.findByRole("button", { name: "返回修改" }));
@@ -80,7 +94,7 @@ describe("scheduled runs", () => {
   it("shows the kernel's refusal by its code and goes read-only without the edit grant", async () => {
     draw({ createSchedule: vi.fn(async () => { throw new HttpError(403, "x", { code: "schedule.editing_disabled", error: "no" }); }) });
     await userEvent.click(await screen.findByRole("button", { name: "新建定时运行" }));
-    await userEvent.type(screen.getByLabelText("文件夹（它只能读这里）"), "/w");
+    await userEvent.selectOptions(screen.getByLabelText("文件夹（它只能读这里）"), "/Users/you/src/app");
     await userEvent.type(screen.getByLabelText("要做什么"), "x");
     await userEvent.click(screen.getByRole("button", { name: "预览" }));
     await userEvent.click(await screen.findByRole("button", { name: "确认创建" }));

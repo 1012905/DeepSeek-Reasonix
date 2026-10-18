@@ -259,6 +259,8 @@ export const EN: Record<string, string> = {
   "运行结果": "Result",
   "以下是模型写的内容，只作参考，不是 Reasonix 的说明。": "The text below was written by the model; treat it as a reference, not as something Reasonix says.",
   "报告太长，已截断。": "The report was too long and was cut.",
+  "还没有受信任的项目。先在 Studio 或终端界面里打开一个项目并信任它，再回来选。": "There is no trusted project yet. Open one in Studio or the terminal UI and trust it, then come back to choose it.",
+  "选择一个受信任的项目": "Choose a trusted project",
   "无法读取定时运行：{reason}": "Could not read the scheduled runs: {reason}",
   "无法刷新定时运行：{reason}（下面是上一次读到的内容）": "Could not refresh the scheduled runs: {reason} (what is below is what was read last)",
   "等你决定的事": "Waiting for your decision",
