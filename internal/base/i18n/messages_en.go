@@ -329,7 +329,7 @@ var English = Messages{
 	McpPanelTitle:                "Manage MCP servers",
 	McpPanelSummaryFmt:           "%d servers · %d enabled",
 	McpPanelToolsFmt:             "%d tools",
-	McpPanelHint:                 "↑↓ navigate · Space enable/disable · r reconnect · Enter tools · Esc close",
+	McpPanelHint:                 "↑↓ navigate · Space enable/disable · r reconnect · n add · d remove · Enter tools · Esc close",
 	McpPanelDetailHint:           "Esc back",
 	McpPanelNoTools:              "no tools reported",
 	McpPanelOff:                  "off",

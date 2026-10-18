@@ -103,6 +103,9 @@ func (p *pasteStore) expand(s string) string {
 // insertPaste puts pasted text in the composer, folded unless a panel is
 // taking the keys: what is typed into one is an answer, not a message.
 func (m *model) insertPaste(text string) tea.Cmd {
+	if m.mcpPaste(text) {
+		return nil
+	}
 	if m.setup != nil {
 		m.pasteIntoSetup(text)
 		return nil
