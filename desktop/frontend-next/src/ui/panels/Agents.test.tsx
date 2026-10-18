@@ -109,3 +109,16 @@ describe("a delegate that has finished", () => {
     expect(out).toContain("已交付");
   });
 });
+
+describe("the model a sub-agent ran on", () => {
+  const ranOn = { kind: "tool_progress", tool: { id: "c1", name: "reasonix.subagent.status", output: "failed", profile: { model: "aigateway/model-x", effort: "high" } } } as SessionEvent;
+  it("is drawn on the row of a failed run, with the full reference as its title", () => {
+    const s = [...base, ranOn].reduce(reduce, initialState);
+    const html = renderToStaticMarkup(<Agents tasks={railOf(s.items, s.executions, s.subagentPhase).tasks} />);
+    expect(html).toContain("aigateway/model-x · high");
+    expect(html).toContain('title="aigateway/model-x · high"');
+  });
+  it("is absent for a child whose model was never recorded", () => {
+    expect(draw("running")).not.toContain('class="ran"');
+  });
+});

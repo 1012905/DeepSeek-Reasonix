@@ -20,6 +20,10 @@ export function nestLabel(who: string | undefined, count: number | undefined, st
   return t("子代理做了 {n} 步", { n: steps });
 }
 
+// What a child ran on, as the kernel recorded it when the run started: the
+// provider/model reference and the effort. The full reference is the title.
+export const ranLabel = (p: Tool["profile"]): string => (p?.model ? [p.model, p.effort].filter(Boolean).join(" · ") : "");
+
 export type DelegateStatus = "running" | "refused" | "failed" | "done";
 
 // A host refusal names a call that never started; "interrupted" is only true of
