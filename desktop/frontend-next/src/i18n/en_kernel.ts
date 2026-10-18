@@ -564,6 +564,7 @@ export const EN_KERNEL: Record<string, string> = {
   "运行时已更换，费用显示币种未保存，请重试": "The runtime changed; the display currency was not saved. Try again.",
   "费用显示币种未能保存：{detail}": "The display currency was not saved: {detail}",
   "文件改动显示设置未能保存：{detail}": "The file-changes display setting was not saved: {detail}",
+  "等级提示的设置未能保存：{detail}": "The level notice setting was not saved: {detail}",
   "折叠中间过程的设置未能保存：{detail}": "The fold-the-work setting was not saved: {detail}",
   "回合间叙述的设置未能保存：{detail}": "The narration setting was not saved: {detail}",
   "这台服务器没有开启联网搜索与抓取设置的编辑：只有这台电脑上的窗口能改。": "Editing the web search and fetch settings is not enabled on this server: only the window on this computer can change them.",

@@ -4,6 +4,7 @@ import { usePaneCallbacks } from "./usePaneCallbacks";
 import { watchTreeWake } from "./treewake";
 import { usePinnedSessions } from "./usePinnedSessions";
 import { AutoArchiveNotice } from "./AutoArchiveNotice";
+import { LevelUpNotice } from "./LevelUpNotice";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
@@ -480,7 +481,10 @@ export function App({ hub }: { hub: HubPort }) {
   // eye already is; with no pane on screen it takes the main area's corner.
   const activePaneShown = !!activeRuntime && panePorts.has(activeRuntime.id);
   const errorBar = useMemo(() => (error ? <ErrorBar text={error} onDismiss={() => setError("")} onReport={() => setFeedback("send")} /> : null), [error]);
-  const bar = useMemo(() => errorBar ?? <AutoArchiveNotice tree={tree} />, [errorBar, tree]);
+  const bar = useMemo(
+    () => errorBar ?? <LevelUpNotice port={machineRt ? machinePort : null} tick={feedback === null ? 0 : 1} fallback={<AutoArchiveNotice tree={tree} />} />,
+    [errorBar, tree, machineRt, machinePort, feedback],
+  );
   const activeWorkspace = tree.find((ws) => !activeRuntime?.host && workspaceContains(ws, activeRuntime?.root)) ?? tree[0];
   // The folder a new session opens in is the one the switcher above names —
   // the window's, not whichever project happens to sit first in the tree.
