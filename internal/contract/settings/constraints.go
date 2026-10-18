@@ -7,6 +7,10 @@ import "reasonix/internal/contract/config"
 // value of the key's shape is legal. The coverage test fails a writable string
 // or number with none of the three.
 var constraints = map[string]Entry{
+	"observability.otlp.endpoint":                   {Via: viaString((*config.Config).SetOTLPEndpoint)},
+	"observability.otlp.header_name":                {Via: viaString((*config.Config).SetOTLPHeaderName)},
+	"observability.otlp.header_env":                 {Via: viaString((*config.Config).SetOTLPHeaderEnv)},
+	"observability.otlp.service_name":               {Free: true},
 	"tools.web_search_backends":                     {Via: backendList(config.KnownSearchBackends, func(c *config.Config) *[]string { return &c.Tools.WebSearchBackends })},
 	"tools.web_fetch_backends":                      {Via: backendList(config.KnownFetchBackends, func(c *config.Config) *[]string { return &c.Tools.WebFetchBackends })},
 	"ui.shortcut_layout":                            {Via: viaString((*config.Config).SetUIShortcutLayout)},

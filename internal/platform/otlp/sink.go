@@ -36,8 +36,23 @@ func NewSink(inner event.Sink, exp *Exporter, agent string) event.Sink {
 	if exp == nil {
 		return inner
 	}
-	return &Sink{AuditForwarder: event.AuditForwarder{Inner: inner}, exp: exp, agent: Name(agent), now: time.Now,
+	s := &Sink{AuditForwarder: event.AuditForwarder{Inner: inner}, exp: exp, agent: Name(agent), now: time.Now,
 		chats: map[string]*open{}, tools: map[string]*open{}}
+	exp.beforeClose(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.endTurn(event.Event{Kind: event.TurnDone, Cancelled: true})
+	})
+	return s
+}
+
+// RecordTurnCompletion ends the turn of a synchronous run, which emits no
+// TurnDone, then passes the signal inward.
+func (s *Sink) RecordTurnCompletion() {
+	s.mu.Lock()
+	s.endTurn(event.Event{Kind: event.TurnDone})
+	s.mu.Unlock()
+	s.AuditForwarder.RecordTurnCompletion()
 }
 
 // Emit forwards e, then records what it says about the run.

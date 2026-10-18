@@ -336,3 +336,33 @@ func TestAFailedSendIsCountedNotRetriedIntoAPileUp(t *testing.T) {
 		t.Fatalf("stats = %+v", s)
 	}
 }
+
+// A synchronous run emits no TurnDone and signals completion instead, and a
+// session closed mid-turn still delivers the turn it had open.
+func TestATurnWithoutTurnDoneEndsOnTheCompletionSignalOrOnClose(t *testing.T) {
+	c := newCollector(t)
+	exp := exporterFor(t, c)
+	sink := NewSink(event.Discard, exp, "reasonix").(*Sink)
+	sink.Emit(event.Event{Kind: event.TurnStarted, ModelRef: "deepseek/v4"})
+	sink.RecordTurnCompletion()
+	if err := exp.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(c.spans(t)); got != 1 {
+		t.Fatalf("after the completion signal: %d spans", got)
+	}
+	sink.Emit(event.Event{Kind: event.TurnStarted, ModelRef: "deepseek/v4"})
+	sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: event.Tool{ID: "t", Name: "bash"}})
+	if err := exp.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var open *decodedSpan
+	for _, s := range c.spans(t) {
+		if s.Name == "execute_tool bash" {
+			open = &s
+		}
+	}
+	if open == nil || open.Status != 2 || open.Attrs["error.type"] != "incomplete" {
+		t.Fatalf("a tool left open at close = %+v", open)
+	}
+}

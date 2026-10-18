@@ -38,6 +38,9 @@ type Exporter struct {
 	once  sync.Once
 
 	sent, dropped, failed atomic.Int64
+
+	mu       sync.Mutex
+	finalize []func()
 }
 
 // New validates the settings and starts the worker. The client's redirects are
@@ -96,8 +99,23 @@ func (e *Exporter) Flush(ctx context.Context) error {
 	}
 }
 
+// beforeClose registers work that must reach the queue before the final flush,
+// such as a turn still open when the session ends.
+func (e *Exporter) beforeClose(f func()) {
+	e.mu.Lock()
+	e.finalize = append(e.finalize, f)
+	e.mu.Unlock()
+}
+
 // Close flushes, then stops the worker.
 func (e *Exporter) Close(ctx context.Context) error {
+	e.mu.Lock()
+	fs := e.finalize
+	e.finalize = nil
+	e.mu.Unlock()
+	for _, f := range fs {
+		f()
+	}
 	err := e.Flush(ctx)
 	e.once.Do(func() { close(e.stop) })
 	select {
