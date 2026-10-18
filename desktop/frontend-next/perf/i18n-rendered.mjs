@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 const BASE = process.env.PERF_URL ?? "http://localhost:4399/perf.html";
 // Names the demo data itself carries, and names that are written in Chinese on purpose.
 const FIXTURE = [
-  /并行会话演示/, /上一次的会话/, /数据管线/, /跑一遍评测/, /^中文$/, /^做游戏的小鱼$/, /^DeepSeek-Reasonix官方群$/,
+  /并行会话演示/, /上一次的会话/, /站点改版/, /数据管线/, /跑一遍评测/, /^中文$/, /^做游戏的小鱼$/, /^DeepSeek-Reasonix官方群$/,
   /缓存命中率为什么会掉/, /Co-Authored-By/, /Generated with/, /^回复用中文$/, /^跟着用户每条消息的语言走$/, /v2 是从零重写的 Go 内核/,
   /没有 web，桌面端重做/, /问题里提到了 main-v2/, /构建用 -tags legacy/, /^迁移前的构建方式$/,
 ];
