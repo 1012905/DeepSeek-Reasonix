@@ -1,40 +1,34 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import type { AgentPort, PeersSettings, PeersSettingsEdit } from "../port/port";
+import type { PeersSettingsStore } from "./usePeersSettings";
 import { Switch } from "./Switch";
 
 /** The switches behind session messages, which used to be hand-written config.
  *  Saved values only reach the model at the next turn boundary — the tool table
  *  changes with them — so a saved edit says exactly that until the kernel does. */
-export function PeerSettings({ port, onSaved }: { port: AgentPort; onSaved?: (next: PeersSettings) => void }) {
-  const [state, setState] = useState<PeersSettings | null>(null);
+export function PeerSettings({ port, settings, onSaved }: { port: AgentPort; settings: PeersSettingsStore; onSaved?: (next: PeersSettings) => void }) {
+  const { state, publish } = settings;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-    port.peersSettings().then((s) => alive && setState(s)).catch((e) => alive && setError(reason(e)));
-    return () => {
-      alive = false;
-    };
-  }, [port]);
 
   const save = useCallback(async (edit: PeersSettingsEdit) => {
     setBusy(true);
     setError("");
     try {
       const next = await port.savePeersSettings(edit);
-      setState(next);
+      publish(next);
       onSaved?.(next);
     } catch (e) {
       setError(reason(e));
     } finally {
       setBusy(false);
     }
-  }, [port, onSaved]);
+  }, [port, publish, onSaved]);
 
-  if (!state) return error ? <div className="why" role="alert">{error}</div> : null;
+  const shownError = error || settings.loadError;
+  if (!state) return shownError ? <div className="why" role="alert">{shownError}</div> : null;
   const off = busy || !state.available;
 
   return (

@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { PeerProjects } from "./PeerProjects";
+import { usePeersSettings } from "./usePeersSettings";
 import { MockPort } from "../port/mock";
 import { HttpError } from "../port/http_error";
 import { boot, STORAGE } from "../i18n";
@@ -18,6 +19,10 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+
+function Projects({ port, hub }: { port: AgentPort; hub: Parameters<typeof PeerProjects>[0]["hub"] }) {
+  return <PeerProjects port={port} hub={hub} settings={usePeersSettings(port)} />;
+}
 
 const settings = (over: Partial<PeersSettings> = {}): PeersSettings => ({
   enabled: true, dispatch: false, release_projects: [], max_dispatch_depth: 1, max_dispatched_sessions: 8, path: "/home/me/.reasonix/config.toml", applies: "next_turn", pending: false, available: true, ...over,
@@ -34,7 +39,7 @@ function draw(initial: PeersSettings, tree: TreeWorkspace[]) {
     return current;
   });
   const hub = { tree: vi.fn(async () => tree) };
-  render(<PeerProjects port={port as unknown as AgentPort} hub={hub} />);
+  render(<Projects port={port as unknown as AgentPort} hub={hub} />);
   return { save, hub, setCurrent: (next: PeersSettings) => { current = next; } };
 }
 
