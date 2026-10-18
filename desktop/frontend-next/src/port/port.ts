@@ -159,6 +159,17 @@ export interface NotifyPrefs {
   feedbackReply: boolean;
   diskLow: boolean;
   sound: boolean;
+  // What this desktop tells its enrolled phones about.
+  phone: PhoneNotifyPrefs;
+}
+
+/** Only the kind of occasion and a count are ever sent to a phone: the master
+ *  switch and which occasions it reports are the desktop's to decide. */
+export interface PhoneNotifyPrefs {
+  enabled: boolean;
+  approval: boolean;
+  input: boolean;
+  error: boolean;
 }
 
 export interface TrayPrefs {
