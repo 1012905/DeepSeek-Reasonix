@@ -294,8 +294,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# forbid_read = []                  # dirs the agent cannot read or list\n")
 	}
-	fmt.Fprintf(&b, "bash    = %q\n", c.BashMode())
-	fmt.Fprintf(&b, "network = %v\n", c.Sandbox.Network)
+	renderBashAndNetwork(&b, c)
 	fmt.Fprintf(&b, "host_authorities = %s   # host services bash may call; user-global\n", renderStringArray(c.Sandbox.HostAuthorities))
 	renderAllowDevices(&b, c.Sandbox.AllowDevices)
 	if len(c.Sandbox.AllowedDomains) > 0 {
@@ -627,9 +626,6 @@ func RenderTOMLProjectDelta(c *Config) string {
 		// resolves to "off", so project configs should not imply otherwise.
 		if strings.TrimSpace(c.Sandbox.Bash) != "" && c.BashMode() != d.BashModeForGOOS(runtimeGOOS) {
 			fmt.Fprintf(&sandboxBuf, "bash = %q\n", c.BashMode())
-		}
-		if c.Sandbox.WindowsIntegrity {
-			sandboxBuf.WriteString("windows_integrity = true   # Windows: bash runs under a write-restricted, Low-integrity token; user file only\n")
 		}
 		if c.Sandbox.Network != d.Sandbox.Network {
 			fmt.Fprintf(&sandboxBuf, "network = %v\n", c.Sandbox.Network)

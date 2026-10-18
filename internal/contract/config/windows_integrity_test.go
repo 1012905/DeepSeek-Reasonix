@@ -2,6 +2,7 @@ package config
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -37,5 +38,19 @@ func TestAProjectFileCannotTurnTheWindowsSandboxOnOrOff(t *testing.T) {
 	cfg, _ = loadScoped(t, "[sandbox]\nwindows_integrity = true\n", "[sandbox]\nwindows_integrity = false\n")
 	if !cfg.Sandbox.WindowsIntegrity {
 		t.Fatal("the project file switched off what the user turned on")
+	}
+}
+
+// A save must keep the switch: the mode alone reads back as the Windows default.
+func TestWindowsIntegritySurvivesASaveAndReload(t *testing.T) {
+	cfg := Default()
+	cfg.Sandbox.WindowsIntegrity = true
+	text := RenderTOMLForScope(cfg, RenderScopeUser)
+	if !strings.Contains(text, "windows_integrity = true") {
+		t.Fatalf("the rendered user file lost the switch:\n%s", text)
+	}
+	off := Default()
+	if strings.Contains(RenderTOMLForScope(off, RenderScopeUser), "windows_integrity") {
+		t.Fatal("an unset switch was written out")
 	}
 }
