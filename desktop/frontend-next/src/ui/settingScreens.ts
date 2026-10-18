@@ -18,6 +18,7 @@ export const SETTING_SCREEN: Record<string, string> = {
   "permissions.ask": "tools:rules",
   "permissions.deny": "tools:rules",
   "permissions.allow_dynamic_bash": "tools:rules",
+  "permissions.ask_on_external_origin": "tools:approval",
   "sandbox.bash": "tools:sandbox",
   "sandbox.network": "tools:sandbox",
   "sandbox.allow_write": "tools:sandbox",

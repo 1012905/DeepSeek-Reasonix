@@ -385,7 +385,10 @@ func (h heldScope) narrowPermissions(c *Config) {
 			c.ignoreProject("permissions.allow", rule, ProjectUserOnly)
 		}
 	}
-	p.Mode, p.AllowDynamicBash, p.Allow = u.Mode, u.AllowDynamicBash, u.Allow
+	if p.AskOnExternalOrigin != u.AskOnExternalOrigin {
+		c.ignoreProject("permissions.ask_on_external_origin", fmt.Sprint(p.AskOnExternalOrigin), ProjectUserOnly)
+	}
+	p.Mode, p.AllowDynamicBash, p.Allow, p.AskOnExternalOrigin = u.Mode, u.AllowDynamicBash, u.Allow, u.AskOnExternalOrigin
 	p.Ask = appendMissing(u.Ask, p.Ask...)
 	p.Deny = appendMissing(u.Deny, p.Deny...)
 }

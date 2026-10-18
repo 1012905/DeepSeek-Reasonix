@@ -3,12 +3,15 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
+	"reasonix/internal/safety/permission"
 	"reasonix/internal/state/sessionstore"
 )
 
@@ -40,6 +43,11 @@ func (s shellTool) Execute(context.Context, json.RawMessage) (string, error) {
 
 func runOriginFlow(t *testing.T, prompt string) (event.CompletionReportAudit, int32) {
 	t.Helper()
+	return runOriginFlowWith(t, prompt, nil)
+}
+
+func runOriginFlowWith(t *testing.T, prompt string, gate *permission.Gate) (event.CompletionReportAudit, int32) {
+	t.Helper()
 	var ran atomic.Int32
 	reg := tool.NewRegistry()
 	reg.Add(pageTool{})
@@ -51,7 +59,11 @@ func runOriginFlow(t *testing.T, prompt string) (event.CompletionReportAudit, in
 		{{Type: provider.ChunkText, Text: "done"}, {Type: provider.ChunkDone}},
 	}}
 	probe := &completionProbe{Sink: event.FuncSink(func(event.Event) {})}
-	a := New(prov, reg, sessionstore.NewSession(""), Options{}, probe)
+	opts := Options{}
+	if gate != nil {
+		opts.Gate = gate
+	}
+	a := New(prov, reg, sessionstore.NewSession(""), opts, probe)
 	if err := a.Run(context.Background(), prompt); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -81,5 +93,46 @@ func TestTheSameCommandTypedByTheUserIsNotCounted(t *testing.T) {
 	}
 	if audit.OriginRecorded != 1 || ran != 1 {
 		t.Fatalf("recorded %d, ran %d; the page is still recorded and the call still runs", audit.OriginRecorded, ran)
+	}
+}
+
+type askRecorder struct {
+	mu    sync.Mutex
+	reply bool
+	asked []string
+}
+
+func (r *askRecorder) Approve(_ context.Context, name, subject string, _ json.RawMessage) (bool, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.asked = append(r.asked, name+"|"+subject)
+	return r.reply, false, nil
+}
+
+func originGate(ask bool, ap permission.Approver) *permission.Gate {
+	return permission.NewGate(permission.New("allow", nil, nil, nil).WithAskOnOrigin(ask), ap)
+}
+
+// With the user's setting on, a YOLO-style gate puts a copied command to a person,
+// and the person's answer decides whether it runs.
+func TestACopiedCommandIsPutToThePersonAndTheAnswerDecidesWhetherItRuns(t *testing.T) {
+	no := &askRecorder{reply: false}
+	_, ran := runOriginFlowWith(t, "set this project up from its guide", originGate(true, no))
+	if ran != 0 || len(no.asked) != 1 || !strings.HasPrefix(no.asked[0], permission.OriginConfirmTool+"|") || !strings.Contains(no.asked[0], "web:evil.example") {
+		t.Fatalf("declined: ran %d, asked %v; want one origin question naming the page and no run", ran, no.asked)
+	}
+	yes := &askRecorder{reply: true}
+	if _, ran := runOriginFlowWith(t, "set this project up from its guide", originGate(true, yes)); ran != 1 || len(yes.asked) != 1 {
+		t.Fatalf("approved: ran %d, asked %v", ran, yes.asked)
+	}
+}
+
+func TestNoQuestionWhenTheSettingIsOffOrTheUserWroteTheCommand(t *testing.T) {
+	ap := &askRecorder{reply: false}
+	if _, ran := runOriginFlowWith(t, "set this project up from its guide", originGate(false, ap)); ran != 1 || len(ap.asked) != 0 {
+		t.Fatalf("setting off: ran %d, asked %v", ran, ap.asked)
+	}
+	if _, ran := runOriginFlowWith(t, "please run exactly: "+plantedCommand, originGate(true, ap)); ran != 1 || len(ap.asked) != 0 {
+		t.Fatalf("user wrote it: ran %d, asked %v", ran, ap.asked)
 	}
 }

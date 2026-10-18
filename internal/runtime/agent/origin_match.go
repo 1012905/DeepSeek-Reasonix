@@ -1,6 +1,12 @@
 package agent
 
-import "reasonix/internal/contract/provider"
+import (
+	"context"
+
+	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/tool"
+	"reasonix/internal/safety/permission"
+)
 
 // noteOriginMatch counts a call that is not read-only and whose arguments carry,
 // verbatim, text an external result gave this task. Nothing is decided on it: the
@@ -27,4 +33,18 @@ func (a *Agent) userTexts() []string {
 		}
 	}
 	return out
+}
+
+// originCtx marks ctx with the first origin whose recorded text the call's
+// arguments repeat verbatim, for the permission gate to ask about when the user
+// has switched that on. It marks and decides nothing itself.
+func (a *Agent) originCtx(ctx context.Context, plan *toolCallPlan) context.Context {
+	if plan == nil || plan.readOnly || a.task.origins == nil {
+		return ctx
+	}
+	origins := a.task.origins.match(plan.permArgs, a.userTexts)
+	if len(origins) == 0 {
+		return ctx
+	}
+	return permission.WithOrigin(ctx, tool.ProvenanceLabel(origins[0]))
 }

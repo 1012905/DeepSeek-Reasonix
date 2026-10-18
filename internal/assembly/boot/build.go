@@ -372,6 +372,7 @@ func (b *builder) wireTools() error {
 	mediaAsk := askWithUnsandboxedMedia(cfg.Permissions.Allow, cfg.Permissions.Ask, cfg.Permissions.Deny, env.bash.Enforce() && sandbox.AvailableFor(env.bash))
 	t.policy = permission.New(cfg.Permissions.Mode, cfg.Permissions.Allow, mediaAsk, cfg.Permissions.Deny).
 		WithAllowDynamicBashFallback(cfg.Permissions.AllowDynamicBash).
+		WithAskOnOrigin(cfg.Permissions.AskOnExternalOrigin).
 		WithSessionAllow(opts.PermissionAllow)
 	t.gate = control.NewSharedHeadlessGate(t.policy, opts.HeadlessApprovalMode)
 	t.hooks, t.hookRunner = loadHooks(opts, b.roots, root, b.shell, b.sink)
