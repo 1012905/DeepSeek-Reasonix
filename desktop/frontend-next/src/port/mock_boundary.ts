@@ -1,6 +1,6 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { ScheduleBoard, ScheduleDraft, SchedulePreview, ScheduleResultView, ScheduleView } from "./schedule";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
@@ -150,6 +150,17 @@ export class MockBoundary extends MockShell {
     return { ...this.claims };
   }
 
+  private steerLimits: SubagentSteerSettings = { maxBytes: 16384, perMinute: 30, defaultMaxBytes: 16384, defaultPerMinute: 30, path: "/Users/you/.reasonix/config.toml" };
+
+  async subagentSteerSettings(): Promise<SubagentSteerSettings> {
+    return { ...this.steerLimits };
+  }
+
+  async saveSubagentSteerSettings(maxBytes: number, perMinute: number): Promise<SubagentSteerSettings> {
+    this.steerLimits = { ...this.steerLimits, maxBytes, perMinute };
+    return { ...this.steerLimits };
+  }
+
   private plans: PlanApprovalSettings = { auto: false, path: "/Users/you/.reasonix/config.toml" };
 
   async planApproval(): Promise<PlanApprovalSettings> {
@@ -159,6 +170,17 @@ export class MockBoundary extends MockShell {
   async savePlanApproval(auto: boolean): Promise<PlanApprovalSettings> {
     this.plans = { ...this.plans, auto };
     return { ...this.plans };
+  }
+
+  private modes: DefaultModeSettings = { plan: false, path: "/Users/you/.reasonix/config.toml" };
+
+  async defaultMode(): Promise<DefaultModeSettings> {
+    return { ...this.modes };
+  }
+
+  async saveDefaultMode(plan: boolean): Promise<DefaultModeSettings> {
+    this.modes = { ...this.modes, plan };
+    return { ...this.modes };
   }
 
   private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };
@@ -177,6 +199,7 @@ export class MockBoundary extends MockShell {
   private board: ScheduleBoard = {
     pausedAll: false,
     policy: { minIntervalMinutes: 60, maxSchedules: 8, globalTokensDay: 1_200_000, expiryDays: 30 },
+    folders: [{ path: "/Users/you/src/app", name: "app" }, { path: "/Users/you/src/docs", name: "docs" }],
     schedules: [
       { id: "sch_a1b2c3d4", label: "Morning briefing", status: "active", everySec: 86_400, workspace: "/Users/you/src/app", model: "deepseek/deepseek-v4-pro",
         prompt: "Summarize what changed in the repository since yesterday and list open TODOs.", perRunTokens: 250_000, lifetimeTokens: 3_000_000, spentLifetimeTokens: 410_000,
@@ -339,6 +362,20 @@ export class MockBoundary extends MockShell {
   async saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings> {
     this.narration = { ...this.narration, level };
     return { ...this.narration };
+  }
+
+  private observability: ObservabilitySettings = {
+    enabled: false, endpoint: "", headerName: "", headerEnv: "", serviceName: "", headerEnvSet: false,
+    path: "/Users/you/.reasonix/config.toml", applies: "next_session",
+  };
+
+  async observabilitySettings(): Promise<ObservabilitySettings> {
+    return { ...this.observability };
+  }
+
+  async saveObservabilitySettings(patch: ObservabilityPatch): Promise<ObservabilitySettings> {
+    this.observability = { ...this.observability, ...patch };
+    return { ...this.observability };
   }
 
   private webAccess: WebAccessSettings = {

@@ -268,11 +268,11 @@ func scheduleAdd(args []string, store *schedule.Store, p schedule.Policy, sio sc
 
 func (f addFlags) request() (schedule.CreateRequest, error) {
 	d := scheduler.Draft{Label: f.label, Prompt: f.prompt, Workspace: f.workspace, Model: f.model}
+	wd, err := os.Getwd()
+	if err != nil {
+		return schedule.CreateRequest{}, err
+	}
 	if d.Workspace == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return schedule.CreateRequest{}, err
-		}
 		d.Workspace = wd
 	}
 	switch {
@@ -291,9 +291,11 @@ func (f addFlags) request() (schedule.CreateRequest, error) {
 		}
 		d.At = at
 	}
-	req, err := d.Request()
+	req, err := d.Request(scheduler.Folders(wd))
 	req.ConfirmedVia = schedule.ConfirmedViaTerminal
 	switch {
+	case errors.Is(err, scheduler.ErrDraftFolderUnknown):
+		return req, fmt.Errorf("%q is not a trusted project: open it in Studio or the terminal UI and trust it first, then run this again", d.Workspace)
 	case errors.Is(err, scheduler.ErrDraftWorkspace):
 		return req, fmt.Errorf("--workspace %q is not a folder", f.workspace)
 	case errors.Is(err, scheduler.ErrDraftModel):

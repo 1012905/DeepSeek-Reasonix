@@ -53,6 +53,10 @@ type Config struct {
 	AutoSubmit bool `toml:"auto_submit"`
 	// Peers governs messages between sessions; see PeersConfig.
 	Peers PeersConfig `toml:"peers"`
+	// Observability governs the opt-in trace export. User/global only.
+	Observability ObservabilityConfig `toml:"observability"`
+	// Mods governs Claude Code mods; see ModsConfig.
+	Mods ModsConfig `toml:"mods"`
 	// Storage relocates the movable roots, keyed by RootID. User/global only.
 	Storage map[string]string `toml:"storage"`
 
@@ -1076,6 +1080,11 @@ type AgentConfig struct {
 	MaxSideSessions    int               `toml:"max_side_sessions"`    // 0 (default) opens as many side conversations as asked; the user file only
 	MaxQueuedInputs    int               `toml:"max_queued_inputs"`    // 0 (default) queues as many prompts as asked; the user file only
 	MaxProviderRetries int               `toml:"max_provider_retries"` // default 10; 0 retries until cancelled; the user file only
+	// Guidance sent to a running sub-agent: the bytes in one message (default 16384,
+	// which keeps one message from filling the child's context) and the messages
+	// per minute to one sub-agent (default 30, a stop for a loop); 0 lifts either.
+	SubagentSteerBytes     int `toml:"max_subagent_steer_bytes"`       // the user file only
+	SubagentSteerPerMinute int `toml:"max_subagent_steers_per_minute"` // the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.
@@ -1096,6 +1105,7 @@ type AgentConfig struct {
 	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
 	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
+	DefaultMode        string `toml:"default_mode"`      // "normal" (default) or "plan": how a new conversation starts; the user file only
 	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects built-in tone guidance or .reasonix/output-styles/<name>.md.
@@ -1341,11 +1351,14 @@ func Default() *Config {
 			ContextEditing:         "",
 			MaxSubagentDepth:       8,
 			MaxProviderRetries:     10,
+			SubagentSteerBytes:     16384,
+			SubagentSteerPerMinute: 30,
 			MaxSubagentConcurrency: 0,
 			MaxParallelWriters:     0,
 			SubagentClaims:         "strict",
 			WriteLease:             "strict",
 			PlanApproval:           "ask",
+			DefaultMode:            "normal",
 			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask

@@ -9,7 +9,7 @@ import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { SECTION_NAME } from "./prefsnav";
 import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
-import { PlanApproval } from "./PlanApproval";
+import { PlanApproval, DefaultMode } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -35,6 +35,7 @@ import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
 import { SessionRef } from "./SessionRef";
+import { TraceExport } from "./TraceExport";
 import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
@@ -479,7 +480,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                     onClick={() => run("plan", () => port.setPlanMode(!status?.plan))}
                   />
                 </div>
-              </Group>
+              </Group><DefaultMode port={port} />
               <DisplaySettings port={port} />
               <AskTimeout port={port} />
               <SessionRef port={port} />
@@ -713,6 +714,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <Network port={networkPort ?? port} host={networkHost ?? ""} />
             </Group>
           )}
+          {at === "network" && <TraceExport port={port} />}
 
           {at === "remote" && (
             <Group id="remote"
@@ -738,9 +740,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <Backup port={port} />
             </Group>
           )}
-
           {at === "versions" && <About port={homePort} />}
-
           {at === "memory" && (
             <Group id="memory"
               title={t("记忆")}

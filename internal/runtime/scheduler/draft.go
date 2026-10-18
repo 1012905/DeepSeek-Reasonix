@@ -16,7 +16,10 @@ import (
 var (
 	ErrDraftTrigger   = errors.New("schedule draft: give exactly one of an interval and a time")
 	ErrDraftWorkspace = errors.New("schedule draft: the folder does not exist")
-	ErrDraftModel     = errors.New("schedule draft: the model is not configured")
+	// ErrDraftFolderUnknown: the folder is not one of the trusted projects, which
+	// is the only kind a schedule may read.
+	ErrDraftFolderUnknown = errors.New("schedule draft: the folder is not a trusted project")
+	ErrDraftModel         = errors.New("schedule draft: the model is not configured")
 )
 
 // Draft is what a person typed or picked, before the host normalises it: the
@@ -31,11 +34,11 @@ type Draft struct {
 	Model string
 }
 
-// Request normalises a draft into the store's request: the folder is made
-// absolute and resolved, and the model is pinned from the user's configuration.
-// The returned request is marked as a human's; a frontend only calls this for
-// one.
-func (d Draft) Request() (schedule.CreateRequest, error) {
+// Request normalises a draft into the store's request. The folder must be one
+// of folders (see Folders); it is resolved from that entry, not from the draft.
+// The model is pinned from the user's configuration, and the request is marked
+// as a human's: a frontend only calls this for one.
+func (d Draft) Request(folders []string) (schedule.CreateRequest, error) {
 	req := schedule.CreateRequest{Label: strings.TrimSpace(d.Label), Prompt: strings.TrimSpace(d.Prompt), ConfirmedBy: schedule.ConfirmedByHuman}
 	if (d.EverySec > 0) == !d.At.IsZero() {
 		return req, ErrDraftTrigger
@@ -45,9 +48,9 @@ func (d Draft) Request() (schedule.CreateRequest, error) {
 	} else {
 		req.Trigger = schedule.Trigger{Kind: schedule.TriggerAt, At: d.At}
 	}
-	ws := d.Workspace
-	if ws == "" {
-		return req, fmt.Errorf("%w: no folder given", ErrDraftWorkspace)
+	ws, ok := Match(folders, d.Workspace)
+	if !ok {
+		return req, ErrDraftFolderUnknown
 	}
 	abs, err := filepath.Abs(ws)
 	if err != nil {

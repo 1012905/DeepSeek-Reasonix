@@ -106,6 +106,17 @@ export interface SubagentClaimsSettings {
   path: string;
 }
 
+// The bounds on guidance sent to a running sub-agent, as the user file records
+// them: bytes in one message and messages per minute to one sub-agent, zero
+// lifting a bound. A project file cannot set them.
+export interface SubagentSteerSettings {
+  maxBytes: number;
+  perMinute: number;
+  defaultMaxBytes: number;
+  defaultPerMinute: number;
+  path: string;
+}
+
 // How this machine's sessions hold the workspace write lease against one
 // another, as the user file records it. A project file cannot set it. A running
 // session keeps the lease it was built with, so a change reaches sessions
@@ -119,6 +130,13 @@ export interface WriteLeaseSettings {
 // user file records it. A project file cannot set it.
 export interface PlanApprovalSettings {
   auto: boolean;
+  path: string;
+}
+
+// Whether a new conversation starts in plan mode, as the user file records it.
+// A project file cannot set it.
+export interface DefaultModeSettings {
+  plan: boolean;
   path: string;
 }
 
@@ -278,6 +296,22 @@ export interface SearxngProbe {
 
 export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed" | "video_url_passthrough">>;
 
+// The opt-in OpenTelemetry trace export. headerEnvSet says the named variable
+// has a value now; the value itself is never read back. A save reaches sessions
+// opened afterwards, not the ones already running.
+export interface ObservabilitySettings {
+  enabled: boolean;
+  endpoint: string;
+  headerName: string;
+  headerEnv: string;
+  serviceName: string;
+  headerEnvSet: boolean;
+  path: string;
+  applies: string;
+}
+
+export type ObservabilityPatch = Partial<Pick<ObservabilitySettings, "enabled" | "endpoint" | "headerName" | "headerEnv" | "serviceName">>;
+
 export interface ChangedFilesSettings {
   show: boolean;
   path: string;
@@ -321,4 +355,46 @@ export interface ProgressWatchSettings {
   defaultRounds: number;
   defaultTokenMultiple: number;
   path: string;
+}
+
+/** Where a Claude Code mod's hooks module stands in this session. */
+export type ModState = "inactive" | "starting" | "running" | "restarting" | "disabled";
+
+export interface ModRuntime {
+  // "electron" for Studio's own binary in Node mode, "node" for one found on PATH.
+  kind: string;
+  path: string;
+  version: string;
+}
+
+/** One installed mod. `code` is the typed cause when it is not running
+ *  (mod.switch_off, mod.runtime_missing, mod.crashed, ...); a frontend maps it
+ *  to its own words and never reads `detail` to decide anything. */
+export interface ModStatus {
+  plugin: string;
+  state: ModState;
+  code?: string;
+  detail?: string;
+  restarts: number;
+  runtime?: ModRuntime;
+  // Literal event names the module registered; `unserved` are the ones this host never raises.
+  events?: string[];
+  unserved?: string[];
+}
+
+/** The user file's [mods] table. Turning `enabled` on is Elevated: the module
+ *  of an installed mod then runs on this machine with the user's trust. */
+export interface ModsSettings {
+  enabled: boolean;
+  // One hook's own running time in milliseconds; 0 keeps Claude Code's 10000.
+  hook_budget_ms: number;
+  path: string;
+  // False until the switch can be turned on; the row is not drawn then.
+  available: boolean;
+  applies: "next_session";
+}
+
+export interface ModsSettingsEdit {
+  enabled?: boolean;
+  hook_budget_ms?: number;
 }

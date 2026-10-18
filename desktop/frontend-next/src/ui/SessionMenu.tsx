@@ -25,13 +25,15 @@ export interface SessionMenuProps {
   /** One place up or down in the project list; absent where the row has no order to move in. */
   onMove?: (direction: -1 | 1) => void;
   canMove?: { up: boolean; down: boolean };
+  /** Opens the choice of another project; absent where a conversation cannot move (a copy, a version). */
+  onMoveTo?: () => void;
 }
 
 /** What can be done to one conversation, drawn at the document root so the
  *  sidebar's clipping cannot cut it. Every action closes the menu itself:
  *  the parent's handlers do that, this only says which one was chosen. */
 export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function SessionMenu(
-  { session, label, live, pinned, exporting, autoNaming, onPin, onRename, onAutoName, onPause, onClose, onArchive, onBranch, onCopyInfo, onExport, onDelete, onMove, canMove },
+  { session, label, live, pinned, exporting, autoNaming, onPin, onRename, onAutoName, onPause, onClose, onArchive, onBranch, onCopyInfo, onExport, onDelete, onMove, canMove, onMoveTo },
   ref,
 ) {
   const target = session.path;
@@ -95,6 +97,11 @@ export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function
         <button role="menuitem" data-action="session.copy-info" data-target={target} onClick={onCopyInfo}>
           <StudioIcon name="copy" /><span>{t("复制会话信息")}</span>
         </button>
+        {onMoveTo && (
+          <button role="menuitem" data-action="session.move-to-start" data-target={target} disabled={!!session.runtimeId} title={session.runtimeId ? t("先关闭这个会话，再移动它") : undefined} onClick={onMoveTo}>
+            <StudioIcon name="folder" /><span>{t("移动到项目…")}</span>
+          </button>
+        )}
         <button role="menuitem" data-action="session.export" data-target={target} disabled={exporting} onClick={onExport}>
           <StudioIcon name="download" /><span>{t("导出会话")}</span><small>JSON</small>
         </button>

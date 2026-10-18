@@ -147,6 +147,8 @@ func refuseSchedule(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusConflict, "schedule.limit_reached", "the schedule limit is reached", nil)
 	case errors.Is(err, scheduler.ErrDraftTrigger):
 		refuse(w, http.StatusBadRequest, "schedule.bad_trigger", "give exactly one of an interval and a time", nil)
+	case errors.Is(err, scheduler.ErrDraftFolderUnknown):
+		refuse(w, http.StatusBadRequest, "schedule.workspace_unknown", "the folder is not a trusted project", nil)
 	case errors.Is(err, scheduler.ErrDraftWorkspace):
 		refuse(w, http.StatusBadRequest, "schedule.no_folder", "the folder does not exist", nil)
 	case errors.Is(err, scheduler.ErrDraftModel):

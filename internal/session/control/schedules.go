@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -88,6 +89,15 @@ type ScheduleBoard struct {
 	Schedules    []ScheduleView     `json:"schedules"`
 	Runs         []ScheduleRunView  `json:"runs"`
 	Policy       SchedulePolicyView `json:"policy"`
+	// Folders are the trusted projects a schedule may be given. A creation names
+	// one of these and nothing else.
+	Folders []ScheduleFolder `json:"folders"`
+}
+
+// ScheduleFolder is one trusted project a schedule can read.
+type ScheduleFolder struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
 }
 
 // SchedulePreview is what a person confirms, with the token that proves a
@@ -141,6 +151,7 @@ func (c *Controller) Schedules(ctx context.Context) (ScheduleBoard, error) {
 	}
 	out := ScheduleBoard{PausedAll: m.PausedAll, PausedReason: string(m.PausedReason), Schedules: []ScheduleView{}, Runs: []ScheduleRunView{},
 		Policy: SchedulePolicyView{MinIntervalMinutes: policy.MinIntervalMinutes, MaxSchedules: policy.MaxSchedules, GlobalTokensDay: policy.GlobalTokensDay, ExpiryDays: policy.ExpiryDays}}
+	out.Folders = c.scheduleFolderViews()
 	for _, s := range m.Schedules {
 		out.Schedules = append(out.Schedules, scheduleView(s))
 	}
@@ -152,6 +163,17 @@ func (c *Controller) Schedules(ctx context.Context) (ScheduleBoard, error) {
 		out.Runs = append(out.Runs, scheduleRunView(r))
 	}
 	return out, nil
+}
+
+// scheduleFolders is the trusted-project list a draft is matched against.
+func (c *Controller) scheduleFolders() []string { return scheduler.Folders(c.WorkspaceRoot()) }
+
+func (c *Controller) scheduleFolderViews() []ScheduleFolder {
+	out := []ScheduleFolder{}
+	for _, p := range c.scheduleFolders() {
+		out = append(out, ScheduleFolder{Path: p, Name: filepath.Base(p)})
+	}
+	return out
 }
 
 func scheduleView(s schedule.Schedule) ScheduleView {
@@ -187,7 +209,7 @@ func (c *Controller) PreviewSchedule(_ context.Context, d ScheduleDraft) (Schedu
 	if err != nil {
 		return SchedulePreview{}, err
 	}
-	req, err := d.draft().Request()
+	req, err := d.draft().Request(c.scheduleFolders())
 	if err != nil {
 		return SchedulePreview{}, err
 	}
@@ -219,7 +241,7 @@ func (c *Controller) CreateSchedule(ctx context.Context, d ScheduleDraft, confir
 	if err != nil {
 		return ScheduleView{}, err
 	}
-	req, err := d.draft().Request()
+	req, err := d.draft().Request(c.scheduleFolders())
 	if err != nil {
 		return ScheduleView{}, err
 	}

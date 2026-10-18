@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -44,11 +45,21 @@ func (r *fakeRunner) Run(ctx context.Context, input string) error {
 // service exercises the actual controller surface (Run/Cancel/Close) it uses.
 type fakeFactory struct {
 	behavior func(ctx context.Context, sink event.Sink, input string) error
+	// planOnNew starts a conversation the way boot does when the user's default mode is plan.
+	planOnNew bool
+	newErr    error
 }
 
 func (f *fakeFactory) NewSession(_ context.Context, p SessionParams) (*control.Controller, error) {
+	if f.newErr != nil {
+		return nil, f.newErr
+	}
 	runner := &fakeRunner{sink: p.Sink, behavior: f.behavior}
-	return control.New(control.Options{Runner: runner, Sink: p.Sink}), nil
+	ctrl := control.New(control.Options{Runner: runner, Sink: p.Sink})
+	if f.planOnNew && p.NewConversation {
+		ctrl.SetPlanMode(true)
+	}
+	return ctrl, nil
 }
 
 type steerBarrierTool struct {
@@ -2245,6 +2256,49 @@ func TestVendorNotificationsReachOnlyClientsThatDeclareThem(t *testing.T) {
 				t.Errorf("vendor notifications = %v, want some: %v", vendor, tc.want)
 			}
 		})
+	}
+}
+
+func TestServeNewSessionStartsInThePlanModeTheControllerDecided(t *testing.T) {
+	for name, tc := range map[string]struct {
+		plan bool
+		want string
+	}{"default plan": {true, sessionModePlan}, "default normal": {false, sessionModeNormal}} {
+		t.Run(name, func(t *testing.T) {
+			client, stop := startServer(t, &fakeFactory{planOnNew: tc.plan})
+			defer stop()
+			client.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+			var nr SessionNewResult
+			if err := json.Unmarshal(client.call(t, "session/new", SessionNewParams{}).Result, &nr); err != nil {
+				t.Fatal(err)
+			}
+			if nr.Modes == nil || nr.Modes.CurrentModeID != tc.want {
+				t.Fatalf("session/new modes = %+v, want current %q", nr.Modes, tc.want)
+			}
+		})
+	}
+}
+
+func TestServeSessionNewWithoutCredentialsIsAuthRequired(t *testing.T) {
+	for name, cause := range map[string]error{
+		"key missing": fmt.Errorf("model %q %w: add DEEPSEEK_API_KEY", "m", provider.ErrKeyMissing),
+		"no provider": provider.ErrNoProvider,
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, stop := startServer(t, &fakeFactory{newErr: cause})
+			defer stop()
+			client.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+			resp := client.call(t, "session/new", SessionNewParams{})
+			if resp.Error == nil || resp.Error.Code != ErrAuthRequired {
+				t.Fatalf("session/new = %+v, want code %d (authentication required)", resp.Error, ErrAuthRequired)
+			}
+		})
+	}
+	client, stop := startServer(t, &fakeFactory{newErr: errors.New("disk full")})
+	defer stop()
+	client.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+	if resp := client.call(t, "session/new", SessionNewParams{}); resp.Error == nil || resp.Error.Code != ErrInternal {
+		t.Fatalf("an unrelated failure = %+v, want code %d", resp.Error, ErrInternal)
 	}
 }
 

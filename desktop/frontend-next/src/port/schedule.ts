@@ -51,6 +51,14 @@ export interface ScheduleBoard {
   schedules: ScheduleView[];
   runs: ScheduleRunView[];
   policy: SchedulePolicyView;
+  // The trusted projects a schedule may be given. A creation names one of these
+  // and nothing else; the kernel refuses any other path.
+  folders: ScheduleFolder[];
+}
+
+export interface ScheduleFolder {
+  path: string;
+  name: string;
 }
 
 export interface SchedulePreview {

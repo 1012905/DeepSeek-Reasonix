@@ -44,7 +44,46 @@ type dispatchState struct {
 	mu     sync.Mutex
 	opened bool
 	depth  int
-	pairs  map[string][]byte
+	pairs  map[string]*dispatchPair
+}
+
+// dispatchWindow is how many accepted sequence numbers a pairing remembers; one
+// older than the newest by more than this is refused unseen.
+const dispatchWindow = 4096
+
+// dispatchPair is one pairing: the secret, the next number to sign with, and the
+// numbers taken from the partner. It lives as long as the secret does, in memory
+// only, so a message copied out of the spool cannot be replayed into this pairing
+// however many others have been read since.
+type dispatchPair struct {
+	secret []byte
+	sent   uint64
+	seen   map[uint64]bool
+	floor  uint64
+}
+
+// accept records seq as taken, or refuses it when it was taken or has aged out.
+func (p *dispatchPair) accept(seq uint64) bool {
+	if seq == 0 || seq <= p.floor || p.seen[seq] {
+		return false
+	}
+	if p.seen == nil {
+		p.seen = map[uint64]bool{}
+	}
+	p.seen[seq] = true
+	if len(p.seen) > dispatchWindow {
+		var newest uint64
+		for n := range p.seen {
+			newest = max(newest, n)
+		}
+		p.floor = newest - dispatchWindow
+		for n := range p.seen {
+			if n <= p.floor {
+				delete(p.seen, n)
+			}
+		}
+	}
+	return true
 }
 
 // SetProjectDispatcher gives the dispatch tool somewhere to go; a controller
@@ -94,27 +133,33 @@ func (c *Controller) rememberPairLocked(key string, secret []byte) {
 		return
 	}
 	if c.dispatch.pairs == nil {
-		c.dispatch.pairs = map[string][]byte{}
+		c.dispatch.pairs = map[string]*dispatchPair{}
 	}
-	c.dispatch.pairs[key] = append([]byte(nil), secret...)
+	c.dispatch.pairs[key] = &dispatchPair{secret: append([]byte(nil), secret...)}
 }
 
-// dispatchProof signs a message to a dispatch partner, or returns "" when the
-// target is not one.
-func (c *Controller) dispatchProof(m peermail.Message) string {
+// signDispatch numbers and signs a message to a dispatch partner, and leaves it
+// alone when the target is not one.
+func (c *Controller) signDispatch(m *peermail.Message) {
 	c.dispatch.mu.Lock()
-	secret := c.dispatch.pairs[m.To.SessionID]
-	c.dispatch.mu.Unlock()
-	return peermail.Proof(secret, m)
+	defer c.dispatch.mu.Unlock()
+	pair := c.dispatch.pairs[m.To.SessionID]
+	if pair == nil {
+		return
+	}
+	pair.sent++
+	m.Seq = pair.sent
+	m.Proof = peermail.Proof(pair.secret, *m)
 }
 
 // dispatchPartner reports whether the message proves it came from a session this
-// one dispatched to or was dispatched by.
+// one dispatched to or was dispatched by, and that it is the first time it is
+// taken: a proof is valid once per sequence number.
 func (c *Controller) dispatchPartner(m peermail.Message) bool {
 	c.dispatch.mu.Lock()
-	secret := c.dispatch.pairs[m.From.SessionID]
-	c.dispatch.mu.Unlock()
-	return peermail.ProofValid(secret, m)
+	defer c.dispatch.mu.Unlock()
+	pair := c.dispatch.pairs[m.From.SessionID]
+	return pair != nil && peermail.ProofValid(pair.secret, m) && pair.accept(m.Seq)
 }
 
 // PeerKey is the address other sessions write to this one at, empty until the

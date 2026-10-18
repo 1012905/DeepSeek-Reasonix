@@ -151,7 +151,7 @@ test("only issues the bot filed with the source label are ours", () => {
   assert.equal(isOurs({ ...ok, labels: [] }), false);
 });
 
-function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = (n) => ({ ...BOT, number: n, comments: 1 }), comments = [], commentFails = false, reopenFails = false, recent = [], recordedFails = false, pendingFails = null, open = [], pending = [item()], issues = {}, changed = [], timeline = [], pulls = {}, tags = [], stable = null, releaseAt = null } = {}) {
+function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = (n) => ({ ...BOT, number: n, comments: 1 }), comments = [], commentFails = false, reopenFails = false, recent = [], recordedFails = false, pendingFails = null, open = [], withdrawn = [], withdrawnFails = null, closeFails = false, pending = [item()], issues = {}, changed = [], timeline = [], pulls = {}, tags = [], stable = null, releaseAt = null } = {}) {
   const calls = [];
   return {
     calls,
@@ -159,6 +159,7 @@ function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = 
     worker: {
       pending: async () => { if (pendingFails) throw pendingFails; return pending; },
       open: async () => open,
+      withdrawn: async () => { if (withdrawnFails) throw withdrawnFails; return withdrawn; },
       recorded: async (r, b) => { calls.push(["recorded", r, b]); if (recordedFails) throw new Error("boom"); },
       status: async (r, b) => calls.push(["status", r, b]),
       replies: async () => { if (repliesFails) throw repliesFails; return replies; },
@@ -173,6 +174,7 @@ function fakes({ replies = [], ackFails = false, repliesFails = null, issueOf = 
       recentComments: async (n) => { calls.push(["comments", n]); return comments; },
       comment: async (n, body) => { calls.push(["comment", n, body]); if (commentFails) throw new Error("gh boom"); },
       updateComment: async (id, body) => calls.push(["updateComment", id, body]),
+      close: async (n) => { calls.push(["close", n]); if (closeFails) throw new Error("gh close boom"); },
       reopen: async (n) => { calls.push(["reopen", n]); if (reopenFails) throw new Error("gh reopen boom"); },
       timeline: async (n) => { calls.push(["timeline", n]); return timeline; },
       getPull: async (n) => pulls[n],
@@ -332,7 +334,7 @@ test("an unreachable worker is a warning, not a failed job", async () => {
     const deps = liveDeps({ FEEDBACK_ADMIN_TOKEN: "t" });
     const logs = [];
     const { failures } = await run({ ...deps, log: (m) => logs.push(m) });
-    assert.equal(failures.length, 3);
+    assert.equal(failures.length, 4);
     assert.ok(logs.every((m) => m.startsWith("::warning::") && m.includes("ECONNREFUSED")));
   } finally {
     globalThis.fetch = real;
@@ -512,4 +514,58 @@ test("a comment that is already current is neither edited nor reposted", async (
   const d = fakes({ pending: [], replies: [withImages(true)], comments: [same] });
   await run(d);
   assert.deepEqual(writes(d), ["getIssue", "comments", "ack"]);
+});
+
+const WITHDRAWN = (over = {}) => ({ receipt: R, issueNumber: 777, issueUrl: "https://github.com/esengine/DeepSeek-Reasonix/issues/777", ...over });
+const mirror = (over = {}) => ({ ...BOT, number: 777, state: "open", body: `text\n\n${marker(R)}`, ...over });
+const closes = (d) => d.calls.filter((c) => c[0] === "close");
+
+test("withdrawn: the mirror issue of a withdrawn report is closed as not planned, with a note", async () => {
+  const d = fakes({ pending: [], withdrawn: [WITHDRAWN()], issues: { 777: mirror() } });
+  assert.equal((await run(d)).failures.length, 0);
+  assert.deepEqual(closes(d), [["close", 777]]);
+  const note = d.calls.find((c) => c[0] === "comment");
+  assert.equal(note[1], 777);
+  assert.match(note[2], /withdrew/);
+});
+
+test("withdrawn: an issue that is already closed is left alone, so a repeat run writes nothing", async () => {
+  const d = fakes({ pending: [], withdrawn: [WITHDRAWN()], issues: { 777: mirror({ state: "closed", state_reason: "not_planned" }) } });
+  await run(d);
+  assert.equal(closes(d).length, 0);
+  assert.equal(d.calls.filter((c) => c[0] === "comment").length, 0);
+});
+
+test("withdrawn: only the mirror of that very report is closed, never another issue the worker names", async () => {
+  for (const issue of [
+    mirror({ body: `text\n\n${marker("FB-AAAA-AAAA")}` }),
+    mirror({ user: { login: "someone" } }),
+    mirror({ labels: [] }),
+    mirror({ pull_request: {} }),
+  ]) {
+    const d = fakes({ pending: [], withdrawn: [WITHDRAWN()], issues: { 777: issue } });
+    await run(d);
+    assert.equal(closes(d).length, 0);
+  }
+});
+
+test("withdrawn: a dry run writes nothing, and a read or close failure never stops the rest", async () => {
+  const dry = fakes({ pending: [], withdrawn: [WITHDRAWN()], issues: { 777: mirror() } });
+  await run(dry, { dryRun: true });
+  assert.equal(closes(dry).length, 0);
+  assert.equal(dry.calls.filter((c) => c[0] === "comment").length, 0);
+
+  const broken = fakes({ pending: [], withdrawnFails: new Error("worker down") });
+  assert.equal((await run(broken)).failures.length, 1);
+
+  const stuck = fakes({ pending: [], withdrawn: [WITHDRAWN(), WITHDRAWN({ receipt: "FB-BBBB-0002", issueNumber: 778 })], issues: { 777: mirror(), 778: mirror({ number: 778, body: `t\n\n${marker("FB-BBBB-0002")}` }) }, closeFails: true });
+  const { failures } = await run(stuck);
+  assert.equal(failures.length, 2);
+  assert.equal(stuck.calls.filter((c) => c[0] === "comment").length, 0);
+});
+
+test("withdrawn: a malformed list entry is skipped", async () => {
+  const d = fakes({ pending: [], withdrawn: [{ receipt: "nope", issueNumber: 7 }, WITHDRAWN({ issueNumber: "x" }), WITHDRAWN({ issueNumber: -1 })], issues: { 777: mirror() } });
+  await run(d);
+  assert.equal(closes(d).length, 0);
 });

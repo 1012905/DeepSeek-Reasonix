@@ -45,6 +45,10 @@ func (f *feedbackStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, f.mine)
 		return
 	}
+	if strings.HasSuffix(r.URL.Path, "/withdraw") {
+		_, _ = io.WriteString(w, `{"receipt":"FB-7K3M-9QX2","status":"withdrawn"}`)
+		return
+	}
 	if strings.HasSuffix(r.URL.Path, "/reply") {
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"replyId":55,"createdAt":"2026-10-02T09:00:00Z"}`)
@@ -443,5 +447,57 @@ func TestFeedbackReplyImagesReachTheWorkerAndBadOnesAreRefused(t *testing.T) {
 	})
 	if r := reasonOf(t, out); r.Code != "feedback.invalid" || r.Params["field"] != "images" || r.Params["reason"] != "undecodable" {
 		t.Fatalf("bad base64: %s", out)
+	}
+}
+
+func TestFeedbackWithdrawRoundTripShowsItAsWithdrawn(t *testing.T) {
+	stub := &feedbackStub{}
+	srv := feedbackServer(t, stub, true)
+	feedbackPost(t, srv.URL+"/feedback", map[string]any{"category": "bug", "body": "x", "displayName": "kim"})
+	resp, out := feedbackPost(t, srv.URL+"/feedback/FB-7K3M-9QX2/withdraw", map[string]any{})
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("withdraw: %d %s", resp.StatusCode, out)
+	}
+	stub.mu.Lock()
+	stub.mine = `{"items":[{"receipt":"FB-7K3M-9QX2","category":"bug","titleSnippet":"x","status":"withdrawn","createdAt":"2026-09-30T08:00:00Z","updatedAt":"2026-09-30T09:00:00Z"}]}`
+	stub.mu.Unlock()
+	if got := feedbackGetMine(t, srv.URL); got.Items[0].Status != feedback.StatusWithdrawn {
+		t.Fatalf("mine after withdrawing = %+v", got.Items[0])
+	}
+}
+
+func TestFeedbackWithdrawRefusalsCarryTheirOwnCodes(t *testing.T) {
+	for _, c := range []struct {
+		status   int
+		upstream string
+		code     string
+		want     int
+	}{
+		{409, "feedback.not_withdrawable", "feedback.not_withdrawable", 409},
+		{404, "feedback.not_found", "feedback.not_found", 404},
+		{401, "feedback.bad_token", "feedback.bad_token", 409},
+		{502, "", "feedback.unavailable", 502},
+	} {
+		stub := &feedbackStub{}
+		srv := feedbackServer(t, stub, true)
+		feedbackPost(t, srv.URL+"/feedback", map[string]any{"category": "bug", "body": "x", "displayName": "kim"})
+		stub.status, stub.body = c.status, `{"error":{"code":"`+c.upstream+`"}}`
+		resp, out := feedbackPost(t, srv.URL+"/feedback/FB-7K3M-9QX2/withdraw", map[string]any{})
+		if resp.StatusCode != c.want || reasonOf(t, out).Code != c.code {
+			t.Errorf("%s: %d %s", c.upstream, resp.StatusCode, out)
+		}
+	}
+}
+
+func TestFeedbackWithdrawWithoutAServiceOrAReceiptIsRefused(t *testing.T) {
+	srv := feedbackServer(t, &feedbackStub{}, false)
+	resp, out := feedbackPost(t, srv.URL+"/feedback/FB-7K3M-9QX2/withdraw", map[string]any{})
+	if resp.StatusCode != http.StatusServiceUnavailable || reasonOf(t, out).Code != "feedback.disabled" {
+		t.Fatalf("no service: %d %s", resp.StatusCode, out)
+	}
+	srv = feedbackServer(t, &feedbackStub{}, true)
+	resp, out = feedbackPost(t, srv.URL+"/feedback/FB-AAAA-BBBB/withdraw", map[string]any{})
+	if resp.StatusCode != http.StatusBadRequest || reasonOf(t, out).Code != "feedback.invalid" {
+		t.Fatalf("an unknown receipt: %d %s", resp.StatusCode, out)
 	}
 }
