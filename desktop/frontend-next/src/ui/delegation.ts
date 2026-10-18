@@ -25,12 +25,12 @@ export function nestLabel(who: string | undefined, count: number | undefined, st
 export const ranLabel = (p: Tool["profile"]): string => (p?.model ? [p.model, p.effort].filter(Boolean).join(" · ") : "");
 
 // The same, for a row with no room: the model name is what tells two runs apart,
-// so the provider in front of it is what gives way ("…/deepseek-v4-pro · high").
+// so it is all the row keeps ("…/deepseek-v4-pro"); the provider and the effort are
+// the title.
 export const ranShort = (p: Tool["profile"]): string => {
   if (!p?.model) return "";
   const at = p.model.lastIndexOf("/");
-  const name = at >= 0 ? `…/${p.model.slice(at + 1)}` : p.model;
-  return [name, p.effort].filter(Boolean).join(" · ");
+  return at >= 0 ? `…/${p.model.slice(at + 1)}` : p.model;
 };
 
 export type DelegateStatus = "running" | "refused" | "failed" | "done";

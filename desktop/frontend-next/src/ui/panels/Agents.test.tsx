@@ -115,7 +115,7 @@ describe("the model a sub-agent ran on", () => {
   it("is drawn on the row of a failed run, with the full reference as its title", () => {
     const s = [...base, ranOn].reduce(reduce, initialState);
     const html = renderToStaticMarkup(<Agents tasks={railOf(s.items, s.executions, s.subagentPhase).tasks} />);
-    expect(html).toContain("…/model-x · high");
+    expect(html).toContain(">…/model-x<");
     expect(html).toContain('title="aigateway/model-x · high"');
   });
   it("is absent for a child whose model was never recorded", () => {
@@ -133,6 +133,6 @@ describe("two sub-agents whose model references differ only in the model name", 
     const s = [...ran("c1", "deepseek-v4-pro"), ...ran("c2", "deepseek-v4-flash")].reduce(reduce, initialState);
     const html = renderToStaticMarkup(<Agents tasks={railOf(s.items, s.executions, s.subagentPhase).tasks} />);
     const chips = [...html.matchAll(/<span class="ran"[^>]*>([^<]*)<\/span>/g)].map((m) => m[1]);
-    expect(chips).toEqual(["…/deepseek-v4-pro · high", "…/deepseek-v4-flash · high"]);
+    expect(chips).toEqual(["…/deepseek-v4-pro", "…/deepseek-v4-flash"]);
   });
 });
