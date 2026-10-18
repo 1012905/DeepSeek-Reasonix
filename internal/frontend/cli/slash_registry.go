@@ -69,6 +69,7 @@ func builtinSlashSpecs() []builtinSlashSpec {
 		{name: "/quit", aliases: []string{"/exit"}, insert: "/quit", hint: i18n.M.CmdQuit},
 		{name: "/copy", insert: "/copy", hint: i18n.M.CmdCopy, showInHelp: true},
 		{name: "/export", insert: "/export", hint: i18n.M.CmdExport, showInHelp: true},
+		{name: "/btw", insert: "/btw ", hint: i18n.M.CmdBtw, showInHelp: true},
 	}
 }
 
