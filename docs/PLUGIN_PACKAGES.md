@@ -739,6 +739,9 @@ How it runs:
   disabled, and its status says why.
 - Nothing a mod does changes the cached system prompt or the tool list. Its text
   reaches the model only as data from the mod.
+- While a mod runs, the completion receipt carries the gap `mod_effects_unobserved`:
+  what a full-trust process wrote is outside what the host observes, so a change
+  it made cannot be proven.
 
 Events served:
 
