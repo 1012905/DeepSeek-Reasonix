@@ -2,7 +2,10 @@ package settings
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -236,6 +239,45 @@ func TestClassAndEffectHaveWireNames(t *testing.T) {
 	for _, e := range All() {
 		if e.Class.String() == "" || e.Effect.String() == "" {
 			t.Fatalf("%s has no wire name", e.ID)
+		}
+	}
+}
+
+func TestAWebBackendChainIsJudgedByTheConfigsOwnNormaliser(t *testing.T) {
+	cfg := &config.Config{}
+	if _, to, err := Write(cfg, "tools.web_fetch_backends", json.RawMessage(`["local","deepseek_api"]`)); err != nil || !reflect.DeepEqual(to, []string{"local", "deepseek_api"}) {
+		t.Fatalf("to=%v err=%v", to, err)
+	}
+	if _, _, err := Write(cfg, "tools.web_search_backends", json.RawMessage(`["no-such-backend"]`)); CodeOf(err) != CodeValue || len(cfg.Tools.WebSearchBackends) != 0 {
+		t.Fatalf("a backend nothing can build was written: %v", err)
+	}
+}
+
+func TestEmbeddedConfigStructsAreDeclaredToo(t *testing.T) {
+	for _, id := range []string{"tools.searxng_url", "tools.web_search_paid_allowed", "tools.web_fetch_paid_allowed"} {
+		if e, ok := Lookup(id); !ok || e.Class != Guarded {
+			t.Errorf("%s = %+v, want a declared Guarded key", id, e)
+		}
+	}
+	if e, _ := Lookup("tools.web_search_backends"); e.Class != Elevated {
+		t.Errorf("a chain that can add a paid backend must be Elevated, got %v", e.Class)
+	}
+}
+
+// The desktop's table of where a setting is drawn names only ids that exist, so a
+// setting renamed or removed here cannot leave a button that opens the wrong row.
+func TestTheDesktopScreenTableNamesOnlyDeclaredSettings(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "desktop", "frontend-next", "src", "ui", "settingScreens.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := regexp.MustCompile(`(?m)^\s+"([a-z_][a-z_.0-9]*)":\s+"[a-z-]+:[a-z-]+",`).FindAllStringSubmatch(string(src), -1)
+	if len(ids) < 30 {
+		t.Fatalf("read %d ids from the screen table; this guard is watching nothing", len(ids))
+	}
+	for _, m := range ids {
+		if _, ok := Lookup(m[1]); !ok {
+			t.Errorf("settingScreens.ts names %q, which no declaration has", m[1])
 		}
 	}
 }

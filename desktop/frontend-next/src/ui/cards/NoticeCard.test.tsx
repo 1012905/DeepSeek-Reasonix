@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import "../testkit";
 import { NoticeCard } from "./NoticeCard";
 import { t } from "../../i18n";
@@ -266,5 +266,27 @@ describe("a background job notice", () => {
     cleanup();
     const untyped = draw({ code: "job_failed", text: "english", detail: detail({}) });
     expect(untyped.querySelector(".nwhy")?.textContent).toBe("exit status 2");
+  });
+});
+
+describe("a notice about a setting the model named", () => {
+  it("offers to open the setting where it is drawn", () => {
+    const open = vi.fn();
+    const box = render(<NoticeCard item={notice({ level: "info", code: "setting_open", text: "助手需要改动 permissions.mode", detail: "permissions.mode" })} onSettings={open} />).container;
+    fireEvent.click(box.querySelector("button")!);
+    expect(open).toHaveBeenCalledExactlyOnceWith("tools:approval");
+  });
+
+  it("opens the top of the sheet for a setting with no row of its own", () => {
+    const open = vi.fn();
+    const box = render(<NoticeCard item={notice({ level: "info", code: "setting_open", text: "x", detail: "agent.max_steps" })} onSettings={open} />).container;
+    fireEvent.click(box.querySelector("button")!);
+    expect(open).toHaveBeenCalledExactlyOnceWith(undefined);
+  });
+
+  it("does not draw a button for a change that already happened, and names the setting once", () => {
+    const box = draw({ level: "info", code: "setting_changed", text: "设置 peers.enabled 已从 false 改为 true。", detail: "peers.enabled" });
+    expect(box.querySelector("button")).toBeNull();
+    expect(box.querySelector(".nrule")?.textContent).toBe("peers.enabled");
   });
 });

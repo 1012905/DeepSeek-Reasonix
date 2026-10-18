@@ -1651,4 +1651,8 @@ export const EN: Record<string, string> = {
   "收起数据": "Hide data",
   "图表数据：{title}": "Chart data: {title}",
   "另有 {n} 行": "and {n} more rows",
+  "请求修改设置": "Asks to change a setting",
+  "每次都会询问": "Asked every time",
+  "这项设置会放宽模型的权限，所以没有「本会话内不再问」，每次都要你亲自确认。": "This setting loosens what the model may do, so there is no \"don't ask again this session\": you confirm it yourself each time.",
+  "打开设置": "Open settings",
 };
