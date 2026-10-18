@@ -11,9 +11,23 @@ import (
 	"reasonix/internal/session/control"
 )
 
+// refuseDevice answers a paired device that reached a route which sends data off
+// this machine or destroys it: those belong to the window, and are refused before
+// the request is read or any git process starts.
+func refuseDevice(w http.ResponseWriter, r *http.Request) bool {
+	if hostReach(r) {
+		return false
+	}
+	refuse(w, http.StatusNotFound, codeDeviceHostOnly, "a paired device cannot use this", nil)
+	return true
+}
+
 // pushPreview says where the current branch would go and what it would send. It
 // reaches no remote.
 func (s *Server) pushPreview(w http.ResponseWriter, r *http.Request) {
+	if refuseDevice(w, r) {
+		return
+	}
 	plan, err := s.ctl().GitPushPreview(r.Context(), r.URL.Query().Get("repo"))
 	if err != nil {
 		refusePush(w, r, err)
@@ -24,6 +38,9 @@ func (s *Server) pushPreview(w http.ResponseWriter, r *http.Request) {
 
 // push sends the confirmed plan's branch to its upstream.
 func (s *Server) push(w http.ResponseWriter, r *http.Request) {
+	if refuseDevice(w, r) {
+		return
+	}
 	var req control.PushRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
 		refuse(w, http.StatusBadRequest, "push.bad_request", "the request body is not a JSON push request", nil)

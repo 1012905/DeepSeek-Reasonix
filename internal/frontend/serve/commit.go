@@ -117,6 +117,9 @@ func refuseCommit(w http.ResponseWriter, r *http.Request, err error) {
 // discardChange throws away one file's change. Only a path git lists as a
 // modification or deletion of a file the last commit holds is accepted.
 func (s *Server) discardChange(w http.ResponseWriter, r *http.Request) {
+	if refuseDevice(w, r) {
+		return
+	}
 	var req control.DiscardRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		refuse(w, http.StatusBadRequest, "discard.bad_request", "the request body is not a JSON discard request", nil)
