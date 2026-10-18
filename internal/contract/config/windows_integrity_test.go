@@ -54,3 +54,29 @@ func TestWindowsIntegritySurvivesASaveAndReload(t *testing.T) {
 		t.Fatal("an unset switch was written out")
 	}
 }
+
+// A caller's request to enforce (an observed run asks for it) does not make
+// Windows edit permissions on the user's folders unless the user turned the
+// sandbox on; elsewhere the request is honoured.
+func TestAnEnforceOverrideNeedsTheUsersConsentOnWindows(t *testing.T) {
+	old := runtimeGOOS
+	t.Cleanup(func() { runtimeGOOS = old })
+	cfg := Default()
+
+	runtimeGOOS = "windows"
+	if got := cfg.BashModeUnderOverride("enforce"); got != "off" {
+		t.Fatalf("windows, no opt-in: %q, want off", got)
+	}
+	if got := cfg.BashModeUnderOverride("off"); got != "off" {
+		t.Fatalf("windows, off override: %q", got)
+	}
+	cfg.Sandbox.WindowsIntegrity = true
+	if got := cfg.BashModeUnderOverride("enforce"); got != "enforce" {
+		t.Fatalf("windows, opted in: %q, want enforce", got)
+	}
+	runtimeGOOS = "linux"
+	cfg.Sandbox.WindowsIntegrity = false
+	if got := cfg.BashModeUnderOverride("enforce"); got != "enforce" {
+		t.Fatalf("linux: %q, want the override", got)
+	}
+}

@@ -1042,6 +1042,17 @@ func (c *Config) BashModeForGOOS(goos string) string {
 	}
 }
 
+// BashModeUnderOverride is the mode a caller's request for override wins. On
+// Windows a request to enforce is honoured only when the user turned on
+// windows_integrity: enforcing there edits permissions on the user's folders,
+// which a caller must not do on its own account.
+func (c *Config) BashModeUnderOverride(override string) string {
+	if override == "enforce" && runtimeGOOS == "windows" && !c.Sandbox.WindowsIntegrity {
+		return c.BashMode()
+	}
+	return override
+}
+
 // AgentConfig configures the harness loop. PlannerModel is optional: when set
 // to another provider's name it enables two-model collaboration, where the
 // planner handles low-frequency planning in its own session (kept separate so

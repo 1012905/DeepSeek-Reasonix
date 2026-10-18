@@ -10,7 +10,7 @@ import (
 // effectiveBashMode is the bash-sandbox mode this build runs under.
 func effectiveBashMode(opts Options, cfg *config.Config) string {
 	if override := strings.TrimSpace(opts.SandboxBashOverride); override != "" {
-		return override
+		return cfg.BashModeUnderOverride(override)
 	}
 	return cfg.BashMode()
 }

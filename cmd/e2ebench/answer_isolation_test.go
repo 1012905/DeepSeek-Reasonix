@@ -26,13 +26,13 @@ func TestMemoryBenchRequiresReadSandbox(t *testing.T) {
 		}
 	}
 	err = validateAnswerIsolation(tasks)
-	if sandbox.Available() && err != nil {
+	if sandbox.ConfinesByDefault() && err != nil {
 		t.Fatal(err)
 	}
-	if !sandbox.Available() && err == nil {
+	if !sandbox.ConfinesByDefault() && err == nil {
 		t.Fatal("MemoryBench accepted a host with no OS read sandbox")
 	}
-	if sandbox.Available() {
+	if sandbox.ConfinesByDefault() {
 		previous := benchStateBase
 		benchStateBase = func() (string, error) { return filepath.Join(tasks[0].answerRoot, "cache"), nil }
 		t.Cleanup(func() { benchStateBase = previous })
@@ -43,7 +43,7 @@ func TestMemoryBenchRequiresReadSandbox(t *testing.T) {
 }
 
 func TestMemoryBenchAnswerIsolationAtSandboxBoundary(t *testing.T) {
-	if !sandbox.Available() {
+	if !sandbox.ConfinesByDefault() {
 		t.Skip("this host has no OS read sandbox")
 	}
 	const suite = "../../benchmarks/memorybench"
