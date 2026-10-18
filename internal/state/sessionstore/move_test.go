@@ -86,6 +86,26 @@ func TestMoveSessionLeavesNothingBehindAtTheSource(t *testing.T) {
 	}
 }
 
+func TestMoveSessionRemovesCheckpointsJobsAndInboxAndMovesNone(t *testing.T) {
+	from, to := t.TempDir(), t.TempDir()
+	src := movableSession(t, from)
+	dirs := []string{store.SessionCheckpointDir(src), store.SessionJobsDir(src), store.SessionInboxDir(src)}
+	dst, err := MoveSession(src, to, "/new/project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range dirs {
+		if _, err := os.Stat(d); !os.IsNotExist(err) {
+			t.Errorf("%s survived the move (stat err %v)", d, err)
+		}
+	}
+	for _, d := range []string{store.SessionCheckpointDir(dst), store.SessionJobsDir(dst), store.SessionInboxDir(dst)} {
+		if _, err := os.Stat(d); !os.IsNotExist(err) {
+			t.Errorf("%s arrived at the target: checkpoints snapshot the old project's files and stay behind (stat err %v)", d, err)
+		}
+	}
+}
+
 func TestMoveSessionRefusesASessionSomeoneHolds(t *testing.T) {
 	from, to := t.TempDir(), t.TempDir()
 	src := movableSession(t, from)

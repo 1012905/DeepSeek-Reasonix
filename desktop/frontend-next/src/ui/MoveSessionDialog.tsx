@@ -26,9 +26,10 @@ export function MoveSessionDialog({ session, label, projects, busy, error, note,
   const [target, setTarget] = useState(projects[0]?.root ?? "");
   return createPortal(
     <div ref={sheet} className="pickveil" role="dialog" aria-modal="true" aria-labelledby="movess-t">
-      <form className="pickcard" data-action="session.move-to" data-target={session.path} onSubmit={(ev) => { ev.preventDefault(); if (target) onMove(target); }}>
+      <form className="pickcard movess" data-action="session.move-to" data-target={session.path} onSubmit={(ev) => { ev.preventDefault(); if (target) onMove(target); }}>
         <h2 id="movess-t">{t("把「{name}」移到另一个项目", { name: label })}</h2>
         <p className="picknote">{t("只带走对话本身和你设的标题、置顶、归档。原项目的权限与目标设置不会跟着走，新项目按它自己的规则重新判断；对话里记录的路径保持原样。")}</p>
+        <p className="picknote">{t("检查点（回退快照）、后台任务日志和排队中的消息不随会话移动，原件会被移除。")}</p>
         {projects.length === 0 ? (
           <p className="picknote">{t("没有别的项目可以移到。先添加一个项目。")}</p>
         ) : (

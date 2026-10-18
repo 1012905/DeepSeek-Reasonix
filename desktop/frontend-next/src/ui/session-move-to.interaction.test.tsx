@@ -51,6 +51,7 @@ it("asks where, lists the other projects only, and says what travels and what do
   expect(options).toEqual(["beta — /b", "gamma — /c"]);
   expect(dialog.textContent).toContain("原项目的权限与目标设置不会跟着走");
   expect(dialog.textContent).toContain("对话里记录的路径保持原样");
+  expect(dialog.textContent).toContain("检查点（回退快照）、后台任务日志和排队中的消息不随会话移动，原件会被移除");
 });
 
 it("moves through the kernel once, reads the tree again and closes", async () => {

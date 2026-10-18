@@ -1293,5 +1293,6 @@ export const EN_SETTINGS: Record<string, string> = {
   "移动": "Move",
   "先关闭这个会话，再移动它": "Close this conversation first, then move it",
   "移动到项目…": "Move to a project…",
+  "检查点（回退快照）、后台任务日志和排队中的消息不随会话移动，原件会被移除。": "Checkpoints (rewind snapshots), background-task logs and queued messages do not travel; the originals are removed.",
   "对话已经移过去了，但原来的那份没能删除，请手动删除。": "The conversation was moved, but the original could not be removed; please delete it by hand.",
 };
