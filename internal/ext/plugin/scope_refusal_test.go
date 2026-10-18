@@ -82,7 +82,7 @@ func TestAnExhaustedRefusalIsPermanentAndSaysNothingNew(t *testing.T) {
 
 func TestOtherErrorsPassThroughUnchanged(t *testing.T) {
 	want := errors.New("boom")
-	if got := scopeClient(&noticeLog{}).scopeRefusal(want); got != want {
+	if got := scopeClient(&noticeLog{}).scopeRefusal(want); !errors.Is(got, want) {
 		t.Fatalf("got %v", got)
 	}
 }

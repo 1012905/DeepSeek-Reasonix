@@ -81,12 +81,12 @@ type bearerChallenge struct {
 func scopeTokens(raw string) []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, tok := range strings.Fields(raw) {
+	for tok := range strings.FieldsSeq(raw) {
 		if len(tok) > maxScopeLength || seen[tok] {
 			continue
 		}
 		valid := true
-		for i := 0; i < len(tok); i++ {
+		for i := range len(tok) {
 			if c := tok[i]; c < 0x21 || c > 0x7e || c == '"' || c == '\\' {
 				valid = false
 				break

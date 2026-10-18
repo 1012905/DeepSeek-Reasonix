@@ -187,6 +187,19 @@ export function ServerRow({
       )}
     </div>
   );
+  const asked = m.scopeUpgrade ?? [];
+  // The scope names are the server's words: shown as written, never read for meaning.
+  const upgrade = asked.length > 0 && (
+    <div className="srv-held" role="group" aria-label={t("这个服务器要求更多权限")}>
+      <span className="ds">{t("这个服务器拒绝了一次调用，并要求更多权限（以下是它自己写的名称）：")}</span>
+      <code>{asked.join(" ")}</code>
+      {live && (
+        <button className="act" data-action="mcp.upgrade" data-target={m.name} disabled={!!busy} onClick={() => void run("upgrade", () => port.upgradeMcp(m.name))}>
+          {t(busy === "upgrade" ? "等待浏览器授权…" : "授权更多权限")}
+        </button>
+      )}
+    </div>
+  );
   const following = m.followsChanges && (
     <div className="srv-held" role="group" aria-label={t("自动接受这个服务器的改动")}>
       <span className="ds">{t("这个服务器的改动会自动接受，并在通知里告诉你。")}</span>
@@ -263,7 +276,7 @@ export function ServerRow({
         <div className="srv-hd">{head}</div>
         {about}
         {launch}
-        {held}{following}
+        {held}{upgrade}{following}
         {why && <div className="why" role={failed ? "alert" : undefined}>{why}</div>}
         {confirm}
       </div>
@@ -276,7 +289,7 @@ export function ServerRow({
       <summary>{head}</summary>
       {about}
       {launch}
-      {held}{following}
+      {held}{upgrade}{following}
       {why && <div className="why" role={failed ? "alert" : undefined}>{why}</div>}
       {confirm}
       {load}

@@ -202,6 +202,7 @@ export const ACTIONS: UIAction[] = [
   { id: "mcp.retry", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "mcp.trust", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.signin", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.upgrade", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.follow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.unfollow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.remove", kind: "destructive", target: "entity", proof: "interaction" },

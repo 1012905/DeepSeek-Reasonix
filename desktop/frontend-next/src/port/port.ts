@@ -334,6 +334,8 @@ export interface AgentPort {
   trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
   // Blocks until the browser sign-in ends (up to five minutes); a refusal is a thrown coded error.
   signinMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
+  // Like signinMcp, for the access a server asked for; the kernel asks the person every time.
+  upgradeMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
   followMcp(name: string, follow: boolean): Promise<{ name: string; follow: boolean; tools?: number }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;

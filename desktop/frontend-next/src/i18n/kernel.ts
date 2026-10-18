@@ -399,6 +399,7 @@ const SAID: Record<string, string> = {
   "mcp.editing_disabled": "这个客户端不能登录 MCP 服务器",
   "mcp.signin_declined": "你没有同意前往该登录站点，已取消登录",
   "mcp.signin_ineligible": "这个服务器不使用 OAuth 登录",
+  "mcp.no_scope_upgrade": "这个服务器没有要求更多权限",
   "mcp.signin_busy": "这个服务器已经在登录中",
   "mcp.signin_no_host": "服务器给出的登录页没有主机名，已停止",
   "mcp.signin_no_browser": "这台机器打不开浏览器",
