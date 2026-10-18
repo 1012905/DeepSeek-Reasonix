@@ -76,10 +76,7 @@ func resolveToolEnvironment(opts Options, cfg *config.Config, roots config.Roots
 	if opts.SandboxNetworkOverride != nil {
 		env.network = *opts.SandboxNetworkOverride
 	}
-	bashMode := cfg.BashMode()
-	if override := strings.TrimSpace(opts.SandboxBashOverride); override != "" {
-		bashMode = override
-	}
+	bashMode := effectiveBashMode(opts, cfg)
 	// Config repair outside the workspace goes through the approval-gated file
 	// tools, never raw shell writes, so the bash write roots stay unwidened.
 	env.managedConfig = builtin.NewManagedConfigPaths(config.ReasonixManagedConfigPaths())

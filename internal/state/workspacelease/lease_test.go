@@ -589,19 +589,17 @@ func TestACrossProcessWaitNamesTheHolder(t *testing.T) {
 // Two folders that only share a git repository above them wait on each other,
 // and the report says the shared domain is that repository: a holder and a
 // requester showing one identical path otherwise reads as a session fighting itself.
-func TestAWaitNamesTheRepositoryThatFoldsTwoFoldersIntoOneDomain(t *testing.T) {
+func TestAWaitNamesTheRepositoryThatFoldsAFolderIntoTheRootsDomain(t *testing.T) {
 	withWaitGrace(t, 20*time.Millisecond)
 	repo, locks := testenv.TempDir(t), testenv.TempDir(t)
 	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	projectA, projectB := filepath.Join(repo, "a"), filepath.Join(repo, "b")
-	for _, dir := range []string{projectA, projectB} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
+	projectB := filepath.Join(repo, "b")
+	if err := os.MkdirAll(projectB, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	first, err := New(projectA, locks, nil)
+	first, err := New(repo, locks, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
