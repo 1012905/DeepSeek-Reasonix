@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -72,7 +73,8 @@ func TestSettingOpenNeverProposes(t *testing.T) {
 
 func TestSettingWithoutAHostRefusesByCode(t *testing.T) {
 	_, err := settingToolWith(nil).Execute(context.Background(), json.RawMessage(`{"op":"list"}`))
-	if r, ok := err.(tool.Refusal); !ok || r.Code != "setting.unavailable" {
+	var r tool.Refusal
+	if !errors.As(err, &r) || r.Code != "setting.unavailable" {
 		t.Fatalf("err = %v", err)
 	}
 }

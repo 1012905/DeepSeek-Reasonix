@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -151,20 +152,11 @@ func TestEffectTheModelProposesASettingAndTheUserClickDecidesIt(t *testing.T) {
 			if !reflect.DeepEqual(rec.toolNames(0), rec.toolNames(1)) {
 				t.Fatalf("the tool block moved between requests:\n%v\n%v", rec.toolNames(0), rec.toolNames(1))
 			}
-			if !slicesContains(rec.toolNames(0), "setting") {
+			if !slices.Contains(rec.toolNames(0), "setting") {
 				t.Fatalf("setting is not offered: %v", rec.toolNames(0))
 			}
 		})
 	}
-}
-
-func slicesContains(list []string, name string) bool {
-	for _, s := range list {
-		if s == name {
-			return true
-		}
-	}
-	return false
 }
 
 // A boundary setting is never proposed: no card, nothing written, and the

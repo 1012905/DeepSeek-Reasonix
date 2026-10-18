@@ -1236,8 +1236,7 @@ type ToolsConfig struct {
 	ProtectChangedFiles      *bool                `toml:"protect_changed_files"`
 	BrowserTools             *bool                `toml:"browser_tools"`
 	SettingTool              *bool                `toml:"setting_tool"`
-	// MCPResources offers the model a tool that reads a resource a connected
-	// server declares. The user file only; off by default.
+	// MCPResources offers a tool that reads a connected server's resource; user file only, off by default.
 	MCPResources bool `toml:"mcp_resources"`
 	WebAccessSettings
 	// VideoNativeMaxBytes lowers the size of file read_video sends natively below

@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -45,11 +46,15 @@ func propose(c *Controller, id, value, reason string) chan proposal {
 
 func userFile() *config.Config { return config.LoadForEdit(config.UserConfigPath()) }
 
+func asRefusal(err error) (tool.Refusal, bool) {
+	var r tool.Refusal
+	ok := errors.As(err, &r)
+	return r, ok
+}
+
 func refusalCode(err error) string {
-	if r, ok := err.(tool.Refusal); ok {
-		return r.Code
-	}
-	return ""
+	r, _ := asRefusal(err)
+	return r.Code
 }
 
 func idle(t *testing.T, done chan proposal, what string) {
@@ -147,7 +152,7 @@ func TestAGuardedSettingIsRefusedWithAnOpenRemedyAndNoCard(t *testing.T) {
 	c, requests, _ := settingController(t)
 	before := userFile().Permissions.Mode
 	_, err := c.ProposeSetting(context.Background(), "permissions.mode", json.RawMessage(`"yolo"`), "faster")
-	r, ok := err.(tool.Refusal)
+	r, ok := asRefusal(err)
 	if !ok || r.Code != "setting.guarded" || r.Remedy == nil || r.Remedy.Op != tool.RemedyOpen || r.Remedy.Setting != "permissions.mode" {
 		t.Fatalf("err = %#v", err)
 	}
@@ -257,7 +262,7 @@ func TestOpeningASettingEmitsANoticeAndChangesNothing(t *testing.T) {
 func TestADisabledDispatchNamesTheSwitchThatWouldLiftIt(t *testing.T) {
 	c, requests, _ := settingController(t)
 	_, err := peerDirectory{c}.DispatchToProject(context.Background(), "other", "do it")
-	r, ok := err.(tool.Refusal)
+	r, ok := asRefusal(err)
 	if !ok || r.Code != "dispatch.disabled" || r.Remedy == nil || r.Remedy.Setting != "peers.enabled" || r.Remedy.Op != tool.RemedyPropose {
 		t.Fatalf("err = %#v, want the refusal to name peers.enabled", err)
 	}
@@ -268,7 +273,7 @@ func TestADisabledDispatchNamesTheSwitchThatWouldLiftIt(t *testing.T) {
 	}
 	c.settings.proposals.Store(0)
 	_, err = peerDirectory{c}.DispatchToProject(context.Background(), "other", "do it")
-	if r, ok = err.(tool.Refusal); !ok || r.Remedy == nil || r.Remedy.Setting != "peers.dispatch" {
+	if r, ok = asRefusal(err); !ok || r.Remedy == nil || r.Remedy.Setting != "peers.dispatch" {
 		t.Fatalf("with messaging on, err = %#v, want the dispatch switch next", err)
 	}
 }
