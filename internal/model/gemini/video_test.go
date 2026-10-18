@@ -107,7 +107,6 @@ type filesAPI struct {
 	states    []string // states the polls answer with, in order
 	deleted   []string
 	request   []byte
-	wrongKey  bool
 }
 
 func newFilesAPI(t *testing.T, states ...string) *filesAPI {

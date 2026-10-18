@@ -92,14 +92,14 @@ func TestTextStreamsLiveAndUsageComesFromTheCompletedInteraction(t *testing.T) {
 	srv := serve(t, body, &seen, &header, &path)
 	got := collect(t, newTestClient(t, srv, nil), provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
 
-	var text string
+	var text strings.Builder
 	var usage *provider.Usage
 	var items []string
 	done := false
 	for _, c := range got {
 		switch c.Type {
 		case provider.ChunkText:
-			text += c.Text
+			text.WriteString(c.Text)
 		case provider.ChunkUsage:
 			usage = c.Usage
 		case provider.ChunkResponsesItem:
@@ -110,8 +110,8 @@ func TestTextStreamsLiveAndUsageComesFromTheCompletedInteraction(t *testing.T) {
 			t.Fatalf("error: %v", c.Err)
 		}
 	}
-	if text != "Hello" || !done {
-		t.Fatalf("text=%q done=%v", text, done)
+	if text.String() != "Hello" || !done {
+		t.Fatalf("text=%q done=%v", text.String(), done)
 	}
 	if usage == nil || usage.PromptTokens != 62 || usage.CompletionTokens != 171+297 || usage.ReasoningTokens != 297 ||
 		usage.CacheHitTokens != 20 || usage.CacheMissTokens != 42 || usage.TotalTokens != 530 || usage.FinishReason != "stop" {
