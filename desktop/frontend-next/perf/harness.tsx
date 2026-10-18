@@ -223,7 +223,7 @@ class BenchPort extends MockPort {
   async peersSettings() {
     if (!query.has("peerset")) return super.peersSettings();
     return {
-      enabled: true, dispatch: true, applies: "next_turn" as const, pending: query.has("pending"), available: true,
+      enabled: true, dispatch: true, max_dispatch_depth: 1, max_dispatched_sessions: 8, applies: "next_turn" as const, pending: query.has("pending"), available: true,
       path: "/Users/you/.reasonix/config.toml",
       release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
     };
