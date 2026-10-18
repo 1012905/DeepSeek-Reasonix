@@ -2123,5 +2123,6 @@ A refusal that a setting would lift ends with `(fix: setting ...)`. The tool can
 - Nothing changes until you answer a card. It names the setting, the old and the new value, and when the change takes effect. It is worded by Reasonix; the model's own reason is only quoted under it.
 - Every setting has a class in the code. A preference (a font, a retry count) can be agreed once for the rest of the session. An elevated setting (messaging between sessions, dispatching to another project, a protection the model could otherwise loosen) is asked every time, in every approval mode including YOLO.
 - Boundary settings (approval mode, sandbox, network, rules, hooks, provider keys and addresses, safety limits, and the switch for this tool) are never changed by the model. It can only point you at them (`op=open`).
-- The change is written to your user file. A project file cannot grant it, and values are checked with the same rules as the Settings screen. At most three proposals are put to you per turn.
+- The card shows the whole new value; a value too long to show is refused instead of cut. The change is written to your user file, a project file cannot grant it, and values are checked with the same rules as the Settings screen.
+- At most three proposals are put to you per turn, and none while plan mode is on (the model can still look at settings and point you at one).
 - To remove the tool, set `[tools] setting_tool = false`, or leave `setting` out of an explicit `[tools] enabled` list.

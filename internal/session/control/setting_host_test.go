@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -275,5 +276,106 @@ func TestADisabledDispatchNamesTheSwitchThatWouldLiftIt(t *testing.T) {
 	_, err = peerDirectory{c}.DispatchToProject(context.Background(), "other", "do it")
 	if r, ok = asRefusal(err); !ok || r.Remedy == nil || r.Remedy.Setting != "peers.dispatch" {
 		t.Fatalf("with messaging on, err = %#v, want the dispatch switch next", err)
+	}
+}
+
+func listOf(prefix string, n int) string {
+	var b strings.Builder
+	b.WriteString("[")
+	for i := range n {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `"%s%03d"`, prefix, i)
+	}
+	b.WriteString("]")
+	return b.String()
+}
+
+// What the card shows is what is written: a list whose harmless head fits the
+// card and whose last element is the one that matters is refused outright.
+func TestAValueTooLongForTheCardToShowIsRefusedBeforeAnyCardOrWrite(t *testing.T) {
+	c, requests, _ := settingController(t)
+	value := strings.TrimSuffix(listOf("skill-", 80), "]") + `,"the-one-that-matters"]`
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := c.ProposeSetting(ctx, "skills.disabled_skills", json.RawMessage(value), "")
+	if refusalCode(err) != CodeSettingTooLong {
+		t.Fatalf("err = %v, want %s", err, CodeSettingTooLong)
+	}
+	select {
+	case a := <-requests:
+		t.Fatalf("a card for a value it cannot show: %+v", a)
+	default:
+	}
+	if len(userFile().Skills.DisabledSkills) != 0 {
+		t.Fatal("the long value was written")
+	}
+}
+
+func TestAValueTheCardCanShowIsShownWhole(t *testing.T) {
+	c, requests, _ := settingController(t)
+	done := propose(c, "skills.disabled_skills", `["a","b","the-one-that-matters"]`, "")
+	a := nextApproval(t, requests)
+	if !strings.Contains(a.Reason, "the-one-that-matters") {
+		t.Fatalf("the card hides the tail of the value: %q", a.Reason)
+	}
+	c.Approve(a.ID, false, false, false)
+	<-done
+}
+
+func TestARawValueBeyondTheParseCapIsRefusedUnread(t *testing.T) {
+	c, _, _ := settingController(t)
+	huge := `"` + strings.Repeat("x", settingRawBytes) + `"`
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := c.ProposeSetting(ctx, "agent.output_style", json.RawMessage(huge), "")
+	if refusalCode(err) != CodeSettingTooLong {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestARawValueIsCappedBeforeItIsParsedWhateverItHolds(t *testing.T) {
+	c, _, _ := settingController(t)
+	padded := strings.Repeat(" ", settingRawBytes) + jsonBool(!userFile().UI.ShowReceipt)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := c.ProposeSetting(ctx, "ui.show_receipt", json.RawMessage(padded), ""); refusalCode(err) != CodeSettingTooLong {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// A click authorises the change, not the mode: in plan mode nothing is proposed,
+// while reading and pointing stay open.
+func TestPlanModeRefusesAProposalButNotListOrOpen(t *testing.T) {
+	c, requests, _ := settingController(t)
+	c.SetPlanMode(true)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := c.ProposeSetting(ctx, "ui.show_receipt", json.RawMessage(jsonBool(!userFile().UI.ShowReceipt)), "")
+	if refusalCode(err) != CodeSettingPlanMode {
+		t.Fatalf("err = %v, want %s", err, CodeSettingPlanMode)
+	}
+	select {
+	case a := <-requests:
+		t.Fatalf("a card in plan mode: %+v", a)
+	default:
+	}
+	if len(c.SettingsList("receipt")) == 0 || c.OpenSetting("permissions.mode") != nil {
+		t.Fatal("list and open must stay available in plan mode")
+	}
+}
+
+func TestListShowsNoValueForABoundarySetting(t *testing.T) {
+	c, _, _ := settingController(t)
+	cfg := userFile()
+	cfg.Agent.SystemPrompt = "secret instructions"
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range c.SettingsList("agent.system_prompt") {
+		if r.ID == "agent.system_prompt" && (r.Value != nil || r.Class != "guarded") {
+			t.Fatalf("row = %+v, want the row without its value", r)
+		}
 	}
 }

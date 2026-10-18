@@ -29,6 +29,11 @@ const (
 	settingProposalsPerTurn = 3
 	settingReasonRunes      = 160
 	settingListRows         = 60
+	// settingValueRunes bounds the new value so the card can show all of it: what
+	// the user reads is exactly what is written. settingRawBytes bounds what is
+	// parsed at all.
+	settingValueRunes = 400
+	settingRawBytes   = 4 << 10
 )
 
 // Setting refusal codes the controller adds to the declaration's own.
@@ -37,6 +42,8 @@ const (
 	CodeSettingNoAnswer   = "setting.no_approver"
 	CodeSettingLimit      = "setting.proposal_limit"
 	CodeSettingUnwritable = "setting.unwritable"
+	CodeSettingTooLong    = "setting.value_too_long"
+	CodeSettingPlanMode   = "setting.plan_mode"
 )
 
 // settingsState holds the per-turn count of proposals, so a model cannot turn
@@ -87,8 +94,10 @@ func (c *Controller) SettingsList(query string) []tool.SettingInfo {
 			continue
 		}
 		row := tool.SettingInfo{ID: e.ID, Class: e.Class.String(), Effect: e.Effect.String()}
-		if v, err := settings.Read(cfg, e.ID); err == nil {
-			row.Value = v
+		if e.Class != settings.Guarded {
+			if v, err := settings.Read(cfg, e.ID); err == nil {
+				row.Value = v
+			}
 		}
 		out = append(out, row)
 		if len(out) > settingListRows {
@@ -121,10 +130,19 @@ func (c *Controller) ProposeSetting(ctx context.Context, id string, raw json.Raw
 		return tool.SettingReceipt{}, tool.Refusal{Code: settings.CodeGuarded, Remedy: settings.RemedyFor(id, nil),
 			Message: id + " is a boundary setting; only the user changes it."}
 	}
+	if c.PlanMode() {
+		return tool.SettingReceipt{}, tool.Refusal{Code: CodeSettingPlanMode, Message: "Settings are not changed while plan mode is on: use op=open to point the user at it, or ask again once the plan is approved."}
+	}
+	if len(raw) > settingRawBytes {
+		return tool.SettingReceipt{}, tooLong(id)
+	}
 	probe := config.LoadForEdit(config.UserConfigPath())
 	from, to, err := settings.Write(probe, id, raw)
 	if err != nil {
 		return tool.SettingReceipt{}, settingRefusal(err)
+	}
+	if utf8.RuneCountInString(whole(to)) > settingValueRunes {
+		return tool.SettingReceipt{}, tooLong(id)
 	}
 	receipt := tool.SettingReceipt{ID: id, From: from, To: to, Effect: e.Effect.String()}
 	if reflect.DeepEqual(from, to) {
@@ -146,7 +164,7 @@ func (c *Controller) ProposeSetting(ctx context.Context, id string, raw json.Raw
 	}
 	receipt.From, receipt.To = from, to
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeSettingChanged,
-		Text: fmt.Sprintf(i18n.M.SettingChangedFmt, id, shown(from), shown(to), effectSentence(e.Effect)), Detail: id})
+		Text: fmt.Sprintf(i18n.M.SettingChangedFmt, id, shown(from), whole(to), effectSentence(e.Effect)), Detail: id})
 	return receipt, nil
 }
 
@@ -158,7 +176,7 @@ func (c *Controller) confirmSetting(ctx context.Context, e settings.Entry, r too
 		card = SettingElevatedApprovalTool
 	}
 	args, _ := json.Marshal(map[string]any{"id": e.ID, "from": r.From, "to": r.To, "effect": r.Effect})
-	text := fmt.Sprintf(i18n.M.SettingApprovalFmt, e.ID, shown(r.From), shown(r.To), effectSentence(e.Effect))
+	text := fmt.Sprintf(i18n.M.SettingApprovalFmt, e.ID, shown(r.From), whole(r.To), effectSentence(e.Effect))
 	if reason = tidyReason(reason); reason != "" {
 		text += "\n" + fmt.Sprintf(i18n.M.SettingReasonFmt, reason)
 	}
@@ -223,6 +241,20 @@ func effectSentence(e settings.Effect) string {
 	return i18n.M.SettingEffectOnOpen
 }
 
+func tooLong(id string) error {
+	return tool.Refusal{Code: CodeSettingTooLong, Message: fmt.Sprintf("The value for %s is longer than the confirmation card can show whole (%d characters); propose a shorter one.", id, settingValueRunes)}
+}
+
+// whole is a value as the card prints it. A value that is written is never cut.
+func whole(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "?"
+	}
+	return string(b)
+}
+
+// shown is a value that is only being replaced, so it may be shortened.
 func shown(v any) string {
 	b, err := json.Marshal(v)
 	if err != nil {
