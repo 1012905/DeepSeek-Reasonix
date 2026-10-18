@@ -43,6 +43,14 @@ type Entry struct {
 	Effect Effect
 	// Secret keys are never read back, to the model or to a card.
 	Secret bool
+
+	// Via is the config's own setter, which validates and normalises.
+	Via func(cfg *config.Config, value any) error
+	// Min and Max bound a number when Bounded is set.
+	Min, Max float64
+	Bounded  bool
+	// Free says any value of the key's shape is legal.
+	Free bool
 }
 
 // Shape is the kind of value a key holds, read from the Config type.
@@ -64,6 +72,7 @@ const (
 	CodeSecret     = "setting.secret"
 	CodeShape      = "setting.shape_unsupported"
 	CodeValue      = "setting.invalid_value"
+	CodeRange      = "setting.out_of_range"
 	codeUndeclared = "setting.undeclared"
 )
 
@@ -118,6 +127,8 @@ func register(rows []Entry, root reflect.Type) error {
 		if _, ok := fs[e.ID]; !ok {
 			return fmt.Errorf("setting %q is not a key of the user config", e.ID)
 		}
+		c := constraints[e.ID]
+		e.Via, e.Min, e.Max, e.Bounded, e.Free = c.Via, c.Min, c.Max, c.Bounded, c.Free
 		es[e.ID] = e
 	}
 	for id := range fs {
@@ -242,7 +253,38 @@ func Write(cfg *config.Config, id string, raw json.RawMessage) (from, to any, er
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, next.Interface()) != nil {
 		return nil, nil, &Error{Code: CodeValue, ID: id, msg: "the value does not fit " + v.Type().String()}
 	}
+	want := plain(next.Elem())
+	if err := e.check(id, want); err != nil {
+		return nil, nil, err
+	}
 	from = plain(v)
+	if e.Via != nil {
+		if err := e.Via(cfg, want); err != nil {
+			return nil, nil, &Error{Code: CodeValue, ID: id, msg: err.Error()}
+		}
+		return from, plain(v), nil
+	}
 	v.Set(next.Elem())
 	return from, plain(v), nil
+}
+
+func (e Entry) check(id string, value any) error {
+	if !e.Bounded {
+		return nil
+	}
+	var n float64
+	switch x := value.(type) {
+	case int:
+		n = float64(x)
+	case int64:
+		n = float64(x)
+	case float64:
+		n = x
+	default:
+		return nil
+	}
+	if n < e.Min || n > e.Max {
+		return &Error{Code: CodeRange, ID: id, msg: fmt.Sprintf("%v is outside %g to %g", n, e.Min, e.Max)}
+	}
+	return nil
 }

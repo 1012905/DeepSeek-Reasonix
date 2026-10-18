@@ -4,7 +4,7 @@ package settings
 // Config type in both directions.
 var table = []Entry{
 	{ID: "config_version", Class: Guarded, Effect: OnOpen, Secret: true},
-	{ID: "default_model", Class: Preference, Effect: OnOpen},
+	{ID: "default_model", Class: Guarded, Effect: OnOpen},
 	{ID: "language", Class: Preference, Effect: Restart},
 	{ID: "credentials_store", Class: Guarded, Effect: OnOpen},
 	{ID: "ui.theme", Class: Preference, Effect: OnOpen},

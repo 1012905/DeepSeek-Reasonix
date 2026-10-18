@@ -185,3 +185,37 @@ func TestKeysThatRelaxAProtectionAreElevated(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryWritableValueHasAValidator(t *testing.T) {
+	for _, e := range All() {
+		if e.Class == Guarded {
+			continue
+		}
+		switch ShapeOf(e.ID) {
+		case ShapeString, ShapeInt, ShapeFloat, ShapeStringList:
+			if e.Via == nil && !e.Bounded && !e.Free {
+				t.Errorf("%s accepts a value with nothing to say what a legal one is", e.ID)
+			}
+		}
+	}
+}
+
+func TestAnOutOfRangeNumberIsRefusedAndLeftAlone(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Agent.Temperature = 0.2
+	for _, raw := range []string{`7`, `-1`} {
+		if _, _, err := Write(cfg, "agent.temperature", json.RawMessage(raw)); CodeOf(err) != CodeRange || cfg.Agent.Temperature != 0.2 {
+			t.Errorf("%s: err = %v, temperature = %v", raw, err, cfg.Agent.Temperature)
+		}
+	}
+}
+
+func TestTheConfigsOwnSetterJudgesTheValue(t *testing.T) {
+	cfg := config.Default()
+	if _, _, err := Write(cfg, "agent.compact_ratio", json.RawMessage(`5`)); CodeOf(err) != CodeValue {
+		t.Fatalf("a ratio the setter refuses was written: %v", err)
+	}
+	if _, to, err := Write(cfg, "agent.compact_ratio", json.RawMessage(`0.8`)); err != nil || to != 0.8 {
+		t.Fatalf("to=%v err=%v", to, err)
+	}
+}
