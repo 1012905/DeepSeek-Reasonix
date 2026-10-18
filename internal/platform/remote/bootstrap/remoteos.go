@@ -18,7 +18,7 @@ type remoteOS interface {
 	Executable() string
 	// Home is the user's directory, spelled the way the file layer addresses
 	// it — which on Windows is not how its own shell spells it.
-	Home(ctx context.Context, conn Conn, fs *sftpfs.FS) (string, error)
+	Home(ctx context.Context, conn Conn, fs sftpfs.Files) (string, error)
 	Paths(home, workspace string) StatePaths
 	// Absolute reports whether p is rooted on that machine, and if so returns
 	// it in the file layer's spelling.
@@ -46,7 +46,7 @@ type remoteOS interface {
 // remoteFor resolves which machine this is and where its files live. Every
 // entry point needs both before it can name a single path, so the two answers
 // are fetched together rather than rediscovered at each one.
-func remoteFor(ctx context.Context, conn Conn, fs *sftpfs.FS) (target remoteOS, goos, goarch, home string, err error) {
+func remoteFor(ctx context.Context, conn Conn, fs sftpfs.Files) (target remoteOS, goos, goarch, home string, err error) {
 	goos, goarch, err = detectPlatform(ctx, conn)
 	if err != nil {
 		return nil, "", "", "", err
