@@ -69,6 +69,8 @@ var codeSentinels = map[string]error{
 	"feedback.reply_limit":        ErrReplyLimit,
 	"feedback.not_replyable":      ErrNotReplyable,
 	"feedback.challenge_required": ErrChallengeRequired,
+	"feedback.not_withdrawable":   ErrNotWithdrawable,
+	"feedback.not_found":          ErrNotFound,
 	"feedback.account_required":   ErrAccountRequired,
 	"feedback.link_conflict":      ErrLinkConflict,
 	"feedback.link_limit":         ErrLinkLimit,
@@ -127,6 +129,22 @@ func (s *Service) postReply(ctx context.Context, id, token, receipt, body string
 	var out ReplyReceipt
 	err = s.do(req, &out)
 	return out, err
+}
+
+// postWithdraw takes one report back. The worker treats a repeat as done, so
+// nothing here depends on the first answer having arrived.
+func (s *Service) postWithdraw(ctx context.Context, id, token, receipt string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.base+"/v1/feedback/"+url.PathEscape(receipt)+"/withdraw", strings.NewReader("{}"))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Install-Id", id)
+	req.Header.Set("X-Install-Token", token)
+	var out struct {
+		Status Status `json:"status"`
+	}
+	return s.do(req, &out)
 }
 
 // do performs one request and turns whatever came back into a sentinel.

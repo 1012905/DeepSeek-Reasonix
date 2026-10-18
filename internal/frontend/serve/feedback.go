@@ -17,24 +17,26 @@ import (
 const uploadCeiling = 16 << 20
 
 const (
-	codeFeedbackInvalid      = "feedback.invalid"
-	codeFeedbackTooLarge     = "feedback.too_large"
-	codeFeedbackRateLimited  = "feedback.rate_limited"
-	codeFeedbackDisabled     = "feedback.disabled"
-	codeFeedbackDuplicate    = "feedback.duplicate"
-	codeFeedbackBadToken     = "feedback.bad_token"
-	codeFeedbackOffline      = "feedback.offline"
-	codeFeedbackUnavailable  = "feedback.unavailable"
-	codeFeedbackInternal     = "feedback.internal"
-	codeFeedbackBusy         = "feedback.busy"
-	codeFeedbackImageMeta    = "feedback.image_metadata"
-	codeFeedbackReplyLimit   = "feedback.reply_limit"
-	codeFeedbackNotReplyable = "feedback.not_replyable"
-	codeFeedbackChallenge    = "feedback.challenge_required"
-	codeFeedbackAccount      = "feedback.account_required"
-	codeFeedbackLinkConflict = "feedback.link_conflict"
-	codeFeedbackLinkLimit    = "feedback.link_limit"
-	codeFeedbackNoInstall    = "feedback.no_install"
+	codeFeedbackInvalid         = "feedback.invalid"
+	codeFeedbackTooLarge        = "feedback.too_large"
+	codeFeedbackRateLimited     = "feedback.rate_limited"
+	codeFeedbackDisabled        = "feedback.disabled"
+	codeFeedbackDuplicate       = "feedback.duplicate"
+	codeFeedbackBadToken        = "feedback.bad_token"
+	codeFeedbackOffline         = "feedback.offline"
+	codeFeedbackUnavailable     = "feedback.unavailable"
+	codeFeedbackInternal        = "feedback.internal"
+	codeFeedbackBusy            = "feedback.busy"
+	codeFeedbackImageMeta       = "feedback.image_metadata"
+	codeFeedbackReplyLimit      = "feedback.reply_limit"
+	codeFeedbackNotReplyable    = "feedback.not_replyable"
+	codeFeedbackNotWithdrawable = "feedback.not_withdrawable"
+	codeFeedbackNotFound        = "feedback.not_found"
+	codeFeedbackChallenge       = "feedback.challenge_required"
+	codeFeedbackAccount         = "feedback.account_required"
+	codeFeedbackLinkConflict    = "feedback.link_conflict"
+	codeFeedbackLinkLimit       = "feedback.link_limit"
+	codeFeedbackNoInstall       = "feedback.no_install"
 )
 
 // feedbackSurface names where a report from a hub or pane of surface from
@@ -57,6 +59,7 @@ func (s *Server) registerFeedbackRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /feedback/name", s.feedbackName)
 	mux.HandleFunc("POST /feedback/{receipt}/reply", s.feedbackReply)
 	mux.HandleFunc("POST /feedback/{receipt}/seen", s.feedbackSeen)
+	mux.HandleFunc("POST /feedback/{receipt}/withdraw", s.feedbackWithdraw)
 	mux.HandleFunc("GET /feedback/links", s.feedbackLinks)
 	mux.HandleFunc("POST /feedback/link", s.feedbackLink)
 	mux.HandleFunc("DELETE /feedback/link", s.feedbackUnlink)
@@ -162,6 +165,14 @@ func (s *Server) feedbackReply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, got)
 }
 
+func (s *Server) feedbackWithdraw(w http.ResponseWriter, r *http.Request) {
+	if err := s.ctl().WithdrawFeedback(r.Context(), r.PathValue("receipt")); err != nil {
+		refuseFeedback(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type feedbackSeenBody struct {
 	UpTo feedback.ReplyID `json:"upTo"`
 }
@@ -217,6 +228,10 @@ func refuseFeedback(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusServiceUnavailable, codeFeedbackBusy, err.Error(), limitParams(err))
 	case errors.Is(err, feedback.ErrReplyLimit):
 		refuse(w, http.StatusTooManyRequests, codeFeedbackReplyLimit, err.Error(), limitParams(err))
+	case errors.Is(err, feedback.ErrNotWithdrawable):
+		refuse(w, http.StatusConflict, codeFeedbackNotWithdrawable, err.Error(), nil)
+	case errors.Is(err, feedback.ErrNotFound):
+		refuse(w, http.StatusNotFound, codeFeedbackNotFound, err.Error(), nil)
 	case errors.Is(err, feedback.ErrNotReplyable):
 		refuse(w, http.StatusConflict, codeFeedbackNotReplyable, err.Error(), nil)
 	case errors.Is(err, feedback.ErrChallengeRequired):

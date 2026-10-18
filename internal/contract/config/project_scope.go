@@ -26,6 +26,7 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
+	defaultMode    string
 	limits         agentLimits
 	goalAutoRetry  int
 	subagentClaims string
@@ -47,6 +48,8 @@ type heldScope struct {
 	turnNarration string
 	persona       PersonaConfig
 	peers         PeersConfig
+	observability ObservabilityConfig
+	mods          ModsConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
 	// webSearchBackends and searxngURL decide where the user's queries go, so
@@ -82,6 +85,7 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
+		defaultMode:     c.Agent.DefaultMode,
 		limits:          holdAgentLimits(c),
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
@@ -98,6 +102,8 @@ func holdUserScope(c *Config) heldScope {
 		turnNarration:   c.TurnNarration(),
 		persona:         clonePersona(c.Agent.Persona),
 		peers:           clonePeers(c.Peers),
+		observability:   c.Observability,
+		mods:            c.Mods,
 		mcpResources:    c.Tools.MCPResources,
 
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
@@ -199,6 +205,8 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	// Messages between sessions put other sessions' text in front of this one's
 	// model, so enabling them is the user's alone.
 	h.narrowPeers(c)
+	h.narrowObservability(c)
+	h.narrowMods(c)
 	// Letting the model read what a server publishes widens what a third party
 	// can put in front of it, so a cloned repo must not turn it on.
 	if c.Tools.MCPResources != h.mcpResources {
@@ -224,6 +232,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
 		c.Agent.PlanApproval = h.planApproval
+	}
+	if c.Agent.DefaultMode != h.defaultMode {
+		c.ignoreProject("agent.default_mode", c.Agent.DefaultMode, ProjectUserOnly)
+		c.Agent.DefaultMode = h.defaultMode
 	}
 	if c.Agent.WriteLease != h.writeLease {
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)

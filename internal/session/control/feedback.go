@@ -18,6 +18,7 @@ type Feedback interface {
 	ListFeedback(ctx context.Context) (feedback.Mine, error)
 	ReplyFeedback(ctx context.Context, receipt, body string, images ...feedback.Image) (feedback.ReplyReceipt, error)
 	MarkFeedbackSeen(receipt string, upTo feedback.ReplyID) error
+	WithdrawFeedback(ctx context.Context, receipt string) error
 	LinkFeedbackAccount(ctx context.Context) error
 	UnlinkFeedbackAccount(ctx context.Context) error
 	UnlinkFeedbackInstall(ctx context.Context, shortID string) error
@@ -75,6 +76,15 @@ func (c *Controller) ReplyFeedback(ctx context.Context, receipt, body string, im
 		return feedback.ReplyReceipt{}, feedback.ErrDisabled
 	}
 	return c.feedback.Service.Reply(ctx, receipt, body, images...)
+}
+
+// WithdrawFeedback takes one of this install's reports back. The service decides
+// whether it still can; every frontend asks through here.
+func (c *Controller) WithdrawFeedback(ctx context.Context, receipt string) error {
+	if c.feedback.Service == nil {
+		return feedback.ErrDisabled
+	}
+	return c.feedback.Service.Withdraw(ctx, receipt)
 }
 
 func (c *Controller) MarkFeedbackSeen(receipt string, upTo feedback.ReplyID) error {

@@ -207,6 +207,7 @@ export const SETTINGS: SettingEntry[] = [
   // an internal policy look like a required work mode.
   { section: "session", anchor: "preset", title: "完成标准", scope: "session", apply: "immediate", keywords: ["自动", "验证", "复核", "完成判定"] },
   { section: "session", anchor: "plan-mode", title: "计划模式", scope: "session", apply: "immediate", keywords: ["只读", "先规划"] },
+  { section: "session", anchor: "default-mode", title: "新对话的起始模式", scope: "machine", apply: "on-open", keywords: ["plan", "默认模式", "协作方式", "default_mode", "新会话"] },
   { section: "session", anchor: "receipt", title: "交付验收卡片", scope: "machine", apply: "immediate", keywords: ["回执", "验收", "验证", "未验证", "receipt"] },
   // Written to the user file only, and read by the running turn at its next round.
   { section: "session", anchor: "ask-timeout", title: "提问等待超时", scope: "machine", apply: "immediate", keywords: ["ask", "跳过", "无人回答", "长任务", "超时", "自动继续"] },
@@ -247,6 +248,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
   { section: "tools", anchor: "write-lease", title: "多个会话同时写一个项目", scope: "machine", apply: "on-open", keywords: ["lease", "写锁", "并行", "多会话", "乐观", "optimistic", "write_lease", "等待"] },
   { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
+  { section: "network", anchor: "trace-export", title: "追踪导出", scope: "machine", apply: "on-open", keywords: ["追踪", "opentelemetry", "otlp", "观测", "遥测", "trace", "collector", "收集器"] },
   { section: "tools", anchor: "web-access", title: "联网：搜索与抓取", scope: "machine", apply: "on-open", keywords: ["搜索", "searxng", "deepseek", "抓取", "计费", "付费", "web search", "fetch"] },
   { section: "tools", anchor: "browser-tools", title: "内置浏览器", scope: "machine", apply: "runtime-rebuild", keywords: ["browser", "网页", "chrome", "浏览器工具"] },
 

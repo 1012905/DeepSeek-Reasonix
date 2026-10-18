@@ -85,16 +85,27 @@ func (h *Hub) saveRemoteHost(w http.ResponseWriter, r *http.Request) {
 		// Editing an entry must not drop the forwards it carries: they are set
 		// from the CLI and have no control on this page to put them back.
 		if existing, ok := c.RemoteHost(name); ok {
+			if existing.HostKind() != config.RemoteKindSSH {
+				return nil, errRemoteKind
+			}
 			entry.Forwards = append([]config.RemoteForwardEntry(nil), existing.Forwards...)
 		}
 		return nil, c.UpsertRemoteHost(entry)
 	})
+	if errors.Is(err, errRemoteKind) {
+		refuse(w, http.StatusConflict, "remote.kind_unsupported", "this machine is not an SSH host, so this form cannot change it", nil)
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// errRemoteKind stops the SSH form from rewriting a machine of another kind,
+// which would drop the fields it has no control for.
+var errRemoteKind = errors.New("remote host is not an ssh host")
 
 func (h *Hub) removeRemoteHost(w http.ResponseWriter, r *http.Request) {
 	if h.opts.Remote == nil {

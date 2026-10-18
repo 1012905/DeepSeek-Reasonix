@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import "./testkit";
 import { Pane } from "./Pane";
@@ -9,11 +9,13 @@ import type { PaneView } from "../state/paneview";
 import { MockPort } from "../port/mock";
 import type { RuntimeView } from "../port/hub";
 import { useWindowKeys } from "./windowkeys";
+import type { WireEvent } from "../port/wire";
 
 afterEach(cleanup);
 
-function open(active = true) {
+function open(active = true, setup?: (port: MockPort) => void) {
   const port = new MockPort();
+  setup?.(port);
   const width = vi.fn();
   const close = vi.fn();
   function Fixture() {
@@ -116,5 +118,47 @@ describe("browser wide mode", () => {
     act(() => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "B", ctrlKey: true, shiftKey: true, isComposing: true, bubbles: true })));
     fireEvent.keyDown(document.body, { key: "b", ctrlKey: true });
     expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("split");
+  });
+
+  it("shows the page alone in full mode, keeps the conversation mounted, and Escape returns to the split", async () => {
+    const { container, close } = open();
+    const frame = await screen.findByLabelText("网页地址");
+    const composer = container.querySelector(".compose");
+    fireEvent.click(screen.getByRole("button", { name: "全屏浏览器" }));
+    expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("full");
+    expect(screen.getByRole("button", { name: "退出全屏" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("网页地址")).toBe(frame);
+    expect(container.querySelector(".compose")).toBe(composer);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("split");
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("toggles full mode with Ctrl+Shift+F and does not mix it up with wide mode", async () => {
+    const { container } = open();
+    await screen.findByLabelText("网页地址");
+    fireEvent.keyDown(document.body, { key: "F", ctrlKey: true, shiftKey: true });
+    expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("full");
+    fireEvent.keyDown(document.body, { key: "B", ctrlKey: true, shiftKey: true });
+    expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("wide");
+    fireEvent.keyDown(document.body, { key: "F", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "F", ctrlKey: true, shiftKey: true });
+    expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("split");
+  });
+
+  it("leaves full mode when the turn starts waiting on the person, so the card is not hidden", async () => {
+    let deliver: ((event: WireEvent) => void) | undefined;
+    let waiting = false;
+    const { container } = open(true, (port) => {
+      const read = port.status.bind(port);
+      vi.spyOn(port, "status").mockImplementation(async () => ({ ...(await read()), decisions: waiting ? [{ id: "ask-1", kind: "ask" as const }] : [] }));
+      vi.spyOn(port, "subscribe").mockImplementation((onEvent) => { deliver = onEvent; return () => true; });
+    });
+    await screen.findByLabelText("网页地址");
+    fireEvent.click(screen.getByRole("button", { name: "全屏浏览器" }));
+    expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("full");
+    waiting = true;
+    await act(async () => { deliver?.({ kind: "ask_request" } as WireEvent); });
+    await waitFor(() => expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("split"));
   });
 });

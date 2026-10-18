@@ -1,0 +1,2 @@
+- 修复：迁移数据根之后，窗口里仍记着旧位置的会话现在能按文件名在新的会话目录里打开，不再提示“没有这个会话”。关联 #13152。
+- Fixed: After the data root is moved, a conversation the window remembers by its old location opens from the new session folder by file name. Refs #13152.

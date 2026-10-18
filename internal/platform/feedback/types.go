@@ -49,6 +49,7 @@ const (
 	StatusFixed      Status = "fixed"
 	StatusWontFix    Status = "wontfix"
 	StatusDuplicate  Status = "duplicate"
+	StatusWithdrawn  Status = "withdrawn"
 )
 
 // Limits are the ceilings the worker enforces, held here so a frontend states

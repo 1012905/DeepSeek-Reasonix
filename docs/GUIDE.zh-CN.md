@@ -86,6 +86,7 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_queued_inputs = 0              # 会话队列里等待发送的消息条数；0 = 不限制，队列的字节上限仍然生效（只认用户级配置）
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
+# default_mode = "plan"              # 仅用户配置文件；新对话从计划模式开始（恢复的对话保持自己的模式；设置里有对应开关），默认 normal
 # subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict
 # host_verification = "off"          # 仅用户配置文件；改过文件的回合不再被要求先做检查、复核和签收；交付回执仍如实写明检查了什么，默认 on
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
@@ -154,10 +155,14 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 
 [peers]
 # enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准；设置里也有开关，下个回合起生效（只认用户级配置）
-# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled；打开就是你对这些会话的任务和回信的总同意，不再出审批卡（只认用户级配置）
+# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled；打开就是你对这些会话的任务和回信的总同意，不再出审批卡；新开的会话沿用发起方的模型、预设、审批档位和计划模式，所以 YOLO 的发起方开出的也是 YOLO 会话，会连目标项目的“要问我”规则一起答掉（拒绝规则仍然生效）（只认用户级配置）
 # max_dispatch_depth = 1       # 派发最多能连着开几层会话；0 表示不限（只认用户级配置）
 # max_dispatched_sessions = 8  # 一个会话通过派发最多同时开着几个会话；0 表示不限（只认用户级配置）
 # release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧（只认用户级配置）
+
+[mods]
+# enabled = false              # 运行已安装 Claude Code mod 的钩子模块；完全信任、不在沙盒内（只认用户级配置）
+# hook_budget_ms = 0           # 单个钩子自身的运行时限，毫秒；0 保持 10000（只认用户级配置）
 
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌
@@ -963,6 +968,23 @@ MCP 等独立沙盒继续使用自己的隔离规范，不继承父会话临时�
 
 没有可用 OS 沙盒时，`bash = "enforce"` 会拒绝 bash 执行，不会无沙盒运行。
 Windows 上兼容的值始终为 `off`。
+
+### 在开发容器或 Docker 里
+
+bubblewrap 需要创建用户命名空间和挂载命名空间（关闭网络时还要网络命名空间），默认容器会拦下这些。在
+Docker Desktop（Linux 虚拟机、Debian 12、bubblewrap 0.8.0）上，用每种配置各启动一条受限命令（`enforce`）实测：
+
+| 容器配置 | 沙盒 | 报告的原因 |
+|---|---|---|
+| 没装 bubblewrap | 不可用 | `sandbox.no_bubblewrap` |
+| 默认 `docker run`；只解除 seccomp；只加 `SYS_ADMIN`；解除 seccomp 和 AppArmor 但没有 `SYS_ADMIN` | 不可用 | `sandbox.bwrap_namespace_denied` |
+| `SYS_ADMIN` 加解除 seccomp 和 AppArmor | 网络开放时可用；关闭网络时不可用 | 关闭网络时为 `sandbox.bwrap_network_denied` |
+| 再加 `NET_ADMIN`，或 `--privileged` | 可用，网络开放或关闭都行 | 无 |
+
+- `CAP_SYS_ADMIN` 和解除 seccomp 两样都要，缺一不可。
+- Reasonix 不去判断是不是在容器里。提示来自 bubblewrap 实际能做什么、不能做什么：给了这些权限的容器能用上沙盒，没给的会被告知缺哪一项。
+- 给这些权限会放宽容器本身。另一条路是 `[sandbox] bash = "off"`；那时容器就是唯一的边界，你挂载成可写的东西（包括绑定挂载的工作区里的凭据文件）每条命令都能写。
+- 只测了 Linux 沙盒；没有跑真正的 Dev Containers / Codespaces、rootless Docker 和 SELinux 主机。
 
 反馈编码质量问题时，可运行 `reasonix doctor quality <branch-id-or-path>`（加
 `--json` 输出结构化结果）。命令会读取指定 session，但只输出不含内容的计数与

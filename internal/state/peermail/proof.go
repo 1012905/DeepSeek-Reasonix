@@ -14,7 +14,7 @@ func Proof(secret []byte, m Message) string {
 		return ""
 	}
 	mac := hmac.New(sha256.New, secret)
-	for _, part := range []string{m.ID, m.From.SessionID, m.To.SessionID, strconv.FormatInt(m.SentAt.UnixNano(), 10), strconv.Itoa(m.Hops), cleanBody(m.Body)} {
+	for _, part := range []string{m.ID, m.From.SessionID, m.To.SessionID, strconv.FormatInt(m.SentAt.UnixNano(), 10), strconv.Itoa(m.Hops), strconv.FormatUint(m.Seq, 10), cleanBody(m.Body)} {
 		mac.Write([]byte(strconv.Itoa(len(part))))
 		mac.Write([]byte{':'})
 		mac.Write([]byte(part))

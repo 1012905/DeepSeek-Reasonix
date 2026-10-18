@@ -690,3 +690,42 @@ func TestRemoteSessionIsRemovedByTheFarKernel(t *testing.T) {
 		t.Fatalf("refusal = %d %q, want the far kernel's own 409 session.has_open_pane", resp.StatusCode, reason.Code)
 	}
 }
+
+// The SSH form has no control for a WSL machine's fields, so saving through it
+// would rebuild the row as an ssh host; it is refused with a typed code and the
+// row stays as it was.
+func TestTheSSHFormCannotRewriteAWSLMachine(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	if err := config.EditUserConfigWithCredentials(func(c *config.Config) ([]config.CredentialChange, error) {
+		return nil, c.UpsertRemoteHost(config.RemoteHostEntry{Name: "dev", Kind: "wsl", Distro: "Ubuntu", Workspace: "/home/dev/app"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resp := bookPost(t, front, "/remotes", `{"name":"dev","host":"10.0.0.9"}`)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", resp.StatusCode)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body.Code != "remote.kind_unsupported" {
+		t.Fatalf("code = %q", body.Code)
+	}
+	cfg, _ := config.Load()
+	entry, _ := cfg.RemoteHost("dev")
+	if entry.HostKind() != config.RemoteKindWSL || entry.Distro != "Ubuntu" || entry.Host != "" {
+		t.Fatalf("the refused save changed the row: %+v", entry)
+	}
+	list, err := http.Get(front.URL + "/remotes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer list.Body.Close()
+	var rows []struct {
+		Target string `json:"target"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&rows); err != nil || len(rows) != 1 || rows[0].Target != "wsl:Ubuntu" {
+		t.Fatalf("rows = %+v, %v", rows, err)
+	}
+}

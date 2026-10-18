@@ -62,6 +62,8 @@ type Conn struct {
 
 	reqH map[string]RequestHandler
 	notH map[string]NotificationHandler
+	// flight tracks the requests in service so $/cancel_request can reach one.
+	flight flightSet
 
 	wg        sync.WaitGroup
 	closeOnce sync.Once
@@ -212,6 +214,8 @@ func (c *Conn) dispatch(ctx context.Context, line []byte) {
 		c.wg.Go(func() {
 			c.serveRequest(ctx, in.ID, in.Method, in.Params)
 		})
+	case in.Method == cancelRequestMethod && !hasID:
+		c.flight.cancel(in.Params)
 	case in.Method != "" && !hasID:
 		if h := c.notH[in.Method]; h != nil {
 			c.wg.Go(func() {
@@ -232,6 +236,8 @@ func (c *Conn) serveRequest(ctx context.Context, id json.RawMessage, method stri
 		c.writeError(id, ErrMethodNotFound, "method not found: "+method)
 		return
 	}
+	ctx, fl, end := c.flight.begin(ctx, id)
+	defer end()
 	result, err := h(ctx, params)
 	if err != nil {
 		code := ErrInternal
@@ -239,6 +245,9 @@ func (c *Conn) serveRequest(ctx context.Context, id json.RawMessage, method stri
 		var re *RPCError
 		if errors.As(err, &re) {
 			code, data = re.Code, re.Data
+		}
+		if fl.cancelled.Load() && ctx.Err() != nil {
+			code, data = ErrRequestCancelled, nil
 		}
 		c.writeErrorData(id, code, err.Error(), data)
 		return
