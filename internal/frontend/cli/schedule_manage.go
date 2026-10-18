@@ -248,6 +248,13 @@ func scheduleAdd(args []string, store *schedule.Store, p schedule.Policy, sio sc
 
 func (f addFlags) request() (schedule.CreateRequest, error) {
 	d := scheduler.Draft{Label: f.label, Prompt: f.prompt, Workspace: f.workspace, Model: f.model}
+	if d.Workspace == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return schedule.CreateRequest{}, err
+		}
+		d.Workspace = wd
+	}
 	switch {
 	case (f.every == "") == (f.at == ""):
 		return schedule.CreateRequest{}, errors.New("give exactly one of --every and --at")
