@@ -259,7 +259,7 @@ func ValidWSLDistroName(name string) bool {
 	if name == "" || len(name) > maxWSLDistroName || name[0] == '-' {
 		return false
 	}
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		c := name[i]
 		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
 			return false
