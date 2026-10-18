@@ -1690,4 +1690,8 @@ export const EN: Record<string, string> = {
   "每次都会询问": "Asked every time",
   "这项设置会放宽模型的权限，所以没有「本会话内不再问」，每次都要你亲自确认。": "This setting loosens what the model may do, so there is no \"don't ask again this session\": you confirm it yourself each time.",
   "打开设置": "Open settings",
+  "视频地址": "Video addresses",
+  "模型可以把你在对话里写的公开视频地址交给模型厂商读取。默认关闭，立即生效。": "The model can hand a public video address you wrote in the conversation to the model vendor to read. Off by default; applies at once.",
+  "把视频地址交给模型厂商": "Hand video addresses to the model vendor",
+  "开启后，该网址会被厂商直接访问：由厂商的服务器去打开它，不是本机下载。只有你自己写在对话里的地址才会交出去，且所选模型的厂商要支持。": "When on, the address is visited directly by the vendor: its servers open it, it is not downloaded here. Only an address you wrote in the conversation is handed over, and the selected model's vendor has to support it.",
 };

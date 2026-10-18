@@ -23,6 +23,9 @@ func mcpResourcesLine(t ToolsConfig) string {
 	if len(t.WebFetchPaidAllowed) > 0 {
 		line += fmt.Sprintf("web_fetch_paid_allowed = %s   # paid fetch backends you agreed to be charged for; user file only\n", renderStringArray(t.WebFetchPaidAllowed))
 	}
+	if t.VideoURLPassthrough {
+		line += "video_url_passthrough = true   # the model may hand a public video address you gave to the vendor, which then visits it; user file only\n"
+	}
 	if t.VideoNativeMaxBytes > 0 {
 		line += fmt.Sprintf("video_native_max_bytes = %d   # a lower ceiling, in bytes, on a video file read_video sends natively; user file only\n", t.VideoNativeMaxBytes)
 	}
@@ -52,6 +55,9 @@ func renderToolsSwitches(b *strings.Builder, t ToolsConfig) {
 	}
 	if len(t.WebFetchPaidAllowed) > 0 {
 		fmt.Fprintf(b, "web_fetch_paid_allowed = %s\n", renderStringArray(t.WebFetchPaidAllowed))
+	}
+	if t.VideoURLPassthrough {
+		b.WriteString("video_url_passthrough = true\n")
 	}
 	if t.VideoNativeMaxBytes > 0 {
 		fmt.Fprintf(b, "video_native_max_bytes = %d\n", t.VideoNativeMaxBytes)

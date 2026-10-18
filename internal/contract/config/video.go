@@ -13,6 +13,7 @@ const (
 	VideoProtocolMoonshotFile  = provider.VideoProtocolMoonshotFile
 	VideoProtocolGeminiInline  = provider.VideoProtocolGeminiInline
 	VideoProtocolGeminiFiles   = provider.VideoProtocolGeminiFiles
+	VideoProtocolZhipuURL      = provider.VideoProtocolZhipuURL
 )
 
 // VideoProtocolsFor lists the protocols a wire can speak: a protocol is a
@@ -22,7 +23,7 @@ func VideoProtocolsFor(kind string) []string {
 	if strings.EqualFold(strings.TrimSpace(kind), "gemini") {
 		return []string{VideoProtocolGeminiInline, VideoProtocolGeminiFiles}
 	}
-	return []string{VideoProtocolInlineDataURL, VideoProtocolMoonshotFile}
+	return []string{VideoProtocolInlineDataURL, VideoProtocolMoonshotFile, VideoProtocolZhipuURL}
 }
 
 // EffectiveVideo reports how the selected model takes a video file natively. ok

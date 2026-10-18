@@ -37,6 +37,9 @@ func nativeVideoSource(entry *config.ProviderEntry, cfg *config.Config) tool.Nat
 		if cfg != nil && cfg.Tools.VideoNativeMaxBytes > 0 {
 			limits = append(limits, tool.VideoLimit{Source: "tools.video_native_max_bytes", Bytes: cfg.Tools.VideoNativeMaxBytes})
 		}
-		return tool.NativeVideo{Protocol: protocol, Model: model, Limits: limits}, true
+		// The switch is read from the user's own file at each call, so a change
+		// the user confirms applies to the next one.
+		addresses := config.LoadForEdit(config.UserConfigPath()).Tools.VideoURLPassthrough
+		return tool.NativeVideo{Protocol: protocol, Model: model, Limits: limits, Addresses: addresses}, true
 	}
 }

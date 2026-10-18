@@ -29,6 +29,7 @@ export const SETTING_SCREEN: Record<string, string> = {
   "observability.otlp.header_name": "network:trace-export",
   "observability.otlp.header_env": "network:trace-export",
   "observability.otlp.service_name": "network:trace-export",
+  "tools.video_url_passthrough": "tools:web-access",
   "agent.subagent_claims": "tools:subagent-claims",
   "agent.write_lease": "tools:write-lease",
   "ui.show_receipt": "session:receipt",

@@ -563,6 +563,7 @@ export const ACTIONS: UIAction[] = [
   { id: "trace-export.header-name", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "trace-export.header-env", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "trace-export.service-name", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.video-url", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.measure", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

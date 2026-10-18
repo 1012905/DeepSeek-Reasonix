@@ -32,6 +32,7 @@ for (const scheme of ["light", "dark"]) {
       const wide = [...g.querySelectorAll(".box *")].filter((e) => e.getBoundingClientRect().right > box.right + 1).map((e) => e.className || e.tagName);
       return {
         lists,
+        video: g.querySelector('[data-action="web-access.video-url"]')?.getAttribute("aria-checked"),
         consent: consent.map((b) => [b.getAttribute("aria-checked"), b.disabled]),
         hint: g.textContent.includes("需要一个带密钥的 DeepSeek 提供方"),
         applies: g.textContent.includes("之后新开的窗格"),
@@ -40,7 +41,8 @@ for (const scheme of ["light", "dark"]) {
         scroll: g.querySelector(".box").scrollWidth - g.querySelector(".box").clientWidth,
       };
     });
-    check(`${tag}: search and fetch are two ordered lists, the paid backend after the free one`, r.lists.length === 2 && r.lists[0][1][0] === "SearXNG" && r.lists[0][1][1] === "DeepSeek 官方搜索" && r.lists[1][1][0] === "本机抓取" && r.lists[1][1][1] === "DeepSeek 官方抓取", JSON.stringify(r.lists));
+    check(`${tag}: search and fetch are two ordered lists, the paid backend after the free one`, r.lists.length === 3 && r.lists[0][1][0] === "SearXNG" && r.lists[0][1][1] === "DeepSeek 官方搜索" && r.lists[1][1][0] === "本机抓取" && r.lists[1][1][1] === "DeepSeek 官方抓取", JSON.stringify(r.lists));
+    check(`${tag}: the video address list is its own third list with one switch, off until the person turns it on`, r.lists[2]?.[0] === "视频地址" && r.lists[2][1].length === 1 && r.lists[2][1][0] === "把视频地址交给模型厂商" && r.video === "false", JSON.stringify([r.lists[2], r.video]));
     check(`${tag}: no consent is ticked for the person`, r.consent.length === 2 && r.consent.every(([on]) => on === "false"), JSON.stringify(r.consent));
     check(`${tag}: the consent is ${ready === "noready" ? "inert and says why" : "live"}`, ready === "noready" ? r.consent.every(([, off]) => off) && r.hint : r.consent.every(([, off]) => !off) && !r.hint);
     check(`${tag}: it says when a change applies and where it is kept`, r.applies && r.path);
