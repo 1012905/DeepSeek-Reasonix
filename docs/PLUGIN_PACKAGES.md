@@ -769,14 +769,18 @@ Events served:
   response's token counts. A mod that calls them is listed in the install
   preview as reading the session.
 - `prompt.submit(text)`: queues a prompt as the mod's own words, under the host's
-  header, never as yours; `asUser` is not served. Over `[mods] submit_per_turn`
-  (3 between two prompts you write) it rejects with `mod.submit_rate`, and with
-  `mod.submit_refused` while the session has no saved file.
+  header, never as yours; `asUser` is not served.
+- It rejects with `mod.submit_rate` over `[mods] submit_per_turn` (3 between two
+  prompts you write), with `mod.submit_too_long` over `[mods] submit_bytes`
+  (8 KiB, 0 for none), and with `mod.submit_refused` while the session has no saved file.
 - A call that needs an answer made while `session.start` runs rejects with
   `mod.not_ready`: that hook runs before the session is ready.
 - `tool.register/call/list` and `command.register/run/list`. Both register
   while `session.start` runs.
 - `ui.toast`, `status`, `notice`, `log`, `ask`, `resolve`, `invalidate`.
+
+The turn a queued prompt starts is held to this session's own approvals and
+sandbox like any other turn; that, not the label, is what keeps it safe.
 
 The ceilings above are in the user file only, and `0` removes one.
 

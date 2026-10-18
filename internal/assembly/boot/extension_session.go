@@ -42,6 +42,8 @@ func (s extensionSession) SubmitPrompt(_ context.Context, plugin string, p proto
 	switch err := c.QueueExtensionPrompt(plugin, p.Text); {
 	case errors.Is(err, control.ErrExtensionSubmitRate):
 		return protocol.PromptSubmitResult{Refused: protocol.PromptSubmitRefusedPerTurn}, nil
+	case errors.Is(err, control.ErrExtensionSubmitTooLong):
+		return protocol.PromptSubmitResult{Refused: protocol.PromptSubmitRefusedTooLong}, nil
 	case errors.Is(err, control.ErrInboxNeedsSession):
 		return protocol.PromptSubmitResult{Refused: protocol.PromptSubmitRefusedNoSession}, nil
 	case err != nil:

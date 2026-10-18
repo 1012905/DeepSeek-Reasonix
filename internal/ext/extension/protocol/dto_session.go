@@ -1,7 +1,7 @@
 package protocol
 
 // Session DTOs: a read-only view of the session, and a queued prompt, for an
-// extension that declared the "session" capability. Both ride Extension → Host
+// extension that declared the "session.read" or "session.submit" capability. Both ride Extension → Host
 // requests; text an extension sends reaches the model only as data from it.
 
 // SessionReadKind names what host/session/read returns.
@@ -49,6 +49,9 @@ type PromptSubmitParams struct {
 // PromptSubmitRefusedPerTurn is Refused when the user's per-turn ceiling on
 // queued prompts is spent.
 const PromptSubmitRefusedPerTurn = "submit_per_turn"
+
+// PromptSubmitRefusedTooLong is Refused when one prompt is over the user's byte ceiling.
+const PromptSubmitRefusedTooLong = "submit_bytes"
 
 // PromptSubmitRefusedNoSession is Refused when the session has no saved path yet,
 // so there is nowhere to queue.

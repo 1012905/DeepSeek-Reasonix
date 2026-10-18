@@ -16,11 +16,12 @@ type SessionHandler interface {
 	SubmitPrompt(ctx context.Context, p protocol.PromptSubmitParams) (protocol.PromptSubmitResult, error)
 }
 
-// sessionHandler is the handler for a call that needs the "session" capability:
-// the runtime must have declared it, and the host must serve it.
-func (c *Client) sessionHandler(method protocol.Method) (SessionHandler, error) {
-	if c.rt == nil || !containsString(c.rt.Capabilities, "session") {
-		return nil, &protocol.ProtocolError{Reason: protocol.ErrCapabilityNotDeclared, Message: fmt.Sprintf("extension %s called %s without the session capability", c.pluginID, method)}
+// sessionHandler is the handler for a call that needs a session capability:
+// "session.read" for reads, "session.submit" for queued prompts. The runtime
+// must have declared it, and the host must serve it.
+func (c *Client) sessionHandler(method protocol.Method, capability string) (SessionHandler, error) {
+	if c.rt == nil || !containsString(c.rt.Capabilities, capability) {
+		return nil, &protocol.ProtocolError{Reason: protocol.ErrCapabilityNotDeclared, Message: fmt.Sprintf("extension %s called %s without the %s capability", c.pluginID, method, capability)}
 	}
 	h, ok := c.ui.(SessionHandler)
 	if !ok {
@@ -34,7 +35,7 @@ func (c *Client) handleSessionRead(ctx context.Context, raw json.RawMessage) (an
 	if err != nil {
 		return nil, protocol.MustProtocolError(protocol.ErrInvalidParams).RPCError()
 	}
-	h, err := c.sessionHandler(protocol.MethodHostSessionRead)
+	h, err := c.sessionHandler(protocol.MethodHostSessionRead, "session.read")
 	if err != nil {
 		return nil, mapHandlerError(err)
 	}
@@ -50,7 +51,7 @@ func (c *Client) handlePromptSubmit(ctx context.Context, raw json.RawMessage) (a
 	if err != nil {
 		return nil, protocol.MustProtocolError(protocol.ErrInvalidParams).RPCError()
 	}
-	h, err := c.sessionHandler(protocol.MethodHostPromptSubmit)
+	h, err := c.sessionHandler(protocol.MethodHostPromptSubmit, "session.submit")
 	if err != nil {
 		return nil, mapHandlerError(err)
 	}

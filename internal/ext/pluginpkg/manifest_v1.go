@@ -379,7 +379,7 @@ var runtimeNamedSlots = map[string]bool{
 	"frontend_events":   true,
 }
 
-var runtimeCapabilities = []string{"interceptors", "strategies", "providers", "ui", "tools", "session"}
+var runtimeCapabilities = []string{"interceptors", "strategies", "providers", "ui", "tools", "session.read", "session.submit"}
 
 var runtimeToolName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,48}$`)
 

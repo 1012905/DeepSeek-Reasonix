@@ -71,6 +71,7 @@ var constraints = map[string]Entry{
 	"mods.context_blocks":                           {Min: 0, Max: 1024, Bounded: true},
 	"mods.messages_max":                             {Min: 0, Max: 100000, Bounded: true},
 	"mods.submit_per_turn":                          {Min: 0, Max: 1000, Bounded: true},
+	"mods.submit_bytes":                             {Min: 0, Max: 1 << 24, Bounded: true},
 	"agent.checkpoint_ceiling_ratio":                {Min: 0.05, Max: 1, Bounded: true},
 	"agent.compact_force_ratio":                     {Min: 0.05, Max: 1, Bounded: true},
 	"agent.soft_compact_ratio":                      {Min: 0.05, Max: 1, Bounded: true},

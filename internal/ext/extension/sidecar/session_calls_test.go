@@ -29,7 +29,8 @@ func sessionClient(caps []string, ui UIHandler) *Client {
 }
 
 // Session reads and prompt submissions are served only to a runtime that
-// declared the session capability, whatever the host could answer.
+// declared the matching capability (session.read, session.submit), whatever the
+// host could answer.
 func TestSessionCallsNeedTheDeclaredCapability(t *testing.T) {
 	ui := &sessionUI{}
 	read := json.RawMessage(`{"what":"messages","limit":5}`)
@@ -46,7 +47,18 @@ func TestSessionCallsNeedTheDeclaredCapability(t *testing.T) {
 		t.Fatalf("the host was asked %d reads and %d submits before the capability check", ui.reads, ui.submits)
 	}
 
-	with := sessionClient([]string{"session"}, ui)
+	// Each capability opens only its own call: a runtime that may read the session
+	// cannot put words in front of the model, and the reverse.
+	readOnly := sessionClient([]string{"session.read"}, ui)
+	if _, err := readOnly.handlePromptSubmit(context.Background(), submit); err == nil {
+		t.Fatal("a submit was served to a runtime that declared only session.read")
+	}
+	submitOnly := sessionClient([]string{"session.submit"}, ui)
+	if _, err := submitOnly.handleSessionRead(context.Background(), read); err == nil {
+		t.Fatal("a read was served to a runtime that declared only session.submit")
+	}
+
+	with := sessionClient([]string{"session.read", "session.submit"}, ui)
 	got, err := with.handleSessionRead(context.Background(), read)
 	if err != nil || got.(protocol.SessionReadResult).Messages[0].Text != "messages" {
 		t.Fatalf("read = %v, %v", got, err)
@@ -58,7 +70,7 @@ func TestSessionCallsNeedTheDeclaredCapability(t *testing.T) {
 
 // A host that serves UI but not sessions says so, the same way it does for UI.
 func TestSessionCallsWithoutAHostHandlerAreUnknownMethods(t *testing.T) {
-	c := sessionClient([]string{"session"}, unavailableUIHandler{})
+	c := sessionClient([]string{"session.read", "session.submit"}, unavailableUIHandler{})
 	if _, err := c.handleSessionRead(context.Background(), json.RawMessage(`{"what":"usage"}`)); err == nil {
 		t.Fatal("a read was served with no host handler")
 	}

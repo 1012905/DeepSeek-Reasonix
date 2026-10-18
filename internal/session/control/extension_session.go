@@ -17,7 +17,9 @@ import (
 // Typed identities of the refusals an extension's session calls can get.
 var (
 	// ErrExtensionSubmitRate: the extension queued its share of prompts this turn.
-	ErrExtensionSubmitRate = errors.New("extensions have queued as many prompts since you last wrote as the submit_per_turn ceiling allows")
+	// ErrExtensionSubmitTooLong: one prompt over the user's submit_bytes ceiling.
+	ErrExtensionSubmitTooLong = errors.New("an extension prompt is longer than the submit_bytes ceiling allows")
+	ErrExtensionSubmitRate    = errors.New("extensions have queued as many prompts since you last wrote as the submit_per_turn ceiling allows")
 	// ErrExtensionReadKind: a read of something the host does not serve.
 	ErrExtensionReadKind = errors.New("the host serves only usage and messages")
 )
@@ -63,7 +65,11 @@ func (c *Controller) QueueExtensionPrompt(plugin, text string) error {
 	if strings.TrimSpace(text) == "" {
 		return errors.New("an extension prompt must have text")
 	}
-	if !c.extPrompts.take(config.LoadForEdit(config.UserConfigPath()).ModsLimits().SubmitPerTurn) {
+	limits := config.LoadForEdit(config.UserConfigPath()).ModsLimits()
+	if limits.SubmitBytes > 0 && len(text) > limits.SubmitBytes {
+		return ErrExtensionSubmitTooLong
+	}
+	if !c.extPrompts.take(limits.SubmitPerTurn) {
 		return ErrExtensionSubmitRate
 	}
 	source := tool.Provenance{Kind: tool.ProvenanceExtension, Source: plugin}

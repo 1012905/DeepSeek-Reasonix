@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"reasonix/internal/base/testenv"
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/extension/protocol"
@@ -97,6 +99,30 @@ func TestAnExtensionMayQueueOnlyTheUsersCountPerTurn(t *testing.T) {
 	}
 	if err := c.QueueExtensionPrompt("mod-x", "now allowed"); err != nil {
 		t.Fatalf("submit_per_turn = 0 still refused: %v", err)
+	}
+}
+
+// One prompt is bounded by the user's byte ceiling, and a refused one does not
+// spend the per-turn count.
+func TestAnExtensionPromptOverTheByteCeilingIsRefusedAndSpendsNoCount(t *testing.T) {
+	c, r := heldController(t)
+	startTurn(t, c, r)
+	long := strings.Repeat("x", config.DefaultModsSubmitBytes+1)
+	for range 5 {
+		if err := c.QueueExtensionPrompt("mod-x", long); !errors.Is(err, ErrExtensionSubmitTooLong) {
+			t.Fatalf("an over-long prompt: %v", err)
+		}
+	}
+	if err := c.QueueExtensionPrompt("mod-x", strings.Repeat("x", config.DefaultModsSubmitBytes)); err != nil {
+		t.Fatalf("a prompt at the ceiling after five refusals: %v", err)
+	}
+
+	path := filepath.Join(os.Getenv("REASONIX_HOME"), "config.toml")
+	if err := os.WriteFile(path, []byte("[mods]\nsubmit_bytes = 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.QueueExtensionPrompt("mod-x", long); err != nil {
+		t.Fatalf("submit_bytes = 0 still refused: %v", err)
 	}
 }
 

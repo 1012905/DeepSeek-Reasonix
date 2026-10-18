@@ -8,7 +8,7 @@ import (
 )
 
 func TestTheModCeilingsHaveDefaultsAndAZeroIsAnExplicitChoice(t *testing.T) {
-	want := ModsLimits{ContextBytes: 8192, ContextBlocks: 8, MessagesMax: 200, SubmitPerTurn: 3}
+	want := ModsLimits{ContextBytes: 8192, ContextBlocks: 8, MessagesMax: 200, SubmitPerTurn: 3, SubmitBytes: 8192}
 	if got := Default().ModsLimits(); got != want {
 		t.Fatalf("defaults = %+v, want %+v", got, want)
 	}
@@ -21,7 +21,7 @@ func TestTheModCeilingsHaveDefaultsAndAZeroIsAnExplicitChoice(t *testing.T) {
 
 // A repository could otherwise lift the ceiling on what a mod adds to a turn.
 func TestAProjectFileCannotRaiseWhatAModMayAdd(t *testing.T) {
-	cfg, _ := loadScoped(t, "", "[mods]\ncontext_bytes = 0\ncontext_blocks = 0\nmessages_max = 0\nsubmit_per_turn = 0\n")
+	cfg, _ := loadScoped(t, "", "[mods]\ncontext_bytes = 0\ncontext_blocks = 0\nmessages_max = 0\nsubmit_per_turn = 0\nsubmit_bytes = 0\n")
 	if got, want := cfg.ModsLimits(), Default().ModsLimits(); got != want {
 		t.Fatalf("a project file moved the ceilings to %+v", got)
 	}

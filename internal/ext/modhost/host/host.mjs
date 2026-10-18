@@ -256,6 +256,7 @@ const $ = {
       if (opts?.asUser) throw unsupported("$.prompt.submit with asUser");
       const r = await callHost("host/prompt/submit", { text: String(text ?? "") });
       if (r.refused === "submit_per_turn") throw new ModError("mod.submit_rate", "the ceiling on prompts mods may queue between two of yours is spent");
+      if (r.refused === "submit_bytes") throw new ModError("mod.submit_too_long", "the prompt is longer than the ceiling on one prompt a mod may queue");
       if (r.refused) throw new ModError("mod.submit_refused", `the host refused the prompt: ${r.refused}`);
       return { queued: r.queued === true };
     },

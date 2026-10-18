@@ -124,7 +124,7 @@ func Synthesize(d Deps, m Module, rt Runtime, script string) pluginpkg.Installed
 		KillOnTimeout: true,
 		TimeoutMillis: timeout,
 		Intercepts:    append([]string(nil), Intercepts...),
-		Capabilities:  []string{"interceptors", "ui", "tools", "session"},
+		Capabilities:  []string{"interceptors", "ui", "tools", "session.read", "session.submit"},
 	}
 	pkg := pluginpkg.Package{Root: m.Root, ManifestKind: m.Installed.ManifestKind, Manifest: pluginpkg.Manifest{Name: m.Plugin, Version: m.Installed.Version, Runtime: spec}}
 	installed := m.Installed

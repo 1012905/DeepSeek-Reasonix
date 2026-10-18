@@ -94,7 +94,7 @@ export function register(on) {
   });
 }`
 
-// A mod that declared the session capability reads the transcript and queues a
+// A mod that declared the session capabilities reads the transcript and queues a
 // prompt; the model sees the queued text labelled as the mod's own, never as the
 // user's, and the read reaches it only through the context the mod chose to add.
 func TestEffectAModQueuesAPromptThatReachesTheModelLabelledAsTheMods(t *testing.T) {

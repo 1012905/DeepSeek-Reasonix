@@ -104,9 +104,9 @@ Streams follow `extension/provider/stream/open` → `stream/chunk` →
 
 ## Structured UI
 
-Extensions with the `session` capability read the session (`host/session/read`: `usage` or `messages`, redacted and bounded by the user's ceilings) and queue a prompt (`host/prompt/submit`).
+Extensions with the `session.read` capability read the session (`host/session/read`: `usage` or `messages`, redacted and bounded by the user's ceilings) and those with `session.submit` queue a prompt (`host/prompt/submit`); neither implies the other.
 
-A queued prompt is the host's message about the extension, labelled with its source, never the user's words; the host may refuse it with a `refused` identity in the result (`submit_per_turn`, `no_session`).
+A queued prompt is the host's message about the extension, labelled with its source, never the user's words; the host may refuse it with a `refused` identity in the result (`submit_per_turn`, `submit_bytes`, `no_session`).
 
 Extensions with the `ui` capability publish `status`, `card`, `form`, `notification`, `panel`, and `view` payloads (`host/ui/publish`) and ask questions (`host/ui/request`: confirm, input, select, multiselect).
 
