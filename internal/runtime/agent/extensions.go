@@ -357,6 +357,17 @@ func (a *Agent) interceptExtensionPermission(ctx context.Context, plan *toolCall
 	return toolOutcome{}, false
 }
 
+// mcpFastPathRuling is the trusted MCP path's gate: the host's explicit deny and
+// live authorization, then the extensions' ruling. The path allows by default,
+// so an extension can only tighten here.
+func (a *Agent) mcpFastPathRuling(ctx context.Context, plan *toolCallPlan, gateArgs json.RawMessage) (toolOutcome, bool) {
+	if outcome, blocked := mcpFastPathBlock(ctx, a.svc.gate, plan.permName, gateArgs, plan.readOnly); blocked {
+		return outcome, true
+	}
+	allowed := true
+	return a.interceptExtensionPermission(ctx, plan, &allowed)
+}
+
 // confirmAskedByExtension puts a call the host allowed to the user because a
 // tighten-only extension asked. A gate that cannot ask refuses: an ask is never
 // quietly dropped.

@@ -523,13 +523,8 @@ func (a *Agent) applyRecoveryAndPermission(ctx context.Context, plan *toolCallPl
 				errMsg:  "blocked: MCP server identity is not authorized",
 			}, true
 		}
-		if outcome, blocked := mcpFastPathBlock(ctx, a.svc.gate, plan.permName, gateArgs, plan.readOnly); blocked {
+		if outcome, blocked := a.mcpFastPathRuling(ctx, plan, gateArgs); blocked {
 			return outcome, true
-		}
-		// The fast path allows by default, so an extension can only tighten here.
-		allowed := true
-		if blocked, early := a.interceptExtensionPermission(ctx, plan, &allowed); early {
-			return blocked, true
 		}
 	} else if a.svc.gate != nil {
 		v, err := permission.VerdictOf(ctx, a.svc.gate, plan.permName, gateArgs, plan.readOnly)
