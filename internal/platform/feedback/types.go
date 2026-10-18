@@ -256,4 +256,13 @@ type Mine struct {
 	HasNew  bool   `json:"hasNew"`
 	// Profile is null when the service stated none; offline, the last confirmed.
 	Profile *Profile `json:"profile"`
+	// Promotion is a level the service now states that this machine has not told
+	// the person about; it stays until AckPromotion and is never made offline.
+	Promotion *Promotion `json:"promotion,omitempty"`
+}
+
+// Promotion is the move from the last level this machine knew to the one now stated.
+type Promotion struct {
+	From int `json:"from"`
+	To   int `json:"to"`
 }

@@ -142,6 +142,12 @@ func (c *Controller) feedbackList() {
 	if got.Offline {
 		b.WriteString("(offline - showing what this machine remembers; statuses may be out of date)\n")
 	}
+	if up := got.Promotion; up != nil {
+		fmt.Fprintf(&b, i18n.M.Feedback.LevelUpFmt+"\n", up.To, feedbackLevelName(up.To), up.From)
+		if err := c.AckFeedbackPromotion(up.To); err != nil {
+			b.WriteString("(could not remember that you were told: " + err.Error() + ")\n")
+		}
+	}
 	if standing := feedbackStanding(got.Profile, got.Offline); standing != "" {
 		b.WriteString(standing + "\n\n")
 	}

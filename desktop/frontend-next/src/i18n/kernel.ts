@@ -509,6 +509,7 @@ const SAID: Record<string, string> = {
   "display_currency.runtime_changed": "运行时已更换，费用显示币种未保存，请重试",
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "changed_files.save_failed": "文件改动显示设置未能保存：{detail}",
+  "feedback_level_notices.save_failed": "等级提示的设置未能保存：{detail}",
   "fold_work.save_failed": "折叠中间过程的设置未能保存：{detail}",
   "turn_narration.save_failed": "回合间叙述的设置未能保存：{detail}",
   "web_access.editing_disabled": "这台服务器没有开启联网搜索与抓取设置的编辑：只有这台电脑上的窗口能改。",

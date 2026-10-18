@@ -59,6 +59,7 @@ func (s *Server) registerFeedbackRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /feedback/name", s.feedbackName)
 	mux.HandleFunc("POST /feedback/{receipt}/reply", s.feedbackReply)
 	mux.HandleFunc("POST /feedback/{receipt}/seen", s.feedbackSeen)
+	mux.HandleFunc("POST /feedback/promotion/ack", s.feedbackPromotionAck)
 	mux.HandleFunc("POST /feedback/{receipt}/withdraw", s.feedbackWithdraw)
 	mux.HandleFunc("GET /feedback/links", s.feedbackLinks)
 	mux.HandleFunc("POST /feedback/link", s.feedbackLink)

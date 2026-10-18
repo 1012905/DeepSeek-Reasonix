@@ -14,6 +14,7 @@ var table = []Entry{
 	{ID: "ui.show_reasoning", Class: Preference, Effect: OnOpen},
 	{ID: "ui.show_turn_usage", Class: Preference, Effect: OnOpen},
 	{ID: "ui.show_changed_files", Class: Preference, Effect: Immediate},
+	{ID: "ui.feedback_level_notices", Class: Preference, Effect: Immediate},
 	{ID: "ui.fold_turn_work", Class: Preference, Effect: Immediate},
 	{ID: "ui.show_receipt", Class: Preference, Effect: Immediate},
 	{ID: "ui.cursor_shape", Class: Preference, Effect: OnOpen},
