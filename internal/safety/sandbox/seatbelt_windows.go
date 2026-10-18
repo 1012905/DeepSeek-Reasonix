@@ -2,19 +2,40 @@
 
 package sandbox
 
-// Command returns the native shell invocation unwrapped. Windows currently has
-// no Reasonix OS-level Bash sandbox; config.BashModeForGOOS keeps the effective
-// product setting fixed to off. Returning wrapped=false also preserves the
-// fail-closed contract for any internal caller that constructs an enforce Spec
-// directly.
+import (
+	"os"
+	"strings"
+)
+
+// Command wraps the shell invocation to run under the write-restricted token
+// when spec asks for enforcement and names the SID the roots were granted to;
+// otherwise it returns the invocation unwrapped, and a caller in enforce mode
+// treats that as refused.
 func Command(spec Spec, sh Shell, command string) ([]string, bool) {
-	return sh.argv(command), false
+	return winWrap(spec, sh.argv(command))
 }
 
 // CommandArgs is like Command but accepts the command as raw argv instead of a
 // shell command string.
 func CommandArgs(spec Spec, args []string) ([]string, bool) {
-	return args, false
+	return winWrap(spec, args)
+}
+
+// winWrap routes argv through this binary's launcher entry.
+func winWrap(spec Spec, argv []string) ([]string, bool) {
+	if spec.Mode != "enforce" || spec.GrantSID == "" || len(argv) == 0 {
+		return argv, false
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return argv, false
+	}
+	env := map[string]string{}
+	for _, kv := range SessionTempEnv(spec.SessionTemp, false) {
+		k, v, _ := strings.Cut(kv, "=")
+		env[k] = v
+	}
+	return winLaunchArgv(self, winLaunch{SID: spec.GrantSID, Env: env}, argv), true
 }
 
 // Available reports that Reasonix does not currently ship an OS-level Bash

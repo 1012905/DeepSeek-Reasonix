@@ -84,6 +84,10 @@ type Spec struct {
 	// keeps the platform default (ephemeral tmpfs on Linux bwrap, host temp
 	// elsewhere). MCP and other independent sandboxes leave this empty.
 	SessionTemp string
+	// GrantSID is the synthetic SID the Windows launcher restricts a command's
+	// token to: the one the GrantBook granted on WriteRoots. Empty leaves a
+	// Windows command unwrapped, which a caller in enforce mode treats as refused.
+	GrantSID string
 }
 
 // EgressRoute is the host proxy a confined command's external traffic goes
