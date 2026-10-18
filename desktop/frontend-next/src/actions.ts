@@ -430,6 +430,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "session.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "workspace.reorder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
 
   // ── Taking a change back ─────────────────────────────────────────────────

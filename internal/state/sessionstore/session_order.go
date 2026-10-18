@@ -101,6 +101,7 @@ func orderInfoOf(full string, e fs.DirEntry) (SessionOrderInfo, bool) {
 	row.CustomTitle = meta.CustomTitle
 	row.Archived = meta.Archived
 	row.Pinned = meta.Pinned
+	row.ManualRank = meta.ManualRank
 	row.Unread = meta.Unread()
 	row.Recovered = meta.Recovered
 	row.RecoveryReason = meta.RecoveryReason
