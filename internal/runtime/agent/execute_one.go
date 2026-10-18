@@ -565,6 +565,9 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Resolve the concrete execution target before hooks. A proxy may carry a
 	// different target/name/argument set than the provider-visible call.
 	plan.runTool, plan.runArgs = plan.executionTarget()
+	if outcome, missing := rootMissingOutcome(plan.runTool, plan.runArgs); missing {
+		return outcome, true
+	}
 	// Hooks can write beyond a tool's paths, so permission precedes lease
 	// acquisition and hooks follow it under a conservative workspace claim.
 	if plan.mutates && a.svc.workspaceLease != nil {

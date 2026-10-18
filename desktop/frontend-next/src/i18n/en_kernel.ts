@@ -339,6 +339,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这个内核没有窗口，打不开本机的编辑器。": "This kernel has no window, so it cannot open an editor on this machine.",
   "这个文件夹不在当前窗口的项目列表里。": "That folder is not a project in this window.",
   "项目文件夹已不在磁盘上。": "The project folder is no longer on disk.",
+  "这次操作需要的文件夹已不在磁盘上：可能被移走、改名或删除了，操作没有执行。": "The folder this action needs is no longer on disk: it may have been moved, renamed or deleted, and nothing was run.",
   "这个内核不在本机，没法在系统文件管理器中显示它的文件。": "This kernel is not on this machine, so its files cannot be shown in the system file manager.",
   "这个系统没有可用的文件夹选择框，请直接填写路径。": "This system has no folder picker available; type the path instead.",
   "打不开文件夹选择框：{error}": "The folder picker could not be opened: {error}",
