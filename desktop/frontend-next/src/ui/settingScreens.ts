@@ -24,6 +24,7 @@ export const SETTING_SCREEN: Record<string, string> = {
   "tools.web_search_backends": "tools:web-access",
   "tools.web_fetch_backends": "tools:web-access",
   "tools.searxng_url": "tools:web-access",
+  "tools.video_url_passthrough": "tools:web-access",
   "agent.subagent_claims": "tools:subagent-claims",
   "agent.write_lease": "tools:write-lease",
   "ui.show_receipt": "session:receipt",

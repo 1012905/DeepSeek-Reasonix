@@ -147,6 +147,7 @@ var table = []Entry{
 	{ID: "tools.searxng_url", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.web_search_paid_allowed", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.web_fetch_paid_allowed", Class: Guarded, Effect: OnOpen},
+	{ID: "tools.video_url_passthrough", Class: Elevated, Effect: Immediate},
 	{ID: "tools.setting_tool", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.shell.prefer", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.shell.path", Class: Guarded, Effect: OnOpen},

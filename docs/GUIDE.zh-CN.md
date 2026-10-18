@@ -1743,3 +1743,14 @@ Reasonix 按 Google 公布的标价计费，每百万 token（https://ai.google.
 | `gemini-3.1-pro-preview`（提示词不超过 200k token） | $2.00 | $0.20 | $12.00 |
 
 `gemini-3.1-pro-preview` 在提示词超过 200k token 后更贵（$4.00 / $0.40 / $18.00），一张费率卡表达不了，所以超长提示词会读低。`gemini-4-argon` 页面上没有价格，不计价。显式上下文缓存的存储费不计入。
+
+### 把视频地址交给模型厂商
+
+有的厂商从公开地址读取视频，而不是读文件。`read_video` 可以用 `url` 代替 `path`，但必须先在设置里打开（「联网」→「视频地址」，或用户文件里的 `[tools] video_url_passthrough = true`；项目文件无法设置它）。打开本身就是一次确认：模型也可以提议打开，每次都由你点卡片同意。
+
+- 地址由厂商自己去访问，本机不下载任何东西。只有接受“厂商的服务器会打开这个地址”才应打开。
+- 只交出你在对话里亲手写的地址。模型从网页、文件、工具结果里看到的或自己编的地址都会被拒绝（`video.url_not_from_user`），所以网页作者无法让厂商去访问他选的地址。
+- 地址必须是 `https` 且有公开主机名：不能带账号密码，不能是 IP、`localhost`、单段主机名或局域网名，长度不超过 2048 字符（`video.url_invalid`）。
+- 智谱 GLM 在 `video_url` 里接收公开 https 地址，不接收文件（[docs.bigmodel.cn](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v)，2026-10-17 读取）。在条目上写 `video_models = ["glm-4.6v"]` 和 `video_protocol = "zhipu_url"`；本地文件此时按帧读取。
+- Gemini 在 `gemini_inline` 和 `gemini_files` 下把公开的 YouTube 地址作为视频 `uri`；其他地址不会交给它（`video.url_unsupported_model`）。
+- 从存档或导入的会话里恢复出来的引用永远不会被发送：只发送在本进程里检查过的地址。
