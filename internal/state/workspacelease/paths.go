@@ -24,6 +24,9 @@ type pathLeaseState struct {
 	identity  string
 	// repository is the git root that folds the selected folder into this domain; empty when none does.
 	repository string
+	// folder is the selected folder, claimed by a writer that declared no
+	// extent; empty when it is the domain root itself.
+	folder string
 }
 
 type pathLeaseRecord struct {

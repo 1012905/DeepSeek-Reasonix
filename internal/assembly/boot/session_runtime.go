@@ -33,6 +33,9 @@ func startSessionRuntime(opts Options, cfg *config.Config, root string, sink eve
 	if lease == nil {
 		var err error
 		var leaseOptions []workspacelease.Option
+		if shellConfinedToFolder(opts, cfg) {
+			leaseOptions = append(leaseOptions, workspacelease.WithFolderClaim())
+		}
 		if cfg.WriteLeaseOptimistic() {
 			leaseOptions = append(leaseOptions, workspacelease.WithoutWholeWorkspaceHold())
 		}
