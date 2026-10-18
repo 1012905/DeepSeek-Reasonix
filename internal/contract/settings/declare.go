@@ -69,6 +69,12 @@ var table = []Entry{
 	{ID: "notifications.feedback_reply", Class: Preference, Effect: Immediate},
 	{ID: "notifications.disk_low", Class: Preference, Effect: Immediate},
 	{ID: "notifications.sound", Class: Preference, Effect: Immediate},
+	// Reporting to the account service that something is waiting is a decision
+	// about what leaves the machine, so no automatic answer stands in for the click.
+	{ID: "notifications.phone.enabled", Class: Elevated, Effect: Immediate},
+	{ID: "notifications.phone.approval", Class: Preference, Effect: Immediate},
+	{ID: "notifications.phone.input", Class: Preference, Effect: Immediate},
+	{ID: "notifications.phone.error", Class: Preference, Effect: Immediate},
 	{ID: "progress_watch.pause", Class: Elevated, Effect: Immediate},
 	{ID: "progress_watch.rounds", Class: Elevated, Effect: Immediate},
 	{ID: "progress_watch.token_multiple", Class: Elevated, Effect: Immediate},

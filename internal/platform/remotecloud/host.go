@@ -68,6 +68,10 @@ type Host struct {
 
 	link relayLink
 
+	// saved reads the device identity this Studio registered with. It is a field
+	// so a test can supply one; New sets it to the credential store.
+	saved func() (*identity, error)
+
 	mu    sync.RWMutex
 	state hostState
 }
@@ -132,7 +136,7 @@ func New(client *account.Client, dialer *websocket.Dialer, relayURL, version str
 	}
 	host := &Host{
 		client: client, dialer: dialer, relayURL: strings.TrimRight(relayURL, "/"),
-		version: version, name: name, token: account.Token, disconnect: make(chan controllerDisconnect),
+		version: version, name: name, token: account.Token, disconnect: make(chan controllerDisconnect), saved: loadIdentity,
 	}
 	if len(tasks) > 0 {
 		host.tasks = tasks[0]

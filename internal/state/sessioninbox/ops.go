@@ -182,8 +182,15 @@ func (s *Store) MoveItem(id string, toIndex int) error {
 	return nil
 }
 
-// SetPaused toggles the recovery/inspection pause flag.
-func (s *Store) SetPaused(paused bool) error {
+// Pause holds the queue, naming why. A queue already paused keeps the cause that
+// paused it first, except that the person's own pause takes the cause over: it
+// is the one a standing consent never overrides, whatever came before it.
+func (s *Store) Pause(code PauseCode) error { return s.setPaused(true, code) }
+
+// Resume lifts the pause and the recovery mark that came with it.
+func (s *Store) Resume() error { return s.setPaused(false, "") }
+
+func (s *Store) setPaused(paused bool, code PauseCode) error {
 	if s == nil {
 		return ErrClosed
 	}
@@ -197,11 +204,12 @@ func (s *Store) SetPaused(paused bool) error {
 	if err := s.mutableLocked(); err != nil {
 		return err
 	}
-	if s.man.Paused == paused {
+	if s.man.Paused == paused && (!paused || code != PauseUser || s.man.PauseCode == PauseUser) {
 		return nil
 	}
 	next := s.man.clone()
 	next.Paused = paused
+	next.PauseCode = code
 	if !paused {
 		next.Recovered = false
 		next.RecoveredN = 0
@@ -253,6 +261,16 @@ func (s *Store) SetStateCoded(id string, state InboxState, code BlockCode, block
 // ClaimItem atomically transitions one queued item to running. It is the
 // durable admission boundary for both asynchronous and synchronous frontends.
 func (s *Store) ClaimItem(id string) error {
+	return s.claimItem(id, false)
+}
+
+// ClaimItemOverPause is ClaimItem for an item the person has just let in: it is
+// claimed although the queue is paused, and the pause stays.
+func (s *Store) ClaimItemOverPause(id string) error {
+	return s.claimItem(id, true)
+}
+
+func (s *Store) claimItem(id string, overPause bool) error {
 	if s == nil {
 		return ErrClosed
 	}
@@ -267,7 +285,7 @@ func (s *Store) ClaimItem(id string) error {
 	if err := s.mutableLocked(); err != nil {
 		return err
 	}
-	if s.man.Paused {
+	if s.man.Paused && !overPause {
 		return ErrPaused
 	}
 	next := s.man.clone()
@@ -454,6 +472,7 @@ func (s *Store) ForcePause(reasonRecovered bool, n int) error {
 	}
 	next := s.man.clone()
 	next.Paused = true
+	next.PauseCode = PauseRecovered
 	if reasonRecovered {
 		next.Recovered = true
 		if n > 0 {

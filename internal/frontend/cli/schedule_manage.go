@@ -58,7 +58,7 @@ type scheduleIO struct {
 
 func scheduleOS() scheduleIO {
 	human := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
-	return scheduleIO{in: os.Stdin, out: os.Stdout, err: os.Stderr, human: human, agentChild: os.Getenv(secrets.AgentChildEnv) == "1", now: time.Now}
+	return scheduleIO{in: os.Stdin, out: os.Stdout, err: os.Stderr, human: human, agentChild: inAgentChild(), now: time.Now}
 }
 
 func scheduleManage(args []string, sio scheduleIO) int {

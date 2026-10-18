@@ -1,7 +1,7 @@
 import type { AgentPort } from "./port";
 import type { HistoryHit, HubPort, RuntimeView, TreeSession, TreeWindow, TreeWorkspace } from "./hub";
 import type { RemoteHost, RemoteListing, RemoteProbe } from "./remote";
-import type { ShareStatus } from "./share";
+import type { PhoneAction, PhoneList, PhoneView, ShareStatus } from "./share";
 import { MockPort } from "./mock";
 
 // MockHub is the fixture's answer to a window that drives several panes. Each
@@ -317,6 +317,25 @@ export class MockHub implements HubPort {
     cloudDevices: [],
     cloudRemote: { online: false, reason: "signed_out" },
   };
+
+  private phones: PhoneView[] = [
+    { id: "rc_aaa", ordinal: 1, name: "iPhone Safari", state: "active", uaClass: "ios-safari", createdAt: "2026-10-12T08:00:00Z", lastSeenAt: "2026-10-18T09:30:00Z", keyThumbprint: "kP3x…f9a1" },
+    { id: "rc_bbb", name: "Android Chrome", state: "pending", uaClass: "android-chrome", createdAt: "2026-10-18T09:40:00Z", lastSeenAt: "2026-10-18T09:40:00Z", expiresAt: "2026-10-18T09:55:00Z", keyThumbprint: "Zq8m…02c7" },
+  ];
+
+  sharePhones() {
+    return Promise.resolve<PhoneList | null>({ phones: this.phones.map((p) => ({ ...p })) });
+  }
+
+  resolvePhone(id: string, action: PhoneAction) {
+    this.phones = this.phones.flatMap((p) => (p.id !== id ? [p] : action === "reject" ? [] : [{ ...p, state: "active" as const, expiresAt: undefined, ordinal: 2 }]));
+    return Promise.resolve<PhoneList>({ phones: this.phones.map((p) => ({ ...p })) });
+  }
+
+  revokePhone(id: string) {
+    this.phones = this.phones.filter((p) => p.id !== id);
+    return Promise.resolve<PhoneList>({ phones: this.phones.map((p) => ({ ...p })) });
+  }
 
   shareStatus() {
     return Promise.resolve<ShareStatus | null>({ ...this.share });

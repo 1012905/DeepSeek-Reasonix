@@ -11,6 +11,8 @@ const { KeyboardKeeper } = require("./keyboard");
 // a phone layout or not at all.
 const AGENT_VIEWPORT = { width: 1280, height: 900 };
 
+const fitScale = (at, metrics) => Math.min(1, at.width / metrics.width, at.height / metrics.height);
+
 // How long a page may be held out of the window while its navigation runs. A
 // server that accepts the connection and never answers would otherwise keep the
 // panel blank, with nothing turning, for as long as it likes; past this the page
@@ -140,6 +142,16 @@ class BrowserViews {
     return {
       targetId,
       send: (method, params) => {
+        if (method === "Emulation.setDeviceMetricsOverride") {
+          entry.override = params;
+          entry.scale = entry.at ? fitScale(entry.at, params) : 1;
+          return contents.debugger.sendCommand(method, { ...params, scale: entry.scale });
+        }
+        if (method === "Emulation.clearDeviceMetricsOverride") entry.override = undefined;
+        if (method === "Page.captureScreenshot") {
+          // A capture puts the emulation back without its scale.
+          return contents.debugger.sendCommand(method, params).finally(() => this.fit(entry, true));
+        }
         if (!method.startsWith("Input.")) return contents.debugger.sendCommand(method, params);
         entry.synthUntil = Date.now() + 250;
         return this.wake.run(() => contents.debugger.sendCommand(method, params));
@@ -178,7 +190,18 @@ class BrowserViews {
     entry.attached = true;
     entry.view.setBounds(at);
     entry.at = at;
+    this.fit(entry);
     this.keepKeyboard();
+  }
+
+  // A page the agent laid out wider than the pane is shown whole, scaled to the pane:
+  // the layout viewport stays what the agent asked for, so its screenshots and clicks are unchanged.
+  fit(entry, force = false) {
+    if (!entry.override || !entry.at || entry.view.webContents.isDestroyed()) return;
+    const scale = fitScale(entry.at, entry.override);
+    if (scale === entry.scale && !force) return;
+    entry.scale = scale;
+    void entry.view.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", { ...entry.override, scale }).catch(() => {});
   }
 
   // Attaching a view can leave nobody holding the keyboard, and the platform

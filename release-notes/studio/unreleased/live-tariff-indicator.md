@@ -1,0 +1,2 @@
+- 新增：状态栏显示当前按供应商哪个时段计费（高峰或平峰）和还有多久切换，只在模型用的是供应商自己的价格表时显示。关联 #8853。
+- Added: The status bar shows which of the vendor's billing windows (peak or off-peak) the model is in and how long until it changes, only where the model is billed at the vendor's own rate. Refs #8853.

@@ -340,3 +340,36 @@ func TestLinuxArm64PackagesAreKeyedBesideAmd64(t *testing.T) {
 		}
 	}
 }
+
+// An AppImage is a download a person is offered and nothing an updater
+// replaces: it must not appear as a platform asset or a native package, and
+// adding it must not move any entry a shipped client reads.
+func TestAnAppImageIsOfferedButNeverResolvedAsAnUpdate(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"ReasonixStudio-linux-amd64.deb", "ReasonixStudio-linux-amd64.AppImage", "ReasonixStudio-linux-arm64.AppImage"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GITHUB_REPOSITORY", "esengine/DeepSeek-Reasonix")
+	if err := run(dir, "v0.1.0", "studio-v0.1.0", "", true); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var m update.Manifest
+	raw, _ := os.ReadFile(filepath.Join(dir, "latest.json"))
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"ReasonixStudio-linux-amd64.AppImage", "ReasonixStudio-linux-arm64.AppImage"} {
+		a, ok := m.Downloads[name]
+		if !ok || a.Sig != a.URL+".minisig" {
+			t.Errorf("downloads[%s] = %+v, %v; want a signed download", name, a, ok)
+		}
+	}
+	if len(m.NativePackages) != 1 || !strings.HasSuffix(m.NativePackages["linux-amd64"].URL, "linux-amd64.deb") {
+		t.Errorf("native packages = %+v, want only the .deb", m.NativePackages)
+	}
+	if len(m.Platforms) != 0 {
+		t.Errorf("platforms = %+v: an AppImage must not resolve as an update", m.Platforms)
+	}
+}

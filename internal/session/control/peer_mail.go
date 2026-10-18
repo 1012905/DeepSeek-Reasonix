@@ -416,11 +416,12 @@ func (c *Controller) resolvePeerMessage(id string, approve bool, released peerma
 	decision := peermail.DecisionDenied
 	if approve {
 		display, submit := peerMessageTexts(m, released)
-		if _, err := c.EnqueueInbox(InboxRequest{
+		receipt, err := c.EnqueueInbox(InboxRequest{
 			Intent: sessioninbox.IntentFollowup, Origin: sessioninbox.OriginHost,
 			Source: peerSourcePrefix + m.From.SessionID, Idempotency: "peer-" + m.ID,
 			Display: display, Submit: submit,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 		decision = peermail.DecisionApproved
@@ -428,7 +429,7 @@ func (c *Controller) resolvePeerMessage(id string, approve bool, released peerma
 			decision = peermail.DecisionReleased
 		}
 		if !c.Running() {
-			c.maybeDispatchInbox()
+			c.startPeerItem(receipt.ItemID, released != "")
 		}
 	}
 	if err := dir.Ack(key, m.ID); err != nil {
@@ -445,6 +446,30 @@ func (c *Controller) resolvePeerMessage(id string, approve bool, released peerma
 	}
 	p.mu.Unlock()
 	return nil
+}
+
+// startPeerItem starts what the person let in. A message approved on its card is
+// a fresh decision and starts whatever paused the queue. One let in by a standing
+// consent starts only over a pause the host set to guard stale input: it never
+// overrides a pause the person set, and stays queued for them to see. Items
+// queued before it stay where they are.
+func (c *Controller) startPeerItem(id string, standing bool) {
+	st, err := c.ensureInbox()
+	if err != nil || id == "" {
+		c.maybeDispatchInbox()
+		return
+	}
+	snap := st.Snapshot()
+	if !snap.Paused {
+		c.maybeDispatchInbox()
+		return
+	}
+	if standing && !snap.PauseCode.GuardsStaleInput() {
+		return
+	}
+	if _, err := c.submitInboxItem(id, true); err != nil {
+		slog.Warn("controller: start a message from another session", "err", err, "id", id)
+	}
 }
 
 // peerMessageTexts is the host's own account of a message: the queue row says

@@ -40,6 +40,10 @@ func (s *Server) balance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if reading.Balance == nil {
+		if errors.Is(reading.Err, billing.ErrFormatNotDeclared) {
+			refuse(w, http.StatusConflict, walletCode(reading.Err), reading.Err.Error(), nil)
+			return
+		}
 		slog.Warn("serve: wallet unreadable", "err", reading.Err)
 		refuse(w, http.StatusBadGateway, walletCode(reading.Err), reading.Err.Error(), nil)
 		return
@@ -70,6 +74,8 @@ func walletCode(err error) string {
 		return "wallet.unauthorized"
 	case errors.Is(err, billing.ErrUnreadable):
 		return "wallet.unreadable"
+	case errors.Is(err, billing.ErrFormatNotDeclared):
+		return "wallet.format_not_declared"
 	default:
 		return "wallet.unreachable"
 	}

@@ -137,7 +137,7 @@ func TestCorruptManifestWithUnreadableBlobsIsNotEmptyQueue(t *testing.T) {
 		t.Fatalf("failed salvage was persisted as an empty manifest: %s", man)
 	}
 	// A later mutation must not be able to clear the evidence either.
-	if err := s2.SetPaused(false); err == nil {
+	if err := s2.Resume(); err == nil {
 		t.Fatalf("unpausing an unreadable queue succeeded; manifest now %s", readManifestBytes(t, session))
 	} else if !errors.Is(err, ErrUnrecovered) {
 		t.Fatalf("the refusal lost its identity: %v", err)
