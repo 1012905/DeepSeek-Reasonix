@@ -17,6 +17,8 @@ type RefusalIdentity interface {
 type Refusal struct {
 	Code    string
 	Message string
+	// Remedy, when set, is the setting whose change would lift this refusal.
+	Remedy *Remedy
 }
 
 // Error lets one value serve both refusal paths a contextual tool has: the
@@ -29,13 +31,17 @@ func (r Refusal) Error() string { return r.String() }
 // because an identity the model never sees is one it cannot cite back.
 func (r Refusal) String() string {
 	msg := strings.TrimSpace(r.Message)
-	if r.Code == "" {
-		return msg
+	switch {
+	case r.Code == "":
+	case msg == "":
+		msg = "(refusal: " + r.Code + ")"
+	default:
+		msg += " (refusal: " + r.Code + ")"
 	}
-	if msg == "" {
-		return "(refusal: " + r.Code + ")"
+	if r.Remedy != nil {
+		msg += " (fix: " + r.Remedy.String() + ")"
 	}
-	return msg + " (refusal: " + r.Code + ")"
+	return strings.TrimSpace(msg)
 }
 
 // Empty reports a refusal carrying neither identity nor words, which is what a
