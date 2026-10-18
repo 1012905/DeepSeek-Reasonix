@@ -5464,6 +5464,10 @@
   padding: 4px 10px; border-radius: var(--r-pill); background: var(--overlay);
   color: var(--muted); font: var(--w-med) var(--fs-ui) var(--ui);
 }
+.uhero-est { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hair) }
+.uhero-estk { color: var(--muted); font: var(--w-med) var(--fs-meta) var(--ui); letter-spacing: var(--track-lead) }
+.uhero-estv { font: var(--w-med) calc(20px * var(--fs-scale, 1))/1.2 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted) }
+.udaily-est { display: block; color: var(--faint); font-size: var(--fs-meta) }
 .uhero-note { margin: 11px 0 0; max-width: 62ch; color: var(--muted); font: var(--w-reg) var(--fs-ui)/1.6 var(--ui) }
 
 .utiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(142px, 1fr)); gap: 12px }

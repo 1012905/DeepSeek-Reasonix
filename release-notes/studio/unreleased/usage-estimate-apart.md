@@ -1,0 +1,2 @@
+- 用量页的「实付」不再包含订阅等价（Token Plan 之类）的估算；估算单独一行标为「等价估算」，每日明细里也并排显示。议题 #13276。
+- The usage page's paid figure no longer includes a subscription-equivalent estimate; it is its own labelled line and sits beside each day. Issue #13276.
