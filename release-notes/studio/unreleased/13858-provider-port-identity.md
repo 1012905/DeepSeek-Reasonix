@@ -1,0 +1,2 @@
+- 修复：同一主机、不同端口的两个模型服务被合并成一个，新增的那个不显示；现在端口属于地址，各自独立显示，重复的条目也不再被丢掉。关联 #13858。
+- Fixed: Two model services on one host but different ports were merged into one and the new one never showed; the port is now part of the address, and exact duplicates are listed too. Refs #13858.

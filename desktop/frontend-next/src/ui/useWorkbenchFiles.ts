@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentPort, WorkspaceFile } from "../port/port";
+import type { GitRepoRow } from "../port/workspace";
+import { locate } from "../state/gittree";
 import { WORKSPACE_FILE_MISSING, reason } from "../i18n/kernel";
 import { HttpError } from "../port/port";
 import { parseGrantedFile } from "./grantedfiles";
@@ -11,14 +13,16 @@ type Entry = {
 const blank = (): Entry => ({ file: null, draft: "", diff: "", error: "", missing: false, pending: "", issued: 0 });
 const dirty = (entry: Entry) => !!entry.file && entry.draft !== entry.file.content;
 
-export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown, refresh, poll }: {
-  port: AgentPort; workspaceRoot: string; path: string; openPaths: string[]; shown: boolean; refresh: string; poll: boolean;
+export function useWorkbenchFiles({ port, workspaceRoot, repos = [], path, openPaths, shown, refresh, poll }: {
+  port: AgentPort; workspaceRoot: string; repos?: GitRepoRow[]; path: string; openPaths: string[]; shown: boolean; refresh: string; poll: boolean;
 }) {
   const entries = useMemo(() => new Map<string, Entry>(), [port, workspaceRoot]);
   const current = useRef<Map<string, Entry> | null>(entries);
   current.current = entries;
   const [version, render] = useState(0);
   const notify = useCallback(() => { if (current.current === entries) render((n) => n + 1); }, [entries]);
+  const repoList = useRef(repos);
+  repoList.current = repos;
   const entry = path ? entries.get(path) ?? blank() : blank();
   if (path && !entries.has(path)) entries.set(path, entry);
 
@@ -48,7 +52,7 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
         const granted = parseGrantedFile(path);
         const [file, patch] = await Promise.all([
           granted ? port.workspaceFile(granted.rel, granted.root) : port.workspaceFile(path),
-          quiet || granted ? Promise.resolve(null) : port.changeDiff(path).catch(() => null),
+          quiet || granted ? Promise.resolve(null) : diffOf(port, repoList.current, path),
         ]);
         if (!valid() || dirty(entry)) return;
         changed ||= entry.file?.content !== file.content || entry.file?.revision !== file.revision || !!entry.error;
@@ -103,4 +107,10 @@ export function useWorkbenchFiles({ port, workspaceRoot, path, openPaths, shown,
     }
   };
   return { ...entry, busy: entry.pending === "save" || (!entry.file && entry.pending === "read"), setDraft, save };
+}
+
+// The diff of a workspace-relative path, read from the repository that holds it.
+function diffOf(port: AgentPort, repos: GitRepoRow[], path: string) {
+  const at = locate(repos, path);
+  return (at.repo ? port.changeDiff(at.rel, at.repo) : port.changeDiff(path)).catch(() => null);
 }

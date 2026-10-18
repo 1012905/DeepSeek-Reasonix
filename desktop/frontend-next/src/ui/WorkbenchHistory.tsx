@@ -5,6 +5,7 @@ import type { AgentPort } from "../port/port";
 import type { GitHistory } from "../port/workspace";
 import { layoutGraph, type GraphRow } from "../state/gitgraph";
 import { since } from "./wallet";
+import { GitCommitDetail } from "./GitCommitDetail";
 
 const ROW = 28;
 const COL = 12;
@@ -16,7 +17,8 @@ type Read = { k: "idle" } | { k: "loading" } | { k: "ready"; history: GitHistory
 // The commit graph beside the changes: what the project's history looks like,
 // read from git on request and never changed from here. It reads when opened and
 // again on demand, so a closed section costs nothing.
-export function WorkbenchHistory({ port }: { port: AgentPort }) {
+export function WorkbenchHistory({ port, repo }: { port: AgentPort; repo?: string }) {
+  const [openId, setOpenId] = useState("");
   const [shown, setShown] = useState(false);
   const [read, setRead] = useState<Read>({ k: "idle" });
   const latest = useRef(0);
@@ -24,12 +26,12 @@ export function WorkbenchHistory({ port }: { port: AgentPort }) {
     const id = ++latest.current;
     setRead({ k: "loading" });
     try {
-      const history = await port.workspaceGitLog(100);
+      const history = await port.workspaceGitLog(100, repo);
       if (id === latest.current) setRead({ k: "ready", history });
     } catch (e) {
       if (id === latest.current) setRead({ k: "failed", why: reason(e) });
     }
-  }, [port]);
+  }, [port, repo]);
   useEffect(() => {
     if (shown && read.k === "idle") void load();
   }, [shown, read.k, load]);
@@ -56,13 +58,17 @@ export function WorkbenchHistory({ port }: { port: AgentPort }) {
       {graph && graph.rows.length > 0 && (
         <ol className="gh-list">
           {graph.rows.map((row) => (
-            <li className="gh-row" key={row.commit.id} title={`${row.commit.id.slice(0, 7)}  ${row.commit.subject}`}>
-              <Lanes row={row} width={PAD * 2 + Math.max(graph.lanes - 1, 0) * COL} />
-              <span className="gh-subject">{row.commit.subject}</span>
-              {row.commit.refs.map((ref) => (
-                <em className="gh-ref" key={ref} data-kind={ref.startsWith("tag: ") ? "tag" : "branch"}>{ref}</em>
-              ))}
-              <small className="gh-meta">{row.commit.author} · {since(new Date(row.commit.at * 1000).toISOString(), now)}</small>
+            <li key={row.commit.id} className="gh-item">
+              <button type="button" className="gh-row" data-action="workbench.commit" data-target={row.commit.id} aria-expanded={openId === row.commit.id}
+                title={`${row.commit.id.slice(0, 7)}  ${row.commit.subject}`} onClick={() => setOpenId(openId === row.commit.id ? "" : row.commit.id)}>
+                <Lanes row={row} width={PAD * 2 + Math.max(graph.lanes - 1, 0) * COL} />
+                <span className="gh-subject">{row.commit.subject}</span>
+                {row.commit.refs.map((ref) => (
+                  <em className="gh-ref" key={ref} data-kind={ref.startsWith("tag: ") ? "tag" : "branch"}>{ref}</em>
+                ))}
+                <small className="gh-meta">{row.commit.author} · {since(new Date(row.commit.at * 1000).toISOString(), now)}</small>
+              </button>
+              {openId === row.commit.id && <GitCommitDetail port={port} id={row.commit.id} repo={repo} />}
             </li>
           ))}
           {history?.truncated && <li className="gh-more">{t("只显示最近的提交")}</li>}

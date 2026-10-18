@@ -180,7 +180,7 @@ func (a *Agent) parseToolCall(ctx context.Context, plan *toolCallPlan) (toolOutc
 				output: fmt.Sprintf("MCP server %q is connected; its real tools are now available", server),
 			}, true
 		}
-		if refusal, ok := a.svc.tools.MCPRefusal(plan.call.Name); ok {
+		if refusal, ok := a.svc.tools.CallRefusal(plan.call.Name); ok {
 			msg := refusal.String()
 			return toolOutcome{output: msg, blocked: true, errMsg: firstLine(msg), refusalCode: refusal.Code}, true
 		}
@@ -568,7 +568,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Hooks can write beyond a tool's paths, so permission precedes lease
 	// acquisition and hooks follow it under a conservative workspace claim.
 	if plan.mutates && a.svc.workspaceLease != nil {
-		end, err := a.svc.workspaceLease.HoldPaths(ctx, a.workspaceWritePaths(plan))
+		heldCtx, end, err := a.svc.workspaceLease.HoldPaths(ctx, a.workspaceWritePaths(plan))
 		if err != nil {
 			return toolOutcome{
 				output:         fmt.Sprintf("blocked: %v", err),
@@ -578,7 +578,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 				workspaceLease: workspaceLeaseConflictScope(err),
 			}, true
 		}
-		plan.releaseLeaseHold = end
+		ctx, plan.releaseLeaseHold = heldCtx, end
 	}
 	// Hold the parent claim before PreToolUse: hooks are user shell code and may
 	// mutate the same workspace. The reservation remains live through hooks,

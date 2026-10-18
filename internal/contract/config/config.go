@@ -1122,6 +1122,10 @@ type AgentConfig struct {
 	DefaultMode        string `toml:"default_mode"`      // "normal" (default) or "plan": how a new conversation starts; the user file only
 	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
+
+	// WriteLeaseMaxWaitMinutes bounds one wait behind another session's write
+	// claim; 0, the default, waits for as long as the turn lasts. The user file only.
+	WriteLeaseMaxWaitMinutes int `toml:"write_lease_max_wait_minutes"`
 	// OutputStyle selects built-in tone guidance or .reasonix/output-styles/<name>.md.
 	// Empty leaves the prompt unmodified.
 	OutputStyle string        `toml:"output_style"`
@@ -1176,7 +1180,9 @@ type AgentConfig struct {
 
 // ToolsConfig selects which built-in tools are enabled. Empty means all of them.
 type ToolsConfig struct {
-	Enabled                  []string             `toml:"enabled"`
+	Enabled []string `toml:"enabled"`
+	// Disabled removes tools by name from every surface; a project file can only add to it.
+	Disabled                 []string             `toml:"disabled"`
 	BashTimeoutSeconds       *int                 `toml:"bash_timeout_seconds"`
 	MCPStartupTimeoutSeconds *int                 `toml:"mcp_startup_timeout_seconds"`
 	MCPCallTimeoutSeconds    *int                 `toml:"mcp_call_timeout_seconds"`

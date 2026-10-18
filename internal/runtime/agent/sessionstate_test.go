@@ -44,6 +44,8 @@ var sessionCarryOver = map[string]bool{
 	// The depth the user switched to is the session's setting, saved to their
 	// config alongside, so a new conversation keeps it.
 	"effort": true,
+	// Drained by the receipt of the turn it happened in, which ends before any swap.
+	"claimYields": true,
 }
 
 // windowReset and windowCarryOver are the same two lists for windowState.

@@ -76,7 +76,7 @@ model = "x"
 
 	writeFile(t, dir, "x.go", "package x\n")
 	git("add", "x.go")
-	prop, err := ctrl.ProposeCommit(context.Background())
+	prop, err := ctrl.ProposeCommit(context.Background(), "")
 	if err != nil {
 		t.Fatalf("ProposeCommit = %v; a failed draft is a proposal with no message, not a refusal", err)
 	}

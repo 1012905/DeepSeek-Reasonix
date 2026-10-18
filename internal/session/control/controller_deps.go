@@ -13,6 +13,7 @@ import (
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/goaleval"
 	"reasonix/internal/runtime/guardian"
@@ -49,6 +50,8 @@ type controllerDeps struct {
 	committer CommitDrafter
 	// commitMu serialises commits so two confirmations cannot interleave.
 	commitMu sync.Mutex
+	// repos keeps the workspace's repositories until its structure changes.
+	repos gitrepos.Finder
 	// goalUsageTee accounts billable usage events into the active goal turn's
 	// observational token total. It wraps the public sink when the caller didn't provide one.
 	goalUsageTee *goalUsageTee
