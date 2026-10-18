@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/platform/wsl"
 )
 
 func bookServer(t *testing.T, attacher RemoteAttacher) *httptest.Server {
@@ -727,5 +729,106 @@ func TestTheSSHFormCannotRewriteAWSLMachine(t *testing.T) {
 	}
 	if err := json.NewDecoder(list.Body).Decode(&rows); err != nil || len(rows) != 1 || rows[0].Target != "wsl:Ubuntu" {
 		t.Fatalf("rows = %+v, %v", rows, err)
+	}
+}
+
+func bookServerWSL(t *testing.T, run func(context.Context, ...string) ([]byte, error)) *httptest.Server {
+	t.Helper()
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	front := httptest.NewServer(operatorHandler(NewHub(HubOptions{Remote: &stubAttacher{}, WSL: run})))
+	t.Cleanup(front.Close)
+	return front
+}
+
+func TestAWSLMachineIsSavedListedAndAlwaysReadsItsOwnCredentials(t *testing.T) {
+	front := bookServerWSL(t, nil)
+	resp := bookPost(t, front, "/remotes", `{"name":"dev","kind":"wsl","distro":"Ubuntu-24.04","workspaces":["/home/me/app"],"provider":"local","host":"ignored"}`)
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("save = %d", resp.StatusCode)
+	}
+	cfg, _ := config.Load()
+	entry, ok := cfg.RemoteHost("dev")
+	if !ok || entry.HostKind() != config.RemoteKindWSL || entry.Distro != "Ubuntu-24.04" || entry.Host != "" || entry.Provider != "" || entry.Workspace != "/home/me/app" {
+		t.Fatalf("saved = %+v, %v", entry, ok)
+	}
+	list, err := http.Get(front.URL + "/remotes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer list.Body.Close()
+	var rows []struct {
+		Kind, Distro, Target, Provider string
+	}
+	if err := json.NewDecoder(list.Body).Decode(&rows); err != nil || len(rows) != 1 {
+		t.Fatalf("rows = %+v, %v", rows, err)
+	}
+	if rows[0].Kind != "wsl" || rows[0].Distro != "Ubuntu-24.04" || rows[0].Target != "wsl:Ubuntu-24.04" || rows[0].Provider != "remote" {
+		t.Fatalf("row = %+v", rows[0])
+	}
+}
+
+func TestAWSLSaveRefusesANameWSLWouldReadAsAnOptionAndAKindChange(t *testing.T) {
+	front := bookServerWSL(t, nil)
+	for _, distro := range []string{"", "-d", "--exec", "a b", `a"b`, strings.Repeat("a", 65)} {
+		body, _ := json.Marshal(map[string]any{"name": "dev", "kind": "wsl", "distro": distro})
+		resp := bookPost(t, front, "/remotes", string(body))
+		var got struct{ Code string }
+		_ = json.NewDecoder(resp.Body).Decode(&got)
+		if resp.StatusCode != http.StatusBadRequest || got.Code != "remote.distro_invalid" {
+			t.Errorf("distro %q: %d %q", distro, resp.StatusCode, got.Code)
+		}
+	}
+	bookPost(t, front, "/remotes", `{"name":"box","host":"10.0.0.4"}`)
+	if got := bookPost(t, front, "/remotes", `{"name":"box","kind":"wsl","distro":"Ubuntu"}`).StatusCode; got != http.StatusConflict {
+		t.Fatalf("turning an ssh row into a wsl one = %d, want 409", got)
+	}
+	bookPost(t, front, "/remotes", `{"name":"dev","kind":"wsl","distro":"Ubuntu"}`)
+	if got := bookPost(t, front, "/remotes", `{"name":"dev","host":"10.0.0.9"}`).StatusCode; got != http.StatusConflict {
+		t.Fatalf("turning a wsl row into an ssh one = %d, want 409", got)
+	}
+	cfg, _ := config.Load()
+	if e, _ := cfg.RemoteHost("box"); e.HostKind() != config.RemoteKindSSH || e.Host != "10.0.0.4" {
+		t.Fatalf("a refused save changed the ssh row: %+v", e)
+	}
+}
+
+func TestTheWSLChoiceListsTheDistributionsOrSaysThereIsNone(t *testing.T) {
+	front := bookServerWSL(t, func(context.Context, ...string) ([]byte, error) {
+		return []byte("  NAME      STATE   VERSION\n* Ubuntu    Running 2\n  Old       Stopped 1\n"), nil
+	})
+	resp, err := http.Get(front.URL + "/remotes/wsl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var got WSLDistros
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil || !got.Available || len(got.Distros) != 2 ||
+		got.Distros[0] != (WSLDistro{Name: "Ubuntu", Version: 2, Default: true}) || got.Distros[1].Version != 1 {
+		t.Fatalf("answer = %+v, %v", got, err)
+	}
+
+	none := bookServerWSL(t, func(context.Context, ...string) ([]byte, error) { return nil, wsl.ErrUnavailable })
+	resp, err = http.Get(none.URL + "/remotes/wsl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var empty WSLDistros
+	if err := json.NewDecoder(resp.Body).Decode(&empty); err != nil || empty.Available || empty.Distros == nil || len(empty.Distros) != 0 {
+		t.Fatalf("no WSL = %+v, %v (a missing WSL is an empty answer, not a failure)", empty, err)
+	}
+
+	broken := bookServerWSL(t, func(context.Context, ...string) ([]byte, error) {
+		return []byte("NAME STATE VERSION\nUbuntu Running x\n"), nil
+	})
+	resp, err = http.Get(broken.URL + "/remotes/wsl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var refusal struct{ Code string }
+	_ = json.NewDecoder(resp.Body).Decode(&refusal)
+	if resp.StatusCode != http.StatusBadGateway || refusal.Code != "remote.wsl_unreadable" {
+		t.Fatalf("an unreadable listing = %d %q", resp.StatusCode, refusal.Code)
 	}
 }

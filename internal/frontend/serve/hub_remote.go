@@ -126,6 +126,8 @@ type RemoteLinkState struct {
 // copy would blank whatever it never saw.
 type RemoteHostView struct {
 	Name   string `json:"name"`
+	Kind   string `json:"kind,omitempty"`
+	Distro string `json:"distro,omitempty"`
 	Target string `json:"target"`
 	Status string `json:"status"`
 
@@ -173,6 +175,8 @@ func (h *Hub) listRemoteHosts(w http.ResponseWriter, _ *http.Request) {
 	for _, entry := range cfg.Remote.Hosts {
 		view := RemoteHostView{
 			Name:          entry.Name,
+			Kind:          entry.Kind,
+			Distro:        entry.Distro,
 			Target:        entry.Target(),
 			Status:        "idle",
 			Disabled:      entry.Disabled,

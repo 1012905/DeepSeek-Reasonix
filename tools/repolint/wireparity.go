@@ -186,6 +186,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/hub_remote.go", "RemoteHostView", tsRemoteFile, "RemoteHost"},
 	{"internal/frontend/serve/remote_browse.go", "RemoteListing", tsRemoteFile, "RemoteListing"},
 	{"internal/frontend/serve/remote_browse.go", "RemoteFolder", tsRemoteFile, "RemoteFolder"},
+	{"internal/frontend/serve/remote_book.go", "WSLDistros", tsRemoteFile, "WSLDistros"},
+	{"internal/frontend/serve/remote_book.go", "WSLDistro", tsRemoteFile, "WSLDistro"},
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
 	{"internal/frontend/serve/hub_mux.go", "muxOpened", tsMuxFile, "MuxOpened"},

@@ -4733,6 +4733,7 @@
     display: grid; gap: 8px; margin-top: 12px; padding: 12px;
     border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--overlay);
   }
+  .rmtform > * { min-width: 0 }
   .rmtf { display: flex; align-items: center; gap: 10px; font: var(--w-reg) var(--fs-ui) var(--ui); color: var(--muted) }
   .rmtf > span { flex: none; width: 13ch }
   .rmthint { margin: -2px 0 2px calc(13ch + 10px); font: var(--w-reg) var(--fs-meta)/1.55 var(--ui); color: var(--faint) }
@@ -4748,6 +4749,13 @@
   }
   .rmtf input:focus-visible, .rmtf select:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px }
   .rmtck { gap: 8px }
+  .rmtkinds { display: flex; gap: 6px; flex: 1; flex-wrap: wrap }
+  .rmtkinds button {
+    padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent;
+    color: var(--muted); font: var(--w-reg) var(--fs-ui) var(--ui); cursor: pointer; white-space: nowrap;
+  }
+  .rmtkinds button[aria-checked="true"] { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 10%, transparent) }
+  .rmtkinds button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
 
   .rmtdirs { display: grid; gap: 2px }
   .rmtdirs .sublb { font: var(--w-reg) var(--fs-ui) var(--ui); color: var(--muted) }

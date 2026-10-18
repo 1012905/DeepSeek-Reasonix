@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/platform/wsl"
 )
 
 // The host book is user-global: a machine is reachable from every project on
@@ -21,6 +22,8 @@ import (
 // same shape a provider's key takes.
 type RemoteHostEdit struct {
 	Name          string   `json:"name"`
+	Kind          string   `json:"kind"`
+	Distro        string   `json:"distro"`
 	Host          string   `json:"host"`
 	Port          int      `json:"port"`
 	User          string   `json:"user"`
@@ -49,6 +52,10 @@ func (h *Hub) saveRemoteHost(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
 		refuse(w, http.StatusBadRequest, "remote.name_required", "give this machine a name", nil)
+		return
+	}
+	if (config.RemoteHostEntry{Kind: body.Kind}).HostKind() == config.RemoteKindWSL {
+		h.saveWSLHost(w, name, body)
 		return
 	}
 	host := strings.TrimSpace(body.Host)
@@ -85,7 +92,7 @@ func (h *Hub) saveRemoteHost(w http.ResponseWriter, r *http.Request) {
 		// Editing an entry must not drop the forwards it carries: they are set
 		// from the CLI and have no control on this page to put them back.
 		if existing, ok := c.RemoteHost(name); ok {
-			if existing.HostKind() != config.RemoteKindSSH {
+			if existing.HostKind() != config.RemoteKindSSH || strings.TrimSpace(body.Distro) != "" {
 				return nil, errRemoteKind
 			}
 			entry.Forwards = append([]config.RemoteForwardEntry(nil), existing.Forwards...)
@@ -369,4 +376,74 @@ func (h *Hub) anyRemotePane(host string) (RemoteEndpoint, bool) {
 func refuseNoRemote(w http.ResponseWriter) {
 	refuse(w, http.StatusNotImplemented, "remote.not_available",
 		"this kernel does not open panes on other machines", nil)
+}
+
+// saveWSLHost writes a WSL machine. Only its folder and install fields are
+// read from the body: the SSH fields mean nothing for it, and the config layer
+// refuses a row that carries them.
+func (h *Hub) saveWSLHost(w http.ResponseWriter, name string, body RemoteHostEdit) {
+	distro := strings.TrimSpace(body.Distro)
+	if !config.ValidWSLDistroName(distro) {
+		refuse(w, http.StatusBadRequest, "remote.distro_invalid", "that is not the name of a WSL distribution", nil)
+		return
+	}
+	entry := config.RemoteHostEntry{
+		Name:         name,
+		Kind:         config.RemoteKindWSL,
+		Distro:       distro,
+		Workspace:    strings.TrimSpace(body.Workspace),
+		Workspaces:   body.Workspaces,
+		ServeInstall: strings.TrimSpace(body.ServeInstall),
+		Disabled:     body.Disabled,
+	}
+	err := config.EditUserConfigWithCredentials(func(c *config.Config) ([]config.CredentialChange, error) {
+		if existing, ok := c.RemoteHost(name); ok && existing.HostKind() != config.RemoteKindWSL {
+			return nil, errRemoteKind
+		}
+		return nil, c.UpsertRemoteHost(entry)
+	})
+	if errors.Is(err, errRemoteKind) {
+		refuse(w, http.StatusConflict, "remote.kind_unsupported", "this machine is not a WSL distribution, so it cannot be saved as one", nil)
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// WSLDistro is one installed distribution as the page shows it.
+type WSLDistro struct {
+	Name    string `json:"name"`
+	Version int    `json:"version"`
+	Default bool   `json:"default,omitempty"`
+}
+
+// WSLDistros is what this machine has. Available is false where there is no
+// WSL to ask, which is not a failure and draws no WSL choice.
+type WSLDistros struct {
+	Available bool        `json:"available"`
+	Distros   []WSLDistro `json:"distros"`
+}
+
+func (h *Hub) remoteWSLDistros(w http.ResponseWriter, r *http.Request) {
+	run := h.opts.WSL
+	if run == nil {
+		run = wsl.System()
+	}
+	list, err := wsl.List(r.Context(), run)
+	switch {
+	case errors.Is(err, wsl.ErrUnavailable):
+		writeJSON(w, WSLDistros{Distros: []WSLDistro{}})
+		return
+	case err != nil:
+		refuse(w, http.StatusBadGateway, "remote.wsl_unreadable", "WSL did not say which distributions are installed", nil)
+		return
+	}
+	out := WSLDistros{Available: true, Distros: make([]WSLDistro, 0, len(list))}
+	for _, d := range list {
+		out.Distros = append(out.Distros, WSLDistro{Name: d.Name, Version: d.Version, Default: d.Default})
+	}
+	writeJSON(w, out)
 }

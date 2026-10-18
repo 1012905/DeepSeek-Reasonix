@@ -144,6 +144,10 @@ export class MockHub implements HubPort {
     return Promise.resolve(["attic", "old-laptop"]);
   }
 
+  wslDistros() {
+    return Promise.resolve({ available: true, distros: [{ name: "Ubuntu-24.04", version: 2, default: true }, { name: "Debian", version: 2 }, { name: "Alpine-legacy", version: 1 }] });
+  }
+
   // The fixture has no link to block, so nothing ever asks. The dialog is
   // driven from a story instead of from a stub that would fire on load.
   onRemoteAsk() {
