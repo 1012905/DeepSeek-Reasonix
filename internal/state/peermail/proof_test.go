@@ -23,6 +23,7 @@ func TestAProofHoldsOnlyForTheMessageAndTheSecretItWasMadeFor(t *testing.T) {
 		"id":     func(m *Message) { m.ID = "m-2" },
 		"time":   func(m *Message) { m.SentAt = m.SentAt.Add(time.Nanosecond) },
 		"hops":   func(m *Message) { m.Hops++ },
+		"seq":    func(m *Message) { m.Seq++ },
 	} {
 		forged := m
 		mutate(&forged)

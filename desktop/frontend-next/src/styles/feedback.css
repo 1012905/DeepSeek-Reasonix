@@ -288,3 +288,7 @@
 .fbk-filter-chip:hover, .fbk-filter-chip[aria-pressed="true"] { color: var(--text); background: var(--overlay); }
 .fbk-filter-chip[data-live] small { color: var(--accent-ink); font-weight: 600; }
 .fbk-filter-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.fbk-withdraw-acts { display: flex; gap: 8px; margin-top: 6px; }
+.fbk-withdraw .btn.danger { border-color: color-mix(in srgb, var(--err) 42%, transparent); color: var(--err-ink); }
+.fbk-withdraw .btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 10%, transparent); }

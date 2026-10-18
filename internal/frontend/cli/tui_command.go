@@ -89,6 +89,7 @@ func runTUI(args []string, version string) int {
 	ctrl, err := setupProfileWithOverrides(ctx, *f.model, *f.maxSteps, false, tuiSink(withNotifications(bc, cfg), reporter), profile, cliBuildOverrides{
 		Version: version, WorkspaceRoot: workspaceRoot, OnSessionRecovered: cliSessionRecoveredHandler(leases),
 		Effort: f.effortOverride(), PermissionAllow: allowed, AdditionalDirs: f.addDirs,
+		NewConversation: resumePath == "",
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)

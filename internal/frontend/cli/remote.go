@@ -176,13 +176,7 @@ func remoteListCLI() int {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tTARGET\tWORKSPACE\tFORWARDS\tSSH-CONFIG")
 	for _, h := range cfg.Remote.Hosts {
-		target := h.Host
-		if h.User != "" {
-			target = h.User + "@" + target
-		}
-		if h.Port != 0 && h.Port != 22 {
-			target = fmt.Sprintf("%s:%d", target, h.Port)
-		}
+		target := h.Target()
 		// One machine holds several projects; the column names the default and
 		// says how many more are listed, the same way FORWARDS is a count.
 		ws := h.Workspace

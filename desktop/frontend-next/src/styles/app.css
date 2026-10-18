@@ -4607,6 +4607,7 @@
     padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--r-md);
     background: var(--surface); box-shadow: var(--shadow-float);
   }
+  .movess select { margin-top: 12px }
   .pickcard h2 { margin: 0 0 12px; font: var(--w-med) var(--fs-lead) var(--ui); color: var(--text) }
 
   .pickpath { display: flex; align-items: center; gap: 6px }

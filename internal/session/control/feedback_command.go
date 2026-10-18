@@ -19,6 +19,7 @@ const feedbackUsage = `usage:
   /feedback list                                       show your feedback and its status
   /feedback show <receipt>                             show the thread under one report
   /feedback reply <receipt> [--yes] <text>             answer the maintainers (--yes only directly after the receipt)
+  /feedback withdraw <receipt> [--yes]                  take a report back (--yes directly after the receipt)
   /feedback name <nickname>                            set the nickname reports go out under`
 
 const feedbackPublicNotice = "Your text and nickname become PUBLIC on GitHub (esengine/DeepSeek-Reasonix) only if we file your report as an issue; otherwise they stay private. You will get a receipt and, if it is filed, the link; we may also reply or ask questions here (/feedback list). Do not include secrets or private code. Security problems belong in SECURITY.md, not here."
@@ -35,6 +36,7 @@ func feedbackArgItems(prior []string) []SlashItem {
 		{Label: "list", Insert: "list", Hint: i18n.M.ArgFeedbackList},
 		{Label: "show", Insert: "show", Hint: i18n.M.ArgFeedbackShow},
 		{Label: "reply", Insert: "reply", Hint: i18n.M.ArgFeedbackReply},
+		{Label: "withdraw", Insert: "withdraw", Hint: i18n.M.ArgFeedbackWithdraw},
 		{Label: "name", Insert: "name", Hint: i18n.M.ArgFeedbackName},
 	}
 }
@@ -59,6 +61,8 @@ func (c *Controller) feedbackCommand(args string) {
 		go c.feedbackShow(rest)
 	case "reply":
 		c.feedbackReply(rest)
+	case "withdraw":
+		c.feedbackWithdraw(rest)
 	case "name":
 		if err := c.SetFeedbackDisplayName(rest); err != nil {
 			c.notice(feedbackFailure(err))
@@ -234,6 +238,47 @@ func (c *Controller) feedbackReply(args string) {
 		}
 		c.notice("Reply sent - follow it with /feedback show " + receipt + ".")
 	}()
+}
+
+func (c *Controller) feedbackWithdraw(args string) {
+	fields := strings.Fields(args)
+	if len(fields) == 0 || len(fields) > 2 || (len(fields) == 2 && fields[1] != "--yes") {
+		c.notice(feedbackUsage)
+		return
+	}
+	receipt := fields[0]
+	if len(fields) == 1 {
+		msg := "Withdrawing takes this report back from the maintainers."
+		if it, ok := c.feedbackItem(receipt); ok && it.IssueNumber != nil {
+			msg = fmt.Sprintf("Withdrawing closes this report's public issue (#%d) and removes its images. The issue text already on GitHub stays.", *it.IssueNumber)
+		}
+		c.notice(msg + "\nNothing was sent. To withdraw it, run the same line again with --yes after the receipt.")
+		return
+	}
+	c.notice("withdrawing...")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), feedbackCommandTimeout)
+		defer cancel()
+		if err := c.WithdrawFeedback(ctx, receipt); err != nil {
+			c.notice(feedbackWithdrawFailure(err, receipt))
+			return
+		}
+		c.notice("Withdrawn - " + receipt + " is closed.")
+	}()
+}
+
+// feedbackWithdrawFailure speaks for a withdrawal. The service treats a repeat
+// as done, so an unanswered request is safe to send again.
+func feedbackWithdrawFailure(err error, receipt string) string {
+	switch {
+	case errors.Is(err, feedback.ErrNotWithdrawable):
+		return receipt + " can no longer be withdrawn: it already has an outcome, or this install cannot speak for it"
+	case errors.Is(err, feedback.ErrNotFound):
+		return "no such report for this install: " + receipt
+	case errors.Is(err, feedback.ErrOffline), errors.Is(err, feedback.ErrUnavailable):
+		return "the withdrawal may not have gone through - run it again to be sure"
+	}
+	return feedbackFailure(err)
 }
 
 func (c *Controller) feedbackItem(receipt string) (feedback.Item, bool) {

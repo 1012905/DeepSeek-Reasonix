@@ -144,9 +144,11 @@ jobs:
           node perf/jump-ends.mjs
           node perf/modelrows.mjs
           node perf/explorersize.mjs
+          node perf/session-move-to.mjs
           node perf/rail-search-hold.mjs
           node perf/session-move.mjs
           node perf/session-ref.mjs
+          node perf/browser-full.mjs
           node perf/codeeditor-size.mjs
           node perf/action-icons.mjs
           node perf/rowhit.mjs

@@ -32,6 +32,7 @@ const (
 	tsLookFile      = "desktop/frontend-next/src/port/look.ts"
 	tsHubFile       = "desktop/frontend-next/src/port/hub.ts"
 	tsMuxFile       = "desktop/frontend-next/src/port/mux.ts"
+	tsPluginFile    = "desktop/frontend-next/src/port/plugin.ts"
 	tsChartFile     = "desktop/frontend-next/src/ui/chart/spec.ts"
 	tsSurfaceFile   = "desktop/frontend-next/src/ui/surface/spec.ts"
 )
@@ -129,8 +130,17 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
 	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
 	{"internal/session/control/plan_approval_settings.go", "PlanApprovalSettings", tsBoundaryFile, "PlanApprovalSettings"},
+	{"internal/session/control/default_mode_settings.go", "DefaultModeSettings", tsBoundaryFile, "DefaultModeSettings"},
 	{"internal/session/control/peer_settings.go", "PeersSettings", tsBoundaryFile, "PeersSettings"},
 	{"internal/session/control/peer_settings.go", "PeerReleased", tsBoundaryFile, "PeerProject"},
+	{"internal/session/control/mods.go", "ModStatus", tsBoundaryFile, "ModStatus"},
+	{"internal/session/control/mods.go", "ModRuntime", tsBoundaryFile, "ModRuntime"},
+	{"internal/session/control/mods.go", "ModsSettings", tsBoundaryFile, "ModsSettings"},
+	{"internal/ext/modpreview/types.go", "Preview", tsPluginFile, "ModPreview"},
+	{"internal/ext/modpreview/types.go", "Event", tsPluginFile, "ModPreviewEvent"},
+	{"internal/ext/modpreview/types.go", "Call", tsPluginFile, "ModPreviewCall"},
+	{"internal/ext/modpreview/types.go", "Import", tsPluginFile, "ModPreviewImport"},
+	{"internal/ext/modpreview/types.go", "Finding", tsPluginFile, "ModPreviewFinding"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},
@@ -173,6 +183,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/schedules.go", "SchedulePreview", tsScheduleFile, "SchedulePreview"},
 	{"internal/session/control/schedules.go", "SchedulePendingView", tsScheduleFile, "SchedulePendingView"},
 	{"internal/session/control/schedules.go", "ScheduleResultView", tsScheduleFile, "ScheduleResultView"},
+	{"internal/session/control/observability_settings.go", "ObservabilitySettings", tsBoundaryFile, "ObservabilitySettings"},
 	{"internal/session/control/fold_work_settings.go", "FoldWorkSettings", tsBoundaryFile, "FoldWorkSettings"},
 	{"internal/session/control/ask_timeout.go", "AskTimeoutSettings", tsBoundaryFile, "AskTimeoutSettings"},
 	{"internal/session/control/session_ref_settings.go", "SessionRefSettings", tsBoundaryFile, "SessionRefSettings"},

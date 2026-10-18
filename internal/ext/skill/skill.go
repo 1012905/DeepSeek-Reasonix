@@ -1078,10 +1078,36 @@ func (s *Store) Delete(name string, scope Scope) error {
 	if sk.Path == "" || sk.Path == "(builtin)" {
 		return fmt.Errorf("skill %q has no file to delete", name)
 	}
-	if filepath.Base(sk.Path) == SkillFile {
-		return os.RemoveAll(filepath.Dir(sk.Path)) // directory-layout skill: <name>/SKILL.md + siblings
+	target, folder := s.RemovalTarget(sk)
+	if folder {
+		return os.RemoveAll(target)
 	}
-	return os.Remove(sk.Path) // legacy flat <name>.md skill
+	return os.Remove(target)
+}
+
+// RemovalTarget is what Delete removes for sk, and whether it is a folder: the
+// folder of a directory-layout skill (its SKILL.md and every sibling), or just
+// the file of a flat <name>.md skill and of a SKILL.md at the top of a root,
+// whose folder is the root that holds every other skill. Delete follows it, so
+// what a person is shown is what goes.
+func (s *Store) RemovalTarget(sk Skill) (target string, folder bool) {
+	if filepath.Base(sk.Path) == SkillFile && !s.isRoot(filepath.Dir(sk.Path)) {
+		return filepath.Dir(sk.Path), true
+	}
+	return sk.Path, false
+}
+
+func (s *Store) isRoot(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for _, root := range s.roots() {
+		if r, err := filepath.Abs(root.Dir); err == nil && r == abs {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) globalSkillsRoot() string {

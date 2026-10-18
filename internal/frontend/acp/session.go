@@ -68,15 +68,14 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
 	}
-
 	id, err := newSessionID()
 	if err != nil {
 		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
 	}
-
 	sink := newUpdateSink(s.conn, id)
 	sink.bindCwd(cwd)
 	sink.bindExtensionSurface(s.extensionSurfaceSupported())
+	sink.bindElicitation(s.clientCapabilities())
 	sessionParams := SessionParams{
 		Cwd:                cwd,
 		MCPServers:         mcpServers,
@@ -86,6 +85,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		EffortOverride:     cloneStringPtr(cfgState.EffortOverride),
 		RuntimeProfile:     cfgState.RuntimeProfile,
 		OnSessionRecovered: s.sessionRecoveredHandler(id),
+		NewConversation:    true,
 	}
 	s.bindClientIO(&sessionParams, id)
 	ctrl, err := s.factory.NewSession(ctx, sessionParams)
@@ -96,6 +96,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	sink.bindApprove(ctrl.Approve)
 	sink.bindAnswer(ctrl.AnswerQuestion)
 
+	startMode := startingModeID(ctrl)
 	now := time.Now().UTC()
 	sess := &acpSession{
 		id:               id,
@@ -110,7 +111,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		toolApprovalMode: control.ToolApprovalAsk,
 		runtimeState:     runtimeState,
 		status:           newStatusTelemetry(),
-		modeID:           sessionModeNormal,
+		modeID:           startMode,
 		createdAt:        now,
 		updatedAt:        now,
 	}
@@ -146,7 +147,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		result: SessionNewResult{
 			SessionID:     id,
 			Models:        cfgState.Models,
-			Modes:         sessionModesState(sessionModeNormal),
+			Modes:         sessionModesState(startMode),
 			ConfigOptions: cfgState.ConfigOptions,
 		},
 		after: func() {
@@ -154,6 +155,15 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 			s.publishMCPStatus(sess)
 		},
 	}, nil
+}
+
+// startingModeID is the mode a session just built starts in: plan when the
+// controller started there (the user's default mode), normal otherwise.
+func startingModeID(ctrl *control.Controller) string {
+	if ctrl.PlanMode() {
+		return sessionModePlan
+	}
+	return sessionModeNormal
 }
 
 func sessionModesState(current string) *SessionModeState {

@@ -523,7 +523,7 @@ func (a *Agent) applyRecoveryAndPermission(ctx context.Context, plan *toolCallPl
 				errMsg:  "blocked: MCP server identity is not authorized",
 			}, true
 		}
-		if outcome, blocked := mcpFastPathBlock(ctx, a.svc.gate, plan.permName, gateArgs, plan.readOnly); blocked {
+		if outcome, blocked := a.mcpFastPathRuling(ctx, plan, gateArgs); blocked {
 			return outcome, true
 		}
 	} else if a.svc.gate != nil {

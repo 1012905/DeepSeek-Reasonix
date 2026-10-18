@@ -53,3 +53,6 @@ export function PlanApproval({ port }: { port: AgentPort }) {
     </div>
   );
 }
+
+// The plan-related settings share this entry point.
+export { DefaultMode } from "./DefaultMode";

@@ -53,6 +53,10 @@ type Config struct {
 	AutoSubmit bool `toml:"auto_submit"`
 	// Peers governs messages between sessions; see PeersConfig.
 	Peers PeersConfig `toml:"peers"`
+	// Observability governs the opt-in trace export. User/global only.
+	Observability ObservabilityConfig `toml:"observability"`
+	// Mods governs Claude Code mods; see ModsConfig.
+	Mods ModsConfig `toml:"mods"`
 	// Storage relocates the movable roots, keyed by RootID. User/global only.
 	Storage map[string]string `toml:"storage"`
 
@@ -1096,6 +1100,7 @@ type AgentConfig struct {
 	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
 	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
+	DefaultMode        string `toml:"default_mode"`      // "normal" (default) or "plan": how a new conversation starts; the user file only
 	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
 	// OutputStyle selects built-in tone guidance or .reasonix/output-styles/<name>.md.
@@ -1346,6 +1351,7 @@ func Default() *Config {
 			SubagentClaims:         "strict",
 			WriteLease:             "strict",
 			PlanApproval:           "ask",
+			DefaultMode:            "normal",
 			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask

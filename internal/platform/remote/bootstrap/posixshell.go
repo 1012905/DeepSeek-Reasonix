@@ -15,7 +15,7 @@ type posixShell struct{}
 
 func (posixShell) Executable() string { return "reasonix" }
 
-func (posixShell) Home(ctx context.Context, _ Conn, fs *sftpfs.FS) (string, error) {
+func (posixShell) Home(ctx context.Context, _ Conn, fs sftpfs.Files) (string, error) {
 	return fs.RealPath(ctx, "~")
 }
 

@@ -4,7 +4,7 @@ export type FeedbackGroup = "all" | "fresh" | "input" | "open" | "done";
 
 export const FEEDBACK_GROUPS: FeedbackGroup[] = ["all", "fresh", "input", "open", "done"];
 
-const ENDED: ReadonlySet<FeedbackStatus> = new Set(["fixed", "wontfix", "duplicate", "closed"]);
+const ENDED: ReadonlySet<FeedbackStatus> = new Set(["fixed", "wontfix", "duplicate", "closed", "withdrawn"]);
 
 /** Which groups a report belongs to. `fresh` is the count of replies this visit
  *  has been told are new, not the kernel's live unread number, so a report that

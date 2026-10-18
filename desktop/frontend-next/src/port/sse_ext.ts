@@ -38,6 +38,9 @@ export class SseExtensions extends SseLook {
   applySkillUpdate(name: string, planId: string, overwriteLocal: boolean) {
     return this.post("/skills/" + encodeURIComponent(name) + "/update/apply", { planId, overwriteLocal });
   }
+  removeSkill(name: string, scope: string, path: string, root?: string) {
+    return this.post("/skills/remove", { name, scope, path, root });
+  }
   clearSkillOverride(name: string, root?: string) {
     return this.post("/skills/enabled", { name, clear: true, scope: "project", root });
   }
