@@ -310,6 +310,12 @@ func (s *service) switchSessionConfig(ctx context.Context, sess *acpSession, del
 		sess.stateChangeMu.Unlock()
 		return cfgState, nil
 	}
+	if effortAppliedInPlace(sess, cfgState, deltas) {
+		sess.storeConfigState(cfgState)
+		sess.stateChangeMu.Unlock()
+		sess.sink.send(configOptionUpdate{SessionUpdate: "config_option_update", ConfigOptions: cfgState.ConfigOptions})
+		return cfgState, nil
+	}
 	didMaintenance := false
 	err = s.rebuildSessionLocked(ctx, sess, cfgState, deltas, &didMaintenance)
 	sess.stateChangeMu.Unlock()

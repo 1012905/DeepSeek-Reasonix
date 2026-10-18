@@ -41,6 +41,9 @@ var sessionCarryOver = map[string]bool{
 	// A withdrawn slot outlives the conversation that saw it, so the queued
 	// fact is still true and still undelivered; the next round drains it.
 	"hostNotices": true,
+	// The depth the user switched to is the session's setting, saved to their
+	// config alongside, so a new conversation keeps it.
+	"effort": true,
 }
 
 // windowReset and windowCarryOver are the same two lists for windowState.

@@ -34,6 +34,8 @@ type sessionRuntime struct {
 	missingReasoning missingReasoningWatch
 	// mode is the model mode the conversation asked for; a new one starts off.
 	mode requestModeState
+	// effort is the depth a session switched to without rebuilding the provider.
+	effort requestEffortState
 
 	// path is rebound by preflight when a transcript is bound, so reset leaves
 	// it to its owner rather than blanking it.
