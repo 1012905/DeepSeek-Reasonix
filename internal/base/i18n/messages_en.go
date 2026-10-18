@@ -329,6 +329,8 @@ var English = Messages{
 	McpPanelTitle:                "Manage MCP servers",
 	McpPanelSummaryFmt:           "%d servers · %d enabled",
 	McpPanelToolsFmt:             "%d tools",
+	McpPanelSignIn:               "this server needs you to sign in: press a",
+	McpPanelUpgradeFmt:           "press u to review: this server asks for more access: %s (its own words)",
 	McpPanelHint:                 "↑↓ navigate · Space enable/disable · r reconnect · Enter tools · Esc close",
 	McpPanelDetailHint:           "Esc back",
 	McpPanelNoTools:              "no tools reported",
