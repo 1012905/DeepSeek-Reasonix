@@ -173,6 +173,8 @@ async function main() {
       // One request per call plus the one that reads the last result.
       const calls = act === "network" ? 3 : 2;
       await until(`the turn that would ${act}`, async () => requests.length > before + calls, 90000);
+      // The next turn is submitted only once this one has ended, or it is queued behind it.
+      await until(`the ${act} turn to end`, async () => ((await js(`!document.querySelector('[data-action="session.stop"]')`)) ? true : null), 30000);
       return (requests.at(-1).messages || []).filter((m) => m.role === "tool").map((m) => String(m.content || "")).join("\n");
     };
     const askFor = async (name) => {
