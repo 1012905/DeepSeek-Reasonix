@@ -17,12 +17,19 @@ export class MockCompositions {
   }
   private summary(v:AgentPresetVersion):CompositionSummary { return {id:v.definition.id,name:v.definition.name,revision:v.revision,digest:`mock-${v.revision}`,started:false}; }
   private fail(status:number,code:string):never { throw new HttpError(status,"",{code:`agent_composition.${code}`}); }
+  private validateAuthority(definition:AgentComposition) {
+    if (!definition.id.startsWith("project:")) return;
+    for (const kind of ["mcp","extensions"] as const) for (const member of definition[kind]?.members ?? []) {
+      if (Object.entries(member.parameters ?? {}).some(([key,value])=>["args","url","env","headers"].includes(key.toLowerCase()) && value!=null)) this.fail(400,"invalid");
+    }
+  }
   async agentPresets() { return structuredClone(this.catalog); }
   async saveAgentPreset(definition: AgentComposition, expectedRevision: string): Promise<AgentPresetVersion> {
     if (definition.id.startsWith("builtin:")) this.fail(403,"read_only");
     const prior=this.catalog.presets.find((v)=>v.definition.id===definition.id);
     if ((prior?.revision ?? "")!==expectedRevision) this.fail(409,"conflict");
     if (!/^(user|project):[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(definition.id) || !definition.name.trim()) this.fail(400,"invalid");
+    this.validateAuthority(definition);
     const version={definition:structuredClone(definition),revision:`mock-${++this.library.revision}`};
     const items=definition.id.startsWith("project:") ? this.library.projects.get(this.workspace) ?? [] : this.library.user;
     const next=[...items.filter((v)=>v.definition.id!==definition.id),version];
@@ -48,6 +55,7 @@ export class MockCompositions {
   }
   async importAgentPreset(content:AgentComposition) {
     if (content.schemaVersion!==1 || !content.name || !content.persona) this.fail(400,"invalid");
+    this.validateAuthority(content);
     return {definition:structuredClone(content),diagnostics:[]};
   }
   async agentComposition() { return structuredClone(this.current); }

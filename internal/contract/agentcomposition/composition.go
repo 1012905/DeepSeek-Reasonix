@@ -168,7 +168,7 @@ func Decode(data []byte) (Definition, error) {
 	if err := dec.Decode(new(any)); err != io.EOF {
 		return d, fmt.Errorf("%w: trailing data", ErrInvalid)
 	}
-	return d, d.Validate()
+	return d, d.ValidateForExecution()
 }
 
 func Revision(d Definition) string { return Digest(d) }

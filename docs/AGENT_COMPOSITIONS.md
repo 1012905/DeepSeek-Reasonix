@@ -91,6 +91,36 @@ Parameter names are
 validated. Environment/header overrides require `${NAME}` references.
 Presets cannot replace an installed extension's executable declaration.
 
+## Definition sources and authority
+
+Selecting a definition never grants permission. Built-ins are shipped, read-only
+templates; user definitions are explicitly authored in personal state; project
+definitions are untrusted repository files, even in a trusted workspace.
+
+| Value | `builtin:` | `user:` | `project:` |
+| --- | --- | --- | --- |
+| Persona and tool/module selection | Shipped choices | User choices | Repository choices, only within existing user authorization |
+| MCP `args`, `url`, `env`, `headers` | Shipped values only | Allowed; credential values remain references | Refused, including empty array/map overrides |
+| MCP call/startup timeouts | Supported | Supported | Supported |
+| Extension `args`, `env` | Shipped values only | Allowed; environment values remain references | Refused |
+| Extension timeout | Supported | Supported | Supported |
+| Extension executable, hook/command code or module installation | No new authority | Existing authorization still required | Cannot replace a launch or approve/install a program |
+
+The current built-ins contain no MCP or extension overrides. Tools, skills,
+hooks and commands do not accept member parameters in any scope.
+
+Project definitions can select only resources already authorized by the user,
+never widen capabilities or change a launch. Hook project-program approval and
+its revocation checks still apply; selecting a preset is not an approval card.
+
+Declaration reads, saves, imports, old revisions and executable binding restore
+apply the same source policy before starting a module.
+
+A previously retained project binding containing launch overrides remains
+readable as history but cannot execute, even with an old local authorization
+record. It is not silently rewritten. Valid timeout-only project bindings
+retain their original version.
+
 Inherited choices resolve once at binding. Retained skill and hook files and
 extension code do not follow subsequent source edits.
 

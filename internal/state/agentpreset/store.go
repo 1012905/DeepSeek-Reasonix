@@ -94,7 +94,7 @@ func (s *Store) Get(id string) (agentcomposition.Version, error) {
 }
 
 func (s *Store) Save(d agentcomposition.Definition, expected string) (agentcomposition.Version, error) {
-	if err := d.Validate(); err != nil {
+	if err := d.ValidateForExecution(); err != nil {
 		return agentcomposition.Version{}, err
 	}
 	path, err := s.declarationPath(d.ID)
@@ -135,7 +135,7 @@ func (s *Store) Version(revision string) (agentcomposition.Version, error) {
 	if v.Revision != revision || agentcomposition.Revision(v.Definition) != revision {
 		return v, agentcomposition.ErrInvalid
 	}
-	return v, v.Definition.Validate()
+	return v, v.Definition.ValidateForExecution()
 }
 
 func (s *Store) Delete(id, expected string) error {

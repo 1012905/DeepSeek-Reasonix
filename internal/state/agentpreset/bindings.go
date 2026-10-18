@@ -12,7 +12,7 @@ import (
 
 // RetainBinding records a binding assembled from locally authorized sources.
 func (s *Store) RetainBinding(binding *agentcomposition.Binding) error {
-	if err := binding.Validate(); err != nil {
+	if err := binding.ValidateForExecution(); err != nil {
 		return err
 	}
 	return writeJSON(filepath.Join(s.trustedDirectory(), "bindings", binding.Digest+".json"), binding)
@@ -20,7 +20,7 @@ func (s *Store) RetainBinding(binding *agentcomposition.Binding) error {
 
 // VerifyBinding never treats self-authenticated imported history as executable authority.
 func (s *Store) VerifyBinding(binding *agentcomposition.Binding) error {
-	if err := binding.Validate(); err != nil {
+	if err := binding.ValidateForExecution(); err != nil {
 		return err
 	}
 	if len(binding.Digest) != 64 || strings.Trim(binding.Digest, "0123456789abcdef") != "" {
@@ -34,7 +34,7 @@ func (s *Store) VerifyBinding(binding *agentcomposition.Binding) error {
 	if err := json.Unmarshal(data, &retained); err != nil {
 		return err
 	}
-	if err := retained.Validate(); err != nil {
+	if err := retained.ValidateForExecution(); err != nil {
 		return err
 	}
 	if retained.Digest != binding.Digest {
