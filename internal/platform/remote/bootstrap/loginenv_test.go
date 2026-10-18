@@ -42,7 +42,7 @@ func (c *scriptConn) Exec(_ context.Context, cmd string) (remote.ExecResult, err
 	return c.fn(cmd)
 }
 
-func (c *scriptConn) SFTP() (*sftpfs.FS, error) { return nil, errors.New("no sftp") }
+func (c *scriptConn) Files() (sftpfs.Files, error) { return nil, errors.New("no sftp") }
 
 func TestCaptureLoginEnvParsesPathThroughNoise(t *testing.T) {
 	fixedNonce(t)

@@ -23,7 +23,7 @@ func (windowsShell) Executable() string { return "reasonix.exe" }
 // Home does not ask the shell: OpenSSH on Windows will not resolve ~, but
 // every SFTP session starts in the user's directory, so the file layer's own
 // idea of "." answers the same question without a second command.
-func (windowsShell) Home(ctx context.Context, _ Conn, fs *sftpfs.FS) (string, error) {
+func (windowsShell) Home(ctx context.Context, _ Conn, fs sftpfs.Files) (string, error) {
 	home, err := fs.RealPath(ctx, ".")
 	if err != nil {
 		return "", fmt.Errorf("bootstrap: resolve remote home: %w", err)
