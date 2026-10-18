@@ -83,6 +83,12 @@ func (a *contextWindow) summaryInputBudget(instructions string) int {
 	return min(budget, summaryInputCeilingTokens)
 }
 
+// summaryRejectionScales are the shares of the refused input a summary request is
+// retried at when the provider rejects it as larger than its context. The budget is
+// an estimate, and a refused request costs nothing, so the digest is not given up
+// until three smaller inputs have been refused too.
+var summaryRejectionScales = []float64{0.7, 0.5, 0.35}
+
 // foldToSummary turns one deterministically bounded input into a digest.
 // Summary retries keep this fold, never splitting or merging model outputs.
 func (a *contextWindow) foldToSummary(ctx context.Context, fold []provider.Message, instructions string) (foldSummary, error) {
@@ -93,6 +99,27 @@ func (a *contextWindow) foldToSummary(ctx context.Context, fold []provider.Messa
 		// Manual /compact on an unconfigured provider still works this way.
 		return a.singleCallSummary(ctx, res, fold, instructions)
 	}
+	attempt, err := a.foldAtBudget(ctx, res, fold, instructions, budget)
+	if err == nil || !provider.IsContextOverflow(err) {
+		return attempt, err
+	}
+	refused := attempt.FoldTokens
+	for _, scale := range summaryRejectionScales {
+		target := int(float64(refused) * scale)
+		if target < minSummarySpanTokens {
+			break
+		}
+		a.svc.sink.Emit(event.Event{Kind: event.CompactionProgress})
+		attempt, err = a.foldAtBudget(ctx, res, fold, instructions, target)
+		if err == nil || !provider.IsContextOverflow(err) {
+			return attempt, err
+		}
+	}
+	return attempt, fmt.Errorf("%w: the provider refused the summary request at every size tried (%v)", errSummaryInputTooLarge, err)
+}
+
+// foldAtBudget shortens the fold to fit budget and asks for its summary once.
+func (a *contextWindow) foldAtBudget(ctx context.Context, res foldSummary, fold []provider.Message, instructions string, budget int) (foldSummary, error) {
 	input := fold
 	if res.FoldTokens > budget {
 		input = a.shortenFoldForSummary(fold)
