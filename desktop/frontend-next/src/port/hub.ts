@@ -1,7 +1,7 @@
 import { watchTree } from "./tree_events";
 import { HttpError, type AgentPort } from "./port";
 import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe, WSLDistros } from "./remote";
-import type { CloudShareOffer, DeviceSelf, ShareOffer, SharePort, ShareStatus } from "./share";
+import type { CloudShareOffer, DeviceSelf, PhoneAction, PhoneList, ShareOffer, SharePort, ShareStatus } from "./share";
 import { SsePort } from "./sse";
 import { host } from "./host";
 
@@ -621,6 +621,21 @@ export class SseHub implements HubPort {
 
   revokeDevice(id: string) {
     return this.post<ShareStatus>("/share/revoke", { id });
+  }
+
+  async sharePhones() {
+    const res = await fetch("/share/phones", { credentials: "same-origin" });
+    if (res.status === 404) return null;
+    if (!res.ok) await SseHub.fail("/share/phones", res);
+    return (await res.json()) as PhoneList;
+  }
+
+  resolvePhone(id: string, action: PhoneAction, replaceId?: string) {
+    return this.post<PhoneList>("/share/phones/resolve", { id, action, ...(replaceId ? { replaceId } : {}) });
+  }
+
+  revokePhone(id: string) {
+    return this.post<PhoneList>("/share/phones/revoke", { id });
   }
 
   async device() {
