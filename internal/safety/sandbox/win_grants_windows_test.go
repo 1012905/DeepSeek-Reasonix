@@ -30,6 +30,9 @@ func TestWindowsGrantOpsEditARealDACL(t *testing.T) {
 	if ok, err := ops.Granted(child, sid); err != nil || !ok {
 		t.Fatalf("a file created after the grant did not inherit it: granted=%v err=%v", ok, err)
 	}
+	if ok, err := hasLowLabel(root); err != nil || !ok {
+		t.Fatalf("the root carries no Low label after the grant: %v %v", ok, err)
+	}
 	if err := ops.Revoke(root, sid); err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +41,9 @@ func TestWindowsGrantOpsEditARealDACL(t *testing.T) {
 	}
 	if ok, _ := ops.Granted(child, sid); ok {
 		t.Fatal("the SID is still on a child after a revoke")
+	}
+	if ok, _ := hasLowLabel(root); ok {
+		t.Fatal("the Low label is still on the root after a revoke")
 	}
 }
 

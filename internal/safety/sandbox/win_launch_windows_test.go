@@ -47,7 +47,12 @@ func newWinHarness(t *testing.T) *winHarness {
 
 func (h *winHarness) run(cmdline string) (string, int) {
 	h.t.Helper()
-	argv, wrapped := CommandArgs(h.spec, []string{"cmd", "/c", cmdline})
+	return h.runArgv([]string{"cmd", "/c", cmdline})
+}
+
+func (h *winHarness) runArgv(args []string) (string, int) {
+	h.t.Helper()
+	argv, wrapped := CommandArgs(h.spec, args)
 	if !wrapped {
 		h.t.Fatal("the command was not wrapped")
 	}
@@ -139,5 +144,25 @@ func TestCancellingTheLauncherEndsTheTree(t *testing.T) {
 	time.Sleep(8 * time.Second)
 	if exists(late) {
 		t.Fatal("a child outlived its cancelled launcher and finished its work")
+	}
+}
+
+// Inside a granted root the tools a developer uses still work under the token.
+func TestRestrictedCommandsRunGitAndPowerShellInsideTheRoot(t *testing.T) {
+	h := newWinHarness(t)
+	if out, code := h.run(`cd /d ` + h.ws + ` && git init -q g && echo gitok`); code != 0 || !strings.Contains(out, "gitok") || !exists(filepath.Join(h.ws, "g", ".git")) {
+		t.Errorf("git init: code %d out %q", code, out)
+	}
+	target := filepath.Join(h.ws, "ps.txt")
+	if out, code := h.runArgv([]string{"powershell", "-NoProfile", "-Command", "Set-Content -Path '" + target + "' -Value x; 'psok'"}); code != 0 || !strings.Contains(out, "psok") || !exists(target) {
+		t.Errorf("powershell write: code %d out %q", code, out)
+	}
+	keep := filepath.Join(h.out, "keep.txt")
+	if err := os.WriteFile(keep, []byte("k"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.runArgv([]string{"powershell", "-NoProfile", "-Command", "Remove-Item -LiteralPath '" + keep + "' -Force"})
+	if !exists(keep) {
+		t.Error("PowerShell removed a file outside the root")
 	}
 }
