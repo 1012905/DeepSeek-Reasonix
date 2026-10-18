@@ -41,7 +41,7 @@ func TestLiveAttachBringsUpAKernelInADistribution(t *testing.T) {
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+ep.Addr+"/", nil)
 	req.Header.Set("Authorization", "Bearer "+ep.Token)
 	var resp *http.Response
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if resp, err = http.DefaultClient.Do(req); err == nil {
 			break
 		}
