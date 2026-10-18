@@ -199,6 +199,8 @@ type Controller struct {
 	inbox inboxState
 	// peers is this controller's side of messages between sessions; nil-safe off.
 	peers *peerMail
+	// settings counts the setting proposals of the current turn.
+	settings settingsState
 }
 
 type approvalReply struct {
@@ -318,7 +320,9 @@ type Options struct {
 	SessionDir          string
 	SessionPath         string
 	// Peers opens this session to messages from other sessions; zero is off.
-	Peers         PeersOptions
+	Peers PeersOptions
+	// Settings, when set, is bound to this controller so the setting tool can reach it.
+	Settings      *tool.SettingsLink
 	Host          *plugin.Host
 	Commands      []command.Command
 	Skills        []skill.Skill
@@ -350,6 +354,8 @@ type Options struct {
 	Feedback FeedbackOptions // nil service refuses every feedback call
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager
+	// Subagents reads the runs the delegation tools persist; nil lists none.
+	Subagents SubagentReader
 	// TaskStore remains a FileStore-compatible authority. Desktop injects one
 	// observed instance so recorder and task-control APIs share post-commit
 	// projection hints; nil preserves the ordinary FileStore.
@@ -490,6 +496,7 @@ func New(opts Options) *Controller {
 	c.peers = newPeerMail(opts.Peers)
 	c.rebindInbox()
 	c.startPeers()
+	c.startSettings(opts.Settings)
 	// Observe Steer / unapplied-steer for durable inbox state transitions.
 	// Must wrap both the controller sink and the executor sink: agent.Steer
 	// emits on the executor path, TurnDone on the controller path.
@@ -1055,66 +1062,6 @@ func (c *Controller) ToolResult(toolID string) *ToolResultData {
 // Host returns the running MCP host (nil when no plugins), for frontends that
 // list servers / resolve MCP prompts.
 func (c *Controller) Host() *plugin.Host { return c.mcp.hostRef() }
-
-// Commands returns the loaded custom slash commands.
-func (c *Controller) Commands() []command.Command {
-	if p := c.commands.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// ReloadCommands rescans all command directories and hot-swaps the slash_command
-// tool and the internal command slice — no MCP restart, no hook rerun.
-func (c *Controller) ReloadCommands(ctx context.Context) error {
-	if c.CompositionBinding() != nil {
-		return ctx.Err()
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-	cmds, loadErr := command.LoadRoots(config.CommandRootsForRoot(c.workspaceRoot)...)
-	var cmdSkills []skill.Skill
-	if !c.skills.noImplicitInvocation {
-		cmdSkills = skill.ModelInvocable(c.SlashSkills())
-	}
-
-	entries := make([]command.SlashEntry, 0, len(cmdSkills)+len(cmds))
-	for _, sk := range cmdSkills {
-		entries = append(entries, command.SlashEntry{
-			Name:        sk.SlashName(),
-			Description: sk.Description,
-			ArgHint:     sk.ArgumentHint,
-			Skill:       true,
-			Unlisted:    func() bool { return !c.skills.pathHits.Eligible(sk) },
-			Render: func(args []string) string {
-				cur, err := c.skills.forModel(sk)
-				if err != nil {
-					return ""
-				}
-				return c.skills.renderInvocation(cur, strings.Join(args, " "))
-			},
-		})
-	}
-	for _, cmd := range cmds {
-		if cmd.Hidden {
-			continue
-		}
-
-		entries = append(entries, command.SlashEntry{
-			Name:        cmd.Name,
-			Description: cmd.Description,
-			ArgHint:     cmd.ArgHint,
-			Render:      func(args []string) string { return cmd.Render(args) },
-		})
-	}
-	c.mcp.registerTool(command.NewSlashCommandTool(entries, c.skills.modelGate()))
-	cmdSlice := cmds
-	c.commands.Store(&cmdSlice)
-	return loadErr
-}
 
 // HookRunner returns the session's hook runner (nil-safe; may hold zero hooks),
 // so a frontend can list the active hooks via `/hooks`.

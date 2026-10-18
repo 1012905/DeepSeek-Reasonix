@@ -13,7 +13,7 @@ type compositionToolGuard struct {
 }
 
 func (c *Client) checkCompositionContract(fingerprint [sha256.Size]byte) error {
-	guard := c.compositionGuard.Load()
+	guard := c.refresh.compositionGuard.Load()
 	if guard == nil {
 		return nil
 	}
@@ -26,7 +26,7 @@ func (c *Client) checkCompositionContract(fingerprint [sha256.Size]byte) error {
 }
 
 func (c *Client) compositionContractError() error {
-	if guard := c.compositionGuard.Load(); guard != nil && guard.invalid.Load() {
+	if guard := c.refresh.compositionGuard.Load(); guard != nil && guard.invalid.Load() {
 		return fmt.Errorf("MCP %s tool contract changed; this session cannot continue", c.name)
 	}
 	return nil
@@ -53,7 +53,7 @@ func (h *Host) PinCompositionTools(name, expected string) (string, error) {
 	h.mu.Unlock()
 	c.toolsMu.Lock()
 	defer c.toolsMu.Unlock()
-	c.compositionGuard.Store(guard)
+	c.refresh.compositionGuard.Store(guard)
 	if c.toolsFingerprint != fingerprint {
 		guard.invalid.Store(true)
 		return "", fmt.Errorf("MCP %s tool contract changed while binding", name)
@@ -65,7 +65,7 @@ func (h *Host) attachCompositionGuard(c *Client) {
 	h.mu.RLock()
 	guard := h.compositionGuards[c.name]
 	h.mu.RUnlock()
-	c.compositionGuard.Store(guard)
+	c.refresh.compositionGuard.Store(guard)
 }
 
 func (h *Host) CompositionContractError() error {

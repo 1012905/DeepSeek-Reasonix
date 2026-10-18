@@ -1,9 +1,10 @@
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings, PersonaDraft, PersonaSettings } from "./boundary";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 import { MockCompositions } from "./mock_composition";
 import type { AgentComposition } from "./composition";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
 // far an approved write reaches. It carries one rule of each kind already, so
@@ -198,7 +199,7 @@ export class MockBoundary extends MockShell {
     this.peerState = { ...this.peerState, held: this.peerState.held.filter((h) => h.id !== id) };
   }
 
-  protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false, available: true };
+  protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], max_dispatch_depth: 1, max_dispatched_sessions: 8, path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false, available: true };
 
   async peersSettings(): Promise<PeersSettings> {
     return { ...this.peerSettings, release_projects: [...this.peerSettings.release_projects] };
@@ -210,6 +211,8 @@ export class MockBoundary extends MockShell {
       ...this.peerSettings,
       enabled: edit.enabled ?? this.peerSettings.enabled,
       dispatch: edit.dispatch ?? this.peerSettings.dispatch,
+      max_dispatch_depth: edit.max_dispatch_depth ?? this.peerSettings.max_dispatch_depth,
+      max_dispatched_sessions: edit.max_dispatched_sessions ?? this.peerSettings.max_dispatched_sessions,
       release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
       pending: true,
     };
@@ -296,7 +299,7 @@ export class MockBoundary extends MockShell {
   private webAccess: WebAccessSettings = {
     search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
     known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"],
-    paid_backends: ["deepseek_api"], deepseek_api_ready: false, path: "/Users/you/.reasonix/config.toml",
+    paid_backends: ["deepseek_api"], deepseek_api_ready: false, video_url_passthrough: false, path: "/Users/you/.reasonix/config.toml",
   };
 
   async webAccessSettings(): Promise<WebAccessSettings> {
@@ -306,6 +309,10 @@ export class MockBoundary extends MockShell {
   async saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings> {
     this.webAccess = { ...this.webAccess, ...patch };
     return { ...this.webAccess };
+  }
+
+  async probeSearxng(): Promise<SearxngProbe> {
+    return this.webAccess.searxng_url.trim() ? { ok: true } : { ok: false, code: "search.searxng_unreachable" };
   }
 
   async saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings> {
@@ -329,6 +336,18 @@ export class MockBoundary extends MockShell {
     this.ask = { ...this.ask, seconds };
     return { ...this.ask };
   }
+  private sessionRef: SessionRefSettings = { tokens: 8000, defaultTokens: 8000, minTokens: 500, maxTokens: 200000, path: "/Users/you/.reasonix/config.toml" };
+
+  async sessionRefSettings(): Promise<SessionRefSettings> {
+    return { ...this.sessionRef };
+  }
+
+  async saveSessionRefSettings(tokens: number): Promise<SessionRefSettings> {
+    if (tokens !== 0 && (tokens < this.sessionRef.minTokens || tokens > this.sessionRef.maxTokens)) throw new Error("session reference limit out of range");
+    this.sessionRef = { ...this.sessionRef, tokens: tokens || this.sessionRef.defaultTokens };
+    return { ...this.sessionRef };
+  }
+
   private receipt: ReceiptSettings = { show: false, path: "/Users/you/.reasonix/config.toml" };
 
   async receiptSettings(): Promise<ReceiptSettings> {

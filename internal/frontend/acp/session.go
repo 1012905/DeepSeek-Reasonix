@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/runtime/agent"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessioninbox"
 )
@@ -51,6 +52,11 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/new: " + err.Error()}
 	}
+	additionalDirs, rpcErr := vetAdditionalDirs(cwd, p.AdditionalDirectories)
+	if rpcErr != nil {
+		rpcErr.Message = "session/new: " + rpcErr.Message
+		return nil, rpcErr
+	}
 	cfgState, err := s.sessionConfigState(ctx, SessionConfigStateParams{Cwd: cwd})
 	if err != nil {
 		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
@@ -74,6 +80,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	sessionParams := SessionParams{
 		Cwd:                cwd,
 		MCPServers:         mcpServers,
+		AdditionalDirs:     additionalDirs,
 		Sink:               sink,
 		Model:              cfgState.Model,
 		EffortOverride:     cloneStringPtr(cfgState.EffortOverride),
@@ -83,7 +90,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	s.bindClientIO(&sessionParams, id)
 	ctrl, err := s.factory.NewSession(ctx, sessionParams)
 	if err != nil {
-		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
+		return nil, newSessionError("session/new", err)
 	}
 	ctrl.EnableInteractiveApproval()
 	sink.bindApprove(ctrl.Approve)
@@ -96,6 +103,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		sink:             sink,
 		cwd:              cwd,
 		mcpServers:       clonePluginSpecs(mcpServers),
+		additionalDirs:   additionalDirs,
 		model:            cfgState.Model,
 		effortOverride:   cloneStringPtr(cfgState.EffortOverride),
 		runtimeProfile:   cfgState.RuntimeProfile,
@@ -223,7 +231,7 @@ func (s *service) sessionLoad(ctx context.Context, raw json.RawMessage) (any, er
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/load: " + err.Error()}
 	}
-	cfgState, err := s.openExistingSession(ctx, "session/load", p.SessionID, p.Cwd, p.MCPServers, true)
+	cfgState, err := s.openExistingSession(ctx, "session/load", p.SessionID, p.Cwd, p.AdditionalDirectories, p.MCPServers, true)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +263,7 @@ func (s *service) sessionResume(ctx context.Context, raw json.RawMessage) (any, 
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/resume: " + err.Error()}
 	}
-	cfgState, err := s.openExistingSession(ctx, "session/resume", p.SessionID, p.Cwd, p.MCPServers, false)
+	cfgState, err := s.openExistingSession(ctx, "session/resume", p.SessionID, p.Cwd, p.AdditionalDirectories, p.MCPServers, false)
 	if err != nil {
 		return nil, err
 	}
@@ -327,16 +335,30 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 	sess.persistAfterTurn(text)
 
 	stop := StopEndTurn
+	vendor := map[string]any{}
 	if runErr != nil {
-		if runCtx.Err() != nil {
+		var readinessErr *agent.FinalReadinessError
+		switch {
+		case runCtx.Err() != nil:
 			stop = StopCancelled
-		} else {
-			stop = StopError
+		case errors.As(runErr, &readinessErr):
+			outcome := ReasonixTurnOutcome{Kind: "paused", Reason: clipStatusText(readinessErr.Error(), 2_048)}
+			sess.sink.send(readinessReceipt(outcome.Reason, readinessErr.Missing))
+			vendor["turnOutcome"] = outcome
+		default:
+			return nil, &RPCError{
+				Code:    ErrInternal,
+				Message: clipStatusText(runErr.Error(), 2_048),
+				Data:    TurnErrorData{Code: TurnFailed},
+			}
 		}
 	}
-	res := SessionPromptResult{StopReason: stop}
 	if sess.transcript != "" {
-		res.TranscriptPath = &sess.transcript
+		vendor["transcriptPath"] = sess.transcript
+	}
+	res := SessionPromptResult{StopReason: stop}
+	if len(vendor) > 0 {
+		res.Meta = map[string]any{"reasonix.io": vendor}
 	}
 	return res, nil
 }
@@ -677,4 +699,14 @@ func sessionInfoMatchesCwd(info SessionInfo, filter string) bool {
 		return true
 	}
 	return filepath.Clean(info.Cwd) == filepath.Clean(filter)
+}
+
+// readinessReceipt is the host-written line a text-only client sees when the
+// turn stopped before delivery was verified; the typed outcome rides _meta.
+func readinessReceipt(reason string, missing []string) messageChunk {
+	text := "\n\n[paused] Not verified, the work may be incomplete: " + reason
+	if len(missing) > 0 {
+		text += " (missing: " + strings.Join(redactStatusTexts(missing, 256), ", ") + ")"
+	}
+	return messageChunk{SessionUpdate: "agent_message_chunk", Content: textBlock(text)}
 }

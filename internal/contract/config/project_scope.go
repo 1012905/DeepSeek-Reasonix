@@ -18,6 +18,7 @@ import (
 // may narrow these grants and never widen them. The slices are copies because
 // decoding the project file writes into the arrays the user's decode left.
 type heldScope struct {
+	attachments    AttachmentsConfig
 	sandbox        SandboxConfig
 	permissions    PermissionsConfig
 	approvalMode   string
@@ -59,6 +60,8 @@ type heldScope struct {
 	webFetchPaid  []string
 	// videoNativeMax lowers what is sent to a vendor, so only the user sets it.
 	videoNativeMax int64
+	// videoURLPass has a vendor visit an address, so only the user turns it on.
+	videoURLPass bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -71,6 +74,7 @@ func holdUserScope(c *Config) heldScope {
 	shell.Env = maps.Clone(shell.Env)
 	shell.Args = slices.Clone(shell.Args)
 	return heldScope{
+		attachments:     cloneAttachments(c.Attachments),
 		sandbox:         s,
 		permissions:     p,
 		approvalMode:    c.Desktop.DefaultToolApprovalMode,
@@ -102,6 +106,7 @@ func holdUserScope(c *Config) heldScope {
 		webFetch:          slices.Clone(c.Tools.WebFetchBackends),
 		webFetchPaid:      slices.Clone(c.Tools.WebFetchPaidAllowed),
 		videoNativeMax:    c.Tools.VideoNativeMaxBytes,
+		videoURLPass:      c.Tools.VideoURLPassthrough,
 	}
 }
 
@@ -177,6 +182,10 @@ func (c *Config) ignoreProject(key, value string, reason IgnoredProjectReason) {
 // may have written, and gates the programs the project names. Shell env is
 // the user's alone: it reaches every command the agent runs.
 func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.MetaData) {
+	if !reflect.DeepEqual(c.Attachments, h.attachments) {
+		c.ignoreProject("attachments.max_stream_bytes", fmt.Sprint(c.AttachmentStreamLimit().Bytes), ProjectUserOnly)
+	}
+	c.Attachments = cloneAttachments(h.attachments)
 	ws := workspaceDir(root)
 	c.Tools.Shell.Env = h.shell.Env
 	c.Tools.Shell.Args = h.shell.Args
@@ -197,6 +206,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.Tools.MCPResources = h.mcpResources
 	}
 	c.keepUserSearchBackends(h)
+	if c.Tools.VideoURLPassthrough != h.videoURLPass {
+		c.ignoreProject("tools.video_url_passthrough", fmt.Sprintf("%t", c.Tools.VideoURLPassthrough), ProjectUserOnly)
+		c.Tools.VideoURLPassthrough = h.videoURLPass
+	}
 	if c.Tools.VideoNativeMaxBytes != h.videoNativeMax {
 		c.ignoreProject("tools.video_native_max_bytes", fmt.Sprint(c.Tools.VideoNativeMaxBytes), ProjectUserOnly)
 		c.Tools.VideoNativeMaxBytes = h.videoNativeMax

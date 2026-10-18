@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"reasonix/internal/assembly/boot"
 	"reasonix/internal/contract/agentcomposition"
@@ -19,6 +20,7 @@ type SessionParams struct {
 	Composition        *agentcomposition.Binding
 	Cwd                string
 	MCPServers         []plugin.Spec
+	AdditionalDirs     []string
 	Sink               event.Sink
 	Model              string
 	EffortOverride     *string
@@ -103,7 +105,7 @@ func (s *service) switchComposition(ctx context.Context, sess *acpSession, cur *
 		sess.mu.Unlock()
 		return agentcomposition.ErrLocked
 	}
-	params := SessionParams{AgentComposition: id, Cwd: sess.cwd, MCPServers: clonePluginSpecs(sess.mcpServers), Sink: sess.sink, Model: sess.model, EffortOverride: cloneStringPtr(sess.effortOverride), RuntimeProfile: sess.runtimeProfile, OnSessionRecovered: s.sessionRecoveredHandler(sess.id)}
+	params := SessionParams{AgentComposition: id, Cwd: sess.cwd, MCPServers: clonePluginSpecs(sess.mcpServers), AdditionalDirs: slices.Clone(sess.additionalDirs), Sink: sess.sink, Model: sess.model, EffortOverride: cloneStringPtr(sess.effortOverride), RuntimeProfile: sess.runtimeProfile, OnSessionRecovered: s.sessionRecoveredHandler(sess.id)}
 	done := make(chan struct{})
 	sess.maintenanceDone = done
 	sess.mu.Unlock()

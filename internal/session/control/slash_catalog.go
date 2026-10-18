@@ -67,7 +67,11 @@ func (c *Controller) CompletionData(lang string) CompletionData {
 // an @-reference need models, servers, memory and installed packages, each of
 // which is a disk read that every keystroke would otherwise repeat.
 func (c *Controller) CompletionDataFor(lang, line string, cursor int) CompletionData {
-	return c.completionData(lang, CompletionNeedsArgData(line, cursor))
+	d := c.completionData(lang, CompletionNeedsArgData(line, cursor))
+	if _, _, _, ok := ActiveSessionToken(line, cursor); ok {
+		d.Sessions = c.sessionOptions()
+	}
+	return d
 }
 
 func (c *Controller) completionData(lang string, withArgs bool) CompletionData {

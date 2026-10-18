@@ -2,12 +2,14 @@ package serve
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessionstore"
@@ -28,6 +30,18 @@ func (b *dispatchBook) get(from, root string) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.sessions[dispatchKey{from, root}]
+}
+
+func (b *dispatchBook) targets(from string) []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []string
+	for k, id := range b.sessions {
+		if k.from == from {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (b *dispatchBook) set(from, root, id string) {
@@ -52,21 +66,32 @@ func (h *Hub) dispatchTo(ctx context.Context, from *Runtime, project, text strin
 	if err != nil {
 		return control.DispatchResult{}, err
 	}
+	sender, ok := from.Server.Controller().(*control.Controller)
+	if !ok {
+		return control.DispatchResult{}, control.ErrDispatchNotLocal
+	}
 	target := h.runtimeByID(h.dispatch.get(from.ID, root))
+	var secret []byte
 	if target == nil {
-		if target, err = h.openDispatchSession(ctx, from, root); err != nil {
+		if limit := config.LoadForEdit(config.UserConfigPath()).PeersMaxDispatchedSessions(); limit > 0 && h.liveDispatched(from.ID) >= limit {
+			return control.DispatchResult{}, control.ErrDispatchLimit
+		}
+		if secret, err = newPairSecret(); err != nil {
+			return control.DispatchResult{}, fmt.Errorf("%w: %w", control.ErrDispatchFailed, err)
+		}
+		if target, err = h.openDispatchSession(ctx, from, sender, root, secret); err != nil {
 			return control.DispatchResult{}, err
 		}
 	}
 	targetCtrl, ok := target.Server.Controller().(*control.Controller)
-	sender, senderOK := from.Server.Controller().(*control.Controller)
-	if !ok || !senderOK {
-		return control.DispatchResult{}, control.ErrDispatchUnavailable
+	if !ok {
+		return control.DispatchResult{}, control.ErrDispatchNotLocal
 	}
 	key := targetCtrl.PeerKey()
 	if key == "" {
 		return control.DispatchResult{}, fmt.Errorf("%w: the new session did not publish itself", control.ErrDispatchFailed)
 	}
+	sender.NoteDispatchedSession(key, secret)
 	receipt, err := sender.SendPeerMessage(key, text)
 	if err != nil {
 		return control.DispatchResult{}, err
@@ -74,31 +99,57 @@ func (h *Hub) dispatchTo(ctx context.Context, from *Runtime, project, text strin
 	return control.DispatchResult{Project: root, Key: key, ID: receipt.ID}, nil
 }
 
+// newPairSecret makes the secret one dispatch pairing signs its messages with.
+// It lives in the two controllers' memory and is never written to the spool.
+func newPairSecret() ([]byte, error) {
+	secret := make([]byte, 32)
+	_, err := rand.Read(secret)
+	return secret, err
+}
+
 // openDispatchSession opens a fresh pane in root and gives it the file the
 // sender will write to. A folder the user has not trusted is not opened for
 // someone else's task: the pane is closed again and the dispatch refused.
-func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, root string) (*Runtime, error) {
+func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, sender *control.Controller, root string, secret []byte) (*Runtime, error) {
+	binding := sender.CompositionBinding()
+	if binding != nil && binding.Workspace != "" && binding.Workspace != root {
+		return nil, fmt.Errorf("%w: %w", control.ErrDispatchFailed, agentcomposition.Unavailable(binding.Version.Definition.ID, "A bound composition cannot dispatch into another workspace."))
+	}
 	open := h.dispatch.open
 	if open == nil {
 		open = h.Open
 	}
-	target, err := open(ctx, OpenRequest{Root: root})
+	grant := sender.DispatchGrant()
+	target, err := open(ctx, OpenRequest{Root: root, Model: grant.Model, composition: binding})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", control.ErrDispatchFailed, err)
 	}
 	ctrl, ok := target.Server.Controller().(*control.Controller)
 	if !ok {
 		_ = h.Close(target.ID)
-		return nil, control.ErrDispatchUnavailable
+		return nil, control.ErrDispatchNotLocal
 	}
 	if ctrl.WorkspaceTrust() != config.WorkspaceTrusted {
 		_ = h.Close(target.ID)
 		return nil, control.ErrDispatchUntrusted
 	}
-	ctrl.MarkOpenedByDispatch()
+	ctrl.AdoptSessionGrant(grant)
+	ctrl.MarkOpenedByDispatch(sender.PeerKey(), secret, sender.DispatchDepth()+1)
 	ctrl.SetFreshSessionPath(sessionstore.NewSessionPath(SessionDirFor(root), "dispatch"))
 	h.dispatch.set(from.ID, root, target.ID)
 	return target, nil
+}
+
+// liveDispatched counts the panes from opened for its dispatches that are still
+// open; a pane the user closed no longer counts against the ceiling.
+func (h *Hub) liveDispatched(from string) int {
+	n := 0
+	for _, id := range h.dispatch.targets(from) {
+		if h.runtimeByID(id) != nil {
+			n++
+		}
+	}
+	return n
 }
 
 func (h *Hub) runtimeByID(id string) *Runtime {

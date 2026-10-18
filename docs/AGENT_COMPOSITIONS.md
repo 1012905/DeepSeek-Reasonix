@@ -129,6 +129,16 @@ or reconnect blocks execution instead of silently replacing schemas. Package
 MCP processes and extension sidecars use private package copies; shutdown and
 failed assembly release their private directories.
 
+ACP composition changes preserve the session's vetted additional directories.
+
+A dispatched session inherits the exact binding instead of selecting today's
+default. A binding scoped to one workspace cannot dispatch into another; the
+request is refused before opening a runtime. Unbound Standard dispatch keeps
+the existing behavior.
+
+A fresh dispatch never falls back to a history viewer
+when its inherited binding cannot be assembled.
+
 The user persona is not migrated. `/persona` retains the user-config behavior
 from #13588, and Standard's settings reuse that Persona editor. Standard reads
 it on each runtime build. Explicit compositions

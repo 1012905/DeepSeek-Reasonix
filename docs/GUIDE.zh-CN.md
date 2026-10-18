@@ -30,6 +30,8 @@
 - [内置文档检索](#内置文档检索)
 - [@ 引用](#-引用)
 - [双模型协同](#双模型协同)
+- [让模型修改设置](#让模型修改设置)
+- [Google Gemini 原生接口（实验）](#google-gemini-原生接口实验)
 
 ## 配置
 
@@ -152,7 +154,9 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 
 [peers]
 # enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准；设置里也有开关，下个回合起生效（只认用户级配置）
-# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled（只认用户级配置）
+# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled；打开就是你对这些会话的任务和回信的总同意，不再出审批卡（只认用户级配置）
+# max_dispatch_depth = 1       # 派发最多能连着开几层会话；0 表示不限（只认用户级配置）
+# max_dispatched_sessions = 8  # 一个会话通过派发最多同时开着几个会话；0 表示不限（只认用户级配置）
 # release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧（只认用户级配置）
 
 [serve]
@@ -163,6 +167,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 
 [desktop]
 # max_workspaces = 0           # 侧栏最多记住的项目数；0 = 不限制（只认用户级配置）
+# session_ref_tokens = 8000     # 引用一段历史会话（@session:<id>）时最多给一条消息添加多少 token；500..200000
 
 [[plugins]]
 name    = "example"
@@ -699,7 +704,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | macOS `Cmd+Z`，Windows/Linux `Ctrl+Z` | 撤销输入框中的最近一次编辑 | 普通键入继续由 WebView 原生历史管理；Reasonix 接管的粘贴、剪切、折叠块和结构化 token 会作为完整事务恢复。 |
 | macOS `Cmd+Shift+Z`，Windows/Linux `Ctrl+Shift+Z` | 重做输入框中的最近一次编辑 | Windows/Linux 改绑 YOLO 后也可使用 `Ctrl+Y`。 |
 | `Cmd+Y` / `Ctrl+Y`（默认） | 切换 YOLO 开/关 | 关闭 YOLO 时会尽量恢复之前的 Ask/Auto 基底；当前绑定可在 **设置 → 快捷键** 查看。 |
-| macOS `Cmd+V`，Windows/Linux `Ctrl+V` | 粘贴剪贴板内容 | 剪贴板图片会作为附件加入。拖进输入框的是**任意文件或文件夹**，按它所在的位置引用——桌面端不复制它，所以 turn 处理的就是那个文件本身；只有剪贴板和「添加图片」按钮这种拿不到路径的来源才会把字节存进工作区。 |
+| macOS `Cmd+V`，Windows/Linux `Ctrl+V` | 粘贴剪贴板内容 | 剪贴板图片会作为附件加入。Studio 对通过「添加附件」、粘贴或拖入的普通文件，优先引用原生路径；拿不到原生路径时，流式上传到工作区。 |
 | 输入边界处的普通 `Up` / `Down` | 回放更旧或更新的已提交提示词 | 带修饰键的方向键和原生文本导航仍交给 textarea。 |
 | 运行中按 `Esc` | 取消当前 turn | 如果后端尚未开始回复，会恢复草稿。 |
 
@@ -715,6 +720,36 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | 计划审批卡片 | `Left` / `Right`、`Enter`、`1`-`3`、`Esc` | 在“修改计划 / 开始执行 / 退出计划”之间移动。默认高亮是“开始执行”。 |
 | Plan 控件 | 切换 Plan 开/关 | 和 `Shift+Tab` 是同一个模式。 |
 | 协作菜单里的 Goal | 启动、查看或清除 Goal | Goal 不进入任何快捷键循环。 |
+
+#### Studio 文件附件
+
+普通本地文件（包括大型 APK）在桌面壳能取得原生路径时，直接使用路径引用。
+选择工作区外的单个文件，只授予该文件的读取权限，不包含同目录的其他文件；
+选择文件夹则包含其后代，但目录内指向目录外的符号链接不会扩大授权。
+
+没有原生路径的文件，以二进制流写入 `.reasonix/attachments`；失败或取消时，
+清理未完成文件。移除正在上传的附件会取消传输。
+
+流式传输约束内存占用；普通文件每次上传默认有 1 GiB 安全上限，以保护磁盘空间。
+原生路径引用不复制文件字节。
+
+| 入口 | 限制 |
+| --- | --- |
+| 普通文件的原生路径引用 | 无附件体积上限；文件保留在原位置。 |
+| 普通文件的二进制流上传 | 每次请求默认 1 GiB 安全上限，可在用户配置中调整；仍受磁盘空间及上游传输限制。 |
+| 图片上传 | 每张 10 MiB，前端上传前和内核都会检查。 |
+| 兼容旧客户端的 JSON/Base64 附件接口 | 普通文件上限 25 MiB。 |
+| 加密云中继 | 每个请求体上限 16 MiB，超出时停止读取。这是中继限制，与原生路径引用、直连上传分开计算。 |
+
+在用户 `config.toml` 的 `[attachments]` 节中设置 `max_stream_bytes = 1073741824`，
+可指定普通文件上传的字节上限。
+
+- `0` 表示不限制，负值使用默认值。项目 `reasonix.toml` 无权修改该设置。
+- 超过上限一个字节也会被拒绝，并清理部分文件。
+- 类型化 `attachment.too_large` 响应包含 `limit_bytes` 和 `limit_source`（`default` 或 `user`）。
+- 用户配置语法损坏时，需先修复配置再上传。图片和中继限制独立生效。
+
+这些限制针对附件传输。引用的文件按需读取，完整文件字节不会自动全部放入模型输入。
 
 ### CLI / TUI
 
@@ -1572,6 +1607,19 @@ searxng_url = "http://localhost:8888"
 每次发生时 Reasonix 会弹出通知，写明后端和原因，再尝试下一个；全部没有回答时，模型收到 `search.all_backends_failed`。
 
 - SearXNG 内部某些引擎被限流，只要还有一个引擎能回答，搜索就不算失败。
+
+设置里的「联网：搜索与抓取」在地址旁有「测试连接」按钮：它向已保存的地址发一次搜索（先保存框里的内容），不跟随重定向、不走代理，并说明这个实例为什么没有应答。
+
+它不会连链路本地、云元数据和未指定地址；本机和局域网地址可以。真实搜索失败时，模型收到的是同一个码。
+
+| 码 | 含义 | 怎么办 |
+|---|---|---|
+| `search.searxng_json_disabled` | 实例回了 403。SearXNG 在 `settings.yml` 的 `search.formats` 没有 `json` 时就这样回；它前面的反向代理也可能回 403。 | 在 `search.formats` 里加上 `json` 并重启；已有的话检查代理。 |
+| `search.searxng_unreachable` | 这个地址没有任何应答。 | 确认它在运行，主机和端口写对。 |
+| `search.searxng_not_searxng` | 回了 200，但不是 SearXNG 的 JSON 结果。 | 地址要指向 SearXNG 本身，不是登录页或别的服务。 |
+| `search.searxng_redirected` | 这个地址会重定向。 | 直接填最终地址，例如 `https` 的那个。 |
+| `search.searxng_address_refused` | 测试不连这个地址（链路本地、云元数据或未指定地址）。 | 自托管实例用本机或局域网地址。 |
+| `search.searxng_status` | 其他 HTTP 状态，比如 429、500。 | 稍后重试，或查看实例的日志。 |
 - 搜索结果是第三方内容，会向模型标注为外部内容。
 
 ### 付费回退：DeepSeek 搜索接口
@@ -1637,3 +1685,72 @@ video_protocol = "inline_data_url"   # 或 "moonshot_file"
 
 - Gemini：视频输入在原生 Gemini 接口里（内联数据、Files API、YouTube 链接）；OpenAI 兼容页没有列视频内容块，而 Reasonix 是通过那个端点接 Gemini 的。
 - 智谱 GLM：文档只给了公网 HTTPS 地址的 `video_url` 示例，没写 base64 与限制，所以不能在不替用户把文件传到别处的前提下发送本地文件。
+
+## 让模型修改设置
+
+模型有一个 `setting` 工具。需要的功能被关着时（比如把任务交给另一个项目），它可以请你把开关打开，而不是让你自己去设置里找。能被某项设置解除的拒绝会以 `(fix: setting ...)` 结尾，工具也可以按设置 id 里的词列出设置。
+
+- 在你回答卡片之前什么都不会改。卡片写明设置名、旧值、新值和生效时间，文字由 Reasonix 生成，模型自己的理由只作为引用附在下面。
+- 每项设置在代码里都有类别。偏好（字号、重试次数等）可以同意一次后本会话内不再问；提高权限的设置（会话间消息、向其他项目派发、模型本可借此放松的保护）每次都问，包括 YOLO 在内的任何审批模式都不会代答。
+- 边界类设置（审批模式、沙盒、网络、规则、hooks、模型服务的密钥与地址、安全上限，以及这个工具自己的开关）模型永远不会改，只能把你带到那里（`op=open`）。
+- 卡片显示完整的新值；长到显示不下的值会被拒绝，而不是截断。改动写入你的用户级文件，项目文件不能授予，取值按设置页同一套规则校验。
+- 每回合最多向你提出三次；计划模式下不提出（模型仍可查看设置、把你带到某一项）。
+- 想去掉这个工具：在用户文件里设 `[tools] setting_tool = false`，或在显式的 `[tools] enabled` 列表里不写 `setting`。
+## Google Gemini 原生接口（实验）
+
+`gemini` 提供方类型直接使用 Google 的 Interactions API。它是实验性的：按 Google 官方文档（2026-10-17 读取）编写，尚未用真实端点验证，可能有粗糙之处，欢迎反馈。
+
+安装预设「Google Gemini, native (experimental)」，或自己写一项：
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- 每次请求都带上完整对话，且 `store` 为 false：对话记录归你自己，Google 那边不留存。
+- 思考强度按条目设置（`/effort`），预设里是每个模型文档列出的档位。思考摘要作为推理内容流出，思考步骤会按收到的原样、原顺序随下一次请求发回。
+- 永远不发送 `temperature` 和 `top_p`：Google 的参考页没有为这个接口列出它们。
+- 预设只列读过各自模型页的模型：`gemini-3.8-flash`、`gemini-4-argon`、`gemini-3.6-flash`、`gemini-3.5-flash-lite`、`gemini-3.1-pro-preview`，都是 1,048,576 token 窗口、支持图像和视频输入。其他模型自己列出并声明能读什么即可。
+- 原有的「Google Gemini」预设走 Google 的 OpenAI 兼容端点，该端点文档里没有视频输入。
+
+### 看视频
+
+像其他提供方一样，声明模型和文件的送达方式（见「让模型原生看视频文件」）：
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # 或 "gemini_inline"
+```
+
+- `gemini_inline` 把文件以 base64 放进请求。Google 页面正文写“请求总大小 20MB 以内”，表格却写 100 MB；这里取更窄的读法，文件上限 15,000,000 字节（编码后请求会大三分之一），只能用 `[tools] video_native_max_bytes` 调低。
+- `gemini_files` 用 Files API 的可恢复上传协议上传，等 Google 报告 `ACTIVE`，用 uri 引用，请求结束后立即删除。Google 允许单文件 2 GB、每项目 20 GB，文件 48 小时后自动清除。
+- 两种协议都原生发送 MP4、WebM、MOV；其他容器会抽帧。Google 报告 `FAILED` 或本版本不认识的状态时不发送，并告诉模型 `video.upload_failed`。
+- 公开的 YouTube 地址不能通过 `read_video` 交给模型：宿主不抓取地址，把地址交给厂商是单独的一项设置。
+
+### 费用
+
+Reasonix 按 Google 公布的标价计费，每百万 token（https://ai.google.dev/gemini-api/docs/pricing，2026-10-17 读取）：
+
+| 模型 | 输入 | 缓存命中 | 输出（含思考） |
+|---|---|---|---|
+| `gemini-3.8-flash`、`gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| 这两个模型自 2027-01-01 起 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview`（提示词不超过 200k token） | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` 在提示词超过 200k token 后更贵（$4.00 / $0.40 / $18.00），一张费率卡表达不了，所以超长提示词会读低。`gemini-4-argon` 页面上没有价格，不计价。显式上下文缓存的存储费不计入。
+
+### 把视频地址交给模型厂商
+
+有的厂商从公开地址读取视频，而不是读文件。`read_video` 可以用 `url` 代替 `path`，但必须先在设置里打开（「联网」→「视频地址」，或用户文件里的 `[tools] video_url_passthrough = true`；项目文件无法设置它）。打开本身就是一次确认：模型也可以提议打开，每次都由你点卡片同意。
+
+- 地址由厂商自己去访问，本机不下载任何东西。只有接受“厂商的服务器会打开这个地址”才应打开。
+- 只交出你在对话里亲手写的地址。模型从网页、文件、工具结果里看到的或自己编的地址都会被拒绝（`video.url_not_from_user`），所以网页作者无法让厂商去访问他选的地址。
+- 地址必须是 `https` 且有公开主机名：不能带账号密码，不能是 IP、`localhost`、单段主机名或局域网名，长度不超过 2048 字符（`video.url_invalid`）。
+- 智谱 GLM 在 `video_url` 里接收公开 https 地址，不接收文件（[docs.bigmodel.cn](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v)，2026-10-17 读取）。在条目上写 `video_models = ["glm-4.6v"]` 和 `video_protocol = "zhipu_url"`；本地文件此时按帧读取。
+- Gemini 在 `gemini_inline` 和 `gemini_files` 下把公开的 YouTube 地址作为视频 `uri`；其他地址不会交给它（`video.url_unsupported_model`）。
+- 从存档或导入的会话里恢复出来的引用永远不会被发送：只发送在本进程里检查过的地址。

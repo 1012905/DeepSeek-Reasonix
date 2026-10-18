@@ -88,7 +88,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, viewRequest, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, findTogglePulse = 0, filesPulse = 0, viewRequest, sessionRef, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -355,6 +355,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
     else openChanges();
   }, [visible, workbench, openChanges]);
   useOnBump(filesPulse, pressFiles);
+  useOnBump(sessionRef?.n ?? 0, () => sessionRef && setInserted((was) => ({ n: was.n + 1, text: "", session: { id: sessionRef.id, title: sessionRef.title } })));
   useOnBump(viewRequest?.n ?? 0, () => {
     if (viewRequest && (viewRequest.to !== "analysis" || traj.rows.length > 0)) showView(viewRequest.to);
   });
@@ -399,7 +400,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
 
   const submit = useSubmit({ port, running, dispatch, trajDispatch, refreshStatus, fail });
 
-  const [inserted, setInserted] = useState({ n: 0, text: "" });
+  const [inserted, setInserted] = useState<{ n: number; text: string; session?: { id: string; title: string } }>({ n: 0, text: "" });
   const { queue, restored, onRestoreText, onQueueEdit, onQueueMove, onQueueRetry, onQueueRefresh, onQueuePause, onQueueRead, onQueueSendNow, onQueueCancel } = useQueueActions({
     port,
     dispatch,
@@ -420,7 +421,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   });
 
   const receiptPref = receiptPrefOf(port);
-  const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref);
+  const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref, findTogglePulse);
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
   const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
@@ -483,6 +484,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       <PaneShown.Provider value={shown}>
       <LiveWork.Provider value={live}>
       <Transcript port={port}
+        onSettings={onSettings}
         brought={brought}
         foldWork={foldWork}
         turnRunning={running}

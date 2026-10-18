@@ -23,6 +23,7 @@ type SessionInfo struct {
 	CustomTitle    string
 	Archived       bool
 	Pinned         bool
+	ManualRank     float64
 	Unread         bool
 	Recovered      bool
 	RecoveryReason string
@@ -46,6 +47,7 @@ type SessionOrderInfo struct {
 	CustomTitle    string
 	Archived       bool
 	Pinned         bool
+	ManualRank     float64
 	Unread         bool
 	Recovered      bool
 	RecoveryReason string
@@ -81,6 +83,7 @@ func sessionInfoFromOrder(session SessionOrderInfo, preview string, turns int, c
 		CustomTitle:    session.CustomTitle,
 		Archived:       session.Archived,
 		Pinned:         session.Pinned,
+		ManualRank:     session.ManualRank,
 		Unread:         session.Unread,
 		Recovered:      session.Recovered,
 		RecoveryReason: session.RecoveryReason,

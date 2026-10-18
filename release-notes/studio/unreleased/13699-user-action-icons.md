@@ -1,0 +1,2 @@
+- 修复：你自己发的消息下面的操作图标（复制、改写、回退）和 AI 回复下面的一样大，不再偏小。关联 #13699。
+- Fixed: The action icons under your own messages (copy, edit, rewind) are now the same size as those under a reply instead of smaller. Refs #13699.

@@ -1,3 +1,4 @@
+import { sessionCompletion } from "./mock_sessions";
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import type { JobOutput, PlanAction } from "./session";
 import { approvalKind } from "./mock_approval";
@@ -8,7 +9,7 @@ import { MockWorkspace, mockWorkspaces, mockWorktreeSources, MockPreparations } 
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
 import { MockExecutionHold, mockExecutionGraph } from "./mock_graph";
 import { mockStorage, mockStoragePlan } from "./mock_storage";
-import { MEMORIES } from "./mock_memory";
+import { MEMORIES, mockMemoryCatalog } from "./mock_memory";
 import { mockModels } from "./mock_models";
 import { mockUsage } from "./mock_usage";
 
@@ -116,11 +117,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   }
 
   async memories(): Promise<MemoryCatalog> {
-    return {
-      memories: this.mem.map((m) => ({ ...m })),
-      recallQuery: "缓存命中率为什么会掉",
-      indexPath: "~/.reasonix/projects/reasonix/memory/MEMORY.md",
-    };
+    return mockMemoryCatalog(this.mem);
   }
 
   // The fixture reports a clean revert on the first ask and a conflicted one
@@ -327,6 +324,8 @@ export class MockPort extends MockWorkspace implements AgentPort {
         })).filter((it) => it.insert !== line.slice(at, to));
       return { kind: "ref", from: at, to, query: frag.slice(dir.length), items };
     }
+    const hash = sessionCompletion(line, cursor);
+    if (hash) return hash;
     if (line.startsWith("/") && !/\s/.test(line)) {
       const q = line.toLowerCase();
       const items = [...this.builtins, ...this.commands].filter((it) => it.label.toLowerCase().startsWith(q));

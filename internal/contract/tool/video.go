@@ -3,6 +3,8 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"regexp"
+	"strings"
 
 	"reasonix/internal/contract/provider"
 )
@@ -31,6 +33,9 @@ type NativeVideo struct {
 	// Unavailable is the identity of why the selected model does not take video
 	// natively, set when Protocol is empty.
 	Unavailable string
+	// Addresses is whether the user has let the model hand a public address to the
+	// vendor. It is read from the user's own file at the moment of the call.
+	Addresses bool
 }
 
 // Tightest is the limit that binds: the smallest of those named. No limits reads
@@ -72,4 +77,38 @@ func NativeVideoFrom(ctx context.Context) (NativeVideo, bool) {
 	}
 	n, ok := src()
 	return n, ok && n.Protocol != ""
+}
+
+type userAddressesContextKey struct{}
+
+// WithUserAddresses stamps onto a tool execution context how to list the https
+// addresses the user wrote in this conversation.
+func WithUserAddresses(ctx context.Context, src func() []string) context.Context {
+	if src == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, userAddressesContextKey{}, src)
+}
+
+// UserAddressesFrom lists the addresses the user wrote, or none when ctx has no source.
+func UserAddressesFrom(ctx context.Context) []string {
+	if ctx == nil {
+		return nil
+	}
+	if src, _ := ctx.Value(userAddressesContextKey{}).(func() []string); src != nil {
+		return src()
+	}
+	return nil
+}
+
+var addressInText = regexp.MustCompile(`https://[^\s<>"'\x60\]\)]+`)
+
+// AddressesIn lists the https addresses in a user's text, without the sentence
+// punctuation that follows one.
+func AddressesIn(text string) []string {
+	var out []string
+	for _, raw := range addressInText.FindAllString(text, -1) {
+		out = append(out, strings.TrimRight(raw, ".,;:!?"))
+	}
+	return out
 }

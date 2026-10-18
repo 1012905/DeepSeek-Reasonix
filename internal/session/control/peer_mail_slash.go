@@ -3,6 +3,7 @@ package control
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -127,6 +128,7 @@ func (c *Controller) peerSettingsText() string {
 	if s.Pending {
 		b.WriteString(" (applies when the next turn starts)")
 	}
+	fmt.Fprintf(&b, "\ndispatch ceilings: depth %s, open sessions %s (0 removes a ceiling)", strconv.Itoa(s.MaxDispatchDepth), strconv.Itoa(s.MaxDispatchedSessions))
 	for _, r := range s.ReleaseProjects {
 		fmt.Fprintf(&b, "\nreleased project: %s", r.Path)
 	}

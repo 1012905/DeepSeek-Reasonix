@@ -149,6 +149,10 @@ class BenchPort extends MockPort {
     return { path, content, revision: "r1" };
   }
 
+  async updateMode() {
+    return query.has("update") ? "notify" : super.updateMode();
+  }
+
   async versions() {
     if (query.has("update")) return { current: "2.42.0", pinned: "", stalePin: false, latest: "2.43.0", newer: true, versions: [] };
     if (!query.has("versions")) return super.versions();
@@ -212,14 +216,20 @@ class BenchPort extends MockPort {
       search_backends: ["searxng", "deepseek_api"], searxng_url: "http://127.0.0.1:8080", search_paid_allowed: [],
       fetch_backends: ["local", "deepseek_api"], fetch_paid_allowed: [],
       known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"], paid_backends: ["deepseek_api"],
-      deepseek_api_ready: query.get("webaccess") !== "noready", path: "/Users/you/.reasonix/config.toml",
+      deepseek_api_ready: query.get("webaccess") !== "noready", video_url_passthrough: query.has("videourl"), path: "/Users/you/.reasonix/config.toml",
     };
+  }
+
+  async probeSearxng() {
+    const answer = query.get("probe");
+    if (!answer || answer === "ok") return super.probeSearxng();
+    return { ok: false, code: `search.searxng_${answer}`, status: answer === "status" ? 429 : answer === "json_disabled" ? 403 : undefined };
   }
 
   async peersSettings() {
     if (!query.has("peerset")) return super.peersSettings();
     return {
-      enabled: true, dispatch: true, applies: "next_turn" as const, pending: query.has("pending"), available: true,
+      enabled: true, dispatch: true, max_dispatch_depth: 1, max_dispatched_sessions: 8, applies: "next_turn" as const, pending: query.has("pending"), available: true,
       path: "/Users/you/.reasonix/config.toml",
       release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
     };
@@ -240,8 +250,15 @@ class BenchPort extends MockPort {
     return PREF === null ? look : { ...look, language: PREF };
   }
 
+  private settingCardSent = false;
+
   subscribe(on: (e: WireEvent) => void) {
     this.subs.add(on);
+    const card = query.get("settingcard");
+    if (card && !this.settingCardSent) {
+      this.settingCardSent = true;
+      setTimeout(() => this.feed(settingCardFrame(card)), 400);
+    }
     return () => this.subs.delete(on);
   }
 
@@ -356,7 +373,7 @@ function storedHistory(): HistoryMessage[] {
   const msgs: HistoryMessage[] = [];
   for (let i = 0; i < TURNS; i++) {
     const pinned = query.get("skill") === "1" && i === TURNS - 1;
-    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。` });
+    msgs.push({ role: "user", content: pinned ? SKILL_PIN : `第 ${i} 个问题，麻烦看一下这个文件。`, createdAt: new Date(2026, 9, 17, 18, 33 + i).getTime() });
     msgs.push({
       role: "assistant",
       content: `第 ${i} 段回答，说明刚才那一步做了什么。\n\n- 要点一\n- 要点二\n`,
@@ -442,12 +459,12 @@ class BenchHub extends MockHub {
         root: `~/projects/workspace-${w}`,
         name: `workspace-${w}`,
         open: w === 0,
-        sessions: Array.from({ length: SESSIONS }, (_, s) => ({
+        sessions: this.placed(`~/projects/workspace-${w}`, Array.from({ length: SESSIONS }, (_, s) => ({
           path: `/sessions/w${w}-s${s}.jsonl`,
           name: `w${w}-s${s}`,
           title: `第 ${s} 次会话，标题是内核起的一句话`,
           turns: (s % 40) + 1,
-        })),
+        }))),
       })),
     );
   }
@@ -502,3 +519,22 @@ window.__foldCost = () => {
   fromHistory(msgs);
   return performance.now() - t0;
 };
+
+// ?settingcard= draws what the kernel sends when the model asks to change a
+// setting: a preference card, an elevated one, or the notice that points at a
+// setting only the user may change.
+function settingCardFrame(kind: string): WireEvent {
+  if (kind === "open") {
+    return { kind: "notice", level: "info", code: "setting_open", text: "助手需要改动 permissions.mode，只有你本人能改。", detail: "permissions.mode" } as WireEvent;
+  }
+  const elevated = kind === "elevated";
+  const id = elevated ? "peers.dispatch" : "ui.show_receipt";
+  return {
+    kind: "approval_request",
+    approval: {
+      id: "s1", tool: elevated ? "setting_change_elevated" : "setting_change", subject: id, kind: "tool", fresh: true,
+      allowsSession: !elevated, allowsPersist: false,
+      reason: `助手请求把设置 ${id} 从 false 改为 true。${elevated ? "从下一回合起生效。" : "立即生效。"}\n它给出的理由：要把任务交给另一个项目里的会话。`,
+    },
+  } as WireEvent;
+}

@@ -19,15 +19,13 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
-// The identities of why a video was not sent, said to the model beside the file's
-// name so it does not invent a reason.
 const (
-	videoFileMissing  = "video.file_missing"
-	videoUnavailable  = "video.file_unavailable"
-	videoFileChanged  = "video.file_changed"
-	videoTooLarge     = "video.native_too_large"
-	videoUploadFailed = "video.upload_failed"
-	videoReadFailed   = "video.read_failed"
+	videoFileMissing  = provider.VideoFileMissing
+	videoUnavailable  = provider.VideoUnavailable
+	videoFileChanged  = provider.VideoFileChanged
+	videoTooLarge     = provider.VideoTooLarge
+	videoUploadFailed = provider.VideoUploadFailed
+	videoReadFailed   = provider.VideoReadFailed
 )
 
 // videoWire sends the videos a request carries on the protocol its endpoint
@@ -41,7 +39,7 @@ type videoWire struct {
 
 func newVideoWire(protocol, baseURL string) *videoWire {
 	switch protocol {
-	case provider.VideoProtocolInlineDataURL, provider.VideoProtocolMoonshotFile:
+	case provider.VideoProtocolInlineDataURL, provider.VideoProtocolMoonshotFile, provider.VideoProtocolZhipuURL:
 	default:
 		return nil
 	}
@@ -105,6 +103,12 @@ var errVideoChanged = errors.New("the file no longer matches what the tool read"
 // never granted is reported as unavailable. A file the vendor already holds by
 // its hash needs no read: the id stands for the bytes verified at upload.
 func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http.Request), ref provider.VideoRef) (url string, fromCache bool, code string) {
+	if ref.URL != "" {
+		return w.address(ref)
+	}
+	if !provider.VideoProtocolTakesFiles(w.protocol) {
+		return "", false, provider.VideoAddressOnly
+	}
 	_, limit := provider.VideoProtocolLimit(w.protocol)
 	if ref.Size > limit {
 		return "", false, videoTooLarge
@@ -157,6 +161,18 @@ func (w *videoWire) resolve(ctx context.Context, h *http.Client, auth func(*http
 	w.ids[ref.SHA256] = id
 	w.mu.Unlock()
 	return "ms://" + id, false, ""
+}
+
+// address sends an address the vendor visits itself: only one a tool in this
+// process granted, and only on a protocol whose vendor documents addresses.
+func (w *videoWire) address(ref provider.VideoRef) (string, bool, string) {
+	switch {
+	case !provider.VideoAddressGranted(ref.URL):
+		return "", false, provider.VideoURLUnavailable
+	case !provider.VideoAddressAccepted(w.protocol, ref.URL):
+		return "", false, provider.VideoURLUnsupported
+	}
+	return ref.URL, false, ""
 }
 
 // verifyOpened hashes the open file from its start and leaves it rewound.

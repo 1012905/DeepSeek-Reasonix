@@ -252,7 +252,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       ...s,
       steerQueue: ev.pending ? [...s.steerQueue, ev.text] : s.steerQueue,
       awaitingTurnStart: ev.pending ? s.awaitingTurnStart : [...s.awaitingTurnStart, id],
-      items: [...s.items, { t: "user", id, text: ev.text, pending: ev.pending }],
+      items: [...s.items, { t: "user", id, text: ev.text, pending: ev.pending, at: ev.pending ? undefined : Date.now() }],
     };
   }
   if (ev.kind === "__queued") return nameQueued(s, ev.id, ev.itemId, ev.queued, ev.paused);
@@ -709,7 +709,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
       // after an upgrade as well as for newly written history.
       const legacyHostRepair = m.content.startsWith("The following tools are unavailable in the current workflow phase:");
       const text = m.hostAuthored || legacyHostRepair ? "" : stripControl(m.content);
-      if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex, steer: m.steer, via: m.via, attachments: m.attachments });
+      if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex, steer: m.steer, via: m.via, attachments: m.attachments, at: m.createdAt });
       continue;
     }
     if (m.role === "assistant") {

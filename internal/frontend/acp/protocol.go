@@ -32,6 +32,15 @@ const (
 	ErrInternal       = -32603
 )
 
+// TurnFailed is the TurnErrorData code of a session/prompt that failed after it
+// was admitted. The cause is the error message; the code is what a client keys on.
+const TurnFailed = "turn_failed"
+
+// TurnErrorData is the data member of a failed session/prompt error.
+type TurnErrorData struct {
+	Code string `json:"code"`
+}
+
 // initialize
 
 // InitializeParams is the client's handshake. The agent records the client's
@@ -141,6 +150,8 @@ type SessionCapabilities struct {
 	Resume *EmptyCapability `json:"resume,omitempty"`
 	Close  *EmptyCapability `json:"close,omitempty"`
 	Delete *EmptyCapability `json:"delete,omitempty"`
+	// AdditionalDirectories says session/new, load and resume take extra workspace roots.
+	AdditionalDirectories *EmptyCapability `json:"additionalDirectories,omitempty"`
 }
 
 // PromptCapabilities reports which content-block kinds prompts may carry.
@@ -181,8 +192,9 @@ type AuthenticateResult struct{}
 // SessionNewParams opens a session rooted at cwd, optionally with MCP servers
 // the agent should connect for the session's lifetime.
 type SessionNewParams struct {
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // MCPServerSpec describes one MCP server the client asks the agent to connect.
@@ -312,9 +324,10 @@ type SessionModelState struct {
 // The agent replays the stored conversation as session/update notifications
 // before the request returns.
 type SessionLoadParams struct {
-	SessionID  string          `json:"sessionId"`
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	SessionID             string          `json:"sessionId"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // SessionLoadResult is the empty ack; the conversation has already arrived as a
@@ -329,9 +342,10 @@ type SessionLoadResult struct {
 
 // SessionResumeParams resumes a session without replaying its transcript.
 type SessionResumeParams struct {
-	SessionID  string          `json:"sessionId"`
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	SessionID             string          `json:"sessionId"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // SessionResumeResult is the empty ack returned once the session is ready.
@@ -543,14 +557,13 @@ type StopReason string
 const (
 	StopEndTurn   StopReason = "end_turn"
 	StopCancelled StopReason = "cancelled"
-	StopError     StopReason = "error"
 )
 
-// SessionPromptResult ends a session/prompt. TranscriptPath is reserved for a
-// future on-disk transcript pointer; omitted (null) for now.
+// SessionPromptResult ends a session/prompt. Vendor members, such as the
+// on-disk transcript path, ride Meta under "reasonix.io".
 type SessionPromptResult struct {
-	StopReason     StopReason `json:"stopReason"`
-	TranscriptPath *string    `json:"transcriptPath,omitempty"`
+	StopReason StopReason     `json:"stopReason"`
+	Meta       map[string]any `json:"_meta,omitempty"`
 }
 
 // session/update (agent → client notifications)

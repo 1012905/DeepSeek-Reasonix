@@ -149,6 +149,9 @@ type Spec struct {
 	// OAuthAllowMissingPKCEMetadata accepts an authorization server that does
 	// not list code_challenge_methods_supported; see ErrOAuthPKCEUnadvertised.
 	OAuthAllowMissingPKCEMetadata bool
+	// OAuthScopeUpgrade makes AuthorizeHTTPMCP ask for the scopes the server
+	// challenged for, on top of what was granted, instead of starting afresh.
+	OAuthScopeUpgrade bool
 	// StripRawPrefix, when non-empty, removes this prefix from each MCP tool's
 	// raw name before namespacing. For example, StripRawPrefix="server_" turns
 	// "server_search" into "search", yielding "mcp__search__search" instead of
@@ -574,11 +577,10 @@ func (h *Host) fetchResources(ctx context.Context, c *Client, sink event.Sink) {
 // JSON-RPC. The MCP-level methods (initialize, listTools, …) are transport-
 // agnostic — they go through t.
 type Client struct {
-	compositionGuard atomic.Pointer[compositionToolGuard]
-	name             string
-	instanceID       uint64 // Host-local identity for RemoveIfInstance rollback
-	t                transport
-	spec             Spec
+	name       string
+	instanceID uint64 // Host-local identity for RemoveIfInstance rollback
+	t          transport
+	spec       Spec
 
 	// registrationClaims and registrationCommitted are guarded by Host.mu.
 	// Claims keep a tentative shared instance alive across overlapping builds;
@@ -603,6 +605,10 @@ type Client struct {
 	instructions string
 
 	transport string // declared transport type, for /mcp status ("stdio"/"http")
+	// owner is the host that published this client, which announces on its behalf.
+	owner atomic.Pointer[Host]
+	// scopeAnnounced is the scope request the user was last told about.
+	scopeAnnounced atomic.Value
 
 	// Prompts and resources discovered during StartAll, stored here so the
 	// parallel startup can collect them per-client before merging into Host.
@@ -1641,7 +1647,7 @@ func (t *remoteTool) ExecuteWithImages(ctx context.Context, args json.RawMessage
 		"arguments": argMap,
 	})
 	if err != nil {
-		return "", nil, err
+		return "", nil, t.client.scopeRefusal(err)
 	}
 	return parseToolResult(res)
 }

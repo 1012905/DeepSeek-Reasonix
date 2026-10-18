@@ -18,6 +18,12 @@ import (
 // browser opens for an MCP server's sign-in.
 const MCPSignInApprovalTool = permission.MCPSignIn
 
+// MCPScopeUpgradeApprovalTool is the card for granting a server more access than
+// it was given. It is its own tool because it offers no "remember": agreeing to
+// visit a host is one decision and agreeing to widen what a server may do is
+// another, and neither a remembered host nor a session grant answers it.
+const MCPScopeUpgradeApprovalTool = "mcp_scope_upgrade"
+
 const mcpSignInBound = 5 * time.Minute
 
 var (
@@ -32,6 +38,8 @@ var (
 	ErrMCPSignInNoBrowser = errors.New("this frontend cannot open a browser")
 	// ErrMCPSignInNoHost is an authorization URL that names no host to ask about.
 	ErrMCPSignInNoHost = errors.New("the authorization page names no host")
+	// ErrMCPNoScopeUpgrade is a request to extend access when no server asked for it.
+	ErrMCPNoScopeUpgrade = plugin.ErrNoScopeUpgradePending
 )
 
 // MCPSignInResult is a finished sign-in: the host the user was sent to and the
@@ -47,7 +55,18 @@ type MCPSignInResult struct {
 // after the user has seen which host the server sends them to. A browser is
 // never opened from a tool call or a background failure, only from this verb.
 func (c *Controller) AuthorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error) {
-	result, err := c.authorizeMCPServer(ctx, name, open)
+	return c.authorizeAndReconnect(ctx, name, open, false)
+}
+
+// UpgradeMCPServerAccess extends what a signed-in server may do, to the scopes it
+// asked for when it refused a call. Only the user starts it, and the card names
+// the scopes the server sent as that server's words; it is asked every time.
+func (c *Controller) UpgradeMCPServerAccess(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error) {
+	return c.authorizeAndReconnect(ctx, name, open, true)
+}
+
+func (c *Controller) authorizeAndReconnect(ctx context.Context, name string, open func(url string) error, upgrade bool) (MCPSignInResult, error) {
+	result, err := c.authorizeMCPServerWith(ctx, name, open, upgrade)
 	if err != nil {
 		return MCPSignInResult{}, err
 	}
@@ -60,6 +79,10 @@ func (c *Controller) AuthorizeMCPServer(ctx context.Context, name string, open f
 // authorizeMCPServer is the sign-in itself, up to the stored token; the caller
 // reconnects the server with it.
 func (c *Controller) authorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error) {
+	return c.authorizeMCPServerWith(ctx, name, open, false)
+}
+
+func (c *Controller) authorizeMCPServerWith(ctx context.Context, name string, open func(url string) error, upgrade bool) (MCPSignInResult, error) {
 	name = strings.TrimSpace(name)
 	entry, err := c.configuredMCPServer(name)
 	if err != nil {
@@ -79,10 +102,19 @@ func (c *Controller) authorizeMCPServer(ctx context.Context, name string, open f
 	ctx, cancel := context.WithTimeout(ctx, mcpSignInBound)
 	defer cancel()
 	spec := c.mcpSpec(entry)
+	spec.OAuthScopeUpgrade = upgrade
+	asked := plugin.PendingScopeUpgrade(spec.StateDir)
+	if upgrade && len(asked) == 0 {
+		return MCPSignInResult{}, ErrMCPNoScopeUpgrade
+	}
 	result := MCPSignInResult{Server: name}
 	err = plugin.AuthorizeHTTPMCP(ctx, spec, func(authURL string) error {
 		host := plugin.AuthorizationHost(authURL)
-		if err := c.consentMCPSignIn(ctx, name, host, spec.StateDir); err != nil {
+		if upgrade {
+			if err := c.consentMCPScopeUpgrade(ctx, name, host, asked); err != nil {
+				return err
+			}
+		} else if err := c.consentMCPSignIn(ctx, name, host, spec.StateDir); err != nil {
 			return err
 		}
 		result.Host = host
@@ -122,6 +154,25 @@ func (c *Controller) consentMCPSignIn(ctx context.Context, server, host, stateDi
 	}
 	if reply.persist {
 		c.emitRememberResult(rememberMCPSignInHost(server, host, stateDir))
+	}
+	return nil
+}
+
+// consentMCPScopeUpgrade asks before the browser opens to grant a server more
+// access. It is asked every time, in every approval mode: no remembered host and
+// no session grant stands in for it, and the card offers neither.
+func (c *Controller) consentMCPScopeUpgrade(ctx context.Context, server, host string, scopes []string) error {
+	if host == "" {
+		return ErrMCPSignInNoHost
+	}
+	args, _ := json.Marshal(map[string]any{"server": server, "host": host, "scopes": scopes})
+	reply, err := c.requestApprovalDecision(ctx, approvalRequest{tool: MCPScopeUpgradeApprovalTool, subject: server + " → " + host, args: args,
+		reason: fmt.Sprintf(i18n.M.MCPScopeUpgradeReasonFmt, server, host, strings.Join(scopes, " ")), fresh: true})
+	if err != nil {
+		return err
+	}
+	if !reply.allow {
+		return ErrMCPSignInDeclined
 	}
 	return nil
 }

@@ -1,0 +1,2 @@
+- 新增：终端界面的 /mcp 面板里，返回 401 的服务器可按 a 登录，要求更多权限的服务器可按 u 授权，都会先问你。关联 #12357、#11959。
+- Added: In the terminal /mcp panel, press a to sign in to a server that answered 401, or u to grant one the extra access it asked for; you are asked first. Refs #12357, #11959.

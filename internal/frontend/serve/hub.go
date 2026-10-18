@@ -18,7 +18,6 @@ import (
 	"reasonix/internal/platform/computer"
 
 	"reasonix/internal/base/fileutil"
-	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -315,7 +314,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	var binding *agentcomposition.Binding
+	binding := req.composition
 	if req.SessionPath != "" {
 		binding, err = loadOpenComposition(root, req.SessionPath)
 		if err != nil {
@@ -331,7 +330,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	bc := NewBroadcaster()
 	paneSink := h.decorateSink(bc)
 	build := func(model string, fallback bool) (*boot.BuildResult, error) {
-		return buildCompositionOrHistory(ctx, boot.Options{
+		opts := boot.Options{
 			AgentComposition:         req.AgentComposition,
 			Composition:              binding,
 			ComputerDriver:           h.opts.ComputerDriver,
@@ -349,7 +348,11 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 			OpenOnFallbackModel:      fallback,
 			ProviderResolver:         h.opts.ProviderResolver,
 			CleanupPendingReconciler: BackgroundCleanupReconciler,
-		})
+		}
+		if req.composition != nil {
+			return boot.BuildRuntime(ctx, opts)
+		}
+		return buildCompositionOrHistory(ctx, opts)
 	}
 	built, err := build(req.Model, settings == nil)
 	branchModelFallback := false

@@ -7,6 +7,8 @@ import "reasonix/internal/contract/config"
 // value of the key's shape is legal. The coverage test fails a writable string
 // or number with none of the three.
 var constraints = map[string]Entry{
+	"tools.web_search_backends":                     {Via: backendList(config.KnownSearchBackends, func(c *config.Config) *[]string { return &c.Tools.WebSearchBackends })},
+	"tools.web_fetch_backends":                      {Via: backendList(config.KnownFetchBackends, func(c *config.Config) *[]string { return &c.Tools.WebFetchBackends })},
 	"ui.shortcut_layout":                            {Via: viaString((*config.Config).SetUIShortcutLayout)},
 	"language":                                      {Via: viaString((*config.Config).SetLanguage)},
 	"agent.reasoning_language":                      {Via: viaString((*config.Config).SetReasoningLanguage)},
@@ -76,6 +78,7 @@ var constraints = map[string]Entry{
 	"agent.user_turn_keep_tokens":                   {Min: 0, Max: 1e9, Bounded: true},
 	"auto_archive.days":                             {Min: 0, Max: 1e9, Bounded: true},
 	"desktop.max_workspaces":                        {Min: 0, Max: 1e9, Bounded: true},
+	"desktop.session_ref_tokens":                    {Min: 500, Max: 200000, Bounded: true},
 	"memory.pinned_budget_chars":                    {Min: 0, Max: 1e9, Bounded: true},
 	"memory.recall_limit":                           {Min: 0, Max: 1e9, Bounded: true},
 	"memory.recall_max_chars":                       {Min: 0, Max: 1e9, Bounded: true},
@@ -107,4 +110,17 @@ func viaFloat(set func(*config.Config, float64) error) func(*config.Config, any)
 
 func viaList(set func(*config.Config, []string) error) func(*config.Config, any) error {
 	return func(c *config.Config, v any) error { return set(c, v.([]string)) }
+}
+
+// backendList writes a web backend chain through the config's own normaliser, so
+// a name it cannot build is refused here instead of at the next session's start.
+func backendList(known func() []string, field func(*config.Config) *[]string) func(*config.Config, any) error {
+	return func(c *config.Config, v any) error {
+		list, err := config.NormalizeWebBackends(v.([]string), known())
+		if err != nil {
+			return err
+		}
+		*field(c) = list
+		return nil
+	}
 }

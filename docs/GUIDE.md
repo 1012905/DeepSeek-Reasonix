@@ -30,6 +30,8 @@
 - [Embedded documentation retrieval](#embedded-documentation-retrieval)
 - [@ references](#-references)
 - [Two-model collaboration](#two-model-collaboration)
+- [Letting the model change a setting](#letting-the-model-change-a-setting)
+- [Google Gemini, native (experimental)](#google-gemini-native-experimental)
 
 ## Configuration
 
@@ -143,7 +145,9 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [peers]
 # enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it; also a switch in Settings, applied at the next turn (user config only)
-# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled (user config only)
+# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card (user config only)
+# max_dispatch_depth = 1       # how many sessions deep a dispatch may chain; 0 removes the ceiling (user config only)
+# max_dispatched_sessions = 8  # sessions one session may keep open from its dispatches; 0 removes the ceiling (user config only)
 # release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
 
 [serve]
@@ -154,6 +158,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [desktop]
 # max_workspaces = 0           # most projects the sidebar remembers; 0 = no limit (user config only)
+# session_ref_tokens = 8000     # most tokens one referenced past conversation (@session:<id>) adds to a message; 500..200000
 
 [[plugins]]
 name    = "example"
@@ -881,7 +886,7 @@ Composer shortcuts:
 | `Cmd+Z` on macOS, `Ctrl+Z` on Windows/Linux | Undoes the latest composer edit | Native typing stays in the WebView history; Reasonix-managed paste, cut, folded blocks, and structured tokens are restored as complete transactions. |
 | `Cmd+Shift+Z` on macOS, `Ctrl+Shift+Z` on Windows/Linux | Redoes the latest composer edit | On Windows/Linux, `Ctrl+Y` is also accepted after the YOLO shortcut has been rebound. |
 | `Cmd+Y` / `Ctrl+Y` (default) | Toggles YOLO on/off | Turning YOLO off restores the previous Ask/Auto base when known. The current binding is shown in **Settings → Shortcuts**. |
-| `Cmd+V` on macOS, `Ctrl+V` on Windows/Linux | Pastes clipboard content | Clipboard images are attached. Dropping into the composer takes **any file or folder** and references it where it lives — the desktop app copies nothing, so the turn works on that file itself. Only sources with no path to offer, the clipboard and the add-image button, store bytes in the workspace. |
+| `Cmd+V` on macOS, `Ctrl+V` on Windows/Linux | Pastes clipboard content | Clipboard images are attached. Studio references ordinary files by their native path when available, including files selected with Add attachment, pasted, or dropped. Sources without a native path stream into the workspace. |
 | Plain `Up` / `Down` at the prompt boundary | Recalls older or newer submitted prompts | Modified arrows and native text navigation stay with the textarea. |
 | `Esc` while a turn is running | Cancels the running turn | If the turn has not produced a response yet, the draft is restored. |
 
@@ -914,6 +919,39 @@ Menus and controls:
 | Plan approval card | `Left` / `Right`, `Enter`, `1`-`3`, `Esc` | Move between Revise plan, Start execution, and Exit plan. The default highlighted action is Start execution. |
 | Plan control | Toggles Plan on/off | Same mode as `Shift+Tab`. |
 | Goal item in the collaboration menu | Starts, views, or clears Goal | Goal is not in any keyboard cycle. |
+
+#### Studio file attachments
+
+Ordinary local files, including large APKs, use path references whenever the
+desktop shell can identify the file. Selecting one external file grants read
+access to that file, not its siblings; selecting a folder grants its descendants,
+but a symlink inside it does not grant access outside that folder.
+
+Files without a native path use binary streaming into `.reasonix/attachments`.
+Streaming bounds memory use. Ordinary uploads have a default 1 GiB safety ceiling
+per request to protect disk space; native path references do not copy bytes.
+
+Incomplete files are removed if the transfer fails or is canceled. Removing an uploading
+attachment cancels its transfer.
+
+| Entry point | Limit |
+| --- | --- |
+| Native ordinary-file references | No attachment size cap; the file stays where it is. |
+| Ordinary-file binary upload | Default 1 GiB safety ceiling per request, adjustable in user config. Disk space and upstream limits still apply. |
+| Image upload | 10 MiB per image, checked before upload and by the kernel. |
+| Legacy JSON/Base64 attachment endpoint | 25 MiB general-file limit; retained for older clients. |
+| Encrypted cloud relay | 16 MiB per request body; oversized uploads stop at that budget. This is a relay limit, separate from native references and direct uploads. |
+
+In the user's `config.toml`, `[attachments] max_stream_bytes = 1073741824`
+sets the ordinary upload ceiling in bytes.
+
+- `0` removes that ceiling; negative values use the default. Project `reasonix.toml` cannot set this value.
+- An upload one byte over the limit is refused and its partial file removed.
+- The typed `attachment.too_large` response includes `limit_bytes` and `limit_source` (`default` or `user`).
+- A malformed user config refuses the upload until repaired. The image and relay limits remain independent.
+
+These limits govern attachment transport. A referenced file is read on demand;
+its full bytes do not become model input automatically.
 
 ### CLI / TUI
 
@@ -1247,6 +1285,14 @@ rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
 
 Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
+
+When a signed-in server refuses a call (HTTP 403, `insufficient_scope`) because the access you granted is too narrow:
+
+- The model is told to stop and say so, and you get a notice.
+- Only you can grant more: click **Grant more access** on the server's row, or run `reasonix mcp auth <name> --upgrade`.
+- The scope names are the server's own words, shown as written.
+- You are asked every time, in every approval mode, and the answer is never remembered.
+- A server that keeps asking after being granted is refused for good.
 
 Tools whose definitions change after you approved them are held back until you accept them (`reasonix mcp trust <name>`). To take one server's changes without being asked, run it with `--follow` (`--unfollow` undoes it); each change is still announced.
 
@@ -2007,6 +2053,19 @@ A backend counts as not answering when:
 Each time that happens Reasonix shows a notice naming the backend and the cause, then tries the next one. If none answers, the model receives `search.all_backends_failed`.
 
 - Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
+
+In Settings, **Web access** has a **Test connection** button beside the address. It saves the field, then sends one search to the saved address, follows no redirect, uses no proxy, and says why the instance does not answer.
+
+It never connects to a link-local, cloud-metadata or unspecified address; a loopback or local-network address is fine. The model is told the same code when a real search fails.
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `search.searxng_json_disabled` | The instance answered 403. SearXNG does that when `json` is not in `search.formats` of its `settings.yml`; a reverse proxy in front of it can also answer 403. | Add `json` to `search.formats` and restart it; if that is set, look at the proxy. |
+| `search.searxng_unreachable` | Nothing answered at the address. | Check that it runs and that host and port are right. |
+| `search.searxng_not_searxng` | It answered 200 but not with SearXNG's JSON results. | Point at SearXNG itself, not a login page or another service. |
+| `search.searxng_redirected` | The address redirects. | Enter the final address, for example the `https` one. |
+| `search.searxng_address_refused` | The test will not connect to this address (link-local, cloud metadata or unspecified). | Use a loopback or local-network address for a self-hosted instance. |
+| `search.searxng_status` | Any other HTTP status, for example 429 or 500. | Retry later or read the instance's log. |
 - Results are third-party content and are labelled as such to the model.
 
 ### Paid fallback: the DeepSeek Search API
@@ -2079,3 +2138,76 @@ Not built, and why:
 
 - Gemini: its video input is in the native Gemini API (inline data, the Files API, YouTube URLs); the OpenAI-compatible page does not list a video content part, and Reasonix reaches Gemini through that endpoint.
 - Zhipu GLM: the documentation shows `video_url` with a public HTTPS address only and says nothing about base64 or limits, so a local file cannot be sent without Reasonix uploading it somewhere.
+
+## Letting the model change a setting
+
+The model has a `setting` tool. When something it needs is switched off, such as handing a task to another project, it can ask you to turn the switch on instead of sending you to Settings.
+
+A refusal that a setting would lift ends with `(fix: setting ...)`. The tool can also list settings by the words of their id.
+
+- Nothing changes until you answer a card. It names the setting, the old and the new value, and when the change takes effect. It is worded by Reasonix; the model's own reason is only quoted under it.
+- Every setting has a class in the code. A preference (a font, a retry count) can be agreed once for the rest of the session. An elevated setting (messaging between sessions, dispatching to another project, a protection the model could otherwise loosen) is asked every time, in every approval mode including YOLO.
+- Boundary settings (approval mode, sandbox, network, rules, hooks, provider keys and addresses, safety limits, and the switch for this tool) are never changed by the model. It can only point you at them (`op=open`).
+- The card shows the whole new value; a value too long to show is refused instead of cut. The change is written to your user file, a project file cannot grant it, and values are checked with the same rules as the Settings screen.
+- At most three proposals are put to you per turn, and none while plan mode is on (the model can still look at settings and point you at one).
+- To remove the tool, set `[tools] setting_tool = false`, or leave `setting` out of an explicit `[tools] enabled` list.
+## Google Gemini, native (experimental)
+
+The `gemini` provider kind speaks Google's Interactions API. It is experimental: it was written from Google's documentation (read 2026-10-17) and has not been run against the real endpoint, so expect rough edges and report them.
+
+Install the **Google Gemini, native (experimental)** preset, or write the entry yourself:
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- Every request carries the whole conversation and `store` is false, so the transcript stays yours; Google keeps nothing of it.
+- Thinking runs at the level the entry sets (`/effort`); the preset lists the levels each model documents. Thought summaries are streamed as reasoning, and the thought steps are sent back exactly as received, in order, on the next request.
+- `temperature` and `top_p` are never sent: Google's reference page does not list them for this API.
+- The preset lists only models whose own pages were read: `gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`, all with a 1,048,576-token window, image and video input. Others work if you list them and say what they read.
+- The older **Google Gemini** preset uses Google's OpenAI-compatible endpoint. That endpoint documents no video input.
+
+### Watching video
+
+Declare the models and how a file reaches them, as for any provider (see Letting a model watch a video file):
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # or "gemini_inline"
+```
+
+- `gemini_inline` puts the file in the request as base64. Google's page says "under 20MB total request size" while its table says 100 MB; the narrower reading is used, so the file is held to 15,000,000 bytes (the encoded request is a third larger). You can only lower it with `[tools] video_native_max_bytes`.
+- `gemini_files` uploads the file with the Files API resumable protocol, waits until Google reports it `ACTIVE`, refers to it by its uri, and deletes it when the request ends. Google allows 2 GB per file and 20 GB per project and removes files after 48 hours on its own.
+- MP4, WebM and MOV are sent natively on both protocols; any other container is sampled into frames. A file Google reports as `FAILED`, or in a state this build does not know, is not sent and the model is told `video.upload_failed`.
+- A public YouTube address cannot be given to the model through `read_video`: the host does not fetch addresses, and handing one to the vendor is a separate setting.
+
+### Cost
+
+Reasonix prices Google's list rates per 1M tokens (https://ai.google.dev/gemini-api/docs/pricing, read 2026-10-17):
+
+| Model | Input | Cached | Output (incl. thinking) |
+|---|---|---|---|
+| `gemini-3.8-flash`, `gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| the same two from 2027-01-01 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview` (up to 200k prompt tokens) | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` costs more above 200k prompt tokens ($4.00 / $0.40 / $18.00), which one rate card cannot say, so a long prompt reads low. `gemini-4-argon` shows no price on the page and is not priced. Storage for explicit context caching is not counted.
+
+### Handing a video address to the model vendor
+
+Some vendors read a video from a public address instead of a file. `read_video` can take `url` in place of `path`, but only when you turn this on in Settings (**Web access → Video addresses**, or `[tools] video_url_passthrough = true` in your user file; a project file cannot set it).
+
+Turning it on is a confirmation of its own: the model can propose it, and you answer a card every time.
+
+- The vendor visits the address itself; nothing is downloaded on your machine. Turn it on only if you accept that the vendor's servers open the address.
+- Only an address you wrote in the conversation is handed over. An address the model found in a page, a file or a tool result, or made up, is refused (`video.url_not_from_user`), so a page's author cannot make the vendor visit an address of their choosing.
+- The address must be `https`, with a public host name: no credentials, no IP address, no `localhost`, single-label or local-network name, and at most 2,048 characters (`video.url_invalid`).
+- Zhipu GLM takes a public https address in a `video_url` part and no file ([docs.bigmodel.cn](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v), read 2026-10-17). Declare it with `video_models = ["glm-4.6v"]` and `video_protocol = "zhipu_url"` on the entry; a local file is then read as frames.
+- Gemini takes a public YouTube address as a video `uri` on `gemini_inline` and `gemini_files`; no other address is handed to it (`video.url_unsupported_model`).
+- A reference restored from a stored or imported transcript is never sent: only an address checked in this process is.

@@ -16,11 +16,13 @@ import (
 	"reasonix/internal/platform/browser"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
+	"reasonix/internal/runtime/delegation"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/agentpreset"
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
 	"reasonix/internal/tools/jobs"
+	"reasonix/internal/tools/websearch"
 )
 
 // This file defines the driving port: the typed, segregated interface surface
@@ -306,10 +308,13 @@ type RuntimeSettings interface {
 	SavePersonaSettings(in config.PersonaConfig) error
 	WebAccessSettings() WebAccessSettings
 	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
+	ProbeSearxng(ctx context.Context) (websearch.SearxngProbe, error)
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
 	SaveAskTimeoutSettings(seconds int) error
+	SessionRefSettings() SessionRefSettings
+	SaveSessionRefSettings(tokens int) error
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int
@@ -378,6 +383,7 @@ type Status interface {
 // own to offer, so only the full session port carries it.
 type MCPSignIn interface {
 	AuthorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
+	UpgradeMCPServerAccess(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
 }
 
 // BackgroundJobs stops work a session left running outside any turn.
@@ -403,6 +409,13 @@ type PeerMail interface {
 	ResolvePeerMessageRemembering(id string, approve bool, remember PeerRemember) error
 	PeersSettings() PeersSettings
 	SavePeersSettings(patch PeersPatch) (PeersSettings, error)
+}
+
+// SubagentView reads the sub-agent runs of the session: the ones it spawned,
+// running or finished, and any one run's conversation.
+type SubagentView interface {
+	SubagentRuns() ([]delegation.RunInfo, error)
+	SubagentTranscript(ref string, after, limit int) (delegation.RunTranscript, error)
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -524,6 +537,7 @@ type SessionAPI interface {
 	Provenance
 	BackgroundJobs
 	ToolCallStopper
+	SubagentView
 	PeerMail
 	MCPSignIn
 	LocalShell
@@ -575,6 +589,7 @@ var (
 	_ Goals              = (*Controller)(nil)
 	_ BackgroundJobs     = (*Controller)(nil)
 	_ ToolCallStopper    = (*Controller)(nil)
+	_ SubagentView       = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
 	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)

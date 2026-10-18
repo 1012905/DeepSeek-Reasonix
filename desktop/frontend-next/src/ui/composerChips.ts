@@ -17,9 +17,11 @@ export type Chip =
       error?: string;
     }
   | PasteChip
-  | { k: "quote"; id: string; body: string; turn?: number; source?: string; lines: number };
+  | { k: "quote"; id: string; body: string; turn?: number; source?: string; lines: number }
+  | { k: "session"; id: string; session: string; title: string };
 
 export function chipName(c: Chip): string {
+  if (c.k === "session") return c.title;
   if (c.k === "quote" && c.source) return t("引用 {name}", { name: c.source.split("/").at(-1) ?? c.source });
   if (c.k === "quote") return c.turn === undefined ? t("引用回复") : t("引用第 {n} 轮回复", { n: c.turn });
   return c.k === "paste" ? c.name ?? t("粘贴的文本") : c.name;

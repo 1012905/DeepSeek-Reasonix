@@ -129,3 +129,29 @@ func TestCompositionACPRestorePinsBindingAndKeepsUnavailableHistoryReadable(t *t
 		t.Fatal("legacy ACP history was assigned a new default")
 	}
 }
+
+func TestCompositionACPSwitchKeepsAdditionalDirectories(t *testing.T) {
+	home, root, sibling := dirsWorld(t)
+	f := &compositionFactory{home: home}
+	old, err := f.NewSession(t.Context(), SessionParams{Cwd: root, AdditionalDirs: []string{sibling}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	sess := reloadExtensionsSession(t, "composition-dirs", old, &fakeNotifier{})
+	sess.cwd = root
+	sess.additionalDirs = []string{sibling}
+	svc := &service{factory: f, sessions: map[string]*acpSession{sess.id: sess}}
+	if err := svc.switchComposition(t.Context(), sess, old, "builtin:minimal"); err != nil {
+		t.Fatal(err)
+	}
+	defer sess.currentCtrl().Close()
+	got := f.params[len(f.params)-1]
+	if len(got.AdditionalDirs) != 1 || got.AdditionalDirs[0] != sibling {
+		t.Fatalf("composition switch lost the session's extra roots: %v", got.AdditionalDirs)
+	}
+	got.AdditionalDirs[0] = "changed candidate slice"
+	if sess.additionalDirs[0] != sibling {
+		t.Fatal("candidate shares the live session's extra-roots slice")
+	}
+}

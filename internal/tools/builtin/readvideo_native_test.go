@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -151,5 +152,172 @@ func TestAutoSaysWhyItSampledFramesInsteadOfSendingTheFile(t *testing.T) {
 	}
 	if !strings.Contains(text, CodeVideoNativeTooLarge) || !strings.Contains(text, "tools.video_native_max_bytes") {
 		t.Fatalf("the model is not told why frames were sampled:\n%s", text)
+	}
+}
+
+func nativeCtxOn(protocol string) context.Context {
+	return tool.WithNativeVideo(context.Background(), func() (tool.NativeVideo, bool) {
+		return tool.NativeVideo{Protocol: protocol, Model: "vid-model"}, true
+	})
+}
+
+func quickTimeOf(seconds, size int) []byte {
+	b := mp4Of(seconds, size)
+	copy(b[8:12], "qt  ")
+	return b
+}
+
+// An EBML header whose doctype element (0x4282) says webm; Matroska's own says matroska.
+func ebmlOf(doctype string, size int) []byte {
+	out := []byte{0x1a, 0x45, 0xdf, 0xa3, 0x80 | byte(4+len(doctype)), 0x42, 0x82, 0x80 | byte(len(doctype))}
+	out = append(out, doctype...)
+	return append(out, make([]byte, size)...)
+}
+
+// https://ai.google.dev/gemini-api/docs/video-understanding (read 2026-10-17)
+// lists video/mp4, video/mpeg, video/mov, video/avi, video/x-flv, video/mpg,
+// video/webm, video/wmv and video/3gpp; the container sniff can tell three apart.
+func TestGeminiProtocolsSendMP4WebMAndMOVWithTheirOwnMIMEType(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content []byte
+		mime    string
+	}{
+		{"clip.mp4", mp4Of(3, 4096), "video/mp4"},
+		{"clip.mov", quickTimeOf(3, 4096), "video/mov"},
+		{"clip.webm", ebmlOf("webm", 4096), "video/webm"},
+	} {
+		for _, protocol := range []string{provider.VideoProtocolGeminiInline, provider.VideoProtocolGeminiFiles} {
+			v, _ := nativeTool(t, tc.content, tc.name)
+			raw, _ := json.Marshal(map[string]any{"path": tc.name, "mode": "native"})
+			_, _, videos, err := v.ExecuteWithVideo(nativeCtxOn(protocol), raw)
+			if err != nil || len(videos) != 1 || videos[0].MIME != tc.mime {
+				t.Errorf("%s on %s: videos=%+v err=%v, want %s", tc.name, protocol, videos, err, tc.mime)
+			}
+		}
+	}
+}
+
+func TestTheOtherProtocolsStillSendOnlyMP4(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content []byte
+	}{{"clip.mov", quickTimeOf(3, 4096)}, {"clip.webm", ebmlOf("webm", 4096)}} {
+		v, _ := nativeTool(t, tc.content, tc.name)
+		raw, _ := json.Marshal(map[string]any{"path": tc.name, "mode": "native"})
+		_, _, _, err := v.ExecuteWithVideo(nativeCtxOn(provider.VideoProtocolInlineDataURL), raw)
+		if refusalCode(err) != CodeVideoNativeContainer {
+			t.Errorf("%s: code = %q, want %q", tc.name, refusalCode(err), CodeVideoNativeContainer)
+		}
+	}
+}
+
+func TestMatroskaIsNotWebM(t *testing.T) {
+	v, _ := nativeTool(t, ebmlOf("matroska", 4096), "clip.mkv")
+	raw, _ := json.Marshal(map[string]any{"path": "clip.mkv", "mode": "native"})
+	_, _, _, err := v.ExecuteWithVideo(nativeCtxOn(provider.VideoProtocolGeminiFiles), raw)
+	if refusalCode(err) != CodeVideoNativeContainer {
+		t.Fatalf("code = %q, want %q", refusalCode(err), CodeVideoNativeContainer)
+	}
+}
+
+func addressCtx(protocol string, on bool, user ...string) context.Context {
+	ctx := tool.WithNativeVideo(context.Background(), func() (tool.NativeVideo, bool) {
+		return tool.NativeVideo{Protocol: protocol, Model: "glm-4.6v", Addresses: on}, true
+	})
+	return tool.WithUserAddresses(ctx, func() []string { return user })
+}
+
+func readURL(ctx context.Context, url string) (string, []provider.VideoRef, error) {
+	raw, _ := json.Marshal(map[string]any{"url": url})
+	text, _, videos, err := readVideo{}.ExecuteWithVideo(ctx, raw)
+	return text, videos, err
+}
+
+// Zhipu's page (docs.bigmodel.cn, GLM-4.6V, read 2026-10-17) takes a public
+// https address; the vendor visits it, so nothing is downloaded or opened here.
+func TestAnAddressTheUserWroteIsHandedToTheVendorAndGranted(t *testing.T) {
+	const addr = "https://cdn.example.com/clip.mp4"
+	text, videos, err := readURL(addressCtx(provider.VideoProtocolZhipuURL, true, addr), addr)
+	if err != nil || len(videos) != 1 || videos[0].URL != addr || videos[0].Path != "" || videos[0].Name != "cdn.example.com/clip.mp4" {
+		t.Fatalf("videos=%+v err=%v", videos, err)
+	}
+	if !provider.VideoAddressGranted(addr) || !strings.Contains(text, "visits it itself") {
+		t.Fatalf("granted=%v text=%q", provider.VideoAddressGranted(addr), text)
+	}
+}
+
+func TestAnAddressIsRefusedWhileTheUserHasNotTurnedItOnAndNamesTheSetting(t *testing.T) {
+	const addr = "https://cdn.example.com/off.mp4"
+	_, videos, err := readURL(addressCtx(provider.VideoProtocolZhipuURL, false, addr), addr)
+	var r tool.Refusal
+	if !errors.As(err, &r) || r.Code != CodeVideoURLDisabled || r.Remedy == nil || r.Remedy.Op != tool.RemedyPropose || r.Remedy.Setting != "tools.video_url_passthrough" || string(r.Remedy.Value) != "true" {
+		t.Fatalf("err = %#v", err)
+	}
+	if len(videos) != 0 || provider.VideoAddressGranted(addr) {
+		t.Fatal("an address was handed over with the switch off")
+	}
+}
+
+// Text the model read on a page cannot make the vendor visit an address its author chose.
+func TestAnAddressTheUserDidNotWriteIsNeverHandedOver(t *testing.T) {
+	const addr = "https://attacker.example.com/exfil?d=SECRET.mp4"
+	_, videos, err := readURL(addressCtx(provider.VideoProtocolZhipuURL, true, "https://cdn.example.com/other.mp4"), addr)
+	if refusalCode(err) != CodeVideoURLNotFromUser || len(videos) != 0 || provider.VideoAddressGranted(addr) {
+		t.Fatalf("code=%q videos=%v", refusalCode(err), videos)
+	}
+}
+
+func TestAnAddressThatCannotBePublicIsRefused(t *testing.T) {
+	for _, addr := range []string{"http://cdn.example.com/a.mp4", "https://localhost/a.mp4", "https://192.168.1.4/a.mp4", "https://u:p@cdn.example.com/a.mp4", "https://nas/a.mp4"} {
+		_, _, err := readURL(addressCtx(provider.VideoProtocolZhipuURL, true, addr), addr)
+		if refusalCode(err) != CodeVideoURLInvalid {
+			t.Errorf("%s: code = %q", addr, refusalCode(err))
+		}
+	}
+}
+
+// https://ai.google.dev/gemini-api/docs/video-understanding (read 2026-10-17):
+// Google documents YouTube addresses for video, so only those are handed over.
+func TestGeminiTakesOnlyAYouTubeAddress(t *testing.T) {
+	const yt, other = "https://www.youtube.com/watch?v=9hE5-98ZeCg", "https://cdn.example.com/a.mp4"
+	if _, videos, err := readURL(addressCtx(provider.VideoProtocolGeminiFiles, true, yt), yt); err != nil || len(videos) != 1 {
+		t.Fatalf("youtube: videos=%v err=%v", videos, err)
+	}
+	if _, _, err := readURL(addressCtx(provider.VideoProtocolGeminiFiles, true, other), other); refusalCode(err) != CodeVideoURLUnsupported {
+		t.Fatalf("other address: code = %q", refusalCode(err))
+	}
+}
+
+func TestOtherProtocolsTakeNoAddress(t *testing.T) {
+	const addr = "https://cdn.example.com/b.mp4"
+	if _, _, err := readURL(addressCtx(provider.VideoProtocolInlineDataURL, true, addr), addr); refusalCode(err) != CodeVideoURLUnsupported {
+		t.Fatalf("code = %q", refusalCode(err))
+	}
+}
+
+func TestAnAddressWithoutAVideoModelIsRefusedByTheNativeCode(t *testing.T) {
+	const addr = "https://cdn.example.com/c.mp4"
+	if _, _, err := readURL(tool.WithUserAddresses(context.Background(), func() []string { return []string{addr} }), addr); refusalCode(err) != CodeVideoNativeUnsupported {
+		t.Fatalf("code = %q", refusalCode(err))
+	}
+}
+
+func TestAPathAndAnAddressTogetherAreRefused(t *testing.T) {
+	raw, _ := json.Marshal(map[string]any{"path": "clip.mp4", "url": "https://cdn.example.com/a.mp4"})
+	if _, _, _, err := (readVideo{}).ExecuteWithVideo(addressCtx(provider.VideoProtocolZhipuURL, true), raw); err == nil {
+		t.Fatal("both a path and an address were accepted")
+	}
+}
+
+func TestAFileHasNoWireOnTheAddressOnlyProtocol(t *testing.T) {
+	v, _ := nativeTool(t, mp4Of(3, 4096), "clip.mp4")
+	raw, _ := json.Marshal(map[string]any{"path": "clip.mp4", "mode": "native"})
+	if _, _, _, err := v.ExecuteWithVideo(addressCtx(provider.VideoProtocolZhipuURL, true), raw); refusalCode(err) != CodeVideoNativeAddressOnly {
+		t.Fatalf("code = %q", refusalCode(err))
+	}
+	raw, _ = json.Marshal(map[string]any{"path": "clip.mp4"})
+	if _, _, videos, err := v.ExecuteWithVideo(addressCtx(provider.VideoProtocolZhipuURL, true), raw); len(videos) != 0 || refusalCode(err) != CodeVideoFFmpegMissing {
+		t.Fatalf("auto must fall back to frames: videos=%v code=%q", videos, refusalCode(err))
 	}
 }

@@ -22,6 +22,14 @@ const (
 	DecisionRejected Decision = "rejected"
 )
 
+// Consent is which standing permission of the user's let a message in unasked.
+type Consent string
+
+const (
+	ConsentProject  Consent = "project"
+	ConsentDispatch Consent = "dispatch"
+)
+
 // AuditRecord is one line of the audit trail. It names the parties and says
 // what was decided; it never carries the words of the message, only their
 // length and a digest, so reading the trail reveals no conversation.
@@ -32,8 +40,11 @@ type AuditRecord struct {
 	ID       string    `json:"id,omitempty"`
 	Decision Decision  `json:"decision"`
 	Reason   Reason    `json:"reason,omitempty"`
-	Bytes    int       `json:"bytes,omitempty"`
-	SHA256   string    `json:"sha256,omitempty"`
+	// Consent names the standing consent of the user's that released the message
+	// without a card; empty for a decision the user made on the card.
+	Consent Consent `json:"consent,omitempty"`
+	Bytes   int     `json:"bytes,omitempty"`
+	SHA256  string  `json:"sha256,omitempty"`
 }
 
 // Digest is the audit's stand-in for a message body.

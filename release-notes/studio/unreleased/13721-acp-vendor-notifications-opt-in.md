@@ -1,0 +1,2 @@
+- 变更：通过 ACP 连接时，状态类扩展通知需要客户端在初始化时声明 statusUpdates 才会发送，会话记录路径改放在响应的 _meta 里。关联 #13721。
+- Changed: Over ACP, the vendor status notifications are sent only to clients that declare statusUpdates at initialize, and the transcript path moves into the response _meta. Refs #13721.
