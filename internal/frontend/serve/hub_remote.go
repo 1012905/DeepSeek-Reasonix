@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -175,7 +174,7 @@ func (h *Hub) listRemoteHosts(w http.ResponseWriter, _ *http.Request) {
 	for _, entry := range cfg.Remote.Hosts {
 		view := RemoteHostView{
 			Name:          entry.Name,
-			Target:        remoteTarget(entry),
+			Target:        entry.Target(),
 			Status:        "idle",
 			Disabled:      entry.Disabled,
 			Host:          entry.Host,
@@ -199,19 +198,6 @@ func (h *Hub) listRemoteHosts(w http.ResponseWriter, _ *http.Request) {
 		out = append(out, view)
 	}
 	writeJSON(w, out)
-}
-
-// remoteTarget spells a host the way the user would type it to ssh. The port
-// is shown only when it is not the one ssh would have assumed.
-func remoteTarget(entry config.RemoteHostEntry) string {
-	target := entry.Host
-	if entry.User != "" {
-		target = entry.User + "@" + target
-	}
-	if entry.Port > 0 && entry.Port != 22 {
-		target += ":" + strconv.Itoa(entry.Port)
-	}
-	return target
 }
 
 // OpenRemoteRequest asks for a pane on another machine. An empty Workspace

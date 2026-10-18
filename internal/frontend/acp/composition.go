@@ -26,6 +26,7 @@ type SessionParams struct {
 	EffortOverride     *string
 	RuntimeProfile     string
 	OnSessionRecovered func(control.SessionRecoveryInfo) error
+	NewConversation    bool
 	FileOverlay        builtin.FileOverlay
 	Terminal           builtin.TerminalRunner
 }

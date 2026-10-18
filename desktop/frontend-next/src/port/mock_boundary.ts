@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
 import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
@@ -170,6 +170,17 @@ export class MockBoundary extends MockShell {
   async savePlanApproval(auto: boolean): Promise<PlanApprovalSettings> {
     this.plans = { ...this.plans, auto };
     return { ...this.plans };
+  }
+
+  private modes: DefaultModeSettings = { plan: false, path: "/Users/you/.reasonix/config.toml" };
+
+  async defaultMode(): Promise<DefaultModeSettings> {
+    return { ...this.modes };
+  }
+
+  async saveDefaultMode(plan: boolean): Promise<DefaultModeSettings> {
+    this.modes = { ...this.modes, plan };
+    return { ...this.modes };
   }
 
   private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };

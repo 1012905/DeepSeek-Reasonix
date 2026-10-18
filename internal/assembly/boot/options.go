@@ -76,6 +76,10 @@ type Options struct {
 	// empty follows the environment. It binds this assembly only — a
 	// Controller's later re-reads and the history index still read the process.
 	Home string
+	// NewConversation says this build opens a fresh conversation for a person, so
+	// the user's default mode applies. A resume, a headless run and a sub-agent
+	// leave it false and start as they always did.
+	NewConversation bool
 	// Tests that compare prompt bytes must not depend on host discovery probes.
 	resolvedShell *sandbox.Shell
 	clock         func() time.Time

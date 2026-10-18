@@ -310,6 +310,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.SessionPath = currentSessionPath(root, req.SessionPath)
 	settings, err := branchSettings(req.SessionPath)
 	if err != nil {
 		return nil, err
@@ -348,6 +349,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 			OpenOnFallbackModel:      fallback,
 			ProviderResolver:         h.opts.ProviderResolver,
 			CleanupPendingReconciler: BackgroundCleanupReconciler,
+			NewConversation:          strings.TrimSpace(req.SessionPath) == "",
 		}
 		if req.composition != nil {
 			return boot.BuildRuntime(ctx, opts)

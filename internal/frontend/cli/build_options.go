@@ -32,6 +32,8 @@ type cliBuildOverrides struct {
 	Stderr               io.Writer
 	OnSessionRecovered   func(control.SessionRecoveryInfo) error
 	Ablation             ablation.Set
+	// NewConversation marks an interactive start that is not resuming anything, so the user's default mode applies.
+	NewConversation bool
 	// SessionTemp carries the previous Controller's private temporary directory
 	// manager across model/profile rebuilds so temporary files survive.
 	SessionTemp *sessiontemp.Manager
@@ -78,6 +80,7 @@ func cliProfileBuildOptions(modelName string, maxStepsOverride int, requireKey b
 		Stderr:               overrides.Stderr,
 		OnSessionRecovered:   overrides.OnSessionRecovered,
 		Ablation:             overrides.Ablation,
+		NewConversation:      overrides.NewConversation,
 		SessionTemp:          overrides.SessionTemp,
 		BrowserSession:       overrides.BrowserSession,
 		ProviderResolver:     overrides.ProviderResolver,

@@ -96,6 +96,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /hooks/dry-run", s.dryRunHook)
 	mux.HandleFunc("GET /skills", s.skills)
 	mux.HandleFunc("POST /skills/enabled", s.skillEnabled)
+	s.registerSkillRemoveRoutes(mux)
 	s.registerSkillUpdateRoutes(mux)
 	mux.HandleFunc("GET /slash", s.slash)
 	mux.HandleFunc("GET /complete", s.complete)

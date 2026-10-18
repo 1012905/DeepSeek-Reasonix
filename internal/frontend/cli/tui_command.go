@@ -90,6 +90,7 @@ func runTUI(args []string, version string) int {
 		AgentComposition: freshCompositionName(*f.agentComposition, resumed), Composition: resumedComposition(resumed),
 		Version: version, WorkspaceRoot: workspaceRoot, OnSessionRecovered: cliSessionRecoveredHandler(leases),
 		Effort: f.effortOverride(), PermissionAllow: allowed, AdditionalDirs: f.addDirs,
+		NewConversation: resumePath == "",
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)

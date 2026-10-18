@@ -495,6 +495,9 @@ func (b *builder) controller() (*control.Controller, error) {
 	}
 	ctrlOpts := b.controllerOptions(runner, executor, label)
 	ctrl := withWindowPosture(control.New(ctrlOpts), b.cfg, b.opts.StatsSource, b.sink)
+	if b.opts.NewConversation && b.cfg.DefaultPlanMode() {
+		ctrl.SetPlanMode(true)
+	}
 	reportDormantPermissionRules(b.sink, b.cfg, ctrl)
 	b.ext.publish(ctrl)
 	// Task and fleet sub-agents share the root agent's recovery checkpoint.

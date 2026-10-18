@@ -9,7 +9,7 @@ import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { SECTION_NAME } from "./prefsnav";
 import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
-import { PlanApproval } from "./PlanApproval";
+import { PlanApproval, DefaultMode } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -479,7 +479,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                     onClick={() => run("plan", () => port.setPlanMode(!status?.plan))}
                   />
                 </div>
-              </Group>
+              </Group><DefaultMode port={port} />
               <DisplaySettings port={port} />
               <AskTimeout port={port} />
               <SessionRef port={port} />

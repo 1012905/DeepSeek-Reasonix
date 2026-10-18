@@ -460,7 +460,7 @@ func toWireTool(t event.Tool) *Tool {
 		WorkspaceLease: toWireWorkspaceLease(t.WorkspaceLease),
 		OutputDiff:     t.OutputDiff,
 		ReadOnly:       t.ReadOnly, Truncated: t.Bound.Lossy(),
-		DurationMs: t.DurationMs, ContextTokens: t.ContextTokens(),
+		DurationMs: t.DurationMs, RateTokensPerSec: t.RateTokensPerSec, ContextTokens: t.ContextTokens(),
 		Partial: t.Partial, StartedAt: t.StartedAt, EndedAt: t.EndedAt,
 		ArgChars: t.ArgChars, Refreshed: t.Refreshed,
 		ParentID: t.ParentID, AttemptID: t.AttemptID, Issuer: string(t.Issuer),
@@ -527,6 +527,9 @@ type Tool struct {
 	Truncated  bool   `json:"truncated,omitempty"`
 	Bound      *Bound `json:"bound,omitempty"`
 	DurationMs int64  `json:"durationMs,omitempty"`
+	// RateTokensPerSec is a sub-agent's estimated streaming rate, on its status
+	// channel while it reasons or answers. Estimated, never billed.
+	RateTokensPerSec int `json:"rate,omitempty"`
 	// ContextTokens is what this call left in the prompt (args + result), so a
 	// card can say which step is eating the window. Estimated, never billed.
 	ContextTokens int    `json:"contextTokens,omitempty"`
