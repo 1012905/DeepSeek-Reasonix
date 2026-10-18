@@ -2126,9 +2126,10 @@ func TestServeSteerInjectsIntoActivePrompt(t *testing.T) {
 	}
 }
 
-func TestServePromptErrorIsNotReportedAsCancelled(t *testing.T) {
+func TestServePromptFailureIsAJSONRPCErrorWithTypedCode(t *testing.T) {
+	const leaked = "sk-abcdefghijklmnopqrstuvwxyz123456"
 	factory := &fakeFactory{behavior: func(context.Context, event.Sink, string) error {
-		return errors.New("provider failed")
+		return errors.New("provider failed, key " + leaked)
 	}}
 	client, stop := startServer(t, factory)
 	defer stop()
@@ -2143,12 +2144,18 @@ func TestServePromptErrorIsNotReportedAsCancelled(t *testing.T) {
 		Prompt:    []ContentBlock{{Type: "text", Text: "fail"}},
 	})
 	_, resp := drainPrompt(t, client, promptCh)
-	var pr SessionPromptResult
-	if err := json.Unmarshal(resp.Result, &pr); err != nil {
-		t.Fatalf("prompt result: %v", err)
+	if resp.Error == nil {
+		t.Fatalf("a failed turn must be a JSON-RPC error, got result %s", resp.Result)
 	}
-	if pr.StopReason != StopError {
-		t.Errorf("stopReason = %q, want error", pr.StopReason)
+	if resp.Error.Code != ErrInternal {
+		t.Errorf("code = %d, want %d", resp.Error.Code, ErrInternal)
+	}
+	if !strings.Contains(resp.Error.Message, "provider failed") || strings.Contains(resp.Error.Message, leaked) {
+		t.Errorf("message = %q, want the cause with the key redacted", resp.Error.Message)
+	}
+	var data TurnErrorData
+	if err := json.Unmarshal(resp.Error.Data, &data); err != nil || data.Code != TurnFailed {
+		t.Errorf("data = %s (%v), want code %q", resp.Error.Data, err, TurnFailed)
 	}
 }
 

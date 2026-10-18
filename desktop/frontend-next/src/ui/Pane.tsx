@@ -87,7 +87,7 @@ const totalsOf = (st: SessionStatus) => ({
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
 
-function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, filesPulse = 0, viewRequest, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
+function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, findTogglePulse = 0, filesPulse = 0, viewRequest, onSettings, onFeedback, onOpenSession, needsProject, onOpenProject, onKeepHere, connect, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
   const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
@@ -419,7 +419,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   });
 
   const receiptPref = receiptPrefOf(port);
-  const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref);
+  const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref, findTogglePulse);
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
   const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });

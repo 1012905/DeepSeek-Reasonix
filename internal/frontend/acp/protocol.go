@@ -32,6 +32,15 @@ const (
 	ErrInternal       = -32603
 )
 
+// TurnFailed is the TurnErrorData code of a session/prompt that failed after it
+// was admitted. The cause is the error message; the code is what a client keys on.
+const TurnFailed = "turn_failed"
+
+// TurnErrorData is the data member of a failed session/prompt error.
+type TurnErrorData struct {
+	Code string `json:"code"`
+}
+
 // initialize
 
 // InitializeParams is the client's handshake. The agent records the client's
