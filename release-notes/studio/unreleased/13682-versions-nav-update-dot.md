@@ -1,0 +1,2 @@
+- 修复：有新版本时，设置弹窗左侧列表里的「版本」一行也会出现和左下角设置图标一样的提示点，打开设置后能直接看到该点哪里。关联 #13682。
+- Fixed: When a newer release is known, the Version row in the settings list now carries the same mark as the gear, so the update entry is easy to find. Refs #13682.
