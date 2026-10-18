@@ -93,6 +93,9 @@ type BranchMeta struct {
 	Preview      string            `json:"preview,omitempty"`
 	InFlightTurn *InFlightTurnMeta `json:"in_flight_turn,omitempty"`
 	ImportedFrom *ImportSource     `json:"imported_from,omitempty"`
+	// Adopted says this conversation was brought in from elsewhere: moved from
+	// another project, or read from a file. A move records where it left so it can go back.
+	Adopted *AdoptRecord `json:"adopted,omitempty"`
 }
 
 const (

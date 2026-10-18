@@ -1297,4 +1297,13 @@ export const EN_SETTINGS: Record<string, string> = {
   "历史会话 · 只读资料": "Past conversation · read-only reference",
   "引用「{title}」到输入框": "Reference \"{title}\" in the message box",
   "↑↓ 选择 · 回车添加到这条消息 · Esc 关闭": "↑↓ choose · Enter adds it to this message · Esc closes",
+  "把「{name}」移到另一个项目": "Move \"{name}\" to another project",
+  "只带走对话本身和你设的标题、置顶、归档。原项目的权限与目标设置不会跟着走，新项目按它自己的规则重新判断；对话里记录的路径保持原样。": "Only the conversation itself and the title, pin and archive state you set travel. What the old project allowed does not follow: the new project decides for itself, and the paths recorded inside the conversation stay as they were.",
+  "没有别的项目可以移到。先添加一个项目。": "There is no other project to move it to. Add a project first.",
+  "目标项目": "Target project",
+  "移动": "Move",
+  "先关闭这个会话，再移动它": "Close this conversation first, then move it",
+  "移动到项目…": "Move to a project…",
+  "检查点（回退快照）、后台任务日志和排队中的消息不随会话移动，原件会被移除。": "Checkpoints (rewind snapshots), background-task logs and queued messages do not travel; the originals are removed.",
+  "对话已经移过去了，但原来的那份没能删除，请手动删除。": "The conversation was moved, but the original could not be removed; please delete it by hand.",
 };
