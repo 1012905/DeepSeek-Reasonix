@@ -206,6 +206,9 @@ func Read(cfg *config.Config, id string) (any, error) {
 	if e.Secret {
 		return nil, &Error{Code: CodeSecret, ID: id, msg: "the value is never shown"}
 	}
+	if ShapeOf(id) == ShapeStructured {
+		return nil, &Error{Code: CodeShape, ID: id, msg: "edited in its own screen"}
+	}
 	return plain(v), nil
 }
 

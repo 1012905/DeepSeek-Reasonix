@@ -160,3 +160,28 @@ func TestAnOptionalKeyIsWrittenThroughItsPointer(t *testing.T) {
 		t.Fatal("an optional bool is not a bool")
 	}
 }
+
+func TestNoStructuredKeyIsReadOrWritten(t *testing.T) {
+	cfg := &config.Config{}
+	seen := 0
+	for _, e := range All() {
+		if ShapeOf(e.ID) != ShapeStructured {
+			continue
+		}
+		seen++
+		if _, err := Read(cfg, e.ID); CodeOf(err) != CodeShape && CodeOf(err) != CodeSecret {
+			t.Errorf("%s was read: %v", e.ID, err)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("the config has no structured key left to hold this to")
+	}
+}
+
+func TestKeysThatRelaxAProtectionAreElevated(t *testing.T) {
+	for _, id := range []string{"progress_watch.pause", "progress_watch.rounds", "progress_watch.token_multiple", "progress_watch.perseveration_retries", "agent.worktree_isolation", "agent.write_lease"} {
+		if e, _ := Lookup(id); e.Class != Elevated {
+			t.Errorf("%s class = %v, want Elevated", id, e.Class)
+		}
+	}
+}
