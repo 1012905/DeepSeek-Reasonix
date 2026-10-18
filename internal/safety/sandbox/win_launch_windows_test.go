@@ -277,3 +277,34 @@ func TestGrantedRootsListsWhatGrantSpecGrantedAndRevokeGrantsTakesItBack(t *test
 		t.Fatalf("the record still lists %v", left)
 	}
 }
+
+// A workspace that contains the grant record would let a command rewrite what the
+// host grants next, so enforcement is refused with its own typed fault.
+func TestGrantSpecRefusesARecordInsideAWritableRoot(t *testing.T) {
+	home := t.TempDir()
+	state := filepath.Join(home, "AppData", "reasonix", "sandbox")
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	spec := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{home}, ShellEnv: profileEnv(t)}, state)
+	if !errors.Is(spec.GrantFault, ErrWinRecordExposed) || spec.GrantSID != "" {
+		t.Fatalf("spec = fault %v sid %q", spec.GrantFault, spec.GrantSID)
+	}
+	if got := UnavailableCodeFor(spec); got != "sandbox.win_record_exposed" {
+		t.Fatalf("code = %q", got)
+	}
+	if ok, _ := WindowsGrantOps().Granted(home, newSyntheticSID()); ok {
+		t.Fatal("something was granted before the refusal")
+	}
+	beside := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{t.TempDir()}, ShellEnv: profileEnv(t)}, state)
+	if beside.GrantFault != nil {
+		t.Fatalf("a workspace beside the record was refused: %v", beside.GrantFault)
+	}
+	t.Cleanup(func() {
+		if b, err := windowsBook(state); err == nil {
+			for _, r := range b.Roots() {
+				_ = b.Revoke(r)
+			}
+		}
+	})
+}

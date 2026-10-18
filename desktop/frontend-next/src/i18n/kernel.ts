@@ -670,6 +670,7 @@ const SAID: Record<string, string> = {
   "sandbox.win_grant_unreadable": "Windows 沙箱记录已损坏，不会静默重新开始；删掉它再重启，或关闭 Windows 沙箱",
   "sandbox.win_grant_denied": "Windows 拒绝修改沙箱需要写入的文件夹的权限；确认你是该文件夹的所有者，或关闭 Windows 沙箱",
   "sandbox.win_no_logon_sid": "当前会话没有交互式登录（例如 SSH 或服务会话），无法建立受限令牌；请在桌面里运行，或关闭 Windows 沙箱",
+  "sandbox.win_record_exposed": "Windows 沙箱的授权记录放在了命令可写的文件夹里（例如工作区是你的整个用户文件夹），命令可能改写之后的授权；请打开更小的文件夹，或关闭 Windows 沙箱",
   "sandbox.win_launcher": "Windows 无法创建沙箱命令所用的受限令牌；关闭 Windows 沙箱可让命令不受限制地运行",
   "sandbox.win_not_prepared": "Windows 沙箱已开启，但这次启动没有完成准备；关闭 Windows 沙箱可让命令不受限制地运行",
   "sandbox.unsupported_platform": "该平台尚无可用的沙箱后端，命令将不受限制地运行",

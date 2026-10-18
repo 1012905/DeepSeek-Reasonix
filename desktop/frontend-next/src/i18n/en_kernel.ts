@@ -242,6 +242,7 @@ export const EN_KERNEL: Record<string, string> = {
   "Windows 沙箱记录已损坏，不会静默重新开始；删掉它再重启，或关闭 Windows 沙箱": "The Windows sandbox's record is damaged and will not start over silently; delete it and restart, or turn the Windows sandbox off",
   "Windows 拒绝修改沙箱需要写入的文件夹的权限；确认你是该文件夹的所有者，或关闭 Windows 沙箱": "Windows refused to change the permissions of a folder the sandbox needs to write to; check that you own it, or turn the Windows sandbox off",
   "当前会话没有交互式登录（例如 SSH 或服务会话），无法建立受限令牌；请在桌面里运行，或关闭 Windows 沙箱": "This session has no interactive logon (for example an SSH or service session), so no restricted token can be made; run from the desktop, or turn the Windows sandbox off",
+  "Windows 沙箱的授权记录放在了命令可写的文件夹里（例如工作区是你的整个用户文件夹），命令可能改写之后的授权；请打开更小的文件夹，或关闭 Windows 沙箱": "The Windows sandbox keeps its grant record inside a folder commands may write (for example the workspace is your whole user folder), so a command could rewrite what is granted next; open a narrower folder, or turn the Windows sandbox off",
   "Windows 无法创建沙箱命令所用的受限令牌；关闭 Windows 沙箱可让命令不受限制地运行": "Windows could not create the restricted token commands run under; turn the Windows sandbox off to run them unconfined",
   "Windows 沙箱已开启，但这次启动没有完成准备；关闭 Windows 沙箱可让命令不受限制地运行": "The Windows sandbox is on but this launch was not prepared for it; turn it off to run commands unconfined",
   "该平台尚无可用的沙箱后端，命令将不受限制地运行": "This platform has no usable sandbox backend yet, so commands run unconfined",

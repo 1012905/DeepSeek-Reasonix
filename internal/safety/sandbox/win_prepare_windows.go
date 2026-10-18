@@ -45,7 +45,12 @@ func GrantSpec(spec Spec, stateDir string) Spec {
 		spec.GrantFault = fmt.Errorf("%w: %w", ErrWinGrantUnreadable, err)
 		return spec
 	}
-	for _, dir := range planWriteRoots(spec, backendWriteDirs(spec)).dirs {
+	dirs := planWriteRoots(spec, backendWriteDirs(spec)).dirs
+	if exposed, ok := exposedRecord(stateDir, dirs); ok {
+		spec.GrantFault = fmt.Errorf("%w: %s", ErrWinRecordExposed, exposed)
+		return spec
+	}
+	for _, dir := range dirs {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			continue
 		}
@@ -81,4 +86,16 @@ func probeToken(sid string) error {
 func windowsCacheDirs(spec Spec) []string {
 	getenv := EffectiveGetenv(spec.ShellEnv)
 	return cacheDirsFor(getenv("LOCALAPPDATA"), getenv("USERPROFILE"))
+}
+
+// exposedRecord reports a root that contains the grant record: a command allowed
+// to write there could rewrite the record, and the host re-grants what it lists.
+func exposedRecord(stateDir string, roots []string) (string, bool) {
+	state, _ := resolveWithLinks(stateDir)
+	for _, root := range roots {
+		if pathWithin(fold(root), fold(state)) {
+			return root, true
+		}
+	}
+	return "", false
 }
