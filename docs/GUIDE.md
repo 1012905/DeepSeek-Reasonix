@@ -1364,8 +1364,8 @@ Other facts:
 - The command runs with every privilege except the traverse check removed, and in
   a job that cannot reach the other windows, clipboard or display settings of your session.
 - Only the three standard handles cross into the command.
-- A launcher request is honoured only for the SID in the grant record and for
-  session temp folders the host made.
+- A command cannot start its own launcher: the launcher refuses to run under a
+  restricted token, and grants only session temp folders the host made.
 - It needs an interactive desktop session. In an SSH or service session `enforce`
   refuses to run commands (`sandbox.win_no_logon_sid`) instead of running them unconfined.
 - Not measured: standard (non-admin) accounts, other Windows versions, ReFS and
