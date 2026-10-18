@@ -377,10 +377,17 @@ digest, so a constraint keeps its protection across repeated compaction.
 
 A turn past those bounds folds like any other content. Prefix it with `[[keep]]`
 (keep policy `user_marked`, on by default) to hold it verbatim regardless of
-size. That drop is never silent: compaction telemetry carries `user_kept` and
+its own size.
+
+Marked turns have a budget of their own: together they may spend `window×15%`,
+newest first, and the oldest fold into the digest past it. A kept turn rides
+into every later fold, so an unbounded mark would grow what each fold carries
+until its candidate could not land under the trigger.
+
+That drop is never silent: compaction telemetry carries `user_kept` and
 `user_dropped` counts, and a committed checkpoint that had to fold one of your
-turns emits a warning naming `[[keep]]` — the projection reads as complete
-either way, so the count is the only thing that distinguishes them.
+turns, marked or not, emits a warning. The projection reads as complete either
+way, so the count is the only thing that distinguishes them.
 
 Two properties bound that loss. Each fold re-derives its digest from the
 canonical transcript rather than from the previous digest, so digests do not
