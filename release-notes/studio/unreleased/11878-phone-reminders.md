@@ -1,0 +1,2 @@
+- 新增：登录同一账号的手机可在有操作待批准、模型提问、一轮出错时收到提醒，通知只含类别和数量。电脑和手机两边默认都关，需分别开启。关联 #11878。
+- Added: phones on the same account can be reminded when an action awaits approval, the model asks, or a turn fails; only the kind and a count are sent. Off by default on both sides. Refs #11878.
