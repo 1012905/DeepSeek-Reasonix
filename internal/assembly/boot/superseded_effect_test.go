@@ -52,7 +52,7 @@ recent_keep = 2
 name = "test-model"
 kind = "boot-superseded-effect"
 model = "x"
-context_window = 32000
+context_window = 32500
 `)
 	approveWorkspaceAt(t, home, dir)
 
