@@ -206,6 +206,9 @@ func (d *Dispatcher) Options() Options {
 	return Options{Warn: d.warn, SidecarDown: d.sidecarDown, TightenOnly: maps.Clone(d.tightenOnly), Mods: maps.Clone(d.mods)}
 }
 
+// IsMod reports whether the plugin is a live Claude Code mod. Nil-safe.
+func (d *Dispatcher) IsMod(plugin string) bool { return d != nil && d.mods[plugin] }
+
 // HasMod reports whether a Claude Code mod is live. Nil-safe.
 func (d *Dispatcher) HasMod() bool { return d != nil && len(d.mods) > 0 }
 
@@ -281,6 +284,9 @@ func (d *Dispatcher) Intercept(ctx context.Context, point extension.InterceptorP
 			return result, nil
 		case protocol.DecisionReplace:
 			fresh, decodeErr := decodePayload(point, answer.Replacement)
+			if decodeErr == nil {
+				decodeErr = adoptReplacement(payloadPtr, fresh, pluginID)
+			}
 			if decodeErr != nil {
 				if err := d.violation(pluginID, point, decodeErr); err != nil {
 					return nil, err
@@ -542,6 +548,17 @@ func checkPayloadType(point extension.InterceptorPoint, payloadPtr any) (payload
 // assignPayload replaces the value payloadPtr points to with the freshly
 // decoded replacement. Whole-value assignment keeps omitted (zero) fields in
 // the replacement from leaking the previous value through.
+// adoptReplacement carries what the host owns across a replacement: the
+// credit for context blocks, and the refusal of one that rewrites another's.
+func adoptReplacement(payloadPtr, fresh any, plugin string) error {
+	if in, ok := fresh.(*InputPayload); ok {
+		if old, ok := payloadPtr.(*InputPayload); ok {
+			return AdoptInputContext(old, in, plugin)
+		}
+	}
+	return nil
+}
+
 func assignPayload(payloadPtr, fresh any) error {
 	target := reflect.ValueOf(payloadPtr)
 	source := reflect.ValueOf(fresh)

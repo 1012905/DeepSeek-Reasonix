@@ -267,3 +267,28 @@ export function register(on) {
 		t.Fatalf("an object result = %v", got)
 	}
 }
+
+// A prompt.submit hook that adds context leaves the script as context blocks on
+// the replacement, after any another extension already added.
+func TestAPromptHookCanAddContextBlocks(t *testing.T) {
+	h := startHost(t, writeMod(t, "ctx.mjs", `
+export function register(on) {
+  on('prompt.submit', async ($, e, next) => next({ ...e, context: ['plain note', { label: 'git', text: 'dirty' }, { text: '   ' }] }));
+}`), nil)
+	if res := h.initialize(); res["error"] != nil {
+		t.Fatalf("initialize: %v", res["error"])
+	}
+	got := h.intercept("input.receive", map[string]any{"text": "go", "context": []any{map[string]any{"label": "earlier", "text": "kept"}}})
+	if decision(got) != "replace" {
+		t.Fatalf("got %v", got)
+	}
+	var rep struct {
+		Text    string
+		Context []struct{ Label, Text string }
+	}
+	b, _ := json.Marshal(got["replacement"])
+	_ = json.Unmarshal(b, &rep)
+	if rep.Text != "go" || len(rep.Context) != 3 || rep.Context[0].Text != "kept" || rep.Context[1].Text != "plain note" || rep.Context[2].Label != "git" {
+		t.Fatalf("replacement = %+v, want the earlier block first, then the two new non-empty ones", rep)
+	}
+}

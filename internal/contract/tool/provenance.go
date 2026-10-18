@@ -21,6 +21,7 @@ const (
 	ProvenanceDesktop   ProvenanceKind = "desktop"
 	ProvenanceMCP       ProvenanceKind = "mcp"
 	ProvenanceMod       ProvenanceKind = "mod"
+	ProvenanceExtension ProvenanceKind = "extension"
 )
 
 // Provenance is a result's origin as the host knows it: the kind, and the

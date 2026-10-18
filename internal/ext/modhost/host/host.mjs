@@ -366,8 +366,14 @@ const intercepts = {
     const out = await runChain("prompt.submit", e, (ev) => ({ [SAME]: ev }));
     if (out && typeof out === "object" && !(SAME in out) && "drop" in out) return block(out.drop);
     const final = out?.[SAME];
-    if (final && typeof final.text === "string" && final.text !== p.text && final.text.trim() !== "") return { decision: "replace", replacement: { text: final.text } };
-    return pass;
+    const text = final && typeof final.text === "string" && final.text.trim() !== "" ? final.text : p.text;
+    const added = (Array.isArray(final?.context) ? final.context : []).slice(0, 64)
+      .map((c) => (typeof c === "string" ? { label: "", text: c } : { label: String(c?.label ?? ""), text: String(c?.text ?? "") }))
+      .filter((c) => c.text.trim() !== "");
+    if (text === p.text && added.length === 0) return pass;
+    const replacement = { text };
+    if (added.length) replacement.context = [...(p.context ?? []), ...added];
+    return { decision: "replace", replacement };
   },
   "session.start": async () => { if (startRan) return pass; startRan = true; await runChain("session.start", {}, () => ({})); return pass; },
   "session.end": async () => { await runChain("session.end", { reason: "other" }, () => ({})); return pass; },

@@ -15,6 +15,45 @@ type ModsConfig struct {
 	// HookBudgetMS bounds one hook's own running time; 0 keeps Claude Code's 10 s.
 	// User file only.
 	HookBudgetMS int `toml:"hook_budget_ms"`
+	// ContextBytes and ContextBlocks bound the text a mod adds to a turn: bytes
+	// per block and blocks per turn. The turn tail is the model's context window
+	// and the bill, so these are the host's to protect; 0 removes the ceiling
+	// and is the user's explicit choice. User file only.
+	ContextBytes  int `toml:"context_bytes"`
+	ContextBlocks int `toml:"context_blocks"`
+	// MessagesMax is how many transcript items one read by a mod may return, 0
+	// for no ceiling. User file only.
+	MessagesMax int `toml:"messages_max"`
+	// SubmitPerTurn is how many prompts a mod may queue during one turn. It stops
+	// a mod from feeding the session to itself, so 0 (no ceiling) is a deliberate
+	// act. User file only.
+	SubmitPerTurn int `toml:"submit_per_turn"`
+}
+
+// Defaults of the ceilings above.
+const (
+	DefaultModsContextBytes  = 8192
+	DefaultModsContextBlocks = 8
+	DefaultModsMessagesMax   = 200
+	DefaultModsSubmitPerTurn = 3
+)
+
+func defaultMods() ModsConfig {
+	return ModsConfig{ContextBytes: DefaultModsContextBytes, ContextBlocks: DefaultModsContextBlocks, MessagesMax: DefaultModsMessagesMax, SubmitPerTurn: DefaultModsSubmitPerTurn}
+}
+
+// ModsLimits are the user's ceilings on what a mod may add to a session.
+type ModsLimits struct {
+	ContextBytes, ContextBlocks, MessagesMax, SubmitPerTurn int
+}
+
+// ModsLimits reads the ceilings; a nil config answers the defaults.
+func (c *Config) ModsLimits() ModsLimits {
+	m := defaultMods()
+	if c != nil {
+		m = c.Mods
+	}
+	return ModsLimits{ContextBytes: max(m.ContextBytes, 0), ContextBlocks: max(m.ContextBlocks, 0), MessagesMax: max(m.MessagesMax, 0), SubmitPerTurn: max(m.SubmitPerTurn, 0)}
 }
 
 // ModsEnabled reports whether mods run.
@@ -36,17 +75,38 @@ func (h heldScope) narrowMods(c *Config) {
 	if c.Mods.HookBudgetMS != h.mods.HookBudgetMS {
 		c.ignoreProject("mods.hook_budget_ms", fmt.Sprint(c.Mods.HookBudgetMS), ProjectUserOnly)
 	}
+	for _, f := range []struct {
+		key       string
+		have, was int
+	}{
+		{"mods.context_bytes", c.Mods.ContextBytes, h.mods.ContextBytes},
+		{"mods.context_blocks", c.Mods.ContextBlocks, h.mods.ContextBlocks},
+		{"mods.messages_max", c.Mods.MessagesMax, h.mods.MessagesMax},
+		{"mods.submit_per_turn", c.Mods.SubmitPerTurn, h.mods.SubmitPerTurn},
+	} {
+		if f.have != f.was {
+			c.ignoreProject(f.key, fmt.Sprint(f.have), ProjectUserOnly)
+		}
+	}
 	c.Mods = h.mods
 }
 
 func renderModsSection(b *strings.Builder, c *Config) {
-	if !c.Mods.Enabled && c.Mods.HookBudgetMS == 0 {
+	custom := c.Mods.ContextBytes != DefaultModsContextBytes || c.Mods.ContextBlocks != DefaultModsContextBlocks ||
+		c.Mods.MessagesMax != DefaultModsMessagesMax || c.Mods.SubmitPerTurn != DefaultModsSubmitPerTurn
+	if !c.Mods.Enabled && c.Mods.HookBudgetMS == 0 && !custom {
 		return
 	}
 	b.WriteString("[mods]\n")
 	fmt.Fprintf(b, "enabled = %v   # run the hooks module of installed Claude Code mods; full trust, user file only\n", c.Mods.Enabled)
 	if c.Mods.HookBudgetMS > 0 {
 		fmt.Fprintf(b, "hook_budget_ms = %d   # one hook's own running time; 0 keeps 10000\n", c.Mods.HookBudgetMS)
+	}
+	if custom {
+		fmt.Fprintf(b, "context_bytes = %d   # bytes of one block a mod adds to a turn; 0 for no ceiling\n", c.Mods.ContextBytes)
+		fmt.Fprintf(b, "context_blocks = %d   # blocks a mod may add to one turn; 0 for no ceiling\n", c.Mods.ContextBlocks)
+		fmt.Fprintf(b, "messages_max = %d   # transcript items one read by a mod may return; 0 for no ceiling\n", c.Mods.MessagesMax)
+		fmt.Fprintf(b, "submit_per_turn = %d   # prompts a mod may queue in one turn; 0 for no ceiling\n", c.Mods.SubmitPerTurn)
 	}
 	b.WriteString("\n")
 }
