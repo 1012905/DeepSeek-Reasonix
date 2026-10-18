@@ -187,6 +187,7 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 		SandboxNetworkOverride:   f.networkOverride,
 		SandboxBashOverride:      bashOverride,
 		WorkspaceOnly:            f.workspaceOnly,
+		NewConversation:          p.NewConversation,
 	}, nil
 }
 

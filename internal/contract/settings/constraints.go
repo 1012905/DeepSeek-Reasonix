@@ -28,6 +28,7 @@ var constraints = map[string]Entry{
 	"desktop.currency":                              {Via: viaString((*config.Config).SetDesktopCurrency)},
 	"desktop.reasoning_display_mode":                {Via: viaString((*config.Config).SetDesktopReasoningDisplayMode)},
 	"agent.auto_plan":                               {Via: viaString((*config.Config).SetAutoPlan)},
+	"agent.default_mode":                            {Via: viaString((*config.Config).SetDefaultMode)},
 	"agent.web_search_model":                        {Via: viaString((*config.Config).SetWebSearchModel)},
 	"agent.cold_resume_prune":                       {Via: viaBool((*config.Config).SetColdResumePrune)},
 	"ui.show_reasoning":                             {Via: viaBool((*config.Config).SetShowReasoning)},

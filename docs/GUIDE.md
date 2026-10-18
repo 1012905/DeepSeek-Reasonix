@@ -78,6 +78,7 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
 # plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
+# default_mode = "plan"              # user file only; a new conversation starts in plan mode (a resumed one keeps its own; Settings has a switch); default normal
 # host_verification = "off"          # user file only; the host stops holding a turn that changed files to a check, a review and a sign-off; the receipt still says what was checked; default on
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
