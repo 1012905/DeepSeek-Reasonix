@@ -261,6 +261,9 @@ export const EN_KERNEL: Record<string, string> = {
   "账号服务拒绝了这个操作，请刷新后再试": "The account service refused that; refresh and try again",
   "连不上账号服务，请检查网络后重试": "Could not reach the account service; check the network and try again",
   "这台机器不是 SSH 主机，此表单不能修改它": "This machine is not an SSH host, so this form cannot change it",
+  "这不是有效的 WSL 发行版名称": "That is not the name of a WSL distribution",
+  "读不到已安装的 WSL 发行版": "Could not read which WSL distributions are installed",
+  "这台机器的接入方式与表单不同（SSH 或 WSL），不能这样修改它": "This machine is reached another way than this form describes (SSH or WSL), so it cannot be changed like this",
   "该主机已停用，启用后才能连接": "This machine is turned off; turn it on to connect",
   "该机器仍有 {n} 个打开的面板，请先关闭再移除": "This machine still has {n} open panes — close them before removing it",
   "{host} 的主机密钥已变更。可能是该机器重装，也可能存在中间人。记录位于 {file} 第 {line} 行，核实前请勿连接。":

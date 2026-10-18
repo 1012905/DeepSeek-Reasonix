@@ -140,8 +140,12 @@ func (e RemoteHostEntry) ServeInstallMode() string {
 // ProviderMode returns where this host's model credentials come from,
 // defaulting to local. An unrecognized value is not silently reinterpreted as
 // the other one: it reads as the default, which is also what an entry written
-// by a newer Reasonix looks like to an older one.
+// by a newer Reasonix looks like to an older one. A WSL distribution always
+// reads its own: it cannot be handed this machine's credentials.
 func (e RemoteHostEntry) ProviderMode() string {
+	if e.HostKind() == RemoteKindWSL {
+		return RemoteProviderRemote
+	}
 	if strings.EqualFold(strings.TrimSpace(e.Provider), RemoteProviderRemote) {
 		return RemoteProviderRemote
 	}
