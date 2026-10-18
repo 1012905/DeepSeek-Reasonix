@@ -170,6 +170,8 @@ export interface CommitProposal {
 export type CommitDraftFailure = "no_model" | "timeout" | "no_answer" | "model_failed";
 
 export interface CommitRequest {
+  // The repository below the workspace; absent is the workspace's own.
+  repo?: string;
   message: string;
   fingerprint: string;
   acknowledgeSecrets: boolean;
@@ -178,6 +180,7 @@ export interface CommitRequest {
 // POST /changes/stage. Paths are changes the workspace lists; all means every
 // listed change. Unstage moves them out of the index and keeps their content.
 export interface StageRequest {
+  repo?: string;
   paths?: string[];
   all?: boolean;
   unstage?: boolean;
@@ -186,4 +189,67 @@ export interface StageRequest {
 export interface CommitResult {
   hash: string;
   subject: string;
+}
+
+// One repository of the workspace. dir is its folder below the workspace, empty
+// when the workspace is itself the repository.
+export interface GitRepoRow {
+  dir: string;
+  name: string;
+  branch: string;
+  detached: boolean;
+  added: number;
+  removed: number;
+  untracked: number;
+}
+
+// The workspace's repositories; truncated says a search bound ended the look early.
+export interface GitRepos {
+  repos: GitRepoRow[];
+  truncated: boolean;
+}
+
+// POST /changes/discard: one modified or deleted file goes back to the last commit.
+export interface DiscardRequest {
+  repo?: string;
+  path: string;
+}
+
+// A path one commit changed. insertions and deletions are absent for a binary file.
+export interface GitCommitFile {
+  path: string;
+  oldPath?: string;
+  status: string;
+  insertions?: number;
+  deletions?: number;
+}
+
+export interface GitCommitFiles {
+  repo: boolean;
+  files: GitCommitFile[];
+  truncated: boolean;
+}
+
+// What a push would do and where, read without reaching the remote. It is what
+// the person confirms: the push is refused if the repository no longer matches.
+export interface PushPlan {
+  remote: string;
+  branch: string;
+  upstreamBranch: string;
+  scheme: string;
+  host: string;
+  url: string;
+  head: string;
+  ahead: number;
+  behind: number;
+}
+
+export interface PushRequest {
+  repo?: string;
+  plan: PushPlan;
+}
+
+export interface PushResult {
+  plan: PushPlan;
+  new: boolean;
 }

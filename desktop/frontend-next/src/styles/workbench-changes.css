@@ -11,3 +11,17 @@
 .workbench-stage:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .workbench-explorer-head .workbench-stage-all { height: 20px; margin-inline: 8px; padding: 0 8px; font-size: calc(11px * var(--fs-scale, 1)); }
 .workbench-stage-error { margin: 4px 10px; }
+.workbench-folder-row > svg { flex: none; width: 12px; height: 12px; }
+.workbench-folder-row small { flex: none; color: var(--faint); font-variant-numeric: tabular-nums; }
+.workbench-folder-row > span { flex: 1; }
+.workbench-discard { flex: none; width: 22px; height: 22px; margin-inline-end: 6px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 4px; background: none; color: var(--faint); cursor: pointer; opacity: 0; transition: opacity var(--m-line), color var(--m-line), background var(--m-line); }
+.workbench-change:hover .workbench-discard, .workbench-discard:focus-visible { opacity: 1; }
+.workbench-discard:hover:not(:disabled) { color: var(--err-ink); background: var(--overlay); }
+.workbench-discard:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.workbench-discard:disabled { cursor: default; }
+.workbench-discard svg { width: 13px; height: 13px; }
+.workbench-discard-ask { margin: 2px 10px 6px 30px; padding: 8px 10px; border: 1px solid var(--err-ink); border-radius: 6px; background: var(--surface); }
+.workbench-discard-ask p { margin: 0 0 8px; color: var(--text); font: 450 calc(11.5px * var(--fs-scale, 1))/1.45 var(--ui); overflow-wrap: anywhere; }
+.workbench-discard-ask div { display: flex; gap: 6px; }
+.workbench-discard-ask [data-danger] { border-color: var(--err-ink); color: var(--err-ink); }
+@media (hover: none) { .workbench-discard { opacity: 1; } }

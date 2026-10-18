@@ -7,6 +7,14 @@ import (
 	"reasonix/internal/platform/gitstatus"
 )
 
+// commitFilesView is the files one commit changed. Repo is false for a workspace
+// that is not version-controlled, with no files and nothing wrong.
+type commitFilesView struct {
+	Repo      bool                   `json:"repo"`
+	Files     []gitstatus.CommitFile `json:"files"`
+	Truncated bool                   `json:"truncated"`
+}
+
 // commitFiles lists what one commit changed, so a history row can open into its
 // files. The id is a query parameter a client supplies: gitstatus accepts only a
 // well-formed id that names a commit, and each failure carries its own code
@@ -22,11 +30,7 @@ func (s *Server) commitFiles(w http.ResponseWriter, r *http.Request) {
 	if refuseCommitRead(w, err, id) {
 		return
 	}
-	writeJSON(w, struct {
-		Repo      bool                   `json:"repo"`
-		Files     []gitstatus.CommitFile `json:"files"`
-		Truncated bool                   `json:"truncated"`
-	}{Repo: ok, Files: nonNil(files), Truncated: truncated})
+	writeJSON(w, commitFilesView{Repo: ok, Files: nonNil(files), Truncated: truncated})
 }
 
 // commitDiff is one path's diff within one commit.

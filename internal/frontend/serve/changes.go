@@ -187,6 +187,12 @@ type gitRepoRow struct {
 	Untracked int `json:"untracked"`
 }
 
+// gitReposView is the repositories of the workspace.
+type gitReposView struct {
+	Repos     []gitRepoRow `json:"repos"`
+	Truncated bool         `json:"truncated"`
+}
+
 // gitRepos lists the repositories of the workspace with the one-line identity of
 // each: the workspace itself when it is a repository, otherwise the repositories
 // found below it. Truncated says a search bound ended the look early.
@@ -195,10 +201,7 @@ func (s *Server) gitRepos(w http.ResponseWriter, r *http.Request) {
 		GitRepos(ctx context.Context) (gitrepos.Result, error)
 	})
 	if !ok {
-		writeJSON(w, struct {
-			Repos     []gitRepoRow `json:"repos"`
-			Truncated bool         `json:"truncated"`
-		}{Repos: []gitRepoRow{}})
+		writeJSON(w, gitReposView{Repos: []gitRepoRow{}})
 		return
 	}
 	found, err := ctl.GitRepos(r.Context())
@@ -211,8 +214,5 @@ func (s *Server) gitRepos(w http.ResponseWriter, r *http.Request) {
 		info, _ := gitstatus.Summary(r.Context(), f.Repo)
 		rows = append(rows, gitRepoRow{Dir: f.Dir, Name: info.Name, Branch: info.Branch, Detached: info.Detached, Added: info.Added, Removed: info.Removed, Untracked: info.Untracked})
 	}
-	writeJSON(w, struct {
-		Repos     []gitRepoRow `json:"repos"`
-		Truncated bool         `json:"truncated"`
-	}{Repos: rows, Truncated: found.Truncated})
+	writeJSON(w, gitReposView{Repos: rows, Truncated: found.Truncated})
 }

@@ -26,15 +26,14 @@ import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
 import { WorkbenchSelectionMenu, type SelectionMenu } from "./WorkbenchSelectionMenu";
-import { WorkbenchChanges } from "./WorkbenchChanges";
-import { WorkbenchHistory } from "./WorkbenchHistory";
+import { WorkbenchGit } from "./WorkbenchGit";
+import { useGitRepos } from "./useGitRepos";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { OpenWithMenu } from "./OpenWithMenu";
 import type { HubPort } from "../port/hub";
 import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
-import { useCommitCard } from "./CommitCard";
 import { BrowserWideToggle } from "./BrowserWideToggle";
 import { BrowserFullToggle } from "./BrowserFullToggle";
 import { WorkspaceImage, isWorkspaceImage } from "./WorkspaceImage";
@@ -171,7 +170,7 @@ export function WorkbenchPanel({
   const newTab = useRef<HTMLButtonElement>(null);
   const toggleLauncher = () => { supersede(); setLauncher((open) => !open); };
   const chooseFiles = () => { supersede(); setLauncher(false); setShowFiles(true); };
-  const commit = useCommitCard(port, () => onTreeChanged?.());
+  const repos = useGitRepos(port, wrote);
   const toggleExplorer = () => { supersede(); setLauncher(false); setShowFiles((on) => launcher || !on); };
   useOnBump(revealChanges, chooseFiles);
   useOnBump(toggleFiles, toggleExplorer);
@@ -360,7 +359,7 @@ export function WorkbenchPanel({
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
   const { file, draft, diff, busy, error: fileFailed, missing, setDraft, save } = useWorkbenchFiles({
-    port, workspaceRoot, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
+    port, workspaceRoot, repos, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
     poll: (readable && mode === "read") || (previewable && mode === "preview"),
   });
   const revision = file?.revision;
@@ -707,20 +706,19 @@ export function WorkbenchPanel({
           {/* What differs, without opening anything. The tree marks a changed
               file only once its folder is expanded, so a change three levels
               down was invisible until someone went looking for it. */}
-          {changes.length > 0 && (
-            <WorkbenchChanges
-              port={port}
-              changes={changes}
-              current={active?.kind === "file" && mode === "diff" ? active.path : ""}
-              onOpen={(path) => {
-                openFile(path);
-                setMode("diff");
-              }}
-              onChanged={onTreeChanged}
-              commit={commit}
-            />
-          )}
-          {!remote && <WorkbenchHistory port={port} />}
+          <WorkbenchGit
+            port={port}
+            changes={changes}
+            repos={repos}
+            wrote={wrote}
+            current={active?.kind === "file" && mode === "diff" ? active.path : ""}
+            onOpen={(path) => {
+              openFile(path);
+              setMode("diff");
+            }}
+            onChanged={onTreeChanged}
+            remote={remote}
+          />
           <div className="workbench-filelist">
             {rows.map((row) =>
               row.kind === "folder" ? (
