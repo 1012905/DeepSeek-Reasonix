@@ -247,13 +247,34 @@ func validateRemoteHost(e RemoteHostEntry) error {
 	return nil
 }
 
+// maxWSLDistroName bounds a distribution name. It is this package's own limit,
+// well above any name a store image or `wsl --import` produces in practice.
+const maxWSLDistroName = 64
+
+// ValidWSLDistroName reports whether name is spelled the way a distribution is:
+// ASCII letters, digits, '.', '_' and '-', never starting with '-'. A name
+// handed to wsl.exe after -d must be one argument, never part of a shell string,
+// and one that cannot begin with '-' cannot be read as an option.
+func ValidWSLDistroName(name string) bool {
+	if name == "" || len(name) > maxWSLDistroName || name[0] == '-' {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 // validateWSLHost holds a WSL entry to the fields that mean something for it: a
 // distribution reached without a network hop has no address, login, key or
 // tunnel, and keeping those out means no reader mistakes one for configuration
 // that is in force.
 func validateWSLHost(e RemoteHostEntry) error {
-	if strings.TrimSpace(e.Distro) == "" || strings.ContainsAny(e.Distro, "\x00\r\n") {
-		return fmt.Errorf("remote host %q: a wsl host needs a distro", e.Name)
+	if !ValidWSLDistroName(e.Distro) {
+		return fmt.Errorf("remote host %q: distro must be 1 to %d letters, digits, '.', '_' or '-', not starting with '-'", e.Name, maxWSLDistroName)
 	}
 	ssh := e.Host != "" || e.Port != 0 || e.User != "" || e.IdentityFile != "" || e.PassphraseEnv != "" ||
 		e.PasswordEnv != "" || e.ProxyJump != "" || e.UseSSHConfig || len(e.Forwards) > 0

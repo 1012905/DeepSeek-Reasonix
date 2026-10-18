@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"reasonix/internal/runtime/taskcontract"
 	"reasonix/internal/safety/evidence"
@@ -444,7 +445,11 @@ func unreadCheckDetail(command string) string {
 		return ""
 	}
 	if len(command) > unreadCheckLimit {
-		command = command[:unreadCheckLimit] + "…"
+		cut := unreadCheckLimit
+		for cut > 0 && !utf8.RuneStart(command[cut]) {
+			cut--
+		}
+		command = command[:cut] + "…"
 	}
 	return command
 }
