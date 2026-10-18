@@ -206,3 +206,20 @@ func hasOption(q event.AskQuestion, v string) bool {
 	}
 	return false
 }
+
+// ElicitationCapabilities is clientCapabilities.elicitation.
+type ElicitationCapabilities struct {
+	Form json.RawMessage `json:"form,omitempty"`
+	URL  json.RawMessage `json:"url,omitempty"`
+}
+
+func present(raw json.RawMessage) bool {
+	t := strings.TrimSpace(string(raw))
+	return t != "" && t != "null"
+}
+
+// FormMode and URLMode say which elicitation modes the client advertised.
+func (c ClientCapabilities) FormMode() bool {
+	return c.Elicitation != nil && present(c.Elicitation.Form)
+}
+func (c ClientCapabilities) URLMode() bool { return c.Elicitation != nil && present(c.Elicitation.URL) }

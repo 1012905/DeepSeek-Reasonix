@@ -66,23 +66,6 @@ type ClientCapabilities struct {
 	Meta        map[string]any           `json:"_meta,omitempty"`
 }
 
-// ElicitationCapabilities is clientCapabilities.elicitation.
-type ElicitationCapabilities struct {
-	Form json.RawMessage `json:"form,omitempty"`
-	URL  json.RawMessage `json:"url,omitempty"`
-}
-
-func present(raw json.RawMessage) bool {
-	t := strings.TrimSpace(string(raw))
-	return t != "" && t != "null"
-}
-
-// FormMode and URLMode say which elicitation modes the client advertised.
-func (c ClientCapabilities) FormMode() bool {
-	return c.Elicitation != nil && present(c.Elicitation.Form)
-}
-func (c ClientCapabilities) URLMode() bool { return c.Elicitation != nil && present(c.Elicitation.URL) }
-
 // FSCapabilities reports which client filesystem methods are available.
 type FSCapabilities struct {
 	ReadTextFile  bool `json:"readTextFile,omitempty"`
