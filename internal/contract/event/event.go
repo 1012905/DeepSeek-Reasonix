@@ -281,6 +281,9 @@ type Tool struct {
 	ReadOnly   bool
 	Bound      OutputBound // ToolResult: how Output was fitted into context
 	DurationMs int64       // ToolResult: wall-clock execution time in milliseconds
+	// RateTokensPerSec is the estimated rate a sub-agent is streaming at, on its
+	// status channel only while it reasons or answers. An estimate, not provider usage.
+	RateTokensPerSec int
 	// StartedAt/EndedAt are unix-millisecond execution bounds (ToolResult).
 	// Zero when the call never ran (dependency-skipped, cancelled, synthetic).
 	StartedAt int64
