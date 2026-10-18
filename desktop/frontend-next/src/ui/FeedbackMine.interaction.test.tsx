@@ -60,7 +60,7 @@ describe("my feedback", () => {
     render(<FeedbackMine port={port} onFile={() => {}} />);
     await screen.findByText("FB-AAAA-0000");
     for (const [status, label] of [["received", "已收到"], ["needs_info", "需要补充信息"], ["answered", "维护者已回复"], ["closed", "已关闭此反馈"], ["recorded", "已登记"], ["in_progress", "处理中"], ["fixed", "已修复"], ["wontfix", "不予修复"], ["duplicate", "重复"], ["withdrawn", "已撤回"]]) {
-      expect(document.querySelector(`.fbk-chip[data-status="${status}"]`)!.textContent).toBe(label);
+      expect(document.querySelector(`.fbk-list .fbk-chip[data-status="${status}"]`)!.textContent).toBe(label);
     }
   });
 
