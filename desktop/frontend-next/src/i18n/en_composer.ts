@@ -196,4 +196,5 @@ export const EN_COMPOSER: Record<string, string> = {
   "资源": "resource",
   "↑↓ 选择 · 回车引用 · Tab 补全或进入目录 · Esc 关闭": "↑↓ selects · Enter references · Tab completes or enters a folder · Esc closes",
   "↑↓ 选择 · Tab 或回车补全 · Esc 关闭": "↑↓ selects · Tab or Enter completes · Esc closes",
+  "重新选择文件夹": "Choose the folder again",
 };

@@ -256,6 +256,7 @@ const SAID: Record<string, string> = {
   "editor.no_window": "这个内核没有窗口，打不开本机的编辑器。",
   "workspace.not_listed": "这个文件夹不在当前窗口的项目列表里。",
   "workspace.folder_missing": "项目文件夹已不在磁盘上。",
+  "tool.root_missing": "这次操作需要的文件夹已不在磁盘上：可能被移走、改名或删除了，操作没有执行。",
   "workspace.locate_no_window": "这个内核不在本机，没法在系统文件管理器中显示它的文件。",
   "device.host_only": "这项操作只能在电脑上的窗口里做，已配对的手机做不了。",
   "device.host_rejected": "这个地址不是本机共享的地址，请重新扫码。",

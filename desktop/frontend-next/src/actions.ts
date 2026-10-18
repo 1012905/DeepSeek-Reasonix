@@ -443,6 +443,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.fold-all", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
+  { id: "root-missing.reselect", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "session.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "session.move-to-start", kind: "view", target: "entity", proof: "interaction" },

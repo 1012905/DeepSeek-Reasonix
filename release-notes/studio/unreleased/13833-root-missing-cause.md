@@ -1,0 +1,2 @@
+- 修复：项目文件夹或外部文件夹被移走、改名或删除后，工具调用不再返回系统原话或“无匹配”，而是明确告诉模型和界面“文件夹不在了”，并在输入框上方提示重新选择。关联 #13833。
+- Fixed: when a project or external folder is moved, renamed or deleted, tools now say the folder is gone instead of a bare system error, and the window prompts to choose it again. Refs #13833.
