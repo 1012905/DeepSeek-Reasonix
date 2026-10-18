@@ -58,7 +58,12 @@ func Discover(items []pluginpkg.InstalledPackage) (mods []Module, bad map[string
 
 // moduleOf reads the one module path hooks.json declares.
 func moduleOf(root string) (rel string, declared bool, err error) {
-	body, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(HooksFile)))
+	pkg, openErr := os.OpenRoot(root)
+	if openErr != nil {
+		return "", false, nil
+	}
+	defer pkg.Close()
+	body, readErr := pkg.ReadFile(filepath.FromSlash(HooksFile))
 	if readErr != nil {
 		return "", false, nil
 	}
@@ -81,20 +86,22 @@ func confine(root, rel string) (string, error) {
 	if filepath.IsAbs(rel) || strings.Contains(filepath.ToSlash(rel), "../") || strings.HasPrefix(filepath.ToSlash(rel), "..") {
 		return "", fmt.Errorf("%w: %q is not inside the package", ErrBadModule, rel)
 	}
-	abs := filepath.Join(root, filepath.FromSlash(rel))
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrBadModule, err)
 	}
-	real, err := filepath.EvalSymlinks(abs)
+	pkg, err := os.OpenRoot(realRoot)
 	if err != nil {
-		return "", fmt.Errorf("%w: %q does not exist", ErrBadModule, rel)
+		return "", fmt.Errorf("%w: %w", ErrBadModule, err)
 	}
-	if r, err := filepath.Rel(realRoot, real); err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: %q resolves outside the package", ErrBadModule, rel)
+	defer pkg.Close()
+	// The root resolves every link itself and refuses one that leaves the package.
+	st, err := pkg.Stat(filepath.FromSlash(rel))
+	if err != nil {
+		return "", fmt.Errorf("%w: %q is not inside the package, or does not exist", ErrBadModule, rel)
 	}
-	if st, err := os.Stat(real); err != nil || !st.Mode().IsRegular() {
+	if !st.Mode().IsRegular() {
 		return "", fmt.Errorf("%w: %q is not a regular file", ErrBadModule, rel)
 	}
-	return real, nil
+	return filepath.Join(realRoot, filepath.FromSlash(rel)), nil
 }

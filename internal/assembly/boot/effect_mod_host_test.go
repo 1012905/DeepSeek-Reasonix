@@ -93,6 +93,8 @@ func installMod(t *testing.T, module string) (home, workspace string, prov *modP
 	provider.Register(kind, func(provider.Config) (provider.Provider, error) { return prov, nil })
 	home = isolateConfigHome(t)
 	t.Setenv("REASONIX_HOME", filepath.Join(home, ".reasonix"))
+	// A CI runner without bubblewrap would refuse every bash call under the default sandbox.
+	writeFile(t, filepath.Dir(config.UserConfigPath()), filepath.Base(config.UserConfigPath()), "[sandbox]\nbash = \"off\"\n")
 	workspace = robustTempDir(t)
 	t.Chdir(workspace)
 	writeFile(t, workspace, "reasonix.toml", `

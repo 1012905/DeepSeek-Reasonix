@@ -133,7 +133,12 @@ func Synthesize(d Deps, m Module, rt Runtime, script string) pluginpkg.Installed
 
 // Preview lists a mod's hooks module for the install preview.
 func Preview(m Module) (modpreview.Preview, error) {
-	src, err := os.ReadFile(m.Abs)
+	pkg, err := os.OpenRoot(m.Root)
+	if err != nil {
+		return modpreview.Preview{}, err
+	}
+	defer pkg.Close()
+	src, err := pkg.ReadFile(filepath.FromSlash(m.Rel))
 	if err != nil {
 		return modpreview.Preview{}, err
 	}
