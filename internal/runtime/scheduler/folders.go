@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -28,6 +29,11 @@ func Folders(current string) []string {
 	var out []string
 	for _, p := range candidates {
 		if trust, err := grants.Trust(p); err != nil || trust != config.WorkspaceTrusted || contains(out, p) {
+			continue
+		}
+		// A project that is no longer there is not one a schedule can read, and
+		// answering "gone" would tell a caller about paths it was never offered.
+		if info, err := os.Stat(p); err != nil || !info.IsDir() {
 			continue
 		}
 		out = append(out, p)

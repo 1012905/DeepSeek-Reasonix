@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"reasonix/internal/contract/config"
@@ -84,5 +85,38 @@ func TestTheTrustedFoldersAreTheRememberedProjectsThePersonTrusted(t *testing.T)
 	}
 	if got := Folders(remembered); len(got) != 1 {
 		t.Fatalf("a project listed and current appears twice: %v", got)
+	}
+}
+
+func TestATrustedProjectThatIsGoneOrIsNotAFolderIsNotListed(t *testing.T) {
+	t.Setenv("REASONIX_HOME", t.TempDir())
+	gone, file := t.TempDir(), filepath.Join(t.TempDir(), "afile")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list := filepath.Join(config.MemoryUserDir(), workspacelist.FileName)
+	if err := workspacelist.Update(t.Context(), list, false, func(l *workspacelist.List) error {
+		l.Paths = append(l.Paths, gone, file)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	grants := config.NewProjectGrantStore(config.RootsForHome("").Home())
+	for _, p := range []string{gone, file} {
+		if err := grants.SetTrust(p, config.WorkspaceTrusted); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := Folders(""); !slices.Contains(got, gone) {
+		t.Fatalf("a present trusted project is missing: %v", got)
+	}
+	if got := Folders(""); slices.Contains(got, file) {
+		t.Fatalf("a file was listed as a project: %v", got)
+	}
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatal(err)
+	}
+	if got := Folders(""); slices.Contains(got, gone) {
+		t.Fatalf("a deleted project is still listed: %v", got)
 	}
 }

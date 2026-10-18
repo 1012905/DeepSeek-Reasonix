@@ -129,7 +129,7 @@ func TestScheduleRefusalsCarryTheirOwnCodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if status, raw := postSide(t, base+"/schedules/preview", map[string]any{"everySec": 7200, "workspace": gone, "prompt": "x"}); status != http.StatusBadRequest || !strings.Contains(string(raw), "schedule.workspace_unknown") {
-		t.Errorf("a trusted folder that was deleted = %d %s, want schedule.workspace_unknown (trust is filed under the folder's resolved path)", status, raw)
+		t.Errorf("a trusted folder that was deleted = %d %s, want schedule.workspace_unknown ", status, raw)
 	}
 	resp, err := http.Get(base + "/schedules/result?trigger=sch_x/1")
 	if err != nil {
