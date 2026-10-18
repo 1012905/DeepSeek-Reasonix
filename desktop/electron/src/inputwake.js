@@ -37,10 +37,15 @@ class InputWake {
     if (!this.enabled || win.isDestroyed()) return Promise.resolve();
     if (this.raised) return this.raised;
     if (!win.isMinimized()) return Promise.resolve();
-    win.setOpacity(0);
-    win.setIgnoreMouseEvents(true);
-    win.showInactive();
     this.raised = new Promise((resolve) => setTimeout(resolve, this.settleMs));
+    try {
+      win.setOpacity(0);
+      win.setIgnoreMouseEvents(true);
+      win.showInactive();
+    } catch (err) {
+      this.release();
+      throw err;
+    }
     return this.raised;
   }
 
