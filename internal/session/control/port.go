@@ -6,6 +6,7 @@ import (
 
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/command"
 	"reasonix/internal/ext/hook"
@@ -380,6 +381,7 @@ type Status interface {
 	ContextMaintenanceSnapshot() agent.ContextMaintenanceSnapshot
 	LastUsage() *provider.Usage
 	Balance(ctx context.Context) billing.Reading
+	Tariff() (pricing.Tariff, bool)
 	Jobs() []jobs.View
 	Todos() []evidence.TodoItem
 	BrowserTabs() []browser.TabInfo

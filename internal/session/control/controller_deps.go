@@ -98,6 +98,7 @@ type controllerDeps struct {
 	// when the provider declares none). Captured at build so a model/key switch —
 	// which rebuilds the controller — refreshes it.
 	balance *billing.Cache
+	tariff  TariffSource
 
 	feedback FeedbackOptions
 
@@ -188,6 +189,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		onRemember:             opts.OnRemember,
 		sessionRecoveryMeta:    opts.SessionRecoveryMeta,
 		balance:                opts.Balance,
+		tariff:                 opts.Tariff,
 		feedback:               opts.Feedback,
 		jobs:                   opts.Jobs,
 		subagents:              opts.Subagents,
