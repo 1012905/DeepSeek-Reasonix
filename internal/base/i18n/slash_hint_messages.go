@@ -21,6 +21,9 @@ type SlashHintMessages struct {
 	BtwBusy               string
 	BtwFailedFmt          string
 	ArgFeedbackWithdraw   string
+	ArgFeedbackLink       string
+	ArgFeedbackUnlink     string
+	ArgFeedbackLinks      string
 	ArgFeedbackName       string
 	ArgMemoryRecall       string
 	ArgMemoryRevisions    string

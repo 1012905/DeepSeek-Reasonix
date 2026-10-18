@@ -29,6 +29,7 @@ function gapPhrase(kind: string): string {
     case "unverified_change": return t("有改动；没有主机能读作证据的检查");
     case "unreviewed_change": return t("改动后未再检查");
     case "declared_unverified": return t("自己申报未验证");
+    case "mod_effects_unobserved": return t("有 Claude Code mod 在运行；它写了什么不在主机观测范围内");
     default: return kind;
   }
 }

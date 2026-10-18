@@ -61,8 +61,7 @@ var English = Messages{
 	NoticeCompactFailedFmt:   "Compaction failed: %s",
 	NoticeCompactHeldFmt:     "Automatic compaction is paused, the last attempt did not finish: %s",
 	ReceiptGapKinds: map[string]string{
-		"hint:gaps":                 "changes left unverified",
-		"hint:declared":             "this turn declared risks or unverified items",
+		"hint:gaps": "changes left unverified", "hint:declared": "this turn declared risks or unverified items",
 		"unbacked_claim":            "claimed but unsupported",
 		"unproven_criterion":        "criterion without proof",
 		"missing_check":             "expected check never passed",
@@ -72,6 +71,7 @@ var English = Messages{
 		"unverified_change":         "changed; no check the host could read as proof",
 		"unreviewed_change":         "changed, never looked at again",
 		"declared_unverified":       "declared unverified",
+		"mod_effects_unobserved":    "a Claude Code mod ran; what it wrote is outside what the host observes",
 	},
 	NoSessionToResume:             "no saved session to resume — start a new one with `reasonix`",
 	NoSessionToResumeStartingNew:  "no saved session to resume — starting a new session",

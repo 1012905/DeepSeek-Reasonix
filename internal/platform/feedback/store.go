@@ -34,6 +34,9 @@ type state struct {
 	Profile *Profile `json:"profile,omitempty"`
 	// Seen is, per receipt, the newest reply id the person has been shown.
 	Seen map[string]ReplyID `json:"seen,omitempty"`
+	// Linked is whether this machine asked to be tied to the signed-in account;
+	// only a linked machine reads the account's other installs' reports.
+	Linked bool `json:"linked,omitempty"`
 }
 
 // pending is the idempotency key of a send whose outcome this machine never

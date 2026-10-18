@@ -16,6 +16,20 @@ type FeedbackText struct {
 	RefusedResetsFmt    string // limit name, local reset time
 	RefusedLaterFmt     string // limit name
 	RefusedPermanentFmt string // limit name
+
+	LinkExplain     string
+	LinkDone        string
+	UnlinkExplain   string
+	UnlinkDone      string
+	LinksHeader     string
+	LinksNone       string
+	LinksRowFmt     string // short id, this-device mark, linked date
+	ThisDevice      string
+	NeedSignIn      string
+	LinkConflict    string
+	LinkLimit       string
+	NoInstall       string
+	OtherDeviceMark string
 }
 
 var feedbackEnglish = FeedbackText{
@@ -41,6 +55,19 @@ var feedbackEnglish = FeedbackText{
 	RefusedResetsFmt:    "not sent: %s was reached. It resets at %s.",
 	RefusedLaterFmt:     "not sent: %s was reached. Try again later.",
 	RefusedPermanentFmt: "not sent: %s was reached; it does not reset.",
+	LinkExplain:         "Linking ties this device to your signed-in account: its reports and the replies on them also show on your other linked devices, and theirs show here. You can unlink at any time.\nNothing was sent. To link, run the same line again with --yes.",
+	LinkDone:            "Linked - reports from your other linked devices now appear in /feedback list.",
+	UnlinkExplain:       "Unlinking stops this device showing, and being shown on, your other devices. Reports, level and limits do not change.\nNothing was sent. To unlink, run the same line again with --yes.",
+	UnlinkDone:          "Unlinked - this device now lists only its own reports.",
+	LinksHeader:         "Devices linked to your account:",
+	LinksNone:           "No device is linked to your account.",
+	LinksRowFmt:         "  %s%s  linked %s",
+	ThisDevice:          " (this device)",
+	NeedSignIn:          "Sign in first with `reasonix login`, then run this again.",
+	LinkConflict:        "This device is already linked to another account; unlink it from that account first.",
+	LinkLimit:           "Your account is at its limit of linked devices; unlink one first.",
+	NoInstall:           "Send a report from this device first: a device with no report has nothing to link.",
+	OtherDeviceMark:     "  [other device]",
 }
 
 var feedbackChinese = FeedbackText{
@@ -66,6 +93,19 @@ var feedbackChinese = FeedbackText{
 	RefusedResetsFmt:    "未发送：已达到%s，将在 %s 重置。",
 	RefusedLaterFmt:     "未发送：已达到%s，请稍后再试。",
 	RefusedPermanentFmt: "未发送：已达到%s，它不会自动重置。",
+	LinkExplain:         "关联会把这台设备绑定到你已登录的账号：它的反馈和回复也会出现在你其他已关联的设备上，别的设备上的也会出现在这里。随时可以取消关联。\n什么都没有发出。要关联，请在同一行后面加 --yes 再运行一次。",
+	LinkDone:            "已关联——你其他已关联设备上的反馈现在会出现在 /feedback list 里。",
+	UnlinkExplain:       "取消关联后，这台设备不再显示你其他设备的反馈，也不再被它们显示。反馈、等级和额度都不变。\n什么都没有发出。要取消关联，请在同一行后面加 --yes 再运行一次。",
+	UnlinkDone:          "已取消关联——这台设备现在只列出自己的反馈。",
+	LinksHeader:         "已关联到你账号的设备：",
+	LinksNone:           "没有设备关联到你的账号。",
+	LinksRowFmt:         "  %s%s  关联于 %s",
+	ThisDevice:          "（这台设备）",
+	NeedSignIn:          "请先用 `reasonix login` 登录，再运行一次。",
+	LinkConflict:        "这台设备已经关联到另一个账号，请先在那个账号下取消关联。",
+	LinkLimit:           "你的账号关联的设备已达上限，请先取消一台。",
+	NoInstall:           "请先从这台设备发出一条反馈：没有发过反馈的设备没有可关联的内容。",
+	OtherDeviceMark:     "  [其他设备]",
 }
 
 var feedbackTraditional = FeedbackText{
@@ -91,4 +131,17 @@ var feedbackTraditional = FeedbackText{
 	RefusedResetsFmt:    "未傳送：已達到%s，將在 %s 重置。",
 	RefusedLaterFmt:     "未傳送：已達到%s，請稍後再試。",
 	RefusedPermanentFmt: "未傳送：已達到%s，它不會自動重置。",
+	LinkExplain:         "關聯會把這台裝置綁定到你已登入的帳號：它的回饋和回覆也會出現在你其他已關聯的裝置上，別的裝置上的也會出現在這裡。隨時可以取消關聯。\n什麼都沒有送出。要關聯，請在同一行後面加 --yes 再執行一次。",
+	LinkDone:            "已關聯——你其他已關聯裝置上的回饋現在會出現在 /feedback list 裡。",
+	UnlinkExplain:       "取消關聯後，這台裝置不再顯示你其他裝置的回饋，也不再被它們顯示。回饋、等級和額度都不變。\n什麼都沒有送出。要取消關聯，請在同一行後面加 --yes 再執行一次。",
+	UnlinkDone:          "已取消關聯——這台裝置現在只列出自己的回饋。",
+	LinksHeader:         "已關聯到你帳號的裝置：",
+	LinksNone:           "沒有裝置關聯到你的帳號。",
+	LinksRowFmt:         "  %s%s  關聯於 %s",
+	ThisDevice:          "（這台裝置）",
+	NeedSignIn:          "請先用 `reasonix login` 登入，再執行一次。",
+	LinkConflict:        "這台裝置已經關聯到另一個帳號，請先在那個帳號下取消關聯。",
+	LinkLimit:           "你的帳號關聯的裝置已達上限，請先取消一台。",
+	NoInstall:           "請先從這台裝置送出一則回饋：沒有送過回饋的裝置沒有可關聯的內容。",
+	OtherDeviceMark:     "  [其他裝置]",
 }

@@ -76,6 +76,9 @@ const (
 	GapInconclusiveVerification
 	GapUnverifiedChange
 	GapUnreviewedChange
+	// GapModEffectsUnobserved: a Claude Code mod was live, and nothing the host
+	// watches bounds what it wrote.
+	GapModEffectsUnobserved
 )
 
 func (k GapKind) String() string {
@@ -96,6 +99,8 @@ func (k GapKind) String() string {
 		return "unverified_change"
 	case GapUnreviewedChange:
 		return "unreviewed_change"
+	case GapModEffectsUnobserved:
+		return "mod_effects_unobserved"
 	default:
 		return "unknown"
 	}

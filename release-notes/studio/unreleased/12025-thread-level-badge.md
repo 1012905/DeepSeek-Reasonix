@@ -1,0 +1,2 @@
+- 新增：在“我的反馈”的对话里，你自己的回复旁会显示你的等级徽章，维护者的回复旁没有。关联 #12025。
+- Added: In a My feedback thread, your level badge now sits beside your own replies and never beside a maintainer's. Refs #12025.
