@@ -188,6 +188,7 @@ export class MockBoundary extends MockShell {
   private board: ScheduleBoard = {
     pausedAll: false,
     policy: { minIntervalMinutes: 60, maxSchedules: 8, globalTokensDay: 1_200_000, expiryDays: 30 },
+    folders: [{ path: "/Users/you/src/app", name: "app" }, { path: "/Users/you/src/docs", name: "docs" }],
     schedules: [
       { id: "sch_a1b2c3d4", label: "Morning briefing", status: "active", everySec: 86_400, workspace: "/Users/you/src/app", model: "deepseek/deepseek-v4-pro",
         prompt: "Summarize what changed in the repository since yesterday and list open TODOs.", perRunTokens: 250_000, lifetimeTokens: 3_000_000, spentLifetimeTokens: 410_000,

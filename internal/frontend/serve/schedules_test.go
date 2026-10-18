@@ -1,14 +1,19 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"reasonix/internal/base/testenv"
+	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
+	"reasonix/internal/state/workspacelist"
 )
 
 func schedulesServer(t *testing.T) (string, string) {
@@ -17,7 +22,24 @@ func schedulesServer(t *testing.T) (string, string) {
 	s.AllowProviderEdit()
 	srv := httptest.NewServer(operatorHandler(s))
 	t.Cleanup(srv.Close)
-	return srv.URL, testenv.TempDir(t)
+	ws := testenv.TempDir(t)
+	trustServeFolder(t, ws)
+	return srv.URL, ws
+}
+
+// trustServeFolder remembers dir as a project and marks it trusted.
+func trustServeFolder(t *testing.T, dir string) {
+	t.Helper()
+	list := filepath.Join(config.MemoryUserDir(), workspacelist.FileName)
+	if err := workspacelist.Update(context.Background(), list, false, func(l *workspacelist.List) error {
+		l.Paths = append(l.Paths, dir)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.NewProjectGrantStore(config.RootsForHome("").Home()).SetTrust(dir, config.WorkspaceTrusted); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func scheduleDraft(ws string) map[string]any {
@@ -88,13 +110,26 @@ func TestScheduleRefusalsCarryTheirOwnCodes(t *testing.T) {
 	}{
 		"under the floor": {"/schedules", short, "schedule.interval_too_short"},
 		"no trigger":      {"/schedules/preview", map[string]any{"workspace": ws, "prompt": "x"}, "schedule.bad_trigger"},
-		"no folder":       {"/schedules/preview", map[string]any{"everySec": 7200, "workspace": ws + "/nope", "prompt": "x"}, "schedule.no_folder"},
+		"unknown folder":  {"/schedules/preview", map[string]any{"everySec": 7200, "workspace": ws + "/nope", "prompt": "x"}, "schedule.workspace_unknown"},
+		"parent folder":   {"/schedules/preview", map[string]any{"everySec": 7200, "workspace": filepath.Dir(ws), "prompt": "x"}, "schedule.workspace_unknown"},
+		"relative folder": {"/schedules/preview", map[string]any{"everySec": 7200, "workspace": ".", "prompt": "x"}, "schedule.workspace_unknown"},
 		"unknown model":   {"/schedules/preview", map[string]any{"everySec": 7200, "workspace": ws, "prompt": "x", "model": "nobody/none"}, "schedule.model_unconfigured"},
 		"unknown id":      {"/schedules/sch_none/pause", map[string]any{}, "schedule.not_found"},
 	} {
 		if status, raw := postSide(t, base+c.path, c.body); status < 400 || !strings.Contains(string(raw), c.code) {
 			t.Errorf("%s = %d %s, want %s", name, status, raw, c.code)
 		}
+	}
+	gone := filepath.Join(t.TempDir(), "gone")
+	if err := os.MkdirAll(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	trustServeFolder(t, gone)
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatal(err)
+	}
+	if status, raw := postSide(t, base+"/schedules/preview", map[string]any{"everySec": 7200, "workspace": gone, "prompt": "x"}); status != http.StatusBadRequest || !strings.Contains(string(raw), "schedule.workspace_unknown") {
+		t.Errorf("a trusted folder that was deleted = %d %s, want schedule.workspace_unknown (trust is filed under the folder's resolved path)", status, raw)
 	}
 	resp, err := http.Get(base + "/schedules/result?trigger=sch_x/1")
 	if err != nil {

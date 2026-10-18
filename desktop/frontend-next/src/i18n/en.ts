@@ -243,6 +243,7 @@ export const EN: Record<string, string> = {
   "定时任务数量已达上限": "The schedule limit is reached",
   "请只设置“每隔多久”或“某个时间”其中一个": "Set either an interval or a time, not both and not neither",
   "这个文件夹不存在": "That folder does not exist",
+  "定时运行只能读已受信任的项目文件夹": "A scheduled run can only read a project folder you have trusted",
   "这个模型还没有配置": "That model is not configured",
   "这个定时任务的内容不合法": "The schedule is not valid",
   "定时任务由更新的版本写入，这里只读": "The schedules were written by a newer version and are read-only here",

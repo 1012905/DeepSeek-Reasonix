@@ -20,6 +20,7 @@ import (
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/runtime/schedrun"
+	"reasonix/internal/runtime/scheduler"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/schedule"
 )
@@ -169,6 +170,11 @@ func (r *scheduleRun) load(ctx context.Context) (code string) {
 	}
 	if r.sc.Confirmed.By != schedule.ConfirmedByHuman || r.sc.Confirmed.Digest != schedule.Digest(r.sc) {
 		return schedrun.CodeDigest
+	}
+	// Trust is the person's to withdraw: a project no longer on the trusted list
+	// is not read by a schedule that was confirmed while it was.
+	if _, ok := scheduler.Match(scheduler.Folders(""), r.sc.Target.Workspace); !ok {
+		return schedrun.CodeWorkspaceUntrust
 	}
 	return ""
 }

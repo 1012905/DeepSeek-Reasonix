@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/runtime/scheduler"
 	"reasonix/internal/state/schedule"
+	"reasonix/internal/state/workspacelist"
 )
 
 func schedulesController(t *testing.T) (*Controller, string) {
@@ -21,7 +24,25 @@ func schedulesController(t *testing.T) (*Controller, string) {
 	}
 	c := New(Options{WorkspaceRoot: testenv.TempDir(t)})
 	t.Cleanup(c.Close)
-	return c, testenv.TempDir(t)
+	ws := testenv.TempDir(t)
+	trustProject(t, ws)
+	return c, ws
+}
+
+// trustProject remembers dir as a project and marks it trusted, which is what
+// makes it one a schedule may read.
+func trustProject(t *testing.T, dir string) {
+	t.Helper()
+	list := filepath.Join(config.MemoryUserDir(), workspacelist.FileName)
+	if err := workspacelist.Update(context.Background(), list, false, func(l *workspacelist.List) error {
+		l.Paths = append(l.Paths, dir)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.NewProjectGrantStore(config.RootsForHome("").Home()).SetTrust(dir, config.WorkspaceTrusted); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func draftIn(ws string) ScheduleDraft {
@@ -129,5 +150,40 @@ func TestAResultThatWasNeverRecordedIsATypedNotFound(t *testing.T) {
 	c, _ := schedulesController(t)
 	if _, err := c.ScheduleResult(context.Background(), "sch_x/1"); !errors.Is(err, schedule.ErrResultNotFound) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestAScheduleOnlyEverReadsATrustedProjectAndTheBoardListsThem(t *testing.T) {
+	c, ws := schedulesController(t)
+	ctx := context.Background()
+	board, _ := c.Schedules(ctx)
+	if len(board.Folders) != 1 || board.Folders[0].Path != ws || board.Folders[0].Name != filepath.Base(ws) {
+		t.Fatalf("folders = %+v, want the one trusted project", board.Folders)
+	}
+	untrusted := testenv.TempDir(t)
+	for name, folder := range map[string]string{
+		"a project nobody trusted": untrusted,
+		"the parent directory":     filepath.Dir(ws),
+		"a path through ..":        filepath.Join(ws, "..", filepath.Base(untrusted)),
+		"a relative path":          ".",
+		"a missing folder":         filepath.Join(ws, "nope"),
+	} {
+		if _, err := c.PreviewSchedule(ctx, draftIn(folder)); !errors.Is(err, scheduler.ErrDraftFolderUnknown) {
+			t.Errorf("%s: preview = %v, want ErrDraftFolderUnknown", name, err)
+		}
+		if _, err := c.CreateSchedule(ctx, draftIn(folder), "anything"); !errors.Is(err, scheduler.ErrDraftFolderUnknown) {
+			t.Errorf("%s: create = %v, want ErrDraftFolderUnknown", name, err)
+		}
+	}
+	if board, _ = c.Schedules(ctx); len(board.Schedules) != 0 {
+		t.Fatal("a refused folder stored a schedule")
+	}
+	declined := testenv.TempDir(t)
+	trustProject(t, declined)
+	if err := config.NewProjectGrantStore(config.RootsForHome("").Home()).SetTrust(declined, config.WorkspaceTrustDeclined); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.PreviewSchedule(ctx, draftIn(declined)); !errors.Is(err, scheduler.ErrDraftFolderUnknown) {
+		t.Fatalf("a declined project = %v, want ErrDraftFolderUnknown", err)
 	}
 }

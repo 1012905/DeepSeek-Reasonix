@@ -1791,6 +1791,9 @@ reasonix schedule tick            # claim and run what is due now, then exit
   - Otherwise call `reasonix schedule tick` from the operating system's scheduler (cron, launchd, Task
     Scheduler).
   - Every tick goes through the store's own budget and expiry checks, so neither route can bypass them.
+- **Trusted folders only.** A schedule's folder must be a project you have trusted in Studio or the terminal UI.
+  Anything else is refused by the kernel (`schedule.workspace_unknown`), and trust is checked again at every run:
+  withdrawing it stops the schedule's runs.
 - **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
   for you and never answered on your behalf.
 - **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only

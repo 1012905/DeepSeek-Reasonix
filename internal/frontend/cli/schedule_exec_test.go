@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/runtime/schedrun"
 	"reasonix/internal/state/schedule"
 	"reasonix/internal/state/sessionstore"
@@ -154,6 +155,22 @@ func TestScheduleExecRefusesAnEditedManifestAndSpendsNothing(t *testing.T) {
 	}
 	if got := w.runRecord(); got.Charged != 0 {
 		t.Fatalf("charged %d for a run that never called the model", got.Charged)
+	}
+}
+
+// Trust is the person's to withdraw: a schedule confirmed while its project was
+// trusted does not read it once it is not.
+func TestScheduleExecDoesNotReadAProjectThatIsNoLongerTrusted(t *testing.T) {
+	w := newExecWorld(t, "", "Look around.", fakeModelRef, fakeTurn{text: "x", prompt: 1, cl: 1})
+	if err := config.NewProjectGrantStore(config.RootsForHome("").Home()).SetTrust(w.ws, config.WorkspaceTrustDeclined); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := w.supervisor().Run(t.Context(), w.run.TriggerID)
+	if err != nil || rep.Code != schedrun.CodeWorkspaceUntrust || rep.State != schedule.RunFailed {
+		t.Fatalf("Run = %+v, %v", rep, err)
+	}
+	if n := len(w.model.requests()); n != 0 {
+		t.Fatalf("provider saw %d requests from a run in a project nobody trusts", n)
 	}
 }
 

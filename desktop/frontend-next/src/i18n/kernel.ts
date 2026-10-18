@@ -413,6 +413,7 @@ const SAID: Record<string, string> = {
   "schedule.limit_reached": "定时任务数量已达上限",
   "schedule.bad_trigger": "请只设置“每隔多久”或“某个时间”其中一个",
   "schedule.no_folder": "这个文件夹不存在",
+  "schedule.workspace_unknown": "定时运行只能读已受信任的项目文件夹",
   "schedule.model_unconfigured": "这个模型还没有配置",
   "schedule.invalid": "这个定时任务的内容不合法",
   "schedule.schema_readonly": "定时任务由更新的版本写入，这里只读",
