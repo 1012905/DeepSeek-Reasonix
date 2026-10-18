@@ -31,6 +31,7 @@
 - [@ references](#-references)
 - [Two-model collaboration](#two-model-collaboration)
 - [Letting the model change a setting](#letting-the-model-change-a-setting)
+- [Google Gemini, native (experimental)](#google-gemini-native-experimental)
 
 ## Configuration
 
@@ -1285,6 +1286,14 @@ settings as the MCP connection.
 
 Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
 
+When a signed-in server refuses a call (HTTP 403, `insufficient_scope`) because the access you granted is too narrow:
+
+- The model is told to stop and say so, and you get a notice.
+- Only you can grant more: click **Grant more access** on the server's row, or run `reasonix mcp auth <name> --upgrade`.
+- The scope names are the server's own words, shown as written.
+- You are asked every time, in every approval mode, and the answer is never remembered.
+- A server that keeps asking after being granted is refused for good.
+
 Tools whose definitions change after you approved them are held back until you accept them (`reasonix mcp trust <name>`). To take one server's changes without being asked, run it with `--follow` (`--unfollow` undoes it); each change is still announced.
 
 OAuth client and token state is kept outside the workspace in the server's
@@ -2044,6 +2053,19 @@ A backend counts as not answering when:
 Each time that happens Reasonix shows a notice naming the backend and the cause, then tries the next one. If none answers, the model receives `search.all_backends_failed`.
 
 - Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
+
+In Settings, **Web access** has a **Test connection** button beside the address. It saves the field, then sends one search to the saved address, follows no redirect, uses no proxy, and says why the instance does not answer.
+
+It never connects to a link-local, cloud-metadata or unspecified address; a loopback or local-network address is fine. The model is told the same code when a real search fails.
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `search.searxng_json_disabled` | The instance answered 403. SearXNG does that when `json` is not in `search.formats` of its `settings.yml`; a reverse proxy in front of it can also answer 403. | Add `json` to `search.formats` and restart it; if that is set, look at the proxy. |
+| `search.searxng_unreachable` | Nothing answered at the address. | Check that it runs and that host and port are right. |
+| `search.searxng_not_searxng` | It answered 200 but not with SearXNG's JSON results. | Point at SearXNG itself, not a login page or another service. |
+| `search.searxng_redirected` | The address redirects. | Enter the final address, for example the `https` one. |
+| `search.searxng_address_refused` | The test will not connect to this address (link-local, cloud metadata or unspecified). | Use a loopback or local-network address for a self-hosted instance. |
+| `search.searxng_status` | Any other HTTP status, for example 429 or 500. | Retry later or read the instance's log. |
 - Results are third-party content and are labelled as such to the model.
 
 ### Paid fallback: the DeepSeek Search API
@@ -2129,3 +2151,50 @@ A refusal that a setting would lift ends with `(fix: setting ...)`. The tool can
 - The card shows the whole new value; a value too long to show is refused instead of cut. The change is written to your user file, a project file cannot grant it, and values are checked with the same rules as the Settings screen.
 - At most three proposals are put to you per turn, and none while plan mode is on (the model can still look at settings and point you at one).
 - To remove the tool, set `[tools] setting_tool = false`, or leave `setting` out of an explicit `[tools] enabled` list.
+## Google Gemini, native (experimental)
+
+The `gemini` provider kind speaks Google's Interactions API. It is experimental: it was written from Google's documentation (read 2026-10-17) and has not been run against the real endpoint, so expect rough edges and report them.
+
+Install the **Google Gemini, native (experimental)** preset, or write the entry yourself:
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- Every request carries the whole conversation and `store` is false, so the transcript stays yours; Google keeps nothing of it.
+- Thinking runs at the level the entry sets (`/effort`); the preset lists the levels each model documents. Thought summaries are streamed as reasoning, and the thought steps are sent back exactly as received, in order, on the next request.
+- `temperature` and `top_p` are never sent: Google's reference page does not list them for this API.
+- The preset lists only models whose own pages were read: `gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`, all with a 1,048,576-token window, image and video input. Others work if you list them and say what they read.
+- The older **Google Gemini** preset uses Google's OpenAI-compatible endpoint. That endpoint documents no video input.
+
+### Watching video
+
+Declare the models and how a file reaches them, as for any provider (see Letting a model watch a video file):
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # or "gemini_inline"
+```
+
+- `gemini_inline` puts the file in the request as base64. Google's page says "under 20MB total request size" while its table says 100 MB; the narrower reading is used, so the file is held to 15,000,000 bytes (the encoded request is a third larger). You can only lower it with `[tools] video_native_max_bytes`.
+- `gemini_files` uploads the file with the Files API resumable protocol, waits until Google reports it `ACTIVE`, refers to it by its uri, and deletes it when the request ends. Google allows 2 GB per file and 20 GB per project and removes files after 48 hours on its own.
+- MP4, WebM and MOV are sent natively on both protocols; any other container is sampled into frames. A file Google reports as `FAILED`, or in a state this build does not know, is not sent and the model is told `video.upload_failed`.
+- A public YouTube address cannot be given to the model through `read_video`: the host does not fetch addresses, and handing one to the vendor is a separate setting.
+
+### Cost
+
+Reasonix prices Google's list rates per 1M tokens (https://ai.google.dev/gemini-api/docs/pricing, read 2026-10-17):
+
+| Model | Input | Cached | Output (incl. thinking) |
+|---|---|---|---|
+| `gemini-3.8-flash`, `gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| the same two from 2027-01-01 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview` (up to 200k prompt tokens) | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` costs more above 200k prompt tokens ($4.00 / $0.40 / $18.00), which one rate card cannot say, so a long prompt reads low. `gemini-4-argon` shows no price on the page and is not priced. Storage for explicit context caching is not counted.

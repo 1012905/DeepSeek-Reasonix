@@ -1,5 +1,5 @@
 import type { AgentPort } from "./port";
-import type { HistoryHit, HubPort, RuntimeView, TreeWindow, TreeWorkspace } from "./hub";
+import type { HistoryHit, HubPort, RuntimeView, TreeSession, TreeWindow, TreeWorkspace } from "./hub";
 import type { RemoteHost, RemoteListing, RemoteProbe } from "./remote";
 import type { ShareStatus } from "./share";
 import { MockPort } from "./mock";
@@ -169,13 +169,13 @@ export class MockHub implements HubPort {
         name: root.split("/").pop() ?? root,
         open: this.views.some((v) => v.root === root),
         remembered: true,
-        sessions:
+        sessions: this.placed(root,
           i === 0
             ? [
                 { path: "/sessions/mock.jsonl", name: "mock", title: "并行会话演示", turns: 3, runtimeId: open.get("/sessions/mock.jsonl") },
                 { path: "/sessions/older.jsonl", name: "older", title: "上一次的会话", turns: 12, runtimeId: open.get("/sessions/older.jsonl"), legacy: true },
               ]
-            : [{ path: "/sessions/site.jsonl", name: "site", title: "站点改版", turns: 5, runtimeId: open.get("/sessions/site.jsonl") }],
+            : [{ path: "/sessions/site.jsonl", name: "site", title: "站点改版", turns: 5, runtimeId: open.get("/sessions/site.jsonl") }]),
       })),
     );
   }
@@ -199,6 +199,26 @@ export class MockHub implements HubPort {
     const at = this.roots.indexOf(path);
     if (at >= 0) this.roots.splice(at, 1);
     return Promise.resolve();
+  }
+
+  // Where the person placed sessions, by workspace: what the kernel keeps per project.
+  protected placedSessions = new Map<string, string[]>();
+
+  protected placed(root: string, sessions: TreeSession[]): TreeSession[] {
+    const order = this.placedSessions.get(root) ?? [];
+    const rank = (s: TreeSession) => order.indexOf(s.path);
+    return [...sessions].sort((a, b) => rank(a) - rank(b));
+  }
+
+  async moveSession(path: string, direction: -1 | 1) {
+    const ws = (await this.tree()).find((w) => w.sessions.some((s) => s.path === path));
+    if (!ws) return;
+    const order = ws.sessions.map((s) => s.path);
+    const at = order.indexOf(path);
+    const to = at + direction;
+    if (to < 0 || to >= order.length) return;
+    [order[at], order[to]] = [order[to], order[at]];
+    this.placedSessions.set(ws.root, order);
   }
 
   moveWorkspace(path: string, direction: -1 | 1) {

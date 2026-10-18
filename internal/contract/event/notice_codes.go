@@ -58,6 +58,8 @@ const (
 	NoticeCodeMCPToolsHeld = "mcp_tools_held"
 	// Definitions of a server the user follows that changed and were taken without asking; Detail lists them.
 	NoticeCodeMCPToolsFollowed = "mcp_tools_followed"
+	// An MCP server refused a call for want of access the user did not grant; Detail is the server name.
+	NoticeCodeMCPScopeUpgrade = "mcp_scope_upgrade"
 	// A conversation opened from a 1.x log went on in a new session of its own.
 	NoticeCodeSessionContinuedFrom1x = "session_continued_from_1x"
 	// The user config names a default approval mode this build does not know; it loads as ask.

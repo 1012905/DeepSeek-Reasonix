@@ -20,6 +20,7 @@ import (
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
 	"reasonix/internal/tools/jobs"
+	"reasonix/internal/tools/websearch"
 )
 
 // This file defines the driving port: the typed, segregated interface surface
@@ -305,6 +306,7 @@ type RuntimeSettings interface {
 	SavePersonaSettings(in config.PersonaConfig) error
 	WebAccessSettings() WebAccessSettings
 	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
+	ProbeSearxng(ctx context.Context) (websearch.SearxngProbe, error)
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
@@ -379,6 +381,7 @@ type Status interface {
 // own to offer, so only the full session port carries it.
 type MCPSignIn interface {
 	AuthorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
+	UpgradeMCPServerAccess(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
 }
 
 // BackgroundJobs stops work a session left running outside any turn.

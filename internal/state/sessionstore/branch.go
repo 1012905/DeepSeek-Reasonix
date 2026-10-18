@@ -3,6 +3,7 @@ package sessionstore
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -35,6 +36,10 @@ type BranchMeta struct {
 	Archived bool `json:"archived,omitempty"`
 	// Pinned is the user's "keep this": automatic archiving never touches it.
 	Pinned bool `json:"pinned,omitempty"`
+	// ManualRank is where the user placed this conversation among its project's
+	// list: lower is earlier, 0 means never placed, and an unplaced one sorts by
+	// activity above the placed ones.
+	ManualRank float64 `json:"manual_rank,omitempty"`
 	// AutoArchivedAt is set only by the automatic sweep and cleared on restore;
 	// it is what lets a window say "N conversations were archived for you".
 	AutoArchivedAt time.Time `json:"auto_archived_at,omitzero"`
@@ -378,6 +383,18 @@ func SetSessionArchived(sessionPath string, archived bool) error {
 		if archived {
 			m.Pinned = false
 		}
+		return nil
+	})
+}
+
+// SetSessionRank records where the user put a conversation in its project's list;
+// 0 returns it to the activity order. A rank below zero means nothing and is refused.
+func SetSessionRank(sessionPath string, rank float64) error {
+	if rank < 0 || math.IsNaN(rank) || math.IsInf(rank, 0) {
+		return fmt.Errorf("a session rank is a finite number from 0, not %v", rank)
+	}
+	return UpdateBranchMeta(sessionPath, false, func(m *BranchMeta) error {
+		m.ManualRank = rank
 		return nil
 	})
 }

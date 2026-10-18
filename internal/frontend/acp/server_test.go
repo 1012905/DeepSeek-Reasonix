@@ -2214,6 +2214,40 @@ func TestServeReadinessPauseEndsTheTurnWithAReceiptAndTypedOutcome(t *testing.T)
 	}
 }
 
+// statusUpdatesCaps is the initialize declaration that opts a test client in to
+// the unsolicited vendor status notifications.
+var statusUpdatesCaps = ClientCapabilities{Meta: map[string]any{"reasonix.io": map[string]any{
+	"statusUpdates": map[string]any{"supported": true},
+}}}
+
+func TestVendorNotificationsReachOnlyClientsThatDeclareThem(t *testing.T) {
+	declared := statusUpdatesCaps
+	for name, tc := range map[string]struct {
+		caps ClientCapabilities
+		want bool
+	}{"undeclared": {ClientCapabilities{}, false}, "declared": {declared, true}} {
+		t.Run(name, func(t *testing.T) {
+			factory := &fakeFactory{behavior: func(context.Context, event.Sink, string) error { return nil }}
+			client, stop := startServer(t, factory)
+			defer stop()
+			client.call(t, "initialize", InitializeParams{ProtocolVersion: 1, ClientCapabilities: tc.caps})
+			var nr SessionNewResult
+			json.Unmarshal(client.call(t, "session/new", SessionNewParams{}).Result, &nr)
+			ch := client.callAsync("session/prompt", SessionPromptParams{SessionID: nr.SessionID, Prompt: []ContentBlock{{Type: "text", Text: "go"}}})
+			notifs, _ := drainPrompt(t, client, ch)
+			var vendor []string
+			for _, n := range notifs {
+				if strings.HasPrefix(n.Method, "_reasonix.io/") {
+					vendor = append(vendor, n.Method)
+				}
+			}
+			if got := len(vendor) > 0; got != tc.want {
+				t.Errorf("vendor notifications = %v, want some: %v", vendor, tc.want)
+			}
+		})
+	}
+}
+
 func TestServeRejectsConcurrentPromptForSameSession(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})

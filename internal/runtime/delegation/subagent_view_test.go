@@ -148,3 +148,18 @@ func TestReadingARunningChildWhileItWritesIsSafe(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+// A run is recorded complete a moment before its owner lets go of it, and a
+// reader in that moment must not be told it is still being written.
+func TestARecordedFinishedRunIsNotLiveWhileItsOwnerHasNotLetGo(t *testing.T) {
+	store, spec := viewFixture(t)
+	run := startedRun(t, store, spec, said(provider.RoleUser, "a"), said(provider.RoleAssistant, "done"))
+	defer run.Release()
+	if err := store.SaveCompleted(run); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Transcript(run.Ref, spec.ParentSession, spec.WorkspaceRoot, 0, 0)
+	if err != nil || got.Live || got.Info.State != RunCompleted || len(got.Messages) != 3 {
+		t.Fatalf("read between SaveCompleted and Release = %+v err=%v, want completed, not live, all messages", got, err)
+	}
+}

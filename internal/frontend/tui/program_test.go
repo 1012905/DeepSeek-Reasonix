@@ -30,6 +30,8 @@ type recordingKernel struct {
 	refuseText bool
 	// partialCoverage makes a prepared rewind plan ask for confirmation.
 	partialCoverage bool
+	// mcpRows replaces the canned /mcp list when set.
+	mcpRows []map[string]any
 }
 
 func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +111,10 @@ func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			{"ref": "beta/solo", "provider": "beta", "model": "solo"},
 		}})
 	case "/mcp":
+		if k.mcpRows != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{"servers": k.mcpRows})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"servers": []map[string]any{
 			{"name": "docs", "state": "ready", "enabled": true, "transport": "http", "source": "user", "tools": 2,
 				"toolList": []map[string]any{{"name": "search", "readOnly": true}, {"name": "purge", "destructive": true}}},

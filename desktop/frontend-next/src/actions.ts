@@ -202,6 +202,7 @@ export const ACTIONS: UIAction[] = [
   { id: "mcp.retry", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "mcp.trust", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.signin", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "mcp.upgrade", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.follow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.unfollow", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "mcp.remove", kind: "destructive", target: "entity", proof: "interaction" },
@@ -429,6 +430,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "session.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "workspace.reorder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
 
   // ── Taking a change back ─────────────────────────────────────────────────
@@ -554,6 +556,7 @@ export const ACTIONS: UIAction[] = [
   { id: "web-access.backend", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "web-access.move", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "web-access.consent", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "web-access.probe", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "web-access.searxng-url", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

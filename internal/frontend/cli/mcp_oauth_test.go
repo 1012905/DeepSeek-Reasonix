@@ -115,3 +115,29 @@ func TestMCPAuthCLINamesTheHostBeforeOpeningTheBrowser(t *testing.T) {
 		t.Fatalf("the host was not named:\n%s", out)
 	}
 }
+
+func TestMCPAuthCLIUpgradeNeedsAServerThatAsked(t *testing.T) {
+	home, workspace := testenv.TempDir(t), testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	t.Chdir(workspace)
+	entry := config.PluginEntry{Name: "figma", Type: "http", URL: "https://mcp.figma.com/mcp", Source: config.MCPSourceUserConfig}
+	if _, err := config.InstallUserPluginForRoot(workspace, entry, true); err != nil {
+		t.Fatal(err)
+	}
+	previous := mcpAuthorizeForCLI
+	called := false
+	mcpAuthorizeForCLI = func(_ context.Context, spec plugin.Spec, _ func(string) error) error {
+		called = true
+		if !spec.OAuthScopeUpgrade {
+			t.Fatal("the upgrade flag did not reach the authorization")
+		}
+		return nil
+	}
+	t.Cleanup(func() { mcpAuthorizeForCLI = previous })
+	if code := mcpAuthCLI([]string{"figma", "--upgrade"}); code != 1 || called {
+		t.Fatalf("nothing asked: exit=%d called=%v", code, called)
+	}
+	if code := mcpAuthCLI([]string{"figma", "--bogus"}); code != 2 {
+		t.Fatalf("unknown flag exit = %d", code)
+	}
+}

@@ -643,8 +643,8 @@ body { background: var(--page) !important; }
   transform: translateY(-40px); opacity: 0; pointer-events: none; border: 0; background: var(--surface);
   transition: opacity 120ms ease, transform 140ms ease;
 }
-.rail .wsfind:focus-within { position: relative; left: auto; right: auto; width: calc(100% - 38px); margin: 0 19px 7px; transform: none; opacity: 1; pointer-events: auto; }
-.rail .wsfind:focus-within { background: var(--overlay); box-shadow: 0 0 0 1px var(--border); }
+.rail .wsfind:is(:focus-within, [data-query]) { position: relative; left: auto; right: auto; width: calc(100% - 38px); margin: 0 19px 7px; transform: none; opacity: 1; pointer-events: auto; }
+.rail .wsfind:is(:focus-within, [data-query]) { background: var(--overlay); box-shadow: 0 0 0 1px var(--border); }
 .rail .scroll { padding-bottom: 8px; }
 .rail .wsrow { margin-inline: 15px; min-height: 35px; border-radius: 6px; }
 .rail .wsnode[data-current] > .wsrow .wsname { color: var(--text); font-weight: 620; }

@@ -47,11 +47,12 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings, PersonaDraft, PersonaSettings } from "./boundary";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 export type * from "./plugin";
 export type * from "./market";
@@ -303,6 +304,7 @@ export interface AgentPort {
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings>;
   webAccessSettings(): Promise<WebAccessSettings>;
   saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings>;
+  probeSearxng(): Promise<SearxngProbe>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
@@ -338,6 +340,8 @@ export interface AgentPort {
   trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
   // Blocks until the browser sign-in ends (up to five minutes); a refusal is a thrown coded error.
   signinMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
+  // Like signinMcp, for the access a server asked for; the kernel asks the person every time.
+  upgradeMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
   followMcp(name: string, follow: boolean): Promise<{ name: string; follow: boolean; tools?: number }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;

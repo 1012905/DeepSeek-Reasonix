@@ -52,6 +52,11 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/new: " + err.Error()}
 	}
+	additionalDirs, rpcErr := vetAdditionalDirs(cwd, p.AdditionalDirectories)
+	if rpcErr != nil {
+		rpcErr.Message = "session/new: " + rpcErr.Message
+		return nil, rpcErr
+	}
 	cfgState, err := s.sessionConfigState(ctx, SessionConfigStateParams{Cwd: cwd})
 	if err != nil {
 		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
@@ -75,6 +80,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	sessionParams := SessionParams{
 		Cwd:                cwd,
 		MCPServers:         mcpServers,
+		AdditionalDirs:     additionalDirs,
 		Sink:               sink,
 		Model:              cfgState.Model,
 		EffortOverride:     cloneStringPtr(cfgState.EffortOverride),
@@ -84,7 +90,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	s.bindClientIO(&sessionParams, id)
 	ctrl, err := s.factory.NewSession(ctx, sessionParams)
 	if err != nil {
-		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
+		return nil, newSessionError("session/new", err)
 	}
 	ctrl.EnableInteractiveApproval()
 	sink.bindApprove(ctrl.Approve)
@@ -97,6 +103,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		sink:             sink,
 		cwd:              cwd,
 		mcpServers:       clonePluginSpecs(mcpServers),
+		additionalDirs:   additionalDirs,
 		model:            cfgState.Model,
 		effortOverride:   cloneStringPtr(cfgState.EffortOverride),
 		runtimeProfile:   cfgState.RuntimeProfile,
@@ -223,7 +230,7 @@ func (s *service) sessionLoad(ctx context.Context, raw json.RawMessage) (any, er
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/load: " + err.Error()}
 	}
-	cfgState, err := s.openExistingSession(ctx, "session/load", p.SessionID, p.Cwd, p.MCPServers, true)
+	cfgState, err := s.openExistingSession(ctx, "session/load", p.SessionID, p.Cwd, p.AdditionalDirectories, p.MCPServers, true)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +262,7 @@ func (s *service) sessionResume(ctx context.Context, raw json.RawMessage) (any, 
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/resume: " + err.Error()}
 	}
-	cfgState, err := s.openExistingSession(ctx, "session/resume", p.SessionID, p.Cwd, p.MCPServers, false)
+	cfgState, err := s.openExistingSession(ctx, "session/resume", p.SessionID, p.Cwd, p.AdditionalDirectories, p.MCPServers, false)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +334,7 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 	sess.persistAfterTurn(text)
 
 	stop := StopEndTurn
-	var meta map[string]any
+	vendor := map[string]any{}
 	if runErr != nil {
 		var readinessErr *agent.FinalReadinessError
 		switch {
@@ -336,7 +343,7 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 		case errors.As(runErr, &readinessErr):
 			outcome := ReasonixTurnOutcome{Kind: "paused", Reason: clipStatusText(readinessErr.Error(), 2_048)}
 			sess.sink.send(readinessReceipt(outcome.Reason, readinessErr.Missing))
-			meta = map[string]any{"reasonix.io": map[string]any{"turnOutcome": outcome}}
+			vendor["turnOutcome"] = outcome
 		default:
 			return nil, &RPCError{
 				Code:    ErrInternal,
@@ -345,9 +352,12 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 			}
 		}
 	}
-	res := SessionPromptResult{StopReason: stop, Meta: meta}
 	if sess.transcript != "" {
-		res.TranscriptPath = &sess.transcript
+		vendor["transcriptPath"] = sess.transcript
+	}
+	res := SessionPromptResult{StopReason: stop}
+	if len(vendor) > 0 {
+		res.Meta = map[string]any{"reasonix.io": vendor}
 	}
 	return res, nil
 }

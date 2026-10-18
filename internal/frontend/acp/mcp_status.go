@@ -76,7 +76,7 @@ func (s *service) sessionMCPStatus(_ context.Context, raw json.RawMessage) (any,
 }
 
 func (s *service) publishMCPStatus(sess *acpSession) {
-	if sess == nil {
+	if sess == nil || !s.statusUpdatesSupported() {
 		return
 	}
 	_ = s.conn.Notify(sessionMCPStatusUpdateMethod,
