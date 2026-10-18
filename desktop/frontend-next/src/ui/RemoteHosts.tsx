@@ -185,7 +185,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                       onClick={(event) => { event.stopPropagation(); void open(host, ws.root); }}>
                       <StudioIcon name="chat" />
                     </button>
-                    <RemoteProjectMenu name={ws.name} root={ws.root} host={host.name} defaultRoot={host.workspace || workspacesOf(host)[0]} busy={!!busy}
+                    <RemoteProjectMenu name={ws.name} root={ws.root} host={host.name} defaultRoot={host.workspace} busy={!!busy}
                       onRefresh={() => void readBook(host.name)}
                       onRemove={ws.booked ? () => void drop(host, ws) : undefined} />
                   </span>

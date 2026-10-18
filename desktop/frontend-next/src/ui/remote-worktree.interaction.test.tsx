@@ -6,11 +6,12 @@ import "./testkit";
 import { RemoteHosts } from "./RemoteHosts";
 import { Palette } from "./Palette";
 import type { TreeWorkspace } from "../port/hub";
+import type { RemoteHost } from "../port/remote";
 
 afterEach(cleanup);
 const root = "/projects/site";
 const copy = "/state/worktrees/site";
-const host = { name: "gpu", target: "test@host", status: "connected" as const, workspaces: [root, copy] };
+const host = { name: "gpu", target: "test@host", status: "connected" as const, workspace: root, workspaces: [root, copy] };
 
 it.each([undefined, "gpu"])("quick switching retains a grouped session's actual directory on %s", async (source) => {
   const onOpenSession = vi.fn();
@@ -22,14 +23,14 @@ it.each([undefined, "gpu"])("quick switching retains a grouped session's actual 
   expect(onOpenSession).toHaveBeenCalledWith("/sessions/task", expect.objectContaining({ root: copy, host: source }));
 });
 
-function draw(open = false) {
+function draw(open = false, source: RemoteHost = host) {
   const onOpen = vi.fn().mockResolvedValue(undefined);
   const onClose = vi.fn().mockResolvedValue(undefined);
   const removeRemoteWorkspace = vi.fn().mockResolvedValue(undefined);
   const tree: TreeWorkspace[] = [{ root, name: "site", workspaceRoots: [root, copy], sessions: [
     { path: "/sessions/task", name: "Isolated task", workspaceRoot: copy, isolated: true },
   ] }];
-  render(<RemoteHosts hub={{ removeRemoteWorkspace } as never} hosts={[host]} trees={{ gpu: tree }}
+  render(<RemoteHosts hub={{ removeRemoteWorkspace } as never} hosts={[source]} trees={{ gpu: tree }}
     runtimes={open ? [{ id: "r1", host: "gpu", base: "", root: copy, name: "site", sessionPath: "/sessions/task" }] : []}
     active={open ? "r1" : ""} onOpen={onOpen} onFocus={vi.fn()} onClose={onClose} liveIds={() => []}
     reload={async () => {}} reloadTrees={async () => {}} readTree={async () => {}} onError={vi.fn()} />);
@@ -61,4 +62,16 @@ it("shows the active SSH directory separately from the host's default read targe
   expect(screen.getByText("连接目录：" + copy)).toBeTruthy();
   await userEvent.click(screen.getByRole("button", { name: "项目操作：site · gpu" }));
   expect(screen.getByText("默认连接目录：" + root)).toBeTruthy();
+});
+
+it("uses the server's resolved default even when it differs from the project list's order", async () => {
+  draw(false, { ...host, workspace: copy });
+  await userEvent.click(screen.getByRole("button", { name: "项目操作：site · gpu" }));
+  expect(screen.getByText("默认连接目录：" + copy)).toBeTruthy();
+});
+
+it("does not invent a default from the project list when the server reports none", async () => {
+  draw(false, { ...host, workspace: undefined });
+  await userEvent.click(screen.getByRole("button", { name: "项目操作：site · gpu" }));
+  expect(screen.getByText("未设置默认工作区")).toBeTruthy();
 });
