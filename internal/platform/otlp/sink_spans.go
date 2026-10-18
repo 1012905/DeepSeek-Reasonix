@@ -1,13 +1,10 @@
 package otlp
 
 import (
-	"errors"
 	"strings"
 
 	"reasonix/internal/contract/event"
 )
-
-var errAbandoned = errors.New("turn abandoned")
 
 var finishReasons = []string{"stop", "tool_calls", "length", "content_filter", "repetition_truncation", "interrupted"}
 

@@ -1,6 +1,9 @@
 package otlp
 
-import "regexp"
+import (
+	"regexp"
+	"slices"
+)
 
 // Attr is one span attribute. Only the constructors below make one, and the
 // string constructors accept a Safe value, so a caller cannot hand free text
@@ -30,10 +33,8 @@ func Name(s string) Safe {
 
 // OneOf admits s only when it is in the closed set, else "other".
 func OneOf(s string, set ...string) Safe {
-	for _, v := range set {
-		if s == v {
-			return Safe(s)
-		}
+	if slices.Contains(set, s) {
+		return Safe(s)
 	}
 	return "other"
 }
