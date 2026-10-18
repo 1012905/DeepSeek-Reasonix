@@ -986,7 +986,33 @@ MCP 等独立沙盒继续使用自己的隔离规范，不继承父会话临时�
 以当前用户身份运行，不能作为保护其他用户可读文件的安全边界。
 
 没有可用 OS 沙盒时，`bash = "enforce"` 会拒绝 bash 执行，不会无沙盒运行。
-Windows 上兼容的值始终为 `off`。
+Windows 上默认关闭，需要设置 `[sandbox] windows_integrity = true`（设置 > 沙箱；只认用户文件）才会启用。
+
+### 在 Windows 上
+
+打开 `windows_integrity` 后，bash 命令运行在写入受限的令牌下。
+
+- 首个会话会给一个合成的 Windows 身份授予对工作区、你的 `allow_write` 文件夹和工具链数据缓存的写权限。
+- 缓存指 Go 构建与模块缓存、npm、pip、cargo registry、NuGet 包。放着你会运行的程序的文件夹（`~/go/bin`、`.cargo/bin`）永远不授权。
+- 授权是加在这些文件夹上的一条权限项，记录在 Reasonix 状态目录里；它不给其他任何人权限，沙箱以后关闭它也不起作用。
+- `reasonix sandbox list` 显示已授权的内容，`reasonix sandbox revoke` 收回。
+
+它限制什么（在 Windows 11 的交互会话里实测）：
+
+- 在授权文件夹之外创建、追加、覆盖文件。
+- `mkdir`、写你用户下的注册表、改全局 git 配置。
+- 穿过指向授权文件夹之外的目录联接写入。
+- 所有子进程的同样操作。
+
+它不限制什么：
+
+- **删除或重命名走**授权文件夹之外的文件（Windows 不对这两种操作应用该限制）。删除仍由删除守卫和审批层把关。
+- 读取文件和网络。
+
+其他事实：
+
+- 需要交互式桌面会话。SSH 或服务会话里 `enforce` 会拒绝执行命令（`sandbox.win_no_logon_sid`），而不是无沙箱运行。
+- 未测：标准（非管理员）账户、其他 Windows 版本、ReFS 与网络盘。Linux 和 macOS 不变，且限制所有种类的写入。
 
 ### 在开发容器或 Docker 里
 

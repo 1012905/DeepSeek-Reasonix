@@ -6,5 +6,5 @@ func backendWriteDirs(spec Spec) []string {
 	if spec.MinimalWrites {
 		return nil
 	}
-	return windowsCacheDirs()
+	return windowsCacheDirs(spec)
 }

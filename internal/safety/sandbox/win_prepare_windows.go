@@ -32,11 +32,10 @@ func windowsBook(stateDir string) (*GrantBook, error) {
 }
 
 // GrantSpec prepares an enforcing spec for the Windows launcher: it grants the
-// install's SID on the roots the spec names and the toolchain caches that exist
-// (once each; later calls find the grant in place), and proves a restricted
-// token can be made here. On any failure the spec comes back unprepared, with the
-// reason as an ErrWin* identity, so a caller in enforce mode refuses instead of
-// running unconfined. A spec that does not enforce is returned as it was.
+// install's SID on the spec's roots and the toolchain caches that exist, once each,
+// and proves a restricted token can be made here. On failure the spec comes back
+// unprepared with an ErrWin* identity, so enforce mode refuses instead of running
+// unconfined. A spec that does not enforce is returned as it was.
 func GrantSpec(spec Spec, stateDir string) Spec {
 	if spec.Mode != "enforce" {
 		return spec
@@ -77,8 +76,9 @@ func probeToken(sid string) error {
 	return nil
 }
 
-// windowsCacheDirs are the data caches of this user's toolchains. Each is
-// granted only if it already exists.
-func windowsCacheDirs() []string {
-	return cacheDirsFor(os.Getenv("LOCALAPPDATA"), os.Getenv("USERPROFILE"))
+// windowsCacheDirs are the data caches of the user the spec's environment names.
+// Each is granted only if it already exists.
+func windowsCacheDirs(spec Spec) []string {
+	getenv := EffectiveGetenv(spec.ShellEnv)
+	return cacheDirsFor(getenv("LOCALAPPDATA"), getenv("USERPROFILE"))
 }

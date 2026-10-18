@@ -1318,7 +1318,43 @@ When no OS sandbox backend is available, `bash = "enforce"` refuses bash
 execution instead of running unconfined. Install the platform sandbox backend
 (bubblewrap/`bwrap` on Linux, `sandbox-exec` on macOS) or set
 `[sandbox] bash = "off"` to explicitly restore the pre-1.16 unconfined shell
-behavior. On Windows the compatible value is always `off`.
+behavior.
+
+On Windows the sandbox is off unless you turn on
+`[sandbox] windows_integrity = true` (Settings > Sandbox; user file only).
+
+### On Windows
+
+With `windows_integrity` on, a bash command runs under a write-restricted token.
+
+- The first session grants a synthetic Windows identity write access on the
+  workspace, your `allow_write` folders and the data caches of your toolchains.
+- The caches are Go build and module, npm, pip, cargo registry and NuGet packages.
+  A folder that holds programs you run (`~/go/bin`, `.cargo/bin`) is never granted.
+- The grant is a permission entry on those folders, recorded in the Reasonix
+  state folder. It gives nobody else access and is inert if the sandbox is turned off.
+- `reasonix sandbox list` shows what is granted; `reasonix sandbox revoke` takes it back.
+
+What it bounds, measured on Windows 11 in an interactive session:
+
+- Creating, appending to and overwriting files outside the granted folders.
+- `mkdir`, registry writes under your user, and global git configuration.
+- Writes through a junction that points out of a granted folder.
+- The same from every child process.
+
+What it does not bound:
+
+- **Deleting or renaming away** a file outside the granted folders. Windows does
+  not apply the restriction to those two. The delete guard and the approval
+  layer remain the control for deletes.
+- Reading files, and the network.
+
+Other facts:
+
+- It needs an interactive desktop session. In an SSH or service session `enforce`
+  refuses to run commands (`sandbox.win_no_logon_sid`) instead of running them unconfined.
+- Not measured: standard (non-admin) accounts, other Windows versions, ReFS and
+  network drives. Linux and macOS are unchanged and bound every kind of write.
 
 ### In a dev container or Docker
 

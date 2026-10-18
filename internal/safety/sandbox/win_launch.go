@@ -3,8 +3,6 @@ package sandbox
 import (
 	"encoding/base64"
 	"encoding/json"
-	"slices"
-	"strings"
 )
 
 // winLaunchFlag marks an argv as a request to run the rest of it under the
@@ -40,29 +38,4 @@ func parseWinLaunch(args []string) (l winLaunch, argv []string, ok bool) {
 		return winLaunch{}, nil, false
 	}
 	return l, args[4:], true
-}
-
-// mergeEnv applies overrides over base. Windows names ignore case, so an
-// override replaces the entry it would shadow wherever its spelling differs.
-func mergeEnv(base []string, over map[string]string) []string {
-	out := make([]string, 0, len(base)+len(over))
-	set := map[string]bool{}
-	for k := range over {
-		set[strings.ToLower(k)] = true
-	}
-	for _, kv := range base {
-		name, _, _ := strings.Cut(kv, "=")
-		if !set[strings.ToLower(name)] {
-			out = append(out, kv)
-		}
-	}
-	keys := make([]string, 0, len(over))
-	for k := range over {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	for _, k := range keys {
-		out = append(out, k+"="+over[k])
-	}
-	return out
 }

@@ -164,9 +164,15 @@ func runRestricted(l winLaunch, argv []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	env := environmentBlock(mergeEnv(os.Environ(), l.Env))
+	// The command inherits this process's environment, so the host's overrides are
+	// set here rather than merged into a copy.
+	for k, v := range l.Env {
+		if err := os.Setenv(k, v); err != nil {
+			return 0, err
+		}
+	}
 	var pi windows.ProcessInformation
-	if err := windows.CreateProcessAsUser(tok, nil, cmdline, nil, nil, true, windows.CREATE_SUSPENDED|windows.CREATE_UNICODE_ENVIRONMENT, &env[0], nil, &si, &pi); err != nil {
+	if err := windows.CreateProcessAsUser(tok, nil, cmdline, nil, nil, true, windows.CREATE_SUSPENDED|windows.CREATE_UNICODE_ENVIRONMENT, nil, nil, &si, &pi); err != nil {
 		return 0, fmt.Errorf("start %s: %w", argv[0], err)
 	}
 	defer windows.CloseHandle(pi.Process)
@@ -200,17 +206,4 @@ func killOnCloseJob() (windows.Handle, error) {
 		return 0, fmt.Errorf("limit job: %w", err)
 	}
 	return job, nil
-}
-
-// environmentBlock is the NUL-separated, double-NUL-terminated UTF-16 form.
-func environmentBlock(env []string) []uint16 {
-	var block []uint16
-	for _, kv := range env {
-		u, err := windows.UTF16FromString(kv)
-		if err != nil {
-			continue
-		}
-		block = append(block, u...)
-	}
-	return append(block, 0)
 }

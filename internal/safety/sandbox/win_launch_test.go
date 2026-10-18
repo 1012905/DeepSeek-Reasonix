@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -34,16 +33,5 @@ func TestALauncherRequestNamingARealAccountIsRefused(t *testing.T) {
 		if _, _, ok := parseWinLaunch(argv); ok {
 			t.Errorf("a request for %q was accepted", sid)
 		}
-	}
-}
-
-func TestEnvOverridesReplaceByCaseInsensitiveNameAndComeOutInOrder(t *testing.T) {
-	got := mergeEnv([]string{"Path=C:\\bin", "temp=C:\\old", "KEEP=1"}, map[string]string{"TEMP": `D:\new`, "TMP": `D:\new`})
-	want := []string{"Path=C:\\bin", "KEEP=1", `TEMP=D:\new`, `TMP=D:\new`}
-	if !slices.Equal(got, want) {
-		t.Fatalf("env = %v, want %v", got, want)
-	}
-	if strings.Count(strings.ToLower(strings.Join(got, "\n")), "temp=") != 1 {
-		t.Fatalf("TEMP appears more than once: %v", got)
 	}
 }

@@ -72,6 +72,13 @@ func (h *winHarness) runArgv(args []string) (string, int) {
 	return strings.TrimSpace(string(out)), code
 }
 
+// profileEnv moves the profile a spec's caches are looked up in to temporary
+// directories, so a test never grants a folder of the machine it runs on.
+func profileEnv(t *testing.T) map[string]string {
+	t.Helper()
+	return map[string]string{"LOCALAPPDATA": t.TempDir(), "USERPROFILE": t.TempDir()}
+}
+
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
 
 // What the host observes, not exit codes: a denied write leaves no file.
@@ -166,16 +173,14 @@ func TestRestrictedCommandsRunGitAndPowerShellInsideTheRoot(t *testing.T) {
 // GrantSpec prepares an enforcing spec through the real book: roots granted,
 // token proven, SID set; and a spec that does not enforce is left alone.
 func TestGrantSpecPreparesAnEnforcingSpecAndLeavesAnOffSpecAlone(t *testing.T) {
-	// The caches it grants are the user's real ones unless the profile is moved.
-	t.Setenv("LOCALAPPDATA", t.TempDir())
-	t.Setenv("USERPROFILE", t.TempDir())
 	state := t.TempDir()
 	ws := t.TempDir()
-	off := GrantSpec(Spec{Mode: "off", WriteRoots: []string{ws}}, state)
+	env := profileEnv(t)
+	off := GrantSpec(Spec{Mode: "off", WriteRoots: []string{ws}, ShellEnv: env}, state)
 	if off.GrantSID != "" || off.GrantFault != nil {
 		t.Fatalf("an off spec was touched: %+v", off)
 	}
-	on := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{ws}}, state)
+	on := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{ws}, ShellEnv: env}, state)
 	if on.GrantFault != nil || on.GrantSID == "" {
 		t.Fatalf("enforce spec = fault %v sid %q", on.GrantFault, on.GrantSID)
 	}
@@ -194,13 +199,11 @@ func TestGrantSpecPreparesAnEnforcingSpecAndLeavesAnOffSpecAlone(t *testing.T) {
 
 // A damaged record is a typed fault with its own stable code, never a fresh start.
 func TestGrantSpecReportsADamagedRecordAsATypedFault(t *testing.T) {
-	t.Setenv("LOCALAPPDATA", t.TempDir())
-	t.Setenv("USERPROFILE", t.TempDir())
 	state := t.TempDir()
 	if err := os.WriteFile(filepath.Join(state, "windows-grants.json"), []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	spec := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{t.TempDir()}}, state)
+	spec := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{t.TempDir()}, ShellEnv: profileEnv(t)}, state)
 	if !errors.Is(spec.GrantFault, ErrWinGrantUnreadable) || spec.GrantSID != "" {
 		t.Fatalf("spec = fault %v sid %q", spec.GrantFault, spec.GrantSID)
 	}
@@ -246,5 +249,31 @@ func TestKnownGapDeleteOutsideTheRootIsNotBounded(t *testing.T) {
 	h.run(`echo moved> ` + filepath.Join(h.out, "still-denied.txt"))
 	if exists(filepath.Join(h.out, "still-denied.txt")) {
 		t.Fatal("the gap is wider than documented: a create outside the root succeeded")
+	}
+}
+
+func TestGrantedRootsListsWhatGrantSpecGrantedAndRevokeGrantsTakesItBack(t *testing.T) {
+	state, ws := t.TempDir(), t.TempDir()
+	spec := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{ws}, ShellEnv: profileEnv(t)}, state)
+	if spec.GrantFault != nil {
+		t.Fatal(spec.GrantFault)
+	}
+	sid, roots, err := GrantedRoots(state)
+	if err != nil || sid != spec.GrantSID || len(roots) == 0 {
+		t.Fatalf("GrantedRoots = %q %v %v", sid, roots, err)
+	}
+	// A fresh process would open the record again; this one holds the book, so drop it.
+	windowsBooksMu.Lock()
+	delete(windowsBooks, state)
+	windowsBooksMu.Unlock()
+	done, failed, err := RevokeGrants(state)
+	if err != nil || len(failed) != 0 || len(done) != len(roots) {
+		t.Fatalf("RevokeGrants = %v %v %v", done, failed, err)
+	}
+	if ok, _ := WindowsGrantOps().Granted(ws, sid); ok {
+		t.Fatal("the SID is still on the workspace after RevokeGrants")
+	}
+	if _, left, _ := GrantedRoots(state); len(left) != 0 {
+		t.Fatalf("the record still lists %v", left)
 	}
 }
