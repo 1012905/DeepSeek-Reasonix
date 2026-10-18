@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -157,35 +158,55 @@ func (l *wslLink) holdAnchor(ctx context.Context) {
 	}
 }
 
-// ErrNoSession: the session that launches long-lived processes is not up.
+// ErrNoSession: the session that launches long-lived processes is not up, or
+// ended before the command it was given finished.
 var ErrNoSession = errors.New("attach: the WSL session that keeps a kernel alive is not open")
+
+// ErrUnsafeScratch: the directory launch commands are staged in is not the
+// current user's private directory, so what is written there could be read or
+// replaced by someone else.
+var ErrUnsafeScratch = errors.New("attach: the WSL launch directory is not private to this user")
 
 // detachedPoll is how often a launched command is asked whether it finished.
 const detachedPoll = 100 * time.Millisecond
 
+const (
+	exitUnsafeScratch = 47
+	exitNotYet        = 44
+	// scratch is a directory under the account's home that must be a real
+	// directory it owns and nobody else can enter. A path under /tmp would be
+	// accepted by mkdir -p whoever had made it.
+	scratch = `d="$HOME/.reasonix/link"`
+)
+
 // ExecDetached runs cmd inside the held session, so what it starts is not
 // ended when this call returns. The command is written to a file and only its
 // name is typed into the session, which keeps the script's text out of the
-// session's input.
+// session's input. The wait ends when the command does or when the session it
+// was given to does, whichever is first.
 func (l *wslLink) ExecDetached(ctx context.Context, cmd string) (remote.ExecResult, error) {
 	var raw [8]byte
 	_, _ = rand.Read(raw[:])
 	id := hex.EncodeToString(raw[:])
-	const dir = "/tmp/.reasonix-link"
-	put, err := l.Script(ctx, strings.NewReader(cmd), `mkdir -p -m 700 "$1" && cat > "$1/$2.sh"`, dir, id)
+	put, err := l.Script(ctx, strings.NewReader(cmd), scratch+`
+mkdir -p -m 700 "$d" || exit 1
+[ -d "$d" ] && [ ! -L "$d" ] && [ "$(stat -c %u "$d")" = "$(id -u)" ] && [ "$(stat -c %a "$d")" = 700 ] || exit 47
+cat > "$d/$1.sh"`, id)
 	if err != nil {
 		return remote.ExecResult{}, err
 	}
-	if put.ExitCode != 0 {
+	switch put.ExitCode {
+	case 0:
+	case exitUnsafeScratch:
+		return remote.ExecResult{}, ErrUnsafeScratch
+	default:
 		return remote.ExecResult{}, fmt.Errorf("attach: stage the launch command: exit %d: %s", put.ExitCode, strings.TrimSpace(string(put.Stderr)))
 	}
-	l.mu.Lock()
-	in := l.anchorIn
-	l.mu.Unlock()
+	in := l.session()
 	if in == nil {
 		return remote.ExecResult{}, ErrNoSession
 	}
-	line := fmt.Sprintf("/bin/sh %[1]s/%[2]s.sh </dev/null >%[1]s/%[2]s.out 2>%[1]s/%[2]s.err; echo $? >%[1]s/%[2]s.rc\n", dir, id)
+	line := fmt.Sprintf(scratch+`; /bin/sh "$d/%[1]s.sh" </dev/null >"$d/%[1]s.out" 2>"$d/%[1]s.err"; echo $? >"$d/%[1]s.rc"`+"\n", id)
 	wrote := make(chan error, 1)
 	go func() { _, err := io.WriteString(in, line); wrote <- err }()
 	select {
@@ -197,17 +218,15 @@ func (l *wslLink) ExecDetached(ctx context.Context, cmd string) (remote.ExecResu
 		return remote.ExecResult{}, ctx.Err()
 	}
 	for {
-		res, err := l.Script(ctx, nil, `[ -s "$1/$2.rc" ] || exit 44
-code=$(cat "$1/$2.rc")
-cat "$1/$2.out"
-cat "$1/$2.err" >&2
-rm -f "$1/$2.sh" "$1/$2.out" "$1/$2.err" "$1/$2.rc"
-exit "$code"`, dir, id)
+		res, err := l.Script(ctx, nil, scratch+`; [ -s "$d/$1.rc" ] || exit 44`, id)
 		if err != nil {
 			return remote.ExecResult{}, err
 		}
-		if res.ExitCode != 44 {
-			return remote.ExecResult{Stdout: res.Stdout, Stderr: res.Stderr, ExitCode: res.ExitCode}, nil
+		if res.ExitCode != exitNotYet {
+			break
+		}
+		if l.session() != in {
+			return remote.ExecResult{}, ErrNoSession
 		}
 		select {
 		case <-ctx.Done():
@@ -215,6 +234,42 @@ exit "$code"`, dir, id)
 		case <-time.After(detachedPoll):
 		}
 	}
+	return l.collect(ctx, id)
+}
+
+// session is the input of the shell session currently held, nil when none is.
+func (l *wslLink) session() io.Writer {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.anchorIn
+}
+
+// collect reads what a finished launch printed and how it ended, then removes
+// its files. The status is read from its own file, so no exit code of the
+// command can be mistaken for the poll's "not yet".
+func (l *wslLink) collect(ctx context.Context, id string) (remote.ExecResult, error) {
+	read := func(name string) ([]byte, error) {
+		res, err := l.Script(ctx, nil, scratch+`; cat "$d/$1.`+name+`"`, id)
+		return res.Stdout, err
+	}
+	out, err := read("out")
+	if err != nil {
+		return remote.ExecResult{}, err
+	}
+	errb, err := read("err")
+	if err != nil {
+		return remote.ExecResult{}, err
+	}
+	rc, err := read("rc")
+	if err != nil {
+		return remote.ExecResult{}, err
+	}
+	_, _ = l.Script(ctx, nil, scratch+`; rm -f "$d/$1.sh" "$d/$1.out" "$d/$1.err" "$d/$1.rc"`, id)
+	code, err := strconv.Atoi(strings.TrimSpace(string(rc)))
+	if err != nil {
+		return remote.ExecResult{}, fmt.Errorf("attach: the launch left no readable status: %w", err)
+	}
+	return remote.ExecResult{Stdout: out, Stderr: errb, ExitCode: code}, nil
 }
 
 func (l *wslLink) Close() error {
