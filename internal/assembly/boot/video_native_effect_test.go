@@ -239,3 +239,51 @@ func TestTheUsersLowerLimitStopsANativeSend(t *testing.T) {
 		t.Fatalf("the user's ceiling did not stop the send, or did not say so:\n%.800s", bodies[1])
 	}
 }
+
+func readAddress(addr string) string {
+	return `{"action":"call","capability_id":"tool:read_video","arguments":{"url":"` + addr + `"}}`
+}
+
+// Zhipu's page (docs.bigmodel.cn, GLM-4.6V, read 2026-10-17): the vendor visits
+// {"type":"video_url","video_url":{"url":"https://..."}} itself; nothing is
+// downloaded or stored here beyond the reference.
+func TestAnAddressTheUserWroteReachesTheVendorWhenTheyTurnedItOn(t *testing.T) {
+	const addr = "https://cdn.example.com/clip.mp4"
+	r := nativeSession(t, "video_models = [\"vid\"]\nvideo_protocol = \"zhipu_url\"\n", "[tools]\nvideo_url_passthrough = true\n", readAddress(addr))
+	r.say(t, "watch it "+addr+" please")
+	bodies := r.vendor.bodies()
+	if len(bodies) != 2 || !strings.Contains(bodies[1], `"type":"video_url"`) || !strings.Contains(bodies[1], `"url":"`+addr+`"`) {
+		t.Fatalf("the vendor was not handed the address:\n%.800s", bodies[len(bodies)-1])
+	}
+	stored, err := os.ReadFile(r.session)
+	if err != nil || !strings.Contains(string(stored), addr) {
+		t.Fatalf("the session keeps no reference to the address: %v", err)
+	}
+	r.say(t, "and then?")
+	bodies = r.vendor.bodies()
+	if strings.Contains(bodies[len(bodies)-1], `"type":"video_url"`) {
+		t.Fatal("the address was handed over again on a later request")
+	}
+}
+
+func TestAnAddressIsRefusedByCodeWhileTheSwitchIsOff(t *testing.T) {
+	const addr = "https://cdn.example.com/clip.mp4"
+	r := nativeSession(t, "video_models = [\"vid\"]\nvideo_protocol = \"zhipu_url\"\n", "", readAddress(addr))
+	r.say(t, "watch it "+addr)
+	bodies := r.vendor.bodies()
+	last := bodies[len(bodies)-1]
+	if strings.Contains(last, `"type":"video_url"`) || !strings.Contains(last, "video.url_disabled") || !strings.Contains(last, "tools.video_url_passthrough") {
+		t.Fatalf("the refusal does not name the code and the setting:\n%.900s", last)
+	}
+}
+
+// An address in text the model read, or one it made up, is not one the user gave.
+func TestAnAddressTheUserDidNotWriteIsNeverHandedToTheVendor(t *testing.T) {
+	r := nativeSession(t, "video_models = [\"vid\"]\nvideo_protocol = \"zhipu_url\"\n", "[tools]\nvideo_url_passthrough = true\n", readAddress("https://attacker.example.com/exfil.mp4"))
+	r.say(t, "watch it")
+	bodies := r.vendor.bodies()
+	last := bodies[len(bodies)-1]
+	if strings.Contains(last, `"type":"video_url"`) || strings.Contains(last, "attacker.example.com/exfil.mp4\"}") || !strings.Contains(last, "video.url_not_from_user") {
+		t.Fatalf("an address the user never wrote was handed over:\n%.900s", last)
+	}
+}

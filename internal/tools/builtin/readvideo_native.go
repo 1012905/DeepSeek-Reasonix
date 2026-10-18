@@ -10,11 +10,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/settings"
 	"reasonix/internal/contract/tool"
 )
 
@@ -25,6 +28,11 @@ const (
 	CodeVideoNativeNoProtocol  = "video.native_no_protocol"
 	CodeVideoNativeTooLarge    = "video.native_too_large"
 	CodeVideoNativeContainer   = "video.native_container_unsupported"
+	CodeVideoNativeAddressOnly = provider.VideoAddressOnly
+	CodeVideoURLDisabled       = "video.url_disabled"
+	CodeVideoURLInvalid        = "video.url_invalid"
+	CodeVideoURLUnsupported    = "video.url_unsupported_model"
+	CodeVideoURLNotFromUser    = "video.url_not_from_user"
 )
 
 // nativeContainer names the container a file is and says whether the protocol
@@ -56,10 +64,21 @@ func nativeContainer(head []byte, protocol string) (mime string, accepted string
 func (r readVideo) ExecuteWithVideo(ctx context.Context, args json.RawMessage) (string, []string, []provider.VideoRef, error) {
 	var p struct {
 		Path string `json:"path"`
+		URL  string `json:"url"`
 		Mode string `json:"mode"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", nil, nil, fmt.Errorf("invalid args: %w", err)
+	}
+	if p.URL != "" {
+		if p.Path != "" {
+			return "", nil, nil, errors.New("give a path or a url, not both")
+		}
+		text, ref, err := address(ctx, p.URL)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		return text, nil, []provider.VideoRef{ref}, nil
 	}
 	if p.Path == "" {
 		return "", nil, nil, errors.New("path is required")
@@ -96,13 +115,16 @@ func (r readVideo) ExecuteWithVideo(ctx context.Context, args json.RawMessage) (
 		return text, nil, []provider.VideoRef{ref}, nil
 	}
 	var refusal tool.Refusal
-	if mode != "native" && errors.As(err, &refusal) && (refusal.Code == CodeVideoNativeTooLarge || refusal.Code == CodeVideoNativeContainer) {
+	if mode != "native" && errors.As(err, &refusal) && (refusal.Code == CodeVideoNativeTooLarge || refusal.Code == CodeVideoNativeContainer || refusal.Code == CodeVideoNativeAddressOnly) {
 		return frames(fmt.Sprintf("[native video not used (%s): %s; frames were sampled instead]", refusal.Code, refusal.Message))
 	}
 	return "", nil, nil, err
 }
 
 func (r readVideo) native(path string, plan tool.NativeVideo) (string, provider.VideoRef, error) {
+	if !provider.VideoProtocolTakesFiles(plan.Protocol) {
+		return "", provider.VideoRef{}, tool.Refusal{Code: CodeVideoNativeAddressOnly, Message: "this model's video protocol takes a public address and no file: give a url, or use mode frames"}
+	}
 	rp := resolveReadablePath(r.workDir, path, r.paths)
 	if err := r.refuse(rp); err != nil {
 		return "", provider.VideoRef{}, err
@@ -236,4 +258,38 @@ func findBox(f *os.File, from, to int64, kind string) (boxSpan, bool) {
 		at += size
 	}
 	return boxSpan{}, false
+}
+
+// address hands a public video address to the vendor, which visits it itself:
+// nothing is downloaded here, so there is no frame fallback. It is sent only when
+// the user turned the switch on, the model's protocol documents addresses, and
+// the address is one the user wrote in this conversation, so text the model read
+// elsewhere cannot make a vendor visit an address its author chose.
+func address(ctx context.Context, raw string) (string, provider.VideoRef, error) {
+	plan, ok := tool.NativeVideoFrom(ctx)
+	if !ok {
+		code := plan.Unavailable
+		if code == "" {
+			code = CodeVideoNativeUnsupported
+		}
+		return "", provider.VideoRef{}, tool.Refusal{Code: code, Message: "the selected model does not take video natively, and an address cannot be sampled into frames"}
+	}
+	switch {
+	case !plan.Addresses:
+		return "", provider.VideoRef{}, tool.Refusal{Code: CodeVideoURLDisabled, Remedy: settings.RemedyFor("tools.video_url_passthrough", true),
+			Message: "handing an address to the model vendor is off: the user has to turn it on, because the vendor then visits the address itself"}
+	case provider.ValidVideoAddress(raw) != nil:
+		return "", provider.VideoRef{}, tool.Refusal{Code: CodeVideoURLInvalid, Message: "the address must be a public https address with a host name, no credentials, and at most 2048 characters"}
+	case !provider.VideoAddressAccepted(plan.Protocol, raw):
+		return "", provider.VideoRef{}, tool.Refusal{Code: CodeVideoURLUnsupported, Message: "the selected model's video protocol does not take this address (Zhipu takes a public https address; Gemini only a YouTube address)"}
+	case !slices.Contains(tool.UserAddressesFrom(ctx), raw):
+		return "", provider.VideoRef{}, tool.Refusal{Code: CodeVideoURLNotFromUser, Message: "only an address the user wrote in this conversation can be handed to the vendor; ask the user for it"}
+	}
+	provider.GrantVideoAddress(raw)
+	name := raw
+	if u, err := url.Parse(raw); err == nil {
+		name = u.Host + u.EscapedPath()
+	}
+	ref := provider.VideoRef{URL: raw, Name: name}
+	return fmt.Sprintf("video address %s handed to %s, which visits it itself; nothing was downloaded here. It is attached to the next request only; call read_video again to look at it again.", name, plan.Model), ref, nil
 }
