@@ -15,6 +15,7 @@ import (
 	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/model/billing"
 	"reasonix/internal/safety/endpointclient"
 	"reasonix/internal/safety/redirectguard"
 )
@@ -81,6 +82,12 @@ type providerView struct {
 	// has no format for it, so the answer differs per protocol on one account.
 	CanWebSearch bool `json:"canWebSearch"`
 	WebSearch    bool `json:"webSearch"`
+	// BalanceFormat is declared; ImpliedBalanceFormat is what the saved address's
+	// host implies (empty for a relay); BalanceFormats is the closed set.
+	BalanceURL           string   `json:"balanceUrl"`
+	BalanceFormat        string   `json:"balanceFormat"`
+	ImpliedBalanceFormat string   `json:"impliedBalanceFormat"`
+	BalanceFormats       []string `json:"balanceFormats"`
 	// CanListModels is false where the protocol declares no model listing, so
 	// the editor does not offer to read one.
 	CanListModels bool `json:"canListModels"`
@@ -156,45 +163,49 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 		p := &cfg.Providers[i]
 		settable := visionSettableOf(cfg, p)
 		out = append(out, providerView{
-			LastCheck:          lastCheckOf(p),
-			Name:               p.Name,
-			DisplayName:        strings.TrimSpace(p.DisplayName),
-			Kind:               strings.ToLower(strings.TrimSpace(p.Kind)),
-			BaseURL:            p.BaseURL,
-			Models:             nonNilStrings(p.ChatModelList()),
-			ModelAliases:       p.ModelAliases,
-			VisionModels:       nonNilStrings(visionModelsOf(cfg, p)),
-			CanSetVision:       len(settable) > 0 || config.CanConfigureVision(p),
-			VisionSettable:     nonNilStrings(settable),
-			CanWebSearch:       config.HasServerWebSearchCapability(p),
-			WebSearch:          config.EffectiveWebSearch(p),
-			CanListModels:      config.CanListModels(p),
-			CanSetThinking:     config.CanConfigureThinkingParams(p),
-			SendsThinking:      config.SendsThinkingParams(p),
-			EffortField:        config.EffortFieldForEntry(p),
-			CanSetContinuation: config.CanConfigureContinuation(p),
-			Continuation:       string(config.ContinuationOf(p)),
-			Default:            p.DefaultModel(),
-			HasKey:             p.APIKey() != "",
-			KeyEnv:             p.APIKeyEnv,
-			InUse:              p.Name == current,
-			Preset:             strings.TrimSpace(p.PresetID) != "",
-			ReasoningProtocol:  strings.ToLower(strings.TrimSpace(p.ReasoningProtocol)),
-			SupportedEfforts:   config.StoredEffortLevels(p.SupportedEfforts),
-			DefaultEffort:      strings.ToLower(strings.TrimSpace(p.DefaultEffort)),
-			ModelEfforts:       modelEffortsOf(p),
-			InheritedEfforts:   inheritedEffortsOf(p),
-			ModelProtocols:     modelProtocolsOf(p),
-			ModelLimits:        modelLimitsOf(p),
-			InheritedLimits:    inheritedLimitsOf(p),
-			ModelPrices:        modelPricesOf(p),
-			OfficialPricing:    officialPricingOf(p),
-			ContextWindow:      p.ContextWindow,
-			MaxOutputTokens:    p.MaxOutputTokens,
-			IdleTimeoutSeconds: p.IdleTimeoutSeconds,
-			IdleTimeoutDefault: int(provider.StreamIdleTimeout / time.Second),
-			Headers:            p.Headers,
-			ExtraBody:          p.ExtraBody,
+			LastCheck:            lastCheckOf(p),
+			Name:                 p.Name,
+			DisplayName:          strings.TrimSpace(p.DisplayName),
+			Kind:                 strings.ToLower(strings.TrimSpace(p.Kind)),
+			BaseURL:              p.BaseURL,
+			Models:               nonNilStrings(p.ChatModelList()),
+			ModelAliases:         p.ModelAliases,
+			VisionModels:         nonNilStrings(visionModelsOf(cfg, p)),
+			CanSetVision:         len(settable) > 0 || config.CanConfigureVision(p),
+			VisionSettable:       nonNilStrings(settable),
+			CanWebSearch:         config.HasServerWebSearchCapability(p),
+			WebSearch:            config.EffectiveWebSearch(p),
+			CanListModels:        config.CanListModels(p),
+			CanSetThinking:       config.CanConfigureThinkingParams(p),
+			SendsThinking:        config.SendsThinkingParams(p),
+			EffortField:          config.EffortFieldForEntry(p),
+			CanSetContinuation:   config.CanConfigureContinuation(p),
+			Continuation:         string(config.ContinuationOf(p)),
+			Default:              p.DefaultModel(),
+			HasKey:               p.APIKey() != "",
+			KeyEnv:               p.APIKeyEnv,
+			InUse:                p.Name == current,
+			Preset:               strings.TrimSpace(p.PresetID) != "",
+			ReasoningProtocol:    strings.ToLower(strings.TrimSpace(p.ReasoningProtocol)),
+			SupportedEfforts:     config.StoredEffortLevels(p.SupportedEfforts),
+			DefaultEffort:        strings.ToLower(strings.TrimSpace(p.DefaultEffort)),
+			ModelEfforts:         modelEffortsOf(p),
+			InheritedEfforts:     inheritedEffortsOf(p),
+			ModelProtocols:       modelProtocolsOf(p),
+			ModelLimits:          modelLimitsOf(p),
+			InheritedLimits:      inheritedLimitsOf(p),
+			ModelPrices:          modelPricesOf(p),
+			OfficialPricing:      officialPricingOf(p),
+			ContextWindow:        p.ContextWindow,
+			MaxOutputTokens:      p.MaxOutputTokens,
+			IdleTimeoutSeconds:   p.IdleTimeoutSeconds,
+			IdleTimeoutDefault:   int(provider.StreamIdleTimeout / time.Second),
+			Headers:              p.Headers,
+			ExtraBody:            p.ExtraBody,
+			BalanceURL:           strings.TrimSpace(p.BalanceURL),
+			BalanceFormat:        strings.TrimSpace(p.BalanceFormat),
+			ImpliedBalanceFormat: string(billing.ImpliedFormat(p.BalanceURL)),
+			BalanceFormats:       balanceFormatNames(),
 		})
 	}
 	writeJSON(w, out)
@@ -611,4 +622,12 @@ func firstModelRef(e config.ProviderEntry) string {
 		model = d
 	}
 	return e.Name + "/" + model
+}
+
+func balanceFormatNames() []string {
+	var out []string
+	for _, f := range billing.Formats() {
+		out = append(out, string(f))
+	}
+	return out
 }

@@ -30,7 +30,7 @@ func (c *Controller) RunInboxTurn(ctx context.Context, id string) error {
 	}
 	if block != "" {
 		_ = st.SetState(id, sessioninbox.StateBlocked, block)
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseReferenceBlocked)
 		return fmt.Errorf("%w: %s", sessioninbox.ErrInvalidState, block)
 	}
 	return c.runSynchronousTurn(ctx, func() error {

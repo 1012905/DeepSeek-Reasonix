@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reasonix/internal/base/secrets"
 	"runtime"
 	"strings"
 	"text/tabwriter"
@@ -20,6 +21,10 @@ func remoteCommand(args []string, version string) int {
 	if len(args) == 0 {
 		remoteUsage()
 		return 2
+	}
+	if inAgentChild() && !remoteReadOnly(args) {
+		fmt.Fprintf(os.Stderr, "reasonix remote %s is refused: this command was started by an agent tool (%s is set); it changes the machine book or opens a link, which a person does\n", args[0], secrets.AgentChildEnv)
+		return exitAgentChild
 	}
 	switch args[0] {
 	case "add":
@@ -58,6 +63,20 @@ func remoteCommand(args []string, version string) int {
 		remoteUsage()
 		return 2
 	}
+}
+
+// remoteReadOnly says the invocation neither writes the machine book nor opens a
+// link to a machine: listing, the usage text, and listing or probing WSL
+// distributions on this machine. Every other subcommand, including ones added
+// later, is a person's.
+func remoteReadOnly(args []string) bool {
+	switch args[0] {
+	case "list", "ls", "help", "-h", "--help":
+		return true
+	case "wsl":
+		return len(args) > 1 && (args[1] == "list" || args[1] == "test")
+	}
+	return false
 }
 
 // The Remote Workbench protocol and its hidden subcommands were removed. The

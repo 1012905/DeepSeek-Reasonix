@@ -151,7 +151,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card; the opened session keeps the sender's model, preset, approval mode and planning, so a YOLO sender opens a YOLO session that answers the target project's ask rules too (deny rules still hold) (user config only)
 # max_dispatch_depth = 1       # how many sessions deep a dispatch may chain; 0 removes the ceiling (user config only)
 # max_dispatched_sessions = 8  # sessions one session may keep open from its dispatches; 0 removes the ceiling (user config only)
-# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
+# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply; they start over a pause the host set itself (session switch, unreadable @ reference, reopen) but never over one you pressed (user config only)
 
 [mods]
 # enabled = false              # run the hooks module of installed Claude Code mods; full trust, no sandbox (user config only)
@@ -418,6 +418,10 @@ startup, capability negotiation, session lifecycle, independent model/work/
 collaboration/approval controls, client filesystem and terminal capabilities,
 MCP servers, permission requests, and the Reasonix mid-turn steering extension.
 
+## Using Reasonix from DeepSeek Harness
+
+DeepSeek Harness (`dsh`) can delegate a task to Reasonix as a subagent over ACP, with configuration only. [Using Reasonix from DeepSeek Harness](./DSH.md) covers the install through DSH's plugin market or by hand, switching the plugin on, the permission policy and the limits.
+
 ## Remote SSH
 
 The remote module runs Reasonix on a remote host and reaches it over your own
@@ -494,6 +498,13 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
   - `connect` keeps the session open until you press Ctrl-C, and the kernel stops with it.
   - `status`, `forward`, `serve` and `fs` stay SSH-only and refuse a WSL machine with
     `remote: host is not reached over ssh`.
+
+For an agent's own shell commands, only `list`, `help` and `wsl list|test` run:
+
+- Every other `reasonix remote` subcommand refuses there (exit 77), because it changes the machine book or opens a
+  link, which a person does.
+- The host marks the commands it runs for the agent to tell them apart. It guards against an agent that does not
+  hide; it is not the sandbox.
 
 CLI:
 
@@ -711,7 +722,8 @@ For Anthropic-compatible services, such as some coding-plan endpoints, choose
 | Authorization: Bearer | For Anthropic-compatible providers, sends the saved API key as `Authorization: Bearer <key>` instead of `x-api-key`. | Enable it only when the gateway documents Bearer auth, such as MiniMax Global or Vercel AI Gateway. |
 | Model capability mode | Which reasoning request protocol Reasonix should use for this provider. | Keep **Auto-detect** unless the gateway is misdetected or the model docs require a specific reasoning format. |
 | Thinking override | Provider-specific override for `thinking.type`. | Keep **Auto** unless the backend documents `enabled`, `disabled`, or `adaptive`. Unsupported values can make some OpenAI-compatible gateways reject the request. |
-| Balance URL | Optional endpoint for wallet/balance lookup. | Set it when the provider exposes a balance endpoint and you want the desktop status bar to show it. |
+| Balance URL | Optional endpoint for wallet/balance lookup. | Set it when the provider exposes a balance endpoint and you want the desktop status bar to show it. The key is sent only to this address and never follows a redirect. |
+| Balance format | How that endpoint answers: `deepseek`, `moonshot` or `openrouter` (`balance_format`). | A vendor's own domain (`api.deepseek.com`, `api.moonshot.cn`/`.ai`, `openrouter.ai`) is read in that vendor's format with nothing set. Any other address, a relay for example, must name the format, or it is shown as not configured and the endpoint is not asked. Existing entries on such addresses are written as `deepseek` once, which is how they were always read. Reasonix 1.x rewrites the shared config file without keys it does not know, so a format it dropped is put back at the next start from `balance-formats.json` beside the config, unless you removed it in the connection editor. |
 | Context window | The provider-wide token budget Reasonix uses for automatic context cleanup. `0` disables automatic compaction. | Set it to the provider's model context limit; use a per-model override below when selected models differ. |
 
 Each selected model also has an optional **Context window** input. Leave it blank

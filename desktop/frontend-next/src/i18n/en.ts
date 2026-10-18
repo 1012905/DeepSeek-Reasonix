@@ -1312,6 +1312,15 @@ export const EN: Record<string, string> = {
   // ── 内核其余的拒绝措辞 ─────────────────────────────────────────
   "该供应商拒绝了当前密钥，无法读取余额": "The provider refused this key, so the balance cannot be read",
   "该供应商的余额接口无响应": "The provider's balance endpoint did not answer",
+  "余额地址": "Balance address",
+  "余额格式": "Balance format",
+  "留空则不显示余额。密钥只会发给这个地址，不会跟随跳转。": "Leave empty to show no balance. The key is sent only to this address and never follows a redirect.",
+  "供应商自己的域名会按它的格式读取；其他地址（例如中转站）必须选择它返回的格式，否则不读取余额。": "A vendor's own domain is read in that vendor's format; any other address (a relay, for example) must name the format it answers in, or no balance is read.",
+  "按地址推断（{format}）": "From the address ({format})",
+  "DeepSeek 格式": "DeepSeek format",
+  "Moonshot 格式": "Moonshot format",
+  "OpenRouter 格式": "OpenRouter format",
+  "余额格式未配置：这个地址不是供应商自己的域名，选择格式之前不会读取余额。": "Balance format not set: this address is not the vendor's own domain, so no balance is read until a format is chosen.",
   "无法解析该供应商余额接口返回的内容": "The provider's balance endpoint answered in a shape this build cannot read",
 
   "{n} 个问题": "{n} questions",

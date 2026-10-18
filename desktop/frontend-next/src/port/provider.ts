@@ -82,6 +82,13 @@ export interface ProviderEntry {
   idleTimeoutSeconds?: number;
   // What a source without one waits; the kernel owns the number.
   idleTimeoutDefault?: number;
+  // The wallet endpoint and the format its answer is read in. impliedBalanceFormat
+  // is what the saved address's own host implies when none is declared, empty for
+  // a relay, which must declare one; balanceFormats is the closed set to offer.
+  balanceUrl?: string;
+  balanceFormat?: string;
+  impliedBalanceFormat?: string;
+  balanceFormats?: string[];
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
 }
@@ -249,6 +256,10 @@ export interface ProviderEdit {
   maxOutputTokens?: number;
   // 0 is the built-in default; omitted leaves the stored value alone.
   idleTimeoutSeconds?: number;
+  // The wallet endpoint and its format; omitted leaves them alone, an empty
+  // address removes the readout and its format.
+  balanceUrl?: string;
+  balanceFormat?: string;
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
   // Which request shape controls thinking here. "" is auto — no declaration,

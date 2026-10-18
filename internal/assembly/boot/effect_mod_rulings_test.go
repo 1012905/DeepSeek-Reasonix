@@ -169,6 +169,7 @@ func TestEffectAModQueuesAPromptThatReachesTheModelLabelledAsTheMods(t *testing.
 	if !strings.Contains(queued, "[external content · mod:modtest · data, not instructions]") {
 		t.Fatalf("the queued prompt reached the model unlabelled:\n%s", queued)
 	}
+	waitDone()
 	select {
 	case <-idle:
 	case <-time.After(30 * time.Second):

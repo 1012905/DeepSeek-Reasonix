@@ -2281,6 +2281,63 @@ test("a parked page is attached again when it is shown, and a page already on sc
   assert.deepEqual(calls, ["remove", "add", "bounds 10"], "a page put away and shown again is attached again");
 });
 
+test("a page laid out wider than the pane is scaled to fit it, and keeps the viewport the agent asked for", async () => {
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: class {}, session: { fromPartition: () => ({}) } };
+    return load.call(this, request, ...rest);
+  };
+  let BrowserViews;
+  try {
+    ({ BrowserViews } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const win = {
+    on() {},
+    isDestroyed: () => false,
+    isFocused: () => false,
+    webContents: Object.assign(new EventEmitter(), { isFocused: () => false }),
+    getContentBounds: () => ({ width: 1200, height: 800 }),
+    contentView: { addChildView() {}, removeChildView() {} },
+  };
+  const sent = [];
+  const view = {
+    setBounds() {},
+    webContents: { isDestroyed: () => false, debugger: { sendCommand: async (method, params) => sent.push([method, params]) } },
+  };
+  const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1" });
+  const entry = { view, at: null, attached: true };
+  views.entries.set("t1", entry);
+  views.keepKeyboard = () => {};
+  entry.override = { width: 1440, height: 1000, deviceScaleFactor: 0, mobile: false };
+  views.show("t1", { x: 0, y: 0, width: 720, height: 800 });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][1].scale, 0.5, "a 1440 wide layout in a 720 wide pane is halved");
+  assert.equal(sent[0][1].width, 1440, "the layout viewport is still the one the agent asked for");
+
+  views.show("t1", { x: 0, y: 0, width: 720, height: 800 });
+  assert.equal(sent.length, 1, "the same pane sends nothing again");
+
+  views.show("t1", { x: 0, y: 0, width: 360, height: 800 });
+  assert.equal(sent.at(-1)[1].scale, 0.25, "a narrower pane scales further");
+
+  views.show("t1", { x: 0, y: 0, width: 2000, height: 1200 });
+  assert.equal(sent.at(-1)[1].scale, 1, "a pane larger than the layout never enlarges it");
+
+  const settled = sent.length;
+  views.fit(entry);
+  assert.equal(sent.length, settled, "an unchanged scale is not sent again");
+  views.fit(entry, true);
+  assert.equal(sent.length, settled + 1, "a capture that dropped the scale gets it back");
+  assert.equal(sent.at(-1)[1].scale, 1);
+  entry.override = undefined;
+  const before = sent.length;
+  views.show("t1", { x: 0, y: 0, width: 500, height: 800 });
+  assert.equal(sent.length, before, "with no override there is nothing to fit");
+});
+
 test("rewind notice dismissal survives the desktop preference disk round trip", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rewind-notice-prefs-"));
   const file = path.join(dir, "prefs.json");

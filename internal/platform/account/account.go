@@ -243,6 +243,14 @@ func (c *Client) do(ctx context.Context, method, path, token string, body, out a
 }
 
 func (c *Client) doLimit(ctx context.Context, method, path, token string, body, out any, limit int64) error {
+	headers := map[string]string{}
+	if token != "" {
+		headers["Authorization"] = "Bearer " + token
+	}
+	return c.doHeaders(ctx, method, path, headers, body, out, limit)
+}
+
+func (c *Client) doHeaders(ctx context.Context, method, path string, headers map[string]string, body, out any, limit int64) error {
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -258,8 +266,8 @@ func (c *Client) doLimit(ctx context.Context, method, path, token string, body, 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)

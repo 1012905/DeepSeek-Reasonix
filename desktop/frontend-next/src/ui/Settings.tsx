@@ -14,6 +14,9 @@ import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
 import { PhoneAccess } from "./PhoneAccess";
+import { PhoneReminders } from "./PhoneReminders";
+import { remoteDeviceId } from "../port/cloud_remote";
+import { PhoneNotifications } from "./PhoneNotifications";
 import { Remotes } from "./Remotes";
 import type { HubPort } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
@@ -723,6 +726,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
             </Group>
           )}
           {at === "remote" && <PhoneAccess hub={hub} onError={onError} />}
+          {at === "remote" && <PhoneNotifications hub={hub} port={port} onError={onError} />}
+          {at === "remote" && remoteDeviceId() && <PhoneReminders host={remoteDeviceId()!} />}
 
           {at === "account" && (
             <Group id="account"

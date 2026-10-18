@@ -39,6 +39,7 @@ func TestEffectChildEffortSelection(t *testing.T) {
 			var mu sync.Mutex
 			var sent []any
 			var profiles []event.Profile
+			var ran []event.Profile
 			var failures int
 			args, err := json.Marshal(map[string]any{
 				"action": "call", "capability_id": "task:subagent",
@@ -91,6 +92,11 @@ default_effort = "low"
 					profiles = append(profiles, *e.Tool.Profile)
 					mu.Unlock()
 				}
+				if e.Kind == event.ToolProgress && e.Tool.Name == event.SubagentProgressStatusName && e.Tool.Profile != nil {
+					mu.Lock()
+					ran = append(ran, *e.Tool.Profile)
+					mu.Unlock()
+				}
 			})})
 			if err != nil {
 				t.Fatal(err)
@@ -115,11 +121,19 @@ default_effort = "low"
 					wantModel = tc.model
 				}
 				if len(profiles) == 0 {
-					t.Fatal("child dispatch did not report its runtime identity")
+					t.Fatal("child dispatch did not report its selection")
 				}
 				for _, profile := range profiles {
+					if profile.Model != tc.model || profile.Effort != tc.effort {
+						t.Errorf("dispatch selection = %+v, want %s/%s", profile, tc.model, tc.effort)
+					}
+				}
+				if len(ran) == 0 {
+					t.Fatal("child status did not report its runtime identity")
+				}
+				for _, profile := range ran {
 					if profile.Model != wantModel || profile.Effort != tc.want {
-						t.Errorf("dispatch profile = %+v, want runtime %s/%s", profile, wantModel, tc.want)
+						t.Errorf("status runtime = %+v, want %s/%s", profile, wantModel, tc.want)
 					}
 				}
 			}

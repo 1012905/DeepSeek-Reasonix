@@ -64,7 +64,7 @@ func TestNextQueuedEmptyQueueStaysIdle(t *testing.T) {
 // inspection is idle rather than dispatched.
 func TestNextQueuedPausedQueueStaysIdle(t *testing.T) {
 	s, _ := openControlStore(t, "held for inspection")
-	if err := s.SetPaused(true); err != nil {
+	if err := s.Pause(PauseUser); err != nil {
 		t.Fatal(err)
 	}
 	breakTransactionLock(t, s)

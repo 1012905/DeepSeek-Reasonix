@@ -571,7 +571,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
 
   // The fixture has a window with an icon, because the state worth designing
   // is the one where both switches mean something.
-  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, diskLow: true, sound: false };
+  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, diskLow: true, sound: false, phone: { enabled: false, approval: false, input: false, error: false } };
 
   async notifyPrefs(): Promise<NotifyPrefs | null> {
     return { ...this.notifications };

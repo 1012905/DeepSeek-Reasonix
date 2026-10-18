@@ -84,15 +84,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		renderAutoArchiveSection(&b, c)
 		renderServeAndPeers(&b, c)
 		renderObservabilitySection(&b, c)
-		b.WriteString("[notifications]\n")
-		fmt.Fprintf(&b, "enabled = %v   # system notifications for CLI and desktop turns; default off\n", c.Notifications.Enabled)
-		fmt.Fprintf(&b, "turn_done = %v   # notify when a turn finishes\n", c.Notifications.TurnDone)
-		fmt.Fprintf(&b, "approval_request = %v   # notify when a tool approval is waiting\n", c.Notifications.ApprovalRequest)
-		fmt.Fprintf(&b, "ask_request = %v   # notify when a question is waiting\n", c.Notifications.AskRequest)
-		fmt.Fprintf(&b, "feedback_reply = %v   # notify when a feedback report gets a reply\n", c.Notifications.FeedbackReply)
-		fmt.Fprintf(&b, "disk_low = %v   # notify when the workspace or state volume is nearly full\n", c.Notifications.DiskLow)
-		fmt.Fprintf(&b, "sound = %v   # play a short chime for the events above, with or without system notifications; default off\n", c.Notifications.Sound)
-		b.WriteString("\n")
+		renderNotificationsSection(&b, c)
 	}
 
 	if shouldRenderNetwork(c, defaults, scope) {

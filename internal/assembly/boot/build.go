@@ -25,6 +25,7 @@ import (
 	"reasonix/internal/ext/mcplaunch"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/pluginspec"
+	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/browser"
 	"reasonix/internal/platform/gitcmd"
 	"reasonix/internal/platform/lsp"
@@ -631,7 +632,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		Memory:                         b.prompt.memory,
 		// Read at Close time: freeze chains the extension runtime set onto it.
 		Cleanup:               func() { defer b.closeLifetime(); b.cleanup() },
-		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, entry.APIKey()),
+		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, billing.Format(entry.BalanceFormat), entry.APIKey()),
 		Feedback:              control.FeedbackOptions{Service: feedbackService(b.roots.Home(), b.proxy, opts.AccountsURL), ProviderKind: feedbackProviderKind(entry), Surface: opts.FeedbackSurface},
 		Jobs:                  b.session.jobs,
 		TaskStore:             opts.TaskStore,
