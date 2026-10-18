@@ -1,9 +1,11 @@
 package control
 
 import (
+	"context"
 	"slices"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/tools/websearch"
 )
 
 // WebAccessSettings is where web_search and web_fetch may send things, as the
@@ -114,4 +116,11 @@ func orEmpty(list []string) []string {
 		return []string{}
 	}
 	return list
+}
+
+// ProbeSearxng sends one test search to the SearXNG address already saved in the
+// user file and reports why the instance did not answer. Nothing a caller sends
+// chooses the address, so the probe can only reach what the user saved.
+func (c *Controller) ProbeSearxng(ctx context.Context) (websearch.SearxngProbe, error) {
+	return websearch.ProbeSearxng(ctx, c.WebAccessSettings().SearxngURL)
 }
