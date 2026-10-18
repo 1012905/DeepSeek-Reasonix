@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -107,6 +108,11 @@ type filesAPI struct {
 	states    []string // states the polls answer with, in order
 	deleted   []string
 	request   []byte
+	// startTo, when set, is the upload address the start answer names instead of
+	// this server's own; finalName is the file name the finalize answer carries.
+	startTo   string
+	finalName string
+	stray     []string // requests no handler below expects
 }
 
 func newFilesAPI(t *testing.T, states ...string) *filesAPI {
@@ -118,14 +124,22 @@ func newFilesAPI(t *testing.T, states ...string) *filesAPI {
 		defer f.mu.Unlock()
 		b, _ := io.ReadAll(r.Body)
 		f.startHdr, f.startBody = r.Header.Clone(), string(b)
-		w.Header().Set("X-Goog-Upload-URL", f.srv.URL+"/upload-target")
+		target := f.srv.URL + "/upload-target"
+		if f.startTo != "" {
+			target = f.startTo
+		}
+		w.Header().Set("X-Goog-Upload-URL", target)
 	})
 	mux.HandleFunc("POST /upload-target", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.putHdr = r.Header.Clone()
 		f.uploaded, _ = io.ReadAll(r.Body)
-		_, _ = io.WriteString(w, `{"file":{"name":"files/abc123","uri":"`+f.srv.URL+`/v1beta/files/abc123","state":"PROCESSING"}}`)
+		name := "files/abc123"
+		if f.finalName != "" {
+			name = f.finalName
+		}
+		_, _ = io.WriteString(w, `{"file":{"name":"`+name+`","uri":"`+f.srv.URL+`/v1beta/files/abc123","state":"PROCESSING"}}`)
 	})
 	mux.HandleFunc("GET /v1beta/files/abc123", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -146,6 +160,12 @@ func newFilesAPI(t *testing.T, states ...string) *filesAPI {
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, sse(completed))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.stray = append(f.stray, r.Method+" "+r.URL.Path)
+		f.mu.Unlock()
+		w.WriteHeader(http.StatusNotFound)
 	})
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
@@ -168,7 +188,7 @@ func (f *filesAPI) run(t *testing.T, ref provider.VideoRef) {
 	for range ch {
 	}
 	// The delete runs after the stream ends; give it the moment it needs.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(400 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		f.mu.Lock()
 		n := len(f.deleted)
@@ -250,5 +270,42 @@ func TestTheFileURLsAreDerivedFromTheBase(t *testing.T) {
 	w := newVideoWire(provider.VideoProtocolGeminiFiles, "https://generativelanguage.googleapis.com/v1beta")
 	if w == nil || w.uploadURL != "https://generativelanguage.googleapis.com/upload/v1beta/files" || w.root != "https://generativelanguage.googleapis.com/v1beta" {
 		t.Fatalf("wire = %+v", w)
+	}
+}
+
+// A response must not choose where the file's bytes or the key go: an upload
+// address on another host is refused before anything is sent to it.
+func TestAnUploadAddressOnAnotherHostIsNeverFollowed(t *testing.T) {
+	var elsewhere atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { elsewhere.Add(1) }))
+	defer other.Close()
+	ref := grantedVideo(t, []byte("bytes"))
+	f := newFilesAPI(t, "ACTIVE")
+	f.startTo = other.URL + "/steal"
+	f.run(t, ref)
+	if elsewhere.Load() != 0 {
+		t.Fatalf("the bytes were sent to a host the response named: %d requests", elsewhere.Load())
+	}
+	if !strings.Contains(string(f.request), provider.VideoUploadFailed) || strings.Contains(string(f.request), `"type":"video"`) {
+		t.Fatalf("request = %s", f.request)
+	}
+}
+
+// A file name is joined onto the API root for polling and deletion, so only the
+// shape Google issues is accepted: nothing is polled or deleted under any other.
+func TestAFileNameThatIsNotAFilesPathIsNeverRequested(t *testing.T) {
+	filePollEvery = time.Millisecond
+	defer func() { filePollEvery = 2 * time.Second }()
+	for _, name := range []string{"files/../models/x", "../x", "files/a/b", "models/abc", "files/"} {
+		ref := grantedVideo(t, []byte("bytes"))
+		f := newFilesAPI(t, "ACTIVE")
+		f.finalName = name
+		f.run(t, ref)
+		f.mu.Lock()
+		polls, deleted, stray := f.polls, len(f.deleted), append([]string(nil), f.stray...)
+		f.mu.Unlock()
+		if polls != 0 || deleted != 0 || len(stray) != 0 || !strings.Contains(string(f.request), provider.VideoUploadFailed) {
+			t.Errorf("name %q: polls=%d deleted=%d stray=%v request=%s", name, polls, deleted, stray, f.request)
+		}
 	}
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -97,5 +98,18 @@ func TestOnlyTheModelsWithAPublishedPriceCarryOne(t *testing.T) {
 	}
 	if e.Prices["gemini-4-argon"] != nil {
 		t.Error("gemini-4-argon shows no price on Google's page, so none may be invented")
+	}
+}
+
+func TestTheAnnotatedConfigSaysTheGeminiKindIsExperimental(t *testing.T) {
+	var b strings.Builder
+	renderProviderEntryAnnotated(&b, *geminiNativeEntry(t, "gemini-3.8-flash"))
+	if !strings.Contains(b.String(), "experimental") {
+		t.Fatalf("the config the user reads does not say so:\n%s", b.String())
+	}
+	b.Reset()
+	renderProviderEntryAnnotated(&b, ProviderEntry{Name: "x", Kind: "openai", BaseURL: "https://x"})
+	if strings.Contains(b.String(), "experimental") {
+		t.Fatal("another kind was marked experimental")
 	}
 }
