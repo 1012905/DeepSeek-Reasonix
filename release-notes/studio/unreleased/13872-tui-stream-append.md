@@ -1,0 +1,2 @@
+- 修复：终端界面里，命令输出很长、或思考/回答很长时，界面会越来越卡（每次追加都复制整段文字）；现在追加开销不再随长度增长。见 #13872。
+- Fixed: the terminal UI slowed down as a command's output, an answer or its thinking grew, since each appended piece copied everything so far; appending now costs the same at any length. See #13872.
