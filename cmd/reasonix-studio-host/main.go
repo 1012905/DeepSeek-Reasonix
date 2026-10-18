@@ -386,7 +386,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// This window is the only client of its kernel, so a system notification
 	// reaches the person who asked for it. Every pane gets the same wrapper,
 	// not just the one the launch started with.
-	notifications, notifySet := hostNotifications(cfg)
+	notifications, notifySet, phoneLink := hostNotifications(cfg)
 	// One fold behind the status icon: every pane's events on the way through,
 	// so the tray surface answers from what the panes did rather than from a
 	// count the shell kept for itself.
@@ -474,7 +474,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		return nil, err
 	}
 	hub.StartRecoveryGC(ctx)
-	startCloudRemote(ctx, cfg, logs, hub)
+	startCloudRemote(ctx, cfg, logs, hub, phoneLink)
 	phases.mark(startupBackground)
 	return hub, nil
 }
@@ -500,7 +500,7 @@ func runtimeOptions(root string, sink event.Sink, logs io.Writer, phases *startu
 	}
 }
 
-func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, tasks remotecloud.TaskService) {
+func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, tasks remotecloud.TaskService, phones *notify.PhoneLink) {
 	httpClient, err := netclient.NewHTTPClient(cfg.NetworkProxySpec(), netclient.TransportOptions{})
 	if err != nil {
 		fmt.Fprintf(logs, "remote cloud: %v\n", err)
@@ -528,6 +528,12 @@ func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, t
 				DeviceID: status.DeviceID, Name: status.Name, Online: status.Online, Error: status.Error, Reason: string(status.Reason),
 			}
 		})
+	}
+	// Phone notifications leave through this connection, under this Studio's own
+	// device credential.
+	phones.Set(host)
+	if registrar, ok := tasks.(interface{ SetCloudPhones(serve.CloudPhones) }); ok {
+		registrar.SetCloudPhones(host)
 	}
 	go host.Run(ctx)
 }
@@ -573,13 +579,17 @@ func hostServeConfig(cfg config.ServeConfig) config.ServeConfig {
 // says today, because deciding here would make "notify me" mean "notify me
 // after a restart". The shared [notifications] config is the one setting this
 // window and the CLI both answer to.
-func hostNotifications(cfg *config.Config) (func(event.Sink) event.Sink, *notify.Settings) {
+func hostNotifications(cfg *config.Config) (func(event.Sink) event.Sink, *notify.Settings, *notify.PhoneLink) {
 	set := notify.NewSettings(config.NotificationsConfig{})
 	if cfg != nil {
 		set.Store(cfg.Notifications)
 	}
 	sender := notify.NewPlatformSender()
-	return func(sink event.Sink) event.Sink { return notify.NewSink(sink, sender, i18n.M, set) }, set
+	// One reporter for every runtime, so a burst across panes folds into one
+	// report; its sender is the account connection, attached once that is up.
+	link := &notify.PhoneLink{}
+	phone := notify.NewPhone(link)
+	return func(sink event.Sink) event.Sink { return notify.NewSink(sink, sender, i18n.M, set).WithPhone(phone) }, set, link
 }
 
 // studioTray answers for a shell that can put an icon back whenever the setting
