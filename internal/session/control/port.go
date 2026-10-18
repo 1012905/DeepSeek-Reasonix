@@ -310,6 +310,8 @@ type RuntimeSettings interface {
 	SaveDisplayCurrency(mode string) error
 	ChangedFilesSettings() ChangedFilesSettings
 	SaveChangedFilesSettings(show bool) error
+	FeedbackLevelNotices() FeedbackLevelNoticeSettings
+	SaveFeedbackLevelNotices(enabled bool) error
 	ObservabilitySettings() ObservabilitySettings
 	SaveObservabilitySettings(patch ObservabilityPatch) (ObservabilitySettings, error)
 	FoldWorkSettings() FoldWorkSettings

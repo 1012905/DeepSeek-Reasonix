@@ -1,0 +1,2 @@
+- 新增：设置 → 远程可以添加本机的 WSL 发行版：内核运行在发行版里，界面仍在 Windows；关闭 Studio 后内核随发行版停止，对话会保留。关联 #12225。
+- Added: Settings, Remote can add a WSL distribution on this PC. The kernel runs in it and stops with it when Studio closes; conversations are kept. Refs #12225.

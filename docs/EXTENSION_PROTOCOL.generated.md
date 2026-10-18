@@ -5,7 +5,7 @@
 - Protocol ID: `reasonix.extension.v2`
 - Protocol major: `2`
 - Schema: `internal/ext/extension/protocol/schema.generated.json`
-- Schema hash: `sha256:d46a970c1b1ac3a03cbdc9a32e6457e48f02c25a2679a0e3bbc8a727557437e7`
+- Schema hash: `sha256:240d875d8539373bc8e50cb8df431ba0364e58a4502b773beb0eb6a2a8120bb3`
 
 Within major v2 only optional fields, new enum values, and new methods may
 be added; existing required fields, directions, limits, error reasons, and
@@ -30,6 +30,8 @@ semantics never change.
 | `extension/ui/action` | `host_to_extension_request` | `ui` | `UIActionParams` | `UIActionResult` |
 | `extension/ui/submit` | `host_to_extension_request` | `ui` | `UISubmitParams` | `UISubmitResult` |
 | `host/content/read` | `extension_to_host_request` | `content` | `ContentReadParams` | `ContentReadResult` |
+| `host/prompt/submit` | `extension_to_host_request` | `session` | `PromptSubmitParams` | `PromptSubmitResult` |
+| `host/session/read` | `extension_to_host_request` | `session` | `SessionReadParams` | `SessionReadResult` |
 | `host/ui/publish` | `extension_to_host_request` | `ui` | `UIPublishParams` | `UIPublishResult` |
 | `host/ui/request` | `extension_to_host_request` | `ui` | `UIRequestParams` | `UIRequestResult` |
 

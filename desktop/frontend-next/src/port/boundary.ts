@@ -312,6 +312,13 @@ export interface ObservabilitySettings {
 
 export type ObservabilityPatch = Partial<Pick<ObservabilitySettings, "enabled" | "endpoint" | "headerName" | "headerEnv" | "serviceName">>;
 
+// Whether the person is told when their feedback level goes up; the user file
+// holds it, and it starts off.
+export interface FeedbackLevelNotices {
+  enabled: boolean;
+  path: string;
+}
+
 export interface ChangedFilesSettings {
   show: boolean;
   path: string;

@@ -24,3 +24,17 @@
 .composition-custom-list [aria-pressed="true"] { background: var(--overlay); border-color: var(--faint); }
 .composition-catalog button:focus-visible, .composition-how summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
 .composition-catalog button:disabled { cursor: default; opacity: .6; }
+.composition-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.composition-editor { display: grid; gap: 12px; margin-block: 16px; }
+.composition-editor input, .composition-editor select { min-width: 0; max-width: 100%; }
+.composition-modules { border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; }
+.composition-modules legend { font-weight: 600; padding-inline: 4px; }
+.composition-module { margin-block: 8px; }
+.composition-module .in { flex: 1; min-width: 100px; }
+.composition-editor :is(input, select) {
+  width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--raised); color: var(--text); padding: 6px 9px; font: var(--w-reg) var(--fs-ui)/1.5 var(--ui);
+}
+.composition-editor :is(input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.composition-editor :is(input, select):disabled { opacity: .65; }
+.composition-editor h4 { margin: 10px 12px 0; font-size: var(--fs-ui); }

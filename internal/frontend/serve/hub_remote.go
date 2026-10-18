@@ -127,6 +127,8 @@ type RemoteLinkState struct {
 // copy would blank whatever it never saw.
 type RemoteHostView struct {
 	Name   string `json:"name"`
+	Kind   string `json:"kind,omitempty"`
+	Distro string `json:"distro,omitempty"`
 	Target string `json:"target"`
 	Status string `json:"status"`
 
@@ -174,6 +176,8 @@ func (h *Hub) listRemoteHosts(w http.ResponseWriter, _ *http.Request) {
 	for _, entry := range cfg.Remote.Hosts {
 		view := RemoteHostView{
 			Name:          entry.Name,
+			Kind:          entry.Kind,
+			Distro:        entry.Distro,
 			Target:        entry.Target(),
 			Status:        "idle",
 			Disabled:      entry.Disabled,
@@ -182,7 +186,7 @@ func (h *Hub) listRemoteHosts(w http.ResponseWriter, _ *http.Request) {
 			User:          entry.User,
 			IdentityFile:  entry.IdentityFile,
 			ProxyJump:     entry.ProxyJump,
-			Workspace:     entry.Workspace,
+			Workspace:     entry.DefaultWorkspace(),
 			Workspaces:    entry.WorkspaceList(),
 			ServeInstall:  entry.ServeInstall,
 			Provider:      entry.ProviderMode(),
@@ -201,7 +205,7 @@ func (h *Hub) listRemoteHosts(w http.ResponseWriter, _ *http.Request) {
 }
 
 // OpenRemoteRequest asks for a pane on another machine. An empty Workspace
-// takes the host entry's own default, which the attach layer resolves.
+// takes the same user-configured default as a host-level read.
 type OpenRemoteRequest struct {
 	Host             string `json:"host"`
 	Workspace        string `json:"workspace"`
@@ -294,20 +298,20 @@ func relayFarReason(err error) error {
 
 func (h *Hub) openRemoteRuntime(w http.ResponseWriter, r *http.Request) {
 	var req OpenRemoteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		badBody(w)
+	if !decodeRemoteBody(w, r, &req) {
 		return
 	}
 	if h.opts.Remote == nil {
 		refuseNoRemote(w)
 		return
 	}
-	if err := h.remoteHostDialable(req.Host); errors.Is(err, errRemoteDisabled) {
-		refuse(w, http.StatusConflict, "remote.disabled", "this machine is turned off in the host book", map[string]any{"host": req.Host})
-		return
-	} else if err != nil {
+	workspace, err := h.remoteHostWorkspace(req.Host)
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	if strings.TrimSpace(req.Workspace) == "" {
+		req.Workspace = workspace
 	}
 	ep, release, err := h.opts.Remote.Attach(operationContext(r), req.Host, req.Workspace)
 	if err != nil {

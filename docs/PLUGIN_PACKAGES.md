@@ -497,7 +497,7 @@ see `docs/EXTENSION_PROTOCOL.generated.md` for the method index and
   slot has exactly one owner across all installed plugins; a collision fails
   the build with both sources named.
 - `capabilities` gates whole feature families: `interceptors`, `strategies`,
-  `providers`, `ui`, `tools`. Anything the sidecar announces beyond the
+  `providers`, `ui`, `tools`, `session`. Anything the sidecar announces beyond the
   manifest is rejected during the handshake.
 - `tools` declares the model-callable tools the runtime serves; it needs the
   `tools` capability. Each tool has:
@@ -739,13 +739,22 @@ How it runs:
   disabled, and its status says why.
 - Nothing a mod does changes the cached system prompt or the tool list. Its text
   reaches the model only as data from the mod.
+- While a mod runs, the completion receipt carries the gap `mod_effects_unobserved`:
+  what a full-trust process wrote is outside what the host observes, so a change
+  it made cannot be proven.
 
 Events served:
 
-- `tool.call`: `{ deny }` and argument rewrite. A `{ result }` answer is reported
-  to the model as the reason the call was answered in place of the tool.
-- `tool.check`: `deny` and `ask`. An `allow` is ignored.
-- `prompt.submit`: text rewrite and `{ drop }`.
+- `tool.call`: `{ deny }`, argument rewrite, and `{ result }`. A result answers
+  the call in place of the tool: the tool does not run, the model gets a
+  successful result under the host's header naming the mod, and the receipt
+  counts no change.
+- `tool.check`: `deny` and `ask`. An `allow` is ignored. It applies to installed
+  MCP tools as well, and can only tighten.
+- `prompt.submit`: text rewrite, `{ drop }` and `context`, a list of strings or
+  `{ label, text }` blocks. Blocks follow the prompt on the turn's tail under the
+  host's header; they never touch the cached prefix. A block is cut at
+  `[mods] context_bytes` (8192) and a turn keeps `context_blocks` (8).
 - `session.start`, `session.end`, `turn.start`, `command.run`, `ui.press`.
 - `ui.render` for the `AbovePrompt` band.
 
@@ -755,11 +764,27 @@ Events served:
 - `state`, with `atom`, `read`, `update`, `derive` and `memberOf` imported from
   `claude-code`.
 - `session.id`, `session.cwd`, `session.root`.
+- `session.messages({ limit })` and `session.usage()`: the last transcript items
+  (credentials redacted, up to `[mods] messages_max`, 200) and the last
+  response's token counts. A mod that calls them is listed in the install
+  preview as reading the session.
+- `prompt.submit(text)`: queues a prompt as the mod's own words, under the host's
+  header, never as yours; `asUser` is not served.
+- It rejects with `mod.submit_rate` over `[mods] submit_per_turn` (3 between two
+  prompts you write), with `mod.submit_too_long` over `[mods] submit_bytes`
+  (8 KiB, 0 for none), and with `mod.submit_refused` while the session has no saved file.
+- A call that needs an answer made while `session.start` runs rejects with
+  `mod.not_ready`: that hook runs before the session is ready.
 - `tool.register/call/list` and `command.register/run/list`. Both register
   while `session.start` runs.
 - `ui.toast`, `status`, `notice`, `log`, `ask`, `resolve`, `invalidate`.
 
-Anything else is registered and named in the mod's status as unserved. A call to
+The turn a queued prompt starts is held to this session's own approvals and
+sandbox like any other turn; that, not the label, is what keeps it safe.
+
+The ceilings above are in the user file only, and `0` removes one.
+
+Anything else is registered and named in the mod's status as unserved; a call to
 an unserved `$` member rejects with the typed code `mod.unsupported`.
 
 `$.ui.ask` is a question from the mod, shown with its name. It can never approve

@@ -772,6 +772,7 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 				Answers:  string(config.AnswersFor(p.Kind)),
 				Active:   active,
 				Default:  ref == cfg.DefaultModel || p.Name == cfg.DefaultModel,
+				NotAdded: !cfg.ProviderAdded(p.Name),
 			}
 			capabilitiesFor(cfg, p, model, &entry)
 			out = append(out, entry)

@@ -1322,7 +1322,7 @@ func Default() *Config {
 	return &Config{
 		ConfigVersion:    freshConfigVersion,
 		DefaultModel:     "deepseek-flash",
-		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(),
+		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(), Mods: defaultMods(),
 		UI:      UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
 		Desktop: DesktopConfig{ConversationWidth: "standard"},
 		Billing: BillingConfig{},

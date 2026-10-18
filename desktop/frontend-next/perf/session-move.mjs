@@ -18,10 +18,14 @@ for (const scheme of ["light", "dark"]) {
     page.on("pageerror", (e) => fails.push("页面异常: " + e.message));
     await page.goto(`${BASE}?pref=zh&ws=1&sess=4&turns=1`, { waitUntil: "networkidle" });
     await page.waitForSelector(".app");
-    const rows = '.sessrow[role="treeitem"][data-target]';
+    const rows = '.wsnode:has(> .wsrow[data-target="~/projects/workspace-0"]) .sessrow[role="treeitem"][data-target]';
+    const remoteRows = '.sessrow-remote[role="treeitem"][data-target]';
     const order = () => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => e.getAttribute("data-target")?.replace(/.*\/|\.jsonl/g, "")), rows);
     await page.waitForSelector(rows);
     const start = await order();
+    const remoteOrder = () => page.locator(remoteRows).evaluateAll((els) => els.map((el) => el.dataset.target));
+    const remoteStart = await remoteOrder();
+    check(`${tag}: SSH conversations share the list`, remoteStart.length > 0, remoteStart.join());
     check(`${tag}: the project lists its four conversations`, start.length === 4, start.join());
 
     const first = page.locator(rows).first();
@@ -41,6 +45,8 @@ for (const scheme of ["light", "dark"]) {
     await page.keyboard.press("Alt+ArrowUp");
     await page.waitForFunction(([sel, s]) => [...document.querySelectorAll(sel)].map((e) => e.getAttribute("data-target")?.replace(/.*\/|\.jsonl/g, "")).join() === s, [rows, start.join()]);
     check(`${tag}: Alt+Up on the focused row puts it back first`, (await order()).join() === start.join());
+    check(`${tag}: sorting local conversations preserves the SSH rows`, JSON.stringify(await remoteOrder()) === JSON.stringify(remoteStart));
+    check(`${tag}: sorting keeps focus on the moved row`, await page.locator(rows).first().evaluate((el) => el === document.activeElement));
     await page.mouse.move(width - 3, 895);
     if (shotDir) await page.locator(".rail").screenshot({ path: `${shotDir}/${scheme}-rail.png` });
     await page.close();

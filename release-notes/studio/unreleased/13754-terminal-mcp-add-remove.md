@@ -1,0 +1,2 @@
+- 新增：终端里的 /mcp 面板现在可以添加和删除 MCP 服务器（按 n、d），添加前会完整显示将要运行的命令并要你确认。关联 #13754。
+- Added: The terminal's /mcp panel can now add and remove MCP servers (n, d), showing the full command it would run and asking you to confirm first. Refs #13754.

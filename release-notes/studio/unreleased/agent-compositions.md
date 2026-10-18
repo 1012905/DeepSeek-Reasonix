@@ -5,6 +5,7 @@
 - 组合切换保留 ACP 额外工作目录；派发继承精确绑定，并明确拒绝跨工作区使用绑定。#13613
 - 项目预设的 MCP/扩展参数仅可调整超时，不能改写启动参数、地址或凭据环境；旧的不安全绑定保留历史但拒绝执行。#13613
 - 拒绝跨项目移动绑定组合的会话，保留原会话，避免丢失绑定后以其他能力续写。#13613
+- 远程新会话透传所选模式，同时保留并发打开与重复点击的保护。#13613
 
 <!-- lang:en -->
 
@@ -15,3 +16,4 @@
 - Preserve ACP additional directories across composition switches; dispatch carries the exact binding and refuses cross-workspace bindings. #13613
 - Limit project MCP/extension parameters to timeouts; refuse launch, endpoint or credential-environment overrides, including in old executable bindings, while keeping history readable. #13613
 - Refuse moving bound conversations to another project before copying or deleting them, preserving the original immutable composition. #13613
+- Carry the selected mode into new remote conversations while preserving concurrent-open ordering and duplicate-click protection. #13613

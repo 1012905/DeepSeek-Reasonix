@@ -22,6 +22,31 @@ export function notePhase(phases: Record<string, string>, tool: Tool): Record<st
   if (tool.name !== SUBAGENT_PROGRESS_PREFIX + "status" || !tool.id) return phases;
   return { ...phases, [tool.id]: tool.output ?? "" };
 }
+/** The kernel names, on a child's status events, the model and effort its run started
+ *  with. That is what ran, so it replaces the dispatch-time reading on the card the
+ *  child belongs to, at the top level or nested in a batch. */
+export function noteRan(items: Item[], tool: Tool): Item[] {
+  const ran = tool.profile;
+  if (tool.name !== SUBAGENT_PROGRESS_PREFIX + "status" || !tool.id || !ran?.model) return items;
+  const patch = (c: Tool): Tool => (c.profile?.model === ran.model && c.profile?.effort === ran.effort ? c : { ...c, profile: { ...c.profile, model: ran.model, effort: ran.effort } });
+  let changed = false;
+  const next = items.map((i) => {
+    if (i.t !== "tool") return i;
+    if (i.tool.id === tool.id) {
+      const tool2 = patch(i.tool);
+      changed ||= tool2 !== i.tool;
+      return tool2 === i.tool ? i : { ...i, tool: tool2 };
+    }
+    const kids = i.children.map((c) => (c.id === tool.id ? patch(c) : c));
+    if (kids.some((c, k) => c !== i.children[k])) {
+      changed = true;
+      return { ...i, children: kids };
+    }
+    return i;
+  });
+  return changed ? next : items;
+}
+
 /** A child is working until its tracker says otherwise. */
 export const subagentLive = (phase: string | undefined): boolean => !!phase && !TERMINAL.has(phase);
 

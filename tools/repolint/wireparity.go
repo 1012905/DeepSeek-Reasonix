@@ -186,6 +186,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/hub_remote.go", "RemoteHostView", tsRemoteFile, "RemoteHost"},
 	{"internal/frontend/serve/remote_browse.go", "RemoteListing", tsRemoteFile, "RemoteListing"},
 	{"internal/frontend/serve/remote_browse.go", "RemoteFolder", tsRemoteFile, "RemoteFolder"},
+	{"internal/frontend/serve/remote_book.go", "WSLDistros", tsRemoteFile, "WSLDistros"},
+	{"internal/frontend/serve/remote_book.go", "WSLDistro", tsRemoteFile, "WSLDistro"},
 	// The sidebar row. The unread mark is derived by the kernel from two stored
 	// timestamps; a row the page cannot read it from shows a finished turn as seen.
 	{"internal/frontend/serve/hub_mux.go", "muxOpened", tsMuxFile, "MuxOpened"},
@@ -249,6 +251,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/feedback/types.go", "Reply", tsFeedbackFile, "FeedbackReply"},
 	{"internal/platform/feedback/types.go", "ReplyReceipt", tsFeedbackFile, "FeedbackReplyReceipt"},
 	{"internal/platform/feedback/types.go", "Mine", tsFeedbackFile, "FeedbackMine"},
+	{"internal/platform/feedback/types.go", "Promotion", tsFeedbackFile, "FeedbackPromotion"},
 	{"internal/platform/feedback/types.go", "Profile", tsFeedbackFile, "FeedbackProfile"},
 	{"internal/platform/feedback/types.go", "EffectiveLimits", tsFeedbackFile, "FeedbackEffectiveLimits"},
 	{"internal/frontend/serve/feedback.go", "feedbackEnvView", tsFeedbackFile, "FeedbackEnv"},

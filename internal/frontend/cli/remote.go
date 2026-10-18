@@ -296,6 +296,9 @@ func remoteTestCLI(args []string, version string) int {
 		fmt.Fprintln(os.Stderr, "usage: reasonix remote test <name|user@host>")
 		return 2
 	}
+	if entry, ok := wslEntry(args[0]); ok {
+		return remoteWSLTest(args[0], entry, version)
+	}
 	client, cleanup, err := buildRemoteClient(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -397,6 +400,7 @@ Usage:
   reasonix remote import [alias...|--all]      # from ~/.ssh/config
   reasonix remote test <name|user@host>        # dial, auth, host key, and whether a kernel can run there
   reasonix remote wsl list | wsl test <distribution>   # WSL distributions on this Windows machine
+  reasonix remote wsl add <name> <distribution> [--workspace PATH] [--serve-install MODE]   # connect/test/open then work on it
   reasonix remote connect <name> [--workspace PATH] [--local-port N] [--no-serve] [--open] [--forward-only]
   reasonix remote open <name>                  # connect --open
   reasonix remote status [<name>]

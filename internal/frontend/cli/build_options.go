@@ -11,6 +11,7 @@ import (
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/feedback"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessiontemp"
 )
@@ -77,6 +78,7 @@ func cliProfileBuildOptions(modelName string, maxStepsOverride int, requireKey b
 		HeadlessApprovalMode: overrides.HeadlessApprovalMode,
 		GoalTurnsUnreachable: overrides.GoalTurnsUnreachable,
 		StatsSource:          surface.CLI,
+		FeedbackSurface:      feedback.SurfaceTUI,
 		Stderr:               overrides.Stderr,
 		OnSessionRecovered:   overrides.OnSessionRecovered,
 		Ablation:             overrides.Ablation,

@@ -129,7 +129,10 @@ ACP 切换组合会保留本会话已校验的额外工作目录。派发新会�
 CLI 使用 `--agent-composition builtin:minimal` 或 `--agent-composition user:my-agent`。
 交互会话的 `/agent` 列出目录，`/agent user:my-agent` 在首次提交前选择组合。
 `/preset` 仍表示均衡/交付档位。ACP 增加独立的 `agent_composition` 选项，开始
-对话后只保留当前选择。远程会话使用远端目录、凭据和资源。
+对话后只保留当前选择。
+
+远程会话使用远端目录、凭据和资源；新建时将所选组合 ID
+交给远端解析，不上传本机可执行资源。
 
 HTTP 路由、请求字段与稳定错误代码见 [接口说明](AGENT_COMPOSITIONS.md#entry-points)。
 `/status` 和会话运行时列表返回 `agentComposition`。导入返回定义与依赖诊断，

@@ -77,6 +77,7 @@ func startExtensions(ctx context.Context, opts Options, roots config.Roots, root
 		Warn: func(msg string) {
 			slog.Warn("boot: extension UI hub: "+msg, "root", root)
 		},
+		Session: extensionSession{ctrl: ext.ctrl.Load},
 	})
 	home := roots.Home()
 	if opts.Observe != nil {

@@ -190,8 +190,11 @@ CLI: `reasonix --agent-composition builtin:minimal`, or
 interactive conversation. `/preset` retains its balanced/delivery meaning.
 
 ACP exposes an independent `agent_composition` configuration option and narrows
-it to the current choice after the conversation starts. Remote sessions use the
-remote host's catalog, credentials and retained resources.
+it to the current choice after the conversation starts.
+
+Remote sessions use the
+remote host's catalog, credentials and retained resources. New remote conversations
+send the selected composition ID to that host; local executable resources are not uploaded.
 
 | HTTP method and route | Request / result |
 | --- | --- |

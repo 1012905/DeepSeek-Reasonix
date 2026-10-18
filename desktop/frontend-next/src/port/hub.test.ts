@@ -13,11 +13,36 @@ function answer(status: number, body: string) {
   }));
 }
 
+it("keeps local project moves and host-qualified pin/archive calls on their owning routes", async () => {
+  const fetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+  vi.stubGlobal("fetch", fetch);
+  try {
+    const hub = new SseHub();
+    await hub.pinSession("/same/session.jsonl", true);
+    await hub.pinSession("/same/session.jsonl", false, "gpu box");
+    await hub.archiveSession("/same/session.jsonl", true);
+    await hub.archiveSession("/same/session.jsonl", false, "gpu box");
+    await hub.moveSessionTo("/same/session.jsonl", "/other-project");
+    expect(fetch.mock.calls.map(([path, init]) => [path, JSON.parse(init.body)])).toEqual([
+      ["/tree/sessions/pin", { path: "/same/session.jsonl", pinned: true }],
+      ["/remotes/gpu%20box/sessions/pin", { path: "/same/session.jsonl", pinned: false }],
+      ["/tree/sessions/archive", { path: "/same/session.jsonl", archived: true }],
+      ["/remotes/gpu%20box/sessions/archive", { path: "/same/session.jsonl", archived: false }],
+      ["/tree/sessions/move-to", { path: "/same/session.jsonl", target: "/other-project" }],
+    ]);
+  } finally { vi.unstubAllGlobals(); }
+});
+
 // The same defect SseHttp was fixed for, still standing in the hub port: asking
 // for JSON first threw away every answer that was not an envelope, and what
 // reached the window was "this request did not reach the kernel (HTTP 502)" —
 // wrong twice over, because it had, and the kernel had explained itself.
 describe("a failed hub call", () => {
+  it("surfaces a remote book conflict instead of treating it as an unread book", async () => {
+    answer(409, JSON.stringify({ code: "remote.serve_provider_mismatch", error: "provider setting conflict", params: { host: "gpu-box" } }));
+    await expect(new SseHub().remoteTree("gpu-box")).rejects.toMatchObject({ status: 409,
+      reason: { code: "remote.serve_provider_mismatch", params: { host: "gpu-box" } } });
+  });
   it("carries a plain-text reason through", async () => {
     answer(502, "remote /runtimes: 400 Bad Request: workspace /srv/data is not a directory");
     const err = (await new SseHub().openRemote({ host: "gpu-box" }).catch((e) => e)) as HttpError;
@@ -58,6 +83,20 @@ function jsonAnswer(status: number, body: unknown) {
     headers: new Map([["content-type", "application/json"]]),
   };
 }
+
+it("serializes the remote composition choice at the HTTP request boundary", async () => {
+  const fetch = vi.fn(async () => jsonAnswer(200, { id: "remote", root: "/project", host: "gpu", base: "/runtime/remote", name: "Remote" }));
+  vi.stubGlobal("fetch", fetch);
+  try {
+    const hub = new SseHub();
+    for (const agentComposition of ["builtin:minimal", "builtin:general", undefined]) {
+      await hub.openRemote({ host: "gpu", workspace: "/project", agentComposition });
+      const [url, init] = fetch.mock.lastCall as unknown as [string, RequestInit];
+      expect(url).toBe("/remotes/open");
+      expect(JSON.parse(init.body as string)).toEqual({ host: "gpu", workspace: "/project", sessionPath: "", ...(agentComposition ? { agentComposition } : {}) });
+    }
+  } finally { vi.unstubAllGlobals(); }
+});
 
 describe("host capabilities", () => {
   it("does not ask a kernel picker the capability probe says is absent", async () => {
