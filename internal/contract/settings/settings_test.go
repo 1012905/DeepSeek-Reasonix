@@ -146,3 +146,17 @@ func TestShapesAreReadFromTheConfigType(t *testing.T) {
 		}
 	}
 }
+
+func TestAnOptionalKeyIsWrittenThroughItsPointer(t *testing.T) {
+	cfg := &config.Config{}
+	from, to, err := Write(cfg, "tools.browser_tools", json.RawMessage(`true`))
+	if err != nil || from != nil || to != true || cfg.Tools.BrowserTools == nil || !*cfg.Tools.BrowserTools {
+		t.Fatalf("from=%v to=%v err=%v", from, to, err)
+	}
+	if got, _ := Read(cfg, "tools.browser_tools"); got != true {
+		t.Fatalf("read = %v", got)
+	}
+	if ShapeOf("tools.browser_tools") != ShapeBool {
+		t.Fatal("an optional bool is not a bool")
+	}
+}

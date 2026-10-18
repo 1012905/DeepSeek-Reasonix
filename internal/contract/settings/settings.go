@@ -150,6 +150,9 @@ func walk(t reflect.Type, prefix string, index []int, out map[string]field) {
 }
 
 func shapeOf(t reflect.Type) Shape {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
 	switch t.Kind() {
 	case reflect.Bool:
 		return ShapeBool
@@ -203,7 +206,18 @@ func Read(cfg *config.Config, id string) (any, error) {
 	if e.Secret {
 		return nil, &Error{Code: CodeSecret, ID: id, msg: "the value is never shown"}
 	}
-	return v.Interface(), nil
+	return plain(v), nil
+}
+
+// plain is the value a key holds, with an optional key's pointer looked through.
+func plain(v reflect.Value) any {
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+	return v.Interface()
 }
 
 // Write sets a key on cfg from a JSON value and returns what it held before. It
@@ -225,7 +239,7 @@ func Write(cfg *config.Config, id string, raw json.RawMessage) (from, to any, er
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, next.Interface()) != nil {
 		return nil, nil, &Error{Code: CodeValue, ID: id, msg: "the value does not fit " + v.Type().String()}
 	}
-	from = v.Interface()
+	from = plain(v)
 	v.Set(next.Elem())
-	return from, v.Interface(), nil
+	return from, plain(v), nil
 }
