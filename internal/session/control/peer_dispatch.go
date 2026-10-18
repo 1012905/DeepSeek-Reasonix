@@ -38,10 +38,9 @@ type ProjectDispatcher func(ctx context.Context, project, text string) (Dispatch
 // dispatchState is the controller's side of cross-project dispatch.
 type dispatchState struct {
 	hook atomic.Pointer[ProjectDispatcher]
-	// mu guards the relation. A dispatch partner is a session this one opened or
-	// the one that opened it, and each pairing has a secret the host registered in
-	// memory when it opened the session. The spool only carries messages: what a
-	// message says about who sent it is proved with that secret, never believed.
+	// mu guards the relation: a partner is a session this one opened or the one
+	// that opened it, paired by a secret the host keeps in memory. The spool only
+	// carries messages; who sent one is proved with the secret, never believed.
 	mu     sync.Mutex
 	opened bool
 	depth  int

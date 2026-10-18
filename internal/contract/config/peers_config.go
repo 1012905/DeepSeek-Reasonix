@@ -29,6 +29,10 @@ type PeersConfig struct {
 	MaxDispatchedSessions int `toml:"max_dispatched_sessions"`
 }
 
+func defaultPeers() PeersConfig {
+	return PeersConfig{MaxDispatchDepth: DefaultMaxDispatchDepth, MaxDispatchedSessions: DefaultMaxDispatchedSessions}
+}
+
 // Defaults of the two ceilings above.
 const (
 	DefaultMaxDispatchDepth      = 1

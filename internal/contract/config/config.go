@@ -1310,10 +1310,10 @@ func Default() *Config {
 	return &Config{
 		ConfigVersion:    freshConfigVersion,
 		DefaultModel:     "deepseek-flash",
-		CredentialsStore: CredentialsStoreAuto,
-		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
-		Desktop:          DesktopConfig{ConversationWidth: "standard"},
-		Billing:          BillingConfig{},
+		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(),
+		UI:      UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
+		Desktop: DesktopConfig{ConversationWidth: "standard"},
+		Billing: BillingConfig{},
 		// Set here, not left to the zero value: an absent [secrets] still protects.
 		Secrets: SecretsConfig{ProtectCredentialFiles: true},
 		Notifications: NotificationsConfig{
@@ -1324,7 +1324,6 @@ func Default() *Config {
 			FeedbackReply:   true,
 			DiskLow:         true,
 		},
-		Peers: PeersConfig{MaxDispatchDepth: DefaultMaxDispatchDepth, MaxDispatchedSessions: DefaultMaxDispatchedSessions},
 		Agent: AgentConfig{
 			SystemPrompt: DefaultSystemPrompt,
 			// No total round cap, and nothing else bounds a turn by default: the
