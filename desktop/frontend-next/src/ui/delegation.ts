@@ -24,6 +24,15 @@ export function nestLabel(who: string | undefined, count: number | undefined, st
 // provider/model reference and the effort. The full reference is the title.
 export const ranLabel = (p: Tool["profile"]): string => (p?.model ? [p.model, p.effort].filter(Boolean).join(" · ") : "");
 
+// The same, for a row with no room: the model name is what tells two runs apart,
+// so the provider in front of it is what gives way ("…/deepseek-v4-pro · high").
+export const ranShort = (p: Tool["profile"]): string => {
+  if (!p?.model) return "";
+  const at = p.model.lastIndexOf("/");
+  const name = at >= 0 ? `…/${p.model.slice(at + 1)}` : p.model;
+  return [name, p.effort].filter(Boolean).join(" · ");
+};
+
 export type DelegateStatus = "running" | "refused" | "failed" | "done";
 
 // A host refusal names a call that never started; "interrupted" is only true of
