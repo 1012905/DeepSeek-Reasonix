@@ -14,6 +14,9 @@ import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
 import { PhoneAccess } from "./PhoneAccess";
+import { PhoneReminders } from "./PhoneReminders";
+import { remoteDeviceId } from "../port/cloud_remote";
+import { PhoneNotifications } from "./PhoneNotifications";
 import { Remotes } from "./Remotes";
 import type { HubPort } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
@@ -27,7 +30,7 @@ import { SkillGroups } from "./SkillRow";
 import { Hooks } from "./Hooks";
 import { Network } from "./Network";
 import { Shell as ShellPicker } from "./Shell";
-import { Rules } from "./Rules";
+import { Rules, ToolList } from "./Rules";
 import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
@@ -575,7 +578,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 hint={t("上一项决定是否请求确认，此处决定哪些操作始终禁止、哪些无需确认。修改会重建运行时，任务运行期间无法变更。")}
               >
                 <Rules port={port} onChanged={onChanged} />
-              </Group>
+              </Group><ToolList port={port} />
               <Group id="sandbox"
                 title={t("沙箱")}
                 hint={t("批准之后可以操作的范围。该限制不依赖 agent 自觉：写入范围由工具实施，命令隔离由操作系统实施。")}
@@ -723,6 +726,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
             </Group>
           )}
           {at === "remote" && <PhoneAccess hub={hub} onError={onError} />}
+          {at === "remote" && <PhoneNotifications hub={hub} port={port} onError={onError} />}
+          {at === "remote" && remoteDeviceId() && <PhoneReminders host={remoteDeviceId()!} />}
 
           {at === "account" && (
             <Group id="account"

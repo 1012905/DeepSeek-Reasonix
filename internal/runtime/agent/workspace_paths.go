@@ -37,6 +37,9 @@ func workspaceLeaseConflictScope(err error) *event.WorkspaceLease {
 }
 
 func workspaceLeaseRefusalCode(err error) string {
+	if errors.Is(err, workspacelease.ErrClaimTimeout) {
+		return workspacelease.CodeClaimTimeout
+	}
 	if errors.Is(err, workspacelease.ErrConflict) {
 		return workspacelease.CodeWriteConflict
 	}

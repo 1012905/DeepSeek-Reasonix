@@ -384,8 +384,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.post("/delete-session", { name });
   }
 
-  async proposeCommit(signal?: AbortSignal) {
-    const res = await fetch(this.base + "/commit/propose", {
+  async proposeCommit(signal?: AbortSignal, repo?: string) {
+    const res = await fetch(this.base + "/commit/propose" + (repo ? `?repo=${encodeURIComponent(repo)}` : ""), {
       method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: "{}", signal,
     });
     if (!res.ok) await SsePort.fail("/commit/propose", res);

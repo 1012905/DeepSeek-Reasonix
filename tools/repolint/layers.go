@@ -30,6 +30,7 @@ var leaves = []string{
 	"internal/contract/agentpreset",
 	"internal/contract/chartspec",
 	"internal/contract/surfacespec",
+	"internal/contract/walletformat",
 	"internal/model/billing",
 	"internal/platform/browser",
 	"internal/platform/computer",

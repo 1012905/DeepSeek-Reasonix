@@ -243,6 +243,7 @@ export const SETTINGS: SettingEntry[] = [
   // and the one a reader cannot see from the screen.
   { section: "tools", anchor: "approval", title: "工具批准", scope: "machine", apply: "immediate", keywords: ["权限", "yolo", "询问", "放行"] },
   { section: "tools", anchor: "plan-approval", title: "计划批准", scope: "machine", apply: "immediate", keywords: ["plan", "自动批准", "长任务", "无人值守", "plan_approval", "放行", "询问"] },
+  { section: "tools", anchor: "tool-list", title: "模型可用的工具", scope: "machine", apply: "on-open", keywords: ["禁用", "关闭工具", "tools.disabled", "省 token", "提示词开销", "web_fetch", "denylist"] },
   { section: "tools", anchor: "rules", title: "明确的规则", scope: "machine", apply: "runtime-rebuild", keywords: ["permissions", "允许", "拒绝", "配方"] },
   { section: "tools", anchor: "sandbox", title: "沙箱", scope: "machine", apply: "runtime-rebuild", keywords: ["隔离", "联网", "写权限", "ssh-agent"] },
   { section: "tools", anchor: "shell", title: "命令执行程序", scope: "machine", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
@@ -276,6 +277,8 @@ export const SETTINGS: SettingEntry[] = [
   // walks through it reaches every pane. Nothing is written, so nothing outlives
   // the window either.
   { section: "remote", anchor: "phone", title: "手机访问", scope: "machine", apply: "immediate", keywords: ["手机", "扫码", "二维码", "局域网", "配对", "phone", "mobile", "qr"] },
+  { section: "remote", anchor: "phone-notify", title: "手机通知", scope: "machine", apply: "immediate", keywords: ["推送", "提醒", "手机", "批准", "push", "notification", "phone"] },
+  { section: "remote", anchor: "phone-device", title: "这台手机的提醒", scope: "machine", apply: "immediate", keywords: ["推送", "提醒", "手机", "push", "notification"] },
   { section: "account", anchor: "account", title: "账号", scope: "account", apply: "immediate", keywords: ["登录", "社区"] },
   // Shown only while signed in; restoring writes through the ordinary config paths and reloads the runtime.
   { section: "account", anchor: "backup-file", title: "导出与导入配置", scope: "machine", apply: "immediate", keywords: ["备份", "导出", "导入", "换机", "迁移", "文件"] },

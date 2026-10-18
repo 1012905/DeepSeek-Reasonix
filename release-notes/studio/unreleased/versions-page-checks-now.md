@@ -1,0 +1,2 @@
+- 已选「自动下载」时，打开设置里的版本页会立即检查一次新版本并开始下载，不必再等最长一天的后台检查。议题 #13683。
+- With automatic download chosen, opening the Versions page now checks for a release at once and starts the download, instead of waiting for the next daily background check. Issue #13683.

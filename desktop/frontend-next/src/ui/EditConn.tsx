@@ -11,9 +11,10 @@ import { EffortShape } from "./EffortShape";
 import type { ModelEffort, ModelLimit, ProviderEdit } from "../port/port";
 import { KIND_LABEL } from "./vendors";
 import { ModelLimits, limitTextOf, limitsToSend, type LimitText } from "./ModelLimits";
-import { ModelPrices, incomplete, priceTextOf, pricesToSend, type PriceText } from "./ModelPrices";
+import { ModelPrices, incomplete, priceTextOf, pricesToSend, sourceBad, type PriceText } from "./ModelPrices";
 import { useModelBatch } from "./useModelBatch";
 import { EndpointSwitches, hasEndpointSwitches } from "./EndpointSwitches";
+import { BalanceFields } from "./BalanceFields";
 
 // Only what this form owns is sent: the entry keeps its prices, effort
 // vocabularies and everything else the panel cannot show.
@@ -65,6 +66,8 @@ export function EditConn({
   const [priceText, setPriceText] = useState<Record<string, PriceText>>(
     () => Object.fromEntries(Object.entries(entry.modelPrices ?? {}).map(([m, r]) => [m, priceTextOf(r)])),
   );
+  const [balUrl, setBalUrl] = useState(entry.balanceUrl ?? "");
+  const [balFormat, setBalFormat] = useState(entry.balanceFormat ?? "");
   const [think, setThink] = useState(entry.reasoningProtocol ?? "");
   const [search, setSearch] = useState(entry.webSearch ?? false);
   const [carry, setCarry] = useState(entry.continuation ?? "");
@@ -229,6 +232,8 @@ export function EditConn({
     contextWindow: Number(win.replace(/\D/g, "")) || 0,
     maxOutputTokens: Number(maxOut.replace(/\D/g, "")) || 0,
     idleTimeoutSeconds: idle.ok ? idle.secs : 0,
+    ...(balUrl.trim() !== (entry.balanceUrl ?? "") && { balanceUrl: balUrl.trim() }),
+    ...(balFormat !== (entry.balanceFormat ?? "") && { balanceFormat: balFormat }),
     reasoningProtocol: think,
     ...(wireSwitches && entry.canWebSearch && search !== (entry.webSearch ?? false) && { webSearch: search }),
     ...(wireSwitches && entry.canSetContinuation && carry !== (entry.continuation ?? "") && { continuation: carry }),
@@ -263,7 +268,7 @@ export function EditConn({
   const [edited, setEdited] = useState(false);
   if (dirty && !edited) setEdited(true);
 
-  const canSave = (dirty || err?.kind === "unapplied") && busy === "" && !testing && picked.length > 0 && !extraBad && idle.ok && !picked.some((m) => incomplete(priceText[m]));
+  const canSave = (dirty || err?.kind === "unapplied") && busy === "" && !testing && picked.length > 0 && !extraBad && idle.ok && !picked.some((m) => incomplete(priceText[m]) || sourceBad(priceText[m]));
   const phase: Phase = saving ? "saving"
     : err?.kind === "save" && dirty ? "failed"
       : dirty ? "dirty"
@@ -350,7 +355,8 @@ export function EditConn({
         {(picked.length > 1 || picked.some((m) => entry.modelLimits?.[m])) && (
           <ModelLimits models={picked} value={limitText} onChange={setLimitText} inherited={inheritedLimitsFor} />
         )}
-        {picked.length > 0 && <ModelPrices models={picked} value={priceText} onChange={setPriceText} official={entry.officialPricing === true} stored={entry.modelPrices ?? {}} />}
+        {picked.length > 0 && <ModelPrices models={picked} value={priceText} onChange={setPriceText} official={entry.officialPricing === true} stored={entry.modelPrices ?? {}}
+          onOpenSource={(url) => void Promise.resolve(port.openExternal(url)).catch(() => {})} />}
       </div>
 
       <div className="mlist">
@@ -500,6 +506,7 @@ export function EditConn({
                 {t("等待响应头、以及回包过程中无新内容超过这个时间，就按连接中断处理并重试。本地模型处理长上下文时可能需要调大。")}
               </i>
             </label>
+            <BalanceFields entry={entry} url={balUrl} format={balFormat} onUrl={setBalUrl} onFormat={setBalFormat} />
             {!idle.ok && <div className="why">{t("须是 {min} 到 {max} 之间的整数秒；留空使用默认值。", { min: IDLE_TIMEOUT_MIN, max: IDLE_TIMEOUT_MAX })}</div>}
             <label className="grow full">
               <span>{t("额外请求头")}</span>

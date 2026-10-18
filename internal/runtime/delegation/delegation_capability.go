@@ -76,11 +76,6 @@ func (t *TaskTool) ResolveProfile(args json.RawMessage) *event.Profile {
 	if name == "" {
 		name = "task"
 	}
-	// The concrete runtime the call resolves to: an alias expanded, and the parent's
-	// own model named when the call inherits it, never an empty "inherits".
-	if ranModel, ranEffort := t.effectiveIdentity(model, effort); ranModel != "" {
-		model, effort = ranModel, ranEffort
-	}
 	return &event.Profile{Name: name, Count: 1, Model: model, Effort: effort, Label: taskLabel(p.Desc, p.Prompt)}
 }
 

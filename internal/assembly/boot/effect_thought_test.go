@@ -79,9 +79,10 @@ model = "x"
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	floor := thinkFor.Milliseconds() - 10
-	if kept < floor || framed < floor {
-		t.Fatalf("thought kept %d ms, framed %d ms; want both at least %d", kept, framed, floor)
+	// The size of the measurement is the thought clock's own unit test, with an
+	// injected clock; here the claim is only that one was taken, kept and framed.
+	if kept <= 0 || framed <= 0 {
+		t.Fatalf("thought kept %d ms, framed %d ms; want both measured", kept, framed)
 	}
 	if kept != framed {
 		t.Fatalf("the transcript keeps %d ms but the live frame said %d ms", kept, framed)

@@ -42,6 +42,7 @@ type SlashHintMessages struct {
 	ArgFeedbackLink       string
 	ArgFeedbackUnlink     string
 	ArgFeedbackLinks      string
+	ArgFeedbackBoard      string
 	ArgFeedbackName       string
 	ArgMemoryRecall       string
 	ArgMemoryRevisions    string

@@ -66,6 +66,9 @@ type Options struct {
 	// provider instance. It is attached to emitted Usage events so downstream
 	// usage accounting can attribute tokens to the exact model.
 	ModelRef string
+	// RequestEffort is the depth this agent's requests carry over its provider's
+	// built one: a sub-agent sharing its parent's provider starts on the parent's.
+	RequestEffort string
 	// EventSource names the producer of this agent's settled frames — executor
 	// unless a caller says otherwise, so a two-model stream says which model
 	// wrote each one rather than leaving it to be inferred.

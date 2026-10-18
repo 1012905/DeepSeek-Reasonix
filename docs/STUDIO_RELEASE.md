@@ -288,7 +288,8 @@ Studio and 1.x signing jobs and smoke tests share the concurrency group `certum-
 `latest.json` keys `platforms` (and `deltas`) as `<GOOS>-<GOARCH>`, derived from the artifact name by `studio-manifest` and asked for by the running kernel through `runtime.GOOS` and `runtime.GOARCH`.
 
 - The key is the binary's own architecture, not the machine's. An x64 build running under ARM64 emulation asks for `windows-amd64` and keeps updating to the amd64 installer; it is not moved to a native build.
-- Linux ships a `.deb` and an `.rpm` for each of amd64 and arm64 (aarch64), all named `ReasonixStudio-linux-<arch>.<ext>`; the publish job requires all four by name.
+- Linux ships a `.deb`, an `.rpm` and an `.AppImage` for each of amd64 and arm64 (aarch64), all named `ReasonixStudio-linux-<arch>.<ext>`; the publish job requires all six by name.
+- The `.AppImage` is a download only: no `native_packages` key names it and no client replaces one, so an AppImage user downloads the next one. `scripts/verify-linux-appimage.sh` checks its type marker, its ELF machine, and that extracting it yields the kernel (for the right architecture) and the page.
 - CI and releases use `scripts/verify-linux-package.sh` to read both formats back: package name, architecture, root-owned update payload, every ELF image, and static Go binaries.
 - `scripts/linux-install-smoke.sh` runs only with `GITHUB_ACTIONS=true`. It installs and reinstalls the `.deb`, drives its packaged Electron window under Xvfb through a renderer-to-kernel request and second launch, checks normal shell/kernel exit, and uninstalls.
 - ARM64 packaging does not establish compatibility with every UOS/Kylin version. Qualify the target distribution's glibc, GTK/NSS, graphics/session environment and, for `.deb` self-update, apt, pkexec and Polkit. RPM updates remain manual.

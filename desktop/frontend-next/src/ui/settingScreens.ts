@@ -14,6 +14,7 @@ export const SETTING_SCREEN: Record<string, string> = {
   "agent.plan_approval": "tools:plan-approval",
   "agent.default_mode": "session:default-mode",
   "permissions.mode": "tools:approval",
+  "tools.disabled": "tools:tool-list",
   "permissions.allow": "tools:rules",
   "permissions.ask": "tools:rules",
   "permissions.deny": "tools:rules",

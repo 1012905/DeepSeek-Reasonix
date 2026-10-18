@@ -234,7 +234,9 @@ func TestRunShell_HeredocCancelReleasesTurn(t *testing.T) {
 	}, "\n")
 
 	ctrl.RunShell(command)
-	if !waitForFileContainingWithin(target, "TOKEN_EXAMPLE", 2*time.Second) {
+	// What is awaited is the shell starting (a cold Git Bash on a shared runner can take
+	// seconds), not a property under test: the bound only keeps a hang from lasting forever.
+	if !waitForFileContainingWithin(target, "TOKEN_EXAMPLE", 15*time.Second) {
 		ctrl.Cancel()
 		waitForDoneWithin(t, done, shellWaitDelay+10*time.Second)
 		t.Fatalf("heredoc target body was not written before cancel: %s", target)

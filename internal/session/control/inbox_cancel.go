@@ -66,7 +66,7 @@ func (c *Controller) CancelWithInboxItems(ids []string, source string) error {
 		return err
 	}
 	wasPaused := st.Snapshot().Paused
-	if err := st.SetPaused(true); err != nil {
+	if err := st.Pause(sessioninbox.PauseUser); err != nil {
 		c.Cancel()
 		return err
 	}
@@ -90,7 +90,7 @@ func (c *Controller) CancelWithInboxItems(ids []string, source string) error {
 		}
 	}
 	if !wasPaused {
-		if err := st.SetPaused(false); err != nil {
+		if err := st.Resume(); err != nil {
 			return err
 		}
 		c.maybeDispatchInbox()
