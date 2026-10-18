@@ -1703,9 +1703,13 @@ reasonix schedule pause <id>      # pause-all, resume, resume-all, renew and rm 
 reasonix schedule tick            # claim and run what is due now, then exit
 ```
 
-- **A person confirms it.** `add`, `resume`, `renew`, `rm` and `resume-all` need a terminal: the command
-  shows the first run, the folder, the model, the most it can spend and when it ends, and asks. A command run
-  by a tool, a pipe or a scheduler is refused.
+- **A person confirms it.** `add`, `resume`, `renew`, `rm` and `resume-all` need a terminal. `add` shows the whole
+  plan (prompt, folder, model, budget, expiry) and asks you to type back its short id; `list` shows who created
+  each one. A command run by a tool, a pipe or a scheduler is refused.
+  - The host marks every subprocess it starts for the agent with `REASONIX_AGENT_CHILD=1`, and these commands
+    refuse when it is set, so an agent that opens its own pty is stopped too.
+  - That is a guard against accidents and a trick, not a boundary: a child can clear its own environment, and
+    only the sandbox confines what an agent can do.
 - **Nothing runs by itself yet.** Call `reasonix schedule tick` from the operating system's scheduler (cron,
   launchd, Task Scheduler). Every tick goes through the store's own budget and expiry checks, so a scheduler
   that only calls `tick` cannot bypass them. An in-kernel ticker is a later change.

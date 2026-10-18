@@ -3,8 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +25,8 @@ type schedWorld struct {
 	err   bytes.Buffer
 	input string
 	human bool
+	// agentChild simulates a command started by an agent tool.
+	agentChild bool
 }
 
 func newSchedWorld(t *testing.T) *schedWorld {
@@ -53,8 +57,27 @@ func (w *schedWorld) run(args ...string) int {
 	w.t.Helper()
 	w.out.Reset()
 	w.err.Reset()
-	return scheduleManage(args, scheduleIO{in: strings.NewReader(w.input), out: &w.out, err: &w.err, human: w.human, now: func() time.Time { return w.now }})
+	return scheduleManage(args, scheduleIO{in: w.stdin(), out: &w.out, err: &w.err, human: w.human, agentChild: w.agentChild, now: func() time.Time { return w.now }})
 }
+
+// stdin answers "CONFIRM" with whatever plan code the command printed, as a
+// person reading the prompt would; any other input is passed through.
+func (w *schedWorld) stdin() io.Reader {
+	if w.input != "CONFIRM" {
+		return strings.NewReader(w.input)
+	}
+	return readerFunc(func(p []byte) (int, error) {
+		m := regexp.MustCompile(`Type ([0-9a-f]{6}) to create`).FindStringSubmatch(w.out.String())
+		if m == nil {
+			return 0, io.EOF
+		}
+		return copy(p, m[1]+"\n"), io.EOF
+	})
+}
+
+type readerFunc func([]byte) (int, error)
+
+func (f readerFunc) Read(p []byte) (int, error) { return f(p) }
 
 func (w *schedWorld) store() *schedule.Store {
 	w.t.Helper()
@@ -75,7 +98,7 @@ func (w *schedWorld) schedules() []schedule.Schedule {
 
 func (w *schedWorld) add() schedule.Schedule {
 	w.t.Helper()
-	w.input = "y\n"
+	w.input = "CONFIRM"
 	if code := w.run("add", "--every", "2h", "--prompt", "summarize TODOs", "--workspace", w.ws); code != 0 {
 		w.t.Fatalf("add = %d: %s %s", code, w.out.String(), w.err.String())
 	}
@@ -92,7 +115,11 @@ func TestScheduleAddShowsWhatIsConfirmedAndCreatesOnlyOnYes(t *testing.T) {
 	if code := w.run("add", "--every", "2h", "--prompt", "summarize TODOs", "--workspace", w.ws, "--label", "morning"); code != 0 {
 		t.Fatalf("exit %d: %s", code, w.err.String())
 	}
-	for _, want := range []string{"every 2h0m0s", "first run:   2026-", w.ws, "local/fake-model", "summarize TODOs", "up to 250000 tokens", "at most:     1000000 tokens per day", "parked for you"} {
+	realWS, err := filepath.EvalSymlinks(w.ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"every 2h0m0s", "first run:   2026-", realWS, "local/fake-model", "summarize TODOs", "up to 250000 tokens", "at most:     1000000 tokens per day", "parked for you"} {
 		if !strings.Contains(w.out.String(), want) {
 			t.Fatalf("preview lacks %q:\n%s", want, w.out.String())
 		}
@@ -100,7 +127,18 @@ func TestScheduleAddShowsWhatIsConfirmedAndCreatesOnlyOnYes(t *testing.T) {
 	if len(w.schedules()) != 0 {
 		t.Fatal("a declined confirmation still created a schedule")
 	}
+	w.input = "y\n"
+	if code := w.run("add", "--every", "2h", "--prompt", "summarize TODOs", "--workspace", w.ws); code != 0 || len(w.schedules()) != 0 {
+		t.Fatalf("typing y instead of the plan id created something: %d %d", code, len(w.schedules()))
+	}
 	sc := w.add()
+	if sc.Confirmed.Via != schedule.ConfirmedViaTerminal {
+		t.Fatalf("via = %q", sc.Confirmed.Via)
+	}
+	w.run("list")
+	if !strings.Contains(w.out.String(), "created by terminal") {
+		t.Fatalf("list does not say who created it:\n%s", w.out.String())
+	}
 	if sc.Confirmed.By != schedule.ConfirmedByHuman || sc.Model.Provider != "local" || sc.Model.Model != "fake-model" || sc.Trigger.EverySec != 7200 {
 		t.Fatalf("schedule = %+v", sc)
 	}
@@ -132,9 +170,32 @@ func TestSchedulesNeedAPersonAtATerminalToCreateResumeOrDelete(t *testing.T) {
 	}
 }
 
+// A terminal an agent tool opened for itself passes the terminal check; the
+// marker the host puts on its subprocesses is what refuses it.
+func TestSchedulesRefuseACommandStartedByAnAgentTool(t *testing.T) {
+	w := newSchedWorld(t)
+	sc := w.add()
+	w.agentChild = true
+	w.input = "CONFIRM"
+	for _, args := range [][]string{
+		{"add", "--every", "2h", "--prompt", "x", "--workspace", w.ws},
+		{"resume", sc.ID}, {"renew", sc.ID}, {"rm", sc.ID}, {"resume-all"},
+	} {
+		if code := w.run(args...); code != scheduleExitNotHuman {
+			t.Fatalf("%v = %d, want %d", args, code, scheduleExitNotHuman)
+		}
+		if !strings.Contains(w.err.String(), "started by an agent tool") {
+			t.Fatalf("%v gave no reason: %q", args, w.err.String())
+		}
+	}
+	if got := w.schedules(); len(got) != 1 {
+		t.Fatalf("a refused command changed the store: %+v", got)
+	}
+}
+
 func TestScheduleAddRefusesWhatCannotBeConfirmed(t *testing.T) {
 	w := newSchedWorld(t)
-	w.input = "y\n"
+	w.input = "CONFIRM"
 	for name, args := range map[string][]string{
 		"both triggers":  {"add", "--every", "2h", "--at", "2030-01-01 09:00", "--prompt", "x", "--workspace", w.ws},
 		"no trigger":     {"add", "--prompt", "x", "--workspace", w.ws},
