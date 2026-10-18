@@ -162,7 +162,7 @@ func (s loginShell) Exec(_ context.Context, cmd string) (remote.ExecResult, erro
 	return remote.ExecResult{ExitCode: 127}, nil
 }
 
-func (loginShell) SFTP() (*sftpfs.FS, error) { return nil, errors.New("no file layer here") }
+func (loginShell) Files() (sftpfs.Files, error) { return nil, errors.New("no file layer here") }
 
 func decodeB64UTF16(encoded string) string {
 	raw, err := base64.StdEncoding.DecodeString(encoded)

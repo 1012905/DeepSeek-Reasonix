@@ -37,7 +37,7 @@ func (f *fakeConn) Exec(_ context.Context, cmd string) (remote.ExecResult, error
 	return f.handler(cmd)
 }
 
-func (f *fakeConn) SFTP() (*sftpfs.FS, error) {
+func (f *fakeConn) Files() (sftpfs.Files, error) {
 	if f.sftpErr != nil {
 		return nil, f.sftpErr
 	}
