@@ -3,6 +3,8 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +18,7 @@ import (
 
 	"golang.org/x/term"
 
+	"reasonix/internal/base/secrets"
 	"reasonix/internal/runtime/schedrun"
 	"reasonix/internal/runtime/scheduler"
 	"reasonix/internal/state/schedule"
@@ -35,7 +38,7 @@ const scheduleUsage = `usage: reasonix schedule <command>
   pause <id> | resume <id> | renew <id> | rm <id>
   pause-all | resume-all
   tick   claim and run what is due now, then exit (for an OS scheduler to call)
-Creating, resuming and deleting need a terminal: a person confirms them.`
+Creating, resuming and deleting need a terminal: a person confirms them by typing back the plan id.`
 
 // scheduleSupervisorForCLI builds the runner a tick hands claimed runs to.
 var scheduleSupervisorForCLI = func(store *schedule.Store, p schedule.Policy) scheduler.Runner {
@@ -47,12 +50,14 @@ type scheduleIO struct {
 	out   io.Writer
 	err   io.Writer
 	human bool
-	now   func() time.Time
+	// agentChild is set when the host started this process for an agent tool.
+	agentChild bool
+	now        func() time.Time
 }
 
 func scheduleOS() scheduleIO {
 	human := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
-	return scheduleIO{in: os.Stdin, out: os.Stdout, err: os.Stderr, human: human, now: time.Now}
+	return scheduleIO{in: os.Stdin, out: os.Stdout, err: os.Stderr, human: human, agentChild: os.Getenv(secrets.AgentChildEnv) == "1", now: time.Now}
 }
 
 func scheduleManage(args []string, sio scheduleIO) int {
@@ -93,8 +98,14 @@ func openScheduleStore(now func() time.Time) (*schedule.Store, schedule.Policy, 
 
 // requireHuman refuses what only a person at a terminal may do. A command run by
 // a tool, a pipe or a scheduler has no terminal, so it cannot create, resume or
-// delete a schedule.
+// delete a schedule. A terminal an agent tool opened itself is refused by the
+// marker the host puts on its subprocesses; that is a guard against a pty trick,
+// not a boundary, because a child can clear its own environment.
 func requireHuman(sio scheduleIO, what string) bool {
+	if sio.agentChild {
+		fmt.Fprintf(sio.err, "schedule %s is refused: this command was started by an agent tool (%s is set)\n", what, secrets.AgentChildEnv)
+		return false
+	}
 	if sio.human {
 		return true
 	}
@@ -152,8 +163,8 @@ func scheduleList(store *schedule.Store, sio scheduleIO) int {
 		fmt.Fprintln(sio.out, "no schedules")
 	}
 	for _, s := range m.Schedules {
-		fmt.Fprintf(sio.out, "%s  %-9s  %s  %s  spent %d of %d tokens  expires %s\n", s.ID, s.Status, describeTrigger(s.Trigger), displayLabel(s),
-			s.SpentLifetimeTokens, s.Budget.LifetimeTokens, s.ExpiresAt.Local().Format("2006-01-02"))
+		fmt.Fprintf(sio.out, "%s  %-9s  %s  %s  spent %d of %d tokens  expires %s  created by %s\n", s.ID, s.Status, describeTrigger(s.Trigger), displayLabel(s),
+			s.SpentLifetimeTokens, s.Budget.LifetimeTokens, s.ExpiresAt.Local().Format("2006-01-02"), createdBy(s))
 	}
 	runs := m.Runs
 	if len(runs) > 10 {
@@ -163,6 +174,13 @@ func scheduleList(store *schedule.Store, sio scheduleIO) int {
 		fmt.Fprintf(sio.out, "  run %s  %s  %d tokens  %s\n", r.TriggerID, r.State, r.Charged, r.SkipReason)
 	}
 	return scheduleExitOK
+}
+
+func createdBy(s schedule.Schedule) string {
+	if s.Confirmed.Via == "" {
+		return "unknown"
+	}
+	return s.Confirmed.Via
 }
 
 func displayLabel(s schedule.Schedule) string {
@@ -230,10 +248,12 @@ func scheduleAdd(args []string, store *schedule.Store, p schedule.Policy, sio sc
 		fmt.Fprintln(sio.err, "schedule:", err)
 		return scheduleExitUsage
 	}
-	fmt.Fprint(sio.out, preview(req, p, sio.now()))
-	fmt.Fprint(sio.out, "Create this schedule? [y/N] ")
+	plan := preview(req, p, sio.now())
+	code := planCode(plan)
+	fmt.Fprint(sio.out, plan)
+	fmt.Fprintf(sio.out, "Type %s to create this schedule, anything else cancels: ", code)
 	line, _ := bufio.NewReader(sio.in).ReadString('\n')
-	if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+	if strings.TrimSpace(line) != code {
 		fmt.Fprintln(sio.out, "not created")
 		return scheduleExitOK
 	}
@@ -272,6 +292,7 @@ func (f addFlags) request() (schedule.CreateRequest, error) {
 		d.At = at
 	}
 	req, err := d.Request()
+	req.ConfirmedVia = schedule.ConfirmedViaTerminal
 	switch {
 	case errors.Is(err, scheduler.ErrDraftWorkspace):
 		return req, fmt.Errorf("--workspace %q is not a folder", f.workspace)
@@ -293,6 +314,13 @@ func parseAt(s string) (time.Time, error) {
 
 // preview is what a person confirms: when it first runs, what it may do, and the
 // most it can spend, in the policy's own numbers.
+// planCode is the short id a person types back: it names the exact plan shown,
+// so a confirmation typed for one plan cannot be replayed for another.
+func planCode(plan string) string {
+	sum := sha256.Sum256([]byte(plan))
+	return hex.EncodeToString(sum[:3])
+}
+
 func preview(req schedule.CreateRequest, p schedule.Policy, now time.Time) string {
 	f := scheduler.FactsFor(req, p, now)
 	var sb strings.Builder
