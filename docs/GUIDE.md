@@ -1792,8 +1792,8 @@ accepted for compatibility but are hidden from help and completion.
 
 ## Scheduled runs
 
-A schedule makes Reasonix run a read-only task for you at a time you chose and leave the result waiting. It is
-the command line only for now; Studio gets a list later.
+A schedule makes Reasonix run a read-only task for you at a time you chose and leave the result waiting. Create
+and manage them in Studio under Settings, Automation, Scheduled runs, or with the command line below.
 
 ```bash
 reasonix schedule add --every 2h --prompt "Summarize what changed in the open TODOs" --workspace ~/src/app
