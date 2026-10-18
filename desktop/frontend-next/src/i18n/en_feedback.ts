@@ -125,6 +125,8 @@ export const EN_FEEDBACK: Record<string, string> = {
   "确认撤回": "Withdraw",
   "撤回后维护者不再处理它，对应的 #{n} 议题会被关闭，你上传的图片会被删除；GitHub 上已经公开的文字会保留。": "Once withdrawn the maintainers stop working on it, its issue #{n} is closed and the images you uploaded are deleted; text already public on GitHub stays.",
   "撤回后维护者不再处理它，你上传的图片会被删除。": "Once withdrawn the maintainers stop working on it and the images you uploaded are deleted.",
+  "来自其他设备": "From another device",
+  "已读标记只记在这台电脑上，其他设备上的反馈在这里仍可能显示为新回复。": "Read marks are kept on this computer only, so a report from another device may still show new replies here.",
   "需要你回复": "Needs your reply",
   "等你补充信息": "Waiting for your information",
   "维护者": "Maintainers",

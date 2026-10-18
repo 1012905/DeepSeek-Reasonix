@@ -106,6 +106,8 @@ export interface FeedbackReply {
 }
 
 export interface FeedbackItem {
+  // A report another device of the same account filed; read marks stay on this computer.
+  otherInstall?: boolean;
   receipt: string;
   category: FeedbackCategory;
   titleSnippet: string;
