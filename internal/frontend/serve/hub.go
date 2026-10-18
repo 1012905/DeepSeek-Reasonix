@@ -335,6 +335,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.SessionPath = currentSessionPath(root, req.SessionPath)
 	settings, err := branchSettings(req.SessionPath)
 	if err != nil {
 		return nil, err
