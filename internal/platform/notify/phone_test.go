@@ -36,7 +36,7 @@ func (r *phoneRecorder) NotifyPhones(_ context.Context, kind string, count int) 
 
 func (r *phoneRecorder) wait(t *testing.T, n int) []reportedPhone {
 	t.Helper()
-	for i := 0; i < n; i++ {
+	for range n {
 		select {
 		case <-r.done:
 		case <-time.After(2 * time.Second):
@@ -142,7 +142,7 @@ func TestABurstOfOneKindIsOneReportThenOneMoreWithTheCount(t *testing.T) {
 	approval := event.Event{Kind: event.ApprovalRequest}
 	p.Event(phoneCfg(allOn), approval)
 	rec.wait(t, 1)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		p.Event(phoneCfg(allOn), approval)
 	}
 	if got := rec.snapshot(); len(got) != 1 {
@@ -173,7 +173,7 @@ func TestTheCountIsCappedAndAFailureDoesNotStopLaterReports(t *testing.T) {
 	approval := event.Event{Kind: event.ApprovalRequest}
 	p.Event(phoneCfg(allOn), approval)
 	rec.wait(t, 1)
-	for i := 0; i < 250; i++ {
+	for range 250 {
 		p.Event(phoneCfg(allOn), approval)
 	}
 	w.fire()

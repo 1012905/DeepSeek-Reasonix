@@ -60,13 +60,11 @@ func call(t *testing.T, srv *httptest.Server, method, path, body string) (int, m
 	return resp.StatusCode, out
 }
 
-func intp(n int) *int { return &n }
-
 func TestPhonesAreListedWithTheWaitingOnesAndWithoutTheRevokedOnes(t *testing.T) {
 	src := &fakePhones{list: []account.Phone{
-		{ID: "rc_1", Ordinal: intp(1), Name: "iPhone Safari", State: "active", UAClass: "ios-safari", CreatedAt: "a", LastSeenAt: "b", KeyThumbprint: "t1"},
-		{ID: "rc_2", Name: "Android Chrome", State: "pending", ExpiresAt: strp("later"), KeyThumbprint: "t2", ReplaceCandidate: strp("rc_1")},
-		{ID: "rc_3", Ordinal: intp(2), State: "revoked"},
+		{ID: "rc_1", Ordinal: new(1), Name: "iPhone Safari", State: "active", UAClass: "ios-safari", CreatedAt: "a", LastSeenAt: "b", KeyThumbprint: "t1"},
+		{ID: "rc_2", Name: "Android Chrome", State: "pending", ExpiresAt: new("later"), KeyThumbprint: "t2", ReplaceCandidate: new("rc_1")},
+		{ID: "rc_3", Ordinal: new(2), State: "revoked"},
 	}}
 	srv := phoneServer(t, src)
 	status, body := call(t, srv, http.MethodGet, "/share/phones", "")
@@ -82,8 +80,6 @@ func TestPhonesAreListedWithTheWaitingOnesAndWithoutTheRevokedOnes(t *testing.T)
 		t.Fatal("the list carries an address")
 	}
 }
-
-func strp(s string) *string { return &s }
 
 func TestAWaitingPhoneIsAddedReplacedOrRejectedByIdentityAndTheListComesBackFresh(t *testing.T) {
 	src := &fakePhones{list: []account.Phone{{ID: "rc_2", State: "pending"}}}

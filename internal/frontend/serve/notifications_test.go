@@ -157,7 +157,7 @@ func putPrefs(t *testing.T, srv *httptest.Server, body string) NotifyPrefs {
 	}
 	defer resp.Body.Close()
 	var got NotifyPrefs
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil || resp.StatusCode != 200 {
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("PUT = %d, %v", resp.StatusCode, err)
 	}
 	return got
