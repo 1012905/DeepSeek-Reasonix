@@ -66,6 +66,7 @@ interface Props {
   onSettings: (section?: string) => void;
   onFiles: () => void;
   onView: (to: PaneView) => void;
+  onReferenceSession?: (id: string, title: string) => void;
   onFeedback: (tab?: "send" | "mine") => void;
   // Reports with a new reply or a question waiting; the entry and the palette say so.
   feedbackUnread: number;
@@ -116,6 +117,7 @@ export function Sidebar({
   onSettings,
   onFiles,
   onView,
+  onReferenceSession,
   onFeedback,
   feedbackUnread,
   onFind,
@@ -264,7 +266,7 @@ export function Sidebar({
         </div>
       </div>
       <RailSearch>
-      <ContentMatches hub={hub} tree={tree} onOpen={onOpen} onError={onError} />
+      <ContentMatches hub={hub} tree={tree} onOpen={onOpen} onError={onError} onReference={onReferenceSession} />
       <Workspaces
         hub={hub}
         tree={tree}

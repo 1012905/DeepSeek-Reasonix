@@ -485,6 +485,8 @@ const SAID: Record<string, string> = {
   "web_access.bad_searxng_url": "SearXNG 地址必须是带主机名的 http(s) 地址，不能含账号、查询串或片段，未做任何修改。",
   "ask_timeout.save_failed": "提问等待时长未能保存：{detail}",
   "ask_timeout.out_of_range": "等待时长超出允许范围，未做任何修改：{detail}",
+  "session_ref.save_failed": "引用历史会话的长度上限未能保存：{detail}",
+  "session_ref.out_of_range": "长度上限超出允许范围，未做任何修改：{detail}",
   "receipt.save_failed": "交付验收卡片的设置未能保存：{detail}",
   "progress_watch.save_failed": "无进展设置未能保存：{detail}",
   "auto_archive.save_failed": "自动归档设置未能保存：{detail}",

@@ -62,6 +62,7 @@ import { useTreeRead } from "./useTreeRead";
 import { useOpenPane } from "./useOpenPane";
 import { markSettled } from "../boot/gate";
 import type { PaneView } from "../state/paneview";
+import { usePaneSessionRefs } from "./usePaneSessionRefs";
 
 // Start fetching the settings chunk with the shell instead of waiting for the
 // first click. It remains a separate chunk (and keeps its failure boundary),
@@ -124,6 +125,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [report, setReport] = useState<PaneReport>(NO_REPORT);
   const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
   const [viewRequests, setViewRequests] = useState<Record<string, { to: PaneView; n: number }>>({});
+  const [sessionRefs, referenceSession] = usePaneSessionRefs(active, (id) => panePorts.has(id));
   const [error, setError] = useState("");
   const [renaming, setRenaming] = useState<{ path: string; title: string } | null>(null);
   // false = closed, true = open at its last section, a string = open there.
@@ -637,6 +639,7 @@ export function App({ hub }: { hub: HubPort }) {
           onSettings={showPrefs}
           onFiles={openFiles}
           onView={showView}
+          onReferenceSession={panePorts.has(active) ? referenceSession : undefined}
           onFeedback={(tab) => setFeedback(tab ?? "send")}
           feedbackUnread={feedbackUnread}
           onFind={find.open}
@@ -693,6 +696,7 @@ export function App({ hub }: { hub: HubPort }) {
                   findTogglePulse={find.togglePulse}
                   filesPulse={filesRequests[rt.id] ?? 0}
                   viewRequest={viewRequests[rt.id]}
+                  sessionRef={sessionRefs[rt.id]}
                   alert={rt.id === active ? bar : undefined}
                   connect={first.connect}
                   needsProject={needsProject}

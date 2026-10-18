@@ -34,6 +34,7 @@ import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
+import { SessionRef } from "./SessionRef";
 import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
@@ -506,6 +507,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               </Group>
               <DisplaySettings port={port} />
               <AskTimeout port={port} />
+              <SessionRef port={port} />
               <ProgressWatch port={port} />
               <AutoArchive port={port} />
               <Group id="session-dir" title={t("会话写入位置")}>

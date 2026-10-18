@@ -551,6 +551,8 @@ export const EN_KERNEL: Record<string, string> = {
   "SearXNG 地址必须是带主机名的 http(s) 地址，不能含账号、查询串或片段，未做任何修改。": "The SearXNG address must be an http(s) address with a host, without credentials, query or fragment; nothing was changed.",
   "无进展设置未能保存：{detail}": "The progress settings were not saved: {detail}",
   "提问等待时长未能保存：{detail}": "The question wait time was not saved: {detail}",
+  "引用历史会话的长度上限未能保存：{detail}": "The size limit for referenced conversations was not saved: {detail}",
+  "长度上限超出允许范围，未做任何修改：{detail}": "The size limit is outside the allowed range; nothing was changed: {detail}",
   "等待时长超出允许范围，未做任何修改：{detail}": "That wait time is out of range; nothing was changed: {detail}",
   "自动归档设置未能保存：{detail}": "The auto-archive settings were not saved: {detail}",
   "天数超出允许范围，未做任何修改：{detail}": "The number of days is out of range; nothing was changed: {detail}",
