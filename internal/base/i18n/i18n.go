@@ -288,8 +288,6 @@ type Messages struct {
 	McpPanelSummaryFmt           string // /mcp panel: server and enabled counts
 	McpPanelToolsFmt             string // /mcp panel row: tool count
 	McpPanelHint                 string // /mcp panel keyboard hint
-	McpPanelSignIn               string // /mcp panel: a server answered 401
-	McpPanelUpgradeFmt           string // /mcp panel: a server asked for more access; %s the scopes
 	McpPanelDetailHint           string // /mcp server detail keyboard hint
 	McpPanelNoTools              string // /mcp server detail: nothing to list
 	McpPanelOff                  string // /mcp panel row: server switched off
