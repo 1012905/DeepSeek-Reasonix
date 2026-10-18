@@ -147,6 +147,10 @@ func walk(t reflect.Type, prefix string, index []int, out map[string]field) {
 	for i := range t.NumField() {
 		f := t.Field(i)
 		name := strings.Split(f.Tag.Get("toml"), ",")[0]
+		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("toml") == "" {
+			walk(f.Type, prefix, append(append([]int(nil), index...), i), out)
+			continue
+		}
 		if !f.IsExported() || name == "" || name == "-" {
 			continue
 		}

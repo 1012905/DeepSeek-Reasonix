@@ -577,6 +577,9 @@ func approvalSessionOptionName(tool, subject string) string {
 	if tool == control.SandboxEscapeApprovalTool {
 		return "Use real environment for this session"
 	}
+	if tool == control.SettingApprovalTool {
+		return "Allow changes to " + subject + " for this session"
+	}
 	if tool == control.NetworkEgressApprovalTool {
 		return "Allow " + subject + " for this session"
 	}
@@ -603,7 +606,7 @@ func approvalOptions(tool, subject string, fresh, persist bool) []PermissionOpti
 		return append(options, PermissionOption{OptionID: string(OptRejectOnce), Name: "Reject", Kind: OptRejectOnce})
 	}
 	if fresh || control.RequiresFreshHumanApprovalTool(tool) {
-		if tool == control.SandboxEscapeApprovalTool || tool == control.NetworkEgressApprovalTool {
+		if tool == control.SandboxEscapeApprovalTool || tool == control.NetworkEgressApprovalTool || tool == control.SettingApprovalTool {
 			return []PermissionOption{
 				{OptionID: string(OptAllowOnce), Name: "Allow", Kind: OptAllowOnce},
 				{OptionID: string(OptAllowAlways), Name: approvalSessionOptionName(tool, subject), Kind: OptAllowAlways},
