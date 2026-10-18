@@ -220,6 +220,12 @@ class BenchPort extends MockPort {
     };
   }
 
+  async probeSearxng() {
+    const answer = query.get("probe");
+    if (!answer || answer === "ok") return super.probeSearxng();
+    return { ok: false, code: `search.searxng_${answer}`, status: answer === "status" ? 429 : answer === "json_disabled" ? 403 : undefined };
+  }
+
   async peersSettings() {
     if (!query.has("peerset")) return super.peersSettings();
     return {
