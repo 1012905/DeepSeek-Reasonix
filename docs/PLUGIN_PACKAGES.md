@@ -766,18 +766,18 @@ Events served:
   response's token counts. A mod that calls them is listed in the install
   preview as reading the session.
 - `prompt.submit(text)`: queues a prompt as the mod's own words, under the host's
-  header, never as yours. `asUser` is not served. At most `[mods] submit_per_turn`
-  (3) are queued between two prompts you write, then it rejects with
-  `mod.submit_rate`; it rejects with `mod.submit_refused` while the session has
-  no saved file yet.
+  header, never as yours; `asUser` is not served. Over `[mods] submit_per_turn`
+  (3 between two prompts you write) it rejects with `mod.submit_rate`, and with
+  `mod.submit_refused` while the session has no saved file.
 - A call that needs an answer made while `session.start` runs rejects with
   `mod.not_ready`: that hook runs before the session is ready.
 - `tool.register/call/list` and `command.register/run/list`. Both register
   while `session.start` runs.
 - `ui.toast`, `status`, `notice`, `log`, `ask`, `resolve`, `invalidate`.
 
-The ceilings above are in the user file only, and `0` removes one. Anything else
-is registered and named in the mod's status as unserved. A call to
+The ceilings above are in the user file only, and `0` removes one.
+
+Anything else is registered and named in the mod's status as unserved; a call to
 an unserved `$` member rejects with the typed code `mod.unsupported`.
 
 `$.ui.ask` is a question from the mod, shown with its name. It can never approve

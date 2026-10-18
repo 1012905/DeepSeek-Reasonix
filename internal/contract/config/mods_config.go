@@ -15,19 +15,17 @@ type ModsConfig struct {
 	// HookBudgetMS bounds one hook's own running time; 0 keeps Claude Code's 10 s.
 	// User file only.
 	HookBudgetMS int `toml:"hook_budget_ms"`
-	// ContextBytes and ContextBlocks bound the text a mod adds to a turn: bytes
-	// per block and blocks per turn. The turn tail is the model's context window
-	// and the bill, so these are the host's to protect; 0 removes the ceiling
-	// and is the user's explicit choice. User file only.
+	// ContextBytes and ContextBlocks bound the text a mod adds to a turn, per
+	// block and per turn; the tail is the context window and the bill. 0 removes
+	// a ceiling and is the user's explicit choice. User file only.
 	ContextBytes  int `toml:"context_bytes"`
 	ContextBlocks int `toml:"context_blocks"`
 	// MessagesMax is how many transcript items one read by a mod may return, 0
 	// for no ceiling. User file only.
 	MessagesMax int `toml:"messages_max"`
 	// SubmitPerTurn is how many prompts mods may queue between two prompts you
-	// write yourself: a queued prompt opens a turn whose hooks may queue another,
-	// so this is what stops a mod feeding the session to itself. 0 removes it,
-	// which is a deliberate act. User file only.
+	// write: it stops a mod feeding the session to itself. 0 removes it, a
+	// deliberate act. User file only.
 	SubmitPerTurn int `toml:"submit_per_turn"`
 }
 
