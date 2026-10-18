@@ -2006,3 +2006,30 @@ func TestPermissionDecisionContinueLeavesInstalledMCPToolsAlone(t *testing.T) {
 		t.Fatalf("outcome = %+v execs = %d, want the installed MCP tool to run", out, rec.execs)
 	}
 }
+
+// A mod's answer takes the place of the tool's output: the call completes
+// without running the tool, the result is not an error, and the host labels it
+// as data from the mod.
+func TestToolBeforeAnswerIsAResultFromTheModAndTheToolDoesNotRun(t *testing.T) {
+	client := &fakeDispatchClient{interceptFn: func(ev protocol.InterceptEvent, _ json.RawMessage) (protocol.InterceptResult, error) {
+		if ev == protocol.EventToolBefore {
+			return protocol.InterceptResult{Decision: protocol.DecisionBlock, Answer: "forty-two"}, nil
+		}
+		return protocol.InterceptResult{Decision: protocol.DecisionContinue}, nil
+	}}
+	d := newExtDispatcher(client, true, nil, extension.PointToolBefore)
+	rec := &recordingTool{name: "read_file", readOnly: true}
+	reg := tool.NewRegistry()
+	reg.Add(rec)
+	a := New(nil, reg, sessionstore.NewSession(""), Options{Extensions: d}, event.Discard)
+	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "read_file", Arguments: `{"path":"/x"}`})
+	if out.blocked || out.errMsg != "" || !strings.Contains(out.output, "forty-two") {
+		t.Fatalf("outcome = %+v, want a successful result carrying the answer", out)
+	}
+	if want := (tool.Provenance{Kind: tool.ProvenanceMod, Source: extTestPlugin}); out.provenance != want {
+		t.Fatalf("provenance = %+v, want %+v", out.provenance, want)
+	}
+	if rec.execs != 0 {
+		t.Fatalf("an answered tool ran %d times", rec.execs)
+	}
+}

@@ -70,6 +70,9 @@ type Result struct {
 	Blocked bool
 	// BlockReason is the extension's user-visible reason, credential-redacted.
 	BlockReason string
+	// Answer is the text an extension gave in place of the tool's output, and
+	// AnswerBy the plugin that gave it. Set only by a block at tool.before.
+	Answer, AnswerBy string
 	// Ask is set when a tighten-only runtime put the call to the user; the caller
 	// asks even where the host allowed it. It is never set by an allow or a deny.
 	Ask bool
@@ -262,7 +265,7 @@ func (d *Dispatcher) Intercept(ctx context.Context, point extension.InterceptorP
 			}
 			continue
 		}
-		if cause := d.tightenViolation(pluginID, point, answer.Decision); cause != nil {
+		if cause := d.rulingViolation(pluginID, point, answer); cause != nil {
 			if err := d.violation(pluginID, point, cause); err != nil {
 				return nil, err
 			}
@@ -274,6 +277,7 @@ func (d *Dispatcher) Intercept(ctx context.Context, point extension.InterceptorP
 		case protocol.DecisionBlock:
 			result.Blocked = true
 			result.BlockReason = secrets.RedactCredentials(answer.Reason)
+			result.Answer, result.AnswerBy = secrets.RedactCredentials(answer.Answer), pluginID
 			return result, nil
 		case protocol.DecisionReplace:
 			fresh, decodeErr := decodePayload(point, answer.Replacement)
@@ -322,10 +326,14 @@ func (d *Dispatcher) Intercept(ctx context.Context, point extension.InterceptorP
 	return result, nil
 }
 
-// tightenViolation says what a decision does to the contract when the runtime
-// is tighten-only: it may ask at permission.decision, and may not allow or
-// rewrite there. Everyone else may not ask at all.
-func (d *Dispatcher) tightenViolation(pluginID string, point extension.InterceptorPoint, decision protocol.InterceptDecision) error {
+// rulingViolation says what a ruling does to the contract. An answer rides only
+// a block at tool.before. A tighten-only runtime may ask at permission.decision
+// and may not allow or rewrite there; everyone else may not ask at all.
+func (d *Dispatcher) rulingViolation(pluginID string, point extension.InterceptorPoint, ruling protocol.InterceptResult) error {
+	decision := ruling.Decision
+	if ruling.Answer != "" && (decision != protocol.DecisionBlock || point != extension.PointToolBefore) {
+		return fmt.Errorf("an answer is only legal with a block at %s", extension.PointToolBefore)
+	}
 	if decision == protocol.DecisionAsk {
 		if point != extension.PointPermissionDecision || !d.tightenOnly[pluginID] {
 			return fmt.Errorf("decision %q is only legal for a tighten-only runtime at %s", decision, extension.PointPermissionDecision)

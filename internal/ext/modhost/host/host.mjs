@@ -346,7 +346,7 @@ const intercepts = {
     const out = await runChain("tool.call", e, (ev) => ({ [SAME]: ev }));
     if (out && typeof out === "object" && !(SAME in out)) {
       if (typeof out.deny === "string") return block(out.deny);
-      if ("result" in out) return block(`A mod answered this call in place of the tool: ${typeof out.result === "string" ? out.result : JSON.stringify(out.result)}`);
+      if ("result" in out) return { decision: "block", answer: (typeof out.result === "string" ? out.result : JSON.stringify(out.result)) ?? "" };
       return pass;
     }
     const final = out?.[SAME];

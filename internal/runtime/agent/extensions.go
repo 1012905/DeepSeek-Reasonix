@@ -10,6 +10,7 @@ import (
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/extension"
 	"reasonix/internal/ext/extension/dispatch"
 	"reasonix/internal/ext/extension/providerconv"
@@ -254,6 +255,9 @@ func (a *Agent) interceptToolBefore(ctx context.Context, plan *toolCallPlan) (to
 		return toolOutcome{output: msg, errMsg: firstLine(err.Error())}, true
 	}
 	d.Event(extension.PointToolBefore, payload)
+	if result.Answer != "" {
+		return modAnswerOutcome(result), true
+	}
 	if result.Blocked {
 		reason := extensionBlockReason(result.BlockReason)
 		return toolOutcome{output: "blocked: " + reason, blocked: true, errMsg: "blocked by extension"}, true
@@ -280,6 +284,16 @@ func (a *Agent) interceptToolBefore(ctx context.Context, plan *toolCallPlan) (to
 		return blocked, true
 	}
 	return toolOutcome{}, false
+}
+
+// modAnswerOutcome is a call a mod answered in place of the tool. The tool did
+// not run, so the host says so before the mod's text, and the result carries the
+// mod as its origin: the one label every external result gets.
+func modAnswerOutcome(result *dispatch.Result) toolOutcome {
+	return toolOutcome{
+		output:     "the tool did not run: a Claude Code mod answered this call in its place\n" + result.Answer,
+		provenance: tool.Provenance{Kind: tool.ProvenanceMod, Source: result.AnswerBy},
+	}
 }
 
 // interceptExtensionPermission runs permission.decision at the gate point.

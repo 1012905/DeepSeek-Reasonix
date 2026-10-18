@@ -243,3 +243,27 @@ func waitPublish(t *testing.T, h *fakeHost) map[string]any {
 		return nil
 	}
 }
+
+// A tool.call hook that returns { result } gives the host an answer to put in
+// the tool's place, not a reason for a refusal.
+func TestAToolCallResultLeavesTheScriptAsAnAnswer(t *testing.T) {
+	h := startHost(t, writeMod(t, "answer.mjs", `
+export function register(on) {
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (e.input.command === 'whoami') return { result: 'mod-user' };
+    if (e.input.command === 'obj') return { result: { n: 1 } };
+    return next(e);
+  });
+}`), toolCfg())
+	if res := h.initialize(); res["error"] != nil {
+		t.Fatalf("initialize: %v", res["error"])
+	}
+	got := h.intercept("tool.before", map[string]any{"name": "bash", "arguments": `{"command":"whoami"}`, "callId": "c1"})
+	if decision(got) != "block" || got["answer"] != "mod-user" || got["reason"] != nil {
+		t.Fatalf("result = %v, want a block carrying the answer and no reason", got)
+	}
+	got = h.intercept("tool.before", map[string]any{"name": "bash", "arguments": `{"command":"obj"}`, "callId": "c2"})
+	if got["answer"] != `{"n":1}` {
+		t.Fatalf("an object result = %v", got)
+	}
+}

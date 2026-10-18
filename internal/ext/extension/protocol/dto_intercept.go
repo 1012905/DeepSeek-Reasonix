@@ -21,10 +21,13 @@ type InterceptParams struct {
 // InterceptResult is the extension's ruling. Replacement carries the new
 // payload when Decision is "replace" and is absent otherwise; when the
 // replacement exceeds ExternalizeFieldBytes it travels as null and
-// Externalized carries its content-ref descriptor instead.
+// Externalized carries its content-ref descriptor instead. Answer is legal only
+// with a block at tool.before: the tool does not run and the text stands in for
+// its output.
 type InterceptResult struct {
 	Decision     InterceptDecision   `json:"decision"`
 	Reason       string              `json:"reason,omitempty"`
+	Answer       string              `json:"answer,omitempty"`
 	Replacement  json.RawMessage     `json:"replacement,omitempty" externalizable:"true"`
 	Externalized []ExternalizedField `json:"externalized,omitempty"`
 }

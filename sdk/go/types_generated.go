@@ -263,6 +263,7 @@ type InterceptParams struct {
 type InterceptResult struct {
 	Decision     InterceptDecision   `json:"decision"`
 	Reason       string              `json:"reason,omitempty"`
+	Answer       string              `json:"answer,omitempty"`
 	Replacement  json.RawMessage     `json:"replacement,omitempty" externalizable:"true"`
 	Externalized []ExternalizedField `json:"externalized,omitempty"`
 }
