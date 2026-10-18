@@ -38,4 +38,6 @@ type MCPSignInMessages struct {
 	MCPSignInReasonFmt string // %[1]s server, %[2]s authorization host
 	// MCPScopeUpgradeReasonFmt asks for more access than the user granted: %[1]s server, %[2]s host, %[3]s the scopes it named.
 	MCPScopeUpgradeReasonFmt string
+	// McpPanelSignIn and McpPanelUpgradeFmt are the /mcp panel hints for the sign-in and upgrade keys.
+	McpPanelSignIn, McpPanelUpgradeFmt string
 }

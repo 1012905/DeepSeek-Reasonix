@@ -35,6 +35,10 @@ type MCPServer struct {
 	Launch      string    `json:"launch"`
 	// PendingReason is the kernel's code for why a pending server waits.
 	PendingReason string `json:"pendingReason"`
+	// HTTPStatus is what the endpoint answered when the failure was an HTTP one.
+	HTTPStatus int `json:"httpStatus"`
+	// ScopeUpgrade is the access a signed-in server asked for, in its own words.
+	ScopeUpgrade []string `json:"scopeUpgrade"`
 }
 
 func (c *Client) MCPServers(ctx context.Context) ([]MCPServer, error) {
@@ -52,6 +56,16 @@ func (c *Client) SetMCPEnabled(ctx context.Context, name string, enabled bool) e
 
 func (c *Client) ReconnectMCP(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodPost, "/mcp/reconnect", map[string]string{"name": name}, nil)
+}
+
+// SignInMCP runs the browser sign-in for one server and returns when it ends.
+func (c *Client) SignInMCP(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodPost, "/mcp/signin", map[string]string{"name": name}, nil)
+}
+
+// UpgradeMCP grants a signed-in server the access it asked for.
+func (c *Client) UpgradeMCP(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodPost, "/mcp/upgrade", map[string]string{"name": name}, nil)
 }
 
 // mcpPanel lists the MCP servers; Enter on one shows its tools.
@@ -145,6 +159,18 @@ func (m *model) mcpKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 		return m.mcpToggle(cur), true
+	case "a":
+		if !cur.Enabled || cur.State != "failed" || cur.HTTPStatus != http.StatusUnauthorized {
+			return nil, true
+		}
+		p.busy = true
+		return m.mcpAction(cur.Name, func(ctx context.Context) error { return m.client.SignInMCP(ctx, cur.Name) }), true
+	case "u":
+		if !cur.Enabled || len(cur.ScopeUpgrade) == 0 {
+			return nil, true
+		}
+		p.busy = true
+		return m.mcpAction(cur.Name, func(ctx context.Context) error { return m.client.UpgradeMCP(ctx, cur.Name) }), true
 	case "r":
 		if !cur.Enabled || cur.State != "failed" {
 			return nil, true
@@ -242,9 +268,22 @@ func (m *model) mcpPanelLines() []string {
 		if cur.State == "pending" && cur.Launch != "" {
 			lines = append(lines, termrender.Yellow("  "+fmt.Sprintf(i18n.M.McpPanelLaunchFmt, clipVisible(textutil.SanitizeLaunch(cur.Launch), width-8))))
 		}
+		lines = append(lines, mcpAuthHint(cur, width)...)
 		lines = append(lines, termrender.Dim(i18n.M.McpPanelHint))
 	}
 	return panel(lines, m.width, accentEdge)
+}
+
+// mcpAuthHint names the one key that answers the server under the cursor, when
+// one does. The scope names are the server's words and are shown as written.
+func mcpAuthHint(s MCPServer, width int) []string {
+	switch {
+	case s.Enabled && len(s.ScopeUpgrade) > 0:
+		return []string{termrender.Yellow("  " + clipVisible(fmt.Sprintf(i18n.M.McpPanelUpgradeFmt, textutil.SanitizeLaunch(strings.Join(s.ScopeUpgrade, " "))), width))}
+	case s.Enabled && s.State == "failed" && s.HTTPStatus == http.StatusUnauthorized:
+		return []string{termrender.Yellow("  " + i18n.M.McpPanelSignIn)}
+	}
+	return nil
 }
 
 func (m *model) mcpDetail(s MCPServer) []string {
