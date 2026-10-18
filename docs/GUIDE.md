@@ -452,6 +452,13 @@ bind   = "127.0.0.1:5432"
 target = "127.0.0.1:5432"
 ```
 
+A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `distro` (see `reasonix remote wsl list`):
+
+- It has no address, so it takes only the folder and install fields. `host`, `port`, `user`, keys, passwords,
+  `proxy_jump`, `use_ssh_config` and forwards are rejected on it.
+- Connecting to one is not available yet. An SSH dial of such an entry fails with `remote: host is not reached over
+  ssh` rather than guessing an address.
+
 CLI:
 
 ```bash
