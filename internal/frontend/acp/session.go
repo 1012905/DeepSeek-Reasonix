@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/runtime/agent"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessioninbox"
 )
@@ -327,10 +328,18 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 
 	stop := StopEndTurn
 	if runErr != nil {
-		if runCtx.Err() != nil {
+		var readinessErr *agent.FinalReadinessError
+		switch {
+		case runCtx.Err() != nil:
 			stop = StopCancelled
-		} else {
+		case errors.As(runErr, &readinessErr):
 			stop = StopError
+		default:
+			return nil, &RPCError{
+				Code:    ErrInternal,
+				Message: clipStatusText(runErr.Error(), 2_048),
+				Data:    TurnErrorData{Code: TurnFailed},
+			}
 		}
 	}
 	res := SessionPromptResult{StopReason: stop}
