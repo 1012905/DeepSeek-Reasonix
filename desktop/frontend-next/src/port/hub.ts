@@ -1,6 +1,6 @@
 import { watchTree } from "./tree_events";
 import { HttpError, type AgentPort } from "./port";
-import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe } from "./remote";
+import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe, WSLDistros } from "./remote";
 import type { CloudShareOffer, DeviceSelf, ShareOffer, SharePort, ShareStatus } from "./share";
 import { SsePort } from "./sse";
 import { host } from "./host";
@@ -222,6 +222,8 @@ export interface HubPort extends SharePort {
   // taken yet. Filling it by hand when the addresses are written down next
   // door is the step people skip.
   remoteCandidates(): Promise<string[]>;
+  // The WSL distributions on this machine, for the choice of one as a host.
+  wslDistros(): Promise<WSLDistros>;
   // Questions a connect stopped for. Nothing arrives here in a browser: the
   // kernel that would ask is the one this build cannot reach.
   onRemoteAsk(cb: (ask: RemoteAsk) => void): () => void;
@@ -472,6 +474,10 @@ export class SseHub implements HubPort {
 
   remoteCandidates() {
     return this.get<string[]>("/remotes/candidates");
+  }
+
+  wslDistros() {
+    return this.get<WSLDistros>("/remotes/wsl");
   }
 
   // The question is state the kernel holds, and this is how it is found. No

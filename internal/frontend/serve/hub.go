@@ -16,6 +16,7 @@ import (
 	"reasonix/internal/assembly/boot"
 	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/computer"
+	"reasonix/internal/platform/wsl"
 
 	"reasonix/internal/base/fileutil"
 	"reasonix/internal/contract/config"
@@ -162,6 +163,9 @@ type HubOptions struct {
 	// Remote reaches workspaces on other machines. Nil refuses them: a server
 	// that dials onward on a request's say-so is someone else's way in.
 	Remote RemoteAttacher
+	// WSL lists the WSL distributions on this machine. Nil uses the system
+	// wsl.exe, which is absent anywhere but Windows.
+	WSL wsl.Runner
 	// Asks holds the questions a remote dial stops for. Nil leaves those routes
 	// unregistered and the link layer with nobody to ask, which is what makes
 	// the strict host-key path the default on a server with no window.
@@ -547,6 +551,7 @@ func (h *Hub) Handler() http.Handler {
 	hostMux.HandleFunc("GET /remotes", h.listRemoteHosts)
 	hostMux.HandleFunc("POST /remotes", h.saveRemoteHost)
 	hostMux.HandleFunc("GET /remotes/candidates", h.remoteCandidates)
+	hostMux.HandleFunc("GET /remotes/wsl", h.remoteWSLDistros)
 	hostMux.HandleFunc("GET /remotes/{host}/tree", h.remoteTree)
 	hostMux.HandleFunc("POST /remotes/{host}/sessions/remove", h.removeRemoteSession)
 	hostMux.HandleFunc("GET /remotes/{host}/dirs", h.remoteDirs)

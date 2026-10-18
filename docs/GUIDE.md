@@ -455,7 +455,9 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
 
 - It has no address, so it takes only the folder and install fields. `host`, `port`, `user`, keys, passwords,
   `proxy_jump`, `use_ssh_config` and forwards are rejected on it.
-- Studio opens it like any other machine in its list. Connecting needs WSL 2 and a distribution that has `ps`
+- Add one under Settings, Remote: the "WSL distribution" choice appears only on a machine that has WSL, and lists
+  its distributions (WSL 1 ones are shown disabled). Studio then opens it like any other machine in the list.
+- Connecting needs WSL 2 and a distribution that has `ps`
   and `nohup`; a minimal image without them is refused with the missing name.
 - The kernel runs inside a shell session Studio keeps open, because WSL ends everything a session started when it ends.
   - When Studio closes its link, the kernel goes away with the distribution (WSL stops an idle one after about 15
