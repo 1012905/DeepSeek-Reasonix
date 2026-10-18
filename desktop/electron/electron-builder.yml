@@ -106,6 +106,12 @@ linux:
   maintainer: esengine <esengine@users.noreply.github.com>
   artifactName: ReasonixStudio-linux-${arch}.${ext}
 
+appImage:
+  # Stated rather than inherited: the release vocabulary is the same for every
+  # Linux file, and canonical-artifact-names.js turns whatever architecture
+  # spelling electron-builder puts here (x64, x86_64) into amd64 or fails.
+  artifactName: ReasonixStudio-linux-${arch}.${ext}
+
 deb:
   # Named, not defaulted. electron-builder takes the package name from
   # package.json's `name` unless told otherwise, which would publish
