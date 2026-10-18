@@ -47,6 +47,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	vision, _ := cfg.Extra["vision"].(bool)
 	headers, _ := cfg.Extra["headers"].(map[string]string)
 	maxOutput, _ := cfg.Extra["max_output_tokens"].(int)
+	videoProtocol, _ := cfg.Extra["video_protocol"].(string)
 	httpClient, err := newHTTPClient(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("gemini: network: %w", err)
@@ -54,7 +55,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	return &client{
 		name: name, apiKey: cfg.APIKeyResolver(), keyEnv: keyEnv, keySource: keySource,
 		requestURL: requestURL, model: cfg.Model, effort: normalizeLevel(effort), vision: vision,
-		headers: cleanHeaders(headers), maxOutput: maxOutput, http: httpClient,
+		headers: cleanHeaders(headers), maxOutput: maxOutput, http: httpClient, video: newVideoWire(videoProtocol, root),
 		idleTimeout: provider.IdleTimeoutFromExtra(cfg.Extra),
 	}, nil
 }
@@ -68,6 +69,7 @@ type client struct {
 	model       string
 	effort      string // thinking_level the entry declares; "" = the model's own default
 	vision      bool
+	video       *videoWire
 	headers     map[string]string
 	maxOutput   int
 	http        *http.Client
@@ -116,8 +118,11 @@ func (c *client) sendOpts() provider.SendOptions {
 
 func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	requestCtx := provider.WithRequestAttemptCounter(ctx)
+	var uploaded []string
+	req.Messages, uploaded = c.resolveVideos(requestCtx, req.Messages)
 	body, err := json.Marshal(c.buildRequest(req))
 	if err != nil {
+		c.deleteFiles(uploaded)
 		return nil, fmt.Errorf("%s: marshal request: %w", c.name, err)
 	}
 	newReq := func(ctx context.Context) (*http.Request, error) {
@@ -136,11 +141,15 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
 	if err != nil {
+		c.deleteFiles(uploaded)
 		return nil, provider.AnnotateToolSchemaError(err, req.Tools)
 	}
 	c.authed.Store(true)
 	out := make(chan provider.Chunk)
-	go c.readStream(requestCtx, resp, out)
+	go func() {
+		defer c.deleteFiles(uploaded)
+		c.readStream(requestCtx, resp, out)
+	}()
 	return out, nil
 }
 
@@ -200,6 +209,13 @@ func (c *client) userContent(m provider.Message) []content {
 	var blocks []content
 	if m.Content != "" {
 		blocks = append(blocks, content{Type: "text", Text: m.Content})
+	}
+	for _, v := range m.VideoParts {
+		if c.video != nil && c.video.protocol == provider.VideoProtocolGeminiInline {
+			blocks = append(blocks, content{Type: "video", Data: v.URL, MimeType: v.MIME})
+		} else {
+			blocks = append(blocks, content{Type: "video", URI: v.URL, MimeType: v.MIME})
+		}
 	}
 	if c.vision {
 		for _, url := range m.Images {

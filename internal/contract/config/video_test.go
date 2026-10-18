@@ -78,3 +78,23 @@ func TestRenamingAModelFollowsItIntoVideoModels(t *testing.T) {
 		t.Fatalf("video_models after a rename = %v, want [new]", p.VideoModels)
 	}
 }
+
+func TestAVideoProtocolBelongsToTheWireThatSpeaksIt(t *testing.T) {
+	for _, tc := range []struct {
+		kind, protocol string
+		want           bool
+	}{
+		{"gemini", VideoProtocolGeminiInline, true},
+		{"gemini", VideoProtocolGeminiFiles, true},
+		{"gemini", VideoProtocolInlineDataURL, false},
+		{"openai", VideoProtocolInlineDataURL, true},
+		{"openai", VideoProtocolMoonshotFile, true},
+		{"openai", VideoProtocolGeminiInline, false},
+		{"anthropic", VideoProtocolGeminiFiles, false},
+	} {
+		e := &ProviderEntry{Kind: tc.kind, Model: "m", VideoModels: []string{"m"}, VideoProtocol: tc.protocol}
+		if _, ok := EffectiveVideo(e); ok != tc.want {
+			t.Errorf("%s / %s: native = %v, want %v", tc.kind, tc.protocol, ok, tc.want)
+		}
+	}
+}

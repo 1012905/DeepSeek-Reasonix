@@ -62,6 +62,12 @@ const (
 	// VideoProtocolMoonshotFile uploads the file once and refers to it by id in
 	// a video_url content part.
 	VideoProtocolMoonshotFile = "moonshot_file"
+	// VideoProtocolGeminiInline sends the file in the request as a video content
+	// block holding base64 data and a MIME type.
+	VideoProtocolGeminiInline = "gemini_inline"
+	// VideoProtocolGeminiFiles uploads the file to Google's Files API, refers to
+	// it by its uri in a video content block, and deletes it once the request ends.
+	VideoProtocolGeminiFiles = "gemini_files"
 )
 
 // The ceilings the vendors document for each protocol, read from their own
@@ -72,6 +78,14 @@ const (
 	VideoInlineEncodedLimit = 10_000_000
 	// VideoUploadLimit is Moonshot's bound on one uploaded file (100 MiB).
 	VideoUploadLimit = 100 << 20
+	// VideoGeminiInlineRequestLimit is Google's bound for inline video: "suitable
+	// for shorter videos under 20MB total request size" (video-understanding page).
+	// Its table says 100 MB for the same input, and the two are not reconciled, so
+	// the narrower reading stands. The bound is on the whole request, which carries
+	// the file base64-encoded, so the raw file is held to three quarters of it.
+	VideoGeminiInlineRequestLimit = 20_000_000
+	// VideoGeminiFileLimit is the Files API's per-file maximum, 2 GB.
+	VideoGeminiFileLimit = 2 << 30
 )
 
 // VideoProtocolLimit is the documented ceiling on the raw file for a protocol,
@@ -82,6 +96,10 @@ func VideoProtocolLimit(protocol string) (source string, bytes int64) {
 		return "inline_data_url", VideoInlineEncodedLimit / 4 * 3
 	case VideoProtocolMoonshotFile:
 		return "moonshot_file", VideoUploadLimit
+	case VideoProtocolGeminiInline:
+		return "gemini_inline", VideoGeminiInlineRequestLimit / 4 * 3
+	case VideoProtocolGeminiFiles:
+		return "gemini_files", VideoGeminiFileLimit
 	}
 	return "", 0
 }
@@ -92,6 +110,8 @@ func VideoProtocolLimit(protocol string) (source string, bytes int64) {
 type VideoPart struct {
 	Name string
 	URL  string
+	// MIME is the container type, for a wire that names it beside the data.
+	MIME string
 }
 
 // VideoFailedNote is what a message says when its video could not be sent; code
