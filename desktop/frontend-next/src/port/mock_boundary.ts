@@ -229,6 +229,8 @@ export class MockBoundary extends MockShell {
   }
 
   async createSchedule(d: ScheduleDraft, confirm: string): Promise<ScheduleView> {
+    // A refused write is the only thing that shows the read-only state, so a rendered check reaches it by this label.
+    if (d.label === "no-edit-grant") throw new HttpError(403, "x", { code: "schedule.editing_disabled", error: "this window has no edit grant" });
     if (confirm !== "mock-confirm") throw new HttpError(409, "x", { code: "schedule.digest_mismatch", error: "what is being created is not what was previewed" });
     const sc: ScheduleView = { id: "sch_" + Math.random().toString(16).slice(2, 10), label: d.label, status: "active", everySec: d.everySec, atUnix: d.atUnix, workspace: d.workspace,
       model: d.model || "deepseek/deepseek-v4-pro", prompt: d.prompt, perRunTokens: 250_000, lifetimeTokens: 3_000_000, spentLifetimeTokens: 0, expiresAtUnix: 1_792_700_000 };

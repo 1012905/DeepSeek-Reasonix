@@ -25,6 +25,7 @@ import { Switch } from "./Switch";
 import { ServerRow } from "./ServerRow";
 import { SkillGroups } from "./SkillRow";
 import { Hooks } from "./Hooks";
+import { ScheduledRuns } from "./ScheduledRuns";
 import { Network } from "./Network";
 import { Shell as ShellPicker } from "./Shell";
 import { Rules } from "./Rules";
@@ -600,12 +601,15 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
           )}
 
           {at === "hooks" && (
-            <Group id="hooks"
-              title={t("自动化")}
-              hint={t("在 agent 执行任务前后运行自定义命令。这些命令在本机以当前用户权限运行；可拦截 agent 的两个事件已在下方标出。")}
-            >
-              <Hooks port={port} onChanged={afterExtChange} />
-            </Group>
+            <>
+              <Group id="hooks"
+                title={t("自动化")}
+                hint={t("在 agent 执行任务前后运行自定义命令。这些命令在本机以当前用户权限运行；可拦截 agent 的两个事件已在下方标出。")}
+              >
+                <Hooks port={port} onChanged={afterExtChange} />
+              </Group>
+              <ScheduledRuns port={port} />
+            </>
           )}
           {at === "ext" && (
             <>
