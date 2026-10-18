@@ -314,7 +314,8 @@ func (c *Controller) EnqueueInbox(req InboxRequest) (sessioninbox.InboxReceipt, 
 		Extra:        maps.Clone(req.Extra),
 		Via:          req.Via,
 	}
-	if req.SurfaceAction == nil {
+	// Text the host wrote for another party is data: an @token in it names nothing here.
+	if req.SurfaceAction == nil && !req.Origin.IsHost() {
 		env.FrozenRefBlock, env.FrozenImages, env.ReferenceErrors = c.freezeInboxReferences(context.Background(), submit, req.FreezeRefs)
 	}
 	intent := req.Intent
