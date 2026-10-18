@@ -13,6 +13,8 @@ import (
 
 func (s *Server) registerGitRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /git/repos", s.gitRepos)
+	mux.HandleFunc("GET /git/push", s.pushPreview)
+	mux.HandleFunc("POST /git/push", s.push)
 	mux.HandleFunc("GET /git/commit", s.commitFiles)
 	mux.HandleFunc("GET /git/commit/diff", s.commitDiff)
 	mux.HandleFunc("GET /changes", s.changes)

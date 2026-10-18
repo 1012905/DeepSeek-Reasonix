@@ -14,6 +14,7 @@ import (
 	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/browser"
 	"reasonix/internal/platform/gitcmd"
+	"reasonix/internal/platform/gitpush"
 	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
@@ -513,7 +514,8 @@ type LocalShell interface {
 
 // Commits proposes a commit message for the staged changes and records a local
 // commit once the person has confirmed the text. It stages or unstages only what
-// the person names, and never pushes or rewrites history. It also moves the workspace between local git branches —
+// the person names, and pushes only the confirmed branch to the upstream it already
+// has, from a trusted workspace; it never forces or rewrites history. It also moves the workspace between local git branches —
 // a workspace write like a commit, refused typed while a turn runs.
 type Commits interface {
 	ProposeCommit(ctx context.Context, repo string) (CommitProposal, error)
@@ -522,6 +524,8 @@ type Commits interface {
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
 	StageChanges(ctx context.Context, req StageRequest) error
 	DiscardChange(ctx context.Context, req DiscardRequest) error
+	GitPushPreview(ctx context.Context, repo string) (gitpush.Plan, error)
+	GitPush(ctx context.Context, req PushRequest) (gitpush.Result, error)
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 
