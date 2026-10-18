@@ -1711,10 +1711,12 @@ reasonix schedule tick            # claim and run what is due now, then exit
   that only calls `tick` cannot bypass them. An in-kernel ticker is a later change.
 - **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
   for you and never answered on your behalf.
-- **Ceilings.** At most one run at a time; by default at least 60 minutes between runs (never under 10); 250,000 tokens, 40 steps and
-  15 minutes per run; 4 runs per day for one schedule and 6 for all of them; a lifetime budget per schedule; and
-  a 30 day expiry that only you renew. `[schedule]` in your user config can tighten or, within a floor, change
-  these; a repository's `reasonix.toml` can only tighten them.
+- **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only
+  tighten them.
+  - One run at a time, and by default at least 60 minutes between runs (never under 10).
+  - Per run: 250,000 tokens, 40 steps and 15 minutes.
+  - 4 runs a day for one schedule and 6 for all of them, and a lifetime budget per schedule.
+  - A 30 day expiry that only you renew.
 - **Late and missed runs.** Only the latest slot counts. It still runs if it is at most 15 minutes late (never
   more than a quarter of the interval); otherwise it is recorded as skipped and not made up.
 - **The model is pinned** when you create the schedule, from your own configuration. If it later becomes
