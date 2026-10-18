@@ -385,6 +385,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "还有 {n} 个窗格正在运行，它们会在下次重建时采用这个改动。": "{n} panes are still running and will take this change at their next rebuild.",
   "实际可写": "Actually writable",
   "命令执行方式": "How commands run",
+  "在 Windows 上启用后，命令无法在清单之外创建或改写文件、写注册表；但删除或重命名清单之外的文件、读取文件和联网不受限制。需要交互式桌面会话，并会在清单里的文件夹上加一条权限项（可用 reasonix sandbox revoke 收回）。":
+    "On Windows, once on, commands cannot create or overwrite files outside the list or write the registry; deleting or renaming files outside the list, reading files and the network are not restricted. It needs an interactive desktop session and adds a permission entry on the folders in the list (take it back with reasonix sandbox revoke).",
   "启用沙箱后，命令无法写入清单之外的位置。上方的可写目录清单由操作系统实施，不依赖 agent 自觉遵守。":
     "Inside the sandbox a command cannot write outside the list at all. The writable directories above are enforced by the operating system, not by the agent's cooperation.",
   "本机没有可用的操作系统沙箱": "This machine has no usable OS sandbox",
