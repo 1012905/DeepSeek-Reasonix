@@ -38,7 +38,7 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Recycle bin page for deleted sessions | Unverified | Studio has "delete session" in `ui/Workspaces.tsx`; no recycle-bin page was found, recovery not checked |
 | Manual rename | Have | `renameSession` in `ui/App.tsx` |
 | AI rename of a session | Missing | #11570 |
-| Manual order of projects and sessions | Missing | #11420 |
+| Manual order of projects and sessions | Have | Projects: `ui/WorkspaceOrder.tsx` and drag (2.25.0); sessions: `ui/useSessionMove.ts` and the session menu / Alt+Arrow, ranks kept in the session sidecar (`ManualRank`) |
 | Project-name context menu | Missing | #12089; #12324 (open PR) |
 | Search and reference past conversations | Have differently | Rail search in `ui/railsearch.tsx`; no "reference a past session" action; #11942 |
 | Export a session | Have | `exportSession` in `port/hub.ts` |

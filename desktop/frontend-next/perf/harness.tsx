@@ -453,12 +453,12 @@ class BenchHub extends MockHub {
         root: `~/projects/workspace-${w}`,
         name: `workspace-${w}`,
         open: w === 0,
-        sessions: Array.from({ length: SESSIONS }, (_, s) => ({
+        sessions: this.placed(`~/projects/workspace-${w}`, Array.from({ length: SESSIONS }, (_, s) => ({
           path: `/sessions/w${w}-s${s}.jsonl`,
           name: `w${w}-s${s}`,
           title: `第 ${s} 次会话，标题是内核起的一句话`,
           turns: (s % 40) + 1,
-        })),
+        }))),
       })),
     );
   }

@@ -22,13 +22,16 @@ export interface SessionMenuProps {
   onCopyInfo: () => void;
   onExport: () => void;
   onDelete: () => void;
+  /** One place up or down in the project list; absent where the row has no order to move in. */
+  onMove?: (direction: -1 | 1) => void;
+  canMove?: { up: boolean; down: boolean };
 }
 
 /** What can be done to one conversation, drawn at the document root so the
  *  sidebar's clipping cannot cut it. Every action closes the menu itself:
  *  the parent's handlers do that, this only says which one was chosen. */
 export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function SessionMenu(
-  { session, label, live, pinned, exporting, autoNaming, onPin, onRename, onAutoName, onPause, onClose, onArchive, onBranch, onCopyInfo, onExport, onDelete },
+  { session, label, live, pinned, exporting, autoNaming, onPin, onRename, onAutoName, onPause, onClose, onArchive, onBranch, onCopyInfo, onExport, onDelete, onMove, canMove },
   ref,
 ) {
   const target = session.path;
@@ -42,6 +45,12 @@ export const SessionMenu = forwardRef<HTMLDivElement, SessionMenuProps>(function
         <button role="menuitem" data-action="session.pin" data-target={target} onClick={onPin}>
           <StudioIcon name="pin" /><span>{pinned ? t("取消置顶") : t("置顶会话")}</span>
         </button>
+        {onMove && canMove && ([-1, 1] as const).map((direction) => (
+          <button key={direction} role="menuitem" data-action="session.move" data-target={target} data-value={direction}
+            disabled={direction === -1 ? !canMove.up : !canMove.down} onClick={() => onMove(direction)}>
+            <StudioIcon name="arrow" data-flip={direction === 1 ? "" : undefined} /><span>{t(direction === -1 ? "上移" : "下移")}</span>
+          </button>
+        ))}
         <button role="menuitem" data-action="session.rename-start" data-target={target} onClick={onRename}>
           <StudioIcon name="edit" /><span>{t("重命名")}</span>
         </button>
