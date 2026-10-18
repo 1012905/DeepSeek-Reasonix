@@ -548,7 +548,8 @@ Kimi CN 和 Kimi Global 直连 API 预设也包含 `kimi-k3`，支持图像输�
 | Authorization: Bearer | 对 Anthropic-compatible provider，把已保存的 API key 用 `Authorization: Bearer <key>` 发送，而不是 `x-api-key`。 | MiniMax Global、Vercel AI Gateway 等网关文档明确要求 Bearer 认证时开启。 |
 | 模型能力模式 | 指定 Reasonix 对该 provider 使用哪种 reasoning 请求协议。 | 默认用“自动识别”。只有网关被误判，或模型文档要求特定 reasoning 格式时再切换。 |
 | Thinking 覆盖 | provider 专用的 `thinking.type` 覆盖项。 | 默认用 Auto。只有后端文档明确支持 `enabled`、`disabled` 或 `adaptive` 时再手动指定；不支持的值可能让中转站拒绝请求。 |
-| 余额查询 URL | 可选的钱包余额查询接口。 | 服务商提供余额接口，且希望桌面端状态栏显示余额时填写。 |
+| 余额查询 URL | 可选的钱包余额查询接口。 | 服务商提供余额接口，且希望桌面端状态栏显示余额时填写。密钥只会发给这个地址，不会跟随跳转。 |
+| 余额格式 | 该接口返回内容的格式：`deepseek`、`moonshot` 或 `openrouter`（`balance_format`）。 | 供应商自己的域名（`api.deepseek.com`、`api.moonshot.cn`/`.ai`、`openrouter.ai`）不用设置，按该供应商的格式读取。其他地址（例如中转站）必须填写格式，否则显示为未配置，也不会请求该接口。已有的这类条目升级时会写成 `deepseek`，这正是它们一直以来的读取方式。Reasonix 1.x 重写共用配置文件时会丢掉它不认识的键，所以被丢掉的格式会在下次启动时，按配置旁边的 `balance-formats.json` 补回，除非你在连接编辑页里主动清掉了它。 |
 | 上下文窗口 | Reasonix 用于自动清理上下文的 provider 级 token 预算。`0` 表示禁用自动 compaction。 | 按该 provider 的模型上下文上限填写；所选模型规格不同时使用下方的逐模型覆盖。 |
 
 每个已选模型还提供一个可选的 **上下文窗口** 输入框。留空时继承 provider

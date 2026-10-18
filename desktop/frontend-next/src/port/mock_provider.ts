@@ -36,6 +36,7 @@ export class MockProvider extends MockBoundary {
       name: "deepseek", kind: "openai", effortField: "reasoning_effort", baseUrl: "https://api.deepseek.com",
       models: ["deepseek-v4-pro", "deepseek-flash"], default: "deepseek-v4-pro",
       hasKey: true, inUse: true, preset: false, keyEnv: "DEEPSEEK_API_KEY", canSetVision: false,
+      balanceUrl: "https://api.deepseek.com/user/balance", impliedBalanceFormat: "deepseek", balanceFormats: ["deepseek", "moonshot", "openrouter"],
     },
     {
       name: "deepseek-anthropic", kind: "anthropic", baseUrl: "https://api.deepseek.com/anthropic",
@@ -48,6 +49,7 @@ export class MockProvider extends MockBoundary {
       name: "myrelay", kind: "openai", effortField: "reasoning_effort", baseUrl: "https://relay.example.com/v1",
       models: ["gpt-4o", "claude-sonnet-4"], default: "gpt-4o",
       hasKey: true, inUse: false, preset: false, keyEnv: "MYRELAY_API_KEY",
+      balanceUrl: "https://relay.example.com/user/balance", impliedBalanceFormat: "", balanceFormats: ["deepseek", "moonshot", "openrouter"],
       visionModels: ["gpt-4o"], canSetVision: true, canSetThinking: true, sendsThinking: true,
       reasoningProtocol: "openai", supportedEfforts: ["low", "medium", "high"],
       modelEfforts: { "claude-sonnet-4": { supportedEfforts: ["low", "high", "max"], defaultEffort: "high" } },
@@ -174,6 +176,7 @@ export class MockProvider extends MockBoundary {
             ...p, models: edit.models, default: edit.default, visionModels: edit.vision,
             contextWindow: edit.contextWindow, maxOutputTokens: edit.maxOutputTokens,
             idleTimeoutSeconds: edit.idleTimeoutSeconds || undefined,
+            balanceUrl: edit.balanceUrl ?? p.balanceUrl, balanceFormat: edit.balanceFormat ?? p.balanceFormat,
             headers: edit.headers, extraBody: edit.extraBody,
             reasoningProtocol: edit.reasoningProtocol,
             sendsThinking: edit.reasoningProtocol === undefined ? p.sendsThinking : edit.reasoningProtocol !== "none",
