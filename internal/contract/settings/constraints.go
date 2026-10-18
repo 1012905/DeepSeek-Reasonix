@@ -76,6 +76,7 @@ var constraints = map[string]Entry{
 	"agent.user_turn_keep_tokens":                   {Min: 0, Max: 1e9, Bounded: true},
 	"auto_archive.days":                             {Min: 0, Max: 1e9, Bounded: true},
 	"desktop.max_workspaces":                        {Min: 0, Max: 1e9, Bounded: true},
+	"desktop.session_ref_tokens":                    {Min: 500, Max: 200000, Bounded: true},
 	"memory.pinned_budget_chars":                    {Min: 0, Max: 1e9, Bounded: true},
 	"memory.recall_limit":                           {Min: 0, Max: 1e9, Bounded: true},
 	"memory.recall_max_chars":                       {Min: 0, Max: 1e9, Bounded: true},

@@ -163,6 +163,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/changed_files_settings.go", "ChangedFilesSettings", tsBoundaryFile, "ChangedFilesSettings"},
 	{"internal/session/control/fold_work_settings.go", "FoldWorkSettings", tsBoundaryFile, "FoldWorkSettings"},
 	{"internal/session/control/ask_timeout.go", "AskTimeoutSettings", tsBoundaryFile, "AskTimeoutSettings"},
+	{"internal/session/control/session_ref_settings.go", "SessionRefSettings", tsBoundaryFile, "SessionRefSettings"},
 	{"internal/session/control/auto_archive.go", "AutoArchiveSettings", tsBoundaryFile, "AutoArchiveSettings"},
 	{"internal/session/control/receipt_settings.go", "ReceiptSettings", tsBoundaryFile, "ReceiptSettings"},
 	// RemoteHostEdit is left out on purpose: the kernel still takes the single

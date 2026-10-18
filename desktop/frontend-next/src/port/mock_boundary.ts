@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 
@@ -291,6 +291,18 @@ export class MockBoundary extends MockShell {
     this.ask = { ...this.ask, seconds };
     return { ...this.ask };
   }
+  private sessionRef: SessionRefSettings = { tokens: 8000, defaultTokens: 8000, minTokens: 500, maxTokens: 200000, path: "/Users/you/.reasonix/config.toml" };
+
+  async sessionRefSettings(): Promise<SessionRefSettings> {
+    return { ...this.sessionRef };
+  }
+
+  async saveSessionRefSettings(tokens: number): Promise<SessionRefSettings> {
+    if (tokens !== 0 && (tokens < this.sessionRef.minTokens || tokens > this.sessionRef.maxTokens)) throw new Error("session reference limit out of range");
+    this.sessionRef = { ...this.sessionRef, tokens: tokens || this.sessionRef.defaultTokens };
+    return { ...this.sessionRef };
+  }
+
   private receipt: ReceiptSettings = { show: false, path: "/Users/you/.reasonix/config.toml" };
 
   async receiptSettings(): Promise<ReceiptSettings> {

@@ -306,6 +306,8 @@ type RuntimeSettings interface {
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
 	SaveAskTimeoutSettings(seconds int) error
+	SessionRefSettings() SessionRefSettings
+	SaveSessionRefSettings(tokens int) error
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int

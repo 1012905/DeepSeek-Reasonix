@@ -264,6 +264,16 @@ export interface AskTimeoutSettings {
   path: string;
 }
 
+// How many tokens one referenced past conversation may add to a message; the
+// user file holds it.
+export interface SessionRefSettings {
+  tokens: number;
+  defaultTokens: number;
+  minTokens: number;
+  maxTokens: number;
+  path: string;
+}
+
 // Whether the end-of-turn delivery receipt is drawn as a card; the user file
 // holds it, so the terminal reads the same answer.
 export interface ReceiptSettings {
