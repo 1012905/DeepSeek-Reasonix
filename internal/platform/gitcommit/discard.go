@@ -35,7 +35,7 @@ func Discard(ctx context.Context, repo gitcmd.Repo, path string) error {
 			break
 		}
 	}
-	if change == nil || isDirectory(repo.Dir, path) {
+	if change == nil || isDirectory(repo.Dir, change.Path) {
 		return fmt.Errorf("%w: %q", ErrUnknownPath, path)
 	}
 	if change.OldPath != "" || !onlyModifyOrDelete(change.Status) {

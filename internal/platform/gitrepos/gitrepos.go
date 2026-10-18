@@ -147,11 +147,24 @@ func Resolve(ctx context.Context, root, dir string) (gitcmd.Repo, error) {
 		if p == "" || p == "." || p == ".." {
 			return gitcmd.Repo{}, ErrNotListed
 		}
-		at = filepath.Join(at, p)
-		info, err := os.Lstat(at)
-		if err != nil || !info.IsDir() {
+		// The name is taken from the directory's own listing, never built from the
+		// request: only an entry that is there, is a directory and is not a link
+		// can be stepped into.
+		entries, err := os.ReadDir(at)
+		if err != nil {
 			return gitcmd.Repo{}, ErrNotListed
 		}
+		next := ""
+		for _, e := range entries {
+			if e.Name() == p && e.IsDir() && e.Type()&os.ModeSymlink == 0 {
+				next = e.Name()
+				break
+			}
+		}
+		if next == "" {
+			return gitcmd.Repo{}, ErrNotListed
+		}
+		at = filepath.Join(at, next)
 	}
 	repo, ok := topOfItsOwnTree(ctx, at)
 	if !ok {
