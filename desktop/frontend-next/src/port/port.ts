@@ -461,6 +461,8 @@ export interface AgentPort {
   replyFeedback(receipt: string, body: string, images?: FeedbackImage[]): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
+  // Takes one of this install's reports back; refused with feedback.not_withdrawable once it has an outcome.
+  withdrawFeedback(receipt: string): Promise<void>;
   // Tying this install to the signed-in account is always the person's own
   // request. Linking changes no quota; unlinking only removes the join.
   feedbackLinks(): Promise<FeedbackLinkedInstall[]>;

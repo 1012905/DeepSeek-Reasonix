@@ -14,6 +14,9 @@ export class SseFeedback extends SseBackup {
   replyFeedback(receipt: string, body: string, images: FeedbackImage[] = []) {
     return this.post0<FeedbackReplyReceipt>("/feedback/" + encodeURIComponent(receipt) + "/reply", images.length > 0 ? { body, images } : { body });
   }
+  withdrawFeedback(receipt: string) {
+    return this.post("/feedback/" + encodeURIComponent(receipt) + "/withdraw", {});
+  }
   announceFeedbackReply() {
     return this.post("/notifications/feedback-reply", {});
   }

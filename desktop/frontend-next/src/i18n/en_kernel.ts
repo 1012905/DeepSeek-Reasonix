@@ -53,6 +53,8 @@ export const EN_KERNEL: Record<string, string> = {
   "反馈通道今日已满，请明天再试": "Feedback is at capacity for today - try again tomorrow",
   "这份反馈的回复次数已到上限，或回复太频繁了，请稍后再试": "This report has reached its reply limit, or you replied too often - try again later",
   "这份反馈现在不接收回复": "This report takes no reply right now",
+  "这份反馈已经有了结论，不能再撤回": "This report already has an outcome and can no longer be withdrawn",
+  "找不到这份反馈": "That report could not be found",
   "反馈服务要求额外验证，请稍后再试": "The feedback service asks for extra verification - try again later",
   "需要先登录账号": "Sign in to your account first",
   "这台电脑已关联到另一个账号": "This computer is already linked to another account",

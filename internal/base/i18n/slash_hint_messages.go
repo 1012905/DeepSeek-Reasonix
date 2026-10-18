@@ -20,6 +20,7 @@ type SlashHintMessages struct {
 	BtwLimit              string
 	BtwBusy               string
 	BtwFailedFmt          string
+	ArgFeedbackWithdraw   string
 	ArgFeedbackName       string
 	ArgMemoryRecall       string
 	ArgMemoryRevisions    string
