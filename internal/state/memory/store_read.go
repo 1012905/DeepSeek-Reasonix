@@ -19,7 +19,18 @@ func (s Store) findSaveTarget(id, name string) (Memory, string, bool, error) {
 		return s.findActive(name)
 	}
 	active, path, found, err := s.findActive(id)
-	if err == nil && !found {
+	if err != nil {
+		return active, path, found, err
+	}
+	// A save by id can be the retry after a rename was killed between retiring
+	// the old file and publishing the new one: the fact's only copies are then
+	// hidden artifacts, and reporting not-found would strand them.
+	if !found {
+		if active, path, found, err = s.recoverInterruptedRename(id); err != nil {
+			return Memory{}, "", false, err
+		}
+	}
+	if !found {
 		err = fmt.Errorf("memory id %q not found", id)
 	}
 	return active, path, found, err
