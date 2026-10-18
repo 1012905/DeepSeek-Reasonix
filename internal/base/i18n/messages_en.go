@@ -472,6 +472,7 @@ var English = Messages{
 	EffortReadErrorFmt:    "effort: %s",
 	EffortUnknownModelFmt: "effort: unknown model %q",
 	EffortUnsupportedFmt:  "effort is not configurable for %s",
+	EffortUndeclaredFmt:   "%s declares no reasoning levels for this model. List the levels its provider documents as supported_efforts = [\"...\"] on its [[providers]] entry to configure them",
 	EffortStatusFmt:       "effort for %s: %s (default: %s; options: %s)",
 
 	ListModelsHeaderFmt: "models (active: %s)",

@@ -472,6 +472,7 @@ var Chinese = Messages{
 	EffortReadErrorFmt:    "推理档位：%s",
 	EffortUnknownModelFmt: "推理档位：未知模型 %q",
 	EffortUnsupportedFmt:  "%s 不支持配置推理档位",
+	EffortUndeclaredFmt:   "%s 没有声明这个模型的推理档位。把服务商文档里的档位写进它的 [[providers]] 条目：supported_efforts = [\"...\"]，就能配置",
 	EffortStatusFmt:       "%s 的推理档位：%s（默认：%s；选项：%s）",
 
 	ListModelsHeaderFmt: "模型（当前：%s）",
