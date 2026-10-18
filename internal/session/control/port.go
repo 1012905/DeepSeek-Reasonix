@@ -303,6 +303,8 @@ type RuntimeSettings interface {
 	SavePlanApprovalSettings(auto bool) error
 	DefaultModeSettings() DefaultModeSettings
 	SaveDefaultModeSettings(plan bool) error
+	ToolSettings() ToolSettings
+	SaveToolDisabled(name string, disabled bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
