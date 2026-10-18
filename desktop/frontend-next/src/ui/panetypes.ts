@@ -53,6 +53,7 @@ export interface PaneProps {
   // pane keeps reporting the posture it had when it opened.
   pulse: number;
   findPulse: number;
+  findTogglePulse?: number;
   filesPulse?: number;
   viewRequest?: { to: PaneView; n: number };
   onSettings: (section?: string) => void;
