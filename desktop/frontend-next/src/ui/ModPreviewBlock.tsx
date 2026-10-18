@@ -56,7 +56,7 @@ export function ModPreviewBlock({ mod }: { mod: ModPreview }) {
           {dynamic > 0 && <div className="risk" data-kind="secret"><span className="lb">{t("名字无法列出的事件")}</span><span className="dt">{dynamic}</span></div>}
           {calls.length > 0 && <div className="risk"><span className="lb">{t("它用到的接口")}</span><span className="dt">{calls.join(", ")}</span></div>}
           {mod.session.some((m) => SESSION_READ.has(m)) && <div className="risk"><span className="lb">{t("读你的对话")}</span><span className="dt">{mod.session.filter((m) => SESSION_READ.has(m)).join(", ")}</span></div>}
-          {mod.session.includes("submit") && <div className="risk" data-kind="secret"><span className="lb">{t("往模型面前排提示")}</span><span className="dt">{t("它能排队提示，以它自己的名义交给模型，不会冒充你。")}</span></div>}
+          {mod.session.includes("submit") && <div className="risk" data-kind="secret"><span className="lb">{t("往模型面前排提示")}</span><span className="dt">{t("以它自己的名义，不冒充你")}</span></div>}
           {mod.imports.length > 0 && (
             <div className="risk" data-kind="secret">
               <span className="lb">{t("它引入的代码（看不见）")}</span>
