@@ -15,12 +15,9 @@ import (
 	"reasonix/internal/contract/tool"
 )
 
-// Step-up authorization, https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
-// (Scope Challenge Handling, read 2026-10-18): a server answers a call outside
-// the granted scope with 403 and a Bearer challenge whose error is
-// insufficient_scope and whose scope names what the operation needs. The header
-// is the server's text and is data: it is shown to the user and handed to the
-// authorization request, never used to decide whether to ask.
+// Step-up authorization (MCP 2025-11-25, Scope Challenge Handling): a 403 whose
+// Bearer error is insufficient_scope names the scope the operation needs. That
+// header is the server's text: shown and passed on, never used to decide.
 
 const (
 	maxChallengeScopes = 32
@@ -261,4 +258,26 @@ func (c *Client) announceScopeChallenge(need *InsufficientScopeError) {
 		Text:   fmt.Sprintf("MCP server %q asks for more access than you granted it. Sign in again to review and grant it.", textutil.ShownLocator(c.spec.Name)),
 		Detail: c.spec.Name,
 	})
+}
+
+// authorizationScope is the scope an authorization request asks for: the
+// server's challenge or its supported list, and for a step-up the granted scope
+// merged with what the server asked for.
+func authorizationScope(spec Spec, challengedScope string, resourceMeta protectedResourceMetadata, resource string) (string, error) {
+	scope := strings.TrimSpace(challengedScope)
+	if scope == "" {
+		scope = strings.Join(resourceMeta.ScopesSupported, " ")
+	}
+	if !spec.OAuthScopeUpgrade {
+		return scope, nil
+	}
+	asked := PendingScopeUpgrade(spec.StateDir)
+	if len(asked) == 0 {
+		return "", ErrNoScopeUpgradePending
+	}
+	granted := ""
+	if prior, loadErr := loadMCPOAuthState(spec.StateDir); loadErr == nil && sameCanonicalResource(prior.Resource, resource) {
+		granted = prior.Scope
+	}
+	return mergeScopes(granted, asked), nil
 }

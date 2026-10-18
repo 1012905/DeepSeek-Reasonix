@@ -121,14 +121,8 @@ func AuthorizeHTTPMCP(ctx context.Context, spec Spec, openURL func(string) error
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(authMeta.AuthorizationEndpoint) == "" || strings.TrimSpace(authMeta.TokenEndpoint) == "" {
-		return fmt.Errorf("MCP OAuth: authorization server metadata is missing authorization_endpoint or token_endpoint")
-	}
-	if len(authMeta.CodeChallengeMethodsSupported) == 0 && !spec.OAuthAllowMissingPKCEMetadata {
-		return fmt.Errorf("%w (set oauth_allow_missing_pkce_metadata = true on server %q in your own config to proceed)", ErrOAuthPKCEUnadvertised, spec.Name)
-	}
-	if len(authMeta.CodeChallengeMethodsSupported) > 0 && !slices.Contains(authMeta.CodeChallengeMethodsSupported, "S256") {
-		return fmt.Errorf("MCP OAuth: authorization server does not support PKCE S256")
+	if err := checkAuthorizationServer(spec, authMeta); err != nil {
+		return err
 	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -150,20 +144,9 @@ func AuthorizeHTTPMCP(ctx context.Context, spec Spec, openURL func(string) error
 	if err != nil {
 		return fmt.Errorf("MCP OAuth state: %w", err)
 	}
-	scope := strings.TrimSpace(challengedScope)
-	if scope == "" {
-		scope = strings.Join(resourceMeta.ScopesSupported, " ")
-	}
-	if spec.OAuthScopeUpgrade {
-		asked := PendingScopeUpgrade(spec.StateDir)
-		if len(asked) == 0 {
-			return ErrNoScopeUpgradePending
-		}
-		granted := ""
-		if prior, loadErr := loadMCPOAuthState(spec.StateDir); loadErr == nil && sameCanonicalResource(prior.Resource, resource) {
-			granted = prior.Scope
-		}
-		scope = mergeScopes(granted, asked)
+	scope, err := authorizationScope(spec, challengedScope, resourceMeta, resource)
+	if err != nil {
+		return err
 	}
 
 	callbackResult := make(chan oauthCallbackResult, 1)
@@ -796,4 +779,17 @@ func isHTTPMCPTransport(transport string) bool {
 	default:
 		return false
 	}
+}
+
+func checkAuthorizationServer(spec Spec, authMeta authorizationServerMetadata) error {
+	if strings.TrimSpace(authMeta.AuthorizationEndpoint) == "" || strings.TrimSpace(authMeta.TokenEndpoint) == "" {
+		return fmt.Errorf("MCP OAuth: authorization server metadata is missing authorization_endpoint or token_endpoint")
+	}
+	if len(authMeta.CodeChallengeMethodsSupported) == 0 && !spec.OAuthAllowMissingPKCEMetadata {
+		return fmt.Errorf("%w (set oauth_allow_missing_pkce_metadata = true on server %q in your own config to proceed)", ErrOAuthPKCEUnadvertised, spec.Name)
+	}
+	if len(authMeta.CodeChallengeMethodsSupported) > 0 && !slices.Contains(authMeta.CodeChallengeMethodsSupported, "S256") {
+		return fmt.Errorf("MCP OAuth: authorization server does not support PKCE S256")
+	}
+	return nil
 }
