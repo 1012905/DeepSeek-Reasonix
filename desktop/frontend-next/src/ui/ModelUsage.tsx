@@ -207,7 +207,7 @@ function Choices({
   const groups = vendors
     .map((v) => {
       const kind = protocol[v.key] ?? activeKind(v, main);
-      const shown = (answers === "search" ? Object.values(v.byKind).flat() : v.byKind[kind] ?? []).filter((m) => answersMatch(m, answers));
+      const shown = (answers === "search" ? Object.values(v.byKind).flat() : v.byKind[kind] ?? []).filter((m) => answersMatch(m, answers) && !(answers === "search" && m.notAdded));
       const held = Object.values(v.byKind).flat().find((m) => m.ref === value && answersMatch(m, answers) && !shown.includes(m));
       return { v, rows: held ? [held, ...shown] : shown };
     })

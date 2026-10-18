@@ -52,6 +52,8 @@ export interface ModelEntry {
   modelAlias?: string;
   kind?: string;
   active?: boolean;
+  // Configured but outside the access list the person added, so a role cannot pick it.
+  notAdded?: boolean;
   default?: boolean;
   // The endpoint host. Rows sharing it are one service reached under more than
   // one protocol, which is what lets the list fold them into a single choice.
