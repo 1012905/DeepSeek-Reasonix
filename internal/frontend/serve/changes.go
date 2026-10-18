@@ -1,12 +1,14 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"reasonix/internal/platform/gitcmd"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/session/control"
 )
@@ -17,7 +19,11 @@ import (
 // Repo is false for a workspace that is not version-controlled, which is a
 // fallback signal and not a failure.
 func (s *Server) changes(w http.ResponseWriter, r *http.Request) {
-	list, ok, err := gitstatus.Status(r.Context(), workspaceRepo(s.ctl()))
+	repo, named := s.requestRepo(w, r)
+	if !named {
+		return
+	}
+	list, ok, err := gitstatus.Status(r.Context(), repo)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -49,7 +55,10 @@ type workspaceGitView struct {
 // workspaceGit answers with the work tree's one-line identity. Repo is false
 // for a workspace that is not version-controlled, as for /changes.
 func (s *Server) workspaceGit(w http.ResponseWriter, r *http.Request) {
-	repo := workspaceRepo(s.ctl())
+	repo, named := s.requestRepo(w, r)
+	if !named {
+		return
+	}
 	info, ok := gitstatus.Summary(r.Context(), repo)
 	w.Header().Set("content-type", "application/json")
 	view := workspaceGitView{
@@ -82,7 +91,11 @@ func (s *Server) gitHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = n
 	}
-	page, ok, err := gitstatus.History(r.Context(), workspaceRepo(s.ctl()), limit)
+	repo, named := s.requestRepo(w, r)
+	if !named {
+		return
+	}
+	page, ok, err := gitstatus.History(r.Context(), repo, limit)
 	if err != nil {
 		refuse(w, http.StatusInternalServerError, "git.history_failed", err.Error(), nil)
 		return
@@ -100,7 +113,11 @@ func (s *Server) gitHistory(w http.ResponseWriter, r *http.Request) {
 // carry different codes because a frontend has to say different things.
 func (s *Server) changeDiff(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
-	text, truncated, err := gitstatus.Diff(r.Context(), workspaceRepo(s.ctl()), path)
+	repo, named := s.requestRepo(w, r)
+	if !named {
+		return
+	}
+	text, truncated, err := gitstatus.Diff(r.Context(), repo, path)
 	if errors.Is(err, gitstatus.ErrPathOutsideTree) {
 		refuse(w, http.StatusBadRequest, "changes.path_outside_tree",
 			"that path is not inside the working tree", map[string]any{"path": path})
@@ -125,4 +142,77 @@ func workspaceRepo(ctl control.SessionAPI) gitcmd.Repo {
 		return c.WorkspaceRepo()
 	}
 	return gitcmd.Repo{Dir: ctl.WorkspaceRoot()}
+}
+
+// requestRepo is the repository a git read names with ?repo=, a directory below
+// the workspace as /git/repos lists it; absent is the workspace's own. A name
+// that is not listed is refused with its own code and nothing is read.
+func (s *Server) requestRepo(w http.ResponseWriter, r *http.Request) (gitcmd.Repo, bool) {
+	return s.repoNamed(w, r, r.URL.Query().Get("repo"))
+}
+
+func (s *Server) repoNamed(w http.ResponseWriter, r *http.Request, dir string) (gitcmd.Repo, bool) {
+	ctl, ok := s.ctl().(interface {
+		RepoFor(ctx context.Context, dir string) (gitcmd.Repo, error)
+	})
+	if !ok {
+		if dir != "" {
+			refuse(w, http.StatusNotFound, "git.repo_unknown", "that repository is not part of this workspace", nil)
+			return gitcmd.Repo{}, false
+		}
+		return workspaceRepo(s.ctl()), true
+	}
+	repo, err := ctl.RepoFor(r.Context(), dir)
+	if errors.Is(err, gitrepos.ErrNotListed) {
+		refuse(w, http.StatusNotFound, "git.repo_unknown", "that repository is not part of this workspace", nil)
+		return gitcmd.Repo{}, false
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return gitcmd.Repo{}, false
+	}
+	return repo, true
+}
+
+type gitRepoRow struct {
+	// Dir is the repository's folder below the workspace; empty when the
+	// workspace is itself the repository.
+	Dir      string `json:"dir"`
+	Name     string `json:"name"`
+	Branch   string `json:"branch"`
+	Detached bool   `json:"detached"`
+	Added    int    `json:"added"`
+	Removed  int    `json:"removed"`
+	// Untracked counts files git does not know yet.
+	Untracked int `json:"untracked"`
+}
+
+// gitRepos lists the repositories of the workspace with the one-line identity of
+// each: the workspace itself when it is a repository, otherwise the repositories
+// found below it. Truncated says a search bound ended the look early.
+func (s *Server) gitRepos(w http.ResponseWriter, r *http.Request) {
+	ctl, ok := s.ctl().(interface {
+		GitRepos(ctx context.Context) (gitrepos.Result, error)
+	})
+	if !ok {
+		writeJSON(w, struct {
+			Repos     []gitRepoRow `json:"repos"`
+			Truncated bool         `json:"truncated"`
+		}{Repos: []gitRepoRow{}})
+		return
+	}
+	found, err := ctl.GitRepos(r.Context())
+	if err != nil {
+		refuse(w, http.StatusInternalServerError, "git.repos_failed", err.Error(), nil)
+		return
+	}
+	rows := make([]gitRepoRow, 0, len(found.Repos))
+	for _, f := range found.Repos {
+		info, _ := gitstatus.Summary(r.Context(), f.Repo)
+		rows = append(rows, gitRepoRow{Dir: f.Dir, Name: info.Name, Branch: info.Branch, Detached: info.Detached, Added: info.Added, Removed: info.Removed, Untracked: info.Untracked})
+	}
+	writeJSON(w, struct {
+		Repos     []gitRepoRow `json:"repos"`
+		Truncated bool         `json:"truncated"`
+	}{Repos: rows, Truncated: found.Truncated})
 }

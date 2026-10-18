@@ -126,6 +126,8 @@ export const EN: Record<string, string> = {
   "耗时 {t}": "Worked for {t}",
   "提交历史": "Commit history",
   "无法读取这个仓库的提交历史": "Could not read this repository's commit history",
+  "这个仓库不属于当前工作区": "That repository is not part of this workspace",
+  "无法列出这个工作区里的仓库": "Could not list the repositories in this workspace",
   "重新读取": "Read again",
   "这个文件夹不是 git 仓库": "This folder is not a git repository",
   "还没有提交": "No commits yet",

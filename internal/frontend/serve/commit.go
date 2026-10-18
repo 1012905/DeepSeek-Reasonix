@@ -7,10 +7,12 @@ import (
 	"net/http"
 
 	"reasonix/internal/platform/gitcommit"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/session/control"
 )
 
 func (s *Server) registerGitRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /git/repos", s.gitRepos)
 	mux.HandleFunc("GET /changes", s.changes)
 	mux.HandleFunc("GET /changes/diff", s.changeDiff)
 	mux.HandleFunc("GET /workspace/git", s.workspaceGit)
@@ -26,7 +28,7 @@ func (s *Server) registerGitRoutes(mux *http.ServeMux) {
 // commitPropose answers the staged changes and a model-proposed message. It
 // changes nothing in the repository.
 func (s *Server) commitPropose(w http.ResponseWriter, r *http.Request) {
-	p, err := s.ctl().ProposeCommit(r.Context())
+	p, err := s.ctl().ProposeCommit(r.Context(), r.URL.Query().Get("repo"))
 	if err != nil {
 		refuseCommit(w, r, err)
 		return
@@ -61,6 +63,8 @@ func (s *Server) stageChanges(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Context().Err() != nil:
 			// The person cancelled; nobody is left to read an answer.
+		case errors.Is(err, gitrepos.ErrNotListed):
+			refuse(w, http.StatusNotFound, "git.repo_unknown", "that repository is not part of this workspace", nil)
 		case errors.Is(err, gitcommit.ErrNoRepository):
 			refuse(w, http.StatusConflict, "commit.no_repository", err.Error(), nil)
 		case errors.Is(err, gitcommit.ErrUnknownPath):
@@ -78,6 +82,8 @@ func refuseCommit(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case r.Context().Err() != nil:
 		// The person cancelled; nobody is left to read an answer.
+	case errors.Is(err, gitrepos.ErrNotListed):
+		refuse(w, http.StatusNotFound, "git.repo_unknown", "that repository is not part of this workspace", nil)
 	case errors.Is(err, gitcommit.ErrNoRepository):
 		refuse(w, http.StatusConflict, "commit.no_repository", err.Error(), nil)
 	case errors.Is(err, gitcommit.ErrNothingStaged):

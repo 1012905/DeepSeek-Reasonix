@@ -13,6 +13,8 @@ import (
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/gitcmd"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/delegation"
@@ -514,7 +516,9 @@ type LocalShell interface {
 // the person names, and never pushes or rewrites history. It also moves the workspace between local git branches —
 // a workspace write like a commit, refused typed while a turn runs.
 type Commits interface {
-	ProposeCommit(ctx context.Context) (CommitProposal, error)
+	ProposeCommit(ctx context.Context, repo string) (CommitProposal, error)
+	GitRepos(ctx context.Context) (gitrepos.Result, error)
+	RepoFor(ctx context.Context, dir string) (gitcmd.Repo, error)
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
 	StageChanges(ctx context.Context, req StageRequest) error
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
