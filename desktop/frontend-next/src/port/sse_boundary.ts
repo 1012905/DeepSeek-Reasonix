@@ -1,6 +1,6 @@
 import { SseShell } from "./sse_shell";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, ToolSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
@@ -56,6 +56,12 @@ export class SseBoundary extends SseShell {
   }
   saveDefaultMode(plan: boolean) {
     return this.post0<DefaultModeSettings>("/default-mode", { plan });
+  }
+  toolSettings() {
+    return this.get<ToolSettings>("/tools");
+  }
+  saveToolDisabled(name: string, disabled: boolean) {
+    return this.post0<ToolSettings>("/tools/disabled", { name, disabled });
   }
   writeLease() {
     return this.get<WriteLeaseSettings>("/write-lease");

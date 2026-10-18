@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, ToolSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
 import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { mockMods } from "./mock_mods";
 import { HttpError } from "./http_error";
@@ -184,6 +184,29 @@ export class MockBoundary extends MockShell {
   async saveDefaultMode(plan: boolean): Promise<DefaultModeSettings> {
     this.modes = { ...this.modes, plan };
     return { ...this.modes };
+  }
+
+  private toolList: ToolSettings = {
+    tools: [
+      { name: "bash", description: "Run a shell command in the workspace.", disabled: false },
+      { name: "read_file", description: "Read a file, or a line range of it.", disabled: false },
+      { name: "recall", description: "Search what earlier turns folded away.", disabled: false },
+      { name: "todo_write", description: "Keep a checklist for a multi-step task.", disabled: false, requiredBy: "plan_steps" },
+      { name: "web_search", description: "Search the web.", disabled: true, byProject: true },
+      { name: "update_goal", description: "Report a goal as complete, blocked or stopped.", disabled: false, requiredBy: "goal_mode" },
+      { name: "use_capability", description: "Reach a deferred MCP tool.", disabled: false, requiredBy: "deferred_mcp_tools" },
+      { name: "web_fetch", description: "Fetch a web page.", disabled: false },
+    ],
+    path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async toolSettings(): Promise<ToolSettings> {
+    return structuredClone(this.toolList);
+  }
+
+  async saveToolDisabled(name: string, disabled: boolean): Promise<ToolSettings> {
+    this.toolList = { ...this.toolList, tools: this.toolList.tools.map((x) => (x.name === name ? { ...x, disabled } : x)) };
+    return structuredClone(this.toolList);
   }
 
   private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };

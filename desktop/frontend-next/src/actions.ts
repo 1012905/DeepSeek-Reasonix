@@ -678,6 +678,7 @@ export const ACTIONS: UIAction[] = [
   { id: "write-lease.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "plan-approval.auto", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "default-mode.plan", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "tool-list.toggle", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.target", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.text", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.expand", kind: "view", target: "none", proof: "interaction" },
