@@ -140,6 +140,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这台服务器未开放子代理指示上限设置": "This server does not open the sub-agent guidance limit setting",
   "子代理指示上限设置未能保存：{detail}": "The sub-agent guidance limit setting was not saved: {detail}",
   "本次请求未说明选择，未做任何修改": "The request did not say which, so nothing changed",
+  "最长等待的分钟数不能是负数": "The longest wait cannot be negative",
   "这个路径正被另一个并行的子代理或写入占用。本次写入未执行；请换一个路径，或等对方结束后再写": "This path is in use by another parallel sub-agent or write. This write did not run; choose another path, or wait until it finishes",
   "无法解析该服务器声明：{detail}": "That server declaration could not be read: {detail}",
   "未能安装该服务器：{detail}": "That server could not be installed: {detail}",

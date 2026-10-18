@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -86,8 +87,9 @@ type Owner struct {
 	// holder names this session to a session waiting on it. Read when the
 	// lease is taken, so a rename mid-hold shows on the next hold.
 	holder func() string
-	// undeclaredFree is set at construction and never changes.
+	// undeclaredFree and maxWait are set at construction and never change.
 	undeclaredFree bool
+	maxWait        time.Duration
 
 	mu            sync.Mutex
 	activeRuns    int
@@ -123,6 +125,8 @@ func (o *Owner) State() State {
 
 type localLock struct {
 	token chan struct{}
+	// logFailures counts claims granted here whose log entry could not be written.
+	logFailures atomic.Uint64
 }
 
 var localRegistry = struct {
@@ -292,24 +296,25 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 	return err
 }
 
-func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(), error) {
+// acquire returns the call's hold when hold is set and the claim is not waived.
+func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (*callHold, error) {
 	if o == nil {
-		return func() {}, nil
+		return nil, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if o.undeclaredFree && len(paths) == 0 {
-		return func() {}, nil
+		return nil, nil
 	}
 	claim := o.normalizePaths(paths)
 	for {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
 		if o.acquired && coversPaths(o.scope.paths, claim) {
-			end := o.holdLocked(hold)
+			h := o.holdLocked(hold, paths)
 			o.mu.Unlock()
-			return end, nil
+			return h, nil
 		}
 		if o.acquiring {
 			done := o.acquireDone
@@ -334,7 +339,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 		o.mu.Lock()
 		o.acquiring = false
 		o.waiting = false
-		end := func() {}
+		var h *callHold
 		if err == nil {
 			o.acquired = true
 			o.scope.paths = claim
@@ -342,7 +347,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 				o.acquiredAt = time.Now()
 				o.releaseSystem = release
 			}
-			end = o.holdLocked(hold)
+			h = o.holdLocked(hold, paths)
 		}
 		close(done)
 		releaseIfIdle := o.releaseIfIdleLocked()
@@ -350,7 +355,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 		if releaseIfIdle != nil {
 			releaseIfIdle()
 		}
-		return end, err
+		return h, err
 	}
 }
 

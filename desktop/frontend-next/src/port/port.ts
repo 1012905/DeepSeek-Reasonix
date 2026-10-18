@@ -306,7 +306,7 @@ export interface AgentPort {
   defaultMode(): Promise<DefaultModeSettings>;
   saveDefaultMode(plan: boolean): Promise<DefaultModeSettings>;
   writeLease(): Promise<WriteLeaseSettings>;
-  saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
+  saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }): Promise<WriteLeaseSettings>;
   peers(): Promise<PeersState>;
   sendPeerMessage(to: string, text: string): Promise<PeerReceipt>;
   resolvePeerMessage(id: string, approve: boolean, remember?: PeerRemember): Promise<void>;

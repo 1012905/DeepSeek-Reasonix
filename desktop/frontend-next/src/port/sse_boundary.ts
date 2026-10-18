@@ -60,8 +60,8 @@ export class SseBoundary extends SseShell {
   writeLease() {
     return this.get<WriteLeaseSettings>("/write-lease");
   }
-  saveWriteLease(optimistic: boolean) {
-    return this.post0<WriteLeaseSettings>("/write-lease", { optimistic });
+  saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }) {
+    return this.post0<WriteLeaseSettings>("/write-lease", edit);
   }
   peers() {
     return this.get<PeersState>("/peers");

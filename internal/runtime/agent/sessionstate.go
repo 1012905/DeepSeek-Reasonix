@@ -30,6 +30,8 @@ type sessionRuntime struct {
 	// hostNotices is host-authored fact queued for the next round's turn tail;
 	// it outlives any one turn, so it is the session's. See host_notice.go.
 	hostNotices hostNoticeQueue
+	// claimYields are contended write-claim yields awaiting a receipt.
+	claimYields claimYieldLog
 
 	missingReasoning missingReasoningWatch
 	// mode is the model mode the conversation asked for; a new one starts off.

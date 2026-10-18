@@ -247,17 +247,22 @@ func (s *Server) saveWriteLeaseSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var body struct {
-		Optimistic *bool `json:"optimistic"`
+		Optimistic     *bool `json:"optimistic"`
+		MaxWaitMinutes *int  `json:"maxWaitMinutes"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
 		badBody(w)
 		return
 	}
-	if body.Optimistic == nil {
-		refuse(w, http.StatusBadRequest, "write_lease.no_choice", "optimistic is required", nil)
+	if body.Optimistic == nil && body.MaxWaitMinutes == nil {
+		refuse(w, http.StatusBadRequest, "write_lease.no_choice", "optimistic or maxWaitMinutes is required", nil)
 		return
 	}
-	if err := s.ctl().SaveWriteLeaseSettings(*body.Optimistic); err != nil {
+	if body.MaxWaitMinutes != nil && *body.MaxWaitMinutes < 0 {
+		refuse(w, http.StatusBadRequest, "write_lease.bad_wait", "maxWaitMinutes cannot be negative", nil)
+		return
+	}
+	if err := s.ctl().SaveWriteLeaseSettings(body.Optimistic, body.MaxWaitMinutes); err != nil {
 		saveFailed(w, http.StatusInternalServerError, "write_lease.save_failed", err)
 		return
 	}

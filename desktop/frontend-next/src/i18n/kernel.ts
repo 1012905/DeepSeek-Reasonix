@@ -513,6 +513,7 @@ const SAID: Record<string, string> = {
   "peer.settings_unwritable": "会话间消息的设置没能保存：{detail}",
   "provider.key_origin_changed": "地址换了域名，已保存的密钥不会发过去；请填入这个地址对应的密钥",
   "write_lease.no_choice": "本次请求未说明选择，未做任何修改",
+  "write_lease.bad_wait": "最长等待的分钟数不能是负数",
   "write.path_busy": "这个路径正被另一个并行的子代理或写入占用。本次写入未执行；请换一个路径，或等对方结束后再写",
   "display_currency.invalid": "不支持这个币种，只能选自动、CNY 或 USD：{detail}",
   "display_currency.runtime_changed": "运行时已更换，费用显示币种未保存，请重试",

@@ -32,7 +32,7 @@ func startSessionRuntime(opts Options, cfg *config.Config, root string, sink eve
 	lease := opts.WorkspaceLease
 	if lease == nil {
 		var err error
-		var leaseOptions []workspacelease.Option
+		leaseOptions := []workspacelease.Option{workspacelease.WithMaxWait(cfg.WriteLeaseMaxWait())}
 		if cfg.WriteLeaseOptimistic() {
 			leaseOptions = append(leaseOptions, workspacelease.WithoutWholeWorkspaceHold())
 		}
