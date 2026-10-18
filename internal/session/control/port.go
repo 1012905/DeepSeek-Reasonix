@@ -15,6 +15,7 @@ import (
 	"reasonix/internal/platform/browser"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
+	"reasonix/internal/runtime/delegation"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
@@ -401,6 +402,13 @@ type PeerMail interface {
 	SavePeersSettings(patch PeersPatch) (PeersSettings, error)
 }
 
+// SubagentView reads the sub-agent runs of the session: the ones it spawned,
+// running or finished, and any one run's conversation.
+type SubagentView interface {
+	SubagentRuns() ([]delegation.RunInfo, error)
+	SubagentTranscript(ref string, after, limit int) (delegation.RunTranscript, error)
+}
+
 // DiffRendering reports the session's diff-rendering choices, resolved once at
 // build. A frontend rebuilding a transcript (e.g. the HTTP server answering
 // /history) reads them here instead of reloading config per request.
@@ -518,6 +526,7 @@ type SessionAPI interface {
 	Provenance
 	BackgroundJobs
 	ToolCallStopper
+	SubagentView
 	PeerMail
 	MCPSignIn
 	LocalShell
@@ -556,6 +565,7 @@ var (
 	_ Goals              = (*Controller)(nil)
 	_ BackgroundJobs     = (*Controller)(nil)
 	_ ToolCallStopper    = (*Controller)(nil)
+	_ SubagentView       = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
 	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
