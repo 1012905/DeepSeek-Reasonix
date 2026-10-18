@@ -365,6 +365,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 			OpenOnFallbackModel:      fallback,
 			ProviderResolver:         h.opts.ProviderResolver,
 			CleanupPendingReconciler: BackgroundCleanupReconciler,
+			NewConversation:          strings.TrimSpace(req.SessionPath) == "",
 		})
 	}
 	built, err := build(req.Model, settings == nil)

@@ -127,6 +127,8 @@ export const EN_KERNEL: Record<string, string> = {
   "多会话写入设置未能保存：{detail}": "The multi-session write setting was not saved: {detail}",
   "这台服务器未开放计划批准设置": "This server does not open the plan approval setting",
   "计划批准设置未能保存：{detail}": "The plan approval setting was not saved: {detail}",
+  "这台服务器未开放新对话起始模式设置": "This server does not open the new-conversation start mode setting",
+  "新对话起始模式设置未能保存：{detail}": "The new-conversation start mode setting was not saved: {detail}",
   "子代理写入范围设置未能保存：{detail}": "The sub-agent write scope setting was not saved: {detail}",
   "本次请求未说明选择，未做任何修改": "The request did not say which, so nothing changed",
   "这个路径正被另一个并行的子代理或写入占用。本次写入未执行；请换一个路径，或等对方结束后再写": "This path is in use by another parallel sub-agent or write. This write did not run; choose another path, or wait until it finishes",

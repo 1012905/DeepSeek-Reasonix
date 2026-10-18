@@ -26,6 +26,7 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
+	defaultMode    string
 	limits         agentLimits
 	goalAutoRetry  int
 	subagentClaims string
@@ -84,6 +85,7 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
+		defaultMode:     c.Agent.DefaultMode,
 		limits:          holdAgentLimits(c),
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
@@ -230,6 +232,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
 		c.Agent.PlanApproval = h.planApproval
+	}
+	if c.Agent.DefaultMode != h.defaultMode {
+		c.ignoreProject("agent.default_mode", c.Agent.DefaultMode, ProjectUserOnly)
+		c.Agent.DefaultMode = h.defaultMode
 	}
 	if c.Agent.WriteLease != h.writeLease {
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)

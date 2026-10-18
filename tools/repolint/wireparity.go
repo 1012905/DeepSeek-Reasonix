@@ -129,6 +129,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
 	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
 	{"internal/session/control/plan_approval_settings.go", "PlanApprovalSettings", tsBoundaryFile, "PlanApprovalSettings"},
+	{"internal/session/control/default_mode_settings.go", "DefaultModeSettings", tsBoundaryFile, "DefaultModeSettings"},
 	{"internal/session/control/peer_settings.go", "PeersSettings", tsBoundaryFile, "PeersSettings"},
 	{"internal/session/control/peer_settings.go", "PeerReleased", tsBoundaryFile, "PeerProject"},
 	{"internal/session/control/mods.go", "ModStatus", tsBoundaryFile, "ModStatus"},
