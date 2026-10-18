@@ -1,0 +1,2 @@
+- 修复：Windows 上会话文件名含大写字母（如自定义模型名）时，顶部标题和标签总显示“新会话”。关联 #13684。
+- Fixed: on Windows the header and tab always read "New chat" when the transcript file name had upper-case letters (for example a custom model name). Refs #13684.
