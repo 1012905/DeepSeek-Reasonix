@@ -48,6 +48,7 @@ import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } fr
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
 import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { ScheduleBoard, ScheduleDraft, SchedulePreview, ScheduleResultView, ScheduleView } from "./schedule";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -55,6 +56,7 @@ import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, F
 import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 export type * from "./plugin";
+export type * from "./schedule";
 export type * from "./market";
 export type * from "./feedback";
 
@@ -288,6 +290,12 @@ export interface AgentPort {
   savePlanApproval(auto: boolean): Promise<PlanApprovalSettings>;
   writeLease(): Promise<WriteLeaseSettings>;
   saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
+  schedules(): Promise<ScheduleBoard>;
+  previewSchedule(draft: ScheduleDraft): Promise<SchedulePreview>;
+  createSchedule(draft: ScheduleDraft, confirm: string): Promise<ScheduleView>;
+  scheduleAction(id: string, verb: "pause" | "resume" | "renew" | "delete"): Promise<ScheduleBoard>;
+  setSchedulesPaused(paused: boolean): Promise<ScheduleBoard>;
+  scheduleResult(triggerId: string): Promise<ScheduleResultView>;
   peers(): Promise<PeersState>;
   sendPeerMessage(to: string, text: string): Promise<PeerReceipt>;
   resolvePeerMessage(id: string, approve: boolean, remember?: PeerRemember): Promise<void>;

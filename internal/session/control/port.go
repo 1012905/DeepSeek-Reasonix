@@ -535,6 +535,7 @@ type SessionAPI interface {
 	ToolCallStopper
 	SubagentView
 	PeerMail
+	Schedules
 	MCPSignIn
 	LocalShell
 	DiffRendering
@@ -574,6 +575,7 @@ var (
 	_ ToolCallStopper    = (*Controller)(nil)
 	_ SubagentView       = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
+	_ Schedules          = (*Controller)(nil)
 	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)
