@@ -268,6 +268,20 @@ type NotificationsConfig struct {
 	// Sound plays a short system chime for the events switched on above, whether
 	// or not system notifications are; off unless asked for.
 	Sound bool `toml:"sound"`
+	// Phone says what this desktop tells its enrolled phones about. Off unless
+	// asked for, because it tells the account service that something is waiting.
+	Phone PhoneNotificationsConfig `toml:"phone"`
+}
+
+// PhoneNotificationsConfig is the desktop's half of phone notifications: the
+// master switch and which of the three occasions it reports. What a phone does
+// with a report is that phone's own choice. Only the type of occasion and a
+// count are ever sent.
+type PhoneNotificationsConfig struct {
+	Enabled  bool `toml:"enabled"`
+	Approval bool `toml:"approval"`
+	Input    bool `toml:"input"`
+	Error    bool `toml:"error"`
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the

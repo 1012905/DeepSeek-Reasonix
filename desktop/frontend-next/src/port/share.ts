@@ -69,6 +69,29 @@ export interface CloudShareOffer {
   qr: string;
 }
 
+// One device (a phone's browser) enrolled against this Studio at the account
+// service. Mirrors serve.PhoneView. pending is waiting for the person here.
+export interface PhoneView {
+  id: string;
+  ordinal?: number;
+  name: string;
+  state: "pending" | "active" | "revoked";
+  uaClass: string;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt?: string;
+  // What to compare when two devices look alike.
+  keyThumbprint: string;
+  // The active device a pending one says it replaces.
+  replaceCandidate?: string;
+}
+
+export interface PhoneList {
+  phones: PhoneView[];
+}
+
+export type PhoneAction = "add" | "replace" | "reject";
+
 export interface SharePort {
   // Null where this kernel has no window to share from: a browser tab, or a
   // phone that is itself paired.
@@ -84,6 +107,12 @@ export interface SharePort {
   offerShare(): Promise<ShareOffer>;
   offerCloudShare(): Promise<CloudShareOffer>;
   revokeDevice(id: string): Promise<ShareStatus>;
+  // The devices enrolled against this Studio at the account service. Null where
+  // this kernel has no window to ask from; a refusal is a thrown coded error.
+  sharePhones(): Promise<PhoneList | null>;
+  // Answers a waiting device, and answers with the list as it is afterwards.
+  resolvePhone(id: string, action: PhoneAction, replaceId?: string): Promise<PhoneList>;
+  revokePhone(id: string): Promise<PhoneList>;
   // What this page is to the kernel: a paired device, or null for the window
   // and for a browser on a networked serve.
   device(): Promise<DeviceSelf | null>;

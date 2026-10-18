@@ -14,6 +14,7 @@ import (
 // Where the desktop re-declares the kernel's wire types by hand.
 const (
 	tsWireFile      = "desktop/frontend-next/src/port/wire.ts"
+	tsPortFile      = "desktop/frontend-next/src/port/port.ts"
 	tsLeaseFile     = "desktop/frontend-next/src/port/workspace_lease.ts"
 	tsBoundaryFile  = "desktop/frontend-next/src/port/boundary.ts"
 	tsRemoteFile    = "desktop/frontend-next/src/port/remote.ts"
@@ -180,6 +181,10 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/session_ref_settings.go", "SessionRefSettings", tsBoundaryFile, "SessionRefSettings"},
 	{"internal/session/control/auto_archive.go", "AutoArchiveSettings", tsBoundaryFile, "AutoArchiveSettings"},
 	{"internal/session/control/receipt_settings.go", "ReceiptSettings", tsBoundaryFile, "ReceiptSettings"},
+	{"internal/frontend/serve/notifications.go", "NotifyPrefs", tsPortFile, "NotifyPrefs"},
+	{"internal/frontend/serve/notifications.go", "PhoneNotifyPrefs", tsPortFile, "PhoneNotifyPrefs"},
+	{"internal/frontend/serve/share_phones.go", "PhoneView", tsShareFile, "PhoneView"},
+	{"internal/frontend/serve/share_phones.go", "PhoneList", tsShareFile, "PhoneList"},
 	// RemoteHostEdit is left out on purpose: the kernel still takes the single
 	// `workspace` an old row was saved with, which the page deliberately does
 	// not send. An under-filled request is not a picture that cannot be read.

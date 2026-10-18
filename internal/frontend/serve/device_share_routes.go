@@ -36,6 +36,7 @@ func (h *Hub) registerShareRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /share/revoke", h.shareRevoke)
 	mux.HandleFunc("GET /share/remember", h.shareRememberGet)
 	mux.HandleFunc("POST /share/remember", h.shareRememberSave)
+	h.registerPhoneRoutes(mux)
 }
 
 func (h *Hub) shareCloudOffer(w http.ResponseWriter, _ *http.Request) {
