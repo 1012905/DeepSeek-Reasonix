@@ -1,0 +1,2 @@
+- 新增：会话菜单里可以把会话移到另一个项目，只带走对话和标题、置顶、归档，不带走原项目的权限设置。关联 #13370。
+- Added: A conversation can be moved to another project from its menu; the conversation and its title, pin and archive state travel, what the old project allowed does not. Refs #13370.

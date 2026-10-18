@@ -351,6 +351,11 @@ const SAID: Record<string, string> = {
   "session.in_use": "该会话正被其他位置占用，请先关闭该处",
   // 占用者在另一个进程时，这个窗口里没有可关闭的对象，pid 是唯一可操作的事实。
   "session.in_use_by": "该会话被另一个进程占用（{host} 上的 pid {pid}），结束它之后再删",
+  "session.move_open": "该会话正在窗口里打开，先关闭它再移动",
+  "session.move_held": "该会话还在被写入，稍后再移动",
+  "session.move_held_by": "该会话被另一个进程占用（{host} 上的 pid {pid}），结束它之后再移动",
+  "session.same_project": "它已经在这个项目里了",
+  "session.unreadable": "这个会话的记录不完整，不能移动；先让它自己恢复",
   "session.bind_failed": "接管该会话失败，请重新打开窗口",
   "session.has_open_pane": "该会话仍有打开的面板，请先关闭",
   "session.outside_workspace": "该路径不属于任何已知的工作区",

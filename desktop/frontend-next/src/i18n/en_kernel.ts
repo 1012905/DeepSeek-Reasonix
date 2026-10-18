@@ -598,4 +598,9 @@ export const EN_KERNEL: Record<string, string> = {
     "The old memory file could not be backed up first, so it was not migrated and was left as it is; the detail gives the reason",
   "会话、工作区或运行时正在切换，这条消息没能立刻发出；它已排入队列，切换结束后会自动发送，不需要重发":
     "The session, workspace or runtime is switching, so this message could not be sent right away; it is queued and will be sent automatically when the switch ends - no need to send it again",
+  "该会话正在窗口里打开，先关闭它再移动": "This conversation is open in a window; close it before moving it",
+  "该会话还在被写入，稍后再移动": "This conversation is still being written to; move it a little later",
+  "该会话被另一个进程占用（{host} 上的 pid {pid}），结束它之后再移动": "Another process holds this session open (pid {pid} on {host}); end it, then move it",
+  "它已经在这个项目里了": "It is already in this project",
+  "这个会话的记录不完整，不能移动；先让它自己恢复": "This conversation's record is incomplete and cannot be moved; let it recover first",
 };
