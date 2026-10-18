@@ -37,8 +37,11 @@ func runPathScenario(t *testing.T, c *Conn) {
 	t.Helper()
 	ctx := context.Background()
 	for in, want := range map[string]string{
-		`C:\Users\someone\a b`: "/mnt/c/Users/someone/a b",
-		`c:/Users/x`:           "/mnt/c/Users/x",
+		`C:\Users\someone\a b`:                        "/mnt/c/Users/someone/a b",
+		`c:/Users/x`:                                  "/mnt/c/Users/x",
+		`C:\a b\it's "q"\-dash\back`:                  "/mnt/c/a b/it's \"q\"/-dash/back",
+		`C:\a b\`:                                     "/mnt/c/a b/",
+		`C:\dollar $HOME\` + "`z`" + `\ünï`:           "/mnt/c/dollar $HOME/`z`/ünï",
 		`\\wsl.localhost\` + c.Distro() + `\home\dev`: "/home/dev",
 	} {
 		if got, err := c.ToLinux(ctx, in); err != nil || got != want {

@@ -12,6 +12,7 @@ export const SETTING_SCREEN: Record<string, string> = {
   "peers.release_projects": "tools:peers",
   "desktop.default_tool_approval_mode": "tools:approval",
   "agent.plan_approval": "tools:plan-approval",
+  "agent.default_mode": "session:default-mode",
   "permissions.mode": "tools:approval",
   "permissions.allow": "tools:rules",
   "permissions.ask": "tools:rules",

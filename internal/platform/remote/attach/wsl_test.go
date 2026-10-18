@@ -233,7 +233,7 @@ func TestAPoolOpensAWSLEntryThroughTheWSLLinkAndSendsNoBroker(t *testing.T) {
 
 // What a launch starts must belong to the held session, not to the call that
 // sent it: the command is staged in a file, only its name is typed into the
-// session, and the call returns what the command printed.
+// session, and the call returns what the command printed and its own status.
 func TestADetachedCommandRunsInTheHeldSessionAndReturnsItsOutput(t *testing.T) {
 	var staged string
 	var polls int
@@ -241,16 +241,20 @@ func TestADetachedCommandRunsInTheHeldSessionAndReturnsItsOutput(t *testing.T) {
 	m.script = func(args []string, stdin io.Reader) (wsl.Result, error) {
 		body := args[5]
 		switch {
-		case strings.Contains(body, `cat > "$1/$2.sh"`):
+		case strings.Contains(body, `cat > "$d/$1.sh"`):
 			b, _ := io.ReadAll(stdin)
 			staged = string(b)
-			return wsl.Result{}, nil
-		case strings.Contains(body, `.rc`):
+		case strings.Contains(body, `exit 44`):
 			polls++
 			if polls < 3 {
 				return wsl.Result{ExitCode: 44}, nil
 			}
+		case strings.HasSuffix(body, `.out"`):
 			return wsl.Result{Stdout: []byte("12345\n")}, nil
+		case strings.HasSuffix(body, `.err"`):
+			return wsl.Result{Stdout: []byte("warned\n")}, nil
+		case strings.HasSuffix(body, `.rc"`):
+			return wsl.Result{Stdout: []byte("44\n")}, nil
 		}
 		return wsl.Result{}, nil
 	}
@@ -266,8 +270,8 @@ func TestADetachedCommandRunsInTheHeldSessionAndReturnsItsOutput(t *testing.T) {
 	}
 	defer l.Close()
 	res, err := d.ExecDetached(t.Context(), "nohup serve & echo $!")
-	if err != nil || string(res.Stdout) != "12345\n" || res.ExitCode != 0 {
-		t.Fatalf("ExecDetached = %+v, %v", res, err)
+	if err != nil || string(res.Stdout) != "12345\n" || string(res.Stderr) != "warned\n" || res.ExitCode != 44 {
+		t.Fatalf("ExecDetached = %+v, %v; a command's own status 44 must not read as 'not yet'", res, err)
 	}
 	if staged != "nohup serve & echo $!" || polls != 3 {
 		t.Fatalf("staged = %q, polls = %d", staged, polls)
@@ -277,47 +281,62 @@ func TestADetachedCommandRunsInTheHeldSessionAndReturnsItsOutput(t *testing.T) {
 		m.typedMu.Lock()
 		typed := m.typed.String()
 		m.typedMu.Unlock()
-		if strings.Contains(typed, "/tmp/.reasonix-link/") && strings.HasSuffix(typed, "\n") && !strings.Contains(typed, "nohup") {
+		if strings.Contains(typed, `$HOME/.reasonix/link`) && strings.HasSuffix(typed, "\n") && !strings.Contains(typed, "nohup") && !strings.Contains(typed, "/tmp") {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the session was sent %q, want a line naming the staged file and none of its text", typed)
+			t.Fatalf("the session was sent %q, want a line naming the private staged file and none of its text", typed)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 }
 
-func TestADistributionWithoutPsIsRefusedBeforeAnythingIsLaunched(t *testing.T) {
-	m := &wslMachine{t: t, script: func(args []string, _ io.Reader) (wsl.Result, error) {
-		return wsl.Result{Stdout: []byte("ps\n"), ExitCode: exitMissingTool}, nil
-	}}
-	l, _ := m.link(wslEntry())
-	err := l.Start(t.Context())
-	if !errors.Is(err, wsl.ErrUnsupported) || !strings.Contains(err.Error(), "no ps") {
-		t.Fatalf("Start = %v, want ErrUnsupported naming ps", err)
+// The wait for a launched command is bounded by the session it was given to:
+// one that dies after the write leaves nothing that will ever finish.
+func TestALaunchWhoseSessionDiesAfterTheWriteStopsWaiting(t *testing.T) {
+	m := &wslMachine{t: t}
+	m.anchor = func(ctx context.Context, stdin io.Reader) (wsl.Result, error) {
+		buf := make([]byte, 4096)
+		_, _ = stdin.Read(buf)
+		return wsl.Result{}, nil
 	}
-	for _, c := range m.calls {
-		if slices.Equal(c, []string{"-d", "Ubuntu", "--exec", "/bin/sh"}) {
-			t.Fatal("a session was opened on a distribution that cannot run a kernel")
+	m.script = func(args []string, _ io.Reader) (wsl.Result, error) {
+		if strings.Contains(args[5], `exit 44`) {
+			return wsl.Result{ExitCode: 44}, nil
 		}
+		return wsl.Result{}, nil
+	}
+	l, _ := m.link(wslEntry())
+	if err := l.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	_, err := l.(interface {
+		ExecDetached(context.Context, string) (remote.ExecResult, error)
+	}).ExecDetached(ctx, "serve")
+	if !errors.Is(err, ErrNoSession) {
+		t.Fatalf("ExecDetached = %v, want ErrNoSession (not a wait until the deadline)", err)
 	}
 }
 
-func TestAWindowsWorkspaceIsTranslatedByTheDistributionBeforeTheKernelIsAsked(t *testing.T) {
+func TestAScratchDirectoryThatIsNotPrivateIsRefusedWithATypedError(t *testing.T) {
 	m := &wslMachine{t: t, script: func(args []string, _ io.Reader) (wsl.Result, error) {
-		if len(args) == 6 && args[3] == "wslpath" && args[5] == `C:\src\app` {
-			return wsl.Result{Stdout: []byte("/mnt/c/src/app\n")}, nil
+		if strings.Contains(args[5], `cat > "$d/$1.sh"`) {
+			return wsl.Result{ExitCode: exitUnsafeScratch}, nil
 		}
 		return wsl.Result{}, nil
 	}}
 	l, _ := m.link(wslEntry())
-	w := l.(workspaceMapper)
-	for in, want := range map[string]string{`C:\src\app`: "/mnt/c/src/app", "/home/dev/app": "/home/dev/app", "~/app": "~/app"} {
-		if got, err := w.Workspace(t.Context(), in); err != nil || got != want {
-			t.Errorf("Workspace(%q) = %q, %v; want %q", in, got, err, want)
-		}
+	if err := l.Start(t.Context()); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := w.Workspace(t.Context(), `Z:\none`); err == nil {
-		t.Fatal("a drive the distribution does not have was accepted")
+	defer l.Close()
+	_, err := l.(interface {
+		ExecDetached(context.Context, string) (remote.ExecResult, error)
+	}).ExecDetached(t.Context(), "serve")
+	if !errors.Is(err, ErrUnsafeScratch) {
+		t.Fatalf("ExecDetached = %v, want ErrUnsafeScratch", err)
 	}
 }

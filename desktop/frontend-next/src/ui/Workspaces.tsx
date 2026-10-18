@@ -24,6 +24,7 @@ import { WorkspaceOrder, workspaceMenuKeys } from "./WorkspaceOrder";
 import { WorkspaceReveal } from "./WorkspaceReveal";
 import { SessionMenu } from "./SessionMenu";
 import { useSessionMove } from "./useSessionMove";
+import { useSessionMoveTo } from "./useSessionMoveTo";
 import { pinnedFirst } from "./pinorder";
 import { Confirm, removeHint, sessionDeleteHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
@@ -108,6 +109,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
   const quickActions = useSyncExternalStore(onSessionQuickActionsChange, showsSessionQuickActions, showsSessionQuickActions);
   const [sessionMenu, setSessionMenu] = useState("");
   const order = useSessionMove(hub, reload, onError, !!needle);
+  const moveTo = useSessionMoveTo(hub, tree, reload, rowLabel);
   const [sessionMenuAt, setSessionMenuAt] = useState({ x: 0, y: 0 });
   const sessionMenuBox = useRef<HTMLDivElement>(null);
   const sessionMenuPortal = useRef<HTMLDivElement>(null);
@@ -351,6 +353,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
 
   return (
     <>
+      {moveTo.dialog}
       <SessionBatch hub={hub} selection={selection} selected={selected} displayed={displayed} onSelect={setSelection}
         onExit={() => treeKeys.ref.current?.querySelector<HTMLElement>('[data-action="machine.menu"]')?.focus()}
         onBusy={(pending) => { setBusy(pending ? "batch" : ""); if (pending) { setSessionMenu(""); setEditing(""); setConfirm(""); } }}
@@ -674,6 +677,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             onDelete={() => { askDelete(session.path); setSessionMenu(""); }}
                             onMove={(direction) => { setSessionMenu(""); void order.move(session, direction); }}
                             canMove={order.canMove(ws, session)}
+                            onMoveTo={() => { setSessionMenu(""); moveTo.request(session, ws.root); }}
                           />
                         )}
                       </div>

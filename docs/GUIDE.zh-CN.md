@@ -86,6 +86,7 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_queued_inputs = 0              # 会话队列里等待发送的消息条数；0 = 不限制，队列的字节上限仍然生效（只认用户级配置）
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
+# default_mode = "plan"              # 仅用户配置文件；新对话从计划模式开始（恢复的对话保持自己的模式；设置里有对应开关），默认 normal
 # subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict
 # host_verification = "off"          # 仅用户配置文件；改过文件的回合不再被要求先做检查、复核和签收；交付回执仍如实写明检查了什么，默认 on
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
@@ -1196,6 +1197,14 @@ Context Engine v2 把上下文分成两个用途不同的层：
 - **常驻指令**来自分层加载的 `REASONIX.md`、`AGENTS.md` 和 `CLAUDE.md`。必须在每个
   相关回合都存在的规则应放在这里。用户全局文件先加载，再加载 workspace 和更深目标目录，
   同一目录内 `.local.md` 变体优先。
+- **规则**是放在 `.reasonix/rules/`、`.claude/rules/`（项目）和 `<Reasonix 主目录>/rules/`（用户）下的
+  Markdown 文件，含子目录。
+  - 没有 `paths:` 前置字段的规则，按常驻指令的方式送达。
+  - 带 `paths: ["src/**/*.ts"]`（列表或逗号分隔的字符串）的规则，在会话读写过匹配文件后的下一个回合送达，
+    不再适用时会被撤回。
+  - 加载顺序是先用户后项目，后出现的更具体。
+  - 单个文件上限 32 KB，两层各自上限 64 KB；超出的会被跳过并在能力诊断里显示；不跟随符号链接。
+  - 两层都不碰缓存前缀。
 - **背景记忆**每个 Markdown 文件只保存一条持久事实。每条事实都有不变 ID、单调 revision、
   时间戳、相互独立的 `type`（`user`、`feedback`、`project`、`reference`）与
   `scope`（`project`、`global`），以及 freshness。事实可能过时，因此永远不能覆盖

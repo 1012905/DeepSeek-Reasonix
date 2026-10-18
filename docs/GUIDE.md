@@ -78,6 +78,7 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
 # plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
+# default_mode = "plan"              # user file only; a new conversation starts in plan mode (a resumed one keeps its own; Settings has a switch); default normal
 # host_verification = "off"          # user file only; the host stops holding a turn that changed files to a check, a review and a sign-off; the receipt still says what was checked; default on
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
@@ -1576,6 +1577,16 @@ Context Engine v2 separates two intentionally different layers:
   and `CLAUDE.md` files. Put rules here when they must be present on every
   relevant turn. User-global files load first, then workspace and deeper target
   directories; within one directory, `.local.md` variants win.
+- **Rules** are Markdown files in `.reasonix/rules/`, `.claude/rules/` (project)
+  and `<Reasonix home>/rules/` (user), subdirectories included.
+  - A rule with no `paths:` frontmatter is delivered like the standing instructions.
+  - A rule with `paths: ["src/**/*.ts"]` (a list or a comma-separated string) is
+    delivered on the next turn after the session reads or edits a matching file,
+    and is retracted if it stops applying.
+  - Rules load user first, then project, so a later rule is the more specific one.
+  - A file is limited to 32 KB and each of the two layers to 64 KB. What exceeds a
+    limit is skipped and shown in capability diagnostics. Symlinks are not followed.
+  - Neither layer touches the cache-stable prefix.
 - **Background memory** stores one durable fact per Markdown file. Each fact has
   an immutable ID, monotonic revision, timestamps, independent `type`
   (`user`, `feedback`, `project`, `reference`) and `scope` (`project`,
@@ -1796,9 +1807,12 @@ reasonix schedule tick            # claim and run what is due now, then exit
     refuse when it is set, so an agent that opens its own pty is stopped too.
   - That is a guard against accidents and a trick, not a boundary: a child can clear its own environment, and
     only the sandbox confines what an agent can do.
-- **Nothing runs by itself yet.** Call `reasonix schedule tick` from the operating system's scheduler (cron,
-  launchd, Task Scheduler). Every tick goes through the store's own budget and expiry checks, so a scheduler
-  that only calls `tick` cannot bypass them. An in-kernel ticker is a later change.
+- **When it runs.**
+  - Studio ticks while it is open, with a window or a tray icon showing; a kernel nobody can see, or one with
+    no parent that ends it, never starts a run. One kernel at a time ticks.
+  - Otherwise call `reasonix schedule tick` from the operating system's scheduler (cron, launchd, Task
+    Scheduler).
+  - Every tick goes through the store's own budget and expiry checks, so neither route can bypass them.
 - **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
   for you and never answered on your behalf.
 - **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only

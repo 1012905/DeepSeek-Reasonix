@@ -5,6 +5,7 @@ package wslconn
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os/exec"
 	"testing"
@@ -28,7 +29,8 @@ func localCommand(t *testing.T) wsl.Command {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, &out, &errb
 		err := cmd.Run()
 		res := wsl.Result{Stdout: out.Bytes(), Stderr: errb.Bytes()}
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			res.ExitCode, err = ee.ExitCode(), nil
 		}
 		return res, err

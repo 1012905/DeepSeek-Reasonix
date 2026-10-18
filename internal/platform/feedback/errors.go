@@ -24,6 +24,11 @@ var (
 	ErrReplyLimit        = errors.New("feedback: reply limit reached")
 	ErrNotReplyable      = errors.New("feedback: report takes no reply")
 	ErrChallengeRequired = errors.New("feedback: verification required")
+	// ErrNotWithdrawable: the report already has an outcome, or this machine can
+	// no longer speak for it. ErrNotFound: the service has no such report for
+	// this install.
+	ErrNotWithdrawable = errors.New("feedback: report can no longer be withdrawn")
+	ErrNotFound        = errors.New("feedback: no such report")
 	// The account-link sentinels: ErrAccountRequired is a missing, expired or
 	// refused sign-in assertion, ErrLinkConflict an install another account holds,
 	// ErrLinkLimit an account at its cap, ErrNoInstall an install with no report yet.

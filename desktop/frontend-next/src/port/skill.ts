@@ -11,6 +11,9 @@ export interface SkillEntry {
   scope?: string;
   plugin?: string;
   path?: string;
+  // What uninstalling deletes, and whether that is a whole folder; absent when it cannot be removed.
+  removes?: string;
+  removesFolder?: boolean;
   subagent?: boolean;
   readOnly?: boolean;
   model?: string;

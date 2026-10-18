@@ -36,6 +36,7 @@ import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
 import { useCommitCard } from "./CommitCard";
 import { BrowserWideToggle } from "./BrowserWideToggle";
+import { BrowserFullToggle } from "./BrowserFullToggle";
 import { WorkspaceImage, isWorkspaceImage } from "./WorkspaceImage";
 
 // The editor and its grammars load with the first file opened, not with Studio.
@@ -125,6 +126,7 @@ export function WorkbenchPanel({
   onAddToChat,
   onQuoteSelection,
   wideMode,
+  fullMode,
   fileRequest,
 }: {
   port: AgentPort;
@@ -156,6 +158,7 @@ export function WorkbenchPanel({
   // Text selected in an open file, with the file it came from, on its way to the composer.
   onQuoteSelection?: (text: string, path: string) => void;
   wideMode?: { wide: boolean; onToggle: () => void };
+  fullMode?: { full: boolean; onToggle: () => void };
   fileRequest?: { path: string };
 }) {
   const preview = useHtmlPreview(port, allTabs, remote);
@@ -557,6 +560,7 @@ export function WorkbenchPanel({
         ))}
         </div>
         {wideMode && <BrowserWideToggle {...wideMode} />}
+        {fullMode && <BrowserFullToggle {...fullMode} />}
         <button
           className="workbench-files"
           data-action="workbench.files"

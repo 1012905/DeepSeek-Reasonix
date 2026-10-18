@@ -20,7 +20,7 @@ func runFileScenario(t *testing.T, c *Conn, dir string) {
 	t.Helper()
 	ctx := context.Background()
 	fsys, _ := c.Files()
-	awkward := path.Join(dir, `a b "q" 'x' $HOME `+"`z`"+` ünï`)
+	awkward := path.Join(dir, `a b "q" 'x' $HOME `+"`z`"+` ünï back\slash trailing\ -dash`)
 
 	if err := fsys.MkdirAll(ctx, awkward+"/deep/er"); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -32,7 +32,10 @@ func runFileScenario(t *testing.T, c *Conn, dir string) {
 		t.Fatalf("MkdirExclusive: %v", err)
 	}
 
-	file := awkward + "/state.json"
+	if err := fsys.MkdirAll(ctx, awkward+"/-dash"); err != nil {
+		t.Fatalf("MkdirAll of a component that starts with a dash: %v", err)
+	}
+	file := awkward + "/-dash/state.json"
 	want := []byte("{\"port\": 4242}\n")
 	if err := fsys.WriteFileAtomic(ctx, file, want, 0o600); err != nil {
 		t.Fatalf("WriteFileAtomic: %v", err)
@@ -76,8 +79,8 @@ func runFileScenario(t *testing.T, c *Conn, dir string) {
 		}
 	}
 
-	real, err := fsys.RealPath(ctx, awkward+"/deep/../state.json")
-	if err != nil || !strings.HasSuffix(real, "/state.json") || strings.Contains(real, "..") {
+	real, err := fsys.RealPath(ctx, awkward+"/deep/../-dash/state.json")
+	if err != nil || !strings.HasSuffix(real, "/-dash/state.json") || strings.Contains(real, "..") {
 		t.Fatalf("RealPath = %q, %v", real, err)
 	}
 	if home, err := fsys.RealPath(ctx, "~"); err != nil || !strings.HasPrefix(home, "/") {

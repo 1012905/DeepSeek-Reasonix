@@ -115,6 +115,7 @@ var table = []Entry{
 	{ID: "agent.subagent_claims", Class: Guarded, Effect: OnOpen},
 	{ID: "agent.write_lease", Class: Elevated, Effect: OnOpen},
 	{ID: "agent.plan_approval", Class: Guarded, Effect: OnOpen},
+	{ID: "agent.default_mode", Class: Preference, Effect: OnOpen},
 	{ID: "agent.goal_auto_retry", Class: Guarded, Effect: OnOpen},
 	{ID: "agent.host_verification", Class: Guarded, Effect: OnOpen},
 	{ID: "agent.output_style", Class: Preference, Effect: OnOpen},
