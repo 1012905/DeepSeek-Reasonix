@@ -253,3 +253,22 @@ func TestOpeningASettingEmitsANoticeAndChangesNothing(t *testing.T) {
 		t.Fatal("an undeclared id was opened")
 	}
 }
+
+func TestADisabledDispatchNamesTheSwitchThatWouldLiftIt(t *testing.T) {
+	c, requests, _ := settingController(t)
+	_, err := peerDirectory{c}.DispatchToProject(context.Background(), "other", "do it")
+	r, ok := err.(tool.Refusal)
+	if !ok || r.Code != "dispatch.disabled" || r.Remedy == nil || r.Remedy.Setting != "peers.enabled" || r.Remedy.Op != tool.RemedyPropose {
+		t.Fatalf("err = %#v, want the refusal to name peers.enabled", err)
+	}
+	done := propose(c, r.Remedy.Setting, string(r.Remedy.Value), "hand a task to the other project")
+	c.Approve(nextApproval(t, requests).ID, true, false, false)
+	if got := <-done; got.err != nil || !userFile().Peers.Enabled {
+		t.Fatalf("applying the remedy: %+v err=%v enabled=%v", got.receipt, got.err, userFile().Peers.Enabled)
+	}
+	c.settings.proposals.Store(0)
+	_, err = peerDirectory{c}.DispatchToProject(context.Background(), "other", "do it")
+	if r, ok = err.(tool.Refusal); !ok || r.Remedy == nil || r.Remedy.Setting != "peers.dispatch" {
+		t.Fatalf("with messaging on, err = %#v, want the dispatch switch next", err)
+	}
+}
