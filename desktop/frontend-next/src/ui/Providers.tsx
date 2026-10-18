@@ -51,17 +51,19 @@ function groupAccounts(list: ProviderEntry[]): Account[] {
   const out = new Map<string, Account>();
   for (const p of list) {
     const host = hostOf(p.baseUrl);
-    const key = accountKey(host, p.keyEnv);
+    const kind = p.kind || "openai";
+    let key = accountKey(host, p.keyEnv);
+    // A second entry for a door the account already has is a duplicate, and a
+    // duplicate is still somebody's config: it gets its own row, never a seat
+    // behind the first one.
+    if (out.get(key)?.byKind[kind]) key = `${key}\u0000${p.name}`;
     let a = out.get(key);
     if (!a) {
       a = { key, label: "", host, hint: p.name, derived: "", byKind: {}, kinds: [] };
       out.set(key, a);
     }
-    const kind = p.kind || "openai";
-    if (!a.byKind[kind]) {
-      a.byKind[kind] = p;
-      a.kinds.push(kind);
-    }
+    a.byKind[kind] = p;
+    a.kinds.push(kind);
   }
   // Every door has to be in hand before the account can be named: the one the
   // user renamed is not always the first the config file lists.

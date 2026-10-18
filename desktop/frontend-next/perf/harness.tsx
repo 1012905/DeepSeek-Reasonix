@@ -132,10 +132,18 @@ class BenchPort extends MockPort {
     return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
   }
 
+  // ?twoports=1: two local servers on one host, told apart by port, sharing a key slot.
   // ?badprice=1: DeepSeek's flash price is a card the vendor's table does not have,
   // under a pinned display currency.
   async providers() {
     const all = await super.providers();
+    if (query.has("twoports")) {
+      const local = (name: string, port: number) => ({
+        ...all[0], name, baseUrl: `http://127.0.0.1:${port}/v1`, keyEnv: "LOCAL_API_KEY", inUse: false, preset: false,
+        models: [`${name}-chat`], default: `${name}-chat`,
+      });
+      return [...all, local("local", 8756), local("local-2", 8788)];
+    }
     if (!query.has("badprice")) return all;
     return all.map((p) => p.name === "deepseek"
       ? { ...p, officialPricing: true, modelPrices: { "deepseek-flash": { input: 0.3, output: 1.2, cacheHit: 0, currency: "USD", official: false } } }
