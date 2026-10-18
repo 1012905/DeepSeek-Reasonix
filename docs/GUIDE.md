@@ -75,6 +75,8 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_side_sessions = 0              # side conversations open at once; 0 = no limit (user config only)
 # max_provider_retries = 10          # retries of a failed provider connection before the turn stops; 0 = keep trying until cancelled (user config only)
 # max_queued_inputs = 0              # prompts waiting in a session's queue; 0 = no limit, the queue's byte limits still apply (user config only)
+# max_subagent_steer_bytes = 16384    # bytes in one message of guidance to a running sub-agent, which keeps one message from filling its context; 0 = no limit (user config only)
+# max_subagent_steers_per_minute = 30  # messages of guidance per minute to one running sub-agent, a stop for a loop; 0 = no limit (user config only)
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
 # plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
@@ -456,8 +458,18 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
 
 - It has no address, so it takes only the folder and install fields. `host`, `port`, `user`, keys, passwords,
   `proxy_jump`, `use_ssh_config` and forwards are rejected on it.
-- Connecting to one is not available yet. An SSH dial of such an entry fails with `remote: host is not reached over
-  ssh` rather than guessing an address.
+- Studio opens it like any other machine in its list. Connecting needs WSL 2 and a distribution that has `ps`
+  and `nohup`; a minimal image without them is refused with the missing name.
+- The kernel runs inside a shell session Studio keeps open, because WSL ends everything a session started when it ends.
+  - When Studio closes its link, the kernel goes away with the distribution (WSL stops an idle one after about 15
+    seconds).
+  - Conversations are kept on disk and resume on the next connect.
+  - Nothing keeps a distribution running behind your back.
+- Model credentials come from the distribution's own configuration (`provider = "remote"`): under WSL's default
+  networking the distribution cannot reach this machine's loopback, so this machine's provider is not shared.
+- A folder chosen as a Windows path (`C:\work\app` or `\\wsl.localhost\<distro>\home\me\app`) is translated by
+  the distribution; a folder it cannot see is refused. The command-line `reasonix remote connect` still dials
+  SSH only: such an entry fails with `remote: host is not reached over ssh`.
 
 CLI:
 
@@ -1565,6 +1577,16 @@ Context Engine v2 separates two intentionally different layers:
   and `CLAUDE.md` files. Put rules here when they must be present on every
   relevant turn. User-global files load first, then workspace and deeper target
   directories; within one directory, `.local.md` variants win.
+- **Rules** are Markdown files in `.reasonix/rules/`, `.claude/rules/` (project)
+  and `<Reasonix home>/rules/` (user), subdirectories included.
+  - A rule with no `paths:` frontmatter is delivered like the standing instructions.
+  - A rule with `paths: ["src/**/*.ts"]` (a list or a comma-separated string) is
+    delivered on the next turn after the session reads or edits a matching file,
+    and is retracted if it stops applying.
+  - Rules load user first, then project, so a later rule is the more specific one.
+  - A file is limited to 32 KB and each of the two layers to 64 KB. What exceeds a
+    limit is skipped and shown in capability diagnostics. Symlinks are not followed.
+  - Neither layer touches the cache-stable prefix.
 - **Background memory** stores one durable fact per Markdown file. Each fact has
   an immutable ID, monotonic revision, timestamps, independent `type`
   (`user`, `feedback`, `project`, `reference`) and `scope` (`project`,
@@ -1785,9 +1807,12 @@ reasonix schedule tick            # claim and run what is due now, then exit
     refuse when it is set, so an agent that opens its own pty is stopped too.
   - That is a guard against accidents and a trick, not a boundary: a child can clear its own environment, and
     only the sandbox confines what an agent can do.
-- **Nothing runs by itself yet.** Call `reasonix schedule tick` from the operating system's scheduler (cron,
-  launchd, Task Scheduler). Every tick goes through the store's own budget and expiry checks, so a scheduler
-  that only calls `tick` cannot bypass them. An in-kernel ticker is a later change.
+- **When it runs.**
+  - Studio ticks while it is open, with a window or a tray icon showing; a kernel nobody can see, or one with
+    no parent that ends it, never starts a run. One kernel at a time ticks.
+  - Otherwise call `reasonix schedule tick` from the operating system's scheduler (cron, launchd, Task
+    Scheduler).
+  - Every tick goes through the store's own budget and expiry checks, so neither route can bypass them.
 - **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
   for you and never answered on your behalf.
 - **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only
@@ -2033,6 +2058,19 @@ full answer into a truncation-prone tool result. The parent can call
 are scoped to the current conversation lineage and workspace. Headless runs
 without a persisted parent session remain ephemeral and receive fair bounded
 previews, but cannot mint durable references.
+
+A sub-agent that is still running can be sent guidance:
+
+- The model calls `task` with `task_id` set to the sub-agent's `sa_...` reference
+  and the guidance as `prompt`. You send it from Settings or the sub-agent's view.
+- The sub-agent reads it at its next tool call, framed as coming from the
+  delegating session (or from you). Its own approvals still apply.
+- If the sub-agent has already finished, `task_id` continues its transcript
+  exactly as `continue_from` does.
+- `max_subagent_steer_bytes` and `max_subagent_steers_per_minute` bound one
+  message and the rate (user config only; Settings > Tools > Guidance to running
+  sub-agents; `0` lifts a limit).
+- Guidance cannot be sent from a paired device.
 
 The interactive two-model Planner uses a dedicated construction path
 (`NewPlannerAgent`): it still blocks bash, file writers, and ordinary writers,

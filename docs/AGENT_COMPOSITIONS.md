@@ -169,6 +169,10 @@ the existing behavior.
 A fresh dispatch never falls back to a history viewer
 when its inherited binding cannot be assembled.
 
+Moving a bound conversation to another project is refused before copying or
+deleting it (`agent_composition.workspace_bound`). Start a new conversation in
+the target project. Unbound conversations retain the ordinary move behavior.
+
 The user persona is not migrated. `/persona` retains the user-config behavior
 from #13588, and Standard's settings reuse that Persona editor. Standard reads
 it on each runtime build. Explicit compositions
@@ -203,6 +207,7 @@ remote host's catalog, credentials and retained resources.
 | `POST /runtimes` | Existing create fields plus optional `agentComposition` |
 | `POST /tree/sessions/export` | `{path}` → `{name, content}`; native envelope for bound sessions |
 | `POST /tree/sessions/import-native` | `{workspace, content}` → imported `{path, agentComposition}` |
+| `POST /tree/sessions/move-to` | `{path, target}` → moved unbound conversation; bound conversations are refused |
 
 `/status` and runtime listings include `agentComposition`. Refusals use stable
 `agent_composition.invalid`, `.not_found`, `.read_only`, `.conflict`, `.locked`

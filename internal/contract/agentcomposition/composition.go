@@ -20,6 +20,7 @@ const Select = "select"
 var ErrInvalid = errors.New("invalid agent composition")
 var ErrUnavailable = errors.New("agent composition unavailable")
 var ErrLocked = errors.New("agent composition locked")
+var ErrWorkspaceBound = errors.New("agent composition is bound to its workspace")
 var identifier = regexp.MustCompile(`^(builtin|user|project):[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
 type Persona struct {

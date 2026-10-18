@@ -250,6 +250,10 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
+  moveSessionTo(path: string, target: string) {
+    return Promise.resolve({ path: `${target}/${path.split("/").pop()}`, originalRemoved: true });
+  }
+
   removeSession(_path: string) {
     return Promise.resolve();
   }

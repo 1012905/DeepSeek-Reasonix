@@ -4,6 +4,7 @@
 - 内置模式收敛为标准与精简两种，管理页采用模式卡片和独立自定义区域。精简模式保留终端、图片读取和上下文压缩，已有会话继续使用原绑定。#13613
 - 组合切换保留 ACP 额外工作目录；派发继承精确绑定，并明确拒绝跨工作区使用绑定。#13613
 - 项目预设的 MCP/扩展参数仅可调整超时，不能改写启动参数、地址或凭据环境；旧的不安全绑定保留历史但拒绝执行。#13613
+- 拒绝跨项目移动绑定组合的会话，保留原会话，避免丢失绑定后以其他能力续写。#13613
 
 <!-- lang:en -->
 
@@ -13,3 +14,4 @@
 - Add Standard and Minimal cards above custom presets. Minimal keeps terminal, image reading and compaction; existing conversations retain their binding. #13613
 - Preserve ACP additional directories across composition switches; dispatch carries the exact binding and refuses cross-workspace bindings. #13613
 - Limit project MCP/extension parameters to timeouts; refuse launch, endpoint or credential-environment overrides, including in old executable bindings, while keeping history readable. #13613
+- Refuse moving bound conversations to another project before copying or deleting them, preserving the original immutable composition. #13613

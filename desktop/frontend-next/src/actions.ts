@@ -460,6 +460,10 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "session.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "session.move-to-start", kind: "view", target: "entity", proof: "interaction" },
+  { id: "session.move-to", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "session.move-to-cancel", kind: "view", target: "none", proof: "interaction" },
+  { id: "session.move-to-target", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.reorder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
 
   // ── Taking a change back ─────────────────────────────────────────────────
@@ -691,6 +695,8 @@ export const ACTIONS: UIAction[] = [
   { id: "skills.remove-reload", kind: "view", target: "none", proof: "interaction" },
   { id: "skills.remove-confirm", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "subagent-claims.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "subagent-steer.max-bytes", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "subagent-steer.per-minute", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "write-lease.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "plan-approval.auto", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "default-mode.plan", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

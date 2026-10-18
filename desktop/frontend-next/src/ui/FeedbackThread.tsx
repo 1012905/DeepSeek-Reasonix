@@ -5,6 +5,7 @@ import type { AgentPort } from "../port/port";
 import { replyFailure, type FeedbackFailure } from "./feedbackfailure";
 import { FeedbackShot } from "./FeedbackShot";
 import { admit, megabytes, payload, readShot, REFUSED_LABEL, type Refused, type Shot } from "./feedbackshots";
+import { LevelBadge } from "./LevelBadge";
 import { StudioIcon } from "./StudioIcon";
 
 const SHOWN = 4;
@@ -28,13 +29,15 @@ function when(iso: string): string {
 
 interface ThreadProps {
   item: FeedbackItem;
+  // The reporter's own level, shown beside their label; null or absent shows none.
+  level?: number | null;
   fresh: number;
   onView?: (receipt: string, all: boolean | null) => void;
 }
 
 // Replies are plain text by contract: they render as text nodes, never linked,
 // formatted or interpreted, whoever wrote them.
-export function FeedbackThread({ item, fresh, onView }: ThreadProps) {
+export function FeedbackThread({ item, level = null, fresh, onView }: ThreadProps) {
   const [all, setAll] = useState(false);
   const [expanded, setExpanded] = useState(item.needsInput);
   const id = useId();
@@ -68,6 +71,12 @@ export function FeedbackThread({ item, fresh, onView }: ThreadProps) {
             <li key={r.id} data-author={r.author} data-new={isNew(r) ? "" : undefined}>
               <div className="fbk-msg-hd">
                 <b>{t(AUTHOR_LABEL[r.author])}</b>
+                {r.author === "user" && level !== null && (
+                  <>
+                    <LevelBadge level={level} decorative size={14} />
+                    <span className="sr-only">{t("等级 {n}", { n: level })}</span>
+                  </>
+                )}
                 {isNew(r) && <span className="fbk-new">{t("新")}</span>}
                 <time dateTime={r.createdAt}>{when(r.createdAt)}</time>
               </div>

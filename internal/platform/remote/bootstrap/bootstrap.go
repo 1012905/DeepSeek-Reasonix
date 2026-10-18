@@ -32,6 +32,14 @@ type Conn interface {
 	Files() (sftpfs.Files, error)
 }
 
+// Detacher is a connection whose commands end every process they started when
+// they return. Such a machine launches the kernel through ExecDetached, which
+// starts it under something that outlives the call, so the kernel lives as long
+// as that does.
+type Detacher interface {
+	ExecDetached(ctx context.Context, cmd string) (remote.ExecResult, error)
+}
+
 // Install strategies.
 const (
 	InstallAuto   = "auto"
@@ -208,7 +216,11 @@ func launchServe(ctx context.Context, conn Conn, target remoteOS, fs sftpfs.File
 			_ = fs.Remove(cleanup, scriptPath, false)
 		}()
 	}
-	launchRes, err := conn.Exec(ctx, target.Launch(spec, paths))
+	launch := conn.Exec
+	if d, ok := conn.(Detacher); ok {
+		launch = d.ExecDetached
+	}
+	launchRes, err := launch(ctx, target.Launch(spec, paths))
 	if err != nil {
 		cleanupFailedLaunch(conn, target, fs, paths, 0)
 		return Result{}, fmt.Errorf("bootstrap: launch: %w", err)

@@ -44,6 +44,9 @@ Studio 的「Agent 预设」把人设、工具、技能、MCP、扩展、Hook �
 
 ## 存储与兼容
 
+绑定组合的会话不能移到其他项目，接口返回 `agent_composition.workspace_bound`，
+复制或删除前即拒绝。请在目标项目新建会话；普通未绑定会话仍可按原流程移动。
+
 | 内容 | 位置 |
 | --- | --- |
 | 用户声明 | `<用户状态根>/agent-presets/definitions/<id>.json` |

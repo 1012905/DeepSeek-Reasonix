@@ -3,6 +3,7 @@
 // code adds one here. i18n.test.ts is what stops one from being forgotten.
 
 export const EN_KERNEL: Record<string, string> = {
+  "此会话的组合已绑定原项目，请在目标项目新建会话": "This conversation's composition is bound to its project. Start a new conversation in the target project",
   "起始分支已不存在，请重新选择分支": "The source branch no longer exists. Choose another branch",
   "会话或工作目录已改变，请新建会话后重新选择 worktree": "The session or workspace changed. Start a new session to select a worktree",
   "请先打开一个本机会话，再读取本机设置": "Open a local session to read this machine’s settings",
@@ -100,6 +101,10 @@ export const EN_KERNEL: Record<string, string> = {
   "没有找到这个子代理的记录": "No sub-agent run was found for that reference",
   "这个子代理不属于当前会话": "That sub-agent belongs to a different conversation",
   "读取子代理记录失败：{detail}": "Could not read the sub-agent record: {detail}",
+  "这个子代理已经不在运行，读不到新的指示": "That sub-agent is no longer running, so it cannot read new guidance",
+  "指示不能是空的": "Guidance cannot be empty",
+  "这条指示太长了，超过了发给子代理的单条上限": "That guidance is longer than the limit for one message to a sub-agent",
+  "短时间内发给这个子代理的指示太多了，请稍后再发": "Too much guidance was sent to this sub-agent a moment ago; send it again shortly",
   "你停止了这条调用，它在外部已经做了什么无法确定": "You stopped this call; what it had already done outside the workspace is unknown",
   "请输入要搜索的内容": "Enter something to search for",
   "对话内容索引暂时无法回答，稍后再试": "The conversation index cannot answer right now; try again shortly",
@@ -132,6 +137,8 @@ export const EN_KERNEL: Record<string, string> = {
   "这台服务器未开放新对话起始模式设置": "This server does not open the new-conversation start mode setting",
   "新对话起始模式设置未能保存：{detail}": "The new-conversation start mode setting was not saved: {detail}",
   "子代理写入范围设置未能保存：{detail}": "The sub-agent write scope setting was not saved: {detail}",
+  "这台服务器未开放子代理指示上限设置": "This server does not open the sub-agent guidance limit setting",
+  "子代理指示上限设置未能保存：{detail}": "The sub-agent guidance limit setting was not saved: {detail}",
   "本次请求未说明选择，未做任何修改": "The request did not say which, so nothing changed",
   "这个路径正被另一个并行的子代理或写入占用。本次写入未执行；请换一个路径，或等对方结束后再写": "This path is in use by another parallel sub-agent or write. This write did not run; choose another path, or wait until it finishes",
   "无法解析该服务器声明：{detail}": "That server declaration could not be read: {detail}",
@@ -611,4 +618,9 @@ export const EN_KERNEL: Record<string, string> = {
     "The old memory file could not be backed up first, so it was not migrated and was left as it is; the detail gives the reason",
   "会话、工作区或运行时正在切换，这条消息没能立刻发出；它已排入队列，切换结束后会自动发送，不需要重发":
     "The session, workspace or runtime is switching, so this message could not be sent right away; it is queued and will be sent automatically when the switch ends - no need to send it again",
+  "该会话正在窗口里打开，先关闭它再移动": "This conversation is open in a window; close it before moving it",
+  "该会话还在被写入，稍后再移动": "This conversation is still being written to; move it a little later",
+  "该会话被另一个进程占用（{host} 上的 pid {pid}），结束它之后再移动": "Another process holds this session open (pid {pid} on {host}); end it, then move it",
+  "它已经在这个项目里了": "It is already in this project",
+  "这个会话的记录不完整，不能移动；先让它自己恢复": "This conversation's record is incomplete and cannot be moved; let it recover first",
 };

@@ -16,6 +16,7 @@ import (
 	"reasonix/internal/ext/extension/sidecar"
 	"reasonix/internal/ext/extension/uihub"
 	"reasonix/internal/ext/hook"
+	"reasonix/internal/ext/modhost"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/platform/computer"
@@ -328,7 +329,7 @@ func assembleLegacySnapshot(ctx context.Context, in legacyAssembly, generation u
 		}
 		required := requiredRuntimeSet(managed)
 		clients := sidecarClientResolver(managed)
-		dispatchOpts := dispatch.Options{Warn: ext.warn, SidecarDown: ext.onSidecarDown, TightenOnly: tightenOnlyRuntimeSet(managed)}
+		dispatchOpts := dispatch.Options{Warn: ext.warn, SidecarDown: ext.onSidecarDown, TightenOnly: tightenOnlyRuntimeSet(managed), Mods: modRuntimeSet(managed)}
 		// system_prompt.build strategy: the slot's owner rules on the
 		// composed prompt before the snapshot freezes. Skipped on no-op plans
 		// so CacheHash stays stable across rebuilds.
@@ -399,6 +400,18 @@ func tightenOnlyRuntimeSet(mgr *sidecar.Manager) map[string]bool {
 	out := map[string]bool{}
 	for _, client := range mgr.Clients() {
 		if client.TightenOnly() {
+			out[client.PluginID()] = true
+		}
+	}
+	return out
+}
+
+// modRuntimeSet names the live runtimes that are Claude Code mods, by the mod
+// registry's own record rather than by anything the runtime says.
+func modRuntimeSet(mgr *sidecar.Manager) map[string]bool {
+	out := map[string]bool{}
+	for _, client := range mgr.Clients() {
+		if modhost.Default.Known(client.PluginID()) {
 			out[client.PluginID()] = true
 		}
 	}
