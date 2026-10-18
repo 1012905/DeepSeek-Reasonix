@@ -556,7 +556,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	if err := t.settleSpecPrompts(&spec); err != nil {
 		return "", err
 	}
-
+	ctx = agent.BindTaskImages(ctx, spec.Task.Objective)
 	maxSteps := t.childMaxStepsForContext(ctx, spec.Sched.MaxSteps)
 	childDepth, err := t.nextSubagentDepth(ctx)
 	if err != nil {

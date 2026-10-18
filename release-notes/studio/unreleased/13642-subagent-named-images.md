@@ -1,0 +1,2 @@
+- 修复：委派任务里点名了粘贴的截图（.reasonix/attachments 下的文件）时，子代理现在能收到图并切到识图模型；技能子代理也不再悄悄丢图。见 #13642。
+- Fixed: a delegated task naming a pasted screenshot (a file under .reasonix/attachments) now gives the sub-agent the image on the vision model; skill sub-agents no longer drop it. See #13642.
