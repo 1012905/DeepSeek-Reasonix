@@ -297,7 +297,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
                 ))}
               </ol>}
               <FeedbackReviewNote item={item} />
-              <FeedbackThread item={item} fresh={fresh[item.receipt] ?? 0} onView={view} />
+              <FeedbackThread item={item} level={mine.profile?.level ?? null} fresh={fresh[item.receipt] ?? 0} onView={view} />
               <FeedbackWithdraw port={port} item={item} onDone={() => { setSaid(t("已撤回这条反馈。")); load(); }} onStale={load} />
               <FeedbackReplyBox port={port} item={item} limit={limits?.replyBytes ?? null} limits={limits} offline={mine.offline} onSent={sent} onFile={onFile} onStale={load} />
             </li>
