@@ -342,6 +342,10 @@ Goal、由 `todo_write` 工具驱动的实时 Todo 面板、扩展发布的 stat
 彼此独立的模型/工作/协作/审批控制轴、客户端文件与 terminal 能力、MCP server、权限请求，
 以及 Reasonix 的回合中引导扩展。
 
+## 在 DeepSeek Harness 中使用 Reasonix
+
+DeepSeek Harness（`dsh`）可以通过 ACP 把任务委派给 Reasonix 作为子智能体，只需要配置。[在 DeepSeek Harness 中使用 Reasonix](./DSH.md) 说明如何通过 DSH 的插件市场或手工安装、如何打开插件开关、权限策略和限制。
+
 ## 远程 SSH
 
 远程模块让 Reasonix 在远端主机上运行,并通过你自己的 SSH 连接访问它 —— 即 VS Code
