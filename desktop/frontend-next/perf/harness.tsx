@@ -98,6 +98,26 @@ class BenchPort extends MockPort {
   // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
   constructor() {
     super();
+    // ?git=multi is a folder of projects: three repositories, each with changes of its own.
+    if (query.get("git") === "multi") {
+      this.repoRows = [
+        { dir: "api", name: "api", branch: "main", detached: false, added: 3, removed: 1, untracked: 1 },
+        { dir: "web", name: "web", branch: "feature/login", detached: false, added: 5, removed: 2, untracked: 0 },
+        { dir: "tools/release", name: "release", branch: "main", detached: false, added: 0, removed: 0, untracked: 0 },
+      ];
+      this.repoChanges = {
+        api: [
+          { path: "internal/server/routes.go", status: "M", unstaged: true, insertions: 12, deletions: 3 },
+          { path: "internal/server/routes_test.go", status: "M", staged: true, insertions: 20, deletions: 0 },
+          { path: "README.md", status: "??", unstaged: true },
+        ],
+        web: [
+          { path: "src/login/Form.tsx", status: "M", unstaged: true, insertions: 31, deletions: 9 },
+          { path: "src/login/api.ts", status: "M", staged: true, unstaged: true, insertions: 4, deletions: 1 },
+        ],
+        "tools/release": [],
+      };
+    }
     if (!query.has("mcpactions")) return;
     (this as unknown as { servers: McpEntry[] }).servers.push(
       { name: "notes", state: "ready", enabled: true, transport: "stdio", tools: 2, description: "Notes the agent can search and add to.",
