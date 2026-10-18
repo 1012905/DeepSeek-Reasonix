@@ -1219,6 +1219,31 @@ execution instead of running unconfined. Install the platform sandbox backend
 `[sandbox] bash = "off"` to explicitly restore the pre-1.16 unconfined shell
 behavior. On Windows the compatible value is always `off`.
 
+### In a dev container or Docker
+
+Bubblewrap has to create user and mount namespaces (and a network namespace for
+a closed network), which a default container blocks. Measured on Docker Desktop
+(Linux VM, Debian 12, bubblewrap 0.8.0), by launching a confined command under
+`enforce` in each configuration:
+
+| Container configuration | Sandbox | Reported cause |
+|---|---|---|
+| bubblewrap not installed | unavailable | `sandbox.no_bubblewrap` |
+| default `docker run`; seccomp unconfined only; `SYS_ADMIN` only; seccomp and AppArmor unconfined without `SYS_ADMIN` | unavailable | `sandbox.bwrap_namespace_denied` |
+| `SYS_ADMIN` with seccomp and AppArmor unconfined | works with the network open; a closed network is unavailable | `sandbox.bwrap_network_denied` for the closed network |
+| the above plus `NET_ADMIN`, or `--privileged` | works, network open or closed | none |
+
+- Both `CAP_SYS_ADMIN` and an unconfined seccomp profile are needed; either alone is not enough.
+- Reasonix does not look for a container. The message comes from what bubblewrap
+  could and could not do, so a container granted those privileges gets its
+  sandbox, and one that is not is told which privilege is missing.
+- Granting them widens the container itself. The other choice is
+  `[sandbox] bash = "off"`; the container is then the only boundary, and what
+  you mount writable (a credentials file in a bind-mounted workspace included)
+  is writable by every command.
+- Only the Linux sandbox was measured. A Dev Containers or Codespaces session,
+  rootless Docker and SELinux hosts were not run.
+
 For coding-quality reports, run `reasonix doctor quality <branch-id-or-path>`
 (add `--json` for structured output). This reads the selected session but emits
 only content-free counts and profile categories: model family, runtime profile,
