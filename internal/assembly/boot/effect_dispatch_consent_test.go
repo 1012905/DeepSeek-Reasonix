@@ -40,9 +40,11 @@ func TestEffectADispatchedTaskReachesTheModelWithoutACardAndAStrangersDoesNot(t 
 	if err != nil {
 		t.Fatal(err)
 	}
+	var seq uint64
 	send := func(id, body string, signWith []byte) {
 		t.Helper()
-		m := peermail.Message{ID: id, SentAt: time.Now().UTC(), Body: body,
+		seq++
+		m := peermail.Message{ID: id, SentAt: time.Now().UTC(), Body: body, Seq: seq,
 			From: peermail.Party{SessionID: parent, Title: "planner", Project: "alpha"}, To: peermail.Party{SessionID: receiver}}
 		m.Proof = peermail.Proof(signWith, m)
 		if err := d.Send(m); err != nil {
