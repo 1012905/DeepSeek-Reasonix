@@ -43,6 +43,19 @@ it("pins and unpins on the remote host without opening the same local path", asy
   expect(onFocus).not.toHaveBeenCalled();
 });
 
+it("keeps remote pin and archive in the menu while quick actions are off", async () => {
+  const { pinSession, onOpen } = draw();
+  act(() => setShowsSessionQuickActions(false));
+  expect(screen.queryByRole("button", { name: "置顶会话：Remote task" })).toBeNull();
+  const row = screen.getByRole("treeitem", { name: "Remote task" });
+  row.focus();
+  await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+  expect(screen.getByRole("menuitem", { name: "归档会话" })).toBeTruthy();
+  await userEvent.click(screen.getByRole("menuitem", { name: "置顶会话" }));
+  await waitFor(() => expect(pinSession).toHaveBeenCalledWith("/same/task.jsonl", true, "gpu"));
+  expect(onOpen).not.toHaveBeenCalled();
+});
+
 it("closes an idle remote pane before archiving its transcript on that host", async () => {
   const { archiveSession, onClose, onOpen } = draw({ runtimeId: "remote-pane" });
   let closed!: () => void;

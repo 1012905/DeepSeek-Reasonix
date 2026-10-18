@@ -1,8 +1,6 @@
 package serve
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 )
@@ -24,8 +22,7 @@ func (h *Hub) remoteSessionFlag(action string) http.HandlerFunc {
 			Pinned   bool   `json:"pinned"`
 			Archived bool   `json:"archived"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			badBody(w)
+		if !decodeRemoteBody(w, r, &body) {
 			return
 		}
 		path := strings.TrimSpace(body.Path)
@@ -34,10 +31,6 @@ func (h *Hub) remoteSessionFlag(action string) http.HandlerFunc {
 			return
 		}
 		ep, release, err := h.remoteLink(r, r.PathValue("host"))
-		if errors.Is(err, errRemoteDisabled) {
-			refuse(w, http.StatusConflict, "remote.disabled", "this machine is turned off in the host book", nil)
-			return
-		}
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err)
 			return

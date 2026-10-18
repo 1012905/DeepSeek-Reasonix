@@ -1600,7 +1600,7 @@ what exists.
   archive; restoring uses the same action with the opposite flag. Row buttons
   stop the open gesture, and SSH writes carry the host separately from the
   transcript path so an identical local path cannot receive them.
-- Hover actions default to shown; an explicit saved off preference survives.
+- Hover actions default to hidden unless this machine explicitly enabled them; saved on and off preferences survive.
   Hidden actions remain available in the session menus. Touch surfaces show
   idle-row actions without requiring hover.
 

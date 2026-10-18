@@ -92,11 +92,32 @@ it("opens a local conversation only once when Enter is pressed on its row", asyn
   expect(onOpen).toHaveBeenCalledExactlyOnceWith({ root: "/w", sessionPath: PATH });
 });
 
-it("shows quick actions by default while preserving an explicit off choice", () => {
+it("hides quick actions by default while preserving explicit choices", () => {
   localStorage.removeItem("rx-session-quick-actions");
+  expect(showsSessionQuickActions()).toBe(false);
+  draw();
+  expect(buttons()).toEqual([]);
+  setShowsSessionQuickActions(true);
   expect(showsSessionQuickActions()).toBe(true);
   setShowsSessionQuickActions(false);
   expect(showsSessionQuickActions()).toBe(false);
+});
+
+it("keeps quick actions off when storage cannot be read", () => {
+  const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("unavailable"); });
+  try {
+    expect(showsSessionQuickActions()).toBe(false);
+  } finally {
+    get.mockRestore();
+  }
+});
+
+it("keeps pin and archive available from the local menu with quick actions off", async () => {
+  const { onPin } = draw();
+  await userEvent.pointer({ target: row(), keys: "[MouseRight]" });
+  expect(screen.getByRole("menuitem", { name: "归档会话" })).toBeTruthy();
+  await userEvent.click(screen.getByRole("menuitem", { name: "置顶会话" }));
+  expect(onPin).toHaveBeenCalledExactlyOnceWith(PATH);
 });
 
 it("shows or hides the buttons on a list that is already drawn when the setting flips", () => {

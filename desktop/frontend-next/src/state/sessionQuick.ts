@@ -1,12 +1,11 @@
-// An explicit off choice survives the default-on hover action recipe.
 const KEY = "rx-session-quick-actions";
 const listeners = new Set<() => void>();
 
 export function showsSessionQuickActions(): boolean {
   try {
-    return localStorage.getItem(KEY) !== "off";
+    return localStorage.getItem(KEY) === "on";
   } catch {
-    return true;
+    return false;
   }
 }
 

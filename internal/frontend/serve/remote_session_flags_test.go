@@ -37,6 +37,7 @@ func TestRemoteSessionFlagsUseFarKernel(t *testing.T) {
 					return RemoteEndpoint{Host: host, Addr: far.Listener.Addr().String(), Token: "test"}, func() { releases++ }, nil
 				}})
 				body, _ := json.Marshal(map[string]any{"path": "/same/session.jsonl", flag: value})
+				saveTestRemoteHosts(t, "gpu")
 				resp := bookPost(t, front, "/remotes/gpu/sessions/"+action, string(body))
 				if resp.StatusCode != http.StatusNoContent || calls != 1 || releases != 1 {
 					t.Fatalf("status=%d far calls=%d releases=%d", resp.StatusCode, calls, releases)

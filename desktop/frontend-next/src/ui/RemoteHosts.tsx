@@ -172,7 +172,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                 <StudioIcon name="folder" className="wsfolder" />
                 <span className="wsname" title={host.name + " · " + ws.root} dir="ltr">{ws.name}</span>
                 <span className="project-source" title={host.target}>{host.name}</span>
-                {currentPane && <span className="wsmeta" title={currentPane.root} dir="ltr">{t("连接目录：{path}", { path: currentPane.root })}</span>}
+                {currentPane && <span className="bound-workspace" title={currentPane.root} dir="ltr">{t("连接目录：{path}", { path: currentPane.root })}</span>}
                 <span className="wsacts">
                   {folded && <UnreadCount n={ws.sessions.filter((session) => session.unread).length} />}
                   {tree && ws.sessions.length > 0 && <RowCount c={scope === "all" && older > 0

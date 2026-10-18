@@ -6,6 +6,7 @@ import { App } from "./App";
 import { MockHub } from "../port/mock_hub";
 import type { TreeWorkspace } from "../port/hub";
 import { boot, STORAGE } from "../i18n";
+import { setShowsSessionQuickActions } from "../state/sessionQuick";
 
 beforeEach(() => {
   localStorage.clear();
@@ -22,6 +23,7 @@ afterEach(() => {
 });
 
 it("converges two App trees and counts after another client's changes and page recovery", async () => {
+  setShowsSessionQuickActions(true);
   let book: TreeWorkspace[] = [{ root: "/project", name: "project", remembered: true, sessions: [
     { path: "/sessions/alpha.jsonl", name: "alpha", title: "Alpha" },
     { path: "/sessions/beta.jsonl", name: "beta", title: "Beta" },

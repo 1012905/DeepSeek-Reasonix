@@ -306,8 +306,7 @@ func relayFarReason(err error) error {
 
 func (h *Hub) openRemoteRuntime(w http.ResponseWriter, r *http.Request) {
 	var req OpenRemoteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		badBody(w)
+	if !decodeRemoteBody(w, r, &req) {
 		return
 	}
 	if h.opts.Remote == nil {
@@ -315,10 +314,7 @@ func (h *Hub) openRemoteRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace, err := h.remoteHostWorkspace(req.Host)
-	if errors.Is(err, errRemoteDisabled) {
-		refuse(w, http.StatusConflict, "remote.disabled", "this machine is turned off in the host book", map[string]any{"host": req.Host})
-		return
-	} else if err != nil {
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
