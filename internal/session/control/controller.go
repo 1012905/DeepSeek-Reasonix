@@ -196,6 +196,8 @@ type Controller struct {
 	inbox inboxState
 	// peers is this controller's side of messages between sessions; nil-safe off.
 	peers *peerMail
+	// settings counts the setting proposals of the current turn.
+	settings settingsState
 }
 
 type approvalReply struct {
@@ -315,7 +317,9 @@ type Options struct {
 	SessionDir          string
 	SessionPath         string
 	// Peers opens this session to messages from other sessions; zero is off.
-	Peers         PeersOptions
+	Peers PeersOptions
+	// Settings, when set, is bound to this controller so the setting tool can reach it.
+	Settings      *tool.SettingsLink
 	Host          *plugin.Host
 	Commands      []command.Command
 	Skills        []skill.Skill
@@ -487,6 +491,7 @@ func New(opts Options) *Controller {
 	c.peers = newPeerMail(opts.Peers)
 	c.rebindInbox()
 	c.startPeers()
+	c.startSettings(opts.Settings)
 	// Observe Steer / unapplied-steer for durable inbox state transitions.
 	// Must wrap both the controller sink and the executor sink: agent.Steer
 	// emits on the executor path, TurnDone on the controller path.

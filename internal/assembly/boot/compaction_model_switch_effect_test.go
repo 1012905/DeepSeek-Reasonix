@@ -50,13 +50,13 @@ recent_keep = 2
 name = "model-a"
 kind = "boot-compaction-switch"
 model = "a"
-context_window = 32000
+context_window = 32500
 
 [[providers]]
 name = "model-b"
 kind = "boot-compaction-switch"
 model = "b"
-context_window = 32000
+context_window = 32500
 `)
 	approveWorkspaceAt(t, home, dir)
 

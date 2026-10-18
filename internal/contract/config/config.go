@@ -1235,6 +1235,7 @@ type ToolsConfig struct {
 	SystemOne                SystemOneConfig      `toml:"system_one"`
 	ProtectChangedFiles      *bool                `toml:"protect_changed_files"`
 	BrowserTools             *bool                `toml:"browser_tools"`
+	SettingTool              *bool                `toml:"setting_tool"`
 	// MCPResources offers the model a tool that reads a resource a connected
 	// server declares. The user file only; off by default.
 	MCPResources bool `toml:"mcp_resources"`

@@ -172,6 +172,7 @@ type Messages struct {
 	SlashHintMessages
 	QueueMessages
 	GoalMessages
+	SettingMessages
 	ApprovalNeededFmt              string // notification text for a pending approval, tool only
 	ApprovalNeededWithSubjectFmt   string // notification text for a pending approval with subject
 	AnswerNeededFmt                string // notification text for a pending ask question

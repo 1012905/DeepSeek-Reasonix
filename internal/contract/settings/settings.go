@@ -85,6 +85,9 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Code + ": " + e.ID + ": " + e.msg }
 
+// Message is the sentence without the code, for a caller that carries the code itself.
+func (e *Error) Message() string { return e.msg }
+
 // CodeOf is the code of a settings refusal, or "" for any other error.
 func CodeOf(err error) string {
 	var e *Error
