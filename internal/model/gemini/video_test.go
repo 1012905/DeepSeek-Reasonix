@@ -309,3 +309,41 @@ func TestAFileNameThatIsNotAFilesPathIsNeverRequested(t *testing.T) {
 		}
 	}
 }
+
+// https://ai.google.dev/gemini-api/docs/video-understanding and the interactions
+// reference (read 2026-10-17): a public YouTube address is {"type":"video","uri":...}.
+func TestAGrantedYouTubeAddressRidesAsTheURIAndNothingIsUploaded(t *testing.T) {
+	const addr = "https://www.youtube.com/watch?v=9hE5-98ZeCg"
+	provider.GrantVideoAddress(addr)
+	for _, protocol := range []string{provider.VideoProtocolGeminiInline, provider.VideoProtocolGeminiFiles} {
+		f := newFilesAPI(t, "ACTIVE")
+		p, _ := New(provider.Config{Name: "g", BaseURL: f.srv.URL + "/v1beta", Model: "m", APIKey: "k", Extra: map[string]any{"video_protocol": protocol}})
+		ch, err := p.Stream(context.Background(), videoRequest(provider.VideoRef{URL: addr, Name: "9hE5-98ZeCg"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for range ch {
+		}
+		f.mu.Lock()
+		body, stray, uploaded := string(f.request), len(f.stray), len(f.uploaded)
+		f.mu.Unlock()
+		if !strings.Contains(body, `{"type":"video","uri":"`+addr+`"}`) || strings.Contains(body, "mime_type") || stray != 0 || uploaded != 0 {
+			t.Fatalf("%s: request = %s stray=%d uploaded=%d", protocol, body, stray, uploaded)
+		}
+	}
+}
+
+func TestOnlyYouTubeAddressesAndOnlyGrantedOnesAreSentToGemini(t *testing.T) {
+	provider.GrantVideoAddress("https://cdn.example.com/a.mp4")
+	for addr, code := range map[string]string{
+		"https://cdn.example.com/a.mp4":  provider.VideoURLUnsupported,
+		"https://youtu.be/never-granted": provider.VideoURLUnavailable,
+	} {
+		var seen []byte
+		srv := serve(t, sse(completed), &seen, nil, nil)
+		collect(t, newTestClient(t, srv, map[string]any{"video_protocol": provider.VideoProtocolGeminiFiles}), videoRequest(provider.VideoRef{URL: addr, Name: "x"}))
+		if !strings.Contains(string(seen), code) || strings.Contains(string(seen), `"type":"video"`) {
+			t.Errorf("%s: request = %s", addr, seen)
+		}
+	}
+}
