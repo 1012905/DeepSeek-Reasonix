@@ -149,6 +149,10 @@ class BenchPort extends MockPort {
     return { path, content, revision: "r1" };
   }
 
+  async updateMode() {
+    return query.has("update") ? "notify" : super.updateMode();
+  }
+
   async versions() {
     if (query.has("update")) return { current: "2.42.0", pinned: "", stalePin: false, latest: "2.43.0", newer: true, versions: [] };
     if (!query.has("versions")) return super.versions();

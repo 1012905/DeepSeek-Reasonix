@@ -8,6 +8,7 @@ import { arrowTabs } from "./tablist";
 import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { ICON, NAV, SECTION_NAME } from "./prefsnav";
+import { UpdateDot } from "./UpdateDot";
 import { Group, SCOPE_SAID } from "./Group";
 import { PlanApproval } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
@@ -443,6 +444,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                     tabIndex={at === id ? 0 : -1}
                     aria-selected={at === id} disabled={updatingPkg.applying} onClick={() => setAt(id)}>
                     <svg viewBox="0 0 16 16" aria-hidden="true">{ICON[id]}</svg>
+                    {id === "versions" && <UpdateDot />}
                     <span className="nm">{t(name)}</span>
                     <span className="nv" title={nav[id] || undefined} data-danger={danger(id) ? "" : undefined}>
                       {nav[id]}
