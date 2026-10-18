@@ -1,4 +1,5 @@
 import { download } from "./download";
+import { mockModPlan } from "./mock_mods";
 import { HttpError, type PluginExport, type PluginInstallRequest, type PluginPackage, type PluginPlan, type ScopeLayer, type SkillCatalog, type SkillEntry, type SkillUpdatePlan } from "./port";
 import { MockMarket } from "./mock_market";
 
@@ -111,6 +112,7 @@ export class MockExtensions extends MockMarket {
   // a hook and connects a server is what the confirmation page exists for.
   async planPlugin(req: PluginInstallRequest): Promise<PluginPlan> {
     const source = req.source;
+    if (/\bmod\b/i.test(source)) return mockModPlan(source);
     return {
       ok: true, status: "planned", applied: false, source, planId: "high:sha256:mock",
       actions: [
