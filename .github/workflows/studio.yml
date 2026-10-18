@@ -145,6 +145,7 @@ jobs:
           node perf/modelrows.mjs
           node perf/explorersize.mjs
           node perf/session-move-to.mjs
+          node perf/external-origin.mjs
           node perf/rail-search-hold.mjs
           node perf/session-move.mjs
           node perf/session-ref.mjs

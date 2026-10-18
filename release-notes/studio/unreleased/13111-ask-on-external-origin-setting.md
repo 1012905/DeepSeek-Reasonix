@@ -1,0 +1,2 @@
+- 新增：设置的「工具与权限」里有「外部文字」开关，开启后照抄网页或工具结果文字的调用，Auto 和 YOLO 也先问你；默认关。关联 #13111。
+- Added: Settings > Tools has an "Outside text" switch: when on, a call that copies text from a web page or tool result asks first, even in Auto and YOLO. Off by default. Refs #13111.
