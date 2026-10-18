@@ -166,6 +166,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 
 [desktop]
 # max_workspaces = 0           # 侧栏最多记住的项目数；0 = 不限制（只认用户级配置）
+# session_ref_tokens = 8000     # 引用一段历史会话（@session:<id>）时最多给一条消息添加多少 token；500..200000
 
 [[plugins]]
 name    = "example"

@@ -87,6 +87,10 @@ var (
 	slowChildRegistered sync.Once
 )
 
+func registerSlowChild() {
+	provider.Register("boot-effect-slow-child", func(provider.Config) (provider.Provider, error) { return slowChildCurrent.Load(), nil })
+}
+
 func runParentWriteBesideChild(t *testing.T, claims string) (landed bool, result event.Tool) {
 	t.Helper()
 	home := isolateConfigHome(t)
@@ -95,9 +99,7 @@ func runParentWriteBesideChild(t *testing.T, claims string) (landed bool, result
 	t.Chdir(dir)
 	prov := &slowChildProvider{target: filepath.Join(dir, "parent.txt"), started: make(chan struct{}), release: make(chan struct{})}
 	slowChildCurrent.Store(prov)
-	slowChildRegistered.Do(func() {
-		provider.Register("boot-effect-slow-child", func(provider.Config) (provider.Provider, error) { return slowChildCurrent.Load(), nil })
-	})
+	slowChildRegistered.Do(registerSlowChild)
 	writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
 

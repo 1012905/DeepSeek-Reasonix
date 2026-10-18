@@ -157,6 +157,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [desktop]
 # max_workspaces = 0           # most projects the sidebar remembers; 0 = no limit (user config only)
+# session_ref_tokens = 8000     # most tokens one referenced past conversation (@session:<id>) adds to a message; 500..200000
 
 [[plugins]]
 name    = "example"

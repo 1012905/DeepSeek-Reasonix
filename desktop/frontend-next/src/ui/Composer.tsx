@@ -52,7 +52,7 @@ interface Props {
   restore?: { n: number; text: string };
   // Text another surface hands the composer, such as a file reference; it goes
   // in at the caret with a space on either side.
-  inject?: { n: number; text: string };
+  inject?: { n: number; text: string; session?: { id: string; title: string } };
   // Resolves false when the line never left, so what was typed comes back
   // rather than being lost to a refusal the user could not have prevented.
   // Bumped when something outside asks for the cursor — answering a plan card
@@ -166,6 +166,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   useEffect(() => {
     if (!inject?.n || inject.n === injectedAt.current) return;
     injectedAt.current = inject.n;
+    if (inject.session) {
+      addSession(inject.session);
+      queueMicrotask(() => box.current?.focus());
+      return;
+    }
     const where = caret;
     setText((prev) => {
       const at = Math.min(where, prev.length);
@@ -182,10 +187,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     type(next, at);
   }, []);
   const chips = useSkillChips(box, text, moveTo);
+  const addSession = useCallback((s: { id: string; title: string }) => setShots((prev) => prev.some((c) => c.k === "session" && c.session === s.id) ? prev : [...prev, { k: "session", id: chipId(), session: s.id, title: s.title }]), []);
   const menu = useCompletion(port, text, caret, (next, at) => {
     moveTo(next, at);
     box.current?.focus();
-  }, chips);
+  }, chips, addSession);
   const ime = useIme();
   const sendShortcut = useSendShortcut();
 
@@ -221,7 +227,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     if (submittingRef.current || shots.some((c) => c.k === "attachment" && c.state !== "ready")) return;
     const v = text.trim();
     if (!v && shots.length === 0) return;
-    const refs = shots.flatMap((c) => (c.k === "attachment" && c.a ? [c.a.ref] : []));
+    const refs = shots.flatMap((c) => (c.k === "attachment" && c.a ? [c.a.ref] : c.k === "session" ? ["@session:" + c.session] : []));
     const pastes = shots.flatMap((c) => (c.k === "paste" ? [c.saved ? c.saved.pointer.trim() : c.body] : []));
     // A quote is what the question is about, so it leads; a held-back paste is
     // the material the answer needs and follows what was typed.
@@ -471,6 +477,14 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
                         {t("添加失败 · 重试")}
                       </button>
                     )}
+                  </span>
+                </>
+              ) : c.k === "session" ? (
+                <>
+                  <span className="glyph" aria-hidden="true">{"#"}</span>
+                  <span className="meta">
+                    <span className="nm" title={c.title}>{c.title}</span>
+                    <span className="sz">{t("历史会话 · 只读资料")}</span>
                   </span>
                 </>
               ) : (

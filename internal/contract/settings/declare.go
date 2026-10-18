@@ -28,6 +28,7 @@ var table = []Entry{
 	{ID: "desktop.theme_pack", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.welcomed", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.max_workspaces", Class: Preference, Effect: OnOpen},
+	{ID: "desktop.session_ref_tokens", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.surface_slots", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.terminal_theme", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.external_opener", Class: Guarded, Effect: OnOpen},
