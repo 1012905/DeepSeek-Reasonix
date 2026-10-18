@@ -38,6 +38,8 @@ type fakeHost struct {
 	// refuseSubmit makes the host answer a submit with its per-turn refusal.
 	sessionCalls chan map[string]any
 	refuseSubmit atomic.Bool
+	// refuseSubmitLong makes it answer with the byte-ceiling refusal instead.
+	refuseSubmitLong atomic.Bool
 	// early collects host requests the script sent before extension/initialized,
 	// which the protocol forbids and the client answers by killing the process.
 	initializedSent atomic.Bool
@@ -130,6 +132,9 @@ func (h *fakeHost) dispatch(m map[string]any) {
 			result := map[string]any{"queued": true}
 			if h.refuseSubmit.Load() {
 				result = map[string]any{"queued": false, "refused": "submit_per_turn"}
+			}
+			if h.refuseSubmitLong.Load() {
+				result = map[string]any{"queued": false, "refused": "submit_bytes"}
 			}
 			h.in.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
 		case "host/ui/request":

@@ -343,6 +343,25 @@ export function register(on) {
 	}
 }
 
+func TestAPromptOverTheByteCeilingRejectsWithItsOwnTypedCode(t *testing.T) {
+	h := startHost(t, writeMod(t, "submitlong.mjs", `
+export function register(on) {
+  on('prompt.submit', async ($, e, next) => {
+    let code = 'none';
+    try { await $.prompt.submit('x'); } catch (err) { code = err.code; }
+    return next({ ...e, text: code });
+  });
+}`), nil)
+	h.refuseSubmitLong.Store(true)
+	if res := h.initialize(); res["error"] != nil {
+		t.Fatalf("initialize: %v", res["error"])
+	}
+	b, _ := json.Marshal(h.intercept("input.receive", map[string]any{"text": "go"})["replacement"])
+	if !strings.Contains(string(b), "mod.submit_too_long") {
+		t.Fatalf("replacement = %s, want mod.submit_too_long", b)
+	}
+}
+
 // The protocol forbids a request before extension/initialized and the client
 // kills a process that sends one, yet session.start runs during the handshake so
 // its tools can be described. A call a hook makes then waits or is refused; none
