@@ -25,13 +25,13 @@ const (
 	Guarded
 )
 
-// Effect is when a change reaches the running host.
+// Effect is when a plain write of the user file reaches the host: at once, at
+// the next turn, when a session is next opened, or after a restart.
 type Effect int
 
 const (
 	Immediate Effect = iota + 1
 	NextTurn
-	Rebuild
 	OnOpen
 	Restart
 )
