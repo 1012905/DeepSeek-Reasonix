@@ -235,7 +235,10 @@ func TestEffectMCPScopeUpgradeDeclinedSendsNothingMore(t *testing.T) {
 	}
 	before := len(server.callTokens())
 
-	go func() { _, err := ctrl.UpgradeMCPServerAccess(context.Background(), "figma", browser.open); done <- err }()
+	go func() {
+		_, err := ctrl.UpgradeMCPServerAccess(context.Background(), "figma", browser.open)
+		done <- err
+	}()
 	ctrl.Approve(nextEffectApproval(t, approvals).ID, false, false, false)
 	if err := <-done; err == nil {
 		t.Fatal("a declined upgrade reported success")
@@ -268,7 +271,10 @@ func TestEffectMCPScopeUpgradeThatChangesNothingIsFinal(t *testing.T) {
 	if err := ctrl.Run(context.Background(), "write"); err != nil {
 		t.Fatal(err)
 	}
-	go func() { _, err := ctrl.UpgradeMCPServerAccess(context.Background(), "figma", browser.open); done <- err }()
+	go func() {
+		_, err := ctrl.UpgradeMCPServerAccess(context.Background(), "figma", browser.open)
+		done <- err
+	}()
 	ctrl.Approve(nextEffectApproval(t, approvals).ID, true, false, false)
 	if err := <-done; err != nil {
 		t.Fatal(err)
