@@ -1,4 +1,5 @@
 export const EN_COMPOSITION: Record<string,string> = {
+  "当前会话已绑定预设，标准模式的人设修改不会更新此绑定。": "This conversation is bound to a preset. Editing the Standard-mode persona will not update that binding.",
   "默认使用标准模式。其他模式仅在明确选择后启用；首选标记不会自动切换会话。": "Standard mode is used by default. Other modes require an explicit choice; a preference never switches a conversation automatically.",
   "标准模式": "Standard mode",
   "精简模式": "Minimal mode",

@@ -57,7 +57,7 @@ export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; 
         {draft && <>
           {!version && <label className="pers-field"><span className="lb">{t("预设标识")}</span><div className="composition-toolbar"><select aria-label={t("存放范围")} data-action-change="agent-preset.scope" value={draft.id.split(":")[0]} onChange={(e) => setDraft({ ...draft, id: `${e.target.value}:${draft.id.split(":")[1]}` })}><option value="user">{t("个人")}</option><option value="project">{t("项目共享")}</option></select><input className="in" aria-label={t("预设标识")} data-action-change="agent-preset.id" value={draft.id.split(":")[1]} onChange={(e) => setDraft({ ...draft, id: `${draft.id.split(":")[0]}:${e.target.value}` })} /></div></label>}
           {immutable && draft.id !== "builtin:general" && <p className="ds">{t("内置预设只读，复制后即可编辑。")}</p>}
-          {draft.id === "builtin:general" ? <Persona port={port} /> : <CompositionEditor key={editorEpoch} draft={draft} modules={catalog.modules} disabled={busy || immutable} onValidityChange={setValid} onChange={(d) => { setDraft(d); setSaved(""); }} />}
+          {draft.id === "builtin:general" ? <>{current && <p className="ds">{t("当前会话已绑定预设，标准模式的人设修改不会更新此绑定。")}</p>}<Persona port={port} /></> : <CompositionEditor key={editorEpoch} draft={draft} modules={catalog.modules} disabled={busy || immutable} onValidityChange={setValid} onChange={(d) => { setDraft(d); setSaved(""); }} />}
           <div className="composition-toolbar">
             <button className="act" data-action="agent-preset.save" disabled={busy || immutable || !changed || !valid} onClick={() => void perform(async () => {
               const result = await port.saveAgentPreset(draft, version?.revision ?? "");
