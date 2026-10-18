@@ -1,7 +1,9 @@
 package memory
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -139,7 +141,7 @@ func (s Store) rollBackPublish(id string, retired, staged publishArtifact) (Memo
 		return Memory{}, "", false, err
 	}
 	if err := writeMemoryCreate(path, raw, mode); err != nil {
-		if os.IsExist(err) {
+		if errors.Is(err, fs.ErrExist) {
 			return Memory{}, "", false, fmt.Errorf("interrupted rename for memory id %q: name %q is now active", id, name)
 		}
 		return Memory{}, "", false, err
