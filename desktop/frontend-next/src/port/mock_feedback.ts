@@ -1,6 +1,6 @@
 import { HttpError } from "./http_error";
 import { MockCommit } from "./mock_commit";
-import { FEEDBACK_CODE, canWithdraw, type FeedbackEnv, type FeedbackImage, type FeedbackItem, type FeedbackLinkedInstall, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
+import { FEEDBACK_CODE, canWithdraw, type FeedbackBoard, type FeedbackBoardEntry, type FeedbackBoardMe, type FeedbackEnv, type FeedbackImage, type FeedbackItem, type FeedbackLinkedInstall, type FeedbackMine, type FeedbackProfile, type FeedbackReceipt, type FeedbackReply, type FeedbackReplyReceipt, type FeedbackRequest } from "./feedback";
 
 const LIMITS = { bodyBytes: 8192, nameChars: 40, contactChars: 120, images: 3, imageBytes: 2 << 20, uploadBytes: 10 << 20, replyBytes: 4096 };
 
@@ -192,6 +192,55 @@ export class MockFeedback extends MockCommit {
   async unlinkFeedbackAccount(): Promise<void> {
     this.requireAccount();
     this.links = this.links.filter((l) => !l.current);
+  }
+
+  // The demo board: a handful of people, credits spread over three releases.
+  private board: FeedbackBoardEntry[] = [
+    { displayName: "Sample Alpha", credits: 7, rank: null, releases: [{ version: "v2.45.0", count: 3 }, { version: "v2.44.0", count: 2 }, { version: "v2.43.0", count: 2 }] },
+    { displayName: "示例用户", credits: 5, rank: null, releases: [{ version: "v2.45.0", count: 2 }, { version: "v2.44.0", count: 3 }] },
+    { displayName: "sample_beta", credits: 3, rank: null, releases: [{ version: "v2.45.0", count: 2 }, { version: "v2.43.0", count: 1 }] },
+    { displayName: "Sample-Gamma", credits: 2, rank: null, releases: [{ version: "v2.44.0", count: 1 }, { version: "v2.43.0", count: 1 }] },
+    { displayName: "Sample Delta", credits: 1, rank: null, releases: [{ version: "v2.45.0", count: 1 }] },
+  ];
+  private chosen: string | null = null;
+
+  private boardMe(): FeedbackBoardMe {
+    return { listed: this.chosen !== null, displayName: this.chosen, delisted: false };
+  }
+
+  async feedbackBoard(release?: string): Promise<FeedbackBoard> {
+    if (!release) {
+      const all = [...this.board].sort((a, b) => a.displayName.localeCompare(b.displayName));
+      return { available: true, view: "all", release: null, entries: all };
+    }
+    const rows = this.board
+      .map((e) => ({ ...e, releases: e.releases.filter((r) => r.version === release) }))
+      .filter((e) => e.releases.length > 0)
+      .map((e) => ({ ...e, credits: e.releases.reduce((n, r) => n + r.count, 0) }))
+      .sort((a, b) => b.credits - a.credits || a.displayName.localeCompare(b.displayName));
+    let rank = 0;
+    const entries = rows.map((e, i) => {
+      if (i === 0 || e.credits !== rows[i - 1].credits) rank = i + 1;
+      return { ...e, rank };
+    });
+    return { available: true, view: "release", release, entries };
+  }
+
+  async feedbackBoardMe(): Promise<FeedbackBoardMe> {
+    this.requireAccount();
+    return this.boardMe();
+  }
+
+  async joinFeedbackBoard(displayName: string): Promise<FeedbackBoardMe> {
+    this.requireAccount();
+    this.chosen = displayName.trim();
+    return this.boardMe();
+  }
+
+  async leaveFeedbackBoard(): Promise<FeedbackBoardMe> {
+    this.requireAccount();
+    this.chosen = null;
+    return this.boardMe();
   }
 
   async unlinkFeedbackInstall(id: string): Promise<void> {

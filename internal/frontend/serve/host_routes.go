@@ -8,14 +8,16 @@ import (
 type hostRoute struct{ method, path string }
 
 // hostOnlyRoutes is the one list of routes a paired device may not use: they send
-// data off this machine or destroy it, and belong to the window alone. The handler
-// of each reads it, and so does the proxy that forwards a remote pane's requests
-// with the host's own token, where the remote kernel would otherwise see the host
-// and not the device. A HEAD request is judged as the GET it stands for.
+// data off this machine, destroy it, or act for the account the window is signed in
+// as. Each handler reads it, and so does the proxy that forwards a remote pane's
+// requests with the host's own token. A HEAD request is judged as the GET it stands for.
 var hostOnlyRoutes = []hostRoute{
 	{http.MethodGet, "/git/push"},
 	{http.MethodPost, "/git/push"},
 	{http.MethodPost, "/changes/discard"},
+	{http.MethodGet, "/feedback/board/me"},
+	{http.MethodPost, "/feedback/board/join"},
+	{http.MethodPost, "/feedback/board/leave"},
 }
 
 func hostOnlyRoute(method, p string) bool {
