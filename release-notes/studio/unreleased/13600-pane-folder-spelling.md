@@ -1,2 +1,0 @@
-- 修复：同一文件夹被写成不同形式（大小写、斜杠方向、末尾分隔符）时，窗格与侧栏项目对不上，标签和列表可能缺少已打开标记；窗格的会话找不到列表行时，日志里会留一行说明。关联 #13600。
-- Fixed: A folder spelled two ways (case, slashes, trailing separator) no longer splits a pane from its sidebar project; a pane with no row for its conversation now leaves a log line. Refs #13600.

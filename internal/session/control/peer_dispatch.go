@@ -11,6 +11,7 @@ import (
 
 // Each is an identity the dispatch tool reports; none is matched by its words.
 var (
+	ErrDispatchDisabled       = errors.New(`the user has not turned on "Let the model hand a task to another session" (Settings > Tools > Messages between sessions, which also needs "enabled"; [peers] dispatch in the user config)`)
 	ErrDispatchUnavailable    = errors.New("this session cannot open sessions in other projects")
 	ErrDispatchUnknownProject = errors.New("no project of yours answers to that name")
 	ErrDispatchAmbiguous      = errors.New("more than one project answers to that name")
@@ -69,7 +70,7 @@ func (c *Controller) PeerKey() string {
 // DispatchToProject hands a task to a session in another of the user's projects.
 func (c *Controller) DispatchToProject(ctx context.Context, project, text string) (DispatchResult, error) {
 	if !config.LoadForEdit(config.UserConfigPath()).PeersDispatch() {
-		return DispatchResult{}, ErrDispatchUnavailable
+		return DispatchResult{}, ErrDispatchDisabled
 	}
 	if c.OpenedByDispatch() {
 		return DispatchResult{}, ErrDispatchNested

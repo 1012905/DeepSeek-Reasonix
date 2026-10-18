@@ -1,2 +1,0 @@
-- 修复：辅助会话面板改为从输入框上方弹出，不再固定在右上角、盖住右侧文件树；按 Esc 或点 × 关闭后焦点回到辅助会话按钮。关联 #13539。
-- Fixed: the side-conversation panel now opens above the composer instead of sitting at the top right over the file tree; Esc or the close cross returns focus to its button. Refs #13539.

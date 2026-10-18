@@ -66,3 +66,31 @@ func TestProjectCannotSetTheQueuedInputLimit(t *testing.T) {
 		t.Fatalf("the project file overrode the user's limit: %d", cfg.QueuedInputLimit())
 	}
 }
+
+func TestProviderRetriesDefaultToTenAndZeroMeansNoLimit(t *testing.T) {
+	if got := Default().Agent.MaxProviderRetries; got != 10 {
+		t.Fatalf("default max_provider_retries = %d, want 10", got)
+	}
+	cfg, _ := loadScoped(t, "[agent]\nmax_provider_retries = 0\n", "")
+	if cfg.Agent.MaxProviderRetries != 0 {
+		t.Fatalf("an explicit 0 read as %d", cfg.Agent.MaxProviderRetries)
+	}
+	cfg, _ = loadScoped(t, "", "")
+	if cfg.Agent.MaxProviderRetries != 10 {
+		t.Fatalf("an absent key read as %d, want the default 10", cfg.Agent.MaxProviderRetries)
+	}
+}
+
+func TestProjectCannotSetTheProviderRetryLimit(t *testing.T) {
+	cfg, _ := loadScoped(t, "", "[agent]\nmax_provider_retries = 0\n")
+	if cfg.Agent.MaxProviderRetries != 10 {
+		t.Fatal("a cloned repo's reasonix.toml removed the user's retry limit")
+	}
+	if !slices.Contains(ignoredKeys(cfg), "agent.max_provider_retries") {
+		t.Fatalf("ignored = %v, want agent.max_provider_retries reported", ignoredKeys(cfg))
+	}
+	cfg, _ = loadScoped(t, "[agent]\nmax_provider_retries = 25\n", "[agent]\nmax_provider_retries = 1\n")
+	if cfg.Agent.MaxProviderRetries != 25 {
+		t.Fatalf("the project file overrode the user's limit: %d", cfg.Agent.MaxProviderRetries)
+	}
+}

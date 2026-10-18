@@ -1,2 +1,0 @@
-- 编辑器（ACP）新增只读方法 `session/info`（模型、工作区、预设、自动放行、缓存）和 `session/mcpServers`（已配置的 MCP 服务器及启用状态）。关联 #13644。
-- ACP gains read-only `session/info` (model, workspace, preset, auto-approve, cache) and `session/mcpServers` (configured servers, on or off, no commands). Refs #13644.

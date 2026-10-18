@@ -1,2 +1,0 @@
-- 修复：反馈刚提交、状态还是“已收到”时，如果维护者已经留言提问，现在可以直接在这条下面回复，不必等它被登记为 GitHub 议题；审核中的反馈仍不能回复。关联 #13626。
-- Fixed: A "received" report can be answered from its thread once a maintainer has written to it, without waiting to be filed as an issue; one under review still takes no reply. Refs #13626.

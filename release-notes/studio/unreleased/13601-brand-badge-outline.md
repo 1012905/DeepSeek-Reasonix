@@ -1,2 +1,0 @@
-- 改进：左上角品牌标志旁的“STUDIO”徽标由实心深色块改为透明底、细边框、淡色文字，不再像一条提示；外形尺寸不变。关联 #13601。
-- Improved: The STUDIO badge beside the wordmark is now an outline with muted text instead of a solid dark block; its size is unchanged. Refs #13601.

@@ -524,6 +524,7 @@ func (b *builder) executor() *agent.Agent {
 		ReasoningLanguage:            cfg.ReasoningLanguage(),
 		SubagentDepth:                0,
 		MaxSubagentDepth:             t.sub.maxDepth,
+		ProviderRetries:              agent.ProviderRetriesFromConfig(cfg.Agent.MaxProviderRetries),
 		MissingReasoningWarnStateDir: b.roots.MissingReasoningWarnStateDir(),
 	}, b.sink)
 	ag.SetNativeVideo(nativeVideoSource(entry, cfg))

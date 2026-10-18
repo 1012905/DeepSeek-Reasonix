@@ -479,6 +479,9 @@ export interface AgentPort {
    *  one it found, so a window with several installed can say. It refuses with
    *  a code rather than doing nothing when there is none. */
   openInEditor(): Promise<{ editor: string; root: string }>;
+  /** Open one workspace file (html, svg, pdf) with the machine's default
+   *  program. Only a click may call it; the kernel refuses other types. */
+  openDocument(path: string): Promise<void>;
   /** Whether this window can show a workspace entry in the system file manager:
    *  only a shell on the kernel's own machine can. */
   revealsFiles(): boolean;
@@ -570,7 +573,7 @@ export interface AgentPort {
   // that knows where the file came from uses dropRefs and copies nothing.
   // Naming the bytes is what stores them as that kind of file; unnamed bytes
   // must prove they are an image.
-  attach(blob: Blob, name?: string): Promise<Attachment>;
+  attach(blob: Blob, name?: string, signal?: AbortSignal): Promise<Attachment>;
   // Keeps a pasted text as a file in the attachment directory and answers with
   // the pointer that replaces it in the message. Only on a person's say-so.
   keepText(text: string): Promise<KeptText>;

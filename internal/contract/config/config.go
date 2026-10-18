@@ -48,6 +48,7 @@ type Config struct {
 	Browser          BrowserConfig       `toml:"browser"`
 	Bot              map[string]any      `toml:"bot"` // opaque; see passthrough.go
 	Serve            ServeConfig         `toml:"serve"`
+	Attachments      AttachmentsConfig   `toml:"attachments,omitempty"`
 	Secrets          SecretsConfig       `toml:"secrets"`
 	Remote           RemoteConfig        `toml:"remote"`
 	// AutoSubmit commits a multi-question ask once its last question is answered,
@@ -1071,12 +1072,13 @@ type AgentConfig struct {
 	// DecisionModel names the backend system_one asks. It is on a decision
 	// wire, so it never falls back to the main model: a chat model has no
 	// answer for a question set, and falling back would hide that.
-	DecisionModel    string            `toml:"decision_model"`
-	SubagentEffort   string            `toml:"subagent_effort"`
-	SubagentEfforts  map[string]string `toml:"subagent_efforts"`
-	MaxSubagentDepth int               `toml:"max_subagent_depth"` // delegation layers; default 8 stops runaway recursion, 0 removes the stop; the user file only
-	MaxSideSessions  int               `toml:"max_side_sessions"`  // 0 (default) opens as many side conversations as asked; the user file only
-	MaxQueuedInputs  int               `toml:"max_queued_inputs"`  // 0 (default) queues as many prompts as asked; the user file only
+	DecisionModel      string            `toml:"decision_model"`
+	SubagentEffort     string            `toml:"subagent_effort"`
+	SubagentEfforts    map[string]string `toml:"subagent_efforts"`
+	MaxSubagentDepth   int               `toml:"max_subagent_depth"`   // delegation layers; default 8 stops runaway recursion, 0 removes the stop; the user file only
+	MaxSideSessions    int               `toml:"max_side_sessions"`    // 0 (default) opens as many side conversations as asked; the user file only
+	MaxQueuedInputs    int               `toml:"max_queued_inputs"`    // 0 (default) queues as many prompts as asked; the user file only
+	MaxProviderRetries int               `toml:"max_provider_retries"` // default 10; 0 retries until cancelled; the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.
@@ -1410,6 +1412,7 @@ func Default() *Config {
 			CompactForceRatio:      0,
 			ContextEditing:         "",
 			MaxSubagentDepth:       8,
+			MaxProviderRetries:     10,
 			MaxSubagentConcurrency: 0,
 			MaxParallelWriters:     0,
 			SubagentClaims:         "strict",

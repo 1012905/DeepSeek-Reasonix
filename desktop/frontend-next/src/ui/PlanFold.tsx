@@ -2,12 +2,14 @@ import { useState } from "react";
 import { t } from "../i18n";
 import { currentStep, stepDone, stepLabel, type PlanStep } from "../state/session";
 import { Plan } from "./Plan";
+import type { GoalRuntime } from "../port/session";
+import { goalStatusText, goalStopText, goalUsageText } from "./goalusage";
 import { StudioIcon } from "./StudioIcon";
 
 /** The list belongs above the line that narrates the turn, because that is
  *  what it is about. Mounted whether or not it is shown, so the fold survives a
  *  visit to another view. */
-export function PlanFold({ plan, goal, shown, paused }: { plan: PlanStep[]; goal?: string; shown: boolean; paused?: boolean }) {
+export function PlanFold({ plan, goal, goalStatus, goalRuntime, shown, paused }: { plan: PlanStep[]; goal?: string; goalStatus?: string; goalRuntime?: GoalRuntime; shown: boolean; paused?: boolean }) {
   const [open, setOpen] = useState(false);
   if ((plan.length === 0 && !goal) || !shown) return null;
   return (
@@ -31,6 +33,13 @@ export function PlanFold({ plan, goal, shown, paused }: { plan: PlanStep[]; goal
       {open && (
         <div className="studio-todo-body">
           {goal && <p className="studio-todo-goal">{goal}</p>}
+          {goal && goalRuntime && (
+            <div className="studio-todo-usage" role="group" aria-label={t("目标用量")}>
+              <p>{goalStatus && <b>{goalStatusText(goalStatus)}</b>}{goalStatus && " · "}{goalUsageText(goalRuntime)}</p>
+              {goalRuntime.stopCause && goalStatus !== "running" && <p>{t("停下的原因：{cause}", { cause: goalStopText(goalRuntime.stopCause) })}</p>}
+              {goalRuntime.lastReason && <p>{t("最近一次判断：{reason}", { reason: goalRuntime.lastReason })}</p>}
+            </div>
+          )}
           {plan.length > 0 && <Plan steps={plan} paused={paused} />}
         </div>
       )}

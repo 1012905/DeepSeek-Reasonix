@@ -129,7 +129,8 @@ class BenchPort extends MockPort {
 
   async browserTabs() {
     if (!query.has("agentpage")) return super.browserTabs();
-    return [{ id: "t1", target: "view-a", url: "https://example.com/docs/install", title: "Install guide", active: true }];
+    const url = query.get("agentpage") === "file" ? "file:///Users/me/work/site/index.html" : "https://example.com/docs/install";
+    return [{ id: "t1", target: "view-a", url, title: "Install guide", active: true }];
   }
 
   // ?grant=1 grants the workspace a folder, /library, holding one document.
@@ -146,6 +147,10 @@ class BenchPort extends MockPort {
     if (!query.has("doc") || !path.endsWith(".md")) return super.workspaceFile(path);
     const content = "# Install guide\n\nDownload the package for your system, then run the installer. It places the program in your user folder and does not need administrator rights.\n\nAfter the first start, open Settings and add a model service before you begin a conversation.";
     return { path, content, revision: "r1" };
+  }
+
+  async updateMode() {
+    return query.has("update") ? "notify" : super.updateMode();
   }
 
   async versions() {
@@ -308,7 +313,11 @@ class BenchPort extends MockPort {
   private readonly jobsSince = Date.now() - 739_000;
 
   async status() {
-    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}) };
+    const usage = query.get("goalusage");
+    const goalRuntime = usage
+      ? { turnsUsed: 4, tokensUsed: 128_400, requestsUsed: 9, workDurationMs: 12 * 60_000, noProgressTurns: usage === "blocked" ? 2 : 0, ...(usage === "blocked" ? { stopCause: "goal_stuck", lastReason: "测试一直没有通过，改动没有让失败的数量减少" } : {}) }
+      : undefined;
+    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}), ...(usage ? { goalStatus: usage, goalRuntime } : {}) };
     if (STATUS_MS > 0) await new Promise((r) => setTimeout(r, STATUS_MS));
     if (!JOBS) return st;
     const jobs = Array.from({ length: JOBS }, (_, i) => ({

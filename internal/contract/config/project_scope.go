@@ -18,6 +18,7 @@ import (
 // may narrow these grants and never widen them. The slices are copies because
 // decoding the project file writes into the arrays the user's decode left.
 type heldScope struct {
+	attachments    AttachmentsConfig
 	sandbox        SandboxConfig
 	permissions    PermissionsConfig
 	approvalMode   string
@@ -26,8 +27,6 @@ type heldScope struct {
 	writeLease     string
 	planApproval   string
 	limits         agentLimits
-	maxSideSession int
-	maxQueued      int
 	goalAutoRetry  int
 	subagentClaims string
 	hostVerif      string
@@ -72,6 +71,7 @@ func holdUserScope(c *Config) heldScope {
 	shell.Env = maps.Clone(shell.Env)
 	shell.Args = slices.Clone(shell.Args)
 	return heldScope{
+		attachments:     cloneAttachments(c.Attachments),
 		sandbox:         s,
 		permissions:     p,
 		approvalMode:    c.Desktop.DefaultToolApprovalMode,
@@ -80,8 +80,6 @@ func holdUserScope(c *Config) heldScope {
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
 		limits:          holdAgentLimits(c),
-		maxSideSession:  c.Agent.MaxSideSessions,
-		maxQueued:       c.Agent.MaxQueuedInputs,
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
@@ -179,6 +177,10 @@ func (c *Config) ignoreProject(key, value string, reason IgnoredProjectReason) {
 // may have written, and gates the programs the project names. Shell env is
 // the user's alone: it reaches every command the agent runs.
 func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.MetaData) {
+	if !reflect.DeepEqual(c.Attachments, h.attachments) {
+		c.ignoreProject("attachments.max_stream_bytes", fmt.Sprint(c.AttachmentStreamLimit().Bytes), ProjectUserOnly)
+	}
+	c.Attachments = cloneAttachments(h.attachments)
 	ws := workspaceDir(root)
 	c.Tools.Shell.Env = h.shell.Env
 	c.Tools.Shell.Args = h.shell.Args
@@ -208,14 +210,6 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Agent.GoalAutoRetry != h.goalAutoRetry {
 		c.ignoreProject("agent.goal_auto_retry", fmt.Sprint(c.Agent.GoalAutoRetry), ProjectUserOnly)
 		c.Agent.GoalAutoRetry = h.goalAutoRetry
-	}
-	if c.Agent.MaxSideSessions != h.maxSideSession {
-		c.ignoreProject("agent.max_side_sessions", fmt.Sprint(c.Agent.MaxSideSessions), ProjectUserOnly)
-		c.Agent.MaxSideSessions = h.maxSideSession
-	}
-	if c.Agent.MaxQueuedInputs != h.maxQueued {
-		c.ignoreProject("agent.max_queued_inputs", fmt.Sprint(c.Agent.MaxQueuedInputs), ProjectUserOnly)
-		c.Agent.MaxQueuedInputs = h.maxQueued
 	}
 	h.narrowAgentLimits(c)
 	if c.Agent.PlanApproval != h.planApproval {

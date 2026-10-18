@@ -26,5 +26,6 @@ func renderConcurrencyLimits(b *strings.Builder, c *Config, defaults *Config) {
 	agentSetting(b, "max_subagent_concurrency", c.Agent.MaxSubagentConcurrency, defaults.Agent.MaxSubagentConcurrency, "session-wide sub-agent concurrency (task/fleet/skills)")
 	agentSetting(b, "max_parallel_writers", c.Agent.MaxParallelWriters, defaults.Agent.MaxParallelWriters, "concurrent writers with non-overlapping write_paths")
 	agentSetting(b, "max_side_sessions", c.Agent.MaxSideSessions, defaults.Agent.MaxSideSessions, "side conversations open at once; 0 = no limit; user file only")
+	agentSetting(b, "max_provider_retries", c.Agent.MaxProviderRetries, defaults.Agent.MaxProviderRetries, "retries of a failed provider connection before the turn stops; 0 = keep trying until cancelled; user file only")
 	agentSetting(b, "max_queued_inputs", c.Agent.MaxQueuedInputs, defaults.Agent.MaxQueuedInputs, "prompts waiting in a session's queue; 0 = no limit; user file only")
 }

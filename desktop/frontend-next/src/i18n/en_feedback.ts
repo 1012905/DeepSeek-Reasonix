@@ -165,6 +165,7 @@ export const EN_FEEDBACK: Record<string, string> = {
   "已落地 {n} 条，已是最高等级": "{n} shipped, the highest level",
   "已落地 {n} 条，再 {left} 条升到「{name}」": "{n} shipped, {left} more to reach {name}",
   "已落地 {n} 条，再 {left} 条升到 L{level}": "{n} shipped, {left} more to reach L{level}",
+  "「已落地」指你的反馈已被修复或实现，并随新版本发布。": "Shipped means your report was fixed or built and released in a version.",
   "每小时最多 {h} 条反馈 · 每天 {d} 条 · 每小时 {r} 条回复": "Up to {h} reports an hour · {d} a day · {r} replies an hour",
   "你现在较高的额度保留到 {date}。": "Your current higher limits stay until {date}.",
   "较高的额度有效期至 {date}，下一条落地的反馈会续上。": "Your higher limits run until {date}; the next report that ships renews them.",

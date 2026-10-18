@@ -1,2 +1,0 @@
-- 新增：`web_search` 可用你自己运行的 SearXNG 免费搜索，在用户配置里设置，默认关闭。关联 #13541。
-- Added: `web_search` can use your own SearXNG instance for free searches, set in your user config, off by default. Refs #13541.

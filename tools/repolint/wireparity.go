@@ -70,6 +70,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/changes.go", "gitHistoryView", tsWorkspaceFile, "GitHistory"},
 	{"internal/platform/gitstatus/history.go", "Commit", tsWorkspaceFile, "GitCommit"},
 	{"internal/contract/eventwire/wire.go", "AskOrigin", tsWireFile, "AskOrigin"},
+	{"internal/session/control/goal_runtime_view.go", "GoalRuntimeView", tsSessionFile, "GoalRuntime"},
 	{"internal/contract/agentgraph/graph.go", "Node", tsWireFile, "GraphNode"},
 	{"internal/contract/agentgraph/graph.go", "Edge", tsWireFile, "GraphEdge"},
 	{"internal/contract/agentgraph/graph.go", "Delta", tsWireFile, "GraphDelta"},
@@ -124,6 +125,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
 	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
 	{"internal/session/control/plan_approval_settings.go", "PlanApprovalSettings", tsBoundaryFile, "PlanApprovalSettings"},
+	{"internal/session/control/peer_settings.go", "PeersSettings", tsBoundaryFile, "PeersSettings"},
+	{"internal/session/control/peer_settings.go", "PeerReleased", tsBoundaryFile, "PeerProject"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},

@@ -1,2 +1,0 @@
-- 修复：主会话的模型不读图、子代理的模型读图时，子代理现在也有 view_image 可以看图，不再错用视频工具；父会话的工具表不变。关联 #13642。
-- Fixed: A sub-agent on an image-reading model now gets view_image even if the session's model cannot read images; the parent's tool block is unchanged. Refs #13642.
