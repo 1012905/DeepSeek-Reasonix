@@ -235,3 +235,25 @@ func TestRememberingAMessageThatIsNotHeldWritesNothing(t *testing.T) {
 		t.Fatal("an unknown message released the project")
 	}
 }
+
+func TestTheDispatchCeilingsAreSettingsTheUserCanRaiseRemoveAndNotMakeNegative(t *testing.T) {
+	f := newStandbyFixture(t)
+	s := f.c.PeersSettings()
+	if s.MaxDispatchDepth != config.DefaultMaxDispatchDepth || s.MaxDispatchedSessions != config.DefaultMaxDispatchedSessions {
+		t.Fatalf("defaults = depth %d sessions %d, want %d and %d", s.MaxDispatchDepth, s.MaxDispatchedSessions, config.DefaultMaxDispatchDepth, config.DefaultMaxDispatchedSessions)
+	}
+	three, none, below := 3, 0, -1
+	got, err := f.c.SavePeersSettings(PeersPatch{MaxDispatchDepth: &three, MaxDispatchedSessions: &none})
+	if err != nil || got.MaxDispatchDepth != 3 || got.MaxDispatchedSessions != 0 {
+		t.Fatalf("saved = %+v, %v; want depth 3 and no session ceiling", got, err)
+	}
+	if again := f.c.PeersSettings(); again.MaxDispatchDepth != 3 || again.MaxDispatchedSessions != 0 {
+		t.Fatalf("read back = %+v; a 0 ceiling must survive a reload instead of snapping back to the default", again)
+	}
+	if _, err := f.c.SavePeersSettings(PeersPatch{MaxDispatchDepth: &below}); !errors.Is(err, ErrPeerCeilingInvalid) {
+		t.Fatalf("a negative ceiling = %v, want ErrPeerCeilingInvalid", err)
+	}
+	if after := f.c.PeersSettings(); after.MaxDispatchDepth != 3 {
+		t.Fatal("a refused ceiling changed the file")
+	}
+}

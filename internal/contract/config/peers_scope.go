@@ -23,5 +23,11 @@ func (h heldScope) narrowPeers(c *Config) {
 	if !slices.Equal(c.Peers.ReleaseProjects, h.peers.ReleaseProjects) {
 		c.ignoreProject("peers.release_projects", fmt.Sprint(c.Peers.ReleaseProjects), ProjectUserOnly)
 	}
+	if c.Peers.MaxDispatchDepth != h.peers.MaxDispatchDepth {
+		c.ignoreProject("peers.max_dispatch_depth", fmt.Sprint(c.Peers.MaxDispatchDepth), ProjectUserOnly)
+	}
+	if c.Peers.MaxDispatchedSessions != h.peers.MaxDispatchedSessions {
+		c.ignoreProject("peers.max_dispatched_sessions", fmt.Sprint(c.Peers.MaxDispatchedSessions), ProjectUserOnly)
+	}
 	c.Peers = clonePeers(h.peers)
 }

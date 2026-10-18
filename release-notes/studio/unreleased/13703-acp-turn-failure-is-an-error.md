@@ -1,0 +1,2 @@
+- 变更：通过 ACP 连接时，失败的对话回合改为以 JSON-RPC 错误（-32603，data.code 为 turn_failed）结束，不再返回规范之外的 stopReason "error"。关联 #13703。
+- Changed: Over ACP, a failed turn now ends with a JSON-RPC error (-32603, data.code turn_failed), not the non-standard stopReason "error". Refs #13703.

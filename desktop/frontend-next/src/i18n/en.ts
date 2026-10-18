@@ -261,7 +261,7 @@ export const EN: Record<string, string> = {
   "启用会话间消息": "Turn on session messages",
   "同一台机器上的会话互相发文字。收到的文字先挂起，等你批准才会交给模型。": "Sessions on this machine send each other text. Incoming text is held until you approve it; only then does the model see it.",
   "允许模型把任务交给别的会话": "Let the model hand a task to another session",
-  "给模型一个把任务交给另一个项目里会话的工具；对方的用户批准后才会送到。": "Gives the model a tool to hand a task to a session in another project; it is delivered once that session's user approves.",
+  "给模型一个把任务交给另一个项目里会话的工具。打开就是你的总同意：派出的任务和对方的回信不再询问；新会话沿用本会话的模型和权限，不会比本会话更宽。": "Gives the model a tool to hand a task to a session in another project. Turning it on is your standing consent: dispatched tasks and their replies come in without asking, and the new session keeps this session's model and permissions, never more.",
   "先启用会话间消息。": "Turn on session messages first.",
   "这些项目收到的消息不再询问，直接交给模型：": "Messages sent to these projects are no longer asked about and go straight to the model:",
   "已长期放行的项目": "Projects released for good",
@@ -1660,4 +1660,8 @@ export const EN: Record<string, string> = {
   "收起数据": "Hide data",
   "图表数据：{title}": "Chart data: {title}",
   "另有 {n} 行": "and {n} more rows",
+  "请求修改设置": "Asks to change a setting",
+  "每次都会询问": "Asked every time",
+  "这项设置会放宽模型的权限，所以没有「本会话内不再问」，每次都要你亲自确认。": "This setting loosens what the model may do, so there is no \"don't ask again this session\": you confirm it yourself each time.",
+  "打开设置": "Open settings",
 };

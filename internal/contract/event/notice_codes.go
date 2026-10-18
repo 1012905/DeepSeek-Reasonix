@@ -35,6 +35,7 @@ const (
 	NoticeCodeSessionRecoveryDepthCap                           = "session_recovery_depth_cap"
 	NoticeCodeSessionShutdownRecoveryForked                     = "session_shutdown_recovery_forked"
 	NoticeCodeVerificationStalled                               = "verification_stalled"
+	NoticeCodeSettingChanged, NoticeCodeSettingOpen             = "setting_changed", "setting_open"
 	NoticeCodeAskTimeoutInvalid                                 = "ask_timeout_invalid"
 	NoticeCodeDecisionReceipt, NoticeCodeContextEditingFallback = "decision_receipt", "context_editing_fallback"
 	// A reported lease wait always arrives as a pair: one of the two below

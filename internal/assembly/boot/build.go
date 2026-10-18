@@ -82,6 +82,7 @@ type toolStage struct {
 	lsp         *lsp.Manager
 	browser     *browser.Session
 	peerLink    *tool.PeerLink
+	settingLink *tool.SettingsLink
 	peerTools   func(enabled, dispatch bool)
 	maxSteps    int
 	policy      permission.Policy
@@ -339,6 +340,7 @@ func (b *builder) wireTools() error {
 	addViewImage(t.reg, cfg, b.model.entry, env, root)
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
 	t.peerLink, t.peerTools = peerTools(t.reg, cfg)
+	t.settingLink = addSettingTool(t.reg, cfg)
 	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
 	addWebSearch(t.reg, cfg, b.proxy, b.sink)
@@ -565,6 +567,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		SystemPrompt:                   b.prompt.prompt,
 		SessionDir:                     b.session.dir,
 		Peers:                          peersOptions(cfg, t.peerLink, t.peerTools),
+		Settings:                       t.settingLink,
 		Host:                           t.host,
 		Commands:                       t.cmds,
 		Skills:                         b.prompt.skills,

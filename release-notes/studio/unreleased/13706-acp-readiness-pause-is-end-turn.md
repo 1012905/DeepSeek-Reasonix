@@ -1,0 +1,2 @@
+- 变更：通过 ACP 连接时，因“尚未验证”被暂停的回合以 end_turn 结束，响应带 paused 结果，文本末尾追加 [paused] 回执。关联 #13706。
+- Changed: Over ACP, a turn paused as unverified now ends with end_turn, a paused outcome and a [paused] receipt at the end of the text. Refs #13706.

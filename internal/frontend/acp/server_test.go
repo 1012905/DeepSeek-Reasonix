@@ -2126,9 +2126,10 @@ func TestServeSteerInjectsIntoActivePrompt(t *testing.T) {
 	}
 }
 
-func TestServePromptErrorIsNotReportedAsCancelled(t *testing.T) {
+func TestServePromptFailureIsAJSONRPCErrorWithTypedCode(t *testing.T) {
+	const leaked = "sk-abcdefghijklmnopqrstuvwxyz123456"
 	factory := &fakeFactory{behavior: func(context.Context, event.Sink, string) error {
-		return errors.New("provider failed")
+		return errors.New("provider failed, key " + leaked)
 	}}
 	client, stop := startServer(t, factory)
 	defer stop()
@@ -2143,12 +2144,73 @@ func TestServePromptErrorIsNotReportedAsCancelled(t *testing.T) {
 		Prompt:    []ContentBlock{{Type: "text", Text: "fail"}},
 	})
 	_, resp := drainPrompt(t, client, promptCh)
-	var pr SessionPromptResult
-	if err := json.Unmarshal(resp.Result, &pr); err != nil {
+	if resp.Error == nil {
+		t.Fatalf("a failed turn must be a JSON-RPC error, got result %s", resp.Result)
+	}
+	if resp.Error.Code != ErrInternal {
+		t.Errorf("code = %d, want %d", resp.Error.Code, ErrInternal)
+	}
+	if !strings.Contains(resp.Error.Message, "provider failed") || strings.Contains(resp.Error.Message, leaked) {
+		t.Errorf("message = %q, want the cause with the key redacted", resp.Error.Message)
+	}
+	var data TurnErrorData
+	if err := json.Unmarshal(resp.Error.Data, &data); err != nil || data.Code != TurnFailed {
+		t.Errorf("data = %s (%v), want code %q", resp.Error.Data, err, TurnFailed)
+	}
+}
+
+func TestServeReadinessPauseEndsTheTurnWithAReceiptAndTypedOutcome(t *testing.T) {
+	factory := &fakeFactory{behavior: func(_ context.Context, sink event.Sink, _ string) error {
+		sink.Emit(event.Event{Kind: event.Text, Text: "all done"})
+		return &agent.FinalReadinessError{Attempts: 1, Reason: "run a relevant verification command", Missing: []string{"verification"}}
+	}}
+	client, stop := startServer(t, factory)
+	defer stop()
+
+	client.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+	newResp := client.call(t, "session/new", SessionNewParams{})
+	var nr SessionNewResult
+	json.Unmarshal(newResp.Result, &nr)
+
+	promptCh := client.callAsync("session/prompt", SessionPromptParams{
+		SessionID: nr.SessionID,
+		Prompt:    []ContentBlock{{Type: "text", Text: "write something"}},
+	})
+	notifs, resp := drainPrompt(t, client, promptCh)
+	if resp.Error != nil {
+		t.Fatalf("a readiness pause is not a failure: %+v", resp.Error)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(resp.Result, &raw); err != nil {
 		t.Fatalf("prompt result: %v", err)
 	}
-	if pr.StopReason != StopError {
-		t.Errorf("stopReason = %q, want error", pr.StopReason)
+	if string(raw["stopReason"]) != `"end_turn"` {
+		t.Errorf("stopReason = %s, want end_turn", raw["stopReason"])
+	}
+	var meta struct {
+		Reasonix struct {
+			TurnOutcome ReasonixTurnOutcome `json:"turnOutcome"`
+		} `json:"reasonix.io"`
+	}
+	if err := json.Unmarshal(raw["_meta"], &meta); err != nil || meta.Reasonix.TurnOutcome.Kind != "paused" {
+		t.Errorf("_meta = %s (%v), want turnOutcome kind paused", raw["_meta"], err)
+	}
+	var text strings.Builder
+	for _, n := range notifs {
+		var p struct {
+			Update struct {
+				SessionUpdate string `json:"sessionUpdate"`
+				Content       struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"update"`
+		}
+		if json.Unmarshal(n.Params, &p) == nil && p.Update.SessionUpdate == "agent_message_chunk" {
+			text.WriteString(p.Update.Content.Text)
+		}
+	}
+	if got := text.String(); !strings.Contains(got, "all done") || !strings.Contains(got, "[paused]") || !strings.Contains(got, "verification") {
+		t.Errorf("streamed text = %q, want the answer followed by a [paused] receipt naming the missing verification", got)
 	}
 }
 
