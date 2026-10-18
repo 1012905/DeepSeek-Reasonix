@@ -240,10 +240,11 @@ export interface WebAccessSettings {
   known_fetch_backends: string[];
   paid_backends: string[];
   deepseek_api_ready: boolean;
+  video_url_passthrough: boolean;
   path: string;
 }
 
-export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed">>;
+export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed" | "video_url_passthrough">>;
 
 export interface ChangedFilesSettings {
   show: boolean;

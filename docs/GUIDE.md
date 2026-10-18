@@ -2174,3 +2174,16 @@ Reasonix prices Google's list rates per 1M tokens (https://ai.google.dev/gemini-
 | `gemini-3.1-pro-preview` (up to 200k prompt tokens) | $2.00 | $0.20 | $12.00 |
 
 `gemini-3.1-pro-preview` costs more above 200k prompt tokens ($4.00 / $0.40 / $18.00), which one rate card cannot say, so a long prompt reads low. `gemini-4-argon` shows no price on the page and is not priced. Storage for explicit context caching is not counted.
+
+### Handing a video address to the model vendor
+
+Some vendors read a video from a public address instead of a file. `read_video` can take `url` in place of `path`, but only when you turn this on in Settings (**Web access → Video addresses**, or `[tools] video_url_passthrough = true` in your user file; a project file cannot set it).
+
+Turning it on is a confirmation of its own: the model can propose it, and you answer a card every time.
+
+- The vendor visits the address itself; nothing is downloaded on your machine. Turn it on only if you accept that the vendor's servers open the address.
+- Only an address you wrote in the conversation is handed over. An address the model found in a page, a file or a tool result, or made up, is refused (`video.url_not_from_user`), so a page's author cannot make the vendor visit an address of their choosing.
+- The address must be `https`, with a public host name: no credentials, no IP address, no `localhost`, single-label or local-network name, and at most 2,048 characters (`video.url_invalid`).
+- Zhipu GLM takes a public https address in a `video_url` part and no file ([docs.bigmodel.cn](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v), read 2026-10-17). Declare it with `video_models = ["glm-4.6v"]` and `video_protocol = "zhipu_url"` on the entry; a local file is then read as frames.
+- Gemini takes a public YouTube address as a video `uri` on `gemini_inline` and `gemini_files`; no other address is handed to it (`video.url_unsupported_model`).
+- A reference restored from a stored or imported transcript is never sent: only an address checked in this process is.

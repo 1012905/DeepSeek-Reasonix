@@ -258,7 +258,7 @@ export class MockBoundary extends MockShell {
   private webAccess: WebAccessSettings = {
     search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
     known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"],
-    paid_backends: ["deepseek_api"], deepseek_api_ready: false, path: "/Users/you/.reasonix/config.toml",
+    paid_backends: ["deepseek_api"], deepseek_api_ready: false, video_url_passthrough: false, path: "/Users/you/.reasonix/config.toml",
   };
 
   async webAccessSettings(): Promise<WebAccessSettings> {

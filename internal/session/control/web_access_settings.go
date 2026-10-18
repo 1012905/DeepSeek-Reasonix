@@ -22,8 +22,11 @@ type WebAccessSettings struct {
 	PaidBackends        []string `json:"paid_backends"`
 	// DeepSeekAPIReady is whether a configured provider holds a key for the
 	// official DeepSeek API, which the paid backend needs.
-	DeepSeekAPIReady bool   `json:"deepseek_api_ready"`
-	Path             string `json:"path"`
+	DeepSeekAPIReady bool `json:"deepseek_api_ready"`
+	// VideoURLPassthrough is whether the model may hand a public video address the
+	// user wrote to the model vendor, which then visits it. Off by default.
+	VideoURLPassthrough bool   `json:"video_url_passthrough"`
+	Path                string `json:"path"`
 }
 
 // WebAccessPatch carries only the fields a request set; the rest stay as the
@@ -34,11 +37,13 @@ type WebAccessPatch struct {
 	SearchPaidAllowed *[]string `json:"search_paid_allowed"`
 	FetchBackends     *[]string `json:"fetch_backends"`
 	FetchPaidAllowed  *[]string `json:"fetch_paid_allowed"`
+	// VideoURLPassthrough turns handing an address to the vendor on or off.
+	VideoURLPassthrough *bool `json:"video_url_passthrough"`
 }
 
 // Empty reports whether the patch sets nothing.
 func (p WebAccessPatch) Empty() bool {
-	return p.SearchBackends == nil && p.SearxngURL == nil && p.SearchPaidAllowed == nil && p.FetchBackends == nil && p.FetchPaidAllowed == nil
+	return p.SearchBackends == nil && p.SearxngURL == nil && p.SearchPaidAllowed == nil && p.FetchBackends == nil && p.FetchPaidAllowed == nil && p.VideoURLPassthrough == nil
 }
 
 // WebAccessSettings reads the user file, so a window shows what the file says
@@ -91,6 +96,9 @@ func (c *Controller) SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSetti
 	if patch.SearxngURL != nil {
 		tools.SearxngURL = *patch.SearxngURL
 	}
+	if patch.VideoURLPassthrough != nil {
+		cfg.Tools.VideoURLPassthrough = *patch.VideoURLPassthrough
+	}
 	if err := cfg.SaveTo(path); err != nil {
 		return WebAccessSettings{}, err
 	}
@@ -106,6 +114,7 @@ func webAccessView(cfg *config.Config, path string) WebAccessSettings {
 		FetchPaidAllowed:    slices.Clone(orEmpty(w.WebFetchPaidAllowed)),
 		KnownSearchBackends: config.KnownSearchBackends(), KnownFetchBackends: config.KnownFetchBackends(),
 		PaidBackends: config.PaidWebBackends(), DeepSeekAPIReady: apiErr == nil, Path: path,
+		VideoURLPassthrough: cfg.Tools.VideoURLPassthrough,
 	}
 }
 

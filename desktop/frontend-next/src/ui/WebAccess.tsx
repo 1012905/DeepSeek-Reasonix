@@ -124,6 +124,19 @@ export function WebAccess({ port }: { port: AgentPort }) {
       <div className="box">
         {section("search")}
         {section("fetch")}
+        <div className="wa-sec" role="group" aria-label={t("视频地址")}>
+          <div className="peernote"><b>{t("视频地址")}</b>{" "}{t("模型可以把你在对话里写的公开视频地址交给模型厂商读取。默认关闭，立即生效。")}</div>
+          <ul className="wa-list">
+            <li>
+              <span className="tx">
+                <span className="lb">{t("把视频地址交给模型厂商")}</span>
+                <span className="ds">{t("开启后，该网址会被厂商直接访问：由厂商的服务器去打开它，不是本机下载。只有你自己写在对话里的地址才会交出去，且所选模型的厂商要支持。")}</span>
+              </span>
+              <Switch data-action="web-access.video-url" on={state.video_url_passthrough} busy={locked} label={t("把视频地址交给模型厂商")}
+                onClick={() => void apply({ video_url_passthrough: !state.video_url_passthrough })} />
+            </li>
+          </ul>
+        </div>
         <div className="peernote">{t("保存后只对之后新开的窗格生效，已开的窗格沿用旧设置。这些设置写在用户配置文件里：")}<code>{state.path}</code></div>
         {readOnly && <div className="peernote" role="status">{t("这些设置现在是只读的：这个窗口没有被授予编辑权限。")}</div>}
         {error && <div className="why" role="alert">{error}</div>}

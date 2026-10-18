@@ -152,3 +152,40 @@ func TestWebAccessSettingsAreWrittenOnlyWithTheEditGrant(t *testing.T) {
 		})
 	}
 }
+
+func TestTheVideoAddressSwitchIsOffUntilTheWindowTurnsItOnAndIsKeptInTheUserFile(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	if got := readJSON[control.WebAccessSettings](t, srv.URL, "/web-access-settings"); got.VideoURLPassthrough {
+		t.Fatal("handing an address to the vendor is on by default")
+	}
+	resp := postProvider(t, srv.URL, "/web-access-settings", `{"video_url_passthrough":true}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("turning it on = %d", resp.StatusCode)
+	}
+	if !readJSON[control.WebAccessSettings](t, srv.URL, "/web-access-settings").VideoURLPassthrough || !config.LoadForEdit(config.UserConfigPath()).Tools.VideoURLPassthrough {
+		t.Fatal("the switch did not reach the user file")
+	}
+	postProvider(t, srv.URL, "/web-access-settings", `{"video_url_passthrough":false}`).Body.Close()
+	if config.LoadForEdit(config.UserConfigPath()).Tools.VideoURLPassthrough {
+		t.Fatal("the switch did not turn off")
+	}
+}
+
+// A vendor visiting an address is the window's to allow: no paired device turns it on.
+func TestNoPairedDeviceCanTurnTheVideoAddressSwitchOn(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		operatorHandler(s).ServeHTTP(w, r.WithContext(withDeviceReach(r.Context(), "phone", 1)))
+	}))
+	defer srv.Close()
+	resp := postProvider(t, srv.URL, "/web-access-settings", `{"video_url_passthrough":true}`)
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK || config.LoadForEdit(config.UserConfigPath()).Tools.VideoURLPassthrough {
+		t.Fatalf("a paired device turned the switch on: %d", resp.StatusCode)
+	}
+}

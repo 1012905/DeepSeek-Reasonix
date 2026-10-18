@@ -21,7 +21,7 @@ afterEach(() => {
 const settings = (over: Partial<WebAccessSettings> = {}): WebAccessSettings => ({
   search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
   known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"], paid_backends: ["deepseek_api"],
-  deepseek_api_ready: true, path: "/home/me/.reasonix/config.toml", ...over,
+  deepseek_api_ready: true, video_url_passthrough: false, path: "/home/me/.reasonix/config.toml", ...over,
 });
 
 function portWith(initial: WebAccessSettings) {
@@ -180,5 +180,34 @@ describe("when the settings apply", () => {
     await screen.findByRole("group", { name: "网页搜索" });
     expect(screen.getByText(/之后新开的窗格/)).toBeTruthy();
     expect(screen.getByText("/home/me/.reasonix/config.toml")).toBeTruthy();
+  });
+});
+
+describe("handing a video address to the vendor", () => {
+  it("is off by default, says the vendor will visit the address, and saves only that field when turned on", async () => {
+    const { port, save } = portWith(settings());
+    render(<WebAccess port={port} />);
+    const sw = await screen.findByRole("switch", { name: "把视频地址交给模型厂商" });
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(/该网址会被厂商直接访问/)).toBeTruthy();
+    await userEvent.click(sw);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ video_url_passthrough: true });
+  });
+
+  it("shows it on when the user file has it on, and turning it off saves false", async () => {
+    const { port, save } = portWith(settings({ video_url_passthrough: true }));
+    render(<WebAccess port={port} />);
+    const sw = await screen.findByRole("switch", { name: "把视频地址交给模型厂商" });
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    await userEvent.click(sw);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ video_url_passthrough: false });
+  });
+
+  it("cannot be changed while the section is read-only", async () => {
+    const { port } = portWith(settings());
+    vi.spyOn(port, "saveWebAccessSettings").mockRejectedValue(new HttpError(403, "x", { code: "web_access.editing_disabled", error: "editing is not enabled" }));
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("switch", { name: "把视频地址交给模型厂商" }));
+    expect(await screen.findByText(/只读/)).toBeTruthy();
   });
 });
