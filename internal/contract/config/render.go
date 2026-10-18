@@ -628,6 +628,9 @@ func RenderTOMLProjectDelta(c *Config) string {
 		if strings.TrimSpace(c.Sandbox.Bash) != "" && c.BashMode() != d.BashModeForGOOS(runtimeGOOS) {
 			fmt.Fprintf(&sandboxBuf, "bash = %q\n", c.BashMode())
 		}
+		if c.Sandbox.WindowsIntegrity {
+			sandboxBuf.WriteString("windows_integrity = true   # Windows: bash runs under a write-restricted, Low-integrity token; user file only\n")
+		}
 		if c.Sandbox.Network != d.Sandbox.Network {
 			fmt.Fprintf(&sandboxBuf, "network = %v\n", c.Sandbox.Network)
 		}

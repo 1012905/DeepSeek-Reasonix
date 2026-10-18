@@ -220,6 +220,7 @@ var table = []Entry{
 	{ID: "statusline.command", Class: Guarded, Effect: OnOpen},
 	{ID: "lsp.enabled", Class: Guarded, Effect: OnOpen},
 	{ID: "lsp.servers", Class: Guarded, Effect: OnOpen},
+	{ID: "sandbox.windows_integrity", Class: Guarded, Effect: OnOpen},
 	{ID: "browser.enabled", Class: Elevated, Effect: OnOpen},
 	{ID: "browser.executable", Class: Guarded, Effect: OnOpen},
 	{ID: "browser.headless", Class: Preference, Effect: OnOpen},

@@ -35,13 +35,17 @@ func winWrap(spec Spec, argv []string) ([]string, bool) {
 		k, v, _ := strings.Cut(kv, "=")
 		env[k] = v
 	}
-	return winLaunchArgv(self, winLaunch{SID: spec.GrantSID, Env: env}, argv), true
+	l := winLaunch{SID: spec.GrantSID, Env: env}
+	if spec.SessionTemp != "" {
+		l.Grant = []string{spec.SessionTemp}
+	}
+	return winLaunchArgv(self, l, argv), true
 }
 
-// Available reports that Reasonix does not currently ship an OS-level Bash
-// sandbox on Windows.
+// Available reports that the restricted-token backend exists on Windows. Whether
+// a launch is confined is the spec's: it needs GrantSpec to have prepared it.
 func Available() bool {
-	return false
+	return true
 }
 
 // EgressSupported reports whether this platform can confine egress to the
@@ -51,5 +55,17 @@ func EgressSupported() bool { return false }
 // EgressNeedsSocket reports whether the proxy must also listen on a Unix socket.
 func EgressNeedsSocket() bool { return false }
 
-// bwrapFault: bubblewrap is a Linux backend, so there is no such reason here.
-func bwrapFaultFor(Spec) error { return nil }
+// bwrapFaultFor names why an enforcing spec cannot be confined: the fault
+// GrantSpec recorded, or that nothing prepared it. A spec that asks for nothing has none.
+func bwrapFaultFor(spec Spec) error {
+	if spec.Mode != "enforce" {
+		return nil
+	}
+	if spec.GrantFault != nil {
+		return spec.GrantFault
+	}
+	if spec.GrantSID == "" {
+		return ErrWinNotPrepared
+	}
+	return nil
+}

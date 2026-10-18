@@ -82,6 +82,9 @@ func resolveToolEnvironment(opts Options, cfg *config.Config, roots config.Roots
 	env.managedConfig = builtin.NewManagedConfigPaths(config.ReasonixManagedConfigPaths())
 	env.bash = sandbox.Spec{Mode: bashMode, WriteRoots: env.writeRoots, Pins: sandbox.PinWriteRoots(env.writeRoots), ForbidReadRoots: env.forbidReadRoots, Network: env.network,
 		HostAuthorities: sandbox.ParseAuthorities(cfg.Sandbox.HostAuthorities), AllowDevices: cfg.Sandbox.AllowDevices, Shell: shell, ShellEnv: cfg.Tools.Shell.Env}
+	// On Windows an enforcing spec is prepared here: its roots granted to the
+	// restricted token, or the reason it cannot be. Elsewhere this changes nothing.
+	env.bash = sandbox.GrantSpec(env.bash, roots.SandboxDir())
 	// Agent writes into Reasonix's own session stores race the app's saves;
 	// an explicit allow_write entry stays the sanctioned escape hatch.
 	allowWriteRoots := cfg.AllowWriteRoots()

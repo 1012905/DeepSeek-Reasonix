@@ -17,6 +17,8 @@ const winLaunchFlag = "--reasonix-win-sandbox"
 type winLaunch struct {
 	SID string            `json:"sid"`
 	Env map[string]string `json:"env,omitempty"`
+	// Grant lists directories the launcher grants before it starts the command.
+	Grant []string `json:"grant,omitempty"`
 }
 
 // winLaunchArgv wraps argv so that running it starts self as the launcher.

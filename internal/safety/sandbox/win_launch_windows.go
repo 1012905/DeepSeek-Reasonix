@@ -3,6 +3,7 @@
 package sandbox
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"unsafe"
@@ -25,6 +26,9 @@ func init() {
 	}
 	os.Exit(code)
 }
+
+// errNoLogonSID marks the session as one that cannot be restricted.
+var errNoLogonSID = errors.New("no logon SID")
 
 var procCreateRestrictedToken = windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateRestrictedToken")
 
@@ -94,7 +98,7 @@ func logonSID(tok windows.Token) (*windows.SID, error) {
 	}
 	groups := (*windows.Tokengroups)(unsafe.Pointer(&buf[0]))
 	if groups.GroupCount == 0 {
-		return nil, fmt.Errorf("logon SID: the token has none (a session without an interactive logon cannot be restricted)")
+		return nil, fmt.Errorf("logon SID: %w", errNoLogonSID)
 	}
 	return groups.AllGroups()[0].Sid.Copy()
 }
@@ -125,6 +129,13 @@ func setDefaultDACL(tok windows.Token, sids ...*windows.SID) error {
 // ends the tree when the launcher does, resumes it, and returns its exit code.
 // The command's standard handles are the launcher's own.
 func runRestricted(l winLaunch, argv []string) (int, error) {
+	// A session temp directory is new for each lease and not under any root, so the
+	// launcher grants it here; it goes away with its lease, and so does the grant.
+	for _, dir := range l.Grant {
+		if err := WindowsGrantOps().Grant(dir, l.SID); err != nil {
+			return 0, err
+		}
+	}
 	tok, err := restrictedToken(l.SID)
 	if err != nil {
 		return 0, err

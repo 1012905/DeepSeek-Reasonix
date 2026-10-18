@@ -909,6 +909,11 @@ type SandboxConfig struct {
 	// command when an OS sandbox is available and refuses bash otherwise; "off"
 	// runs it unconfined. Empty uses the platform default.
 	Bash string `toml:"bash"`
+	// WindowsIntegrity turns the bash sandbox on for Windows: commands run under a
+	// write-restricted, Low-integrity token, and the workspace and cache roots are
+	// granted to it once (ACL entries on your disk, listed by `reasonix sandbox`).
+	// Off by default and user file only; it bounds writes, not reads or the network.
+	WindowsIntegrity bool `toml:"windows_integrity"`
 	// Network allows network egress from inside the bash sandbox. Defaults true
 	// so module/package downloads keep working; the boundary is then writes.
 	Network bool `toml:"network"`
@@ -1015,11 +1020,14 @@ func (c *Config) BashMode() string {
 }
 
 // BashModeForGOOS normalises the bash-sandbox mode for tests and cross-platform
-// rendering. Windows has no OS-level Bash sandbox and forces the effective mode
-// off, even when older configs explicitly requested "enforce". macOS/Linux keep
-// the existing explicit-mode behavior.
+// rendering. Windows enforces only when the user turned on windows_integrity;
+// an older config's explicit "enforce" there stays off. macOS/Linux keep the
+// existing explicit-mode behavior.
 func (c *Config) BashModeForGOOS(goos string) string {
 	if goos == "windows" {
+		if c.Sandbox.WindowsIntegrity {
+			return "enforce"
+		}
 		return "off"
 	}
 	switch strings.TrimSpace(c.Sandbox.Bash) {

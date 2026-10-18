@@ -88,6 +88,9 @@ type Spec struct {
 	// token to: the one the GrantBook granted on WriteRoots. Empty leaves a
 	// Windows command unwrapped, which a caller in enforce mode treats as refused.
 	GrantSID string
+	// GrantFault is why GrantSpec could not prepare the Windows sandbox, as one of
+	// the ErrWin* identities; nil when it did, or when nothing was asked for.
+	GrantFault error
 }
 
 // EgressRoute is the host proxy a confined command's external traffic goes
@@ -161,7 +164,7 @@ func remediation(fault error) string {
 	case "darwin":
 		return "Ensure `sandbox-exec` is installed and usable (the host must allow `sandbox_apply`), or set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox to restore pre-1.16 unconfined shell execution."
 	case "windows":
-		return "Windows does not currently provide a Reasonix OS-level Bash sandbox; the effective setting is fixed to \"off\" and shell commands run unconfined."
+		return windowsRemediation(fault)
 	default:
 		return "Set [sandbox] bash = \"off\" in config.toml / Settings -> Sandbox to run shell commands unconfined on this platform."
 	}
@@ -212,7 +215,7 @@ func unavailableCode(fault error) string {
 	case "darwin":
 		return "sandbox.no_sandbox_exec"
 	case "windows":
-		return "sandbox.unsupported_on_windows"
+		return windowsUnavailableCode(fault)
 	default:
 		return "sandbox.unsupported_platform"
 	}

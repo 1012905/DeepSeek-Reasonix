@@ -60,6 +60,9 @@ func (c *Config) ForbiddenRootsForRoot(root string) []string {
 	if peers := c.Roots().PeersDir(); peers != "" {
 		base = appendUniqueResolved(base, peers)
 	}
+	if dir := c.Roots().SandboxDir(); dir != "" {
+		base = appendUniqueResolved(base, dir)
+	}
 	credentialPath := strings.TrimSpace(c.Roots().UserCredentialsPath())
 	if credentialPath == "" {
 		return base

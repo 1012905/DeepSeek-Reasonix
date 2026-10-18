@@ -4,6 +4,7 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -164,5 +165,52 @@ func TestRestrictedCommandsRunGitAndPowerShellInsideTheRoot(t *testing.T) {
 	h.runArgv([]string{"powershell", "-NoProfile", "-Command", "Remove-Item -LiteralPath '" + keep + "' -Force"})
 	if !exists(keep) {
 		t.Error("PowerShell removed a file outside the root")
+	}
+}
+
+// GrantSpec prepares an enforcing spec through the real book: roots granted,
+// token proven, SID set; and a spec that does not enforce is left alone.
+func TestGrantSpecPreparesAnEnforcingSpecAndLeavesAnOffSpecAlone(t *testing.T) {
+	state := t.TempDir()
+	ws := t.TempDir()
+	off := GrantSpec(Spec{Mode: "off", WriteRoots: []string{ws}}, state)
+	if off.GrantSID != "" || off.GrantFault != nil {
+		t.Fatalf("an off spec was touched: %+v", off)
+	}
+	on := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{ws}}, state)
+	if on.GrantFault != nil || on.GrantSID == "" {
+		t.Fatalf("enforce spec = fault %v sid %q", on.GrantFault, on.GrantSID)
+	}
+	if ok, _ := WindowsGrantOps().Granted(ws, on.GrantSID); !ok {
+		t.Fatal("the workspace root was not granted")
+	}
+	if !AvailableFor(on) || bwrapFaultFor(on) != nil {
+		t.Fatal("a prepared spec reports itself unavailable")
+	}
+	t.Cleanup(func() {
+		if b, err := windowsBook(state); err == nil {
+			_ = b.Revoke(ws)
+		}
+	})
+}
+
+// A damaged record is a typed fault with its own stable code, never a fresh start.
+func TestGrantSpecReportsADamagedRecordAsATypedFault(t *testing.T) {
+	state := t.TempDir()
+	if err := os.WriteFile(filepath.Join(state, "windows-grants.json"), []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec := GrantSpec(Spec{Mode: "enforce", WriteRoots: []string{t.TempDir()}}, state)
+	if !errors.Is(spec.GrantFault, ErrWinGrantUnreadable) || spec.GrantSID != "" {
+		t.Fatalf("spec = fault %v sid %q", spec.GrantFault, spec.GrantSID)
+	}
+	if AvailableFor(spec) {
+		t.Fatal("an unprepared enforcing spec reports itself available")
+	}
+	if got := UnavailableCodeFor(spec); got != "sandbox.win_grant_unreadable" {
+		t.Fatalf("code = %q", got)
+	}
+	if _, wrapped := CommandArgs(spec, []string{"cmd"}); wrapped {
+		t.Fatal("a command was wrapped without a prepared spec")
 	}
 }
