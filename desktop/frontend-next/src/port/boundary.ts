@@ -9,6 +9,9 @@ export interface PermissionLists {
   allow: string[];
   ask: string[];
   deny: string[];
+  // Ask before a call that copies text an external result gave the task. On a
+  // save, absent leaves it as it is.
+  askOnExternalOrigin?: boolean;
 }
 
 export interface DormantPermissionRule {

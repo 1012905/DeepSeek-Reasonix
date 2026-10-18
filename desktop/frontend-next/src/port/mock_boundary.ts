@@ -73,7 +73,9 @@ export class MockBoundary extends MockShell {
     for (const rule of [...lists.deny, ...lists.ask, ...lists.allow]) {
       if (!/^[^()]+(\(.*\))?$/.test(rule.trim())) throw new Error(`invalid permission rule "${rule}"`);
     }
-    this.rules = { ...this.rules, ...lists };
+    // An absent switch is left as it is, the way the kernel treats a save without it.
+    const { askOnExternalOrigin, ...rest } = lists;
+    this.rules = { ...this.rules, ...rest, askOnExternalOrigin: askOnExternalOrigin ?? this.rules.askOnExternalOrigin ?? false };
     return { ...this.rules };
   }
 

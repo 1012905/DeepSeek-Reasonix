@@ -450,3 +450,39 @@ func TestSaveWriteLeasePersistsAndSaysWhenItTakesEffect(t *testing.T) {
 		t.Fatal("returning to strict did not reach the config file")
 	}
 }
+
+// The origin switch is saved through the rules endpoint and survives the rebuild
+// that endpoint triggers; a save that omits it leaves it alone.
+func TestPermissionsEndpointCarriesTheOriginSwitchThroughARebuild(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	post := func(body string) {
+		resp := postProvider(t, srv.URL, "/permissions", body)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			text, _ := readAllString(resp)
+			t.Fatalf("POST /permissions %s = %d: %s", body, resp.StatusCode, text)
+		}
+	}
+	on := func() bool {
+		v := readJSON[control.PermissionRules](t, srv.URL, "/permissions").AskOnExternalOrigin
+		return v != nil && *v
+	}
+	if on() {
+		t.Fatal("on before anything was saved")
+	}
+	post(`{"mode":"ask","allow":[],"ask":[],"deny":[],"askOnExternalOrigin":true}`)
+	if !on() {
+		t.Fatal("the switch did not survive its save")
+	}
+	post(`{"mode":"ask","allow":[],"ask":[],"deny":[]}`)
+	if !on() {
+		t.Fatal("a save without the field turned the switch off")
+	}
+	post(`{"mode":"ask","allow":[],"ask":[],"deny":[],"askOnExternalOrigin":false}`)
+	if on() {
+		t.Fatal("the switch did not turn off")
+	}
+}
