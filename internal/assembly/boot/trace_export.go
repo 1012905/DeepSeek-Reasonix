@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"reasonix/internal/base/netclient"
@@ -18,14 +17,14 @@ const traceCloseBudget = 3 * time.Second
 // switches it on and names a collector; otherwise nothing is built and nothing
 // leaves the machine. A setting that cannot be honoured is reported once and
 // leaves the export off.
-func newTraceExporter(cfg *config.Config, version string, stderr io.Writer) *otlp.Exporter {
+func newTraceExporter(cfg *config.Config, root, version string, stderr io.Writer) *otlp.Exporter {
 	if !cfg.OTLPActive() {
 		return nil
 	}
 	o := cfg.Observability.OTLP
 	secret := ""
 	if o.HeaderEnv != "" && config.OTLPHeaderEnvOK(o.HeaderEnv) {
-		secret = os.Getenv(o.HeaderEnv)
+		secret = config.ResolveCredentialForRoot(root, o.HeaderEnv).Value
 	}
 	if o.HeaderName != "" && secret == "" {
 		fmt.Fprintf(stderr, "trace export: %s is empty; sending without a credential\n", o.HeaderEnv)

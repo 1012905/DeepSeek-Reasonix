@@ -3,7 +3,6 @@ package control
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"reasonix/internal/contract/config"
@@ -37,12 +36,12 @@ type ObservabilityPatch struct {
 }
 
 func (c *Controller) ObservabilitySettings() ObservabilitySettings {
-	return observabilityFrom(config.UserOTLP())
+	return observabilityFrom(c.WorkspaceRoot(), config.UserOTLP())
 }
 
-func observabilityFrom(o config.OTLPConfig) ObservabilitySettings {
+func observabilityFrom(root string, o config.OTLPConfig) ObservabilitySettings {
 	return ObservabilitySettings{Enabled: o.Enabled, Endpoint: o.Endpoint, HeaderName: o.HeaderName, HeaderEnv: o.HeaderEnv,
-		ServiceName: o.ServiceName, HeaderEnvSet: o.HeaderEnv != "" && envValueSet(o.HeaderEnv), Path: config.UserConfigPath(), Applies: "next_session"}
+		ServiceName: o.ServiceName, HeaderEnvSet: o.HeaderEnv != "" && config.ResolveCredentialForRoot(root, o.HeaderEnv).Set, Path: config.UserConfigPath(), Applies: "next_session"}
 }
 
 // SaveObservabilitySettings writes the patch to the user file. A value the
@@ -79,11 +78,9 @@ func (c *Controller) SaveObservabilitySettings(patch ObservabilityPatch) (Observ
 	if err != nil {
 		if errors.Is(err, config.ErrOTLPEndpointInvalid) || errors.Is(err, config.ErrOTLPEndpointCredentials) ||
 			errors.Is(err, config.ErrOTLPHeaderInvalid) || errors.Is(err, config.ErrOTLPHeaderEnvInvalid) {
-			return observabilityFrom(got), err
+			return observabilityFrom(c.WorkspaceRoot(), got), err
 		}
-		return observabilityFrom(got), fmt.Errorf("%w: %w", ErrObservabilityUnwritable, err)
+		return observabilityFrom(c.WorkspaceRoot(), got), fmt.Errorf("%w: %w", ErrObservabilityUnwritable, err)
 	}
-	return observabilityFrom(got), nil
+	return observabilityFrom(c.WorkspaceRoot(), got), nil
 }
-
-func envValueSet(name string) bool { return os.Getenv(name) != "" }

@@ -211,7 +211,7 @@ func (b *builder) load() error {
 	// One synchronized sink for every emitter: background jobs and sidecars
 	// emit from their own goroutines. The goal tee and the coalescer wrap it
 	// here, before the extension hub captures it, so agents emit through both.
-	b.trace = newTraceExporter(cfg, opts.Version, b.stderr)
+	b.trace = newTraceExporter(cfg, b.root, opts.Version, b.stderr)
 	quoted, quoteContext := quotedSink(cfg, opts, b.trace)
 	b.quoteContext = quoteContext
 	b.sink = control.NewGoalUsageTee(event.Coalesce(quoted, event.DefaultStreamDeltaWindow))

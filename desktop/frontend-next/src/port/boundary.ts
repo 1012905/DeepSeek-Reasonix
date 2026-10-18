@@ -250,6 +250,22 @@ export interface WebAccessSettings {
 
 export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed">>;
 
+// The opt-in OpenTelemetry trace export. headerEnvSet says the named variable
+// has a value now; the value itself is never read back. A save reaches sessions
+// opened afterwards, not the ones already running.
+export interface ObservabilitySettings {
+  enabled: boolean;
+  endpoint: string;
+  headerName: string;
+  headerEnv: string;
+  serviceName: string;
+  headerEnvSet: boolean;
+  path: string;
+  applies: string;
+}
+
+export type ObservabilityPatch = Partial<Pick<ObservabilitySettings, "enabled" | "endpoint" | "headerName" | "headerEnv" | "serviceName">>;
+
 export interface ChangedFilesSettings {
   show: boolean;
   path: string;
