@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +37,15 @@ var (
 )
 
 var errVideoChanged = errors.New("the file no longer matches what the tool read")
+
+// errUntrustedResponse is an upload answer that points somewhere this adapter
+// did not configure, or names a file in a shape Google does not issue.
+var errUntrustedResponse = errors.New("the upload answer is not one this adapter follows")
+
+// fileName is the only shape a file resource name takes here; it is joined onto
+// the API root for polling and deletion, so anything else would let a response
+// choose which path is requested.
+var fileName = regexp.MustCompile(`^files/[A-Za-z0-9-]+$`)
 
 // videoWire sends the videos one request carries on the protocol the entry
 // declares.
@@ -182,6 +192,15 @@ func (e fileEnvelope) resource() uploadedFile {
 	return e.uploadedFile
 }
 
+// sameOrigin says an address Google handed back is on the host this adapter was
+// configured to upload to, with the same scheme, so the file's bytes and the key
+// never leave for a host a response chose.
+func (w *videoWire) sameOrigin(raw string) bool {
+	got, err := url.Parse(raw)
+	want, werr := url.Parse(w.uploadURL)
+	return err == nil && werr == nil && got.Scheme == want.Scheme && got.Host == want.Host && got.User == nil
+}
+
 func (w *videoWire) authed(c *client, req *http.Request) {
 	req.Header.Set("x-goog-api-key", c.apiKey())
 	for name, value := range c.headers {
@@ -215,6 +234,9 @@ func (w *videoWire) upload(ctx context.Context, c *client, ref provider.VideoRef
 	if resp.StatusCode != http.StatusOK || target == "" {
 		return uploadedFile{}, fmt.Errorf("upload start: HTTP %d", resp.StatusCode)
 	}
+	if !w.sameOrigin(target) {
+		return uploadedFile{}, errUntrustedResponse
+	}
 
 	sum := sha256.New()
 	body := io.TeeReader(f, sum)
@@ -238,6 +260,9 @@ func (w *videoWire) upload(ctx context.Context, c *client, ref provider.VideoRef
 	}
 	if resp.StatusCode != http.StatusOK || err != nil || file.Name == "" {
 		return file, fmt.Errorf("upload finalize: HTTP %d", resp.StatusCode)
+	}
+	if !fileName.MatchString(file.Name) {
+		return uploadedFile{}, errUntrustedResponse
 	}
 	return w.waitActive(ctx, c, file)
 }
@@ -281,9 +306,10 @@ func (w *videoWire) waitActive(ctx context.Context, c *client, file uploadedFile
 			return file, fmt.Errorf("file status: HTTP %d", resp.StatusCode)
 		}
 		next := env.resource()
-		if next.Name == "" {
-			next.Name = file.Name
+		if next.Name != "" && next.Name != file.Name {
+			return file, errUntrustedResponse
 		}
+		next.Name = file.Name
 		file = next
 	}
 }
@@ -297,6 +323,9 @@ func (c *client) deleteFiles(names []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	for _, name := range names {
+		if !fileName.MatchString(name) {
+			continue
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.video.root+"/"+name, nil)
 		if err != nil {
 			continue
