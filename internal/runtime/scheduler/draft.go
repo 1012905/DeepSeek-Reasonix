@@ -47,11 +47,7 @@ func (d Draft) Request() (schedule.CreateRequest, error) {
 	}
 	ws := d.Workspace
 	if ws == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return req, err
-		}
-		ws = wd
+		return req, fmt.Errorf("%w: no folder given", ErrDraftWorkspace)
 	}
 	abs, err := filepath.Abs(ws)
 	if err != nil {
