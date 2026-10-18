@@ -145,9 +145,8 @@ func (c *Controller) ProposeSetting(ctx context.Context, id string, raw json.Raw
 		return tool.SettingReceipt{}, err
 	}
 	receipt.From, receipt.To = from, to
-	detail, _ := json.Marshal(receipt)
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeSettingChanged,
-		Text: fmt.Sprintf(i18n.M.SettingChangedFmt, id, shown(from), shown(to), effectSentence(e.Effect)), Detail: string(detail)})
+		Text: fmt.Sprintf(i18n.M.SettingChangedFmt, id, shown(from), shown(to), effectSentence(e.Effect)), Detail: id})
 	return receipt, nil
 }
 

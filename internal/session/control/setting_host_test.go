@@ -94,7 +94,7 @@ func TestAPreferenceChangeWaitsForAPersonEvenInYoloAndWritesOnTheClick(t *testin
 	}
 	select {
 	case n := <-notices:
-		if n.Code != event.NoticeCodeSettingChanged || !strings.Contains(n.Detail, `"to"`) {
+		if n.Code != event.NoticeCodeSettingChanged || n.Detail != "ui.show_receipt" || !strings.Contains(n.Text, "ui.show_receipt") {
 			t.Fatalf("notice = %+v", n)
 		}
 	case <-time.After(time.Second):
