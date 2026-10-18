@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 )
 
@@ -78,18 +77,8 @@ func probeToken(sid string) error {
 	return nil
 }
 
-// windowsCacheDirs are the per-user tool caches a build writes: the same job the
-// Unix toolchain-cache list does. Each is granted only if it already exists.
+// windowsCacheDirs are the data caches of this user's toolchains. Each is
+// granted only if it already exists.
 func windowsCacheDirs() []string {
-	var dirs []string
-	local, home := os.Getenv("LOCALAPPDATA"), os.Getenv("USERPROFILE")
-	for _, p := range []struct{ base, sub string }{
-		{local, "go-build"}, {local, "npm-cache"}, {local, "pip"}, {local, "NuGet"},
-		{home, "go"}, {home, ".cargo"}, {home, ".nuget"}, {home, ".cache"},
-	} {
-		if p.base != "" {
-			dirs = append(dirs, filepath.Join(p.base, p.sub))
-		}
-	}
-	return dirs
+	return cacheDirsFor(os.Getenv("LOCALAPPDATA"), os.Getenv("USERPROFILE"))
 }

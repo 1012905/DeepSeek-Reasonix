@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 type winHarness struct {
@@ -32,6 +35,10 @@ func newWinHarness(t *testing.T) *winHarness {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// A file that exists before the grant: the sandbox must be able to edit it.
+	if err := os.WriteFile(filepath.Join(h.ws, "before.txt"), []byte("before"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	book, err := OpenGrantBook(filepath.Join(base, "state"), WindowsGrantOps())
 	if err != nil {
@@ -171,6 +178,9 @@ func TestRestrictedCommandsRunGitAndPowerShellInsideTheRoot(t *testing.T) {
 // GrantSpec prepares an enforcing spec through the real book: roots granted,
 // token proven, SID set; and a spec that does not enforce is left alone.
 func TestGrantSpecPreparesAnEnforcingSpecAndLeavesAnOffSpecAlone(t *testing.T) {
+	// The caches it grants are the user's real ones unless the profile is moved.
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	state := t.TempDir()
 	ws := t.TempDir()
 	off := GrantSpec(Spec{Mode: "off", WriteRoots: []string{ws}}, state)
@@ -196,6 +206,8 @@ func TestGrantSpecPreparesAnEnforcingSpecAndLeavesAnOffSpecAlone(t *testing.T) {
 
 // A damaged record is a typed fault with its own stable code, never a fresh start.
 func TestGrantSpecReportsADamagedRecordAsATypedFault(t *testing.T) {
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	state := t.TempDir()
 	if err := os.WriteFile(filepath.Join(state, "windows-grants.json"), []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
@@ -212,5 +224,52 @@ func TestGrantSpecReportsADamagedRecordAsATypedFault(t *testing.T) {
 	}
 	if _, wrapped := CommandArgs(spec, []string{"cmd"}); wrapped {
 		t.Fatal("a command was wrapped without a prepared spec")
+	}
+}
+
+// labelLevel is the SID of a path's mandatory label, "" when it has none.
+func labelLevel(t *testing.T, path string) string {
+	t.Helper()
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.LABEL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctrl, _, err := sd.Control(); err != nil || ctrl&windows.SE_SACL_PRESENT == 0 {
+		return ""
+	}
+	sacl, _, err := sd.SACL()
+	if err != nil || sacl == nil {
+		return ""
+	}
+	for i := uint32(0); i < uint32(sacl.AceCount); i++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if windows.GetAce(sacl, i, &ace) == nil && ace.Header.AceType == labelAceType {
+			return (*windows.SID)(unsafe.Pointer(&ace.SidStart)).String()
+		}
+	}
+	return ""
+}
+
+// Inside a root the sandbox edits and removes files that were already there, and
+// what it creates is Medium like the user's own files: a program it builds runs
+// at the user's level when the user starts it.
+func TestRestrictedCommandsEditExistingFilesAndLeaveMediumFilesBehind(t *testing.T) {
+	h := newWinHarness(t)
+	before := filepath.Join(h.ws, "before.txt")
+	h.run(`echo more>> ` + before)
+	if b, _ := os.ReadFile(before); !strings.Contains(string(b), "more") {
+		t.Errorf("the sandbox could not edit a file that existed before the grant: %q", b)
+	}
+	made := filepath.Join(h.ws, "made.exe")
+	h.run(`echo MZ> ` + made)
+	if lvl := labelLevel(t, made); lvl != mediumSID {
+		t.Errorf("a file the sandbox made carries level %q, want Medium %s (a Low program would run Low for the user too)", lvl, mediumSID)
+	}
+	if lvl := labelLevel(t, before); lvl != mediumSID {
+		t.Errorf("a file that existed before the grant carries level %q, want Medium", lvl)
+	}
+	h.run(`del ` + before)
+	if exists(before) {
+		t.Error("the sandbox could not remove a file inside its own root")
 	}
 }

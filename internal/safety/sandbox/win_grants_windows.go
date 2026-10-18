@@ -31,7 +31,7 @@ func (daclOps) Revoke(root, sid string) error {
 	if err := editDACL(root, sid, windows.REVOKE_ACCESS); err != nil {
 		return err
 	}
-	return setRootLabel(root, "S:")
+	return setRootLabel(root, mediumLabelSDDL)
 }
 
 func editDACL(root, sidText string, mode windows.ACCESS_MODE) error {
@@ -63,11 +63,17 @@ func editDACL(root, sidText string, mode windows.ACCESS_MODE) error {
 	return nil
 }
 
-// lowIntegritySID and lowLabelSDDL: the label that lets a Low-integrity writer
-// write into a root, inherited by what is created in it later.
+// The label a granted root carries. Its level is Medium, so everything in it
+// still runs and is treated as the user's own, but it has no NO_WRITE_UP policy,
+// so the Low-integrity token the sandbox runs under may write it. Everything
+// outside a root keeps the default policy, which refuses a Low writer even a delete.
 const (
 	lowIntegritySID = "S-1-16-4096"
-	lowLabelSDDL    = "S:(ML;OICI;NW;;;LW)"
+	mediumSID       = "S-1-16-8192"
+	lowLabelSDDL    = "S:(ML;OICI;;;ME)"
+	// mediumLabelSDDL is what a revoke writes: an empty SACL does not remove a
+	// label, so it writes the level and policy every unlabelled object has.
+	mediumLabelSDDL = "S:(ML;OICI;NW;;;ME)"
 	labelAceType    = 0x11 // SYSTEM_MANDATORY_LABEL_ACE_TYPE
 )
 
@@ -87,7 +93,8 @@ func setRootLabel(root, sddl string) error {
 	return nil
 }
 
-// hasLowLabel reports whether root carries the Low label.
+// hasLowLabel reports whether root carries the grant's label: Medium with no
+// write-up policy. (The name is kept: it is the label a Low token can write through.)
 func hasLowLabel(root string) (bool, error) {
 	sd, err := windows.GetNamedSecurityInfo(root, windows.SE_FILE_OBJECT, windows.LABEL_SECURITY_INFORMATION)
 	if err != nil {
@@ -100,7 +107,7 @@ func hasLowLabel(root string) (bool, error) {
 	if err != nil || sacl == nil {
 		return false, err
 	}
-	low, err := windows.StringToSid(lowIntegritySID)
+	level, err := windows.StringToSid(mediumSID)
 	if err != nil {
 		return false, err
 	}
@@ -109,7 +116,7 @@ func hasLowLabel(root string) (bool, error) {
 		if err := windows.GetAce(sacl, i, &ace); err != nil {
 			return false, err
 		}
-		if ace.Header.AceType == labelAceType && windows.EqualSid(low, (*windows.SID)(unsafe.Pointer(&ace.SidStart))) {
+		if ace.Header.AceType == labelAceType && ace.Mask == 0 && windows.EqualSid(level, (*windows.SID)(unsafe.Pointer(&ace.SidStart))) {
 			return true, nil
 		}
 	}
