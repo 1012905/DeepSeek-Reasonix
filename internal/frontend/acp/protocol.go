@@ -552,14 +552,13 @@ type StopReason string
 const (
 	StopEndTurn   StopReason = "end_turn"
 	StopCancelled StopReason = "cancelled"
-	StopError     StopReason = "error"
 )
 
-// SessionPromptResult ends a session/prompt. TranscriptPath is reserved for a
-// future on-disk transcript pointer; omitted (null) for now.
+// SessionPromptResult ends a session/prompt. Vendor members, such as the
+// on-disk transcript path, ride Meta under "reasonix.io".
 type SessionPromptResult struct {
-	StopReason     StopReason `json:"stopReason"`
-	TranscriptPath *string    `json:"transcriptPath,omitempty"`
+	StopReason StopReason     `json:"stopReason"`
+	Meta       map[string]any `json:"_meta,omitempty"`
 }
 
 // session/update (agent → client notifications)

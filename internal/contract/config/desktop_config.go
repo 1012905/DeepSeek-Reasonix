@@ -99,6 +99,9 @@ type DesktopConfig struct {
 	Welcomed bool `toml:"welcomed"`
 	// MaxWorkspaces caps the projects the sidebar remembers. 0, the default, is no cap.
 	MaxWorkspaces int `toml:"max_workspaces"`
+	// SessionRefTokens bounds what one referenced past conversation may add to a
+	// message, in tokens; 0 is the default, DefaultSessionRefTokens.
+	SessionRefTokens int `toml:"session_ref_tokens"`
 	// SurfaceSlots is where the user put an extension's surface, keyed
 	// "<pluginId>:<surfaceId>". It outranks the extension's own suggestion.
 	SurfaceSlots   map[string]string `toml:"surface_slots"`

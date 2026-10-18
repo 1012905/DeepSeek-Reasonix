@@ -168,6 +168,9 @@ export interface PeersSettings {
   enabled: boolean;
   dispatch: boolean;
   release_projects: PeerProject[];
+  // Ceilings on chained and simultaneous dispatches; 0 removes a ceiling.
+  max_dispatch_depth: number;
+  max_dispatched_sessions: number;
   path: string;
   applies: "next_turn";
   pending: boolean;
@@ -180,6 +183,8 @@ export interface PeersSettingsEdit {
   enabled?: boolean;
   dispatch?: boolean;
   release_projects?: string[];
+  max_dispatch_depth?: number;
+  max_dispatched_sessions?: number;
 }
 
 export type PeerRemember = "project" | "none";
@@ -262,6 +267,16 @@ export interface AskTimeoutSettings {
   defaultSeconds: number;
   minSeconds: number;
   maxSeconds: number;
+  path: string;
+}
+
+// How many tokens one referenced past conversation may add to a message; the
+// user file holds it.
+export interface SessionRefSettings {
+  tokens: number;
+  defaultTokens: number;
+  minTokens: number;
+  maxTokens: number;
   path: string;
 }
 

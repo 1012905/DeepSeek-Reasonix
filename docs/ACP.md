@@ -172,6 +172,19 @@ Hosts should keep the `session/prompt` request open until Reasonix returns its
 stop reason, while continuing to process requests and notifications in both
 directions.
 
+### Vendor notifications are opt-in
+
+Reasonix pushes `_reasonix.io/session/status_update` and `_reasonix.io/session/mcpStatus_update`
+only to a client that declared them in its `initialize` request:
+
+```json
+{"clientCapabilities": {"_meta": {"reasonix.io": {"statusUpdates": {"supported": true}}}}}
+```
+
+- without the declaration, those two notifications are never sent;
+- the matching requests, `_reasonix.io/session/status` and `_reasonix.io/session/mcpStatus`, work either way;
+- the on-disk transcript of a turn is reported as `_meta["reasonix.io"].transcriptPath` in the `session/prompt` result.
+
 ### When a turn fails
 
 A turn that fails after it was admitted ends `session/prompt` with a JSON-RPC
@@ -187,6 +200,15 @@ error, not with a stop reason:
 
 `data.code` is the identity a client keys on; `message` is the host's
 description of the cause, clipped to 2048 bytes.
+
+### When the host pauses a turn
+
+A turn that stops before delivery is verified (for example, files were written and no
+verification command ran) is not a failure and not a completion:
+
+- `session/prompt` returns `stopReason: "end_turn"`;
+- the response carries the typed outcome in `_meta["reasonix.io"].turnOutcome`, e.g. `{"kind": "paused", "reason": "…"}`;
+- the streamed text ends with a host-written `[paused] Not verified, …` line, so a client that reads only message text does not take the work for done.
 
 ## Mid-turn steering extension
 

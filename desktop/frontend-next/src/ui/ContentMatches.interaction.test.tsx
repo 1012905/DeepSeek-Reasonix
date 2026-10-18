@@ -8,11 +8,11 @@ import { RailSearch } from "./railsearch";
 const tree = [{ root: "/w/a", name: "a", sessions: [{ path: "/w/a/s1.jsonl", name: "s1", title: "Rotate keys" }] }] as unknown as TreeWorkspace[];
 const hit: HistoryHit = { path: "/w/a/s1.jsonl", id: "s1", snippet: "rotate the zebra credentials", role: "user", messageIndex: 0, score: 1 };
 
-function setup(search: (q: string) => Promise<HistoryHit[]>, workspaces = tree) {
+function setup(search: (q: string) => Promise<HistoryHit[]>, workspaces = tree, onReference?: (id: string, title: string) => void) {
   const onOpen = vi.fn(() => Promise.resolve());
   render(
     <RailSearch>
-      <ContentMatches hub={{ searchHistory: search }} tree={workspaces} onOpen={onOpen} onError={() => {}} />
+      <ContentMatches hub={{ searchHistory: search }} tree={workspaces} onOpen={onOpen} onError={() => {}} onReference={onReference} />
     </RailSearch>,
   );
   return onOpen;
@@ -60,5 +60,22 @@ describe("ContentMatches", () => {
     await act(async () => void vi.advanceTimersByTime(400));
     fireEvent.click(document.querySelector("[data-action='session.open-match']")!);
     expect(onOpen).toHaveBeenCalledWith({ root: "/worktrees/a", sessionPath: hit.path });
+  });
+
+  it("offers to reference a match in the message box, and referencing does not open it", async () => {
+    const onReference = vi.fn();
+    const onOpen = setup(() => Promise.resolve([hit]), tree, onReference);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zebra" } });
+    await act(async () => void vi.advanceTimersByTime(400));
+    fireEvent.click(screen.getByRole("button", { name: "引用「Rotate keys」到输入框" }));
+    expect(onReference).toHaveBeenCalledExactlyOnceWith("s1", "Rotate keys");
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("has no reference button when there is no message box to put it in", async () => {
+    setup(() => Promise.resolve([hit]));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zebra" } });
+    await act(async () => void vi.advanceTimersByTime(400));
+    expect(document.querySelector("[data-action='session.reference-match']")).toBeNull();
   });
 });

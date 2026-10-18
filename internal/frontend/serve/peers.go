@@ -20,6 +20,7 @@ const (
 	codePeerNotHeld    = "peer.not_held"
 	codePeerSendFailed = "peer.send_failed"
 	codePeerBadProject = "peer.invalid_project"
+	codePeerBadCeiling = "peer.invalid_ceiling"
 	codePeerRemember   = "peer.remember_denied"
 	codePeerSettings   = "peer.settings_unwritable"
 )
@@ -48,13 +49,15 @@ func (s *Server) savePeersSettings(w http.ResponseWriter, r *http.Request) {
 		Enabled         *bool     `json:"enabled"`
 		Dispatch        *bool     `json:"dispatch"`
 		ReleaseProjects *[]string `json:"release_projects"`
+		MaxDepth        *int      `json:"max_dispatch_depth"`
+		MaxSessions     *int      `json:"max_dispatched_sessions"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil ||
-		(body.Enabled == nil && body.Dispatch == nil && body.ReleaseProjects == nil) {
+		(body.Enabled == nil && body.Dispatch == nil && body.ReleaseProjects == nil && body.MaxDepth == nil && body.MaxSessions == nil) {
 		badBody(w)
 		return
 	}
-	got, err := s.ctl().SavePeersSettings(control.PeersPatch{Enabled: body.Enabled, Dispatch: body.Dispatch, ReleaseProjects: body.ReleaseProjects})
+	got, err := s.ctl().SavePeersSettings(control.PeersPatch{Enabled: body.Enabled, Dispatch: body.Dispatch, ReleaseProjects: body.ReleaseProjects, MaxDispatchDepth: body.MaxDepth, MaxDispatchedSessions: body.MaxSessions})
 	if err != nil {
 		refusePeer(w, err)
 		return
@@ -150,6 +153,8 @@ func refusePeer(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusRequestEntityTooLarge, codePeerTooLarge, "that message is too long", nil)
 	case errors.Is(err, control.ErrPeerProjectInvalid):
 		refuse(w, http.StatusBadRequest, codePeerBadProject, "a released project must be an absolute folder path", nil)
+	case errors.Is(err, control.ErrPeerCeilingInvalid):
+		refuse(w, http.StatusBadRequest, codePeerBadCeiling, "a dispatch ceiling is a count of 0 or more", nil)
 	case errors.Is(err, control.ErrPeerSettingsUnwritable):
 		saveFailed(w, http.StatusInternalServerError, codePeerSettings, err)
 	case errors.Is(err, control.ErrPeerRememberDenied):

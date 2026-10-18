@@ -127,6 +127,13 @@ export class MockMcp extends MockProvider {
     return { name, state: "ready", host: "this machine", tools: s.tools };
   }
 
+  async upgradeMcp(name: string) {
+    const s = this.servers.find((x) => x.name === name);
+    if (!s) throw new HttpError(404, "no configured MCP server named " + name, { code: "mcp.signin_ineligible" });
+    s.scopeUpgrade = undefined;
+    return { name, state: "ready", host: "this machine", tools: s.tools };
+  }
+
   async followMcp(name: string, follow: boolean) {
     const s = this.servers.find((x) => x.name === name);
     if (!s) throw new HttpError(404, "no configured MCP server named " + name, { code: "mcp.approval_owed" });

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -222,5 +223,103 @@ func TestMCPSignInIneligibleServerIsRefused(t *testing.T) {
 	}
 	if _, err := c.authorizeMCPServer(context.Background(), "figma", func(string) error { return nil }); !errors.Is(err, ErrMCPSignInIneligible) {
 		t.Fatalf("configured credentials: %v", err)
+	}
+}
+
+func askForScopes(t *testing.T, c *Controller, scopes ...string) {
+	t.Helper()
+	entry, _ := c.configuredMCPServer("figma")
+	dir := c.mcpSpec(entry).StateDir
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(map[string]any{"resource": "r", "scopes": scopes, "at": time.Now()})
+	if err := os.WriteFile(filepath.Join(dir, "mcp-oauth-scope-challenge.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func upgrade(c *Controller, open func(string) error) chan signInAnswer {
+	done := make(chan signInAnswer, 1)
+	go func() {
+		res, err := c.authorizeMCPServerWith(context.Background(), "figma", open, true)
+		done <- signInAnswer{res, err}
+	}()
+	return done
+}
+
+// Widening access is the user's call every time: yolo cannot answer, the card
+// carries the server's scope words, and it offers no way to remember the answer.
+func TestMCPScopeUpgradeAsksEvenInYoloAndOffersNoRemember(t *testing.T) {
+	srv := fakeOAuthMCP(t)
+	c, requests := signInController(t, srv.URL)
+	c.SetAutoApproveTools(true)
+	askForScopes(t, c, "files:write")
+	var opened atomic.Int32
+	done := upgrade(c, browserThatApproves(&opened))
+	a := nextApproval(t, requests)
+	if a.Tool != MCPScopeUpgradeApprovalTool || !a.Fresh || a.AllowsPersist || !strings.Contains(a.Reason, "files:write") {
+		t.Fatalf("approval = %+v", a)
+	}
+	if opened.Load() != 0 {
+		t.Fatal("the browser opened before the user answered")
+	}
+	c.Approve(a.ID, true, true, true)
+	if got := settle(t, done); got.err != nil || opened.Load() != 1 {
+		t.Fatalf("approved = %+v opened=%d", got, opened.Load())
+	}
+	entry, _ := c.configuredMCPServer("figma")
+	if plugin.SignInHostRemembered(c.mcpSpec(entry).StateDir, plugin.AuthorizationHost(srv.URL)) {
+		t.Fatal("an upgrade answer was remembered as a sign-in host")
+	}
+	askForScopes(t, c, "files:write")
+	again := upgrade(c, browserThatApproves(&opened))
+	c.Approve(nextApproval(t, requests).ID, true, false, false)
+	if got := settle(t, again); got.err != nil {
+		t.Fatalf("a session grant answered the next upgrade: %+v", got)
+	}
+}
+
+func TestMCPScopeUpgradeStillAsksAfterAHostWasRemembered(t *testing.T) {
+	srv := fakeOAuthMCP(t)
+	c, requests := signInController(t, srv.URL)
+	var opened atomic.Int32
+	done := signIn(c, browserThatApproves(&opened))
+	c.Approve(nextApproval(t, requests).ID, true, false, true)
+	if got := settle(t, done); got.err != nil {
+		t.Fatal(got.err)
+	}
+	askForScopes(t, c, "files:write")
+	up := upgrade(c, browserThatApproves(&opened))
+	c.Approve(nextApproval(t, requests).ID, true, false, false)
+	if got := settle(t, up); got.err != nil {
+		t.Fatal(got.err)
+	}
+}
+
+func TestMCPScopeUpgradeDeclinedOpensNothing(t *testing.T) {
+	srv := fakeOAuthMCP(t)
+	c, requests := signInController(t, srv.URL)
+	askForScopes(t, c, "files:write")
+	var opened atomic.Int32
+	done := upgrade(c, browserThatApproves(&opened))
+	c.Approve(nextApproval(t, requests).ID, false, false, false)
+	if got := settle(t, done); !errors.Is(got.err, ErrMCPSignInDeclined) || opened.Load() != 0 {
+		t.Fatalf("declined = %+v opened=%d", got, opened.Load())
+	}
+}
+
+func TestMCPScopeUpgradeWithNothingAskedRaisesNoCardAndNoBrowser(t *testing.T) {
+	srv := fakeOAuthMCP(t)
+	c, requests := signInController(t, srv.URL)
+	var opened atomic.Int32
+	got := settle(t, upgrade(c, browserThatApproves(&opened)))
+	if !errors.Is(got.err, ErrMCPNoScopeUpgrade) || opened.Load() != 0 {
+		t.Fatalf("got %+v opened=%d", got, opened.Load())
+	}
+	select {
+	case a := <-requests:
+		t.Fatalf("raised a card: %+v", a)
+	default:
 	}
 }

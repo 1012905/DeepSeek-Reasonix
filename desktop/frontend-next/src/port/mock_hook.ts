@@ -1,5 +1,6 @@
 import { MockMcp } from "./mock_mcp";
 import { HttpError, type HookCatalog, type HookDryRun, type HookEntry } from "./port";
+import type { SubagentRun, SubagentTranscript } from "./subagent";
 
 // Hooks, and what a dry run of one reports back.
 export class MockHook extends MockMcp {
@@ -10,6 +11,14 @@ export class MockHook extends MockMcp {
 
   async stopToolCall(_callId: string): Promise<void> {
     throw new HttpError(409, "no running tool call with this id", { code: "tool_call.not_running" });
+  }
+
+  async subagents(): Promise<SubagentRun[]> {
+    return [];
+  }
+
+  async subagentTranscript(_ref: string): Promise<SubagentTranscript> {
+    throw new HttpError(404, "no sub-agent run answers to that reference", { code: "subagent.not_found" });
   }
 
   async hooks(): Promise<HookCatalog> {
