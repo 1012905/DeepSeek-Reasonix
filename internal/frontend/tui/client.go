@@ -206,6 +206,15 @@ type Status struct {
 	SessionPath      string `json:"sessionPath"`
 	WorkspaceRoot    string `json:"workspaceRoot"`
 	Plan             bool   `json:"plan"`
+	Goal             string `json:"goal"`
+	GoalStatus       string `json:"goalStatus"`
+	GoalRuntime      *struct {
+		TurnsUsed      int    `json:"turnsUsed"`
+		TokensUsed     int    `json:"tokensUsed"`
+		RequestsUsed   int    `json:"requestsUsed"`
+		WorkDurationMs int64  `json:"workDurationMs"`
+		StopCause      string `json:"stopCause"`
+	} `json:"goalRuntime"`
 	// Jobs is how many background jobs the session runs; only the count shows.
 	Jobs      []json.RawMessage `json:"jobs"`
 	LastUsage *struct {

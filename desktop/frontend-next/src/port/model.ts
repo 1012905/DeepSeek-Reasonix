@@ -11,7 +11,7 @@ export interface CompletionItem {
   // A directory, or a command with its own argument menu: accepting re-opens
   // the menu one level deeper instead of closing it.
   descend?: boolean;
-  // builtin | command | skill | subagent | prompt | file | dir | resource.
+  // builtin | command | skill | subagent | prompt | file | dir | resource | session.
   // Empty on argument values, which are not things.
   kind?: string;
   // The arguments an MCP prompt declares, in order.
@@ -27,7 +27,7 @@ export interface CompletionArg {
 }
 
 export interface Completion {
-  kind: "" | "slash" | "slash-arg" | "ref";
+  kind: "" | "slash" | "slash-arg" | "ref" | "session";
   from: number;
   to: number;
   // What the kernel filtered on, so a row can point at the letters that put it

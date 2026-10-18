@@ -23,6 +23,7 @@ import { clearDraftForSession } from "./drafts";
 import { WorkspaceOrder, workspaceMenuKeys } from "./WorkspaceOrder";
 import { WorkspaceReveal } from "./WorkspaceReveal";
 import { SessionMenu } from "./SessionMenu";
+import { useSessionMove } from "./useSessionMove";
 import { pinnedFirst } from "./pinorder";
 import { Confirm, removeHint, sessionDeleteHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
@@ -111,6 +112,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
   const hideLegacy = useSyncExternalStore(onHidesLegacySessionsChange, hidesLegacySessions, hidesLegacySessions);
   const quickActions = useSyncExternalStore(onSessionQuickActionsChange, showsSessionQuickActions, showsSessionQuickActions);
   const [sessionMenu, setSessionMenu] = useState("");
+  const order = useSessionMove(hub, reload, onError, !!needle);
   const [sessionMenuAt, setSessionMenuAt] = useState({ x: 0, y: 0 });
   const sessionMenuBox = useRef<HTMLDivElement>(null);
   const sessionMenuPortal = useRef<HTMLDivElement>(null);
@@ -529,7 +531,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                         data-action-click={selection ? "session.selection" : "session.open"}
                         data-action-contextmenu="session.menu"
                         aria-haspopup="menu"
-                        data-action-keydown={selection ? ["session.selection"] : ["session.open", "session.delete", "session.menu"]}
+                        data-action-keydown={selection ? ["session.selection"] : ["session.open", "session.delete", "session.menu", "session.move"]}
                         data-target={session.path}
                         className="sessrow sessrow-context"
                         role="treeitem"
@@ -566,6 +568,10 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                           }
                           if (ev.key === "ContextMenu" || ev.shiftKey && ev.key === "F10") {
                             ev.preventDefault(); ev.stopPropagation(); openRowMenu(session.path, ev.currentTarget);
+                          } else if (ev.altKey && (ev.key === "ArrowUp" || ev.key === "ArrowDown")) {
+                            ev.preventDefault(); ev.stopPropagation();
+                            const direction = ev.key === "ArrowUp" ? -1 : 1;
+                            if (direction === -1 ? order.canMove(ws, session).up : order.canMove(ws, session).down) void order.move(session, direction);
                           } else if (ev.key === "Enter" || ev.key === " ") {
                             ev.preventDefault();
                             ev.stopPropagation();
@@ -663,6 +669,8 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                             onCopyInfo={() => { void copyText(sessionInfoText(session, session.workspaceRoot || ws.root)).catch(onError); setSessionMenu(""); }}
                             onExport={() => void saveSession(session)}
                             onDelete={() => { askDelete(session.path); setSessionMenu(""); }}
+                            onMove={(direction) => { setSessionMenu(""); void order.move(session, direction); }}
+                            canMove={order.canMove(ws, session)}
                           />
                         )}
                       </div>

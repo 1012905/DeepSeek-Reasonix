@@ -271,7 +271,7 @@ func (s *Store) snapshotLocked() InboxSnapshot {
 		Items:         items,
 		Capacity: Capacity{
 			Items:        len(items),
-			MaxItems:     s.limits.MaxItems,
+			MaxItems:     max(s.limits.MaxItems, 0),
 			Bytes:        m.totalBytes(),
 			MaxBytes:     s.limits.MaxTotalBytes,
 			MaxItemBytes: s.limits.MaxItemBytes,
@@ -333,7 +333,7 @@ func (s *Store) Enqueue(req EnqueueRequest) (InboxReceipt, error) {
 	if byteSize > s.limits.MaxItemBytes {
 		return InboxReceipt{}, ErrItemTooLarge
 	}
-	if len(s.man.Items) >= s.limits.MaxItems {
+	if s.limits.MaxItems > 0 && len(s.man.Items) >= s.limits.MaxItems {
 		return InboxReceipt{}, ErrCapacityItems
 	}
 	if s.man.totalBytes()+byteSize > s.limits.MaxTotalBytes {

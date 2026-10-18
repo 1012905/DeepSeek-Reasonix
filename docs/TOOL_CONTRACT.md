@@ -34,7 +34,7 @@ This document records the provider-visible contract for Reasonix compile-time bu
 | `multi_edit` | false | Apply a list of edits to a single file atomically: each edit runs against the result of the previous one, all in memory; the file is rewritten only if every edit succeeds. Cheaper and safer than chaining edit_file calls — a failure in step 3 leaves the file untouched instead of half-edited. |
 | `notebook_edit` | false | Edit one cell of a Jupyter notebook (.ipynb). Target a cell by 0-based cell_number (or cell_id). edit_mode: "replace" (default) swaps the cell's source; "insert" adds a new cell after cell_number (use -1 to prepend at the top), taking cell_type and new_source; "delete" removes the cell. cell_type is "code" or "markdown" (required for insert). Editing a code cell clears its outputs. Prefer this over edit_file for notebooks — it keeps the JSON valid. |
 | `read_file` | true | Read a text file with optional line offset/limit. Output prefixes each line with its 1-based number (e.g. `   42→...`) so subsequent edit_file calls can target exact lines. Use `offset` and `limit` to page through large files; the tool reports total length and pagination hints in a trailer. |
-| `read_video` | true | Sample still frames from a video with ffmpeg: time-labelled images, no audio or motion. Needs a model that reads images. |
+| `read_video` | true | Look at a video: native if the model watches video, else ffmpeg frames. |
 | `recall` | true | Bring folded conversation back: read the #n positions listed under "Folded work index" in a compaction summary, or search the whole folded region by query when no index line names what you need. Prefer re-reading a file over recalling it — a current copy beats a folded one. One budget per compaction covers both, and a request past it is refused whole, not truncated. |
 | `render_chart` | true | Show the user a chart inline. Rows hold only numbers, strings and nulls; no URLs, markup or colours. Returns a chart_id and a text summary, not the rows. |
 | `todo_write` | true | Record and update a structured task list for the current work. Send the COMPLETE list every call — it replaces the previous one. Use it to plan multi-step work and show progress: keep exactly one item in_progress at a time, and flip an item to completed the moment it's done (don't batch completions). Skip it for trivial single-step tasks. The list is two-level: a `level` 0 item is a PHASE (a milestone) and the `level` 1 items after it are its concrete sub-steps. COPY `step_id` VERBATIM for every item that already has one: it is how a completion stays attached to its step when you retitle it, insert a step above it, or reorder the list. Give a new item a fresh unique id (e.g. "plan_step_07"); never reuse or renumber an existing one. |
@@ -126,6 +126,8 @@ coding tools, background-shell lifecycle tools, and the stable capability proxy:
 `use_capability`.
 
 The host-control tools ride the same surface at every setting: `todo_write` and `complete_step` for the task list, and `ask` and `await_user` for the turns that end on the model's terms.
+
+`setting` finds the user's settings and asks the user to confirm a change. A refusal that a setting would lift ends with `(fix: setting ...)`.
 
 `conclude_blocked` is registered but not yet on this surface, so it is reachable only through `use_capability` even where the host names it as a way out of an unfinished turn.
 

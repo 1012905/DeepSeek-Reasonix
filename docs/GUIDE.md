@@ -30,6 +30,8 @@
 - [Embedded documentation retrieval](#embedded-documentation-retrieval)
 - [@ references](#-references)
 - [Two-model collaboration](#two-model-collaboration)
+- [Letting the model change a setting](#letting-the-model-change-a-setting)
+- [Google Gemini, native (experimental)](#google-gemini-native-experimental)
 
 ## Configuration
 
@@ -71,6 +73,8 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_subagent_concurrency = 0        # session-wide sub-agent concurrency (task/fleet/skills); 0 = no limit (user config only)
 # max_parallel_writers = 0            # concurrent writers with non-overlapping write_paths; 0 = no limit, write claims keep writers apart (user config only)
 # max_side_sessions = 0              # side conversations open at once; 0 = no limit (user config only)
+# max_provider_retries = 10          # retries of a failed provider connection before the turn stops; 0 = keep trying until cancelled (user config only)
+# max_queued_inputs = 0              # prompts waiting in a session's queue; 0 = no limit, the queue's byte limits still apply (user config only)
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
 # plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
@@ -141,7 +145,9 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [peers]
 # enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it; also a switch in Settings, applied at the next turn (user config only)
-# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled (user config only)
+# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card (user config only)
+# max_dispatch_depth = 1       # how many sessions deep a dispatch may chain; 0 removes the ceiling (user config only)
+# max_dispatched_sessions = 8  # sessions one session may keep open from its dispatches; 0 removes the ceiling (user config only)
 # release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
 
 [serve]
@@ -152,6 +158,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [desktop]
 # max_workspaces = 0           # most projects the sidebar remembers; 0 = no limit (user config only)
+# session_ref_tokens = 8000     # most tokens one referenced past conversation (@session:<id>) adds to a message; 500..200000
 
 [[plugins]]
 name    = "example"
@@ -897,7 +904,7 @@ Composer shortcuts:
 | `Cmd+Z` on macOS, `Ctrl+Z` on Windows/Linux | Undoes the latest composer edit | Native typing stays in the WebView history; Reasonix-managed paste, cut, folded blocks, and structured tokens are restored as complete transactions. |
 | `Cmd+Shift+Z` on macOS, `Ctrl+Shift+Z` on Windows/Linux | Redoes the latest composer edit | On Windows/Linux, `Ctrl+Y` is also accepted after the YOLO shortcut has been rebound. |
 | `Cmd+Y` / `Ctrl+Y` (default) | Toggles YOLO on/off | Turning YOLO off restores the previous Ask/Auto base when known. The current binding is shown in **Settings → Shortcuts**. |
-| `Cmd+V` on macOS, `Ctrl+V` on Windows/Linux | Pastes clipboard content | Clipboard images are attached. Dropping into the composer takes **any file or folder** and references it where it lives — the desktop app copies nothing, so the turn works on that file itself. Only sources with no path to offer, the clipboard and the add-image button, store bytes in the workspace. |
+| `Cmd+V` on macOS, `Ctrl+V` on Windows/Linux | Pastes clipboard content | Clipboard images are attached. Studio references ordinary files by their native path when available, including files selected with Add attachment, pasted, or dropped. Sources without a native path stream into the workspace. |
 | Plain `Up` / `Down` at the prompt boundary | Recalls older or newer submitted prompts | Modified arrows and native text navigation stay with the textarea. |
 | `Esc` while a turn is running | Cancels the running turn | If the turn has not produced a response yet, the draft is restored. |
 
@@ -930,6 +937,39 @@ Menus and controls:
 | Plan approval card | `Left` / `Right`, `Enter`, `1`-`3`, `Esc` | Move between Revise plan, Start execution, and Exit plan. The default highlighted action is Start execution. |
 | Plan control | Toggles Plan on/off | Same mode as `Shift+Tab`. |
 | Goal item in the collaboration menu | Starts, views, or clears Goal | Goal is not in any keyboard cycle. |
+
+#### Studio file attachments
+
+Ordinary local files, including large APKs, use path references whenever the
+desktop shell can identify the file. Selecting one external file grants read
+access to that file, not its siblings; selecting a folder grants its descendants,
+but a symlink inside it does not grant access outside that folder.
+
+Files without a native path use binary streaming into `.reasonix/attachments`.
+Streaming bounds memory use. Ordinary uploads have a default 1 GiB safety ceiling
+per request to protect disk space; native path references do not copy bytes.
+
+Incomplete files are removed if the transfer fails or is canceled. Removing an uploading
+attachment cancels its transfer.
+
+| Entry point | Limit |
+| --- | --- |
+| Native ordinary-file references | No attachment size cap; the file stays where it is. |
+| Ordinary-file binary upload | Default 1 GiB safety ceiling per request, adjustable in user config. Disk space and upstream limits still apply. |
+| Image upload | 10 MiB per image, checked before upload and by the kernel. |
+| Legacy JSON/Base64 attachment endpoint | 25 MiB general-file limit; retained for older clients. |
+| Encrypted cloud relay | 16 MiB per request body; oversized uploads stop at that budget. This is a relay limit, separate from native references and direct uploads. |
+
+In the user's `config.toml`, `[attachments] max_stream_bytes = 1073741824`
+sets the ordinary upload ceiling in bytes.
+
+- `0` removes that ceiling; negative values use the default. Project `reasonix.toml` cannot set this value.
+- An upload one byte over the limit is refused and its partial file removed.
+- The typed `attachment.too_large` response includes `limit_bytes` and `limit_source` (`default` or `user`).
+- A malformed user config refuses the upload until repaired. The image and relay limits remain independent.
+
+These limits govern attachment transport. A referenced file is read on demand;
+its full bytes do not become model input automatically.
 
 ### CLI / TUI
 
@@ -1263,6 +1303,16 @@ rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
 
 Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
+
+When a signed-in server refuses a call (HTTP 403, `insufficient_scope`) because the access you granted is too narrow:
+
+- The model is told to stop and say so, and you get a notice.
+- Only you can grant more: click **Grant more access** on the server's row, or run `reasonix mcp auth <name> --upgrade`.
+- The scope names are the server's own words, shown as written.
+- You are asked every time, in every approval mode, and the answer is never remembered.
+- A server that keeps asking after being granted is refused for good.
+
+Tools whose definitions change after you approved them are held back until you accept them (`reasonix mcp trust <name>`). To take one server's changes without being asked, run it with `--follow` (`--unfollow` undoes it); each change is still announced.
 
 OAuth client and token state is kept outside the workspace in the server's
 private Reasonix state directory, written with mode `0600`, and bound to the
@@ -1609,6 +1659,8 @@ Goal is the unified runtime for long-running objectives. Reasonix keeps working
 until the goal is complete, blocked, paused, or cleared. Ordinary chat never
 changes collaboration mode implicitly; choose Goal in the composer or use
 `/goal` to start a long-running objective.
+
+The desktop plan fold and the terminal footer show a goal's state, turns, requests, tokens and active work time, and name the stop cause when it is not running.
 
 Goal has no default model-round, cross-Run turn, wall-clock, or numeric
 no-progress limit. It continues until completion, a genuine user/external
@@ -2019,6 +2071,19 @@ A backend counts as not answering when:
 Each time that happens Reasonix shows a notice naming the backend and the cause, then tries the next one. If none answers, the model receives `search.all_backends_failed`.
 
 - Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
+
+In Settings, **Web access** has a **Test connection** button beside the address. It saves the field, then sends one search to the saved address, follows no redirect, uses no proxy, and says why the instance does not answer.
+
+It never connects to a link-local, cloud-metadata or unspecified address; a loopback or local-network address is fine. The model is told the same code when a real search fails.
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `search.searxng_json_disabled` | The instance answered 403. SearXNG does that when `json` is not in `search.formats` of its `settings.yml`; a reverse proxy in front of it can also answer 403. | Add `json` to `search.formats` and restart it; if that is set, look at the proxy. |
+| `search.searxng_unreachable` | Nothing answered at the address. | Check that it runs and that host and port are right. |
+| `search.searxng_not_searxng` | It answered 200 but not with SearXNG's JSON results. | Point at SearXNG itself, not a login page or another service. |
+| `search.searxng_redirected` | The address redirects. | Enter the final address, for example the `https` one. |
+| `search.searxng_address_refused` | The test will not connect to this address (link-local, cloud metadata or unspecified). | Use a loopback or local-network address for a self-hosted instance. |
+| `search.searxng_status` | Any other HTTP status, for example 429 or 500. | Retry later or read the instance's log. |
 - Results are third-party content and are labelled as such to the model.
 
 ### Paid fallback: the DeepSeek Search API
@@ -2054,3 +2119,100 @@ web_fetch_backends = ["local", "deepseek_api"]
 - So are names that cannot be public, even when this machine cannot resolve them: a single label such as `jira`, or a name under `localhost`, `local`, `internal`, `lan`, `home.arpa`, `invalid`, `test`, `example` or `onion`. Both are refused with `fetch.internal_address`.
 - The whole address, including its query string, is sent to DeepSeek as written. The card shows it in full; after you choose always allow it is no longer shown each time.
 - Pages are third-party content. Each successful paid fetch is counted in the usage view as `deepseek-fetch`.
+
+## Letting a model watch a video file
+
+`read_video` has two ways to look at a video.
+
+- Frames: ffmpeg samples still images, which loses audio and the order of fast events.
+- Natively: the MP4 itself is handed to a model that watches video, with no ffmpeg in between.
+
+Native needs two declarations in the provider entry of your user config: the models, and how a file reaches them.
+
+```toml
+[[providers]]
+name = "dashscope"
+video_models = ["qwen3-vl-plus"]
+video_protocol = "inline_data_url"   # or "moonshot_file"
+```
+
+- `inline_data_url`: the file travels inside the request as a `video_url` data URL. DashScope's documentation (read 2026-10-17) limits the encoded string to under 10 MB, so Reasonix caps the file at 7.5 MB.
+- `moonshot_file`: the file is uploaded once (`POST /files`, `purpose = "video"`) and the request names it as `ms://<id>`.
+- Moonshot's file API (read 2026-10-17) allows 100 MiB per file and 10 GiB per organization, and does not say how long a file is kept.
+- A file the vendor no longer holds is uploaded again once. Files stay in your organization's storage until you delete them there.
+- A model that is not listed in `video_models`, or an entry with no `video_protocol`, keeps getting frames. Nothing is guessed from a model or host name; an explicit empty list means "no model here watches video".
+
+`read_video` takes `mode`: `auto` (default) sends natively when the selected model offers it and the file fits, otherwise samples frames and says why; `frames` always samples; `native` refuses with a code if the file cannot be handed over.
+
+- Only MP4 is sent natively; any other container is sampled into frames (`video.native_container_unsupported`).
+- To lower the size limit, set `[tools] video_native_max_bytes` in your user file; a project file cannot set it, and it can only be lower than the protocol's own limit. A refusal names which limit stopped it (`video.native_too_large`).
+- The model sees the video on the one request that follows the read. After it answers, later requests carry a one-line note instead, so a long file is not resent every turn; call `read_video` again to look again. The session file keeps a reference to the file, not its bytes.
+- The file is read from disk when the request is built. A file that changed since it was read is not sent (`video.file_changed`), and one that is gone is reported as `video.file_missing`.
+- Only a video this process's `read_video` handed out is ever opened; a reference from a restored or imported session is not, and is reported as `video.file_unavailable`.
+- Sub-agents do not get native video; they use frames.
+- Where there is no OS sandbox, `read_video` still asks before its first use, as before; choose always allow on that card or add a rule for `read_video` to stop being asked.
+
+Not built, and why:
+
+- Gemini: its video input is in the native Gemini API (inline data, the Files API, YouTube URLs); the OpenAI-compatible page does not list a video content part, and Reasonix reaches Gemini through that endpoint.
+- Zhipu GLM: the documentation shows `video_url` with a public HTTPS address only and says nothing about base64 or limits, so a local file cannot be sent without Reasonix uploading it somewhere.
+
+## Letting the model change a setting
+
+The model has a `setting` tool. When something it needs is switched off, such as handing a task to another project, it can ask you to turn the switch on instead of sending you to Settings.
+
+A refusal that a setting would lift ends with `(fix: setting ...)`. The tool can also list settings by the words of their id.
+
+- Nothing changes until you answer a card. It names the setting, the old and the new value, and when the change takes effect. It is worded by Reasonix; the model's own reason is only quoted under it.
+- Every setting has a class in the code. A preference (a font, a retry count) can be agreed once for the rest of the session. An elevated setting (messaging between sessions, dispatching to another project, a protection the model could otherwise loosen) is asked every time, in every approval mode including YOLO.
+- Boundary settings (approval mode, sandbox, network, rules, hooks, provider keys and addresses, safety limits, and the switch for this tool) are never changed by the model. It can only point you at them (`op=open`).
+- The card shows the whole new value; a value too long to show is refused instead of cut. The change is written to your user file, a project file cannot grant it, and values are checked with the same rules as the Settings screen.
+- At most three proposals are put to you per turn, and none while plan mode is on (the model can still look at settings and point you at one).
+- To remove the tool, set `[tools] setting_tool = false`, or leave `setting` out of an explicit `[tools] enabled` list.
+## Google Gemini, native (experimental)
+
+The `gemini` provider kind speaks Google's Interactions API. It is experimental: it was written from Google's documentation (read 2026-10-17) and has not been run against the real endpoint, so expect rough edges and report them.
+
+Install the **Google Gemini, native (experimental)** preset, or write the entry yourself:
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- Every request carries the whole conversation and `store` is false, so the transcript stays yours; Google keeps nothing of it.
+- Thinking runs at the level the entry sets (`/effort`); the preset lists the levels each model documents. Thought summaries are streamed as reasoning, and the thought steps are sent back exactly as received, in order, on the next request.
+- `temperature` and `top_p` are never sent: Google's reference page does not list them for this API.
+- The preset lists only models whose own pages were read: `gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`, all with a 1,048,576-token window, image and video input. Others work if you list them and say what they read.
+- The older **Google Gemini** preset uses Google's OpenAI-compatible endpoint. That endpoint documents no video input.
+
+### Watching video
+
+Declare the models and how a file reaches them, as for any provider (see Letting a model watch a video file):
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # or "gemini_inline"
+```
+
+- `gemini_inline` puts the file in the request as base64. Google's page says "under 20MB total request size" while its table says 100 MB; the narrower reading is used, so the file is held to 15,000,000 bytes (the encoded request is a third larger). You can only lower it with `[tools] video_native_max_bytes`.
+- `gemini_files` uploads the file with the Files API resumable protocol, waits until Google reports it `ACTIVE`, refers to it by its uri, and deletes it when the request ends. Google allows 2 GB per file and 20 GB per project and removes files after 48 hours on its own.
+- MP4, WebM and MOV are sent natively on both protocols; any other container is sampled into frames. A file Google reports as `FAILED`, or in a state this build does not know, is not sent and the model is told `video.upload_failed`.
+- A public YouTube address cannot be given to the model through `read_video`: the host does not fetch addresses, and handing one to the vendor is a separate setting.
+
+### Cost
+
+Reasonix prices Google's list rates per 1M tokens (https://ai.google.dev/gemini-api/docs/pricing, read 2026-10-17):
+
+| Model | Input | Cached | Output (incl. thinking) |
+|---|---|---|---|
+| `gemini-3.8-flash`, `gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| the same two from 2027-01-01 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview` (up to 200k prompt tokens) | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` costs more above 200k prompt tokens ($4.00 / $0.40 / $18.00), which one rate card cannot say, so a long prompt reads low. `gemini-4-argon` shows no price on the page and is not priced. Storage for explicit context caching is not counted.

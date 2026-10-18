@@ -36,6 +36,7 @@ type NotificationHandler func(ctx context.Context, params json.RawMessage)
 type RPCError struct {
 	Code    int
 	Message string
+	Data    any
 }
 
 func (e *RPCError) Error() string { return e.Message }
@@ -234,11 +235,12 @@ func (c *Conn) serveRequest(ctx context.Context, id json.RawMessage, method stri
 	result, err := h(ctx, params)
 	if err != nil {
 		code := ErrInternal
+		var data any
 		var re *RPCError
 		if errors.As(err, &re) {
-			code = re.Code
+			code, data = re.Code, re.Data
 		}
-		c.writeError(id, code, err.Error())
+		c.writeErrorData(id, code, err.Error(), data)
 		return
 	}
 	var after func()
@@ -327,7 +329,15 @@ func (c *Conn) write(m outbound) error {
 }
 
 func (c *Conn) writeError(id json.RawMessage, code int, msg string) {
-	_ = c.write(outbound{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
+	c.writeErrorData(id, code, msg, nil)
+}
+
+func (c *Conn) writeErrorData(id json.RawMessage, code int, msg string, data any) {
+	e := &rpcError{Code: code, Message: msg}
+	if data != nil {
+		e.Data, _ = json.Marshal(data)
+	}
+	_ = c.write(outbound{JSONRPC: "2.0", ID: id, Error: e})
 }
 
 // shutdown fails every in-flight outbound request so their goroutines unblock.

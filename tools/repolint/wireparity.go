@@ -18,6 +18,7 @@ const (
 	tsBoundaryFile  = "desktop/frontend-next/src/port/boundary.ts"
 	tsRemoteFile    = "desktop/frontend-next/src/port/remote.ts"
 	tsSessionFile   = "desktop/frontend-next/src/port/session.ts"
+	tsSubagentFile  = "desktop/frontend-next/src/port/subagent.ts"
 	tsVersionFile   = "desktop/frontend-next/src/port/version.ts"
 	tsModelFile     = "desktop/frontend-next/src/port/model.ts"
 	tsMcpFile       = "desktop/frontend-next/src/port/mcp.ts"
@@ -70,6 +71,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/changes.go", "gitHistoryView", tsWorkspaceFile, "GitHistory"},
 	{"internal/platform/gitstatus/history.go", "Commit", tsWorkspaceFile, "GitCommit"},
 	{"internal/contract/eventwire/wire.go", "AskOrigin", tsWireFile, "AskOrigin"},
+	{"internal/session/control/goal_runtime_view.go", "GoalRuntimeView", tsSessionFile, "GoalRuntime"},
 	{"internal/contract/agentgraph/graph.go", "Node", tsWireFile, "GraphNode"},
 	{"internal/contract/agentgraph/graph.go", "Edge", tsWireFile, "GraphEdge"},
 	{"internal/contract/agentgraph/graph.go", "Delta", tsWireFile, "GraphDelta"},
@@ -99,6 +101,8 @@ var mirroredWireTypes = []wireMirror{
 	// The background-job list. A name or full command the page cannot read is
 	// a task it can only call by its short preview.
 	{"internal/tools/jobs/jobs_view.go", "View", tsSessionFile, "JobEntry"},
+	{"internal/frontend/serve/subagents.go", "subagentRunView", tsSubagentFile, "SubagentRun"},
+	{"internal/frontend/serve/subagents.go", "subagentTranscriptView", tsSubagentFile, "SubagentTranscript"},
 	{"internal/frontend/serve/session_usage.go", "SourceUsage", tsSessionFile, "SourceUsage"},
 	// The agent's tabs. The target id is what the window draws a view by, so a
 	// tab the page cannot read one for is a tab it cannot show.
@@ -124,6 +128,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/subagent_claims.go", "SubagentClaimsSettings", tsBoundaryFile, "SubagentClaimsSettings"},
 	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
 	{"internal/session/control/plan_approval_settings.go", "PlanApprovalSettings", tsBoundaryFile, "PlanApprovalSettings"},
+	{"internal/session/control/peer_settings.go", "PeersSettings", tsBoundaryFile, "PeersSettings"},
+	{"internal/session/control/peer_settings.go", "PeerReleased", tsBoundaryFile, "PeerProject"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.
 	{"internal/frontend/serve/catalog.go", "mcpEntry", tsMcpFile, "McpEntry"},
@@ -160,6 +166,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/changed_files_settings.go", "ChangedFilesSettings", tsBoundaryFile, "ChangedFilesSettings"},
 	{"internal/session/control/fold_work_settings.go", "FoldWorkSettings", tsBoundaryFile, "FoldWorkSettings"},
 	{"internal/session/control/ask_timeout.go", "AskTimeoutSettings", tsBoundaryFile, "AskTimeoutSettings"},
+	{"internal/session/control/session_ref_settings.go", "SessionRefSettings", tsBoundaryFile, "SessionRefSettings"},
 	{"internal/session/control/auto_archive.go", "AutoArchiveSettings", tsBoundaryFile, "AutoArchiveSettings"},
 	{"internal/session/control/receipt_settings.go", "ReceiptSettings", tsBoundaryFile, "ReceiptSettings"},
 	// RemoteHostEdit is left out on purpose: the kernel still takes the single

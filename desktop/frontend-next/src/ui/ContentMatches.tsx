@@ -24,11 +24,12 @@ function rootOf(hit: HistoryHit, tree: TreeWorkspace[]): string | undefined {
 /** Conversations whose words, not names, match what the rail is searching for.
  *  The name filter still answers instantly; this adds what was said once the
  *  reader has paused. */
-export function ContentMatches({ hub, tree, onOpen, onError }: {
+export function ContentMatches({ hub, tree, onOpen, onError, onReference }: {
   hub: Pick<HubPort, "searchHistory">;
   tree: TreeWorkspace[];
   onOpen: (req: { root?: string; sessionPath?: string }) => Promise<void>;
   onError: (e: unknown) => void;
+  onReference?: (id: string, title: string) => void;
 }) {
   const needle = useRailQuery();
   const [read, setRead] = useState<Reading | null>(null);
@@ -69,6 +70,11 @@ export function ContentMatches({ hub, tree, onOpen, onError }: {
               <b>{titleOf(hit, tree)}</b>
               <span>{hit.snippet}</span>
             </button>
+            {onReference && (
+              <button type="button" className="content-match-ref" data-action="session.reference-match" data-target={hit.path}
+                aria-label={t("引用「{title}」到输入框", { title: titleOf(hit, tree) })} title={t("引用到输入框")}
+                onClick={() => onReference(hit.id, titleOf(hit, tree))}>#</button>
+            )}
           </li>
         ))}
       </ul>

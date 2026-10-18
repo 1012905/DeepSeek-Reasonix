@@ -28,6 +28,7 @@ import { useWindowKeys, type Shortcut } from "./windowkeys";
 import { useEscStop } from "../state/escstop";
 import { startUpdateWatch } from "../state/updatewatch";
 import { StopHint } from "./StopHint";
+import { useFindAsk } from "./usefindask";
 import { folded as roomGaveUp, onRoomWidth } from "./viewport";
 import { useFoldAway } from "./foldaway";
 import { useDrawerCloses } from "./drawer";
@@ -63,6 +64,7 @@ import { useOpenRemotePane } from "./useOpenRemotePane";
 import { useNewConversation } from "./useNewConversation";
 import { markSettled } from "../boot/gate";
 import type { PaneView } from "../state/paneview";
+import { usePaneSessionRefs } from "./usePaneSessionRefs";
 
 // Start fetching the settings chunk with the shell instead of waiting for the
 // first click. It remains a separate chunk (and keeps its failure boundary),
@@ -123,13 +125,14 @@ export function App({ hub }: { hub: HubPort }) {
   const [dockW, setDockW] = useState(() => widthOf(DOCK));
   const [dockLimit, setDockLimit] = useState(() => dockMax(document.body.clientWidth));
   const [report, setReport] = useState<PaneReport>(NO_REPORT);
-  const [findPulse, setFindPulse] = useState(0);
   const [filesRequests, setFilesRequests] = useState<Record<string, number>>({});
   const [viewRequests, setViewRequests] = useState<Record<string, { to: PaneView; n: number }>>({});
+  const [sessionRefs, referenceSession] = usePaneSessionRefs(active, (id) => panePorts.has(id));
   const [error, setError] = useState("");
   const [renaming, setRenaming] = useState<{ path: string; title: string } | null>(null);
   // false = closed, true = open at its last section, a string = open there.
   const [settings, setSettings] = useState<string | boolean>(false);
+  const find = useFindAsk(settings, setSettings);
   const [feedback, setFeedback] = useState<FeedbackTab | null>(null);
   const [feedbackUnread, setFeedbackUnread] = useState(0);
   const [browser, setBrowser] = useState(false);
@@ -394,13 +397,6 @@ export function App({ hub }: { hub: HubPort }) {
 
   useLinkRouting(activePort, useCallback(() => setBrowser(true), []), fail);
 
-  // Settings cover the conversation, so a find opened under them is one nobody
-  // sees: asking for it leaves them.
-  const openFind = useCallback(() => {
-    setSettings(false);
-    setFindPulse((n) => n + 1);
-  }, []);
-
   // The window's shortcuts, named by the action each one performs — the same
   // identity the control on screen carries, because they are the same thing
   // asked for two ways. Written out rather than branched so the census can read
@@ -410,13 +406,13 @@ export function App({ hub }: { hub: HubPort }) {
     () => [
       { chord: "\\", fields: true, action: "rail.toggle", run: () => setRail((v) => !v) },
       { chord: ",", fields: true, action: "chrome.settings", run: showPrefs },
-      { chord: "f", action: "transcript.find", run: openFind },
+      { chord: "f", action: "transcript.find", run: find.open },
       { chord: "1", fields: true, action: "pane.view", run: () => showView("flow") },
       { chord: "2", fields: true, action: "pane.view", run: () => showView("analysis") },
       { chord: "3", fields: true, action: "pane.view", run: () => showView("browser") },
       ...zoomKeys,
     ],
-    [showPrefs, openFind, showView, zoomKeys],
+    [showPrefs, find.open, showView, zoomKeys],
   );
   const closeBrowser = useCallback(() => setBrowser(false), []);
   const stopTurn = useCallback(() => activePort?.cancel(), [activePort]);
@@ -568,7 +564,7 @@ export function App({ hub }: { hub: HubPort }) {
         account={account}
         theme={scheme}
         onTheme={() => setTheme(scheme === "dark" ? "light" : "dark")}
-        onFind={openFind}
+        onFind={find.toggle}
         view={report.view} rows={report.rows} surfaces={report.surfaces} onView={showView}
         hub={hub} onError={fail}
       />
@@ -632,9 +628,10 @@ export function App({ hub }: { hub: HubPort }) {
           onSettings={showPrefs}
           onFiles={openFiles}
           onView={showView}
+          onReferenceSession={panePorts.has(active) ? referenceSession : undefined}
           onFeedback={(tab) => setFeedback(tab ?? "send")}
           feedbackUnread={feedbackUnread}
-          onFind={openFind}
+          onFind={find.open}
           onError={fail}
         />
 
@@ -684,9 +681,11 @@ export function App({ hub }: { hub: HubPort }) {
                   // looks blank — the next history row would take it over.
                   onSessionChanged={refreshPanes}
                   pulse={settingsPulse}
-                  findPulse={findPulse}
+                  findPulse={find.pulse}
+                  findTogglePulse={find.togglePulse}
                   filesPulse={filesRequests[rt.id] ?? 0}
                   viewRequest={viewRequests[rt.id]}
+                  sessionRef={sessionRefs[rt.id]}
                   alert={rt.id === active ? bar : undefined}
                   connect={first.connect}
                   needsProject={needsProject}

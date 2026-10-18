@@ -1,9 +1,7 @@
 package serve
 
 import (
-	"cmp"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"reasonix/internal/contract/config"
@@ -46,12 +44,7 @@ func (h *Hub) projectPage(roots []string, name string, open map[string]string, w
 			byDir[dir][sessionstore.BranchID(si.Path)] = si
 		}
 	}
-	slices.SortFunc(listed, func(a, b sessionstore.SessionInfo) int {
-		if c := b.LastActivityAt.Compare(a.LastActivityAt); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.Path, b.Path)
-	})
+	sortSessions(listed)
 	heldBy := openLookup(open)
 	out := make([]treeSession, 0, min(len(listed), max(limit, 0)))
 	var total, archived, remaining, windowed int

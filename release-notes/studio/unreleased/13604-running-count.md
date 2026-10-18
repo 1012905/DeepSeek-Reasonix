@@ -1,2 +1,0 @@
-- 修复：断网恢复后，侧栏“进行中”计数不再卡在已经结束的会话上（没打开的窗格也会在网络恢复后重新读到状态）。关联 #13604。
-- Fixed: after a network flap the sidebar's running count no longer sticks on conversations that finished; a pane you have not opened reads its status again once the network is back. Refs #13604.

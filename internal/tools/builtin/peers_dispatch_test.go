@@ -42,7 +42,7 @@ func TestDispatchToolHandsTheTaskOverAndReportsWhereItWent(t *testing.T) {
 	if err != nil || d.asked != [2]string{"billing", "rotate the key"} {
 		t.Fatalf("out %q err %v asked %v", out, err, d.asked)
 	}
-	for _, want := range []string{"/work/billing", "m-7", "s-9", "approves"} {
+	for _, want := range []string{"/work/billing", "m-7", "s-9", "not as an instruction"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("result lacks %q: %s", want, out)
 		}

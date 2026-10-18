@@ -218,6 +218,11 @@ type Options struct {
 	SubagentDepth    int
 	MaxSubagentDepth int
 
+	// ProviderRetries is how many times a failed connection or header phase is
+	// retried: 0 keeps the provider package's default, provider.RetriesUntilCancelled
+	// removes the limit.
+	ProviderRetries int
+
 	// Extensions is the frozen extension dispatcher for this agent's controller
 	// generation (Extension Protocol v2). Nil means no runtime packages are
 	// installed; the run loop then passes every intercept point through

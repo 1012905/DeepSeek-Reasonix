@@ -645,6 +645,19 @@ func TestApprovalOptionsFreshDynamicToolOnlyAllowOnceOrReject(t *testing.T) {
 	}
 }
 
+// A preference setting may be agreed for the session, and the grant names that
+// one setting; an elevated one is asked every time, so it offers allow-once and reject.
+func TestApprovalOptionsForASettingChange(t *testing.T) {
+	pref := approvalOptions(control.SettingApprovalTool, "ui.show_receipt", true, false)
+	if len(pref) != 3 || pref[1].Kind != OptAllowAlways || !strings.Contains(pref[1].Name, "ui.show_receipt") || pref[2].Kind != OptRejectOnce {
+		t.Fatalf("preference options = %+v", pref)
+	}
+	elevated := approvalOptions(control.SettingElevatedApprovalTool, "peers.dispatch", true, false)
+	if len(elevated) != 2 || elevated[0].Kind != OptAllowOnce || elevated[1].Kind != OptRejectOnce {
+		t.Fatalf("elevated options = %+v, want allow-once/reject only", elevated)
+	}
+}
+
 func TestDynamicBashApprovalOptionsUseExactSessionLiteral(t *testing.T) {
 	const command = "git status $(touch /tmp/reasonix-dynamic-approval)"
 	options := approvalOptions("bash", command, false, false)

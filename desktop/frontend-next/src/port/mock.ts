@@ -1,3 +1,4 @@
+import { sessionCompletion } from "./mock_sessions";
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
 import type { JobOutput, PlanAction } from "./session";
 import { approvalKind } from "./mock_approval";
@@ -180,7 +181,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
     this.mem = this.mem.filter((m) => m.name !== name);
   }
 
-  async versions(): Promise<VersionHub> {
+  async versions(_refresh?: boolean): Promise<VersionHub> {
     return { current: "dev", pinned: "", stalePin: false, latest: "", newer: false, versions: [] };
   }
 
@@ -251,6 +252,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async openInEditor() {
     return { editor: "Visual Studio Code", root: "/work/demo" };
   }
+  async openDocument() {}
   revealsFiles() { return true; }
   async revealInFileManager() {}
 
@@ -326,6 +328,8 @@ export class MockPort extends MockWorkspace implements AgentPort {
         })).filter((it) => it.insert !== line.slice(at, to));
       return { kind: "ref", from: at, to, query: frag.slice(dir.length), items };
     }
+    const hash = sessionCompletion(line, cursor);
+    if (hash) return hash;
     if (line.startsWith("/") && !/\s/.test(line)) {
       const q = line.toLowerCase();
       const items = [...this.builtins, ...this.commands].filter((it) => it.label.toLowerCase().startsWith(q));

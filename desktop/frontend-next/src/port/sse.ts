@@ -150,8 +150,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
   // Which build runs belongs to the application, not to a pane: a remote pane's
   // base names another machine, whose version is not the one this window would
   // install. So these two ignore this port's base, the way the tray does.
-  async versions(): Promise<VersionHub> {
-    const res = await fetch("/studio/versions", { credentials: "same-origin" });
+  async versions(refresh = false): Promise<VersionHub> {
+    const res = await fetch(refresh ? "/studio/versions?refresh=1" : "/studio/versions", { credentials: "same-origin" });
     if (!res.ok) await SsePort.fail("/studio/versions", res);
     return (await res.json()) as VersionHub;
   }
@@ -297,15 +297,8 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return (await res.json()) as TrayPrefs;
   }
 
-  async accountPoll(deviceCode: string) {
-    const res = await fetch(this.base + "/account/poll", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ deviceCode }),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return (await res.json()) as { status: "pending" | "complete"; slowDown?: boolean };
+  accountPoll(deviceCode: string) {
+    return this.post0<{ status: "pending" | "complete"; slowDown?: boolean }>("/account/poll", { deviceCode });
   }
 
   accountLogout() {
@@ -342,6 +335,10 @@ export class SsePort extends SseWorkspace implements AgentPort {
 
   async openInEditor(): Promise<{ editor: string; root: string }> {
     return this.post0<{ editor: string; root: string }>("/workspace/editor");
+  }
+
+  async openDocument(path: string): Promise<void> {
+    await this.post0("/workspace/open-document", { path });
   }
 
   revealsFiles() {

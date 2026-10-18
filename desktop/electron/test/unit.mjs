@@ -2681,3 +2681,81 @@ test("a navigation that does finish cancels the limit, and a second one gets a f
     mock.timers.reset();
   }
 });
+
+// Input to a page in a minimized window.
+const { InputWake } = require("../src/inputwake.js");
+
+function wakeWindow({ minimized = true, focused = false } = {}) {
+  const calls = [];
+  const win = {
+    destroyed: false,
+    isDestroyed() { return this.destroyed; },
+    isMinimized: () => minimized,
+    isFocused: () => focused,
+    setOpacity: (v) => calls.push(`opacity ${v}`),
+    setIgnoreMouseEvents: (v) => calls.push(`ignore ${v}`),
+    showInactive: () => { minimized = false; calls.push("showInactive"); },
+    minimize: () => { minimized = true; calls.push("minimize"); },
+  };
+  return { win, calls, focus: () => { focused = true; } };
+}
+const wakeOf = (win) => new InputWake({ win, platform: "win32", settleMs: 5, holdMs: 20 });
+const later = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("input to a minimized window is sent with the window raised unseen, then it is minimized again", async () => {
+  const { win, calls } = wakeWindow();
+  const sent = [];
+  await wakeOf(win).run(async () => sent.push([...calls]));
+  assert.deepEqual(sent[0], ["opacity 0", "ignore true", "showInactive"]);
+  await later(60);
+  assert.deepEqual(calls.slice(3), ["ignore false", "opacity 1", "minimize"]);
+});
+
+test("several inputs in a row raise the window once", async () => {
+  const { win, calls } = wakeWindow();
+  const wake = wakeOf(win);
+  await Promise.all([wake.run(async () => {}), wake.run(async () => {}), wake.run(async () => {})]);
+  await later(60);
+  assert.equal(calls.filter((c) => c === "showInactive").length, 1);
+  assert.equal(calls.filter((c) => c === "minimize").length, 1);
+});
+
+test("a window that is not minimized, or not on Windows, is left alone", async () => {
+  const open = wakeWindow({ minimized: false });
+  await wakeOf(open.win).run(async () => {});
+  const mac = wakeWindow();
+  await new InputWake({ win: mac.win, platform: "darwin", settleMs: 5, holdMs: 20 }).run(async () => {});
+  await later(40);
+  assert.deepEqual([...open.calls, ...mac.calls], []);
+});
+
+test("a window the person focused meanwhile is not minimized under them", async () => {
+  const { win, calls, focus } = wakeWindow();
+  await wakeOf(win).run(async () => focus());
+  await later(60);
+  assert.ok(!calls.includes("minimize"));
+  assert.deepEqual(calls.slice(-2), ["ignore false", "opacity 1"]);
+});
+
+test("a failed input still lets the window go back", async () => {
+  const { win, calls } = wakeWindow();
+  await assert.rejects(wakeOf(win).run(async () => { throw new Error("gone"); }), /gone/);
+  await later(60);
+  assert.ok(calls.includes("minimize"));
+});
+
+test("a window destroyed during the hold is not touched", async () => {
+  const { win, calls } = wakeWindow();
+  await wakeOf(win).run(async () => {});
+  win.destroyed = true;
+  const before = calls.length;
+  await later(60);
+  assert.equal(calls.length, before);
+});
+
+test("a window that fails to raise is given its opacity and mouse back", async () => {
+  const { win, calls } = wakeWindow();
+  win.showInactive = () => { throw new Error("no window"); };
+  await assert.rejects(wakeOf(win).run(async () => {}), /no window/);
+  assert.deepEqual(calls.slice(-3), ["ignore false", "opacity 1", "minimize"]);
+});

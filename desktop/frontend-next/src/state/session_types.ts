@@ -26,6 +26,10 @@ export type Item =
       // The paired device it was sent from; absent is the window.
       via?: Via;
       attachments?: StoredAttachment[];
+      // When the message landed in the conversation (unix ms): the moment it was
+      // sent, or for a follow-up that waited, when its turn began. Guidance said
+      // into a running turn has none.
+      at?: number;
     }
   // source names which model wrote it — a turn can carry two, and the card is
   // where the answer has to survive.

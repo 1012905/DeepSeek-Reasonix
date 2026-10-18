@@ -210,6 +210,16 @@ func freezeProviderRequest(req provider.Request) provider.Request {
 	return out
 }
 
+// withHeaderRetries makes a request report its connection retries to the sink
+// and, when the user set one, apply their retry limit.
+func withHeaderRetries(ctx context.Context, sink event.Sink, limit int) context.Context {
+	ctx = provider.WithRetryNotify(ctx, headerRetryNotice(sink))
+	if limit != 0 {
+		ctx = provider.WithRetryLimit(ctx, limit)
+	}
+	return ctx
+}
+
 // headerRetryNotice turns a connection+header backoff into the Retrying event a
 // frontend words, carrying what the provider knew about why it failed.
 func headerRetryNotice(sink event.Sink) provider.RetryNotify {

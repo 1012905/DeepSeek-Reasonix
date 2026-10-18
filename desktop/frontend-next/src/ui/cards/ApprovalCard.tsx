@@ -14,6 +14,10 @@ const PLAN_TOOL = "exit_plan_mode";
 // answer moves the fence rather than performing anything, so the card says that
 // instead of "about to run extend_write_paths".
 const FENCE_TOOL = "extend_write_paths";
+// The model asking to change one of the user's settings. The card is worded by
+// the kernel; the elevated one offers no session grant, which `allowsSession` already says.
+const SETTING_TOOL = "setting_change";
+const SETTING_ELEVATED_TOOL = "setting_change_elevated";
 
 // Why no posture answers for this call. The kernel names the class and writes
 // the sentence it gave the model; a reader gets that class in their own
@@ -90,6 +94,7 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
   const [switchingFullAccess, setSwitchingFullAccess] = useState(false);
   const remembering: Remembered[] = [...(item.a.allowsSession ? ["session" as const] : []), ...(item.a.allowsPersist ? ["always" as const] : [])];
   const explicit = !!item.a.reasonCode || item.a.reason?.toLowerCase().includes("nested or indirect shell execution");
+  const isSetting = item.a.tool === SETTING_TOOL || item.a.tool === SETTING_ELEVATED_TOOL;
   const decide = async (verdict: ApprovalVerdict) => {
     if (submitting) return;
     setSubmitting(verdict);
@@ -118,20 +123,26 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
       </div>
       <div className="c">
         <div className="hl">
-          <span className="nm">{item.a.tool === FENCE_TOOL ? t("要求扩大可改范围") : t("请求执行权限")}</span>
+          <span className="nm">{item.a.tool === FENCE_TOOL ? t("要求扩大可改范围") : isSetting ? t("请求修改设置") : t("请求执行权限")}</span>
           <span className="tag">{sealed ? t("已处理") : t("等待确认")}</span>
         </div>
         <div className="out">
           <div className="apv" data-sealed={sealed ? item.verdict : undefined} aria-busy={!!submitting}>
             <div className="apv-hd">
-              <span className="tool">{item.a.tool === FENCE_TOOL ? t("这个子任务声明之外的文件") : item.a.tool}</span>
+              <span className="tool">{item.a.tool === FENCE_TOOL ? t("这个子任务声明之外的文件") : isSetting ? t("设置") : item.a.tool}</span>
               <span className="sub" title={item.a.subject}>{item.a.subject}</span>
             </div>
             {item.a.scope && <ApprovalScope scope={item.a.scope} input={item.a.input} />}
             {approvalReason(item.a) && (
               <div className="apv-dt">
                 <span className="apv-dt-label">{t("需要确认的原因")}</span>
-                <span>{approvalReason(item.a)}</span>
+                <span style={isSetting ? { whiteSpace: "pre-line" } : undefined}>{approvalReason(item.a)}</span>
+              </div>
+            )}
+            {item.a.tool === SETTING_ELEVATED_TOOL && (
+              <div className="apv-dt" data-setting="elevated">
+                <span className="apv-dt-label">{t("每次都会询问")}</span>
+                <span>{t("这项设置会放宽模型的权限，所以没有「本会话内不再问」，每次都要你亲自确认。")}</span>
               </div>
             )}
             {!sealed && (

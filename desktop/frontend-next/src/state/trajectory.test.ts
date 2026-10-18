@@ -114,6 +114,10 @@ describe("a retry row names why", () => {
     expect(line(s, 0)).toBe("retry 1/10 · scope=headers · cause=upstream_status 502");
   });
 
+  it("counts against nothing when the user removed the retry limit", () => {
+    expect(line(run([retrying({ retryAttempt: 14, retryMax: 0 })]), 0)).toBe("retry 14/∞ · scope=headers");
+  });
+
   it("stays as it was for a kernel that sends no class", () => {
     expect(line(run([retrying({})]), 0)).toBe("retry 1/10 · scope=headers");
   });

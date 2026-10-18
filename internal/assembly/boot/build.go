@@ -82,6 +82,8 @@ type toolStage struct {
 	lsp         *lsp.Manager
 	browser     *browser.Session
 	peerLink    *tool.PeerLink
+	subagents   *delegation.SubagentStore
+	settingLink *tool.SettingsLink
 	peerTools   func(enabled, dispatch bool)
 	maxSteps    int
 	policy      permission.Policy
@@ -339,6 +341,7 @@ func (b *builder) wireTools() error {
 	addViewImage(t.reg, cfg, b.model.entry, env, root)
 	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
 	t.peerLink, t.peerTools = peerTools(t.reg, cfg)
+	t.settingLink = addSettingTool(t.reg, cfg)
 	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
 	addAdvisor(t.reg, cfg, b.proxy, b.sink)
 	addWebSearch(t.reg, cfg, b.proxy, b.sink)
@@ -356,6 +359,7 @@ func (b *builder) wireTools() error {
 	if err != nil {
 		return err
 	}
+	t.subagents = subagentStore
 	if subagentStore != nil {
 		subagentStore.WithDestroyedChecker(b.session.jobs.IsDestroying)
 	}
@@ -382,7 +386,7 @@ func (b *builder) wireTools() error {
 	}
 	t.taskTool, t.skillRun = t.roles.delegation(delegationInputs{opts: opts, sub: t.sub, exec: b.execProv, entry: b.model.entry,
 		modelName: b.model.name, root: root, maxSteps: t.maxSteps, delivery: b.model.delivery, store: subagentStore,
-		session: b.session, bashEnforced: env.bash.Enforce, extraRoots: b.workspaceExtraRoots()})
+		session: b.session, bashEnforced: env.bash.Enforce, extraRoots: b.workspaceExtraRoots(), childTools: childViewImage(cfg, env, root)})
 	b.addIsolation()
 	registerSessionTools(t.reg, opts.Ablation, b.roots, b.session.dir, b.prompt.memory.Store)
 	if opts.NativeSurfaces {
@@ -486,7 +490,7 @@ func (b *builder) controller() (*control.Controller, error) {
 func (b *builder) executor() *agent.Agent {
 	cfg, entry, t := b.cfg, b.model.entry, &b.tools
 	triageProv, triageRef, triagePrice := resolveTriage(cfg, b.model.ref, b.proxy)
-	return agent.New(b.execProv, t.reg, newObservedSession(b.prompt.prompt), agent.Options{
+	ag := agent.New(b.execProv, t.reg, newObservedSession(b.prompt.prompt), agent.Options{
 		MaxSteps:       t.maxSteps,
 		MaxStepsKey:    b.opts.MaxStepsKey,
 		Temperature:    cfg.Agent.Temperature,
@@ -524,8 +528,11 @@ func (b *builder) executor() *agent.Agent {
 		ReasoningLanguage:            cfg.ReasoningLanguage(),
 		SubagentDepth:                0,
 		MaxSubagentDepth:             t.sub.maxDepth,
+		ProviderRetries:              agent.ProviderRetriesFromConfig(cfg.Agent.MaxProviderRetries),
 		MissingReasoningWarnStateDir: b.roots.MissingReasoningWarnStateDir(),
 	}, b.sink)
+	ag.SetNativeVideo(nativeVideoSource(entry, cfg))
+	return ag
 }
 
 // perseverationRetries resolves the degenerate-generation-loop budget for the
@@ -562,6 +569,8 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		SystemPrompt:                   b.prompt.prompt,
 		SessionDir:                     b.session.dir,
 		Peers:                          peersOptions(cfg, t.peerLink, t.peerTools),
+		Subagents:                      subagentReader(t.subagents),
+		Settings:                       t.settingLink,
 		Host:                           t.host,
 		Commands:                       t.cmds,
 		Skills:                         b.prompt.skills,
@@ -714,4 +723,13 @@ func (b *builder) clock() func() time.Time {
 		return b.opts.clock
 	}
 	return time.Now
+}
+
+// subagentReader hands the controller the store's read side, or nothing when the
+// session has no store, so a nil store never travels as a non-nil interface.
+func subagentReader(s *delegation.SubagentStore) control.SubagentReader {
+	if s == nil {
+		return nil
+	}
+	return s
 }

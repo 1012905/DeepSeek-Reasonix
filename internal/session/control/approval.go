@@ -633,7 +633,7 @@ func ParseToolApprovalMode(mode string) (string, bool) {
 // narrow operation in interactive or headless mode.
 func RequiresFreshHumanApprovalTool(tool string) bool {
 	switch tool {
-	case planApprovalTool, memoryRememberTool, memoryForgetTool, SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool, MCPSignInApprovalTool:
+	case planApprovalTool, memoryRememberTool, memoryForgetTool, SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool, MCPSignInApprovalTool, MCPScopeUpgradeApprovalTool, SettingApprovalTool, SettingElevatedApprovalTool:
 		return true
 	default:
 		return false
@@ -671,7 +671,7 @@ func approvalGrantsForRequest(tool string, fresh, requireHuman bool) (session, p
 
 func allowsFreshSessionGrantTool(tool string) bool {
 	switch tool {
-	case SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool, MCPSignInApprovalTool:
+	case SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool, MCPSignInApprovalTool, SettingApprovalTool:
 		return true
 	default:
 		return false

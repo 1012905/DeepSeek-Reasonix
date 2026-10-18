@@ -16,10 +16,12 @@ const KIND: Record<string, string> = {
   file: "文件",
   dir: "目录",
   resource: "资源",
+  session: "会话",
 };
 
 const HINT: Record<string, string> = {
   ref: "↑↓ 选择 · 回车引用 · Tab 补全或进入目录 · Esc 关闭",
+  session: "↑↓ 选择 · 回车添加到这条消息 · Esc 关闭",
   slash: "↑↓ 选择 · Tab 或回车补全 · Esc 关闭",
   "slash-arg": "↑↓ 选择 · Tab 或回车补全 · Esc 关闭",
 };
@@ -30,7 +32,7 @@ const HINT: Record<string, string> = {
 // the other side — because a false yes costs a request and a false no costs a
 // menu that never opens.
 function mightComplete(text: string): boolean {
-  return text.startsWith("/") || text.includes("@");
+  return text.startsWith("/") || text.includes("@") || text.includes("#");
 }
 
 // A "/" opening a word past the start of the line can only become a chip. The
@@ -93,6 +95,7 @@ export function useCompletion(
   caret: number,
   apply: (text: string, caret: number) => void,
   chips?: ChipHost,
+  onSession?: (picked: { id: string; title: string }) => void,
 ): State {
   const [{ completion, active, kb }, setMenu] = useState({ completion: EMPTY, active: 0, kb: true });
   // An answer and its default highlight publish together; a deferred reset can
@@ -123,7 +126,7 @@ export function useCompletion(
     const slashy = mid !== null || text.startsWith("/");
     const compatible = slashy
       ? previous.kind === "slash" || previous.kind === "slash-arg"
-      : previous.kind === "ref";
+      : previous.kind === "ref" || previous.kind === "session";
     if (!compatible) setCompletion(EMPTY);
     setLoading(false);
     const timer = inSlashWord(text, caret) && !compatible
@@ -159,6 +162,13 @@ export function useCompletion(
     (item?: CompletionItem, mode: "confirm" | "descend" = "confirm") => {
       const pick = item ?? items[Math.min(active, items.length - 1)];
       if (!pick) return;
+      if (completion.kind === "session" && pick.kind === "session") {
+        onSession?.({ id: pick.insert.slice("@session:".length), title: pick.label });
+        asked.current++;
+        setCompletion(EMPTY);
+        setLoading(false);
+        return apply(text.slice(0, completion.from) + text.slice(completion.to).replace(/^ /, ""), completion.from);
+      }
       const placed = chips?.place(text, completion, pick);
       if (placed) return apply(placed.text, placed.caret);
       const finishRef = completion.kind === "ref" && !(mode === "descend" && pick.descend);
@@ -172,7 +182,7 @@ export function useCompletion(
       }
       apply(next, completion.from + pick.insert.length + (finishRef ? 1 : 0));
     },
-    [items, active, text, completion, apply, chips],
+    [items, active, text, completion, apply, chips, onSession],
   );
 
   return {

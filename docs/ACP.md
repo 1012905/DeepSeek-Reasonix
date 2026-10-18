@@ -51,7 +51,8 @@ the following capability shape (irrelevant fields omitted):
       "list": {},
       "resume": {},
       "close": {},
-      "delete": {}
+      "delete": {},
+      "additionalDirectories": {}
     },
     "promptCapabilities": {
       "image": true,
@@ -104,6 +105,20 @@ persisted transcript. State does not leak between sessions.
 Reasonix accepts stdio, Streamable HTTP, and legacy SSE servers. ACP's official `[{"name":"...","value":"..."}]`
 shape is supported for stdio `env` and HTTP `headers`; the older object-map
 shape remains accepted for compatibility.
+
+`session/new`, `session/load`, and `session/resume` may also include
+`additionalDirectories`: absolute folders that join the session's workspace as
+write roots.
+
+- They hold for that session only; nothing is written to the user's folder grants.
+- Each folder gets the vetting a user-granted root gets (it must exist, belong to
+  the user, hold no keys, not be a link to one, and not overlap another write root).
+- One refused folder refuses the whole request with `-32602` and `data.code`
+  naming the reason (for example `workspace_roots.protected`); nothing is skipped silently.
+- At most 32 folders. An agent started to write only inside the cwd refuses them
+  (`acp.additional_directories.disabled`).
+- Resuming an already-open session with a different set is refused
+  (`acp.additional_directories.session_open`); close it first.
 
 ## Session controls
 
@@ -171,6 +186,44 @@ During a turn, Reasonix may send:
 Hosts should keep the `session/prompt` request open until Reasonix returns its
 stop reason, while continuing to process requests and notifications in both
 directions.
+
+### Vendor notifications are opt-in
+
+Reasonix pushes `_reasonix.io/session/status_update` and `_reasonix.io/session/mcpStatus_update`
+only to a client that declared them in its `initialize` request:
+
+```json
+{"clientCapabilities": {"_meta": {"reasonix.io": {"statusUpdates": {"supported": true}}}}}
+```
+
+- without the declaration, those two notifications are never sent;
+- the matching requests, `_reasonix.io/session/status` and `_reasonix.io/session/mcpStatus`, work either way;
+- the on-disk transcript of a turn is reported as `_meta["reasonix.io"].transcriptPath` in the `session/prompt` result.
+
+### When a turn fails
+
+A turn that fails after it was admitted ends `session/prompt` with a JSON-RPC
+error, not with a stop reason:
+
+- the cases are an unreachable model endpoint or a provider that refuses the request;
+- the [ACP prompt-turn specification](https://agentclientprotocol.com/protocol/prompt-turn)
+  allows only `end_turn`, `max_tokens`, `max_turn_requests`, `refusal` and `cancelled` as stop reasons.
+
+```json
+{"error": {"code": -32603, "message": "<cause, secrets redacted>", "data": {"code": "turn_failed"}}}
+```
+
+`data.code` is the identity a client keys on; `message` is the host's
+description of the cause, clipped to 2048 bytes.
+
+### When the host pauses a turn
+
+A turn that stops before delivery is verified (for example, files were written and no
+verification command ran) is not a failure and not a completion:
+
+- `session/prompt` returns `stopReason: "end_turn"`;
+- the response carries the typed outcome in `_meta["reasonix.io"].turnOutcome`, e.g. `{"kind": "paused", "reason": "…"}`;
+- the streamed text ends with a host-written `[paused] Not verified, …` line, so a client that reads only message text does not take the work for done.
 
 ## Mid-turn steering extension
 

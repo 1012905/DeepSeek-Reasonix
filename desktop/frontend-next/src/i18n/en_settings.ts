@@ -1279,4 +1279,13 @@ export const EN_SETTINGS: Record<string, string> = {
   "仅侧栏收起时显示": "Only when the sidebar is collapsed",
   "不显示": "Never",
   "关闭或收起时，这些页面仍可从设置和侧栏打开": "With it off or hidden, these pages still open from settings and the sidebar",
+  "引用历史会话的长度": "Size of a referenced conversation",
+  "在输入框里引用一段历史会话时，最多给这条消息添加多少内容。": "How much a referenced past conversation may add to a message.",
+  "引用的最大长度": "Largest quote",
+  "引用的历史会话会作为只读资料放进这条消息；超过上限时只保留最近的消息，并写明保留了多少。默认 {n} token。": "A referenced conversation goes into the message as read-only reference material. Past the limit only the newest messages stay, and the quote says how many. Default {n} tokens.",
+  "恢复默认": "Restore default",
+  "无法读取引用设置。": "The reference settings could not be read.",
+  "历史会话 · 只读资料": "Past conversation · read-only reference",
+  "引用「{title}」到输入框": "Reference \"{title}\" in the message box",
+  "↑↓ 选择 · 回车添加到这条消息 · Esc 关闭": "↑↓ choose · Enter adds it to this message · Esc closes",
 };

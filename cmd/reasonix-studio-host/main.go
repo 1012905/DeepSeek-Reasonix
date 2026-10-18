@@ -48,6 +48,7 @@ import (
 	// Kinds register from init, so a binary builds only what it links. Without
 	// these every Anthropic model answers "unknown kind" at switch time.
 	_ "reasonix/internal/model/anthropic"
+	_ "reasonix/internal/model/gemini"
 	_ "reasonix/internal/model/openai"
 	_ "reasonix/internal/model/responses"
 )

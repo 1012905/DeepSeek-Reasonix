@@ -98,3 +98,40 @@ func TestSavingPeersSettingsWritesThemAndReadsThemBack(t *testing.T) {
 		t.Fatalf("peers after clearing = %+v", got)
 	}
 }
+
+func TestTheDispatchCeilingsDefaultToTheNamedValuesAndOnlyTheUserFileMovesThem(t *testing.T) {
+	if d := Default(); d.PeersMaxDispatchDepth() != DefaultMaxDispatchDepth || d.PeersMaxDispatchedSessions() != DefaultMaxDispatchedSessions {
+		t.Fatalf("defaults = %d, %d", d.PeersMaxDispatchDepth(), d.PeersMaxDispatchedSessions())
+	}
+	cfg, _ := loadScoped(t, "[peers]\nmax_dispatch_depth = 4\nmax_dispatched_sessions = 0\n", "")
+	if cfg.PeersMaxDispatchDepth() != 4 || cfg.PeersMaxDispatchedSessions() != 0 {
+		t.Fatalf("user file ceilings = %d, %d; want 4 and 0 (no ceiling)", cfg.PeersMaxDispatchDepth(), cfg.PeersMaxDispatchedSessions())
+	}
+	cfg, _ = loadScoped(t, "", "[peers]\nmax_dispatch_depth = 99\nmax_dispatched_sessions = 0\n")
+	if cfg.PeersMaxDispatchDepth() != DefaultMaxDispatchDepth || cfg.PeersMaxDispatchedSessions() != DefaultMaxDispatchedSessions {
+		t.Fatalf("a cloned repo moved a ceiling: %d, %d", cfg.PeersMaxDispatchDepth(), cfg.PeersMaxDispatchedSessions())
+	}
+	ignored := ignoredKeys(cfg)
+	if !slices.Contains(ignored, "peers.max_dispatch_depth") || !slices.Contains(ignored, "peers.max_dispatched_sessions") {
+		t.Fatalf("ignored = %v, want both ceilings reported", ignored)
+	}
+}
+
+func TestCeilingsTheUserSetSurviveAnUnrelatedSave(t *testing.T) {
+	t.Setenv("REASONIX_HOME", t.TempDir())
+	path := UserConfigPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[peers]\nmax_dispatch_depth = 0\nmax_dispatched_sessions = 3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := LoadForEdit(path)
+	cfg.Agent.MaxSideSessions = 2
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadForEdit(path); got.PeersMaxDispatchDepth() != 0 || got.PeersMaxDispatchedSessions() != 3 {
+		t.Fatalf("ceilings after a save = %d, %d; want 0 and 3", got.PeersMaxDispatchDepth(), got.PeersMaxDispatchedSessions())
+	}
+}

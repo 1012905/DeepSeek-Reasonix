@@ -45,6 +45,9 @@ func renderDesktopSection(b *strings.Builder, c *Config) {
 	if c.Desktop.MaxWorkspaces > 0 {
 		fmt.Fprintf(b, "max_workspaces = %d   # desktop: most projects the sidebar remembers; 0 or absent = no limit\n", c.Desktop.MaxWorkspaces)
 	}
+	if c.Desktop.SessionRefTokens > 0 {
+		fmt.Fprintf(b, "session_ref_tokens = %d   # desktop: most tokens one referenced past conversation adds; absent = %d\n", c.Desktop.SessionRefTokens, DefaultSessionRefTokens)
+	}
 	if opener := c.DesktopExternalOpener(); opener != "" {
 		fmt.Fprintf(b, "external_opener = %q   # desktop Open control: installed application id\n", opener)
 	} else {

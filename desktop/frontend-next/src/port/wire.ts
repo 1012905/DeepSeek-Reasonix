@@ -115,6 +115,9 @@ export interface Tool {
   // What the call showed the model, as data URLs. The output text only names
   // them, so without these a person is told a picture was taken and not shown it.
   images?: string[];
+  // Video files the call handed to the model to watch natively: name and size,
+  // never the bytes.
+  videos?: { name: string; size: number; durationMs?: number; model: string }[];
   err?: string;
   // The host's dotted identity for a refusal. err is only its wording.
   refusalCode?: string;

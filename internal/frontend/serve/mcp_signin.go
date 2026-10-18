@@ -48,6 +48,25 @@ func (s *Server) mcpSignIn(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "host": res.Host, "tools": res.Tools})
 }
 
+// mcpUpgrade extends a signed-in server's access to what it asked for. It rides
+// the same grant as sign-in, and the controller asks the person every time.
+func (s *Server) mcpUpgrade(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "mcp.editing_disabled", "MCP sign-in is not enabled for this client", nil)
+		return
+	}
+	name, ok := decodeMCPName(w, r)
+	if !ok {
+		return
+	}
+	res, err := s.ctl().UpgradeMCPServerAccess(r.Context(), name, openAuthorizationPage)
+	if err != nil {
+		refuseMCPSignIn(w, name, err)
+		return
+	}
+	writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "host": res.Host, "tools": res.Tools})
+}
+
 func refuseMCPSignIn(w http.ResponseWriter, name string, err error) {
 	switch {
 	case errors.Is(err, control.ErrMCPSignInDeclined):
@@ -58,6 +77,8 @@ func refuseMCPSignIn(w http.ResponseWriter, name string, err error) {
 		refuse(w, http.StatusConflict, "mcp.signin_busy", "a sign-in for this MCP server is already open", map[string]any{"name": name})
 	case errors.Is(err, control.ErrMCPSignInNoHost):
 		refuse(w, http.StatusBadGateway, "mcp.signin_no_host", "the server's authorization page names no host", map[string]any{"name": name})
+	case errors.Is(err, control.ErrMCPNoScopeUpgrade):
+		refuse(w, http.StatusConflict, "mcp.no_scope_upgrade", "this MCP server has not asked for more access", map[string]any{"name": name})
 	case errors.Is(err, control.ErrMCPSignInNoBrowser):
 		refuse(w, http.StatusInternalServerError, "mcp.signin_no_browser", "this machine cannot open a browser", nil)
 	case errors.Is(err, context.DeadlineExceeded):

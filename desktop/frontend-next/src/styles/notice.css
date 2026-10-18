@@ -9,3 +9,5 @@
 .notice-bar .nwhy { display: block; margin-top: 2px; font-size: var(--fs-meta); line-height: 1.6; color: var(--faint); white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice-bar .nrule { display: block; margin-top: 2px; font: var(--w-reg) var(--fs-meta)/1.6 var(--mono); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice-bar .nmd { margin-top: 2px; color: var(--text); overflow-wrap: anywhere; }
+.notice-bar .nbtn { margin-top: 4px; padding: 0; border: 0; background: transparent; cursor: pointer; color: var(--text); font: var(--w-med) var(--fs-meta) var(--ui); text-decoration: underline; text-underline-offset: 3px; }
+.notice-bar .nbtn:hover { color: var(--accent); }

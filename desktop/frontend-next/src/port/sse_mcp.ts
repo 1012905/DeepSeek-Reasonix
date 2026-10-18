@@ -33,6 +33,15 @@ export class SseMcp extends SseProvider {
     if (!res.ok && !body.error) throw new Error(`/mcp/trust: ${res.status}`);
     return { state: body.state ?? (res.ok ? "ready" : "failed"), tools: typeof body.tools === "number" ? body.tools : body.tools?.length, error: body.error };
   }
+  signinMcp(name: string) {
+    return this.post0<{ name: string; state: string; host?: string; tools?: number }>("/mcp/signin", { name });
+  }
+  upgradeMcp(name: string) {
+    return this.post0<{ name: string; state: string; host?: string; tools?: number }>("/mcp/upgrade", { name });
+  }
+  followMcp(name: string, follow: boolean) {
+    return this.post0<{ name: string; follow: boolean; tools?: number }>("/mcp/follow", { name, follow });
+  }
   async reconnectMcp(name: string) {
     const res = await fetch(this.base + "/mcp/reconnect", {
       method: "POST",

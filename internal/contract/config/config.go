@@ -6,17 +6,14 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"golang.org/x/text/unicode/norm"
 
 	"reasonix/internal/base/netclient"
-	"reasonix/internal/contract/provider"
 )
 
 // Config is Reasonix's runtime configuration.
@@ -48,6 +45,7 @@ type Config struct {
 	Browser          BrowserConfig       `toml:"browser"`
 	Bot              map[string]any      `toml:"bot"` // opaque; see passthrough.go
 	Serve            ServeConfig         `toml:"serve"`
+	Attachments      AttachmentsConfig   `toml:"attachments,omitempty"`
 	Secrets          SecretsConfig       `toml:"secrets"`
 	Remote           RemoteConfig        `toml:"remote"`
 	// AutoSubmit commits a multi-question ask once its last question is answered,
@@ -1071,11 +1069,13 @@ type AgentConfig struct {
 	// DecisionModel names the backend system_one asks. It is on a decision
 	// wire, so it never falls back to the main model: a chat model has no
 	// answer for a question set, and falling back would hide that.
-	DecisionModel    string            `toml:"decision_model"`
-	SubagentEffort   string            `toml:"subagent_effort"`
-	SubagentEfforts  map[string]string `toml:"subagent_efforts"`
-	MaxSubagentDepth int               `toml:"max_subagent_depth"` // delegation layers; default 8 stops runaway recursion, 0 removes the stop; the user file only
-	MaxSideSessions  int               `toml:"max_side_sessions"`  // 0 (default) opens as many side conversations as asked; the user file only
+	DecisionModel      string            `toml:"decision_model"`
+	SubagentEffort     string            `toml:"subagent_effort"`
+	SubagentEfforts    map[string]string `toml:"subagent_efforts"`
+	MaxSubagentDepth   int               `toml:"max_subagent_depth"`   // delegation layers; default 8 stops runaway recursion, 0 removes the stop; the user file only
+	MaxSideSessions    int               `toml:"max_side_sessions"`    // 0 (default) opens as many side conversations as asked; the user file only
+	MaxQueuedInputs    int               `toml:"max_queued_inputs"`    // 0 (default) queues as many prompts as asked; the user file only
+	MaxProviderRetries int               `toml:"max_provider_retries"` // default 10; 0 retries until cancelled; the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.
@@ -1150,76 +1150,6 @@ type AgentConfig struct {
 	PlanModeReadOnlyCommands []string `toml:"plan_mode_read_only_commands"`
 }
 
-// HasModel reports whether m is one of the provider's models.
-func (e *ProviderEntry) HasModel(m string) bool {
-	return slices.Contains(e.ModelList(), m)
-}
-
-// PriceForModel returns the configured per-1M-token price for model. Per-model
-// prices win; the legacy provider-wide price is a fallback for older configs.
-func (e *ProviderEntry) PriceForModel(model string) *provider.Pricing {
-	if e == nil {
-		return nil
-	}
-	if e.Prices != nil {
-		if p := e.Prices[strings.TrimSpace(model)]; p != nil {
-			return clonePricing(p)
-		}
-	}
-	return clonePricing(e.Price)
-}
-
-func (e *ProviderEntry) applyModelPrice() {
-	if e == nil {
-		return
-	}
-	e.Price = e.PriceForModel(e.Model)
-}
-
-func (e *ProviderEntry) applyModelOverride() {
-	if e == nil || len(e.ModelOverrides) == 0 {
-		return
-	}
-	ov, ok := e.modelOverrideForModel(e.Model)
-	if !ok {
-		return
-	}
-	if ov.ReasoningProtocol != "" {
-		e.ReasoningProtocol = ov.ReasoningProtocol
-	}
-	if ov.SupportedEfforts != nil {
-		e.SupportedEfforts = append([]string(nil), ov.SupportedEfforts...)
-	}
-	if ov.DefaultEffort != "" || ov.SupportedEfforts != nil {
-		e.DefaultEffort = ov.DefaultEffort
-	}
-	if ov.Vision != nil {
-		e.visionOverride = ov.Vision
-	}
-	if ov.ContextWindow > 0 {
-		e.ContextWindow = ov.ContextWindow
-	}
-	if ov.MaxOutputTokens != 0 {
-		e.MaxOutputTokens = ov.MaxOutputTokens
-	}
-}
-
-func (e *ProviderEntry) modelOverrideForModel(model string) (ProviderModelOverride, bool) {
-	key, ok := e.modelOverrideKey(model)
-	if !ok {
-		return ProviderModelOverride{}, false
-	}
-	return e.ModelOverrides[key], true
-}
-
-func clonePricing(p *provider.Pricing) *provider.Pricing {
-	if p == nil {
-		return nil
-	}
-	cp := *p
-	return &cp
-}
-
 // ToolsConfig selects which built-in tools are enabled. Empty means all of them.
 type ToolsConfig struct {
 	Enabled                  []string             `toml:"enabled"`
@@ -1232,10 +1162,12 @@ type ToolsConfig struct {
 	SystemOne                SystemOneConfig      `toml:"system_one"`
 	ProtectChangedFiles      *bool                `toml:"protect_changed_files"`
 	BrowserTools             *bool                `toml:"browser_tools"`
-	// MCPResources offers the model a tool that reads a resource a connected
-	// server declares. The user file only; off by default.
+	SettingTool              *bool                `toml:"setting_tool"`
+	// MCPResources offers a tool that reads a connected server's resource; user file only, off by default.
 	MCPResources bool `toml:"mcp_resources"`
 	WebAccessSettings
+	// VideoNativeMaxBytes lowers the size read_video sends natively below the endpoint's limit; 0 keeps it. User file only.
+	VideoNativeMaxBytes int64 `toml:"video_native_max_bytes"`
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`
@@ -1378,10 +1310,10 @@ func Default() *Config {
 	return &Config{
 		ConfigVersion:    freshConfigVersion,
 		DefaultModel:     "deepseek-flash",
-		CredentialsStore: CredentialsStoreAuto,
-		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
-		Desktop:          DesktopConfig{ConversationWidth: "standard"},
-		Billing:          BillingConfig{},
+		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(),
+		UI:      UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
+		Desktop: DesktopConfig{ConversationWidth: "standard"},
+		Billing: BillingConfig{},
 		// Set here, not left to the zero value: an absent [secrets] still protects.
 		Secrets: SecretsConfig{ProtectCredentialFiles: true},
 		Notifications: NotificationsConfig{
@@ -1406,6 +1338,7 @@ func Default() *Config {
 			CompactForceRatio:      0,
 			ContextEditing:         "",
 			MaxSubagentDepth:       8,
+			MaxProviderRetries:     10,
 			MaxSubagentConcurrency: 0,
 			MaxParallelWriters:     0,
 			SubagentClaims:         "strict",
@@ -1602,98 +1535,6 @@ func (c *Config) ResolveDesktopNewSessionModel() (resolvedRef string, fallback b
 	}, false)
 }
 
-// APIKey resolves the entry's API key from its api_key_env.
-func (e *ProviderEntry) APIKey() string {
-	if e == nil {
-		return ""
-	}
-	if e.resolvedAPIKey != "" {
-		return e.resolvedAPIKey
-	}
-	if e.APIKeyEnv == "" {
-		return ""
-	}
-	value, _, _ := storedCredentialValue(e.roots, e.APIKeyEnv)
-	return value
-}
-
-// ResolveAPIKeyFromProcessEnvForProbe pins a setup-time, user-entered key onto
-// this entry for an immediate connectivity probe. Normal runtime resolution does
-// not call this; loaded provider entries still resolve only from Reasonix's
-// global .env.
-func (e *ProviderEntry) ResolveAPIKeyFromProcessEnvForProbe() {
-	if e == nil {
-		return
-	}
-	key := strings.TrimSpace(e.APIKeyEnv)
-	if key == "" {
-		return
-	}
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return
-	}
-	e.resolvedAPIKey = value
-	e.resolvedSource = CredentialSource{Kind: CredentialSourceEnvironment, Label: "setup prompt"}
-}
-
-func (e *ProviderEntry) APIKeySourceLabel() string {
-	if e == nil || strings.TrimSpace(e.APIKeyEnv) == "" {
-		return ""
-	}
-	if e.resolvedAPIKey != "" {
-		return credentialSourceLabel(e.resolvedSource)
-	}
-	return ResolveCredentialForRootGlobalFirst(".", e.APIKeyEnv).Source.Label
-}
-
-// RequiresAPIKey reports whether this provider should be hidden/validated when
-// its configured api_key_env is empty. A blank api_key_env means the provider is
-// intentionally no-auth. Local OpenAI-compatible gateways often keep a legacy
-// api_key_env in config even though they accept unauthenticated requests, so
-// loopback/private endpoints are also allowed to run without a resolved key.
-func (e *ProviderEntry) RequiresAPIKey() bool {
-	if e == nil {
-		return false
-	}
-	if strings.TrimSpace(e.APIKeyEnv) == "" {
-		return providerBaseURLRequiresAPIKey(e.BaseURL)
-	}
-	return !providerBaseURLAllowsMissingAPIKey(e.BaseURL)
-}
-
-func providerBaseURLRequiresAPIKey(raw string) bool {
-	switch officialProviderHost(raw) {
-	case "api.deepseek.com", "api.xiaomimimo.com", "token-plan-cn.xiaomimimo.com", "api.minimaxi.com", "api.openai.com":
-		return true
-	default:
-		return false
-	}
-}
-
-func providerBaseURLAllowsMissingAPIKey(raw string) bool {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return false
-	}
-	host := strings.Trim(strings.ToLower(u.Hostname()), "[]")
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return true
-	}
-	addr, err := netip.ParseAddr(host)
-	if err != nil {
-		return false
-	}
-	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast()
-}
-
-// Configured reports whether the provider is selectable. Providers that do not
-// require an API key are configured by definition; providers that name an env var
-// require that variable to resolve unless their endpoint is local/private.
-func (e *ProviderEntry) Configured() bool {
-	return e != nil && (!e.RequiresAPIKey() || e.APIKey() != "")
-}
-
 // Validate checks that the selected model's provider is usable.
 func (c *Config) Validate(model string) error {
 	e, ok := c.ResolveModel(model)
@@ -1721,4 +1562,24 @@ func (c *Config) providerNames() string {
 		names[i] = p.Name
 	}
 	return strings.Join(names, ", ")
+}
+
+// ResolveAPIKeyFromProcessEnvForProbe pins a setup-time, user-entered key onto
+// this entry for an immediate connectivity probe. Normal runtime resolution does
+// not call this; loaded provider entries still resolve only from Reasonix's
+// global .env.
+func (e *ProviderEntry) ResolveAPIKeyFromProcessEnvForProbe() {
+	if e == nil {
+		return
+	}
+	key := strings.TrimSpace(e.APIKeyEnv)
+	if key == "" {
+		return
+	}
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return
+	}
+	e.resolvedAPIKey = value
+	e.resolvedSource = CredentialSource{Kind: CredentialSourceEnvironment, Label: "setup prompt"}
 }

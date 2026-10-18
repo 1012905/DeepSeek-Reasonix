@@ -144,6 +144,11 @@ jobs:
           node perf/jump-ends.mjs
           node perf/modelrows.mjs
           node perf/explorersize.mjs
+          node perf/rail-search-hold.mjs
+          node perf/session-move.mjs
+          node perf/session-ref.mjs
+          node perf/codeeditor-size.mjs
+          node perf/action-icons.mjs
           node perf/rowhit.mjs
           node perf/tab-pip.mjs
           node perf/context-card-hover.mjs
@@ -163,6 +168,7 @@ jobs:
           node perf/settings-rows.mjs
           node perf/narrow-steps.mjs
           node perf/job-names.mjs
+          node perf/mcp-actions.mjs
           node perf/web-access.mjs
           node perf/peers-settings.mjs
           node perf/peer-threads.mjs

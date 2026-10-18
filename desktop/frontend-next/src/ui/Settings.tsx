@@ -8,6 +8,7 @@ import { arrowTabs } from "./tablist";
 import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { ICON, NAV, SECTION_NAME } from "./prefsnav";
+import { UpdateDot } from "./UpdateDot";
 import { Group, SCOPE_SAID } from "./Group";
 import { PlanApproval } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
@@ -33,6 +34,7 @@ import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
+import { SessionRef } from "./SessionRef";
 import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
@@ -443,6 +445,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                     tabIndex={at === id ? 0 : -1}
                     aria-selected={at === id} disabled={updatingPkg.applying} onClick={() => setAt(id)}>
                     <svg viewBox="0 0 16 16" aria-hidden="true">{ICON[id]}</svg>
+                    {id === "versions" && <UpdateDot />}
                     <span className="nm">{t(name)}</span>
                     <span className="nv" title={nav[id] || undefined} data-danger={danger(id) ? "" : undefined}>
                       {nav[id]}
@@ -504,6 +507,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               </Group>
               <DisplaySettings port={port} />
               <AskTimeout port={port} />
+              <SessionRef port={port} />
               <ProgressWatch port={port} />
               <AutoArchive port={port} />
               <Group id="session-dir" title={t("会话写入位置")}>

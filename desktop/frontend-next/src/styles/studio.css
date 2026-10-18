@@ -150,7 +150,8 @@ body { background: var(--page); }
 [data-titlebar="app"] .nav { -webkit-app-region: drag; }
 [data-titlebar="app"] .nav button { -webkit-app-region: no-drag; }
 .studio-settings, .navbtn { position: relative; }
-.studio-settings .upd-dot, .navbtn .upd-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.studio-settings .upd-dot, .navbtn .upd-dot, .prefs-nav .upd-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.prefs-nav .upd-dot { top: 6px; left: 21px; right: auto; }
 .navbtn .fbk-badge { position: absolute; top: 3px; right: 2px; min-width: 14px; height: 14px; padding: 0 4px; display: inline-grid; place-items: center; border-radius: var(--r-pill); background: var(--accent); color: var(--accent-fg); font: var(--w-med) calc(9px * var(--fs-scale, 1))/1 var(--ui); }
 .navgrp { gap: 3px; }
 .navbtn { width: 36px; height: 36px; border-radius: 8px; }
@@ -642,8 +643,8 @@ body { background: var(--page) !important; }
   transform: translateY(-40px); opacity: 0; pointer-events: none; border: 0; background: var(--surface);
   transition: opacity 120ms ease, transform 140ms ease;
 }
-.rail .wsfind:focus-within { position: relative; left: auto; right: auto; width: calc(100% - 38px); margin: 0 19px 7px; transform: none; opacity: 1; pointer-events: auto; }
-.rail .wsfind:focus-within { background: var(--overlay); box-shadow: 0 0 0 1px var(--border); }
+.rail .wsfind:is(:focus-within, [data-query]) { position: relative; left: auto; right: auto; width: calc(100% - 38px); margin: 0 19px 7px; transform: none; opacity: 1; pointer-events: auto; }
+.rail .wsfind:is(:focus-within, [data-query]) { background: var(--overlay); box-shadow: 0 0 0 1px var(--border); }
 .rail .scroll { padding-bottom: 8px; }
 .rail .wsrow { margin-inline: 15px; min-height: 35px; border-radius: 6px; }
 .rail .wsnode[data-current] > .wsrow .wsname { color: var(--text); font-weight: 620; }
@@ -839,13 +840,14 @@ body { background: var(--page) !important; }
 .flow .user-acts > button,
 .flow .user-acts .stepctl button {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: 26px; height: 26px; padding: 0; opacity: 1; line-height: 12px;
+  width: 26px; height: 26px; padding: 0; opacity: 1; line-height: 15px;
   border: 0; border-radius: 6px; background: transparent; color: var(--muted);
 }
-.flow .user-acts .studio-icon { width: 12px; height: 12px; }
+.flow .user-acts .studio-icon { width: 15px; height: 15px; }
 .flow .call[data-k="me"] .user-acts > button:hover,
 .flow .call[data-k="me"] .user-acts .stepctl button:hover { background: var(--overlay); color: var(--text); }
 .flow .user-acts > .copy[data-feedback] { width: auto; gap: 5px; padding: 0 6px; white-space: nowrap; }
+.flow .user-acts .user-time { margin-inline-end: 4px; color: var(--faint); font: var(--w-reg) var(--fs-meta) var(--ui); white-space: nowrap; }
 .flow .user-acts > button.copy[data-state="done"],
 .flow .user-acts > button.copy[data-state="done"]:hover { color: var(--ok); }
 .flow .user-acts > button.copy[data-state="failed"],
@@ -2039,6 +2041,8 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .view-action { position: relative; }
 .view-action[aria-pressed="true"] { background: var(--overlay); color: var(--text); }
 .view-count { position: absolute; top: -2px; right: -2px; min-width: 14px; padding: 0 3px; border-radius: 7px; background: var(--accent-ink); color: var(--page); font: var(--w-med) var(--fs-micro)/calc(14px * var(--fs-scale, 1)) var(--ui); text-align: center; font-variant-numeric: tabular-nums; }
+.studio-todo-usage { display: grid; gap: 4px; margin: 0 0 12px; color: var(--muted); font: 450 var(--fs-meta)/1.5 var(--ui); }
+.studio-todo-usage > p { margin: 0; overflow-wrap: anywhere; }
 .studio-todo-goal { margin: 12px 0; color: var(--muted); font: 450 var(--fs-ui)/1.6 var(--ui); overflow-wrap: anywhere; white-space: pre-wrap; }
 .studio-todo-body .block[data-b="plan"] { margin: 0; padding: 0; border: 0; background: none; }
 .studio-todo-body .block[data-b="plan"] > .lbl { display: none; }

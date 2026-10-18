@@ -27,6 +27,7 @@ import type { NetworkProbe, NetworkSettings } from "./network";
 import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
+import type { SubagentRun, SubagentTranscript } from "./subagent";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
 import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
@@ -46,7 +47,7 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -302,11 +303,14 @@ export interface AgentPort {
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings>;
   webAccessSettings(): Promise<WebAccessSettings>;
   saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings>;
+  probeSearxng(): Promise<SearxngProbe>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
   askTimeout(): Promise<AskTimeoutSettings>;
   saveAskTimeout(seconds: number): Promise<AskTimeoutSettings>;
+  sessionRefSettings(): Promise<SessionRefSettings>;
+  saveSessionRefSettings(tokens: number): Promise<SessionRefSettings>;
   autoArchive(): Promise<AutoArchiveSettings>;
   // Read by the kernel's background sweep on each pass; no rebuild.
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
@@ -329,6 +333,11 @@ export interface AgentPort {
   // Approves the withheld definitions the digest names, then reconnects. The
   // kernel refuses a digest that no longer matches what it withholds.
   trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
+  // Blocks until the browser sign-in ends (up to five minutes); a refusal is a thrown coded error.
+  signinMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
+  // Like signinMcp, for the access a server asked for; the kernel asks the person every time.
+  upgradeMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
+  followMcp(name: string, follow: boolean): Promise<{ name: string; follow: boolean; tools?: number }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;
   setMcpLoad(name: string, load: McpLoad): Promise<void>;
@@ -387,7 +396,7 @@ export interface AgentPort {
   welcomeSeen(): Promise<boolean>;
   markWelcomed(): Promise<void>;
   removeProvider(name: string): Promise<ProviderRemoval>;
-  versions(): Promise<VersionHub>;
+  versions(refresh?: boolean): Promise<VersionHub>;
   pinVersion(version: string): Promise<void>;
   updateMode(): Promise<UpdateMode>;
   setUpdateMode(mode: UpdateMode): Promise<UpdateMode>;
@@ -475,6 +484,9 @@ export interface AgentPort {
    *  one it found, so a window with several installed can say. It refuses with
    *  a code rather than doing nothing when there is none. */
   openInEditor(): Promise<{ editor: string; root: string }>;
+  /** Open one workspace file (html, svg, pdf) with the machine's default
+   *  program. Only a click may call it; the kernel refuses other types. */
+  openDocument(path: string): Promise<void>;
   /** Whether this window can show a workspace entry in the system file manager:
    *  only a shell on the kernel's own machine can. */
   revealsFiles(): boolean;
@@ -566,7 +578,7 @@ export interface AgentPort {
   // that knows where the file came from uses dropRefs and copies nothing.
   // Naming the bytes is what stores them as that kind of file; unnamed bytes
   // must prove they are an image.
-  attach(blob: Blob, name?: string): Promise<Attachment>;
+  attach(blob: Blob, name?: string, signal?: AbortSignal): Promise<Attachment>;
   // Keeps a pasted text as a file in the attachment directory and answers with
   // the pointer that replaces it in the message. Only on a person's say-so.
   keepText(text: string): Promise<KeptText>;
@@ -623,6 +635,11 @@ export interface AgentPort {
   // Ends one running tool call and lets the turn go on; a call that already
   // finished is refused (tool_call.not_running).
   stopToolCall(callId: string): Promise<void>;
+  // The sub-agent runs this conversation spawned, running or finished, newest
+  // first, and one run's conversation a page at a time: a running run is read
+  // live. A run of another conversation is refused (subagent.not_owned).
+  subagents(): Promise<SubagentRun[]>;
+  subagentTranscript(ref: string, after?: number, limit?: number): Promise<SubagentTranscript>;
   // The end of a running job's output, for the person looking at it. It does
   // not take output from the model's own reader; a job that ended is refused
   // (job.not_running).
