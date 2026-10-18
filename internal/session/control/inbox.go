@@ -204,10 +204,13 @@ func (c *Controller) adoptInboxLocked(path string) (*sessioninbox.Store, error) 
 	return st, nil
 }
 
+// ErrInboxNeedsSession: the queue lives beside a saved session, and this one has no path yet.
+var ErrInboxNeedsSession = errors.New("inbox requires a persisted session path")
+
 func (c *Controller) ensureInbox() (*sessioninbox.Store, error) {
 	path := c.SessionPath()
 	if path == "" {
-		return nil, fmt.Errorf("inbox requires a persisted session path")
+		return nil, ErrInboxNeedsSession
 	}
 	c.inbox.mu.Lock()
 	defer c.inbox.mu.Unlock()

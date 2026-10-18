@@ -52,8 +52,10 @@ type controllerDeps struct {
 	// goalUsageTee accounts billable usage events into the active goal turn's
 	// observational token total. It wraps the public sink when the caller didn't provide one.
 	goalUsageTee *goalUsageTee
-	sink         event.Sink
-	policy       permission.Policy
+	// extPrompts counts the prompts extensions queued since the user last wrote.
+	extPrompts extensionPrompts
+	sink       event.Sink
+	policy     permission.Policy
 	// subagentGate is the shared gate every headless-only sub-agent surface
 	// reads from (see Options.SubagentGate). Nil when the caller didn't build
 	// one — sub-agents then keep whatever gate they were constructed with.
