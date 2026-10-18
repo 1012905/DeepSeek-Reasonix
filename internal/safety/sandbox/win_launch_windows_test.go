@@ -86,10 +86,14 @@ func TestRestrictedCommandsWriteOnlyWhereTheSIDWasGranted(t *testing.T) {
 		`reg add ` + hkcu + ` /v a /d b /f`,
 		`cmd /c "echo nested> ` + filepath.Join(h.out, "nested.txt") + `"`,
 	}
-	for _, c := range cmds {
-		h.run(c)
-	}
 	t.Cleanup(func() { _ = exec.Command("reg", "delete", hkcu, "/f").Run() })
+	for _, c := range cmds {
+		out, code := h.run(c)
+		if b, err := os.ReadFile(existing); err != nil || string(b) != "secret" {
+			t.Errorf("after %q (exit %d, %q) the file outside the root is %q (%v)", c, code, out, b, err)
+			_ = os.WriteFile(existing, []byte("secret"), 0o644)
+		}
+	}
 	if !exists(filepath.Join(h.ws, "inside.txt")) {
 		t.Error("a write inside the granted root did not land")
 	}
