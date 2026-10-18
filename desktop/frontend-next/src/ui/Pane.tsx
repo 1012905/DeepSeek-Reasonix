@@ -112,7 +112,6 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   // are useful while talking to the agent, but both compete with the timeline
   // for exactly the horizontal/vertical space the analysis view explains.
   const docked = manualBrowser && tab === "flow";
-  const browserSize = useBrowserWide(docked, active && visible);
   const workbench = docked || tab === "browser";
   const flow = useRef<HTMLDivElement>(null);
   const running = s.running || !!status?.running; // A paired device can join after turn_started.
@@ -434,6 +433,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   // Chinese literals that the reducer had written — a translation key deciding
   // whether the run reads as moving.
   const blocked = hasPendingDecision(status);
+  const browserSize = useBrowserWide(docked, active && visible, blocked);
   const run = runState({ blocked, running, hasItems: s.items.length > 0, terminal: s.terminal });
   const cost = s.metrics.coverage === "none" ? "" : money(s.metrics.cost, s.metrics.currency);
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : null;
@@ -545,6 +545,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
             fileRequest={conversationFiles.request}
             tabs={pages}
             wideMode={docked ? { wide: browserSize.size === "wide", onToggle: browserSize.toggle } : undefined}
+            fullMode={docked ? { full: browserSize.size === "full", onToggle: browserSize.toggleFull } : undefined}
             manual={manualBrowser}
             shown={visible && workbench}
             onSurfaces={setSurfaces}
