@@ -411,6 +411,9 @@ const SAID: Record<string, string> = {
   // ── 待送达：条目、队列、这份存档各自会拒 ─────────────────────────
   "inbox.not_found": "该条已不在待送达队列中",
   "tool_call.not_running": "这条调用已经结束了",
+  "subagent.not_found": "没有找到这个子代理的记录",
+  "subagent.not_owned": "这个子代理不属于当前会话",
+  "subagent.read_failed": "读取子代理记录失败：{detail}",
   "tool.cancelled_by_user": "你停止了这条调用，它在外部已经做了什么无法确定",
   "history.query_required": "请输入要搜索的内容",
   "history.search_failed": "对话内容索引暂时无法回答，稍后再试",

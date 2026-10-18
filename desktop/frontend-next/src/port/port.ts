@@ -27,6 +27,7 @@ import type { NetworkProbe, NetworkSettings } from "./network";
 import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
+import type { SubagentRun, SubagentTranscript } from "./subagent";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
 import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
@@ -629,6 +630,11 @@ export interface AgentPort {
   // Ends one running tool call and lets the turn go on; a call that already
   // finished is refused (tool_call.not_running).
   stopToolCall(callId: string): Promise<void>;
+  // The sub-agent runs this conversation spawned, running or finished, newest
+  // first, and one run's conversation a page at a time: a running run is read
+  // live. A run of another conversation is refused (subagent.not_owned).
+  subagents(): Promise<SubagentRun[]>;
+  subagentTranscript(ref: string, after?: number, limit?: number): Promise<SubagentTranscript>;
   // The end of a running job's output, for the person looking at it. It does
   // not take output from the model's own reader; a job that ended is refused
   // (job.not_running).
