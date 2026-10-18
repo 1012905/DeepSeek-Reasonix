@@ -17,9 +17,9 @@ import { useOnBump } from "./useOnBump";
 import { StudioIcon } from "./StudioIcon";
 import { LazyMarkdown } from "./LazyMarkdown";
 import type { LocalRefs } from "./Markdown";
-import { docRef } from "./docrefs";
 import { useGlance } from "./glance";
 import { useWorkbenchFiles } from "./useWorkbenchFiles";
+import { documentRefs, parseGrantedFile } from "./grantedfiles";
 import { keyOf, labelOf, type Surface } from "./workbench_tabs";
 import { useTabNames } from "./useTabNames";
 import { useTabClose } from "./useTabClose";
@@ -345,8 +345,9 @@ export function WorkbenchPanel({
     e.preventDefault();
     setSelectionMenu({ text, x: e.clientX, y: e.clientY, anchor: e.currentTarget });
   };
-  const readable = /\.(md|markdown|mdx)$/i.test(filePath);
-  const previewable = !!filePath && preview.can(filePath);
+  const grantedFile = parseGrantedFile(filePath);
+  const readable = /\.(md|markdown|mdx)$/i.test(grantedFile?.rel ?? filePath);
+  const previewable = !!filePath && !grantedFile && preview.can(filePath);
   useEffect(() => {
     setMode((m) => {
       const kept = (m === "read" && !readable) || (m === "preview" && !previewable) ? "file" : m;
@@ -402,19 +403,7 @@ export function WorkbenchPanel({
   // tree. Held stable per document, so typing re-renders the text alone.
   const openRef = useRef(openFile);
   openRef.current = openFile;
-  const docRefs = useMemo<LocalRefs>(
-    () => ({
-      link: (href) => {
-        const to = docRef(filePath, href);
-        return to ? () => openRef.current(to) : null;
-      },
-      image: (src) => {
-        const at = docRef(filePath, src);
-        return at ? port.workspaceImageURL(at) : null;
-      },
-    }),
-    [filePath, port],
-  );
+  const docRefs = useMemo<LocalRefs>(() => documentRefs(filePath, port, (path) => openRef.current(path)), [filePath, port]);
   const toggleFolder = async (path: string) => {
     if (listedScope.current !== scope) return;
     const ticket = Symbol();
@@ -623,20 +612,22 @@ export function WorkbenchPanel({
               tabs={[active.tab]}
               shown={shown && !launcher}
               showTabs={false}
+              onOpenDocument={(path) => port.openDocument(path)}
             />
           )}
           {active?.kind === "file" && (isWorkspaceImage(active.path) ? <WorkspaceImage key={active.path} port={port} path={active.path} /> : (
             <>
               <WorkbenchFileBar
-                path={active.path}
+                path={grantedFile ? `${grantedFile.root.replace(/[\\/]+$/, "")}/${grantedFile.rel}` : active.path}
                 mode={mode}
                 onMode={setMode}
                 readable={readable}
                 previewable={previewable}
-                canSave={!busy && file?.path === active.path && draft !== file.content}
+                canSave={!busy && !file?.readOnly && file?.path === (grantedFile?.rel ?? active.path) && draft !== file.content}
+                readOnlyIn={grantedFile?.root ?? file?.root}
                 onSave={() => void save()}
                 openWith={hub && !remote ? <OpenWithMenu hub={hub} root={workspaceRoot} onError={(e) => setFailed(reason(e))} /> : undefined}
-                onReveal={revealable ? () => { setFailed(""); port.revealInFileManager(active.path).catch((e) => setFailed(reason(e))); } : undefined}
+                onReveal={revealable && !grantedFile ? () => { setFailed(""); port.revealInFileManager(active.path).catch((e) => setFailed(reason(e))); } : undefined}
               />
               {(fileFailed || failed) && !(mode === "preview" && previewTab) && (
                 <div className="workbench-error" role="alert">
@@ -645,7 +636,7 @@ export function WorkbenchPanel({
               )}
               {mode === "preview" ? (
                 previewTab ? (
-                  <AgentBrowserPanel tabs={[previewTab]} shown={shown && !launcher} showTabs={false} />
+                  <AgentBrowserPanel tabs={[previewTab]} shown={shown && !launcher} showTabs={false} onOpenDocument={(path) => port.openDocument(path)} />
                 ) : (
                   <div className="workbench-empty">{t("正在读取…")}</div>
                 )
@@ -655,19 +646,20 @@ export function WorkbenchPanel({
                 <div className="workbench-diff">
                   <DiffView path={active.path} diff={diff} />
                 </div>
-              ) : mode === "read" && file && file.path === active.path ? (
+              ) : mode === "read" && file && file.path === (grantedFile?.rel ?? active.path) ? (
                 <div className="workbench-read">
                   <LazyMarkdown text={draft} local={docRefs} />
                 </div>
-              ) : file && file.path === active.path ? (
+              ) : file && file.path === (grantedFile?.rel ?? active.path) ? (
                 <Suspense fallback={<div className="workbench-empty">{t("正在读取…")}</div>}>
                   <CodeEditor
                     key={active.path}
-                    path={active.path}
+                    path={grantedFile?.rel ?? active.path}
                     value={draft}
                     dark={scheme === "dark"}
                     onChange={setDraft}
                     onSave={() => void save()}
+                    readOnly={!!grantedFile || !!file.readOnly}
                   />
                 </Suspense>
               ) : null}

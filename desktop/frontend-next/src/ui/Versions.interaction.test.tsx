@@ -140,3 +140,16 @@ describe("the version list's history", () => {
     expect(screen.queryByText("2.16.0")).toBeNull();
   });
 });
+
+describe("the version panel's reads", () => {
+  it("opens on whatever the kernel already knows and asks afresh only on a retry", async () => {
+    const versions = vi
+      .fn((_refresh?: boolean) => Promise.resolve(hub))
+      .mockRejectedValueOnce(new HttpError(502, "mirror", { code: "studio.unreachable" }, true));
+    const port = { ...portAt({ version: "", phase: "idle", received: 0, total: 0 }), versions };
+    render(<Versions port={port} />);
+    await userEvent.click(await screen.findByRole("button", { name: "重试" }));
+    await screen.findByText("2.21.0");
+    expect(versions.mock.calls.map((c) => c[0])).toEqual([false, true]);
+  });
+});

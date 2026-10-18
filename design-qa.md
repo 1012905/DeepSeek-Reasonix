@@ -84,3 +84,15 @@ did not specify a dark layout. Phone captures confirm no horizontal overflow.
 
 Windows native installer acceptance and hosted CI are separate from these
 local results. The production build retains its existing large-chunk warning.
+
+## Workspace preparation / 工作目录准备
+
+The workspace palette and preparation states reuse existing typography and
+tokens. Real Git checks cover branches, creation, retry and cancellation; visual
+QA passed. Captures remain in
+[PR #13598](https://github.com/esengine/DeepSeek-Reasonix/pull/13598).
+
+工作目录面板与准备状态复用现有字号、图标和表面样式；真实 Git 验证了分支搜索、
+占用状态、路径展开、创建、成功、失败重试与取消。无残留的 P0/P1/P2 视觉问题，
+截图仅保留于 PR。清理失败时保留外部修改，并明确提示保存任务、核对目录后关闭
+会话，从源目录新建会话重试；安装包与上游 CI 验收单独记录。

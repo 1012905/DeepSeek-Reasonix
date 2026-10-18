@@ -72,10 +72,16 @@ func addRememberedWorkspace(ctx context.Context, dir string) error {
 		if slices.Contains(list.Paths, dir) {
 			return nil
 		}
-		if workspaceListFull(len(list.Paths)) {
+		if workspaceListFull(len(rememberedProjects(list.Paths))) && !hasWorkspaceProject(list.Paths, dir) {
 			return refusal(http.StatusConflict, "workspace.limit_reached", errWorkspaceListFull, nil)
 		}
-		list.Paths = append([]string{dir}, list.Paths...)
+		identity := projectIdentity(dir)
+		at := slices.IndexFunc(list.Paths, func(path string) bool { return projectIdentity(path) == identity })
+		if at < 0 {
+			list.Paths = append([]string{dir}, list.Paths...)
+		} else {
+			list.Paths = slices.Insert(list.Paths, at+1, dir)
+		}
 		list.Launch = dir
 		return nil
 	})
@@ -90,7 +96,7 @@ func keepUsedWorkspace(dir string) {
 		return
 	}
 	err := updateWorkspaceList(context.Background(), true, func(list *workspaceList) error {
-		if slices.Contains(list.Paths, dir) || workspaceListFull(len(list.Paths)) {
+		if slices.Contains(list.Paths, dir) || (workspaceListFull(len(rememberedProjects(list.Paths))) && !hasWorkspaceProject(list.Paths, dir)) {
 			return nil
 		}
 		list.Paths = append(list.Paths, dir)
@@ -106,8 +112,9 @@ func forgetWorkspace(dir string) {
 		return
 	}
 	err := updateWorkspaceList(context.Background(), true, func(list *workspaceList) error {
-		list.Paths = slices.DeleteFunc(list.Paths, func(path string) bool { return path == dir })
-		if list.Launch == dir {
+		root := projectIdentity(dir)
+		list.Paths = slices.DeleteFunc(list.Paths, func(path string) bool { return projectIdentity(path) == root })
+		if projectIdentity(list.Launch) == root {
 			list.Launch = ""
 			if len(list.Paths) > 0 {
 				list.Launch = list.Paths[0]
@@ -122,13 +129,15 @@ func forgetWorkspace(dir string) {
 
 func moveWorkspace(ctx context.Context, dir string, direction int) error {
 	return updateWorkspaceList(ctx, false, func(list *workspaceList) error {
-		at := slices.Index(list.Paths, dir)
+		roots := workspaceProjectOrder(list.Paths)
+		at := slices.Index(roots, projectIdentity(dir))
 		if at < 0 {
 			return errWorkspaceNotRemembered
 		}
 		to := at + direction
-		if to >= 0 && to < len(list.Paths) {
-			list.Paths[at], list.Paths[to] = list.Paths[to], list.Paths[at]
+		if to >= 0 && to < len(roots) {
+			roots[at], roots[to] = roots[to], roots[at]
+			list.Paths = orderWorkspaceMembers(list.Paths, roots)
 		}
 		return nil
 	})
@@ -138,21 +147,26 @@ func moveWorkspace(ctx context.Context, dir string, direction int) error {
 // named by before, or at the end when before is empty. The launch project stays.
 func placeWorkspace(ctx context.Context, dir, before string) error {
 	return updateWorkspaceList(ctx, false, func(list *workspaceList) error {
-		if !slices.Contains(list.Paths, dir) {
+		roots := workspaceProjectOrder(list.Paths)
+		dir = projectIdentity(dir)
+		if before != "" {
+			before = projectIdentity(before)
+		}
+		if !slices.Contains(roots, dir) {
 			return errWorkspaceNotRemembered
 		}
-		if before != "" && !slices.Contains(list.Paths, before) {
+		if before != "" && !slices.Contains(roots, before) {
 			return errWorkspaceNotRemembered
 		}
 		if dir == before {
 			return nil
 		}
-		rest := slices.DeleteFunc(slices.Clone(list.Paths), func(path string) bool { return path == dir })
+		rest := slices.DeleteFunc(roots, func(path string) bool { return path == dir })
 		at := len(rest)
 		if before != "" {
 			at = slices.Index(rest, before)
 		}
-		list.Paths = slices.Insert(rest, at, dir)
+		list.Paths = orderWorkspaceMembers(list.Paths, slices.Insert(rest, at, dir))
 		return nil
 	})
 }

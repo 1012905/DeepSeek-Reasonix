@@ -10,21 +10,20 @@ import { Switch } from "./Switch";
 // bounds the field it can see instead of letting a huge paste grow silently.
 const LIMIT = 32768;
 
-const BLANK: PersonaDraft = { prefix: "", suffix: "", complete: false, include_runtime_context: true };
+const BLANK: PersonaDraft = { prefix: "", suffix: "", include_runtime_context: true };
 
 const draftOf = (s: PersonaSettings): PersonaDraft => ({
   prefix: s.prefix,
   suffix: s.suffix,
-  complete: s.complete,
   include_runtime_context: s.include_runtime_context,
 });
 
 const sameDraft = (a: PersonaDraft, b: PersonaDraft) =>
-  a.prefix === b.prefix && a.suffix === b.suffix && a.complete === b.complete &&
+  a.prefix === b.prefix && a.suffix === b.suffix &&
   a.include_runtime_context === b.include_runtime_context;
 
 const isPreset = (p: PersonaPreset, d: PersonaDraft) =>
-  sameDraft({ prefix: p.prefix, suffix: p.suffix, complete: p.complete, include_runtime_context: p.include_runtime_context }, d);
+  sameDraft({ prefix: p.prefix, suffix: p.suffix, include_runtime_context: p.include_runtime_context }, d);
 
 // Presets are served with their prompt text and a stable id; the words the
 // page shows about them are this interface's, so they go through t() here.
@@ -48,9 +47,6 @@ function presetAbout(id: string): string {
   }
 }
 
-// A persona leads the system prompt as one identity and trails the first-party
-// guidance as one posture. It is composed once at boot, so this page writes a
-// file and says plainly that only the sessions opened afterwards read it.
 export function Persona({ port }: { port: AgentPort }) {
   const [state, setState] = useState<PersonaSettings | null>(null);
   const [draft, setDraft] = useState<PersonaDraft>(BLANK);
@@ -78,12 +74,6 @@ export function Persona({ port }: { port: AgentPort }) {
 
   const save = async () => {
     if (!state) return;
-    // The switch cannot be turned on without a prefix, but clearing the box
-    // after it was on is one keystroke away — the refusal has to live here.
-    if (draft.complete && !draft.prefix.trim()) {
-      setError(t("启用「用前缀替换整个系统提示词」时，前缀不能为空。"));
-      return;
-    }
     setBusy(true);
     setError("");
     try {
@@ -108,7 +98,7 @@ export function Persona({ port }: { port: AgentPort }) {
       id="persona"
       title={t("系统人设")}
       now={now}
-      hint={t("系统人设决定 agent 的身份：前缀写在系统提示词最前面，后缀写在内置指令之后。保存只影响之后新建的会话，当前会话保持它打开时的提示词。")}
+      hint={t("系统人设决定 agent 的身份：前缀写在系统提示词最前面，后缀写在内置指令之后。保存不会立即重建会话；新会话及现有会话下一次重建（例如切换模型）时生效。")}
     >
       {!state ? (
         <div className="empty">{t("无法读取人设设置。")}</div>
@@ -128,7 +118,6 @@ export function Persona({ port }: { port: AgentPort }) {
                     onClick={() => change({
                       prefix: p.prefix,
                       suffix: p.suffix,
-                      complete: p.complete,
                       include_runtime_context: p.include_runtime_context,
                     })}
                   >
@@ -182,25 +171,6 @@ export function Persona({ port }: { port: AgentPort }) {
 
           <div className="lrow">
             <span className="tx">
-              <span className="lb">{t("用前缀替换整个系统提示词（complete）")}</span>
-              <span className="ds">
-                {!draft.prefix.trim() && t("先填写前缀才能开启。")}
-                {t("开启后只用前缀作为整个系统提示词，其余内置指令、运行时上下文、记忆与技能不再写入（工具仍可用）。")}
-              </span>
-            </span>
-            <Switch
-              data-action="persona.complete"
-              on={draft.complete}
-              // Off can always be clicked; on needs a prefix to replace the
-              // prompt with.
-              busy={busy || (!draft.complete && !draft.prefix.trim())}
-              label={t("用前缀替换整个系统提示词（complete）")}
-              onClick={() => change({ complete: !draft.complete })}
-            />
-          </div>
-
-          <div className="lrow">
-            <span className="tx">
               <span className="lb">{t("不注入可选运行时上下文")}</span>
               <span className="ds">{t("关闭后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。")}</span>
             </span>
@@ -216,7 +186,7 @@ export function Persona({ port }: { port: AgentPort }) {
           <div className="lrow">
             <span className="tx">
               <span className="lb">{t("保存")}</span>
-              <span className="ds">{t("写入用户配置，从新会话开始生效；当前会话保持它打开时的系统提示词。")}</span>
+              <span className="ds">{t("写入用户配置，在新会话及现有会话下一次重建时生效；保存本身不会重建会话。")}</span>
             </span>
             <button className="act" data-action="persona.save" disabled={busy || !changed} onClick={() => void save()}>
               {t(busy ? "保存中…" : "保存")}
@@ -225,7 +195,7 @@ export function Persona({ port }: { port: AgentPort }) {
 
           {saved && (
             <div className="find" data-lvl="ok" role="status">
-              <span className="t">{t("已保存，新会话生效")}</span>
+              <span className="t">{t("已保存，下次会话构建时生效")}</span>
               <span className="why"><code>{state.path}</code></span>
             </div>
           )}

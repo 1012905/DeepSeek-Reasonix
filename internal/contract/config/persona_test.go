@@ -11,8 +11,6 @@ import (
 	"reasonix/internal/base/testenv"
 )
 
-func boolValue(v bool) *bool { return &v }
-
 func TestPersonaNormalizeTrimsAndCollapsesOnlyTheEmptyChoice(t *testing.T) {
 	zero := PersonaConfig{}.Normalize()
 	if !reflect.DeepEqual(zero, PersonaConfig{}) {
@@ -29,12 +27,9 @@ func TestPersonaNormalizeTrimsAndCollapsesOnlyTheEmptyChoice(t *testing.T) {
 	// An explicit runtime-context choice is a contribution by itself: the Studio
 	// switch may be the only field the user touched, and collapsing it would make
 	// the save read back as unchanged.
-	pointerOnly := PersonaConfig{IncludeRuntimeContext: boolValue(false)}.Normalize()
+	pointerOnly := PersonaConfig{IncludeRuntimeContext: new(false)}.Normalize()
 	if pointerOnly.IsZero() || pointerOnly.IncludeRuntimeContext == nil || *pointerOnly.IncludeRuntimeContext {
 		t.Fatalf("pointer-only persona collapsed or lost: %+v", pointerOnly)
-	}
-	if (PersonaConfig{Complete: true}).IsZero() {
-		t.Fatal("complete without a prefix must survive for repair, not read as absent")
 	}
 }
 
@@ -45,8 +40,6 @@ func TestPersonaValidateRejectsUnhonorableValues(t *testing.T) {
 		p    PersonaConfig
 		want error
 	}{
-		{"complete without prefix", PersonaConfig{Complete: true}, ErrPersonaCompleteRequiresPrefix},
-		{"complete with blank prefix", PersonaConfig{Complete: true, Prefix: "   "}, ErrPersonaCompleteRequiresPrefix},
 		{"prefix over cap", PersonaConfig{Prefix: tooBig + "x"}, ErrPersonaTooLarge},
 		{"suffix over cap", PersonaConfig{Suffix: tooBig + "x"}, ErrPersonaTooLarge},
 	} {
@@ -58,8 +51,8 @@ func TestPersonaValidateRejectsUnhonorableValues(t *testing.T) {
 		t.Fatalf("two parts at the cap = %v, want accepted", err)
 	}
 	var c Config
-	if err := c.SetPersona(PersonaConfig{Complete: true}); !errors.Is(err, ErrPersonaCompleteRequiresPrefix) {
-		t.Fatalf("SetPersona = %v, want ErrPersonaCompleteRequiresPrefix", err)
+	if err := c.SetPersona(PersonaConfig{Prefix: tooBig + "x"}); !errors.Is(err, ErrPersonaTooLarge) {
+		t.Fatalf("SetPersona = %v, want ErrPersonaTooLarge", err)
 	}
 	if !c.Agent.Persona.IsZero() {
 		t.Fatalf("a rejected persona reached the config: %+v", c.Agent.Persona)
@@ -70,10 +63,10 @@ func TestPersonaRuntimeContextDefaultsEnabled(t *testing.T) {
 	if !(PersonaConfig{}).RuntimeContextEnabled() {
 		t.Fatal("absent include_runtime_context reads as disabled")
 	}
-	if !(PersonaConfig{IncludeRuntimeContext: boolValue(true)}).RuntimeContextEnabled() {
+	if !(PersonaConfig{IncludeRuntimeContext: new(true)}).RuntimeContextEnabled() {
 		t.Fatal("explicit true reads as disabled")
 	}
-	if (PersonaConfig{IncludeRuntimeContext: boolValue(false)}).RuntimeContextEnabled() {
+	if (PersonaConfig{IncludeRuntimeContext: new(false)}).RuntimeContextEnabled() {
 		t.Fatal("explicit false reads as enabled")
 	}
 }
@@ -85,10 +78,10 @@ func TestPersonaRendersAndLoadsUnchanged(t *testing.T) {
 	t.Setenv("REASONIX_HOME", home)
 	path := UserConfigPath()
 	for _, want := range []PersonaConfig{
-		{Prefix: "IDENTITY", Suffix: "TAIL", Complete: true, IncludeRuntimeContext: boolValue(false)},
-		{Prefix: "IDENTITY", IncludeRuntimeContext: boolValue(true)},
+		{Prefix: "IDENTITY", Suffix: "TAIL", IncludeRuntimeContext: new(false)},
+		{Prefix: "IDENTITY", IncludeRuntimeContext: new(true)},
 		{Suffix: "TAIL"},
-		{IncludeRuntimeContext: boolValue(false)},
+		{IncludeRuntimeContext: new(false)},
 	} {
 		c := Default()
 		if err := c.SetPersona(want); err != nil {

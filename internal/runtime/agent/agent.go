@@ -217,6 +217,31 @@ func NormalizeMaxSubagentDepth(depth int) int {
 	return depth
 }
 
+// UnlimitedSubagentDepth is the depth a user who set max_subagent_depth to 0
+// asked for: no layer count stops delegation, only cost does.
+const UnlimitedSubagentDepth = 1 << 20
+
+// SubagentDepthFromConfig reads the user's max_subagent_depth: 0 removes the
+// limit, a negative value reads as the single-layer boundary.
+func SubagentDepthFromConfig(depth int) int {
+	if depth == 0 {
+		return UnlimitedSubagentDepth
+	}
+	return NormalizeMaxSubagentDepth(depth)
+}
+
+// ProviderRetriesFromConfig reads the user's max_provider_retries: 0 removes
+// the limit, a negative value keeps the provider default.
+func ProviderRetriesFromConfig(retries int) int {
+	switch {
+	case retries == 0:
+		return provider.RetriesUntilCancelled
+	case retries < 0:
+		return 0
+	}
+	return retries
+}
+
 // ToolHooks fires user-configured shell hooks around each tool call. PreToolUse
 // runs before the call and may block it (block=true; message is the reason fed
 // back to the model); PostToolUse runs after and only surfaces output to the
@@ -684,6 +709,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 			workspaceVCS:            strings.TrimSpace(opts.WorkspaceVCS),
 			subagentDepth:           subagentDepth,
 			maxSubagentDepth:        maxSubagentDepth,
+			providerRetries:         opts.ProviderRetries,
 			contextWindow:           opts.ContextWindow,
 			compactRatio:            opts.CompactRatio,
 			recentKeep:              opts.RecentKeep,
@@ -1145,7 +1171,7 @@ func (a *Agent) stream(ctx context.Context, turn int, sink event.Sink) streamedT
 }
 
 func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink, frozen *samplingRequest, attemptID string) streamedTurn {
-	ctx = provider.WithRetryNotify(ctx, headerRetryNotice(sink))
+	ctx = withHeaderRetries(ctx, sink, a.providerRetries)
 	// Reuse a parent attempt counter when present so stream retries accumulate
 	// into one RequestCount; otherwise install a fresh counter for this call.
 	ctx = provider.WithRequestAttemptCounter(ctx)

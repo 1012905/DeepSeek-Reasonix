@@ -21,7 +21,7 @@ const NOTES_ABSENT = "studio.notes_absent";
 // worse than no button.
 
 type Port = {
-  versions(): Promise<VersionHub>;
+  versions(refresh?: boolean): Promise<VersionHub>;
   pinVersion(v: string): Promise<void>;
   goToVersion(v: string): Promise<void>;
   restartToVersion(v: string, force: boolean): Promise<void>;
@@ -98,9 +98,9 @@ export function Versions({ port }: { port: Port }) {
   // install, a server that does not carry this at all. Folding that back into
   // null spent the one sentence it gave us and left the panel reading as a
   // request still in flight, forever.
-  const reload = useCallback(() => {
+  const load = useCallback((refresh: boolean) => {
     port
-      .versions()
+      .versions(refresh)
       .then((h) => {
         setHub(h);
         setUnread("");
@@ -113,8 +113,9 @@ export function Versions({ port }: { port: Port }) {
         setUnread(none ? "" : reason(e));
       });
   }, [port]);
+  const reload = useCallback(() => load(true), [load]);
 
-  useEffect(reload, [reload]);
+  useEffect(() => load(false), [load]);
   useEffect(() => port.onUpdateProgress(setProgress), [port]);
 
   // Starting ends once the kernel's own answer names the move; from then on

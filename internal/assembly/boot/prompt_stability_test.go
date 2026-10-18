@@ -76,7 +76,7 @@ func TestBuildComposesByteStablePersonaPrompt(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, os.Getenv("REASONIX_HOME"), "config.toml", `
 default_model = "test-model"
 
 [agent]

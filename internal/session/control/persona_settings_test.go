@@ -21,15 +21,15 @@ func TestPersonaSettingsReadWriteAndValidation(t *testing.T) {
 	defer c.Close()
 
 	got := c.PersonaSettings()
-	if got.Path != path || got.Prefix != "" || got.Suffix != "" || got.Complete || !got.IncludeRuntimeContext {
+	if got.Path != path || got.Prefix != "" || got.Suffix != "" || !got.IncludeRuntimeContext {
 		t.Fatalf("unset persona reads %+v", got)
 	}
 	if len(got.Presets) == 0 {
 		t.Fatal("GET served no presets")
 	}
 
-	if err := c.SavePersonaSettings(config.PersonaConfig{Complete: true}); !errors.Is(err, config.ErrPersonaCompleteRequiresPrefix) {
-		t.Fatalf("complete without prefix = %v", err)
+	if err := c.SavePersonaSettings(config.PersonaConfig{Prefix: strings.Repeat("x", 33<<10)}); !errors.Is(err, config.ErrPersonaTooLarge) {
+		t.Fatalf("oversized persona = %v", err)
 	}
 	if onDisk, _ := os.ReadFile(path); string(onDisk) != raw {
 		t.Fatal("a refused save changed the user config")
@@ -40,7 +40,7 @@ func TestPersonaSettingsReadWriteAndValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved := c.PersonaSettings()
-	if saved.Prefix != "IDENTITY" || saved.Suffix != "TAIL" || saved.Complete || saved.IncludeRuntimeContext {
+	if saved.Prefix != "IDENTITY" || saved.Suffix != "TAIL" || saved.IncludeRuntimeContext {
 		t.Fatalf("saved persona = %+v, want normalized values", saved)
 	}
 	onDisk, err := os.ReadFile(path)

@@ -99,7 +99,8 @@ func (s *Server) workspace(w http.ResponseWriter, r *http.Request) {
 		if body.Worktree != nil {
 			ref = body.Worktree.Ref
 		}
-		res, err := worktree.CreateFrom(r.Context(), workspaceRepo(s.ctl()), config.DeliveryWorktreeDir(), ref)
+		managedRoot := config.DeliveryWorktreeDir()
+		res, err := worktree.CreateFrom(r.Context(), workspaceRepo(s.ctl()), managedRoot, ref)
 		if err != nil {
 			if errors.Is(err, worktree.ErrSourceUnknown) {
 				refuse(w, http.StatusConflict, "workspace.worktree_source_missing", "the source branch is no longer available; choose another branch", nil)
@@ -111,7 +112,7 @@ func (s *Server) workspace(w http.ResponseWriter, r *http.Request) {
 		repo := workspaceRepo(s.ctl())
 		defer func() {
 			if !published {
-				if err := worktree.DiscardUnpublished(context.WithoutCancel(r.Context()), repo, res); err != nil {
+				if err := worktree.DiscardUnpublished(context.WithoutCancel(r.Context()), repo, managedRoot, res); err != nil {
 					slog.Warn("retain unpublished worktree after rollback failure", "path", res.WorkspaceRoot, "err", err)
 				}
 			}
@@ -161,6 +162,10 @@ func resolveWorkspaceDir(dir string) (string, error) {
 // it. bindMu must be held. The outgoing controller keeps serving until the
 // replacement is fully built, so a failure leaves the session untouched.
 func (s *Server) switchWorkspaceLocked(ctx context.Context, dir string) error {
+	return s.switchWorkspaceCommit(ctx, dir, func(publish func() error) error { return publish() })
+}
+
+func (s *Server) switchWorkspaceCommit(ctx context.Context, dir string, commit func(func() error) error) error {
 	cur := s.ctl()
 	if cur.WorkspaceRoot() == dir {
 		return nil
@@ -193,11 +198,15 @@ func (s *Server) switchWorkspaceLocked(ctx context.Context, dir string) error {
 	}
 	newCtrl.SetOnSessionRecovered(sessionLeaseRecoveryHandler(s.leases))
 
-	if err := addRememberedWorkspace(ctx, dir); err != nil {
-		newCtrl.Close()
-		return err
-	}
-	if err := s.publishController(cur, newCtrl); err != nil {
+	if err := commit(func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := addRememberedWorkspace(ctx, dir); err != nil {
+			return err
+		}
+		return s.publishController(cur, newCtrl)
+	}); err != nil {
 		newCtrl.Close()
 		return err
 	}

@@ -45,6 +45,21 @@ describe("tool outcome cards", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  // A video handed to the model natively is a file the person cannot see in the
+  // transcript; the card names it, its size and length, and where it went.
+  it("names a video the call handed to the model natively", () => {
+    const { container } = render(
+      <ToolCard tool={{ id: "vid", name: "read_video", output: "video clip.mp4: 4096 bytes", readOnly: true,
+        videos: [{ name: "clip.mp4", size: 4_194_304, durationMs: 12_000, model: "qwen-vl" }] }} running={false} />,
+    );
+    const note = container.querySelector(".tvideo");
+    expect(note?.textContent).toContain("clip.mp4");
+    expect(note?.textContent).toContain("qwen-vl");
+    expect(note?.textContent).toContain("12.0s");
+    expect(note?.textContent).toMatch(/4(\.0)? ?MB/);
+    expect(container.querySelector(".tshots")).toBeNull();
+  });
+
   it("says nothing where a call showed nothing", () => {
     const { container } = render(<ToolCard tool={{ id: "plain", name: "bash", output: "done", readOnly: false }} running={false} />);
     expect(container.querySelector(".tshots")).toBeNull();

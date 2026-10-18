@@ -119,11 +119,12 @@ interface Props {
   dark: boolean;
   onChange: (text: string) => void;
   onSave: () => void;
+  readOnly?: boolean;
 }
 
 /** A file, read and edited in one place: highlighted as it is typed, with the
  *  editor's own find (Ctrl+F), go to line (Ctrl+G) and save (Ctrl+S). */
-export default function CodeEditor({ path, value, dark, onChange, onSave }: Props) {
+export default function CodeEditor({ path, value, dark, onChange, onSave, readOnly = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const handlers = useRef({ onChange, onSave });
@@ -164,6 +165,9 @@ export default function CodeEditor({ path, value, dark, onChange, onSave }: Prop
           }),
           language.current.of([]),
           look.current.of(theme(dark)),
+          // The parent keys this component by path, and a file never changes between
+          // readable and editable while it is open, so this is read once.
+          ...(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
         ],
       }),
     });

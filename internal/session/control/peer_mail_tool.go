@@ -28,11 +28,17 @@ func (d peerDirectory) SendPeerMessage(to, text string) (tool.PeerReceipt, error
 	return tool.PeerReceipt{ID: r.ID, To: tool.PeerView{Key: r.To.Key, Title: r.To.Title, Project: r.To.Project}}, nil
 }
 
+// fmtPeerError leads with the error's identity, as the send path does.
+func fmtPeerError(err error) error { return fmt.Errorf("%s: %w", peerErrorCode(err), err) }
+
 func peerErrorCode(err error) string {
 	for code, sentinel := range map[string]error{
 		"peer.disabled": ErrPeersDisabled, "peer.not_found": ErrPeerNotFound, "peer.ambiguous": ErrPeerAmbiguous,
 		"peer.self": ErrPeerSelf, "peer.refused": ErrPeerRefused, "peer.rate_limited": ErrPeerRateLimited,
 		"peer.empty": ErrPeerEmpty, "peer.too_large": ErrPeerTooLarge,
+		"dispatch.unavailable": ErrDispatchUnavailable, "dispatch.unknown_project": ErrDispatchUnknownProject,
+		"dispatch.ambiguous": ErrDispatchAmbiguous, "dispatch.nested": ErrDispatchNested,
+		"dispatch.untrusted": ErrDispatchUntrusted, "dispatch.failed": ErrDispatchFailed,
 	} {
 		if errors.Is(err, sentinel) {
 			return code

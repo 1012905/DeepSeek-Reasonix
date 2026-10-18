@@ -30,7 +30,7 @@ func TestPersonaSettingsRouteRoundTripAndValidation(t *testing.T) {
 	defer srv.Close()
 
 	got := readJSON[control.PersonaSettings](t, srv.URL, "/persona")
-	if got.Prefix != "" || got.Suffix != "" || got.Complete || !got.IncludeRuntimeContext {
+	if got.Prefix != "" || got.Suffix != "" || !got.IncludeRuntimeContext {
 		t.Fatalf("unset persona reads %+v, want empty with runtime context enabled", got)
 	}
 	if got.Path != config.UserConfigPath() {
@@ -40,9 +40,6 @@ func TestPersonaSettingsRouteRoundTripAndValidation(t *testing.T) {
 		t.Fatalf("GET served no presets: %+v", got.Presets)
 	}
 
-	if status, code := personaRefusal(t, postProvider(t, srv.URL, "/persona", `{"complete":true}`)); status != http.StatusBadRequest || code != "persona.complete_requires_prefix" {
-		t.Fatalf("complete without prefix = %d %q", status, code)
-	}
 	big := strings.Repeat("x", 33<<10)
 	if status, code := personaRefusal(t, postProvider(t, srv.URL, "/persona", fmt.Sprintf(`{"prefix":%q}`, big))); status != http.StatusBadRequest || code != "persona.too_large" {
 		t.Fatalf("oversized persona = %d %q", status, code)
@@ -63,7 +60,7 @@ func TestPersonaSettingsRouteRoundTripAndValidation(t *testing.T) {
 	if err := json.NewDecoder(ok.Body).Decode(&saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.Prefix != "IDENTITY" || saved.Suffix != "TAIL" || saved.Complete || saved.IncludeRuntimeContext {
+	if saved.Prefix != "IDENTITY" || saved.Suffix != "TAIL" || saved.IncludeRuntimeContext {
 		t.Fatalf("saved response = %+v, want normalized values with runtime context off", saved)
 	}
 	stored := config.LoadForEdit(config.UserConfigPath()).Agent.Persona

@@ -291,7 +291,7 @@ const sseKeepaliveInterval = 15 * time.Second
 // disconnects. Each event is one `data:` frame of the JSON wire form, and every
 // frame a client cannot afford to miss also carries an `id:` it can resume from.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
-	ch, unsubscribe := s.subscribeEvents(lastEventID(r), attaching(r))
+	ch, unsubscribe := s.subscribeEvents(lastEventID(r), attaching(r), false)
 	defer unsubscribe()
 
 	streamFrames(w, r, s.bc, ch)
@@ -301,15 +301,20 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 // EventSource carries its last id on a reconnect unasked, so a dropped
 // connection costs only what the replay log can no longer reach; `first` is a
 // client that holds nothing yet.
-func (s *Server) subscribeEvents(after int64, first bool) (<-chan Frame, func()) {
+func (s *Server) subscribeEvents(after int64, first, attached bool) (<-chan Frame, func()) {
 	var ch <-chan Frame
 	var unsubscribe func()
 	// Subscribe and replay as one handoff. Prompt producers are serialized with
 	// this operation, so no original event can land between the two steps.
 	s.ctl().ReplayPendingPromptsWith(func() event.Sink {
-		if first {
+		switch {
+		case first && attached:
+			ch, unsubscribe = s.bc.SubscribeAttached()
+		case first:
 			ch, unsubscribe = s.bc.SubscribeInitialNotices()
-		} else {
+		case attached:
+			ch, unsubscribe = s.bc.SubscribeResume(after)
+		default:
 			ch, unsubscribe = s.bc.SubscribeFrom(after)
 		}
 		return event.FuncSink(func(e event.Event) {

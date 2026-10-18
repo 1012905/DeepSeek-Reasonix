@@ -198,7 +198,7 @@ func assemblyShape(e *config.ProviderEntry) string {
 		orNil(len(e.ModelOverrides), e.ModelOverrides), e.ContextWindow, e.MaxOutputTokens,
 		orNil(len(e.Headers), e.Headers), orNil(len(e.ExtraBody), e.ExtraBody), e.ReasoningProtocol,
 		orNil(len(e.SupportedEfforts), e.SupportedEfforts), e.DefaultEffort, e.IdleTimeoutSeconds,
-		orNil(len(e.Prices), e.Prices),
+		orNil(len(e.Prices), e.Prices), orNil(len(e.VideoModels), e.VideoModels), e.VideoProtocol,
 	}
 	b, err := json.Marshal(shape)
 	if err != nil {

@@ -28,7 +28,11 @@ type samplingRequest struct {
 }
 
 func (a *Agent) streamProviderRequest(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
-	return a.svc.prov.Stream(ctx, req)
+	ch, err := a.svc.prov.Stream(ctx, req)
+	if err == nil {
+		a.window().rememberSummaryPrefix(req)
+	}
+	return ch, err
 }
 
 func (a *Agent) handleSamplingError(
@@ -204,6 +208,16 @@ func freezeProviderRequest(req provider.Request) provider.Request {
 		out.ResponseFormat = &rf
 	}
 	return out
+}
+
+// withHeaderRetries makes a request report its connection retries to the sink
+// and, when the user set one, apply their retry limit.
+func withHeaderRetries(ctx context.Context, sink event.Sink, limit int) context.Context {
+	ctx = provider.WithRetryNotify(ctx, headerRetryNotice(sink))
+	if limit != 0 {
+		ctx = provider.WithRetryLimit(ctx, limit)
+	}
+	return ctx
 }
 
 // headerRetryNotice turns a connection+header backoff into the Retrying event a

@@ -38,7 +38,7 @@ func buildPersonaPrompt(t *testing.T, extra string) string {
 	t.Setenv("REASONIX_STATE_HOME", "")
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", fmt.Sprintf(personaConfigTemplate, extra))
+	writeFile(t, os.Getenv("REASONIX_HOME"), "config.toml", fmt.Sprintf(personaConfigTemplate, extra))
 	approveWorkspace(t, dir)
 	b, err := Build(context.Background(), Options{Home: os.Getenv("REASONIX_HOME"), WorkspaceRoot: dir, resolvedShell: pinnedEffectShell()})
 	if err != nil {
@@ -79,18 +79,15 @@ suffix = "PERSONA SUFFIX"
 	}
 }
 
-func TestPersonaCompleteIsTheEntirePrompt(t *testing.T) {
+func TestDeprecatedCompleteCannotReplaceFirstPartyPrompt(t *testing.T) {
 	prompt := buildPersonaPrompt(t, `
 [agent.persona]
 prefix = "ONLY THIS PERSONA"
-suffix = "MUST NOT APPEAR"
+suffix = "USER TAIL"
 complete = true
 `)
-	if prompt != "ONLY THIS PERSONA" {
-		t.Fatalf("complete mode prompt = %q, want exactly the prefix", prompt)
-	}
-	if strings.Contains(prompt, "BASE SYSTEM PROMPT") || strings.Contains(prompt, config.WorkPracticePolicy) {
-		t.Fatalf("complete mode kept other prompt sections: %q", prompt)
+	if !strings.HasPrefix(prompt, "ONLY THIS PERSONA") || !strings.Contains(prompt, "USER TAIL") || !strings.Contains(prompt, config.WorkPracticePolicy) || !strings.Contains(prompt, "BASE SYSTEM PROMPT") {
+		t.Fatalf("deprecated complete erased first-party guidance: %q", prompt)
 	}
 }
 
@@ -154,7 +151,7 @@ func TestEmptyPersonaLeavesThePromptUnchanged(t *testing.T) {
 	approveWorkspace(t, dir)
 	opts := Options{Home: os.Getenv("REASONIX_HOME"), WorkspaceRoot: dir, resolvedShell: pinnedEffectShell()}
 	build := func(extra string) string {
-		writeFile(t, dir, "reasonix.toml", fmt.Sprintf(personaConfigTemplate, extra))
+		writeFile(t, os.Getenv("REASONIX_HOME"), "config.toml", fmt.Sprintf(personaConfigTemplate, extra))
 		b, err := Build(context.Background(), opts)
 		if err != nil {
 			t.Fatalf("Build: %v", err)

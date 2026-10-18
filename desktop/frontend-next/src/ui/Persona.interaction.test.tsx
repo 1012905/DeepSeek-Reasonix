@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { Persona } from "./Persona";
@@ -10,11 +10,11 @@ import type { PersonaDraft, PersonaSettings } from "../port/boundary";
 afterEach(cleanup);
 
 const base: PersonaSettings = {
-  prefix: "", suffix: "", complete: false, include_runtime_context: true,
+  prefix: "", suffix: "", include_runtime_context: true,
   path: "/u/config.toml",
   presets: [
-    { id: "engineer", prefix: "Rigorous engineer prefix.", suffix: "", complete: true, include_runtime_context: true },
-    { id: "concise", prefix: "", suffix: "Be terse.", complete: false, include_runtime_context: false },
+    { id: "engineer", prefix: "Rigorous engineer prefix.", suffix: "", include_runtime_context: true },
+    { id: "concise", prefix: "", suffix: "Be terse.", include_runtime_context: false },
   ],
 };
 
@@ -38,7 +38,7 @@ describe("the system persona page", () => {
     await userEvent.click(screen.getByRole("button", { name: "严谨工程师" }));
     expect((await field("系统提示词开头")).value).toBe("Rigorous engineer prefix.");
     expect((await field("第一方指令之后")).value).toBe("");
-    expect(screen.getByRole("switch", { name: "用前缀替换整个系统提示词（complete）" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByRole("switch", { name: /complete/ })).toBeNull();
     expect(now(container)).toBe("严谨工程师");
 
     await userEvent.click(screen.getByRole("button", { name: "简洁" }));
@@ -56,7 +56,7 @@ describe("the system persona page", () => {
     expect(now(container)).toBe("自定义");
   });
 
-  it("saves all four fields and says only new sessions read them", async () => {
+  it("saves supported fields and declares the next session build", async () => {
     const port = portWith();
     render(<Persona port={port} />);
     const prefix = await field("系统提示词开头");
@@ -71,48 +71,18 @@ describe("the system persona page", () => {
     expect(port.savePersonaSettings).toHaveBeenCalledWith({
       prefix: "Lead with evidence.",
       suffix: "Stay terse.",
-      complete: false,
       include_runtime_context: false,
     });
-    expect(await screen.findByText("已保存，新会话生效")).toBeTruthy();
+    expect(await screen.findByText("已保存，下次会话构建时生效")).toBeTruthy();
     expect(screen.getByText("/u/config.toml")).toBeTruthy();
     // Clean again: the same bytes would be a second no-op save.
     expect(saveButton().disabled).toBe(true);
   });
 
-  it("cannot turn complete on until there is a prefix", async () => {
-    render(<Persona port={portWith()} />);
-    const sw = (await screen.findByRole("switch", { name: "用前缀替换整个系统提示词（complete）" })) as HTMLButtonElement;
-    expect(sw.disabled).toBe(true);
-    expect(screen.getByText(/先填写前缀才能开启/)).toBeTruthy();
-    await userEvent.type(await field("系统提示词开头"), "You are someone.");
-    await waitFor(() => expect(sw.disabled).toBe(false));
-    await userEvent.click(sw);
-    expect(sw.getAttribute("aria-checked")).toBe("true");
-  });
-
-  it("refuses complete with an empty prefix without writing", async () => {
-    const port = portWith();
-    render(<Persona port={port} />);
-    await userEvent.click(await screen.findByRole("button", { name: "严谨工程师" }));
-    await userEvent.clear(await field("系统提示词开头"));
-    await userEvent.click(saveButton());
-    expect(port.savePersonaSettings).not.toHaveBeenCalled();
-    expect(await screen.findByText("启用「用前缀替换整个系统提示词」时，前缀不能为空。")).toBeTruthy();
-  });
-
-  it("shows the kernel's wording for the two persona refusals", async () => {
+  it("shows the kernel's size refusal", async () => {
     const port = portWith();
     render(<Persona port={port} />);
     await userEvent.type(await field("系统提示词开头"), "Something.");
-
-    port.savePersonaSettings.mockImplementationOnce(async () => {
-      throw new HttpError(400, "persona.complete_requires_prefix", {
-        code: "persona.complete_requires_prefix", params: { detail: "prefix is blank" },
-      });
-    });
-    await userEvent.click(saveButton());
-    expect(await screen.findByText(/complete 模式必须填写前缀/)).toBeTruthy();
 
     port.savePersonaSettings.mockImplementationOnce(async () => {
       throw new HttpError(400, "persona.too_large", {

@@ -1,5 +1,5 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings, PersonaDraft, PersonaSettings } from "./boundary";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings, PersonaDraft, PersonaSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 
@@ -173,7 +173,7 @@ export class MockBoundary extends MockShell {
   protected peerState: PeersState = { enabled: false, peers: [], held: [] };
 
   async peers(): Promise<PeersState> {
-    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held] };
+    return { ...this.peerState, peers: [...this.peerState.peers], held: [...this.peerState.held], threads: [...(this.peerState.threads ?? [])] };
   }
 
   async sendPeerMessage(to: string, text: string): Promise<PeerReceipt> {
@@ -182,8 +182,26 @@ export class MockBoundary extends MockShell {
     return { id: `m-${text.length}`, to: target };
   }
 
-  async resolvePeerMessage(id: string, _approve: boolean): Promise<void> {
+  async resolvePeerMessage(id: string, _approve: boolean, _remember: PeerRemember = "none"): Promise<void> {
     this.peerState = { ...this.peerState, held: this.peerState.held.filter((h) => h.id !== id) };
+  }
+
+  protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false, available: true };
+
+  async peersSettings(): Promise<PeersSettings> {
+    return { ...this.peerSettings, release_projects: [...this.peerSettings.release_projects] };
+  }
+
+  async savePeersSettings(edit: PeersSettingsEdit): Promise<PeersSettings> {
+    const keep = edit.release_projects;
+    this.peerSettings = {
+      ...this.peerSettings,
+      enabled: edit.enabled ?? this.peerSettings.enabled,
+      dispatch: edit.dispatch ?? this.peerSettings.dispatch,
+      release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
+      pending: true,
+    };
+    return this.peersSettings();
   }
 
   private archive: AutoArchiveSettings = { enabled: false, days: 30, defaultDays: 30, path: "/Users/you/.reasonix/config.toml" };
@@ -197,23 +215,20 @@ export class MockBoundary extends MockShell {
     this.archive = { ...this.archive, ...s };
     return { ...this.archive };
   }
-
-  // Two starting points are enough for the page's layout: one that is a whole
-  // prefix (complete) and one that only trails the built-in guidance.
   private personaState: PersonaSettings = {
-    prefix: "", suffix: "", complete: false, include_runtime_context: true,
+    prefix: "", suffix: "", include_runtime_context: true,
     path: "/Users/you/.reasonix/config.toml",
     presets: [
       {
         id: "engineer",
         prefix: "You are a rigorous staff engineer. Verify before claiming, make the smallest correct change, and state the residual risk.",
-        suffix: "", complete: true, include_runtime_context: true,
+        suffix: "", include_runtime_context: true,
       },
       {
         id: "concise",
         prefix: "",
         suffix: "Be terse. Skip the preamble; prefer code and bullets.",
-        complete: false, include_runtime_context: false,
+        include_runtime_context: false,
       },
     ],
   };
@@ -223,14 +238,11 @@ export class MockBoundary extends MockShell {
   }
 
   async savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings> {
-    // The same rule the kernel enforces, so the fixture cannot show a screen
-    // accepting something the real save refuses.
-    if (s.complete && !s.prefix.trim()) throw new Error("complete requires a prefix");
     this.personaState = { ...this.personaState, ...s };
     return this.persona();
   }
 
-  private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml" };
+  private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml", unconverted: [] };
 
   async displayCurrency(): Promise<DisplayCurrencySettings> {
     return { ...this.currency };
@@ -267,6 +279,21 @@ export class MockBoundary extends MockShell {
   async saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings> {
     this.narration = { ...this.narration, level };
     return { ...this.narration };
+  }
+
+  private webAccess: WebAccessSettings = {
+    search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
+    known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"],
+    paid_backends: ["deepseek_api"], deepseek_api_ready: false, path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async webAccessSettings(): Promise<WebAccessSettings> {
+    return { ...this.webAccess };
+  }
+
+  async saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings> {
+    this.webAccess = { ...this.webAccess, ...patch };
+    return { ...this.webAccess };
   }
 
   async saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings> {

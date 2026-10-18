@@ -150,8 +150,12 @@ export const NAV: [string, [Section, string][]][] = [
  *  on-open         written and kept now; the running session keeps what it was
  *                  built with, and so does a rebuild, so the sessions opened
  *                  afterwards are the ones that start with it.
+ *  next-turn       written and kept now; the running session takes it at its
+ *                  next turn boundary, because it changes what the model is
+ *                  given (the tool table), which only moves between turns.
+ *  next-rebuild    saved without rebuilding now; the next runtime build reads it.
  *  none            nothing here changes anything: the block only reports. */
-export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "on-open" | "none";
+export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "on-open" | "next-turn" | "next-rebuild" | "none";
 
 /** Who owns what a block governs — the other half of the contract, and the one
  *  the screen could not answer. "When does it take effect" was declared here
@@ -212,9 +216,8 @@ export const SETTINGS: SettingEntry[] = [
   { section: "session", anchor: "fold-work", title: "折叠中间过程", scope: "machine", apply: "immediate", keywords: ["折叠", "中间过程", "工具调用", "思考", "最后一句", "收起", "摘要"] },
   // Written to the user file only; the kernel's background sweep reads it on each pass.
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
-  // Composed into the system prompt once at boot as part of the cache-stable
-  // prefix: the save lands now, and only sessions opened afterwards read it.
-  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "on-open", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀", "complete", "预设"] },
+  // Saving does not rebuild; any later runtime build reads the user persona.
+  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "next-rebuild", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀", "预设"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
   { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "网页搜索", "web search", "system one", "typesafe", "laya", "自动命名", "思考强度", "推理", "reasoning", "档位"] },
@@ -240,9 +243,10 @@ export const SETTINGS: SettingEntry[] = [
   // one. The shared [browser] enabled key belongs to the 1.x command line.
   // The lease is built with the session and a rebuild adopts the one it holds, so
   // the save reaches only sessions opened afterwards; the handler rebuilds nothing.
-  { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "none", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
+  { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
   { section: "tools", anchor: "write-lease", title: "多个会话同时写一个项目", scope: "machine", apply: "on-open", keywords: ["lease", "写锁", "并行", "多会话", "乐观", "optimistic", "write_lease", "等待"] },
   { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
+  { section: "tools", anchor: "web-access", title: "联网：搜索与抓取", scope: "machine", apply: "on-open", keywords: ["搜索", "searxng", "deepseek", "抓取", "计费", "付费", "web search", "fetch"] },
   { section: "tools", anchor: "browser-tools", title: "内置浏览器", scope: "machine", apply: "runtime-rebuild", keywords: ["browser", "网页", "chrome", "浏览器工具"] },
 
   // The four blocks below carry a scope control of their own, and the kernel

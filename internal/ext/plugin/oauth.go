@@ -261,6 +261,9 @@ func reconcileHTTPMCPOAuth(spec Spec, remainingResource string) (bool, error) {
 	if err := bumpMCPOAuthGeneration(spec.StateDir); err != nil {
 		return false, fmt.Errorf("clear MCP OAuth state: %w", err)
 	}
+	if err := ForgetSignInConsent(spec.StateDir); err != nil {
+		return false, fmt.Errorf("clear MCP OAuth state: %w", err)
+	}
 	if err := os.Remove(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil

@@ -38,9 +38,9 @@ type promptAssembly struct {
 
 // buildPromptAssembly resolves the base system prompt and folds in, in order,
 // the persona prefix, output style, core policies, persona suffix, environment
-// section, offline note, memory, and the skill index — then persona.Final.
+// section, offline note, memory, and the skill index.
 // Order is the contract: it decides the cache-stable prefix bytes every turn
-// reuses, so a saved persona rides a new session and never rebuilds this one.
+// reuses. Saving does not rebuild a runtime; the next build reads saved values.
 func buildPromptAssembly(ctx context.Context, opts Options, cfg *config.Config, root string, shell sandbox.Shell, sink event.Sink, timer *phaseTimer) (promptAssembly, error) {
 	sysPrompt, err := cfg.ResolveSystemPromptForRoot(root)
 	if err != nil {
@@ -53,9 +53,7 @@ func buildPromptAssembly(ctx context.Context, opts Options, cfg *config.Config, 
 		report(sink, event.Event{Level: event.LevelWarn, Text: err.Error() + "; falling back to inline/default system prompt"})
 		sysPrompt = cfg.InlineSystemPrompt()
 	}
-	// The persona is part of the provider-cached prefix, composed here once. A
-	// saved edit is picked up by the next boot (new sessions), never by rewriting
-	// a live prompt — see control.Compose for what may change mid-session.
+	// Persona edits enter the cache-stable prefix at the next runtime build.
 	p := persona.FromConfig(cfg.Agent.Persona)
 	sysPrompt = persona.ApplyPrefix(sysPrompt, p)
 	// Output style: fold the selected persona/tone block into the base prompt
@@ -124,7 +122,7 @@ func buildPromptAssembly(ctx context.Context, opts Options, cfg *config.Config, 
 	timer.mark("skills")
 
 	return promptAssembly{
-		prompt:         persona.Final(p, skillSet.sysPrompt),
+		prompt:         skillSet.sysPrompt,
 		workspaceVCS:   environment.WorkspaceVCS(root),
 		memory:         memSet.set,
 		projectChecks:  memSet.checks,

@@ -25,7 +25,7 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
-	maxSideSession int
+	limits         agentLimits
 	goalAutoRetry  int
 	subagentClaims string
 	hostVerif      string
@@ -44,7 +44,8 @@ type heldScope struct {
 	// turnNarration is the user's [agent] turn_narration. It adds output tokens
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
-	peers         bool
+	persona       PersonaConfig
+	peers         PeersConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
 	// webSearchBackends and searxngURL decide where the user's queries go, so
@@ -56,6 +57,8 @@ type heldScope struct {
 	webSearchPaid []string
 	webFetch      []string
 	webFetchPaid  []string
+	// videoNativeMax lowers what is sent to a vendor, so only the user sets it.
+	videoNativeMax int64
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -75,7 +78,7 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
-		maxSideSession:  c.Agent.MaxSideSessions,
+		limits:          holdAgentLimits(c),
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
 		hostVerif:       c.Agent.HostVerification,
@@ -89,7 +92,8 @@ func holdUserScope(c *Config) heldScope {
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
-		peers:           c.Peers.Enabled,
+		persona:         clonePersona(c.Agent.Persona),
+		peers:           clonePeers(c.Peers),
 		mcpResources:    c.Tools.MCPResources,
 
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
@@ -97,6 +101,7 @@ func holdUserScope(c *Config) heldScope {
 		webSearchPaid:     slices.Clone(c.Tools.WebSearchPaidAllowed),
 		webFetch:          slices.Clone(c.Tools.WebFetchBackends),
 		webFetchPaid:      slices.Clone(c.Tools.WebFetchPaidAllowed),
+		videoNativeMax:    c.Tools.VideoNativeMaxBytes,
 	}
 }
 
@@ -184,10 +189,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	}
 	// Messages between sessions put other sessions' text in front of this one's
 	// model, so enabling them is the user's alone.
-	if c.Peers.Enabled != h.peers {
-		c.ignoreProject("peers.enabled", fmt.Sprintf("%t", c.Peers.Enabled), ProjectUserOnly)
-		c.Peers.Enabled = h.peers
-	}
+	h.narrowPeers(c)
 	// Letting the model read what a server publishes widens what a third party
 	// can put in front of it, so a cloned repo must not turn it on.
 	if c.Tools.MCPResources != h.mcpResources {
@@ -195,16 +197,17 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.Tools.MCPResources = h.mcpResources
 	}
 	c.keepUserSearchBackends(h)
+	if c.Tools.VideoNativeMaxBytes != h.videoNativeMax {
+		c.ignoreProject("tools.video_native_max_bytes", fmt.Sprint(c.Tools.VideoNativeMaxBytes), ProjectUserOnly)
+		c.Tools.VideoNativeMaxBytes = h.videoNativeMax
+	}
 	// The cross-session write lease protects other sessions from this one, so a
 	// cloned repo must not relax it, nor tighten what the user chose.
 	if c.Agent.GoalAutoRetry != h.goalAutoRetry {
 		c.ignoreProject("agent.goal_auto_retry", fmt.Sprint(c.Agent.GoalAutoRetry), ProjectUserOnly)
 		c.Agent.GoalAutoRetry = h.goalAutoRetry
 	}
-	if c.Agent.MaxSideSessions != h.maxSideSession {
-		c.ignoreProject("agent.max_side_sessions", fmt.Sprint(c.Agent.MaxSideSessions), ProjectUserOnly)
-		c.Agent.MaxSideSessions = h.maxSideSession
-	}
+	h.narrowAgentLimits(c)
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
 		c.Agent.PlanApproval = h.planApproval
@@ -235,6 +238,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.turn_narration", c.TurnNarration(), ProjectUserOnly)
 	}
 	c.Agent.TurnNarration = h.turnNarration
+	if !reflect.DeepEqual(c.Agent.Persona, h.persona) {
+		c.ignoreProject("agent.persona", "", ProjectUserOnly)
+	}
+	c.Agent.Persona = clonePersona(h.persona)
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
 	if !maps.Equal(c.Agent.RoleEfforts, h.endpoints.agent.RoleEfforts) {
@@ -258,6 +265,19 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("tools.system_one.laya.local", "true", ProjectUserOnly)
 		c.Tools.SystemOne.Laya.Local = false
 	}
+	c.applyWorkspaceGrants(r, ws)
+	store := NewProjectProgramStore(r.Home())
+	h.gatePrograms(c, store, ws)
+	// Launcher arguments belong to the program the user chose them for.
+	if c.Tools.Shell.Path != h.shell.Path {
+		c.Tools.Shell.Args = nil
+	}
+	h.endpoints.gateEndpoints(c, store, ws)
+}
+
+// applyWorkspaceGrants adds what the user already granted this workspace, and
+// refuses a granted root that no longer resolves to itself.
+func (c *Config) applyWorkspaceGrants(r Roots, ws string) {
 	grant := grantedToWorkspace(r.Home(), ws)
 	c.Permissions.Allow = appendMissing(c.Permissions.Allow, grant.Allow...)
 	for _, entry := range grant.AllowWrite {
@@ -281,13 +301,6 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		}
 		c.projectScope.extraRoots = appendMissing(c.projectScope.extraRoots, resolved)
 	}
-	store := NewProjectProgramStore(r.Home())
-	h.gatePrograms(c, store, ws)
-	// Launcher arguments belong to the program the user chose them for.
-	if c.Tools.Shell.Path != h.shell.Path {
-		c.Tools.Shell.Args = nil
-	}
-	h.endpoints.gateEndpoints(c, store, ws)
 }
 
 func (h heldScope) narrowSandbox(c *Config, ws string) {
