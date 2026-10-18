@@ -118,6 +118,7 @@ const registeredCommands = new Map();
 let registering = false;
 let startRan = false;
 
+const withUnsupported = (ns, impl) => new Proxy(impl, { get: (t, member) => (member in t ? t[member] : typeof member === "string" ? async () => { throw unsupported(`$.${ns}.${member}`); } : undefined) });
 const rejectUnsupported = (ns) => new Proxy({}, { get: (_, member) => (typeof member === "string" ? async () => { throw unsupported(`$.${ns}.${member}`); } : undefined) });
 
 async function readFileCapped(p) {
@@ -204,8 +205,14 @@ const $ = {
   session: {
     id: () => session.id, cwd: () => session.cwd, root: () => session.root,
     model: () => session.model, turns: () => session.turns,
-    messages: async () => { throw unsupported("$.session.messages"); },
-    usage: async () => ({ startedAt: startedAt, context: usage.context, rateLimits: [], cost: usage.cost }),
+    messages: async (opts) => {
+      const r = await callHost("host/session/read", { what: "messages", ...(Number.isInteger(opts?.limit) && opts.limit > 0 ? { limit: opts.limit } : {}) });
+      return (r.messages ?? []).map((m) => ({ role: m.role, text: m.text }));
+    },
+    usage: async () => {
+      const u = (await callHost("host/session/read", { what: "usage" })).usage ?? {};
+      return { startedAt: startedAt, context: { tokens: u.promptTokens ?? 0, window: 0, percent: 0 }, tokens: { prompt: u.promptTokens ?? 0, completion: u.completionTokens ?? 0, cached: u.cachedTokens ?? 0 }, rateLimits: [], cost: usage.cost };
+    },
   },
   tool: {
     register: (spec) => {
@@ -243,7 +250,16 @@ const $ = {
     selection: async () => { throw unsupported("$.ui.selection"); },
     blit: async () => { throw unsupported("$.ui.blit"); },
   },
-  prompt: rejectUnsupported("prompt"), turn: rejectUnsupported("turn"), agent: rejectUnsupported("agent"), model: rejectUnsupported("model"),
+  prompt: withUnsupported("prompt", {
+    // Always the mod's own words, labelled as such; it never speaks as the user.
+    submit: async (text, opts) => {
+      if (opts?.asUser) throw unsupported("$.prompt.submit with asUser");
+      const r = await callHost("host/prompt/submit", { text: String(text ?? "") });
+      if (r.refused === "submit_per_turn") throw new ModError("mod.submit_rate", "the ceiling on prompts mods may queue between two of yours is spent");
+      if (r.refused) throw new ModError("mod.submit_refused", `the host refused the prompt: ${r.refused}`);
+      return { queued: r.queued === true };
+    },
+  }), turn: rejectUnsupported("turn"), agent: rejectUnsupported("agent"), model: rejectUnsupported("model"),
   config: rejectUnsupported("config"), settings: rejectUnsupported("settings"), mcp: rejectUnsupported("mcp"), audio: rejectUnsupported("audio"), telemetry: rejectUnsupported("telemetry"),
 };
 const startedAt = Date.now();
@@ -296,7 +312,16 @@ function toNode(el, depth = 0) {
 // ---- host RPC ---------------------------------------------------------------
 let nextId = 1;
 const pending = new Map();
+// session.start runs during the handshake, before extension/initialized, and the
+// protocol forbids a request then. A publication made in that window is held and
+// sent once the session is ready; a call that needs an answer is refused.
+const heldPublishes = [];
 function callHost(method, params) {
+  if (!initialized) {
+    if (method !== "host/ui/publish") return Promise.reject(new ModError("mod.not_ready", `${method} is not available until the session has started`));
+    heldPublishes.push(params);
+    return Promise.resolve({ accepted: true });
+  }
   return new Promise((resolve, reject) => {
     const id = nextId++;
     pending.set(id, { resolve, reject });
@@ -404,7 +429,7 @@ async function handle(m) {
   if (m.id !== undefined && !m.method) { const p = pending.get(m.id); if (p) { pending.delete(m.id); m.error ? p.reject(new ModError("mod.host_error", m.error.message)) : p.resolve(m.result); } return; }
   switch (m.method) {
     case "extension/initialize": return init(m);
-    case "extension/initialized": initialized = true; scheduleRedraw(); return;
+    case "extension/initialized": initialized = true; for (const p of heldPublishes.splice(0)) callHost("host/ui/publish", p).catch(() => {}); scheduleRedraw(); return;
     case "extension/intercept": {
       const h = intercepts[m.params.event];
       if (!h) return reply(m.id, pass);

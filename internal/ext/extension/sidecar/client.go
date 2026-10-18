@@ -255,6 +255,8 @@ func newClient(p *process, opts ClientOptions) *Client {
 	c.conn.Handle(string(protocol.MethodHostContentRead), c.store.ReadHandler)
 	c.conn.Handle(string(protocol.MethodHostUIPublish), c.handleUIPublish)
 	c.conn.Handle(string(protocol.MethodHostUIRequest), c.handleUIRequest)
+	c.conn.Handle(string(protocol.MethodHostSessionRead), c.handleSessionRead)
+	c.conn.Handle(string(protocol.MethodHostPromptSubmit), c.handlePromptSubmit)
 	c.conn.HandleNotify(string(protocol.MethodExtensionProviderStreamChunk), c.handleStreamChunk)
 	c.conn.HandleNotify(string(protocol.MethodExtensionProviderStreamEnd), c.handleStreamEnd)
 	return c

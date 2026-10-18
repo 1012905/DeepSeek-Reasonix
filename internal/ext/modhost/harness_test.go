@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -33,7 +34,15 @@ type fakeHost struct {
 	waiting map[int]chan map[string]any
 	// published collects host/ui/publish params; asked answers host/ui/request.
 	published chan map[string]any
-	stderr    *safeBuf
+	// sessionCalls collects host/session/read and host/prompt/submit params;
+	// refuseSubmit makes the host answer a submit with its per-turn refusal.
+	sessionCalls chan map[string]any
+	refuseSubmit atomic.Bool
+	// early collects host requests the script sent before extension/initialized,
+	// which the protocol forbids and the client answers by killing the process.
+	initializedSent atomic.Bool
+	early           chan string
+	stderr          *safeBuf
 }
 
 type safeBuf struct {
@@ -78,7 +87,7 @@ func startHost(t *testing.T, module string, cfg map[string]any) *fakeHost {
 	cmd := exec.Command(node, script, abs, filepath.Dir(abs), "demo", string(raw))
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
-	h := &fakeHost{t: t, cmd: cmd, in: json.NewEncoder(stdin), lines: make(chan map[string]any, 64), waiting: map[int]chan map[string]any{}, published: make(chan map[string]any, 64), stderr: &safeBuf{}}
+	h := &fakeHost{t: t, cmd: cmd, in: json.NewEncoder(stdin), lines: make(chan map[string]any, 64), waiting: map[int]chan map[string]any{}, published: make(chan map[string]any, 64), sessionCalls: make(chan map[string]any, 64), early: make(chan string, 16), stderr: &safeBuf{}}
 	cmd.Stderr = h.stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -102,10 +111,27 @@ func startHost(t *testing.T, module string, cfg map[string]any) *fakeHost {
 func (h *fakeHost) dispatch(m map[string]any) {
 	if method, ok := m["method"].(string); ok {
 		id := m["id"]
+		if !h.initializedSent.Load() && strings.HasPrefix(method, "host/") {
+			h.early <- method
+		}
 		switch method {
 		case "host/ui/publish":
 			h.published <- m["params"].(map[string]any)
 			h.in.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"accepted": true}})
+		case "host/session/read":
+			h.sessionCalls <- m["params"].(map[string]any)
+			if m["params"].(map[string]any)["what"] == "usage" {
+				h.in.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"usage": map[string]any{"promptTokens": 120, "completionTokens": 30, "cachedTokens": 100}}})
+			} else {
+				h.in.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"messages": []any{map[string]any{"role": "user", "text": "hi"}}, "omitted": 2}})
+			}
+		case "host/prompt/submit":
+			h.sessionCalls <- m["params"].(map[string]any)
+			result := map[string]any{"queued": true}
+			if h.refuseSubmit.Load() {
+				result = map[string]any{"queued": false, "refused": "submit_per_turn"}
+			}
+			h.in.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
 		case "host/ui/request":
 			h.in.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"cancelled": false, "values": map[string]any{"answer": "yes"}}})
 		}
@@ -149,6 +175,7 @@ func (h *fakeHost) initialize() map[string]any {
 		"capabilities": map[string]any{"contentRefs": true, "uiHost": "desktop", "protocolVersion": "2"},
 	}, 20*time.Second)
 	if res["error"] == nil {
+		h.initializedSent.Store(true)
 		h.in.Encode(map[string]any{"jsonrpc": "2.0", "method": "extension/initialized", "params": map[string]any{}})
 	}
 	return res

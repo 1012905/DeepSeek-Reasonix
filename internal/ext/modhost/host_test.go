@@ -292,3 +292,92 @@ export function register(on) {
 		t.Fatalf("replacement = %+v, want the earlier block first, then the two new non-empty ones", rep)
 	}
 }
+
+// A mod reads the session and queues a prompt through the host, which answers
+// under the user's ceilings; a refusal arrives as a typed error code.
+func TestAModReadsTheSessionAndQueuesAPromptThroughTheHost(t *testing.T) {
+	h := startHost(t, writeMod(t, "session.mjs", `
+export function register(on) {
+  on('prompt.submit', async ($, e, next) => {
+    const msgs = await $.session.messages({ limit: 7 });
+    const u = await $.session.usage();
+    await $.prompt.submit('follow up');
+    let code = 'none';
+    try { await $.prompt.submit('again', { asUser: true }); } catch (err) { code = err.code; }
+    return next({ ...e, text: e.text + ' ' + msgs.length + ' ' + msgs[0].text + ' ' + u.context.tokens + ' ' + code });
+  });
+}`), nil)
+	if res := h.initialize(); res["error"] != nil {
+		t.Fatalf("initialize: %v", res["error"])
+	}
+	got := h.intercept("input.receive", map[string]any{"text": "go"})
+	b, _ := json.Marshal(got["replacement"])
+	if !strings.Contains(string(b), "go 1 hi 120 mod.unsupported") {
+		t.Fatalf("replacement = %s, want the read messages, the usage and asUser refused as unsupported", b)
+	}
+	var calls []map[string]any
+	for len(h.sessionCalls) > 0 {
+		calls = append(calls, <-h.sessionCalls)
+	}
+	if len(calls) != 3 || calls[0]["what"] != "messages" || calls[0]["limit"] != float64(7) || calls[1]["what"] != "usage" || calls[2]["text"] != "follow up" {
+		t.Fatalf("host calls = %v", calls)
+	}
+}
+
+func TestAPromptTheHostRefusesRejectsWithTheTypedSubmitRateCode(t *testing.T) {
+	h := startHost(t, writeMod(t, "submit.mjs", `
+export function register(on) {
+  on('prompt.submit', async ($, e, next) => {
+    let code = 'none';
+    try { await $.prompt.submit('x'); } catch (err) { code = err.code; }
+    return next({ ...e, text: code });
+  });
+}`), nil)
+	h.refuseSubmit.Store(true)
+	if res := h.initialize(); res["error"] != nil {
+		t.Fatalf("initialize: %v", res["error"])
+	}
+	b, _ := json.Marshal(h.intercept("input.receive", map[string]any{"text": "go"})["replacement"])
+	if !strings.Contains(string(b), "mod.submit_rate") {
+		t.Fatalf("replacement = %s, want mod.submit_rate", b)
+	}
+}
+
+// The protocol forbids a request before extension/initialized and the client
+// kills a process that sends one, yet session.start runs during the handshake so
+// its tools can be described. A call a hook makes then waits or is refused; none
+// reaches the host early.
+func TestHostCallsMadeWhileSessionStartRunsInTheHandshakeNeverReachTheHostEarly(t *testing.T) {
+	h := startHost(t, writeMod(t, "early.mjs", `
+let probe = 'unset';
+export function register(on) {
+  on('session.start', async ($, e, next) => {
+    $.ui.toast('hello from start');
+    try { await $.session.messages(); } catch (err) { probe = err.code; }
+    $.tool.register({ name: 'probe', description: 'p', inputSchema: { type: 'object' }, readOnly: true, run: async () => probe });
+    return next(e);
+  });
+}`), nil)
+	if res := h.initialize(); res["error"] != nil {
+		t.Fatalf("initialize: %v", res["error"])
+	}
+	select {
+	case m := <-h.early:
+		t.Fatalf("the script sent %s before extension/initialized", m)
+	default:
+	}
+	call := h.call("extension/tool/call", map[string]any{"name": "probe", "arguments": map[string]any{}}, 5*time.Second)
+	if got := call["result"].(map[string]any)["content"]; got != "mod.not_ready" {
+		t.Fatalf("a session read during the handshake gave %v, want mod.not_ready", got)
+	}
+	select {
+	case p := <-h.published:
+		if !strings.Contains(string(mustJSON(p)), "hello from start") {
+			t.Fatalf("published %v", p)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the toast made during the handshake was lost instead of sent once the session was ready")
+	}
+}
+
+func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }

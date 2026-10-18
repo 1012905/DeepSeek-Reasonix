@@ -79,6 +79,9 @@ type Options struct {
 	Request    RequestFunc
 	Warn       func(string)
 	Resolve    ClientResolver
+	// Session serves the extensions that declared the session capability; nil
+	// answers every such call as unavailable.
+	Session SessionAccess
 }
 
 // ActionView is one registered extension action for frontend enumeration.
@@ -102,6 +105,7 @@ type Hub struct {
 	emit       func(event.Event)
 	requestFn  RequestFunc
 	warn       func(string)
+	session    SessionAccess
 	resolve    ClientResolver
 	known      map[string]bool
 	crashed    map[string]bool
@@ -123,6 +127,7 @@ func New(opts Options) *Hub {
 		requestFn:  opts.Request,
 		warn:       opts.Warn,
 		resolve:    opts.Resolve,
+		session:    opts.Session,
 		known:      map[string]bool{},
 		crashed:    map[string]bool{},
 		surfaces:   map[string]surfaceRecord{},

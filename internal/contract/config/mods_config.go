@@ -24,9 +24,10 @@ type ModsConfig struct {
 	// MessagesMax is how many transcript items one read by a mod may return, 0
 	// for no ceiling. User file only.
 	MessagesMax int `toml:"messages_max"`
-	// SubmitPerTurn is how many prompts a mod may queue during one turn. It stops
-	// a mod from feeding the session to itself, so 0 (no ceiling) is a deliberate
-	// act. User file only.
+	// SubmitPerTurn is how many prompts mods may queue between two prompts you
+	// write yourself: a queued prompt opens a turn whose hooks may queue another,
+	// so this is what stops a mod feeding the session to itself. 0 removes it,
+	// which is a deliberate act. User file only.
 	SubmitPerTurn int `toml:"submit_per_turn"`
 }
 
@@ -106,7 +107,7 @@ func renderModsSection(b *strings.Builder, c *Config) {
 		fmt.Fprintf(b, "context_bytes = %d   # bytes of one block a mod adds to a turn; 0 for no ceiling\n", c.Mods.ContextBytes)
 		fmt.Fprintf(b, "context_blocks = %d   # blocks a mod may add to one turn; 0 for no ceiling\n", c.Mods.ContextBlocks)
 		fmt.Fprintf(b, "messages_max = %d   # transcript items one read by a mod may return; 0 for no ceiling\n", c.Mods.MessagesMax)
-		fmt.Fprintf(b, "submit_per_turn = %d   # prompts a mod may queue in one turn; 0 for no ceiling\n", c.Mods.SubmitPerTurn)
+		fmt.Fprintf(b, "submit_per_turn = %d   # prompts mods may queue between two prompts you write; 0 for no ceiling\n", c.Mods.SubmitPerTurn)
 	}
 	b.WriteString("\n")
 }

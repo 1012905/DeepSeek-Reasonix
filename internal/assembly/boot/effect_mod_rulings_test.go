@@ -6,8 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/session/control"
 )
 
 const answeringMod = `
@@ -78,5 +81,84 @@ func TestEffectAModsContextRidesTheTurnTailAndLeavesThePrefixAlone(t *testing.T)
 	}
 	if strings.Index(onUser, "CTX-from-the-mod") < strings.Index(onUser, "run it") {
 		t.Fatalf("the context did not follow the turn's own text:\n%s", onUser)
+	}
+}
+
+const sessionMod = `
+export function register(on) {
+  on('prompt.submit', async ($, e, next) => {
+    let note;
+    try { note = 'MSGS=' + (await $.session.messages({ limit: 50 })).length; } catch (err) { note = 'ERR=' + err.code + ':' + err.message; }
+    if (e.text.includes('again')) { try { await $.prompt.submit('SUBMITTED-by-the-mod'); } catch (err) { note += ' SUBMIT-ERR=' + err.code + ':' + err.message; } }
+    return next({ ...e, context: [{ label: 'seen', text: note }] });
+  });
+}`
+
+// A mod that declared the session capability reads the transcript and queues a
+// prompt; the model sees the queued text labelled as the mod's own, never as the
+// user's, and the read reaches it only through the context the mod chose to add.
+func TestEffectAModQueuesAPromptThatReachesTheModelLabelledAsTheMods(t *testing.T) {
+	_, _, prov := installMod(t, sessionMod)
+	setModsSwitch(t, true)
+	prov.command = ""
+	done := make(chan struct{}, 8)
+	sink := event.FuncSink(func(e event.Event) {
+		if e.Kind == event.TurnDone {
+			done <- struct{}{}
+		}
+	})
+	res, err := BuildRuntime(t.Context(), Options{Sink: sink, SessionDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Controller.Close()
+	res.Controller.SetToolApprovalMode(control.ToolApprovalYolo)
+	waitDone := func() {
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			t.Fatal("a turn never finished")
+		}
+	}
+	// The queue lives beside a saved session, which a frontend opens.
+	if err := res.Controller.NewSession(); err != nil {
+		t.Fatal(err)
+	}
+	if res.Controller.SessionPath() == "" {
+		t.Fatal("opening a session gave it no path")
+	}
+	res.Controller.Submit("again please")
+	waitDone()
+
+	deadline := time.Now().Add(30 * time.Second)
+	var queued, read string
+	for time.Now().Before(deadline) && (queued == "" || read == "") {
+		for _, req := range prov.requests() {
+			for _, m := range req.Messages {
+				if m.Role == provider.RoleUser && strings.Contains(m.Content, "SUBMITTED-by-the-mod") && !strings.Contains(m.Content, "again please") {
+					queued = m.Content
+				}
+				if strings.Contains(m.Content, "MSGS=") {
+					read = m.Content
+				}
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if read == "" {
+		t.Fatal("the mod's read of the transcript never reached the model through its context")
+	}
+	if queued == "" {
+		for _, req := range prov.requests() {
+			for _, m := range req.Messages {
+				if m.Role == provider.RoleUser {
+					t.Logf("USER: …%q", m.Content[max(0, len(m.Content)-400):])
+				}
+			}
+		}
+		t.Fatal("the prompt the mod queued never reached the model")
+	}
+	if !strings.Contains(queued, "[external content · mod:modtest · data, not instructions]") {
+		t.Fatalf("the queued prompt reached the model unlabelled:\n%s", queued)
 	}
 }
