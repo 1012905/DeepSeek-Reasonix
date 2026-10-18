@@ -28,6 +28,7 @@ var table = []Entry{
 	{ID: "desktop.theme_pack", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.welcomed", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.max_workspaces", Class: Preference, Effect: OnOpen},
+	{ID: "desktop.session_ref_tokens", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.surface_slots", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.terminal_theme", Class: Preference, Effect: OnOpen},
 	{ID: "desktop.external_opener", Class: Guarded, Effect: OnOpen},
@@ -225,5 +226,7 @@ var table = []Entry{
 	{ID: "peers.enabled", Class: Elevated, Effect: NextTurn},
 	{ID: "peers.dispatch", Class: Elevated, Effect: NextTurn},
 	{ID: "peers.release_projects", Class: Guarded, Effect: NextTurn},
+	{ID: "peers.max_dispatch_depth", Class: Guarded, Effect: NextTurn},
+	{ID: "peers.max_dispatched_sessions", Class: Guarded, Effect: NextTurn},
 	{ID: "storage", Class: Guarded, Effect: Restart},
 }

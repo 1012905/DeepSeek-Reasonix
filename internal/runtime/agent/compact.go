@@ -139,13 +139,19 @@ func (a *contextWindow) compactTrigger() int {
 }
 
 // hardInputCeiling is a physical input-safety boundary, not another user
-// compaction threshold. Reply budgets are resolved independently at send time.
+// compaction threshold. On a provider whose reply shares the window it stops
+// where the send-time output check stops, so a prompt the check would refuse is
+// one the fold has already been told it must free.
 func (a *contextWindow) hardInputCeiling() int {
 	window := a.effectiveContextWindow()
 	if window <= 0 {
 		return 0
 	}
-	return max(1, window-protocolReserveTokens)
+	reserve := protocolReserveTokens
+	if sharesContextWindow(a.svc.prov) && a.configuredOutputBudget(0) > 0 {
+		reserve = max(reserve, outputBudgetReserveFor(window))
+	}
+	return max(1, window-reserve)
 }
 
 // recentTailBudget is the content-construction budget for the recent verbatim
@@ -356,12 +362,15 @@ func (a *contextWindow) keepIndexes(region []provider.Message, policy KeepPolicy
 	// Retention applies only to messages since the latest digest. A failed tool
 	// result is bounded by its own budget, since last fold's survivors sit past
 	// the digest and would otherwise be kept again.
-	var failures []int
+	var failures, marked []int
 	for i, m := range region {
 		if i >= policyStart && shouldKeepMessage(m, policy) {
-			if m.Role == provider.RoleTool {
+			switch m.Role {
+			case provider.RoleTool:
 				failures = append(failures, i)
-			} else {
+			case provider.RoleUser:
+				marked = append(marked, i)
+			default:
 				keep[i] = true
 			}
 		}
@@ -372,7 +381,9 @@ func (a *contextWindow) keepIndexes(region []provider.Message, policy KeepPolicy
 		}
 	}
 	a.keepFailuresWithinBudget(region, keep, failures)
+	markedDropped, markedTokens := a.keepMarkedWithinBudget(region, keep, marked)
 	retention := a.keepUserTurns(region, keep)
+	retention.MarkedDropped, retention.MarkedDroppedTokens = markedDropped, markedTokens
 	pinned := slices.Clone(keep)
 	for i, m := range region {
 		if !pinned[i] {

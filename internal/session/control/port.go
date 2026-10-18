@@ -15,6 +15,7 @@ import (
 	"reasonix/internal/platform/browser"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
+	"reasonix/internal/runtime/delegation"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
@@ -308,6 +309,8 @@ type RuntimeSettings interface {
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
 	SaveAskTimeoutSettings(seconds int) error
+	SessionRefSettings() SessionRefSettings
+	SaveSessionRefSettings(tokens int) error
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int
@@ -401,6 +404,13 @@ type PeerMail interface {
 	ResolvePeerMessageRemembering(id string, approve bool, remember PeerRemember) error
 	PeersSettings() PeersSettings
 	SavePeersSettings(patch PeersPatch) (PeersSettings, error)
+}
+
+// SubagentView reads the sub-agent runs of the session: the ones it spawned,
+// running or finished, and any one run's conversation.
+type SubagentView interface {
+	SubagentRuns() ([]delegation.RunInfo, error)
+	SubagentTranscript(ref string, after, limit int) (delegation.RunTranscript, error)
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -520,6 +530,7 @@ type SessionAPI interface {
 	Provenance
 	BackgroundJobs
 	ToolCallStopper
+	SubagentView
 	PeerMail
 	MCPSignIn
 	LocalShell
@@ -558,6 +569,7 @@ var (
 	_ Goals              = (*Controller)(nil)
 	_ BackgroundJobs     = (*Controller)(nil)
 	_ ToolCallStopper    = (*Controller)(nil)
+	_ SubagentView       = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
 	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)

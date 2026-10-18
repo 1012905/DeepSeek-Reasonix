@@ -102,6 +102,7 @@ type controllerDeps struct {
 	// tools spawn into it; Compose drains its completion notes into the next turn;
 	// Close cancels its still-running jobs.
 	jobs      *jobs.Manager
+	subagents SubagentReader
 	taskStore taskmonitor.WriteStore
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
@@ -186,6 +187,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		balance:                opts.Balance,
 		feedback:               opts.Feedback,
 		jobs:                   opts.Jobs,
+		subagents:              opts.Subagents,
 		taskStore:              opts.TaskStore,
 		workspaceLease:         opts.WorkspaceLease,
 		mcp:                    newMcpManager(opts.Host, opts.Registry, pluginCtx, opts.MCPDefaultCallTimeout, hostFactNotice(opts.Executor)),

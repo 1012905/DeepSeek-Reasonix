@@ -42,7 +42,9 @@ type Party struct {
 }
 
 // Message is one spooled message. It has no field for an approval, a mode, a
-// write root or a credential, so none can travel.
+// write root or a credential, so none can travel. Proof is the one addition: a
+// MAC over the message under a secret only the two hosts' memory holds, so it
+// shows the sender is a session the receiver was paired with and reveals nothing.
 type Message struct {
 	ID     string    `json:"id"`
 	From   Party     `json:"from"`
@@ -50,6 +52,7 @@ type Message struct {
 	SentAt time.Time `json:"sent_at"`
 	Hops   int       `json:"hops"`
 	Body   string    `json:"body"`
+	Proof  string    `json:"proof,omitempty"`
 }
 
 // Live describes one running session. It is a description: whether the session
