@@ -50,7 +50,8 @@ import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
-import type { AgentPort, Appearance, HistoryMessage, McpEntry } from "../src/port/port";
+import { HttpError } from "../src/port/port";
+import type { AgentPort, Appearance, ChipCall, HistoryMessage, McpEntry } from "../src/port/port";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
@@ -104,6 +105,13 @@ class BenchPort extends MockPort {
         held: [{ name: "mcp__notes__search", class: "changed" }, { name: "mcp__notes__add", class: "added" }], heldDigest: "digest-1" },
       { name: "wiki", state: "ready", enabled: true, transport: "http", tools: 4, followsChanges: true, description: "The team wiki." },
     );
+  }
+
+  // ?netshell=1 is a connection over HTTP: a `!` line is refused as the kernel refuses it.
+  async submit(text: string, chips?: ChipCall) {
+    (window.__sent ??= []).push(text);
+    if (query.has("netshell") && text.trimStart().startsWith("!")) throw new HttpError(403, "shell commands are unavailable over HTTP", { code: "shell.unavailable_over_http" });
+    return super.submit(text, chips);
   }
 
   // ?checkfail=<name> makes a plain test of that source answer 401.
@@ -490,6 +498,7 @@ createRoot(document.getElementById("root")!).render(<App hub={hub} />);
 declare global {
   interface Window {
     __moves?: { path: string; target: string }[];
+    __sent?: string[];
     // Feeds every open pane, so a split-view measurement costs what two live
     // conversations really cost.
     __feed: (ev: WireEvent) => void;
