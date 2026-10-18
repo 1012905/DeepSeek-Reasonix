@@ -188,6 +188,15 @@ error, not with a stop reason:
 `data.code` is the identity a client keys on; `message` is the host's
 description of the cause, clipped to 2048 bytes.
 
+### When the host pauses a turn
+
+A turn that stops before delivery is verified (for example, files were written and no
+verification command ran) is not a failure and not a completion:
+
+- `session/prompt` returns `stopReason: "end_turn"`;
+- the response carries the typed outcome in `_meta["reasonix.io"].turnOutcome`, e.g. `{"kind": "paused", "reason": "…"}`;
+- the streamed text ends with a host-written `[paused] Not verified, …` line, so a client that reads only message text does not take the work for done.
+
 ## Mid-turn steering extension
 
 Reasonix exposes mid-turn guidance as an ACP v1 vendor extension. It is not a
