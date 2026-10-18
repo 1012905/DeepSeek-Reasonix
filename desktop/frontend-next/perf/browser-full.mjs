@@ -13,7 +13,7 @@ const check = (name, ok, detail = "") => {
 const browser = await chromium.launch();
 try {
   for (const scheme of ["light", "dark"]) {
-    const page = await browser.newPage({ colorScheme: scheme, viewport: { width: 1400, height: 900 } });
+    const page = await browser.newPage({ colorScheme: scheme, viewport: { width: 1400, height: 900 }, reducedMotion: "reduce" });
     await page.goto(BASE, { waitUntil: "networkidle" });
     await page.waitForSelector(".app");
     await page.locator('.navbtn[aria-label="文件"]').first().click();
@@ -30,6 +30,9 @@ try {
         paneWidth: pane.getBoundingClientRect().width,
       };
     });
+    await page.waitForTimeout(1200);
+    await page.mouse.move(1390, 890);
+    await page.waitForTimeout(300);
     const split = await read();
     check(`${scheme}: starts split with the conversation shown`, split.size === "split" && split.conversation && split.composer);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/browser-${scheme}-split.png` });
@@ -38,6 +41,8 @@ try {
     const full = await read();
     check(`${scheme}: full hides the conversation and the composer`, full.size === "full" && !full.conversation && !full.composer);
     check(`${scheme}: full gives the page the whole pane`, full.dockWidth >= full.paneWidth - 1, `${full.dockWidth}px of ${full.paneWidth}px`);
+    await page.mouse.move(1390, 890);
+    await page.waitForTimeout(300);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/browser-${scheme}-full.png` });
     await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
