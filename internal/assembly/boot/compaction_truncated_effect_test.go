@@ -81,7 +81,7 @@ compact_ratio = 0.5
 name = "test-model"
 kind = "`+kind+`"
 model = "x"
-context_window = 32000
+context_window = 32500
 effort = "high"
 `)
 	approveWorkspace(t, dir)

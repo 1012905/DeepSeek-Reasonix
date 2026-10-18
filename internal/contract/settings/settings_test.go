@@ -219,3 +219,23 @@ func TestTheConfigsOwnSetterJudgesTheValue(t *testing.T) {
 		t.Fatalf("to=%v err=%v", to, err)
 	}
 }
+
+func TestARemedyFollowsTheKeysClass(t *testing.T) {
+	if r := RemedyFor("peers.dispatch", true); r == nil || r.Op != "propose" || string(r.Value) != "true" {
+		t.Fatalf("elevated remedy = %+v", r)
+	}
+	if r := RemedyFor("permissions.mode", "yolo"); r == nil || r.Op != "open" || len(r.Value) != 0 {
+		t.Fatalf("guarded remedy = %+v, want open without a value", r)
+	}
+	if RemedyFor("no.such.key", 1) != nil {
+		t.Fatal("a remedy for a key nobody declared")
+	}
+}
+
+func TestClassAndEffectHaveWireNames(t *testing.T) {
+	for _, e := range All() {
+		if e.Class.String() == "" || e.Effect.String() == "" {
+			t.Fatalf("%s has no wire name", e.ID)
+		}
+	}
+}

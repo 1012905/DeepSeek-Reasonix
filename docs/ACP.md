@@ -172,6 +172,22 @@ Hosts should keep the `session/prompt` request open until Reasonix returns its
 stop reason, while continuing to process requests and notifications in both
 directions.
 
+### When a turn fails
+
+A turn that fails after it was admitted ends `session/prompt` with a JSON-RPC
+error, not with a stop reason:
+
+- the cases are an unreachable model endpoint or a provider that refuses the request;
+- the [ACP prompt-turn specification](https://agentclientprotocol.com/protocol/prompt-turn)
+  allows only `end_turn`, `max_tokens`, `max_turn_requests`, `refusal` and `cancelled` as stop reasons.
+
+```json
+{"error": {"code": -32603, "message": "<cause, secrets redacted>", "data": {"code": "turn_failed"}}}
+```
+
+`data.code` is the identity a client keys on; `message` is the host's
+description of the cause, clipped to 2048 bytes.
+
 ## Mid-turn steering extension
 
 Reasonix exposes mid-turn guidance as an ACP v1 vendor extension. It is not a

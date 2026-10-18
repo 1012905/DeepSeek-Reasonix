@@ -198,6 +198,7 @@ var ChineseTraditional = Messages{
 	SlashHintMessages:               slashHintZHTW,
 	QueueMessages:                   queueZHTW,
 	GoalMessages:                    goalZHTW,
+	SettingMessages:                 settingZHTW,
 	ApprovalNeededFmt:               "需要核准：%s",
 	ApprovalNeededWithSubjectFmt:    "需要核准：%s %s",
 	AnswerNeededFmt:                 "需要回答：%s",
