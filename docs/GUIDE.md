@@ -248,6 +248,44 @@ Reasonix never uploads prompts, answers, reasoning, tool names/arguments/output,
 paths, repositories/branches, session IDs, exact token or cost values,
 Provider/model names, base URLs, or environment variables.
 
+### Trace export (OpenTelemetry)
+
+Reasonix can hand each turn to your own observability stack as OpenTelemetry
+GenAI traces. It is off, and nothing leaves the machine, until your user config
+switches it on and names a collector:
+
+```toml
+[observability.otlp]
+enabled = true
+endpoint = "http://localhost:4318"   # OTLP/HTTP; /v1/traces is appended
+header_name = "Authorization"        # optional: the header carrying a credential
+header_env = "OTEL_EXPORTER_AUTH"    # the variable holding its value, never the value
+service_name = "reasonix"            # optional
+```
+
+- **What is sent.** One trace per turn: an `invoke_agent` span, a `chat` span per
+  model attempt (provider, model, token counts, finish reason), and an
+  `execute_tool` span per tool call (tool name, failure class), nested under the
+  tool that delegated the work.
+- **What is never sent.** Prompts, answers, tool arguments and results, file
+  paths and error text. Spans are built from typed event fields through one fixed
+  attribute set, and a name that does not look like a name is sent as `unknown`.
+- **Who decides.** Only your user config. A repository's `reasonix.toml` cannot
+  switch it on or move it; the ignored key is reported at load.
+- **Credentials.** `header_env` must be an `OTEL_*` or `REASONIX_OTEL_*` variable, so no
+  setting can read an unrelated secret. A credential is refused over plain `http`
+  to any host but loopback, the endpoint may not contain user info, and redirects
+  are not followed.
+- **Failure.** Export never blocks a turn: a slow or dead collector drops spans
+  from a bounded queue.
+- **Stability.** The upstream conventions are marked Development (read
+  2026-10-18); every payload carries `reasonix.semconv_experimental = true` and
+  attribute names can change. Not run against a real backend: built against the
+  OTLP/HTTP JSON encoding and tested with a local collector.
+
+Studio has the same switches under Settings, Network. A save reaches sessions
+opened afterwards.
+
 ### CLI crash reports
 
 An unhandled Go panic that reaches the CLI entrypoint is saved locally as a sanitized report under

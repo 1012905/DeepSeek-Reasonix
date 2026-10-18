@@ -47,6 +47,7 @@ type heldScope struct {
 	turnNarration string
 	persona       PersonaConfig
 	peers         PeersConfig
+	observability ObservabilityConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
 	// webSearchBackends and searxngURL decide where the user's queries go, so
@@ -98,6 +99,7 @@ func holdUserScope(c *Config) heldScope {
 		turnNarration:   c.TurnNarration(),
 		persona:         clonePersona(c.Agent.Persona),
 		peers:           clonePeers(c.Peers),
+		observability:   c.Observability,
 		mcpResources:    c.Tools.MCPResources,
 
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
@@ -199,6 +201,7 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	// Messages between sessions put other sessions' text in front of this one's
 	// model, so enabling them is the user's alone.
 	h.narrowPeers(c)
+	h.narrowObservability(c)
 	// Letting the model read what a server publishes widens what a third party
 	// can put in front of it, so a cloned repo must not turn it on.
 	if c.Tools.MCPResources != h.mcpResources {
