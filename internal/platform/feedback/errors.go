@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -36,8 +37,19 @@ var (
 	ErrLinkConflict    = errors.New("feedback: install linked to another account")
 	ErrLinkLimit       = errors.New("feedback: account link limit reached")
 	ErrNoInstall       = errors.New("feedback: this install has not sent a report")
-	ErrOffline         = errors.New("feedback: service unreachable")
-	ErrUnavailable     = errors.New("feedback: service failed")
+	// The contribution-board sentinels: a display name the service refused as
+	// malformed, as reserved or as another person's, an account a maintainer
+	// removed, and a join before any install is linked. ErrRouteAbsent is a
+	// service that has no such route, which is a version or a switch, not a fault;
+	// it is also an ErrUnavailable.
+	ErrBoardNameInvalid  = errors.New("feedback: board name is not allowed")
+	ErrBoardNameReserved = errors.New("feedback: board name is reserved")
+	ErrBoardNameTaken    = errors.New("feedback: board name is taken")
+	ErrBoardDelisted     = errors.New("feedback: account was removed from the board")
+	ErrBoardNoLink       = errors.New("feedback: no install is linked to this account")
+	ErrRouteAbsent       = fmt.Errorf("%w: the service has no such route", ErrUnavailable)
+	ErrOffline           = errors.New("feedback: service unreachable")
+	ErrUnavailable       = errors.New("feedback: service failed")
 )
 
 // Field names an InvalidError can carry.

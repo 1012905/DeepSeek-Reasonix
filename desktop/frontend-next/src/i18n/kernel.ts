@@ -703,6 +703,11 @@ const SAID: Record<string, string> = {
   "feedback.link_conflict": "这台电脑已关联到另一个账号",
   "feedback.link_limit": "这个账号关联的电脑已达上限",
   "feedback.no_install": "这台电脑还没有发过反馈",
+  "feedback.board_name_invalid": "名字需要 2 到 30 个字符：字母、数字、空格、下划线或连字符，不能含 @ 或网址",
+  "feedback.board_name_reserved": "这个名字是保留的，会让人误以为是维护者，换一个吧",
+  "feedback.board_name_taken": "已经有人用这个名字了",
+  "feedback.board_delisted": "这个账号已被维护者从榜单移除，暂时不能再加入",
+  "feedback.board_no_link": "先把这台电脑关联到账号，才能加入榜单",
 
   // ── 远程连接停下来问的那一句 ───────────────────────────────────
   "ask.not_found": "不存在该待回答的问题",

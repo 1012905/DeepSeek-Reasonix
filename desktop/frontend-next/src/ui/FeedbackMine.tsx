@@ -8,6 +8,7 @@ import { FeedbackFilter } from "./FeedbackFilter";
 import { inGroup, type FeedbackGroup } from "./feedbackgroups";
 import { FeedbackLevel } from "./FeedbackLevel";
 import { FeedbackLink } from "./FeedbackLink";
+import { FeedbackBoard } from "./FeedbackBoard";
 import { feedbackFailure, type FeedbackFailure } from "./feedbackfailure";
 import { FeedbackWithdraw } from "./FeedbackWithdraw";
 import { FeedbackReplyBox, FeedbackReviewNote, FeedbackThread, foldedUnread } from "./FeedbackThread";
@@ -223,6 +224,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
       )}
 
       {mine && <FeedbackLink port={port} hasReport={mine.items.length > 0} />}
+      {mine && <FeedbackBoard port={port} />}
 
       {mine?.offline && (
         <div className="fbk-note" role="status" data-tone="info">
