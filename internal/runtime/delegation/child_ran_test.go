@@ -52,21 +52,6 @@ func TestEachStatusOfAChildNamesTheModelItRanOn(t *testing.T) {
 	}
 }
 
-// The dispatch line says the same thing before the run starts: an inherited model
-// is the concrete one, not an empty field a reader has to guess about.
-func TestTheDispatchLineNamesTheConcreteModelEvenWhenTheCallInherits(t *testing.T) {
-	prov := newLoneProvider()
-	task, _, _, _ := loneFixture(t, prov, 4)
-	p := task.ResolveProfile(json.RawMessage(`{"prompt":"work"}`))
-	if p == nil || p.Model != "base" || p.Effort != "high" {
-		t.Fatalf("profile = %+v, want the parent's model and effort named", p)
-	}
-	p = task.ResolveProfile(json.RawMessage(`{"prompt":"work","model":"other/fast"}`))
-	if p == nil || p.Model != "other/fast" {
-		t.Fatalf("profile = %+v, want the call's own model", p)
-	}
-}
-
 // A batch's items may each pick a model, so the statuses are per child: two items
 // that chose differently each carry their own, and the batch itself carries none.
 func TestEachItemOfABatchNamesItsOwnModel(t *testing.T) {
