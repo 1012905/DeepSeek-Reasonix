@@ -11,17 +11,6 @@ import (
 	"reasonix/internal/session/control"
 )
 
-// refuseDevice answers a paired device that reached a route which sends data off
-// this machine or destroys it: those belong to the window, and are refused before
-// the request is read or any git process starts.
-func refuseDevice(w http.ResponseWriter, r *http.Request) bool {
-	if hostReach(r) {
-		return false
-	}
-	refuse(w, http.StatusNotFound, codeDeviceHostOnly, "a paired device cannot use this", nil)
-	return true
-}
-
 // pushPreview says where the current branch would go and what it would send. It
 // reaches no remote.
 func (s *Server) pushPreview(w http.ResponseWriter, r *http.Request) {

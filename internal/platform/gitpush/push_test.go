@@ -33,6 +33,17 @@ func write(t *testing.T, dir, name, body string) {
 	}
 }
 
+// fileURL spells a local path as the URL git expects on every platform: forward
+// slashes and a leading one, so D:\x\y is file:///D:/x/y and a backslash never
+// reaches a config value, where it would be read as an escape.
+func fileURL(p string) string {
+	p = filepath.ToSlash(p)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return "file://" + p
+}
+
 // local lets file:// stand in for a network remote; production allows none of it.
 func local(t *testing.T) {
 	t.Helper()
@@ -78,7 +89,7 @@ func newFixture(t *testing.T) fixture {
 	write(t, work, "a.go", "package a\n")
 	run(t, work, "add", ".")
 	run(t, work, "commit", "-qm", "base")
-	run(t, work, "remote", "add", "origin", "file://"+remote)
+	run(t, work, "remote", "add", "origin", fileURL(remote))
 	run(t, work, "push", "-q", "-u", "origin", "main")
 	write(t, work, "b.go", "package b\n")
 	run(t, work, "add", ".")
@@ -143,7 +154,7 @@ func TestNothingTheRepositoryConfiguresRunsOrRedirectsAPush(t *testing.T) {
 	run(t, f.work, "config", "core.hooksPath", filepath.Join(f.work, ".git", "hooks"))
 	run(t, f.work, "config", "core.sshCommand", "touch "+marker+" #")
 	run(t, f.work, "config", "credential.helper", "!touch "+marker+" #")
-	run(t, f.work, "config", "url.file:///nowhere/evil.insteadOf", "file://"+f.remote)
+	run(t, f.work, "config", "url.file:///nowhere/evil.insteadOf", fileURL(f.remote))
 	plan, err := Preview(context.Background(), f.repo)
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +178,7 @@ func TestTheUsersOwnRewriteIsAppliedAndShown(t *testing.T) {
 	other := filepath.Join(testenv.TempDir(t), "other.git")
 	run(t, filepath.Dir(other), "init", "-q", "--bare", "-b", "main", other)
 	global := os.Getenv("GIT_CONFIG_GLOBAL")
-	write(t, filepath.Dir(global), filepath.Base(global), "[url \"file://"+other+"\"]\n\tinsteadOf = file://"+f.remote+"\n")
+	write(t, filepath.Dir(global), filepath.Base(global), "[url \""+fileURL(other)+"\"]\n\tinsteadOf = "+fileURL(f.remote)+"\n")
 	plan, err := Preview(context.Background(), f.repo)
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +201,7 @@ func TestTheUsersOwnRewriteIsAppliedAndShown(t *testing.T) {
 func TestAPushThatIsNotAFastForwardIsRefusedAndNeverForced(t *testing.T) {
 	f := newFixture(t)
 	other := filepath.Join(testenv.TempDir(t), "other")
-	run(t, filepath.Dir(other), "clone", "-q", "file://"+f.remote, other)
+	run(t, filepath.Dir(other), "clone", "-q", fileURL(f.remote), other)
 	write(t, other, "c.go", "package c\n")
 	run(t, other, "add", ".")
 	run(t, other, "commit", "-qm", "someone else")
@@ -305,5 +316,14 @@ func TestClassifyReadsTheDestinationByStructure(t *testing.T) {
 		if _, err := Classify(raw); !errors.Is(err, ErrProtocolNotAllowed) {
 			t.Errorf("Classify(%q) err = %v, want ErrProtocolNotAllowed", raw, err)
 		}
+	}
+}
+
+func TestAGitThatCannotReadHeadIsNotADetachedHead(t *testing.T) {
+	f := newFixture(t)
+	write(t, filepath.Join(f.work, ".git"), "HEAD", "garbage that is not a ref\n")
+	_, err := Preview(context.Background(), f.repo)
+	if err == nil || errors.Is(err, ErrDetachedHead) {
+		t.Fatalf("err = %v, want git's own failure and not ErrDetachedHead", err)
 	}
 }

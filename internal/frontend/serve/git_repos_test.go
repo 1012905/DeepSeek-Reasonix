@@ -22,6 +22,7 @@ func projectsFolder(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	for _, k := range []string{"GIT_AUTHOR", "GIT_COMMITTER"} {
 		t.Setenv(k+"_NAME", "t")
 		t.Setenv(k+"_EMAIL", "t@t")
@@ -33,6 +34,7 @@ func projectsFolder(t *testing.T) (*httptest.Server, string) {
 			t.Fatal(err)
 		}
 		gitIn(t, dir, "init", "-q")
+		gitIn(t, dir, "config", "core.autocrlf", "false")
 		if err := os.WriteFile(filepath.Join(dir, "base.go"), []byte("package a\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -58,7 +59,16 @@ func preview(ctx context.Context, repo gitcmd.Repo) (Plan, string, error) {
 	}
 	top := repo.Top()
 	branch, err := output(ctx, top, "symbolic-ref", "--quiet", "--short", "HEAD")
-	if err != nil || branch == "" {
+	if err != nil {
+		// With --quiet git answers a detached HEAD with exit status 1 and says
+		// nothing; any other failure is git not working, which is not a detached HEAD.
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 {
+			return Plan{}, "", ErrDetachedHead
+		}
+		return Plan{}, "", fmt.Errorf("gitpush: read HEAD: %w", err)
+	}
+	if branch == "" {
 		return Plan{}, "", ErrDetachedHead
 	}
 	remote, _ := configValue(ctx, top, "branch."+branch+".remote")
