@@ -188,6 +188,7 @@ async function main() {
     check("the agent's input reaches the page while the window is minimized", await askFor("韩梅梅"), await greeting());
 
     win.restore();
+    win.focus();
     const cover = new BrowserWindow({ width: 1600, height: 1000, x: 0, y: 0, alwaysOnTop: true });
     await cover.loadURL("data:text/html,<h1>cover</h1>");
     cover.focus();
