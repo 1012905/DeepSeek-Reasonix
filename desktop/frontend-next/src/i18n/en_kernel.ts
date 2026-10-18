@@ -260,6 +260,7 @@ export const EN_KERNEL: Record<string, string> = {
   "读不到已安装的 WSL 发行版": "Could not read which WSL distributions are installed",
   "这台机器的接入方式与表单不同（SSH 或 WSL），不能这样修改它": "This machine is reached another way than this form describes (SSH or WSL), so it cannot be changed like this",
   "该主机已停用，启用后才能连接": "This machine is turned off; turn it on to connect",
+  "主机 {host} 尚未保存，请先添加该主机再连接": "Host {host} is not saved; add it before connecting",
   "该机器仍有 {n} 个打开的面板，请先关闭再移除": "This machine still has {n} open panes — close them before removing it",
   "{host} 的主机密钥已变更。可能是该机器重装，也可能存在中间人。记录位于 {file} 第 {line} 行，核实前请勿连接。":
     "The host key for {host} changed. That machine may have been rebuilt \u2014 or someone may be in the middle. The record is at {file} line {line}; do not connect until you have checked.",

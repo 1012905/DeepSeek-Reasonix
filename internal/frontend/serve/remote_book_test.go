@@ -295,6 +295,7 @@ func TestEditingAHostKeepsForwardsThePageCannotSee(t *testing.T) {
 // can still be listed, and listing it opens nothing.
 func TestRemoteTreeIsReadWithOrWithoutAnOpenPane(t *testing.T) {
 	writeOpenableConfig(t)
+	saveTestRemoteHosts(t, "gpu-box")
 	far := NewHub(HubOptions{})
 	defer far.Shutdown()
 	farSide := httptest.NewServer(operatorHandler(far))
@@ -467,8 +468,8 @@ func TestRemovingTheDefaultFolderPromotesTheNext(t *testing.T) {
 
 func TestWritingAFolderOntoAMachineTheBookDoesNotHaveIsRefused(t *testing.T) {
 	front := bookServer(t, &stubAttacher{})
-	if got := bookPost(t, front, "/remotes/absent/workspaces", `{"path":"/srv/x"}`).StatusCode; got != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", got)
+	if got := bookPost(t, front, "/remotes/absent/workspaces", `{"path":"/srv/x"}`).StatusCode; got != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", got)
 	}
 }
 
@@ -635,6 +636,8 @@ func TestReopeningAKnownFolderLeavesTheConfigAlone(t *testing.T) {
 // a link taken for the call, and a refusal comes back under that kernel's own
 // code: it knows the conversation is open there, the window does not.
 func TestRemoteSessionIsRemovedByTheFarKernel(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	saveTestRemoteHosts(t, "gpu-box")
 	var got []string
 	refuseWith := ""
 	far := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

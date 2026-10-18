@@ -51,6 +51,8 @@ export const EN_REMOTE: Record<string, string> = {
   "{name}（WSL 1，不支持）": "{name} (WSL 1, not supported)",
   "内核运行在 Studio 保持的一个会话里：关闭 Studio 后它会随发行版一起停止，对话保存在磁盘上，下次连接时继续。模型凭据使用发行版自己的配置。": "The kernel runs in a session Studio keeps open: when Studio closes, it stops with the distribution. Conversations are kept on disk and continue on the next connect. Model credentials come from the distribution's own configuration.",
   "未设置默认工作区": "No default workspace",
+  "默认连接目录：{path}": "Default connection directory: {path}",
+  "连接目录：{path}": "Connected directory: {path}",
   "跟随 ssh_config": "Follows ssh_config",
   "{n} 条转发": "{n} forwards",
   "{n} 个面板": "{n} panes",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
-const sheets = await Promise.all(["tokens", "app", "studio", "sessionquick", "sessionpin"].map(
+const sheets = await Promise.all(["tokens", "app", "studio", "sessionquick", "sessionpin", "treerows"].map(
   (name) => readFile(new URL(`../src/styles/${name}.css`, import.meta.url), "utf8"),
 ));
 const title = "这是什么？ @.reasonix/attachments/clipboard-" + "long-title".repeat(20);
@@ -14,8 +14,9 @@ try {
       await page.setContent(`<div class="rail" style="width:${width}px">
         <div class="kids">
           <div class="sessrow sessrow-context" tabindex="0" aria-selected="true">
-            <span class="sesstitle" title="${title}"><i class="sesspin"></i><span>${title}</span><em class="sessarch">已归档</em></span>
-            <div class="sessquick"><button>归档</button><button>删除</button></div>
+            <button class="sesspin-action" data-action="session.pin">置顶</button>
+            <span class="sesstitle" title="${title}"><span>${title}</span><em class="sessarch">已归档</em></span>
+            <span class="sessquick"><button data-action="session.archive">归档</button></span>
           </div>
           <div class="sessrow sessrow-context" data-unread tabindex="0">
             <span class="sesstitle" title="短标题"><span>短标题</span></span><span class="unread-dot"></span>
@@ -52,12 +53,12 @@ try {
           assert.ok(row.textHeight <= row.lineHeight + 1);
           assert.ok(row.fullTitle);
         }
-        assert.equal(rows[1].top, rows[0].bottom, "no gap between sessions");
-        assert.equal(rows[2].top, rows[1].bottom, "no gap before remote session");
-        assert.equal(rows[3].top, rows[2].bottom, "no gap before earlier version");
+        assert.equal(rows[1].top - rows[0].bottom, 1, "only the compact row margin separates sessions");
+        assert.equal(rows[2].top - rows[1].bottom, 1, "the remote row has the same compact spacing");
+        assert.equal(rows[3].top - rows[2].bottom, 1, "the earlier version has the same compact spacing");
         assert.ok(rows[0].truncated && rows[2].truncated, "long local and remote titles truncate");
         if (state !== "idle") {
-          const contained = await page.locator(".sessquick > button").evaluateAll((buttons) => buttons.every((button) => {
+          const contained = await page.locator(".sessquick > button, .sesspin-action").evaluateAll((buttons) => buttons.every((button) => {
             const rect = button.getBoundingClientRect();
             const row = button.closest(".sessrow").getBoundingClientRect();
             return rect.top >= row.top && rect.bottom <= row.bottom && rect.left >= row.left && rect.right <= row.right;
@@ -65,7 +66,7 @@ try {
           assert.ok(contained, "quick actions fit inside the compact row");
         }
       }
-      console.log(`${scheme}/${width}: 34px rows, no gaps, single-line ellipsis, hover/focus stable`);
+      console.log(`${scheme}/${width}: 34px rows, 1px spacing, single-line ellipsis, hover/focus stable`);
       await page.close();
     }
   }

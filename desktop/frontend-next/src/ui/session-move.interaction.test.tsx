@@ -52,6 +52,22 @@ it("moves through the kernel once, then asks the tree again rather than patching
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
+it("keeps keyboard menus and move shortcuts available on the same row", async () => {
+  const { moveSession, reload } = draw();
+  row("beta review").focus();
+  await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+  expect(screen.getByRole("menuitem", { name: "置顶会话" })).toBeTruthy();
+  expect(screen.getByRole("menuitem", { name: "归档会话" })).toBeTruthy();
+  await userEvent.click(screen.getByRole("menuitem", { name: "上移" }));
+  expect(moveSession).toHaveBeenCalledExactlyOnceWith(B.path, -1);
+  expect(reload).toHaveBeenCalledTimes(1);
+  row("beta review").focus();
+  await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
+  expect(document.activeElement).toBe(row("beta review"));
+  expect(moveSession).toHaveBeenLastCalledWith(B.path, 1);
+  expect(moveSession).toHaveBeenCalledTimes(2);
+});
+
 it("moves with Alt+Arrow on the focused row, and ignores a step that has nowhere to go", async () => {
   const { moveSession } = draw();
   fireEvent.keyDown(row("beta review"), { key: "ArrowDown", altKey: true });

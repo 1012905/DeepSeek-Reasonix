@@ -377,6 +377,7 @@ const SAID: Record<string, string> = {
   "remote.wsl_unreadable": "读不到已安装的 WSL 发行版",
   "remote.kind_unsupported": "这台机器的接入方式与表单不同（SSH 或 WSL），不能这样修改它",
   "remote.disabled": "该主机已停用，启用后才能连接",
+  "remote.unknown_host": "主机 {host} 尚未保存，请先添加该主机再连接",
   "remote.has_open_panes": "该机器仍有 {n} 个打开的面板，请先关闭再移除",
   // 主机密钥变了没有「仍然连接」这条路：能绕过的警告等于没有警告。
   "remote.host_key_changed": "{host} 的主机密钥已变更。可能是该机器重装，也可能存在中间人。记录位于 {file} 第 {line} 行，核实前请勿连接。",

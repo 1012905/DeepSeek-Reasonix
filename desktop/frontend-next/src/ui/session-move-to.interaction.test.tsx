@@ -63,6 +63,21 @@ it("moves through the kernel once, reads the tree again and closes", async () =>
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
+it("keeps move-to beside pin, archive and ordering in the keyboard menu", async () => {
+  const { moveSessionTo } = draw();
+  screen.getByRole("treeitem", { name: /alpha plan/ }).focus();
+  await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+  for (const name of ["置顶会话", "归档会话", "上移", "下移"]) {
+    expect(screen.getByRole("menuitem", { name })).toBeTruthy();
+  }
+  await userEvent.click(screen.getByRole("menuitem", { name: "移动到项目…" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("目标项目");
+  await userEvent.click(screen.getByRole("button", { name: "移动" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(moveSessionTo).toHaveBeenCalledExactlyOnceWith(A.path, "/b");
+});
+
 it("keeps the dialog open and says why when the kernel refuses", async () => {
   const refuse = vi.fn(async () => { throw new HttpError(409, "held", { code: "session.move_held", error: "held" }); });
   const { reload } = draw(tree(), A, refuse as never);
