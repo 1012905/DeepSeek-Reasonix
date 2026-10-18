@@ -190,6 +190,7 @@ func (s *Store) loadOrInitLocked() error {
 		_ = s.quarantineFileLocked(path, "manifest-corrupt")
 		s.man = emptyManifest(s.runID)
 		s.man.Paused = true
+		s.man.PauseCode = PauseRecovered
 		s.man.Recovered = true
 		s.man.RecoveredN = len(salvaged)
 		s.man.Items = salvaged
@@ -242,6 +243,7 @@ func (s *Store) loadOrInitLocked() error {
 		}
 		if recovered > 0 || len(man.Items) > 0 {
 			man.Paused = true
+			man.PauseCode = PauseRecovered
 			man.Recovered = true
 			man.RecoveredN = recovered
 		}
@@ -280,6 +282,7 @@ func (s *Store) snapshotLocked() InboxSnapshot {
 		SchemaVersion: m.SchemaVersion,
 		Revision:      m.Revision,
 		Paused:        m.Paused || s.unrecovered,
+		PauseCode:     m.PauseCode,
 		Recovered:     m.Recovered,
 		RecoveredN:    m.RecoveredN,
 		Unrecovered:   s.unrecovered,
