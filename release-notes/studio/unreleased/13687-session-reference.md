@@ -1,0 +1,2 @@
+- 新增：在输入框输入 # 可选一段本工作区的历史会话，作为只读资料带进这条消息；搜索命中也能引用，长度上限可在设置里调。关联 #13687、#11942。
+- Added: Type # in the message box to reference a past conversation of this workspace as read-only material; search hits can be referenced too, with a size limit in Settings. Refs #13687, #11942.

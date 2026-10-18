@@ -235,7 +235,8 @@ func TestTheModelsReasonIsQuotedTidyAndBounded(t *testing.T) {
 func TestSettingsListFindsByWordsAndNeverShowsASecret(t *testing.T) {
 	c, _, _ := settingController(t)
 	rows := c.SettingsList("peers dispatch")
-	if len(rows) != 1 || rows[0].ID != "peers.dispatch" || rows[0].Class != "elevated" {
+	// The switch first, then the two ceilings that share its words.
+	if len(rows) != 3 || rows[0].ID != "peers.dispatch" || rows[0].Class != "elevated" || rows[1].ID != "peers.max_dispatch_depth" || rows[2].ID != "peers.max_dispatched_sessions" {
 		t.Fatalf("rows = %+v", rows)
 	}
 	for _, r := range c.SettingsList("serve token") {

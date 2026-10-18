@@ -1,0 +1,2 @@
+- 变更：打开设置里的“派发”开关就是对派发的总同意：任务和回信不再出审批卡；新会话沿用发起会话的模型、预设、审批档位和计划模式，且不会更宽。见 #13526。
+- Changed: the Dispatch switch is your consent: tasks and replies come in with no card, and the opened session keeps the sender's model, preset, approval mode and planning, never wider. See #13526.

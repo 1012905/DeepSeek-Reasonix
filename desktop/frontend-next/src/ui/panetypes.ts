@@ -56,6 +56,7 @@ export interface PaneProps {
   findTogglePulse?: number;
   filesPulse?: number;
   viewRequest?: { to: PaneView; n: number };
+  sessionRef?: { n: number; id: string; title: string };
   onSettings: (section?: string) => void;
   // Opens the feedback form; a notice in this pane can be reported from where it appeared.
   onFeedback?: () => void;

@@ -18,7 +18,7 @@ type dispatchToProject struct{ link *tool.PeerLink }
 
 func (*dispatchToProject) Name() string { return "dispatch_to_project" }
 func (*dispatchToProject) Description() string {
-	return "Hand a task to a session in another of the user's projects: name the project (its folder name or full path, as the user has it in their project list) and write what that session should do. A session is opened there if none of yours is already waiting. The message is held until that project's own user approves it (unless they released that project); only then does its model read it, labelled as coming from you, and it works under its own permissions, not yours. It is for passing a task and its context, not a way to write into that project yourself. You get the receiving session's key; it can answer you with send_peer_message. Do not include secrets."
+	return "Hand a task to a session in another of the user's projects: name the project (its folder name or full path, as the user has it in their project list) and write what that session should do. A session is opened there if none of yours is already waiting. The user's dispatch switch is their consent: the receiving session's model reads the task at once, labelled as coming from you, and it works under permissions no wider than yours. A project the user has not trusted is refused. It is for passing a task and its context, not a way to write into that project yourself. You get the receiving session's key; it can answer you with send_peer_message. Do not include secrets."
 }
 func (*dispatchToProject) Schema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"project":{"type":"string","description":"The project's folder name or full path, as it appears in the user's project list"},"text":{"type":"string","description":"The task and the context the other session needs"}},"required":["project","text"],"additionalProperties":false}`)
@@ -42,11 +42,11 @@ func (t *dispatchToProject) Execute(ctx context.Context, args json.RawMessage) (
 	}
 	d, ok := dir.(tool.ProjectDispatcher)
 	if !ok {
-		return "", errors.New("dispatch.unavailable: this session cannot open sessions in other projects")
+		return "", errors.New("dispatch.unavailable: this session has no window to open another session in; open the project in Reasonix Studio or the web UI to dispatch from it")
 	}
 	r, err := d.DispatchToProject(ctx, in.Project, in.Text)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Handed to a session in %q as %s (key %s). It is read only after that project's user approves it; it can answer with send_peer_message to your key.", r.Project, r.ID, r.Key), nil
+	return fmt.Sprintf("Handed to a session in %q as %s (key %s). It can answer you with send_peer_message to your key; its reply arrives labelled as data from that session, not as an instruction.", r.Project, r.ID, r.Key), nil
 }

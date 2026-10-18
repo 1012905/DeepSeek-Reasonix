@@ -82,6 +82,7 @@ type toolStage struct {
 	lsp         *lsp.Manager
 	browser     *browser.Session
 	peerLink    *tool.PeerLink
+	subagents   *delegation.SubagentStore
 	settingLink *tool.SettingsLink
 	peerTools   func(enabled, dispatch bool)
 	maxSteps    int
@@ -358,6 +359,7 @@ func (b *builder) wireTools() error {
 	if err != nil {
 		return err
 	}
+	t.subagents = subagentStore
 	if subagentStore != nil {
 		subagentStore.WithDestroyedChecker(b.session.jobs.IsDestroying)
 	}
@@ -567,6 +569,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		SystemPrompt:                   b.prompt.prompt,
 		SessionDir:                     b.session.dir,
 		Peers:                          peersOptions(cfg, t.peerLink, t.peerTools),
+		Subagents:                      subagentReader(t.subagents),
 		Settings:                       t.settingLink,
 		Host:                           t.host,
 		Commands:                       t.cmds,
@@ -720,4 +723,13 @@ func (b *builder) clock() func() time.Time {
 		return b.opts.clock
 	}
 	return time.Now
+}
+
+// subagentReader hands the controller the store's read side, or nothing when the
+// session has no store, so a nil store never travels as a non-nil interface.
+func subagentReader(s *delegation.SubagentStore) control.SubagentReader {
+	if s == nil {
+		return nil
+	}
+	return s
 }
