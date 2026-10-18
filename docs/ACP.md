@@ -172,6 +172,19 @@ Hosts should keep the `session/prompt` request open until Reasonix returns its
 stop reason, while continuing to process requests and notifications in both
 directions.
 
+### Vendor notifications are opt-in
+
+Reasonix pushes `_reasonix.io/session/status_update` and `_reasonix.io/session/mcpStatus_update`
+only to a client that declared them in its `initialize` request:
+
+```json
+{"clientCapabilities": {"_meta": {"reasonix.io": {"statusUpdates": {"supported": true}}}}}
+```
+
+- without the declaration, those two notifications are never sent;
+- the matching requests, `_reasonix.io/session/status` and `_reasonix.io/session/mcpStatus`, work either way;
+- the on-disk transcript of a turn is reported as `_meta["reasonix.io"].transcriptPath` in the `session/prompt` result.
+
 ### When a turn fails
 
 A turn that fails after it was admitted ends `session/prompt` with a JSON-RPC
