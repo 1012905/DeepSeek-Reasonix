@@ -140,6 +140,7 @@ var table = []Entry{
 	{ID: "tools.background_jobs.stalled_warning_seconds", Class: Preference, Effect: OnOpen},
 	{ID: "tools.search.engine", Class: Preference, Effect: OnOpen},
 	{ID: "tools.search.rg_path", Class: Guarded, Effect: OnOpen},
+	{ID: "attachments.max_stream_bytes", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.setting_tool", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.shell.prefer", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.shell.path", Class: Guarded, Effect: OnOpen},
