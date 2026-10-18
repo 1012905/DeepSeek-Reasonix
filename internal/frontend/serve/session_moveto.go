@@ -37,14 +37,7 @@ func (h *Hub) moveSessionTo(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusForbidden, "session.outside_workspace", "path outside a known workspace", nil)
 		return
 	}
-	target, err := resolveWorkspaceDir(strings.TrimSpace(body.Target))
-	known := ""
-	for _, ref := range h.sessionRoots() {
-		if err == nil && ref.dir == target {
-			known = ref.dir
-			break
-		}
-	}
+	known := h.knownWorkspaceDir(strings.TrimSpace(body.Target))
 	if known == "" {
 		refuse(w, http.StatusForbidden, "workspace.unknown", "select a known workspace to move the conversation to", nil)
 		return
@@ -73,4 +66,20 @@ func (h *Hub) moveSessionTo(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, map[string]any{"path": moved, "originalRemoved": true})
 	}
+}
+
+// knownWorkspaceDir answers with the declared project root the request names, or
+// "". The request text is only compared with roots the hub already knows: it is
+// never handed to the file system.
+func (h *Hub) knownWorkspaceDir(target string) string {
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return ""
+	}
+	for _, ref := range h.sessionRoots() {
+		if ref.dir == abs {
+			return ref.dir
+		}
+	}
+	return ""
 }

@@ -82,6 +82,16 @@ func TestMovingRefusesWhatCannotBeMovedSafely(t *testing.T) {
 	if status, _ := moveTo(t, srv, paths[0], testenv.TempDir(t)); status != http.StatusForbidden {
 		t.Fatalf("a project the hub does not list = %d, want 403", status)
 	}
+	for name, target := range map[string]string{
+		"a parent of a listed project":  filepath.Join(b, ".."),
+		"a path that climbs out of one": filepath.Join(b, "..", "..", "etc"),
+		"a path nothing has created":    filepath.Join(b, "no-such-dir"),
+		"a relative path":               "../elsewhere",
+	} {
+		if status, out := moveTo(t, srv, paths[0], target); status != http.StatusForbidden || fmt.Sprint(out["code"]) != "workspace.unknown" {
+			t.Fatalf("%s = %d %v, want 403 workspace.unknown", name, status, out)
+		}
+	}
 	if status, _ := moveTo(t, srv, filepath.Join(testenv.TempDir(t), "x.jsonl"), b); status != http.StatusForbidden {
 		t.Fatalf("a conversation outside every project = %d, want 403", status)
 	}
