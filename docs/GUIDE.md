@@ -475,6 +475,13 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
   - `status`, `forward`, `serve` and `fs` stay SSH-only and refuse a WSL machine with
     `remote: host is not reached over ssh`.
 
+For an agent's own shell commands, only `list`, `help` and `wsl list|test` run:
+
+- Every other `reasonix remote` subcommand refuses there (exit 77), because it changes the machine book or opens a
+  link, which a person does.
+- The host marks the commands it runs for the agent to tell them apart. It guards against an agent that does not
+  hide; it is not the sandbox.
+
 CLI:
 
 ```bash
