@@ -135,6 +135,10 @@ func (o *Owner) acquirePaths(ctx context.Context, paths []string, held bool) (fu
 		}
 		w.contend()
 		w.report()
+		if w.expired() {
+			w.close(WaitAbandoned)
+			return nil, w.timeout()
+		}
 		delay := retryInterval
 		if !w.began {
 			delay = min(delay, w.remainingGrace())
@@ -239,11 +243,7 @@ func (o *Owner) tryPaths(paths []string, held bool) (func(), *ConflictError, err
 			return nil, nil, err
 		}
 	}
-	data, err := json.Marshal(pathLeaseRecord{Holder: o.holderName(), SessionID: o.sessionID(), Paths: paths})
-	if err == nil {
-		err = fileutil.AtomicWriteFile(path, data, 0o600)
-	}
-	if err != nil {
+	if err := o.writeClaim(path, paths); err != nil {
 		if release != nil {
 			release()
 		}

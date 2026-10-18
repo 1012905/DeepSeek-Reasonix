@@ -301,7 +301,7 @@ type RuntimeSettings interface {
 	SubagentSteerSettings() SubagentSteerSettings
 	SaveSubagentSteerSettings(maxBytes, perMinute int) error
 	WriteLeaseSettings() WriteLeaseSettings
-	SaveWriteLeaseSettings(optimistic bool) error
+	SaveWriteLeaseSettings(optimistic *bool, maxWaitMinutes *int) error
 	PlanApprovalSettings() PlanApprovalSettings
 	SavePlanApprovalSettings(auto bool) error
 	DefaultModeSettings() DefaultModeSettings

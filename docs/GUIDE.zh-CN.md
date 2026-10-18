@@ -87,6 +87,7 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_subagent_steer_bytes = 16384    # 发给运行中子代理的单条指示的字节数，防止一条消息占满它的上下文；0 = 不限制（只认用户级配置）
 # max_subagent_steers_per_minute = 30  # 每分钟发给同一个运行中子代理的指示条数，用来刹住循环；0 = 不限制（只认用户级配置）
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
+# write_lease_max_wait_minutes = 0    # 写入在另一个会话占着路径时最多等多少分钟，超时以 workspace.claim_timeout 失败；0（默认）= 一直等到本轮结束，建议值 120（只认用户级配置）
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
 # default_mode = "plan"              # 仅用户配置文件；新对话从计划模式开始（恢复的对话保持自己的模式；设置里有对应开关），默认 normal
 # subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict

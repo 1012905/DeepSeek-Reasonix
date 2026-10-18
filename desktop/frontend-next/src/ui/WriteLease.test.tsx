@@ -21,10 +21,24 @@ describe("the write-lease switch", () => {
     expect(screen.getByText(/没有事前的路径围栏，只在事后观察/)).toBeTruthy();
     expect(screen.getByText(/只对之后新开的会话生效/)).toBeTruthy();
     await userEvent.click(sw);
-    expect(save).toHaveBeenCalledWith(true);
+    expect(save).toHaveBeenCalledWith({ optimistic: true });
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
     await userEvent.click(sw);
-    expect(save).toHaveBeenLastCalledWith(false);
+    expect(save).toHaveBeenLastCalledWith({ optimistic: false });
+  });
+
+  it("shows the longest wait, saves a changed one on blur and shows what the kernel stored", async () => {
+    const p = new MockPort() as unknown as AgentPort;
+    const save = vi.spyOn(p, "saveWriteLease");
+    render(<WriteLease port={p} />);
+    const box = (await screen.findByRole("textbox", { name: "等待其他会话释放写入权的最长时间" })) as HTMLInputElement;
+    expect(box.value).toBe("0");
+    await userEvent.clear(box);
+    await userEvent.type(box, "30");
+    await userEvent.tab();
+    expect(save).toHaveBeenCalledWith({ maxWaitMinutes: 30 });
+    await waitFor(() => expect(box.value).toBe("30"));
+    expect(screen.getByText(/workspace\.claim_timeout/)).toBeTruthy();
   });
 
   it("keeps the switch where it was when the save is refused", async () => {

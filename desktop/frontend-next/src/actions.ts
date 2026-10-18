@@ -690,6 +690,7 @@ export const ACTIONS: UIAction[] = [
   { id: "subagent-steer.max-bytes", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "subagent-steer.per-minute", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "write-lease.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "write-lease.max-wait", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workbench.stage-folder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "workbench.change-folder", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.discard", kind: "view", target: "entity", proof: "interaction" },
