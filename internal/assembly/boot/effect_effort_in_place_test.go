@@ -80,6 +80,9 @@ default_effort = "low"
 	if got := ctrl.RuntimeSelection(); got.Effort != "high" || !ctrl.MatchesRuntimeSelection(high) || ctrl.MatchesRuntimeSelection(before) {
 		t.Fatalf("running selection %+v does not follow the change (was %+v)", got, before)
 	}
+	if face, ok := ctrl.ModelFace(); !ok || face.Effort != "high" {
+		t.Fatalf("the status line would still read %q after the change, want high", face.Effort)
+	}
 	ask()
 	if got := last(); got != "high" {
 		t.Fatalf("request after the change carried %v, want high", got)

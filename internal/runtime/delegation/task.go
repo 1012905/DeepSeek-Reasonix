@@ -567,7 +567,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// it and widen it with the user's answer; the audit at the end reads the
 	// same object, so a path the user granted is not reported as an escape.
 	writeGrant := writeclaim.NewWriteGrant(spec.Grant.WritePaths)
-	modelRef, effortRef := agent.VisionRefFor(ctx, spec.Worker.Model), agent.VisionEffortFor(ctx, spec.Worker.Model, spec.Worker.Effort)
+	modelRef, effortRef := t.childRuntimeRef(ctx, spec.Worker.Model, spec.Worker.Effort)
 	subReg, err := t.childRegistry(&spec, childDepth, writeGrant, modelRef)
 	if err != nil {
 		return "", err
@@ -634,7 +634,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		if spec.Grant.ReadOnly {
 			return t.runReadOnlySubSession(withUpstream(runCtx, spec.Context.Upstream), spec.Task.Objective, subReg, sink, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, recoveryTaskID, usageModelRef, mutationObserver, "read_only_"+spec.Worker.Kind, grant)
 		}
-		return t.runSubSession(withUpstream(writeclaim.WithSubagentWriteGrant(runCtx, writeGrant), spec.Context.Upstream), spec.Task.Objective, subReg, sink, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, recoveryTaskID, usageModelRef, mutationObserver, spec.Worker.Kind, grant, t.observeRootFor(backgroundWriter, writeGrant))
+		return t.runSubSession(t.withChildEffort(withUpstream(writeclaim.WithSubagentWriteGrant(runCtx, writeGrant), spec.Context.Upstream), ctx, modelRef, effortRef), spec.Task.Objective, subReg, sink, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, recoveryTaskID, usageModelRef, mutationObserver, spec.Worker.Kind, grant, t.observeRootFor(backgroundWriter, writeGrant))
 	}
 
 	if spec.Sched.RunInBackground {
@@ -907,6 +907,7 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *sessionstore.Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver, entrance string, grant agent.ReviewReportGrant, observeRoot string) (string, error) {
 	opts := t.steerable(t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver), sess)
 	opts.ModelRef = modelRef
+	opts.RequestEffort, _ = ctx.Value(childEffortKey{}).(string)
 	opts.ObserveRoot = observeRoot
 	opts.RequireReviewReportKind = grant.Delivery
 	// Capture the pristine task before host framing is prepended: delivery

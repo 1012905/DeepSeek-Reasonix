@@ -9,7 +9,8 @@ import (
 // effortSelection is the runtime selection a session reached by changing depth in
 // place; unset means the one the controller was built with.
 type effortSelection struct {
-	sel atomic.Pointer[RuntimeSelection]
+	sel   atomic.Pointer[RuntimeSelection]
+	level atomic.Pointer[string] // the depth as the user named it, for a status line
 }
 
 // EffortInPlacer is the controller capability a frontend uses to change reasoning
@@ -52,6 +53,7 @@ func (c *Controller) SetEffortInPlace(level string, target RuntimeSelection) boo
 	}
 	target.ModelRef = strings.TrimSpace(c.modelRef)
 	c.effortSel.sel.Store(&target)
+	c.effortSel.level.Store(&level)
 	return true
 }
 
