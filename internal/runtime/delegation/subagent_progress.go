@@ -149,11 +149,9 @@ type subagentProgressMerger struct {
 
 	slots  map[string]map[subagentProgressChannel]*progressSlot
 	status map[string]*progressStatusSlot
-	// ran is the model and effort each child actually started with; every status
-	// event for the child carries it, so a window that joins late still has it.
-	ran   map[string]*event.Profile
-	order []string // child IDs in registration order, for round-robin
-	rr    int      // rotating scan start for fairness
+	order  []string // child IDs in registration order, for round-robin
+	rr     int      // rotating scan start for fairness
+	ran    ranBook  // what each child started with; every status event for it carries it
 
 	tokens     float64 // preview budget: subagentProgressGroupEventsPerSec
 	lastRefill time.Time
@@ -178,7 +176,6 @@ func newSubagentProgressMerger(clock progressClock, sink event.Sink, groupParent
 		groupParentID:    groupParentID,
 		slots:            make(map[string]map[subagentProgressChannel]*progressSlot),
 		status:           make(map[string]*progressStatusSlot),
-		ran:              make(map[string]*event.Profile),
 		tokens:           subagentProgressGroupBurst,
 		lastRefill:       now,
 		wake:             make(chan struct{}, 1),
@@ -213,7 +210,7 @@ func (m *subagentProgressMerger) Close() {
 // flushChild instead.
 func (m *subagentProgressMerger) directStatus(childID string, phase subagentProgressPhase) {
 	m.mu.Lock()
-	ran := m.ran[childID]
+	ran := m.ran.of(childID)
 	st := m.status[childID]
 	if st == nil {
 		st = &progressStatusSlot{}
@@ -488,19 +485,8 @@ func (m *subagentProgressMerger) emitStatusLocked(childID string, phase subagent
 	}
 	m.sink.Emit(event.Event{Kind: event.ToolProgress, Tool: event.Tool{
 		ID: childID, Name: event.SubagentProgressStatusName, ParentID: parentID,
-		Output: string(phase), DurationMs: durationMs, RateTokensPerSec: rate, Profile: m.ran[childID],
+		Output: string(phase), DurationMs: durationMs, RateTokensPerSec: rate, Profile: m.ran.of(childID),
 	}})
-}
-
-// setRan records what a child's run started with, once its model and effort are
-// resolved; an empty model records nothing.
-func (m *subagentProgressMerger) setRan(childID, model, effort string) {
-	if model == "" {
-		return
-	}
-	m.mu.Lock()
-	m.ran[childID] = &event.Profile{Model: model, Effort: effort}
-	m.mu.Unlock()
 }
 
 func (m *subagentProgressMerger) emitDeltaLocked(childID string, ch subagentProgressChannel, sl *progressSlot) {
@@ -671,12 +657,6 @@ func newSubagentProgressTracker(ctx context.Context, wrapSink event.Sink) *subag
 // states can never be merged away by a faster follow-up transition: a
 // background job that grabs its slot microseconds after registration must not
 // hide the queued state.
-// ran records the model and effort this child's run actually started with, so the
-// status events that follow carry them.
-func (t *subagentProgressTracker) ran(model, effort string) {
-	t.merger.setRan(t.childID, model, effort)
-}
-
 func (t *subagentProgressTracker) queued() {
 	t.emitStatusDirect(subagentPhaseQueued)
 }
