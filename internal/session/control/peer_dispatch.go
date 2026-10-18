@@ -14,10 +14,11 @@ import (
 // Each is an identity the dispatch tool reports; none is matched by its words.
 var (
 	ErrDispatchDisabled       = errors.New(`the user has not turned on "Let the model hand a task to another session" (Settings > Tools > Messages between sessions, which also needs "enabled"; [peers] dispatch in the user config)`)
-	ErrDispatchUnavailable    = errors.New("this session cannot open sessions in other projects")
+	ErrDispatchUnavailable    = errors.New("this session has no window to open another session in (it is a terminal or protocol session): open the project in Reasonix Studio or the web UI to dispatch from it")
+	ErrDispatchNotLocal       = errors.New("this pane is not one of this machine's own sessions (it is driven over SSH or by another window), so it cannot open a session here")
 	ErrDispatchUnknownProject = errors.New("no project of yours answers to that name")
 	ErrDispatchAmbiguous      = errors.New("more than one project answers to that name")
-	ErrDispatchNested         = errors.New("a session opened by a dispatch cannot dispatch further")
+	ErrDispatchNested         = errors.New("this session is as many dispatches deep as your ceiling allows (peers.max_dispatch_depth in the user config; 0 removes it)")
 	ErrDispatchUntrusted      = errors.New("that project is not one you have trusted")
 	ErrDispatchFailed         = errors.New("could not open a session in that project")
 	ErrDispatchLimit          = errors.New("this session already has as many dispatched sessions open as your ceiling allows (peers.max_dispatched_sessions)")

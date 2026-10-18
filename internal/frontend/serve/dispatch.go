@@ -67,7 +67,7 @@ func (h *Hub) dispatchTo(ctx context.Context, from *Runtime, project, text strin
 	}
 	sender, ok := from.Server.Controller().(*control.Controller)
 	if !ok {
-		return control.DispatchResult{}, control.ErrDispatchUnavailable
+		return control.DispatchResult{}, control.ErrDispatchNotLocal
 	}
 	target := h.runtimeByID(h.dispatch.get(from.ID, root))
 	var secret []byte
@@ -84,7 +84,7 @@ func (h *Hub) dispatchTo(ctx context.Context, from *Runtime, project, text strin
 	}
 	targetCtrl, ok := target.Server.Controller().(*control.Controller)
 	if !ok {
-		return control.DispatchResult{}, control.ErrDispatchUnavailable
+		return control.DispatchResult{}, control.ErrDispatchNotLocal
 	}
 	key := targetCtrl.PeerKey()
 	if key == "" {
@@ -122,7 +122,7 @@ func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, sender *co
 	ctrl, ok := target.Server.Controller().(*control.Controller)
 	if !ok {
 		_ = h.Close(target.ID)
-		return nil, control.ErrDispatchUnavailable
+		return nil, control.ErrDispatchNotLocal
 	}
 	if ctrl.WorkspaceTrust() != config.WorkspaceTrusted {
 		_ = h.Close(target.ID)
