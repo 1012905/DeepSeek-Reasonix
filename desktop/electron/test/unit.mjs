@@ -2353,6 +2353,9 @@ test("a page given its own viewport is fitted whole into its panel, centred, and
   }
   const panel = { x: 380, y: 60, width: 560, height: 620 };
   assert.deepEqual(placement(panel, null), { at: panel, scale: 1 }, "a page without a viewport of its own fills the panel");
+  for (const none of [{ width: 0, height: 0 }, { width: 0, height: 600 }, { width: 390, height: 0 }, { width: NaN, height: 600 }, { width: 390, height: Infinity }, { width: -1, height: 600 }]) {
+    assert.deepEqual(placement(panel, none), { at: panel, scale: 1 }, `${JSON.stringify(none)} is no viewport at all`);
+  }
   const wide = placement(panel, { width: 1280, height: 900 });
   assert.equal(wide.scale, 0.4375);
   assert.deepEqual(wide.at, { x: 380, y: 173, width: 560, height: 394 });

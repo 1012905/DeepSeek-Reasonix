@@ -214,8 +214,8 @@ class BrowserViews {
   // emulate records the viewport a page was told to lay out in, which the view
   // is then fitted to; null is the page going back to the size of its view.
   async emulate(entry, params) {
-    entry.override = params ? { ...params } : null;
-    if (!params) {
+    entry.override = sized(params) ? { ...params } : null;
+    if (!entry.override) {
       entry.scale = 1;
       if (entry.panel) this.fit(entry);
       return entry.view.webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride", {});
@@ -476,8 +476,10 @@ async function loadResult(contents, url) {
 // Where a page's view sits in the rectangle the panel gave it. A page laid out
 // in a viewport of its own is shown whole: scaled down to fit and never up,
 // centred, with the view sized to exactly what it draws.
+const sized = (v) => !!v && Number.isFinite(v.width) && Number.isFinite(v.height) && v.width > 0 && v.height > 0;
+
 function placement(panel, emulated) {
-  if (!emulated) return { at: panel, scale: 1 };
+  if (!sized(emulated)) return { at: panel, scale: 1 };
   const scale = Math.min(1, panel.width / emulated.width, panel.height / emulated.height);
   const width = Math.max(1, Math.round(emulated.width * scale));
   const height = Math.max(1, Math.round(emulated.height * scale));
