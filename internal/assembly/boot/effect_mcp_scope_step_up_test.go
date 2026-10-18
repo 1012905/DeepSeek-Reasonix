@@ -309,7 +309,7 @@ func stepUpController(t *testing.T, serverURL string) (*control.Controller, chan
 	isolateConfigHome(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", fmt.Sprintf(`
+	writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
 
 [agent]
@@ -322,7 +322,7 @@ enabled = false
 name = "test-model"
 kind = "boot-mcp-step-up"
 model = "x"
-`))
+`)
 	user := config.UserConfigPath()
 	if err := os.MkdirAll(filepath.Dir(user), 0o755); err != nil {
 		t.Fatal(err)
