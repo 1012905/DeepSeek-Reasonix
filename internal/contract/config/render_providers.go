@@ -59,6 +59,9 @@ func renderProviderEntryAnnotated(b *strings.Builder, p ProviderEntry) {
 	}
 	if p.BalanceURL != "" {
 		fmt.Fprintf(b, "balance_url = %q   # optional; wallet-balance endpoint shown in the status bar\n", p.BalanceURL)
+		if p.BalanceFormat != "" {
+			fmt.Fprintf(b, "balance_format = %q   # how that endpoint answers: deepseek | moonshot | openrouter; required unless the host is a vendor's own\n", p.BalanceFormat)
+		}
 	}
 	renderProviderEntryAnnotatedTuning(b, p)
 }
@@ -181,6 +184,9 @@ func renderProviderEntryPlain(b *strings.Builder, p ProviderEntry) {
 	}
 	if p.BalanceURL != "" {
 		fmt.Fprintf(b, "balance_url = %q\n", p.BalanceURL)
+		if p.BalanceFormat != "" {
+			fmt.Fprintf(b, "balance_format = %q\n", p.BalanceFormat)
+		}
 	}
 	renderProviderEntryPlainTuning(b, p)
 }
