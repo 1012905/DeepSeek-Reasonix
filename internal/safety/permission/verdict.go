@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"reasonix/internal/base/textutil"
 )
 
 // Refusal codes a Gate attaches to a call it refused. The code is the identity
@@ -202,8 +204,15 @@ func (g *Gate) ConfirmOrigin(ctx context.Context, toolName string, args json.Raw
 	if g.Approver == nil {
 		return Verdict{Reason: "this call repeats text from " + origin + ", the session is set to ask about that, and nobody can answer, so it was refused.", Code: RefusalUnattended}, nil
 	}
-	subject := "text from " + origin + " reached this call: " + toolName + " " + Subject(args)
-	allow, _, reason, err := g.approve(ctx, OriginConfirmTool, subject, args, "this call repeats text from "+origin)
+	// The call text is the model's own: shown on one line with controls removed, so
+	// it cannot pass for another line of the card or hide behind an escape.
+	call, cleaned := textutil.ScrubLaunch(toolName + " " + Subject(args))
+	subject := "text from " + origin + " reached this call: " + call
+	why := "this call repeats text from " + origin
+	if cleaned {
+		why += "; line breaks or control characters in the call are hidden here"
+	}
+	allow, _, reason, err := g.approve(ctx, OriginConfirmTool, subject, args, why)
 	if err != nil {
 		return Verdict{Reason: "approval aborted"}, err
 	}
