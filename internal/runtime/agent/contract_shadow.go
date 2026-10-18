@@ -199,7 +199,9 @@ func (a *Agent) emitTurnShadows(input string, blocked bool) {
 	event.RecordContractShadow(a.svc.sink, contractShadowAudit(c))
 	rep := completion.Build(c, a.task.ledger, a.pathInWorkspace)
 	a.turn.completion = &rep
-	event.RecordCompletionReport(a.svc.sink, completionReportAudit(rep))
+	audit := completionReportAudit(rep)
+	audit.OriginRecorded, audit.OriginMatched = a.task.origins.take()
+	event.RecordCompletionReport(a.svc.sink, audit)
 	a.sealShadowBundle(input, c, rep, a.task.ledger.Receipts(), blocked)
 	a.emitCompletionSummary(c, rep, blocked)
 }
