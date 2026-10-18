@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import { SseHub } from "./hub";
 import { HttpError } from "./port";
 
+it("uploads native archives as opaque bodies to the owning host route", async () => {
+  const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ path: "imported" }) });
+  vi.stubGlobal("fetch", fetch);
+  try {
+    const file = new File(["{ not parsed here"], "session.json");
+    await new SseHub().importNativeSession(file, "/folder with space");
+    expect(fetch).toHaveBeenCalledWith("/tree/sessions/import-native?workspace=%2Ffolder+with+space",
+      expect.objectContaining({ method: "POST", body: file,
+        headers: { "content-type": "application/json" }, credentials: "same-origin" }));
+  } finally { vi.unstubAllGlobals(); }
+});
+
 function answer(status: number, body: string) {
   vi.stubGlobal("fetch", async () => ({
     ok: false,

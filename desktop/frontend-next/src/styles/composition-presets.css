@@ -31,10 +31,11 @@
 .composition-modules legend { font-weight: 600; padding-inline: 4px; }
 .composition-module { margin-block: 8px; }
 .composition-module .in { flex: 1; min-width: 100px; }
-.composition-editor :is(input, select) {
+#set-agent-presets :is(.composition-editor, .composition-toolbar) :is(input, select) {
   width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--raised); color: var(--text); padding: 6px 9px; font: var(--w-reg) var(--fs-ui)/1.5 var(--ui);
 }
-.composition-editor :is(input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.composition-editor :is(input, select):disabled { opacity: .65; }
+#set-agent-presets :is(.composition-editor, .composition-toolbar) :is(input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#set-agent-presets :is(.composition-editor, .composition-toolbar) :is(input, select):disabled { opacity: .65; }
+#set-agent-presets .composition-toolbar :is(input, select) { flex: 1; min-width: 100px; max-width: 100%; }
 .composition-editor h4 { margin: 10px 12px 0; font-size: var(--fs-ui); }

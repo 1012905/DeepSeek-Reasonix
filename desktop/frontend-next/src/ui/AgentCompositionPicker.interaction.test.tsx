@@ -1,14 +1,41 @@
 // @vitest-environment jsdom
-import {cleanup,render,screen,waitFor} from "@testing-library/react";
+import {act,cleanup,render,screen,waitFor} from "@testing-library/react";
 import "./testkit";
 import userEvent from "@testing-library/user-event";
-import {afterEach,expect,it,vi} from "vitest";
+import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {MockPort} from "../port/mock";
 import {AgentCompositionPicker} from "./AgentCompositionPicker";
 import {CompositionNewContext} from "./CompositionNewContext";
 import {RunLine} from "./RunLine";
+import { setShowsCompositionPicker } from "../state/compositionPicker";
 
+beforeEach(() => setShowsCompositionPicker(true));
 afterEach(cleanup);
+
+it("hides the picker and performs no composition reads until explicitly enabled", async () => {
+  setShowsCompositionPicker(false);
+  const port = new MockPort();
+  const read = vi.spyOn(port, "agentPresets");
+  const select = vi.spyOn(port, "selectAgentComposition");
+  render(<AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>);
+  expect(screen.queryByRole("button")).toBeNull();
+  expect(read).not.toHaveBeenCalled();
+  act(() => setShowsCompositionPicker(true));
+  await screen.findByRole("button", { name: /^Agent 组合/ });
+  act(() => setShowsCompositionPicker(false));
+  expect(screen.queryByRole("button")).toBeNull();
+  expect(select).not.toHaveBeenCalled();
+});
+
+it("shows an unavailable state with a management entry when the catalog fails", async () => {
+  const port = new MockPort();
+  vi.spyOn(port, "agentPresets").mockRejectedValue(new Error("catalog unavailable"));
+  const settings = vi.fn();
+  render(<AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={settings} onError={()=>{}}/>);
+  const failed = await screen.findByRole("button", { name: "Agent 预设暂不可用" });
+  await userEvent.click(failed);
+  expect(settings).toHaveBeenCalledOnce();
+});
 
 it("groups composition controls with the run state without announcing controls as live status",async()=>{
   const port=new MockPort();const changed=vi.fn();const settings=vi.fn();

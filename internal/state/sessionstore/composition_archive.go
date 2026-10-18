@@ -3,6 +3,7 @@ package sessionstore
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -20,6 +21,9 @@ type NativeArchive struct {
 const NativeArchiveFormat = "reasonix-native-session"
 const NativeArchiveVersion = 2
 const MaxNativeArchiveBytes = 192 << 20
+
+var ErrNativeArchiveInvalid = errors.New("invalid native session archive")
+var ErrNativeArchiveUnsupported = errors.New("unsupported native session archive version")
 
 func ExportNativeArchive(path string) ([]byte, error) {
 	s, err := LoadSession(path)
@@ -42,13 +46,13 @@ func DecodeNativeArchive(data []byte) (*Session, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&archive); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrNativeArchiveInvalid, err)
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
-		return nil, fmt.Errorf("invalid native archive: trailing data")
+		return nil, fmt.Errorf("%w: trailing data", ErrNativeArchiveInvalid)
 	}
 	if archive.Format != NativeArchiveFormat || archive.Version != NativeArchiveVersion {
-		return nil, fmt.Errorf("unsupported native archive version %d", archive.Version)
+		return nil, fmt.Errorf("%w: %d", ErrNativeArchiveUnsupported, archive.Version)
 	}
 	if len(archive.Records) > sessionEventReplayMaxMessages {
 		return nil, ErrSessionReplayLimitExceeded
@@ -69,7 +73,7 @@ func DecodeNativeArchive(data []byte) (*Session, error) {
 	s := NewSession("")
 	s.Messages = archive.Records
 	if !s.HasSystemMessage() {
-		return nil, fmt.Errorf("native archive has no system message")
+		return nil, fmt.Errorf("%w: no system message", ErrNativeArchiveInvalid)
 	}
 	if binding != nil && s.HasContent() && !binding.Started {
 		return nil, fmt.Errorf("%w: admitted archive is unlocked", agentcomposition.ErrInvalid)

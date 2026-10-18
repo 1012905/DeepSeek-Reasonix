@@ -15,8 +15,7 @@ export function NativeSessionImport({ hub, workspace, onImported }: { hub: HubPo
       if (!file) return;
       setBusy(true); setError(""); setMessage("");
       void (async () => {
-        if (file.size > 192 * 1024 * 1024) throw new Error(t("会话文件超过大小限制。"));
-        await hub.importNativeSession(JSON.parse(await file.text()), workspace);
+        await hub.importNativeSession(file, workspace);
         setMessage(t("会话已导入，绑定版本保持不变。"));
         onImported();
       })().catch((e) => setError(reason(e))).finally(() => setBusy(false));

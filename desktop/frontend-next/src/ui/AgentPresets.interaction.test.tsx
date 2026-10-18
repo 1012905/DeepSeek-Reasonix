@@ -1,11 +1,57 @@
 // @vitest-environment jsdom
+import "./testkit";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { MockPort } from "../port/mock";
 import { AgentPresets } from "./AgentPresets";
+import { boot, STORAGE, t } from "../i18n";
+import { AgentCompositionPicker } from "./AgentCompositionPicker";
+import { RunLine } from "./RunLine";
+import { setShowsCompositionPicker } from "../state/compositionPicker";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.setItem(STORAGE, "zh"); boot(); });
+
+it("enables the picker from Settings without changing the active conversation, then hides it", async () => {
+  localStorage.removeItem("rx-show-agent-composition");
+  const port = new MockPort();
+  const select = vi.spyOn(port, "selectAgentComposition");
+  const user = userEvent.setup();
+  render(<><AgentPresets port={port}/>
+    <RunLine label="空闲" running={false} blocked={false} sent={0} received={0} estimated={false}>
+      <AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>
+    </RunLine>
+  </>);
+  await screen.findByRole("button", { name: "标准模式" });
+  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
+  expect(document.querySelector(".compose-context")).toBeNull();
+  const toggle = screen.getByRole("switch", { name: "显示模式选择器" });
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  await user.click(toggle);
+  const picker = await screen.findByRole("button", { name: /^Agent 组合/ });
+  await user.click(picker);
+  await user.click(screen.getByRole("menuitem", { name: /精简模式/ }));
+  const before = await port.agentComposition();
+  await user.click(toggle);
+  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
+  expect(await port.agentComposition()).toEqual(before);
+  expect(select).toHaveBeenCalledExactlyOnceWith("builtin:minimal");
+  setShowsCompositionPicker(false);
+});
+
+it("copies both built-in name and description in the window language", async () => {
+  localStorage.setItem(STORAGE, "en"); boot();
+  const port = new MockPort();
+  render(<AgentPresets port={port} />);
+  await userEvent.click(await screen.findByRole("button", { name: "Duplicate as custom preset" }));
+  await userEvent.click(screen.getByRole("button", { name: "Save preset" }));
+  await screen.findByRole("status");
+  const catalog = await port.agentPresets();
+  const base = catalog.presets.find((v) => v.definition.id === "builtin:general")!.definition;
+  const copy = catalog.presets.find((v) => v.definition.id === "user:custom")!.definition;
+  expect(copy.name).toBe("Standard mode Copy");
+  expect(copy.description).toBe(t(base.description));
+});
 
 describe("Agent preset management", () => {
   it("edits the existing user persona in Standard without migration or binding", async () => {

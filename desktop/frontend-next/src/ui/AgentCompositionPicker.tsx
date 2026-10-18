@@ -6,6 +6,7 @@ import { Picker, type MenuItem } from "./Menu";
 import { StudioIcon } from "./StudioIcon";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
+import { useShowsCompositionPicker } from "../state/compositionPicker";
 
 const MANAGE = "__manage";
 
@@ -29,14 +30,21 @@ export function AgentCompositionPicker({ port, binding, locked: statusLocked, ru
   const [catalog, setCatalog] = useState<AgentPresetCatalog | null>(null);
   const [current, setCurrent] = useState<CompositionSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const enabled = useShowsCompositionPicker();
   const createNew = useContext(CompositionNewContext);
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
+    setUnavailable(false);
     Promise.all([port.agentPresets(), port.agentComposition()]).then(([list, binding]) => {
       if (active) { setCatalog(list); setCurrent(binding); }
-    }).catch(() => {});
+    }).catch(() => { if (active) setUnavailable(true); });
     return () => { active = false; };
-  }, [port, running, binding?.digest, binding?.started]);
+  }, [enabled, port, running, binding?.digest, binding?.started]);
+  if (!enabled) return null;
+  if (unavailable) return <button className="mode composition-trigger" onClick={onSettings}
+    data-action="agent-composition.unavailable">{t("Agent 预设暂不可用")}</button>;
   if (!catalog) return null;
   const selected = catalog.presets.find((v) => v.definition.id === (current?.id ?? "builtin:general"))?.definition;
   const locked = running || statusLocked || !!current?.started;

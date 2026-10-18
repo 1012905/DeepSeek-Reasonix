@@ -21,6 +21,16 @@ to bind a version.
 
 ## Choosing and editing
 
+The mode picker is hidden by default. Enable **Settings → Agent presets → Show
+mode picker** on this machine to show it immediately in every pane.
+
+With it off,
+the composer keeps its original controls and status layout; no catalog is read
+and no composition is selected by the hidden control.
+
+Turning it off hides the
+entry without changing a conversation's binding or a saved preference.
+
 Choose the mode at the left of the composer status row before
 the first prompt. One menu lists compositions with their sources and capabilities;
 **Manage Agent presets…** opens the management page below the choices. Once a prompt is
@@ -231,8 +241,25 @@ send the selected composition ID to that host; local executable resources are no
 | `POST /agent-composition` | `{id}` → selected summary |
 | `POST /runtimes` | Existing create fields plus optional `agentComposition` |
 | `POST /tree/sessions/export` | `{path}` → `{name, content}`; native envelope for bound sessions |
-| `POST /tree/sessions/import-native` | `{workspace, content}` → imported `{path, agentComposition}` |
+| `POST /tree/sessions/import-native?workspace=...` | Original file as an `application/json` body → imported `{path, agentComposition}` |
 | `POST /tree/sessions/move-to` | `{path, target}` → moved unbound conversation; bound conversations are refused |
+
+The renderer uploads the archive as an opaque file and never reads or parses it.
+The host uses the same native decoder and its 192 MiB / replay-record limits.
+
+| Refusal | Code |
+| --- | --- |
+| Malformed | `session.archive_invalid` |
+| Unsupported version | `session.archive_unsupported` |
+| Byte or record limit | `session.archive_too_large` |
+
+The original JSON `{workspace, content}` request remains supported on this same
+route. Neither transport grants trust or starts programs.
+
+The open conversation-import proposal
+[#13728](https://github.com/esengine/DeepSeek-Reasonix/issues/13728) should reuse
+this decoder and limits rather than introduce a second parser; this entry will
+move to that common flow when it lands.
 
 Preset save/delete/default/import and session composition selection require the
 request's provider-edit grant, just like configuration writes. Without it they

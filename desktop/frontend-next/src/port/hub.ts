@@ -194,7 +194,7 @@ export interface HubPort extends SharePort {
   autoNameSession(path: string): Promise<{ title: string }>;
   exportSession(path: string): Promise<{ name: string; content: string }>;
   importLegacySessions(path: string, workspace: string): Promise<LegacyImport>;
-  importNativeSession(content: unknown, workspace: string): Promise<{ path: string }>;
+  importNativeSession(file: Blob, workspace: string): Promise<{ path: string }>;
   // The host book with each link's state, or null where this kernel refuses
   // remote panes outright — a page served to a browser, rather than the window.
   // Null is what lets the sidebar leave the whole section out instead of
@@ -418,8 +418,14 @@ export class SseHub implements HubPort {
     return this.post<LegacyImport>("/tree/sessions/import-legacy", { path, workspace });
   }
 
-  importNativeSession(content: unknown, workspace: string) {
-    return this.post<{ path: string }>("/tree/sessions/import-native", { content, workspace });
+  async importNativeSession(file: Blob, workspace: string): Promise<{ path: string }> {
+    const path = `/tree/sessions/import-native?${new URLSearchParams({ workspace })}`;
+    const response = await fetch(path, {
+      method: "POST", credentials: "same-origin",
+      headers: { "content-type": "application/json" }, body: file,
+    });
+    if (!response.ok) await SseHub.fail(path, response);
+    return await response.json() as { path: string };
   }
 
   async remoteHosts() {

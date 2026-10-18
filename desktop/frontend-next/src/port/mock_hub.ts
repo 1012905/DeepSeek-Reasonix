@@ -305,7 +305,7 @@ export class MockHub implements HubPort {
     return Promise.resolve({ summary: "mock migration complete", imported: 0, warnings: 0, recognised: true, skipped: [] });
   }
 
-  importNativeSession(_content: unknown, _workspace: string) {
+  importNativeSession(_file: Blob, _workspace: string) {
     return Promise.resolve({ path: `/sessions/imported-${++this.seq}.jsonl` });
   }
 

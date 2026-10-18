@@ -4,7 +4,8 @@ import type { AgentPort } from "../port/port";
 import type { PaneReport } from "./Pane";
 import { t } from "../i18n";
 import { openSessionLimit } from "../state/prefs";
-import { pushNote } from "../state/toasts";
+import { pushNote, pushToast } from "../state/toasts";
+import { reason } from "../i18n/kernel";
 import type { SessionSwitch } from "./sessionswitch";
 
 interface Placed {
@@ -41,8 +42,13 @@ export function useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runs
       // folder: it is the pane being asked for. Rebuilding it would cost a full
       // assembly to arrive back where we started.
       if (blank && !req.sessionPath && blank.root === req.root) {
-        const port=panePorts.get(blank.id);
-        if(port) {const chosen=req.agentComposition??(await port.agentPresets()).default;await port.selectAgentComposition(chosen);}
+        if (req.agentComposition !== undefined) {
+          try {
+            await panePorts.get(blank.id)?.selectAgentComposition(req.agentComposition);
+          } catch (e) {
+            pushToast(reason(e));
+          }
+        }
         return { id: blank.id, changed: false };
       }
       // Same folder: the pane just rebinds, so nothing is torn down and a draft

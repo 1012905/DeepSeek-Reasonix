@@ -148,7 +148,7 @@ export function Picker({
     el.style.top = `${at.top}px`;
   }, [align, place]);
 
-  useFollow(open, put, shown.length);
+  useFollow(open, put, shown.length, { anchor: btn, container: menu });
 
   // Headings are divs and never take focus, so walking the buttons is what
   // keeps one arrow press from landing on nothing.

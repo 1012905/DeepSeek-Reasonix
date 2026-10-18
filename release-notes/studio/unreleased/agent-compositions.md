@@ -8,6 +8,9 @@
 - 远程新会话透传所选模式，同时保留并发打开与重复点击的保护。#13613
 - 预设写入与组合切换要求配置编辑授权；安全 Hook 与权限规则不受组合选择影响，旧绑定恢复和会话内策略编辑同样保持保护。#13613
 
+- 模式选择器改为默认关闭的界面开关；重复新建会话保留空白窗格的已选模式。#13613
+- 原生归档直接交给后端解析，错误按码翻译；内置副本使用窗口语言，标识字段跟随主题。#13613
+
 <!-- lang:en -->
 
 - Add session Agent presets with versioned personas, tools and modules, building on #13588. #13613
@@ -19,3 +22,5 @@
 - Refuse moving bound conversations to another project before copying or deleting them, preserving the original immutable composition. #13613
 - Carry the selected mode into new remote conversations while preserving concurrent-open ordering and duplicate-click protection. #13613
 - Require configuration-edit authority for preset writes and composition switches; keep safety hooks and permission rules in force across selection, old-binding restore and live policy edits. #13613
+- Make the mode picker a default-off interface choice; preserve blank-pane modes on repeated New session. #13613
+- Upload native archives to the host decoder; localize refusals, copied descriptions and themed identifier fields. #13613
