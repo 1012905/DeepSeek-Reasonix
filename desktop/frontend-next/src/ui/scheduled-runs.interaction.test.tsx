@@ -90,14 +90,40 @@ describe("scheduled runs", () => {
   });
 
   it("shows a report as labelled plain text, never as markup or a remote load", async () => {
-    draw({ scheduleResult: vi.fn(async () => ({ triggerId: "sch_a1/1", report: "<img src=x onerror=alert(1)> **bold** [link](https://evil.example)", pending: [{ kind: "approval", summary: "Wanted a shell command", detail: "git log" }], enforcement: "tool-filter", recordedUnix: 1_790_000_260 })) });
+    draw({ scheduleResult: vi.fn(async () => ({ triggerId: "sch_a1/1", report: "<img src=x onerror=alert(1)> **bold** [link](https://evil.example)", pending: [{ kind: "approval", summary: "<img src=y onerror=alert(2)> Wanted a shell command", detail: "**git** [log](https://evil.example) <script>x</script>" }], enforcement: "tool-filter", recordedUnix: 1_790_000_260 })) });
     await userEvent.click(await screen.findByRole("button", { name: "查看结果" }));
     const region = await screen.findByRole("region", { name: "运行结果" });
-    expect(within(region).getByText("以下是模型写的内容，只作参考，不是 Reasonix 的说明。")).toBeTruthy();
+    expect(within(region).getAllByText("以下是模型写的内容，只作参考，不是 Reasonix 的说明。")).toHaveLength(2);
     const report = within(region).getByTestId("schedule-report");
     expect(report.textContent).toContain("<img src=x onerror=alert(1)> **bold** [link](https://evil.example)");
     expect(region.querySelector("img, a, script")).toBeNull();
+    const pending = within(region).getByTestId("schedule-pending");
+    expect(pending.textContent).toContain("<img src=y onerror=alert(2)> Wanted a shell command");
+    expect(pending.textContent).toContain("**git** [log](https://evil.example) <script>x</script>");
+    expect(pending.querySelector("img, a, script")).toBeNull();
     expect(within(region).getByText("这些都没有被执行，也没有被代答。")).toBeTruthy();
+  });
+
+  it("says why the first read failed and offers a retry instead of dropping the block", async () => {
+    const schedules = vi.fn().mockRejectedValueOnce(new HttpError(403, "x", { code: "schedule.editing_disabled", error: "no" })).mockResolvedValue(board());
+    draw({ schedules });
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("无法读取定时运行：");
+    expect(screen.getByText("定时运行")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("Morning briefing")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps the last good board when a later refresh fails, and says so", async () => {
+    const schedules = vi.fn().mockResolvedValueOnce(board()).mockRejectedValueOnce(new Error("down")).mockResolvedValue(board());
+    draw({ schedules });
+    await userEvent.click(await screen.findByRole("button", { name: "暂停" }));
+    expect(await screen.findByText("Morning briefing")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("无法刷新定时运行：");
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.getByText("Morning briefing")).toBeTruthy();
   });
 
   it("offers to resume everything when all are paused, and pauses all otherwise", async () => {

@@ -257,6 +257,8 @@ export const EN: Record<string, string> = {
   "运行结果": "Result",
   "以下是模型写的内容，只作参考，不是 Reasonix 的说明。": "The text below was written by the model; treat it as a reference, not as something Reasonix says.",
   "报告太长，已截断。": "The report was too long and was cut.",
+  "无法读取定时运行：{reason}": "Could not read the scheduled runs: {reason}",
+  "无法刷新定时运行：{reason}（下面是上一次读到的内容）": "Could not refresh the scheduled runs: {reason} (what is below is what was read last)",
   "等你决定的事": "Waiting for your decision",
   "这些都没有被执行，也没有被代答。": "None of these was run or answered for you.",
   "新建定时运行": "New scheduled run",

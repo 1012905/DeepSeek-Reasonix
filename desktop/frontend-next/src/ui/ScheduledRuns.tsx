@@ -38,7 +38,14 @@ export function ScheduledRuns({ port }: { port: AgentPort }) {
   const [confirmDelete, setConfirmDelete] = useState("");
   const [result, setResult] = useState<ScheduleResultView | null>(null);
 
-  const refresh = useCallback(() => port.schedules().then(setBoard).catch(() => setBoard(null)), [port]);
+  const [loadError, setLoadError] = useState("");
+
+  // A failed read keeps the last board and says why: the block vanishing would
+  // leave a person who just created a schedule unable to tell whether it exists.
+  const refresh = useCallback(
+    () => port.schedules().then((b) => { setBoard(b); setLoadError(""); }).catch((e) => setLoadError(reason(e))),
+    [port],
+  );
   useEffect(() => {
     let alive = true;
     const load = () => { if (alive) void refresh(); };
@@ -61,7 +68,19 @@ export function ScheduledRuns({ port }: { port: AgentPort }) {
     }
   }, [refresh]);
 
-  if (!board) return null;
+  const unreadable = loadError && (
+    <div className="peerform" role="alert">
+      <div className="why">{board ? t("无法刷新定时运行：{reason}（下面是上一次读到的内容）", { reason: loadError }) : t("无法读取定时运行：{reason}", { reason: loadError })}</div>
+      <span className="acts"><button className="act" data-action="schedule.retry" onClick={() => void refresh()}>{t("重试")}</button></span>
+    </div>
+  );
+  if (!board) {
+    return unreadable ? (
+      <Group id="scheduled-runs" title={t("定时运行")} hint={t("按你确认的时间，只读地运行任务：它能读这个文件夹里的文件，不能写任何东西；需要你批准的事会挂起等你，不会替你答复。")}>
+        <div className="box">{unreadable}</div>
+      </Group>
+    ) : null;
+  }
   const locked = busy || readOnly;
   const name = (s: ScheduleView) => s.label || base(s.workspace);
   const scheduleName = (r: ScheduleRunView) => { const s = board.schedules.find((x) => x.id === r.scheduleId); return s ? name(s) : r.scheduleId; };
@@ -70,6 +89,7 @@ export function ScheduledRuns({ port }: { port: AgentPort }) {
   return (
     <Group id="scheduled-runs" title={t("定时运行")} hint={t("按你确认的时间，只读地运行任务：它能读这个文件夹里的文件，不能写任何东西；需要你批准的事会挂起等你，不会替你答复。")}>
       <div className="box">
+        {unreadable}
         <div className="lrow">
           <span className="tx">
             <span className="lb">{board.pausedAll ? t("全部定时运行已暂停") : t("定时运行进行中")}</span>
@@ -137,7 +157,8 @@ export function ScheduledRuns({ port }: { port: AgentPort }) {
             {result.pending.length > 0 && (
               <>
                 <div className="peernote"><b>{t("等你决定的事")}</b></div>
-                <ul className="wa-list">
+                <div className="peernote">{t("以下是模型写的内容，只作参考，不是 Reasonix 的说明。")}</div>
+                <ul className="wa-list" data-testid="schedule-pending">
                   {result.pending.map((p, i) => (
                     <li key={i}><span className="tx"><span className="lb">{p.summary}</span>{p.detail && <span className="ds">{p.detail}</span>}</span></li>
                   ))}

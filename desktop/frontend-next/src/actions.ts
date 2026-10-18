@@ -212,6 +212,7 @@ export const ACTIONS: UIAction[] = [
   { id: "schedule.delete-ask", kind: "view", target: "entity", proof: "interaction" },
   { id: "schedule.result", kind: "view", target: "entity", proof: "interaction" },
   { id: "schedule.result-close", kind: "view", target: "none", proof: "interaction" },
+  { id: "schedule.retry", kind: "view", target: "none", proof: "interaction" },
   { id: "schedule.new", kind: "view", target: "none", proof: "interaction" },
   { id: "schedule.folder", kind: "view", target: "none", proof: "interaction" },
   { id: "schedule.prompt", kind: "view", target: "none", proof: "interaction" },
