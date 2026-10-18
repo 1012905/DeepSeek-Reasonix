@@ -1,0 +1,2 @@
+- 修复：侧栏搜索框有关键词时不再在失焦后收起，点搜索结果的第一下不会再因为列表上移而落空。关联 #13708。
+- Fixed: The rail's search box stays open while it holds a query, so the first press on a result is no longer lost to the list moving up. Refs #13708.
