@@ -1,2 +1,2 @@
-- 新增：Windows 命令沙箱（设置 > 沙箱，默认关）：命令不能在授权文件夹外创建或改写文件；删除、重命名、读取不受限。见 #13109。
-- Added: a Windows command sandbox (Settings > Sandbox, off by default): no creating or overwriting files outside granted folders; delete, rename, read are not bounded. See #13109.
+- 新增：Windows 命令沙箱（设置 > 沙箱，默认关）：不能在授权文件夹外创建或改写文件；删除、重命名、读取、联网、ssh-agent/docker 管道不受限。见 #13109。
+- Added: a Windows command sandbox (Settings > Sandbox, off): no creating or overwriting files outside granted folders; delete, rename, read, network, ssh-agent/docker pipes are not bounded. #13109

@@ -1305,10 +1305,11 @@ inherit the chat session's temporary directory. An approved sandbox-escape
 command still receives the private temp environment variables, but on Linux its
 literal `/tmp` is no longer mapped by bubblewrap.
 
-**Windows note:** Reasonix does not ship an OS-level Bash sandbox on Windows.
-The effective mode is fixed to `off`; even an older config containing
+**Windows note:** the OS-level Bash sandbox on Windows is off unless the user
+turns on `[sandbox] windows_integrity = true` (see "On Windows" below). While it
+is off the effective mode is `off`; even an older config containing
 `bash = "enforce"` resolves to `off`, `reasonix doctor` flags the ignored value,
-and the desktop selector is read-only. Bash commands therefore run unconfined,
+and the desktop selector is read-only. Bash commands then run unconfined,
 while the dedicated file tools still enforce `workspace_root`, `allow_write`,
 and `forbid_read` in process. Saved credential variables are still removed from
 the child environment, but an approved unconfined shell runs as the user and is
@@ -1335,22 +1336,36 @@ With `windows_integrity` on, a bash command runs under a write-restricted token.
   state folder. It gives nobody else access and is inert if the sandbox is turned off.
 - `reasonix sandbox list` shows what is granted; `reasonix sandbox revoke` takes it back.
 
-What it bounds, measured on Windows 11 in an interactive session:
+What it bounds, measured on Windows 11 and for every child process:
 
 - Creating, appending to and overwriting files outside the granted folders.
-- `mkdir`, registry writes under your user, and global git configuration.
-- Writes through a junction that points out of a granted folder.
-- The same from every child process.
+- `mkdir`, registry writes under your user (HKCU), and global git configuration.
+- Writes through a junction or symbolic link that points out of a granted folder.
+- Backup-semantics writes (`robocopy /B`): the token carries no privileges.
+- Creating a scheduled task, creating a service and writing HKLM from the command
+  were refused when measured.
 
 What it does not bound:
 
-- **Deleting or renaming away** a file outside the granted folders. Windows does
-  not apply the restriction to those two. The delete guard and the approval
-  layer remain the control for deletes.
-- Reading files, and the network.
+- **Deleting or renaming away** an existing file outside the granted folders.
+  Windows does not apply the restriction to those two. The delete guard and the
+  approval layer remain the control for deletes.
+- **Reading** files, and **the network**.
+- **Host authorities**: the Windows named pipes of ssh-agent and docker, and COM
+  and RPC services such as the task scheduler, are reachable.
+- Writes anywhere that Everyone or your logon session can already write: both are
+  in the restricting set, so a folder open to them is open to the command.
+- The toolchain caches that are granted are writable by the command, so a
+  poisoned cache can reach your later unsandboxed builds. macOS and Linux have the
+  same exposure for their caches.
 
 Other facts:
 
+- The command runs with every privilege except the traverse check removed, and in
+  a job that cannot reach the other windows, clipboard or display settings of your session.
+- Only the three standard handles cross into the command.
+- A launcher request is honoured only for the SID in the grant record and for
+  session temp folders the host made.
 - It needs an interactive desktop session. In an SSH or service session `enforce`
   refuses to run commands (`sandbox.win_no_logon_sid`) instead of running them unconfined.
 - Not measured: standard (non-admin) accounts, other Windows versions, ReFS and

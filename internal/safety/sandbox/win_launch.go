@@ -3,7 +3,36 @@ package sandbox
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 )
+
+// sessionTempPrefix names the per-lease directories the host makes under the
+// temp root (internal/state/sessiontemp); a test holds the two spellings equal.
+const sessionTempPrefix = "reasonix-session-tmp-"
+
+// errLaunchRefused marks a launcher request the host did not make.
+var errLaunchRefused = errors.New("launch request refused")
+
+// checkWinLaunch holds a request to what the host intends: every Grant entry is
+// a session temp directory directly under the temp root. Who may ask at all is
+// decided by the token the launcher runs under (see launcherMayRun), not by
+// anything the request says: argv, environment and files are all the caller's own.
+func checkWinLaunch(l winLaunch) error {
+	base, _ := resolveWithLinks(os.TempDir())
+	for _, dir := range l.Grant {
+		real, _ := resolveWithLinks(dir)
+		// The launcher may already run with TEMP pointing at the lease itself.
+		inBase := strings.EqualFold(filepath.Dir(real), base) || strings.EqualFold(real, base)
+		if !inBase || !strings.HasPrefix(filepath.Base(real), sessionTempPrefix) {
+			return fmt.Errorf("%w: %s is not a session temp directory", errLaunchRefused, dir)
+		}
+	}
+	return nil
+}
 
 // winLaunchFlag marks an argv as a request to run the rest of it under the
 // write-restricted token. It is an argument of whichever host binary imports

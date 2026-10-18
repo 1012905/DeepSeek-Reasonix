@@ -70,6 +70,9 @@ func GrantSpec(spec Spec, stateDir string) Spec {
 // probeToken makes and drops a restricted token, to learn at session start what
 // a launch would otherwise learn when it fails.
 func probeToken(sid string) error {
+	if err := launcherMayRun(); err != nil {
+		return fmt.Errorf("%w: %w", ErrWinLauncher, err)
+	}
 	tok, err := restrictedToken(sid)
 	if err != nil {
 		if errors.Is(err, errNoLogonSID) {

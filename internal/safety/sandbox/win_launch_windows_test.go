@@ -17,6 +17,7 @@ type winHarness struct {
 	t             *testing.T
 	book          *GrantBook
 	ws, out, temp string
+	state         string
 	spec          Spec
 }
 
@@ -27,8 +28,7 @@ func newWinHarness(t *testing.T) *winHarness {
 	t.Helper()
 	base := t.TempDir()
 	h := &winHarness{t: t, ws: filepath.Join(base, "ws"), out: filepath.Join(base, "outside")}
-	h.temp = filepath.Join(h.ws, "tmp")
-	for _, d := range []string{h.ws, h.out, h.temp} {
+	for _, d := range []string{h.ws, h.out} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -37,7 +37,16 @@ func newWinHarness(t *testing.T) *winHarness {
 	if err := os.WriteFile(filepath.Join(h.ws, "before.txt"), []byte("before"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	book, err := OpenGrantBook(filepath.Join(base, "state"), WindowsGrantOps())
+	// A session temp directory as the host makes one: new, under the temp root,
+	// outside every write root, granted by the launcher when it starts.
+	temp, err := os.MkdirTemp("", sessionTempPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(temp) })
+	h.temp = temp
+	h.state = filepath.Join(base, "state")
+	book, err := OpenGrantBook(h.state, WindowsGrantOps())
 	if err != nil {
 		t.Fatal(err)
 	}

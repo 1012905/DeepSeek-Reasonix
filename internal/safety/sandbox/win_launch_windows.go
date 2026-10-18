@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -19,6 +20,14 @@ func init() {
 	if !ok {
 		return
 	}
+	if err := launcherMayRun(); err != nil {
+		fmt.Fprintln(os.Stderr, "reasonix sandbox:", err)
+		os.Exit(126)
+	}
+	if err := checkWinLaunch(l); err != nil {
+		fmt.Fprintln(os.Stderr, "reasonix sandbox:", err)
+		os.Exit(126)
+	}
 	code, err := runRestricted(l, argv)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "reasonix sandbox:", err)
@@ -27,12 +36,31 @@ func init() {
 	os.Exit(code)
 }
 
+// launcherMayRun refuses a launcher that already runs under a restricted token.
+// The host's own launcher is the one process that edits DACLs for a command; a
+// command that starts the binary itself inherits its restricted token, so the
+// token, which a command cannot change, tells the two apart and a forged request
+// does nothing.
+func launcherMayRun() error {
+	restricted, err := windows.GetCurrentProcessToken().IsRestricted()
+	if err != nil {
+		return fmt.Errorf("%w: cannot read this process's token: %w", errLaunchRefused, err)
+	}
+	if restricted {
+		return fmt.Errorf("%w: a restricted process may not start a launcher", errLaunchRefused)
+	}
+	return nil
+}
+
 // errNoLogonSID marks the session as one that cannot be restricted.
 var errNoLogonSID = errors.New("no logon SID")
 
 var procCreateRestrictedToken = windows.NewLazySystemDLL("advapi32.dll").NewProc("CreateRestrictedToken")
 
-const writeRestricted = 0x8
+const (
+	disableMaxPrivilege = 0x1
+	writeRestricted     = 0x8
+)
 
 // tokenDefaultDACL is TOKEN_DEFAULT_DACL.
 type tokenDefaultDACL struct{ defaultDACL *windows.ACL }
@@ -42,11 +70,11 @@ type sidAndAttributes struct {
 	attributes uint32
 }
 
-// restrictedToken is the process token narrowed to WRITE_RESTRICTED with the
-// synthetic SID, the logon SID and Everyone as restricting SIDs. A write needs the
-// normal access check and one of those SIDs to pass, and only the roots carry the
-// synthetic one. Everyone is there because a child with less cannot start. A
-// delete or a rename does not consult the restricting SIDs, so it is not bounded.
+// restrictedToken makes the child's token WRITE_RESTRICTED with every privilege
+// but the traverse check removed (backup and restore bypass the access check),
+// restricted to the synthetic SID, the logon SID and Everyone; only the roots
+// carry the synthetic one. A delete or rename does not consult the restricting
+// SIDs, so it is not bounded.
 func restrictedToken(sidText string) (windows.Token, error) {
 	var cur windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ALL_ACCESS, &cur); err != nil {
@@ -66,20 +94,20 @@ func restrictedToken(sidText string) (windows.Token, error) {
 		return 0, err
 	}
 	system, _ := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
-	admins, _ := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
 	user, err := cur.GetTokenUser()
 	if err != nil {
 		return 0, err
 	}
 	list := []sidAndAttributes{{sid: synthetic}, {sid: logon}, {sid: everyone}}
 	var out windows.Token
-	r, _, e := procCreateRestrictedToken.Call(uintptr(cur), writeRestricted, 0, 0, 0, 0, uintptr(len(list)), uintptr(unsafe.Pointer(&list[0])), uintptr(unsafe.Pointer(&out)))
+	r, _, e := procCreateRestrictedToken.Call(uintptr(cur), disableMaxPrivilege|writeRestricted, 0, 0, 0, 0, uintptr(len(list)), uintptr(unsafe.Pointer(&list[0])), uintptr(unsafe.Pointer(&out)))
 	if r == 0 {
 		return 0, fmt.Errorf("create restricted token: %w", e)
 	}
-	// Objects the child creates take this DACL: without the restricting SIDs in
-	// it the child could not open what it just made.
-	if err := setDefaultDACL(out, synthetic, logon, everyone, system, admins, user.User.Sid); err != nil {
+	// Objects the child creates take this DACL. The synthetic SID passes the
+	// restricted half of the access check and the user the normal half, so the child
+	// can open what it made; SYSTEM keeps the service side able to read it.
+	if err := setDefaultDACL(out, synthetic, system, user.User.Sid); err != nil {
 		out.Close()
 		return 0, err
 	}
@@ -143,14 +171,19 @@ func runRestricted(l winLaunch, argv []string) (int, error) {
 	}
 	defer windows.CloseHandle(job)
 
-	si := windows.StartupInfo{Flags: windows.STARTF_USESTDHANDLES}
+	si := windows.StartupInfoEx{}
+	si.Flags = windows.STARTF_USESTDHANDLES
 	si.Cb = uint32(unsafe.Sizeof(si))
+	var inherit []windows.Handle
 	for i, id := range []uint32{windows.STD_INPUT_HANDLE, windows.STD_OUTPUT_HANDLE, windows.STD_ERROR_HANDLE} {
 		h, err := windows.GetStdHandle(id)
 		if err != nil || h == 0 || h == windows.InvalidHandle {
 			continue
 		}
 		_ = windows.SetHandleInformation(h, windows.HANDLE_FLAG_INHERIT, windows.HANDLE_FLAG_INHERIT)
+		if !slices.Contains(inherit, h) {
+			inherit = append(inherit, h)
+		}
 		switch i {
 		case 0:
 			si.StdInput = h
@@ -171,8 +204,23 @@ func runRestricted(l winLaunch, argv []string) (int, error) {
 			return 0, err
 		}
 	}
+	// Only the standard handles cross into the child: an inherited handle is not
+	// checked against the restricted token, so everything else stays behind.
+	flags := uint32(windows.CREATE_SUSPENDED | windows.CREATE_UNICODE_ENVIRONMENT)
+	if len(inherit) > 0 {
+		attrs, err := windows.NewProcThreadAttributeList(1)
+		if err != nil {
+			return 0, fmt.Errorf("handle list: %w", err)
+		}
+		defer attrs.Delete()
+		if err := attrs.Update(windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST, unsafe.Pointer(&inherit[0]), uintptr(len(inherit))*unsafe.Sizeof(inherit[0])); err != nil {
+			return 0, fmt.Errorf("handle list: %w", err)
+		}
+		si.ProcThreadAttributeList = attrs.List()
+		flags |= windows.EXTENDED_STARTUPINFO_PRESENT
+	}
 	var pi windows.ProcessInformation
-	if err := windows.CreateProcessAsUser(tok, nil, cmdline, nil, nil, true, windows.CREATE_SUSPENDED|windows.CREATE_UNICODE_ENVIRONMENT, nil, nil, &si, &pi); err != nil {
+	if err := windows.CreateProcessAsUser(tok, nil, cmdline, nil, nil, len(inherit) > 0, flags, nil, nil, &si.StartupInfo, &pi); err != nil {
 		return 0, fmt.Errorf("start %s: %w", argv[0], err)
 	}
 	defer windows.CloseHandle(pi.Process)
@@ -204,6 +252,13 @@ func killOnCloseJob() (windows.Handle, error) {
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
 		windows.CloseHandle(job)
 		return 0, fmt.Errorf("limit job: %w", err)
+	}
+	// The child cannot reach windows, clipboard, atoms or display settings of the
+	// user's session that live outside the job.
+	ui := windows.JOBOBJECT_BASIC_UI_RESTRICTIONS{UIRestrictionsClass: windows.JOB_OBJECT_UILIMIT_HANDLES | windows.JOB_OBJECT_UILIMIT_READCLIPBOARD | windows.JOB_OBJECT_UILIMIT_WRITECLIPBOARD | windows.JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS | windows.JOB_OBJECT_UILIMIT_DISPLAYSETTINGS | windows.JOB_OBJECT_UILIMIT_GLOBALATOMS | windows.JOB_OBJECT_UILIMIT_DESKTOP | windows.JOB_OBJECT_UILIMIT_EXITWINDOWS}
+	if _, err := windows.SetInformationJobObject(job, windows.JobObjectBasicUIRestrictions, uintptr(unsafe.Pointer(&ui)), uint32(unsafe.Sizeof(ui))); err != nil {
+		windows.CloseHandle(job)
+		return 0, fmt.Errorf("limit job UI: %w", err)
 	}
 	return job, nil
 }

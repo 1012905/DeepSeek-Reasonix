@@ -34,6 +34,8 @@ const (
 
 const grantBookVersion = 1
 
+const grantBookFile = "windows-grants.json"
+
 // ErrGrantBookUnreadable is a record that exists and cannot be trusted. The
 // sandbox treats it as "no grants held" and refuses to run, never as empty.
 var ErrGrantBookUnreadable = errors.New("sandbox: the Windows grant record is unreadable")
@@ -70,15 +72,28 @@ type GrantRepair struct {
 // sub-authorities: it names no account, and no token carries it unless the
 // launcher puts it there.
 func newSyntheticSID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	sub := func(i int) uint32 { return binary.BigEndian.Uint32(b[i*4 : i*4+4]) }
-	return fmt.Sprintf("S-1-5-21-%d-%d-%d-%d", sub(0), sub(1), sub(2), 10000+sub(3)%50000)
+	for {
+		var b [16]byte
+		_, _ = rand.Read(b[:])
+		sub := func(i int) uint32 { return binary.BigEndian.Uint32(b[i*4 : i*4+4]) }
+		sid := fmt.Sprintf("S-1-5-21-%d-%d-%d-%d", sub(0), sub(1), sub(2), 10000+sub(3)%50000)
+		if !sidOwned(sid) {
+			return sid
+		}
+	}
 }
 
-// syntheticSID accepts only a SID this package could have made: a record that
-// names a real account would grant, and later revoke, that account's access.
+// syntheticSID accepts only a SID this package could have made and that names no
+// account: a domain user's SID has the same shape, and a record naming one would
+// grant, and later revoke, that account's access.
 func syntheticSID(s string) bool {
+	return syntheticShape(s) && !sidOwned(s)
+}
+
+// sidOwned is namesAnAccount; tests replace it to stand in for a domain account.
+var sidOwned = namesAnAccount
+
+func syntheticShape(s string) bool {
 	var a, b, c, rid uint32
 	var tail string
 	n, _ := fmt.Sscanf(s, "S-1-5-21-%d-%d-%d-%d%s", &a, &b, &c, &rid, &tail)
@@ -88,7 +103,7 @@ func syntheticSID(s string) bool {
 // OpenGrantBook loads the record under dir, or starts one with a fresh SID. A
 // record that is present and unreadable is an error, not a new book.
 func OpenGrantBook(dir string, ops grantOps) (*GrantBook, error) {
-	b := &GrantBook{path: filepath.Join(dir, "windows-grants.json"), ops: ops}
+	b := &GrantBook{path: filepath.Join(dir, grantBookFile), ops: ops}
 	data, err := os.ReadFile(b.path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
