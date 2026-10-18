@@ -415,6 +415,9 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // onScreenMsg takes the answers to what this screen asked for itself: the
 // clipboard, the session list, the mouse and its timers.
 func (m *model) onScreenMsg(msg tea.Msg) (tea.Cmd, bool) {
+	if cmd, ok := m.onMCPMsg(msg); ok {
+		return cmd, true
+	}
 	switch msg := msg.(type) {
 	case sentMsg:
 		return m.onSent(msg), true
@@ -447,10 +450,6 @@ func (m *model) onScreenMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return m.onModels(msg), true
 	case modelSwitchedMsg:
 		return m.onModelSwitched(msg), true
-	case mcpMsg:
-		return m.onMCP(msg), true
-	case mcpActionErrMsg:
-		return m.onMCPActionErr(msg), true
 	case sessionsMsg:
 		return m.onSessions(msg), true
 	case resumedMsg:

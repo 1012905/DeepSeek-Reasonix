@@ -34,6 +34,7 @@ const (
 	ClassUI          OperationClass = "ui"
 	ClassContent     OperationClass = "content"
 	ClassTool        OperationClass = "tool"
+	ClassSession     OperationClass = "session"
 )
 
 // InterceptEvent names one of the 17 frozen kernel hook points an extension

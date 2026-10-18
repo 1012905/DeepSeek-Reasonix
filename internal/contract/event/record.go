@@ -110,6 +110,11 @@ type CompletionReportAudit struct {
 	// ClaimsUnbacked is how many of them the ledger did not support.
 	ClaimsVerified int
 	ClaimsUnbacked int
+	// OriginRecorded counts the external results the host kept the text of this
+	// turn, and OriginMatched the calls (not read-only) whose arguments carried
+	// that text verbatim. Counts only: they measure a signal, nothing acts on it.
+	OriginRecorded int
+	OriginMatched  int
 }
 
 // CompletionReportAuditSink is an optional sink capability; implementations

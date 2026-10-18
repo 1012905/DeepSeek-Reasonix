@@ -323,7 +323,7 @@ var ChineseTraditional = Messages{
 	McpPanelTitle:                "管理 MCP 伺服器",
 	McpPanelSummaryFmt:           "共 %d 個 · 已啟用 %d 個",
 	McpPanelToolsFmt:             "%d 個工具",
-	McpPanelHint:                 "↑↓ 移動 · 空格 啟用/停用 · r 重新連線 · Enter 工具 · Esc 關閉",
+	McpPanelHint:                 "↑↓ 移動 · 空格 啟用/停用 · r 重新連線 · n 新增 · d 刪除 · Enter 工具 · Esc 關閉",
 	McpPanelDetailHint:           "Esc 返回",
 	McpPanelNoTools:              "未回報任何工具",
 	McpPanelOff:                  "關閉",

@@ -151,6 +151,7 @@ type subagentProgressMerger struct {
 	status map[string]*progressStatusSlot
 	order  []string // child IDs in registration order, for round-robin
 	rr     int      // rotating scan start for fairness
+	ran    ranBook  // what each child started with; every status event for it carries it
 
 	tokens     float64 // preview budget: subagentProgressGroupEventsPerSec
 	lastRefill time.Time
@@ -209,6 +210,7 @@ func (m *subagentProgressMerger) Close() {
 // flushChild instead.
 func (m *subagentProgressMerger) directStatus(childID string, phase subagentProgressPhase) {
 	m.mu.Lock()
+	ran := m.ran.of(childID)
 	st := m.status[childID]
 	if st == nil {
 		st = &progressStatusSlot{}
@@ -227,7 +229,7 @@ func (m *subagentProgressMerger) directStatus(childID string, phase subagentProg
 		Kind: event.ToolProgress,
 		Tool: event.Tool{
 			ID: childID, Name: event.SubagentProgressStatusName,
-			ParentID: parentID, Output: string(phase),
+			ParentID: parentID, Output: string(phase), Profile: ran,
 		},
 	})
 }
@@ -483,7 +485,7 @@ func (m *subagentProgressMerger) emitStatusLocked(childID string, phase subagent
 	}
 	m.sink.Emit(event.Event{Kind: event.ToolProgress, Tool: event.Tool{
 		ID: childID, Name: event.SubagentProgressStatusName, ParentID: parentID,
-		Output: string(phase), DurationMs: durationMs, RateTokensPerSec: rate,
+		Output: string(phase), DurationMs: durationMs, RateTokensPerSec: rate, Profile: m.ran.of(childID),
 	}})
 }
 

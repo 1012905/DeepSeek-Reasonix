@@ -23,6 +23,8 @@ type taskRuntime struct {
 	contract       *contract.Contract
 	contractRecord string
 	ledger         *evidence.Ledger
+	// origins keeps the text of this task's external results, apart from the messages.
+	origins *originLedger
 	// unprovenExplained is the obligation whose full explanation an ended turn already carried.
 	unprovenExplained string
 	outcome           *evidence.OutcomeTracker
@@ -46,8 +48,9 @@ type taskRuntime struct {
 
 func newTaskRuntime(limit TaskBudget) taskRuntime {
 	return taskRuntime{
-		ledger: evidence.NewLedger(),
-		budget: runBudget{limit: normalizeTaskBudget(limit)},
+		ledger:  evidence.NewLedger(),
+		origins: &originLedger{},
+		budget:  runBudget{limit: normalizeTaskBudget(limit)},
 	}
 }
 
@@ -92,6 +95,7 @@ func (t *taskRuntime) restartLedger() {
 		scopeID:       t.scopeID,
 		checkpoint:    t.checkpoint,
 		ledger:        t.ledger,
+		origins:       &originLedger{},
 		outcome:       evidence.NewOutcomeTracker(),
 		budget:        runBudget{limit: t.budget.limit},
 		overScanLimit: new(atomic.Bool),

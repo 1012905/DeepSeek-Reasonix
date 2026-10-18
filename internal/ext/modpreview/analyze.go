@@ -31,7 +31,7 @@ const FindingHookUnresolved = "hook_unresolved"
 func Analyze(plugin, module string, src []byte, served map[string]bool) Preview {
 	sum := sha256.Sum256(src)
 	out := Preview{Plugin: plugin, Module: module, SHA256: hex.EncodeToString(sum[:]),
-		Events: []Event{}, API: []Call{}, Imports: []Import{}, Findings: []Finding{}, Unserved: []string{}}
+		Events: []Event{}, API: []Call{}, Imports: []Import{}, Findings: []Finding{}, Session: []string{}, Unserved: []string{}}
 	switch strings.ToLower(path.Ext(module)) {
 	case ".js", ".mjs", ".cjs":
 	case ".ts", ".mts", ".cts":
@@ -266,6 +266,21 @@ func (a *analysis) addCall(c Call) {
 	}
 }
 
+// sessionUse lists the session members among the module's literal calls.
+func sessionUse(api []Call) []string {
+	out := []string{}
+	for _, c := range api {
+		switch {
+		case c.Namespace == "session" && (c.Method == "messages" || c.Method == "usage"):
+			out = append(out, c.Method)
+		case c.Namespace == "prompt" && c.Method == "submit":
+			out = append(out, "submit")
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 func (a *analysis) finish(served map[string]bool) {
 	slices.SortFunc(a.out.Events, func(x, y Event) int {
 		if x.Dynamic != y.Dynamic {
@@ -283,6 +298,7 @@ func (a *analysis) finish(served map[string]bool) {
 	slices.SortFunc(a.out.Imports, func(x, y Import) int { return strings.Compare(x.Kind+x.Spec, y.Kind+y.Spec) })
 	a.out.Imports = slices.Compact(a.out.Imports)
 	slices.SortFunc(a.out.Findings, func(x, y Finding) int { return strings.Compare(x.Kind, y.Kind) })
+	a.out.Session = sessionUse(a.out.API)
 	if served == nil {
 		return
 	}

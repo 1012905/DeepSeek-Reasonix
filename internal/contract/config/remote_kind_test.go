@@ -118,3 +118,14 @@ func TestADistroNameIsAWholeArgumentNeverAnOption(t *testing.T) {
 		}
 	}
 }
+
+func TestAWSLMachineAlwaysReadsItsOwnCredentials(t *testing.T) {
+	for provider, want := range map[string]string{"": "remote", "local": "remote", "remote": "remote"} {
+		if got := (RemoteHostEntry{Kind: "wsl", Distro: "Ubuntu", Provider: provider}).ProviderMode(); got != want {
+			t.Errorf("wsl with provider %q reads %q, want %q", provider, got, want)
+		}
+	}
+	if got := (RemoteHostEntry{Host: "h"}).ProviderMode(); got != "local" {
+		t.Errorf("an ssh machine's default changed: %q", got)
+	}
+}
