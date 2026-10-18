@@ -66,7 +66,7 @@ func (daclOps) Granted(root, sidText string) (bool, error) {
 	if err != nil || acl == nil {
 		return false, err
 	}
-	for i := uint32(0); i < uint32(acl.AceCount); i++ {
+	for i := range uint32(acl.AceCount) {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(acl, i, &ace); err != nil {
 			return false, err

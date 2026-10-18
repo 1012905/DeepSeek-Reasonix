@@ -64,7 +64,8 @@ func (h *winHarness) runArgv(args []string) (string, int) {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	out, err := cmd.CombinedOutput()
 	code := 0
-	if ee, ok := err.(*exec.ExitError); ok {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
 		code = ee.ExitCode()
 	} else if err != nil {
 		h.t.Fatalf("launcher did not run: %v\n%s", err, out)
