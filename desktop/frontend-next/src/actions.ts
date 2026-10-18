@@ -674,6 +674,7 @@ export const ACTIONS: UIAction[] = [
   { id: "subagent-steer.max-bytes", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "subagent-steer.per-minute", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "write-lease.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "permissions.ask-on-external-origin", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "plan-approval.auto", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "default-mode.plan", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.target", kind: "view", target: "none", proof: "interaction" },
