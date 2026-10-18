@@ -162,7 +162,9 @@ func (s *SubagentStore) Transcript(ref, parentSession, workspaceRoot string, aft
 	out := RunTranscript{Info: s.infoOf(meta), After: after}
 	sess := s.liveSession(ref)
 	if sess != nil {
-		out.Live = true
+		// A run is recorded complete a moment before its owner lets go of it:
+		// only one that still says running is being written.
+		out.Live = meta.Status == sessionstore.SubagentRunning
 	} else {
 		loaded, err := sessionstore.LoadSession(s.sessionPath(ref))
 		if err != nil {
