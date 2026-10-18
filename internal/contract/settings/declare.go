@@ -222,5 +222,7 @@ var table = []Entry{
 	{ID: "peers.enabled", Class: Elevated, Effect: NextTurn},
 	{ID: "peers.dispatch", Class: Elevated, Effect: NextTurn},
 	{ID: "peers.release_projects", Class: Guarded, Effect: NextTurn},
+	{ID: "peers.max_dispatch_depth", Class: Guarded, Effect: NextTurn},
+	{ID: "peers.max_dispatched_sessions", Class: Guarded, Effect: NextTurn},
 	{ID: "storage", Class: Guarded, Effect: Restart},
 }
