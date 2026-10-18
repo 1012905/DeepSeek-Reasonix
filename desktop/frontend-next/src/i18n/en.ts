@@ -12,6 +12,7 @@ import { EN_WINDOW } from "./en_window";
 import { EN_GRAPH } from "./en_graph";
 import { EN_TRAJECTORY } from "./en_trajectory";
 import { EN_SETTINGS } from "./en_settings";
+import { EN_PERSONA } from "./en_persona";
 import { EN_METRICS } from "./en_metrics";
 import { EN_STORAGE } from "./en_storage";
 import { EN_USAGE } from "./en_usage";
@@ -37,6 +38,7 @@ export const EN: Record<string, string> = {
   "工作台": "Workbench",
   "从右侧选择文件，或打开浏览器": "Choose a file on the right, or open a browser",
   ...EN_SETTINGS,
+  ...EN_PERSONA,
   ...EN_COMMUNITY,
   ...EN_SPONSOR,
   ...EN_METRICS,

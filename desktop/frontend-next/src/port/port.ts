@@ -52,6 +52,7 @@ import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, Provid
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 export type * from "./plugin";
 export type * from "./market";
@@ -314,6 +315,10 @@ export interface AgentPort {
   autoArchive(): Promise<AutoArchiveSettings>;
   // Read by the kernel's background sweep on each pass; no rebuild.
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
+  persona(): Promise<PersonaSettings>;
+  // The persona is part of the cache-stable prefix, composed once at boot:
+  // saving is written now and read by the next session, not this one's runtime.
+  savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings>;
   receiptSettings(): Promise<ReceiptSettings>;
   saveReceiptSettings(show: boolean): Promise<ReceiptSettings>;
   // null in a browser tab: there is no window to keep running.
