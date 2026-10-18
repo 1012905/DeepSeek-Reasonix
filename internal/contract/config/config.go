@@ -1324,6 +1324,7 @@ func Default() *Config {
 			FeedbackReply:   true,
 			DiskLow:         true,
 		},
+		Peers: PeersConfig{MaxDispatchDepth: DefaultMaxDispatchDepth, MaxDispatchedSessions: DefaultMaxDispatchedSessions},
 		Agent: AgentConfig{
 			SystemPrompt: DefaultSystemPrompt,
 			// No total round cap, and nothing else bounds a turn by default: the

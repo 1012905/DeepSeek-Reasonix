@@ -49,7 +49,7 @@ export function PeerSettings({ port, onSaved }: { port: AgentPort; onSaved?: (ne
       <div className="lrow">
         <span className="tx">
           <span className="lb">{t("允许模型把任务交给别的会话")}</span>
-          <span className="ds">{state.enabled ? t("给模型一个把任务交给另一个项目里会话的工具；对方的用户批准后才会送到。") : t("先启用会话间消息。")}</span>
+          <span className="ds">{state.enabled ? t("给模型一个把任务交给另一个项目里会话的工具。打开就是你的总同意：派出的任务和对方的回信不再询问；新会话沿用本会话的模型和权限，不会比本会话更宽。") : t("先启用会话间消息。")}</span>
         </span>
         <Switch data-action="peers.dispatch" on={state.dispatch} busy={off || !state.enabled} label={t("允许模型把任务交给别的会话")} onClick={() => void save({ dispatch: !state.dispatch })} />
       </div>

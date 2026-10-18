@@ -464,6 +464,7 @@ const SAID: Record<string, string> = {
   "peer.not_held": "这条消息已经处理过了",
   "peer.send_failed": "会话间消息没能完成：{detail}",
   "peer.invalid_project": "放行的项目必须是一个绝对路径的文件夹",
+  "peer.invalid_ceiling": "派发上限是 0 或更大的整数，0 表示不限制",
   "peer.remember_denied": "只有批准才能记住，拒绝只对这一条生效",
   "peer.settings_unwritable": "会话间消息的设置没能保存：{detail}",
   "provider.key_origin_changed": "地址换了域名，已保存的密钥不会发过去；请填入这个地址对应的密钥",
