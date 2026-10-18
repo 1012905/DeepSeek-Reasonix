@@ -458,8 +458,18 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
 
 - It has no address, so it takes only the folder and install fields. `host`, `port`, `user`, keys, passwords,
   `proxy_jump`, `use_ssh_config` and forwards are rejected on it.
-- Connecting to one is not available yet. An SSH dial of such an entry fails with `remote: host is not reached over
-  ssh` rather than guessing an address.
+- Studio opens it like any other machine in its list. Connecting needs WSL 2 and a distribution that has `ps`
+  and `nohup`; a minimal image without them is refused with the missing name.
+- The kernel runs inside a shell session Studio keeps open, because WSL ends everything a session started when it ends.
+  - When Studio closes its link, the kernel goes away with the distribution (WSL stops an idle one after about 15
+    seconds).
+  - Conversations are kept on disk and resume on the next connect.
+  - Nothing keeps a distribution running behind your back.
+- Model credentials come from the distribution's own configuration (`provider = "remote"`): under WSL's default
+  networking the distribution cannot reach this machine's loopback, so this machine's provider is not shared.
+- A folder chosen as a Windows path (`C:\work\app` or `\\wsl.localhost\<distro>\home\me\app`) is translated by
+  the distribution; a folder it cannot see is refused. The command-line `reasonix remote connect` still dials
+  SSH only: such an entry fails with `remote: host is not reached over ssh`.
 
 CLI:
 

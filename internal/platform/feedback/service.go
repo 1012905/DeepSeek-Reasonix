@@ -239,7 +239,12 @@ func (s *Service) ListMine(ctx context.Context) (Mine, error) {
 		return Mine{}, err
 	}
 	profile := readProfile(resp.Profile)
-	if err := s.store.update(func(st *state) error { st.remember(resp.Items...); st.Profile = profile; return nil }); err != nil {
+	siblings := s.siblingItems(ctx, st)
+	if err := s.store.update(func(st *state) error {
+		st.remember(append(resp.Items, siblings...)...)
+		st.Profile = profile
+		return nil
+	}); err != nil {
 		return Mine{}, err
 	}
 	st, err = s.store.load()
