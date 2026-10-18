@@ -93,6 +93,16 @@ Prefer a terminal? Download the `reasonix` command-line tool, run `reasonix setu
 
 All four are the same program underneath. What follows is for advanced users and contributors.
 
+## Use it from DeepSeek Harness
+
+DeepSeek Harness (`dsh`) can hand a task to Reasonix as a subagent over ACP. This repository publishes a plugin index for it:
+
+1. Run `reasonix setup` on the machine that runs `dsh`. In the DSH Web UI turn on Custom plugin markets (Plugins, More) and add this index in the Discover tab: `https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/studio/integrations/dsh-plugin/market-index.json`
+2. Install "Reasonix subagent" from it.
+3. Open the plugin's page and turn its switch on. While it is off the model has no `reasonix` tool and may run `reasonix -p` in its own shell, which looks like a delegation and is not one.
+
+Setup details, the permission policy and limits are in [Using Reasonix from DeepSeek Harness](./docs/DSH.md).
+
 ## Versions
 
 Reasonix ships on two lines. See the [version roadmap announcement](https://github.com/esengine/DeepSeek-Reasonix/discussions/10748) for the reasoning behind the split.
@@ -240,7 +250,8 @@ For advanced CLI usage and configuration, see the **[CLI reference](./docs/CLI.m
 ## Documentation
 
 - **Getting started:** [Guide](./docs/GUIDE.md) · [CLI reference](./docs/CLI.md) ·
-  [Configuration paths](./docs/CONFIG_PATHS.md) · [ACP editor integration](./docs/ACP.md)
+  [Configuration paths](./docs/CONFIG_PATHS.md) · [ACP editor integration](./docs/ACP.md) ·
+  [Use from DeepSeek Harness](./docs/DSH.md)
 - **Features & troubleshooting:** [Subagent profiles](./docs/SUBAGENT_PROFILES.md) ·
   [Context Engine v2](./docs/SESSION_MEMORY_RETRIEVAL.md) ·
   [Capability diagnostics](./docs/CAPABILITY_DIAGNOSTICS.md) ·

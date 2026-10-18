@@ -1,0 +1,8 @@
+- 本机与 SSH 项目统一展示；“打开项目”移至标题旁的加号，支持统一折叠与展开。提交 da051abb2。
+- 会话采用中性选中背景；可选的悬停置顶、归档按钮默认关闭，菜单始终可用；修复环境切换、重复点击及焦点问题。PR #13638。
+- Local and SSH projects share one list. Open Project moves to the heading's plus button, alongside collapse/expand all. Commit da051abb2.
+- Neutral session selection offers opt-in hover Pin and Archive, off by default; session menus remain available. Environment routing, repeated clicks, focus and stream budgets are fixed. PR #13638.
+- 远端读取与未指定目录的打开共用主机默认目录，已有会话不会改变读取目标或绕过禁用检查。PR #13638。
+- Remote reads and unqualified opens share the host default. Existing panes cannot redirect a read or bypass a disabled host. PR #13638.
+- 未登记的 SSH 主机在连接前返回明确拒绝，远端写入接口的请求体限制为 64 KiB。PR #13638。
+- Unknown SSH hosts are refused before connecting; remote mutation request bodies are limited to 64 KiB. PR #13638.

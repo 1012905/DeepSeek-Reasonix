@@ -40,6 +40,7 @@ export const SETTING_SCREEN: Record<string, string> = {
   "agent.write_lease": "tools:write-lease",
   "ui.show_receipt": "session:receipt",
   "ui.show_changed_files": "session:changed-files",
+  "ui.feedback_level_notices": "session:feedback-level-notices",
   "ui.fold_turn_work": "session:fold-work",
   "agent.turn_narration": "session:turn-narration",
   "auto_archive.enabled": "session:auto-archive",

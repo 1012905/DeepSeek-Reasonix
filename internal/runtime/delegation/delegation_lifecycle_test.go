@@ -60,7 +60,9 @@ type loneSink struct {
 	states   []agentgraph.NodeState
 	durable  []string
 	statuses []string
-	notices  []event.Event
+	// ran is "phase=model/effort" for each status event that named what the child ran on.
+	ran     []string
+	notices []event.Event
 }
 
 func (s *loneSink) Emit(e event.Event) {
@@ -68,6 +70,9 @@ func (s *loneSink) Emit(e event.Event) {
 	defer s.mu.Unlock()
 	if e.Kind == event.ToolProgress && e.Tool.Name == event.SubagentProgressStatusName {
 		s.statuses = append(s.statuses, e.Tool.Output)
+		if e.Tool.Profile != nil {
+			s.ran = append(s.ran, e.Tool.Output+"="+e.Tool.Profile.Model+"/"+e.Tool.Profile.Effort)
+		}
 		return
 	}
 	if e.Kind == event.Notice {

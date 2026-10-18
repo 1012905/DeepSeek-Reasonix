@@ -4,27 +4,27 @@ import (
 	"fmt"
 	"os"
 
-	"reasonix/internal/assembly/boot"
 	"reasonix/internal/base/i18n"
-	"reasonix/internal/contract/config"
+	"reasonix/internal/frontend/clisession"
+	"reasonix/internal/session/control"
+	"reasonix/internal/state/sessionstore"
 )
 
 // resolveCLISessionDir is the session dir for a CLI invocation with no --dir.
-func resolveCLISessionDir() string { return resolveCLISessionDirFor("") }
+func resolveCLISessionDir() string { return clisession.DirFor("") }
 
-// resolveCLISessionDirFor keys the session dir to the workspace root boot will
-// resolve from the same input, so a session started in a repository's
-// subdirectory is listed with that repository rather than under the
-// subdirectory. Falls back to the global session dir.
-func resolveCLISessionDirFor(workspaceRoot string) string {
-	root := boot.ResolveWorkspaceRoot(workspaceRoot)
-	if root == "" {
-		return config.SessionDir()
-	}
-	if projDir := config.ProjectSessionDir(root); projDir != "" && projDir != config.SessionDir() {
-		return projDir
-	}
-	return config.SessionDir()
+// The session helpers a run shares with the scheduled child live in clisession;
+// these keep the command line's own call sites reading as they always did.
+func resolveCLISessionDirFor(workspaceRoot string) string { return clisession.DirFor(workspaceRoot) }
+
+func rebindCLIControllerAuthority(leases *control.SessionLeaseKeeper, ctrl *control.Controller) error {
+	return clisession.RebindAuthority(leases, ctrl)
+}
+
+func reclaimCLIRecoveryBranches(dir string) { clisession.ReclaimRecoveryBranches(dir) }
+
+func bindRunSession(ctrl *control.Controller, leases *control.SessionLeaseKeeper, resumed *sessionstore.Session, resumePath string) error {
+	return clisession.BindRun(ctrl, leases, resumed, resumePath)
 }
 
 // workspaceRootForDir is the root --dir pins; it runs after chdirTo, so the

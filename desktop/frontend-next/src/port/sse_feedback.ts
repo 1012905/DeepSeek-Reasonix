@@ -20,6 +20,9 @@ export class SseFeedback extends SseBackup {
   announceFeedbackReply() {
     return this.post("/notifications/feedback-reply", {});
   }
+  ackFeedbackPromotion(level: number) {
+    return this.post("/feedback/promotion/ack", { level });
+  }
   feedbackSeen(receipt: string, upTo: number) {
     return this.post("/feedback/" + encodeURIComponent(receipt) + "/seen", { upTo });
   }

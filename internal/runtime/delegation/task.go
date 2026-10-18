@@ -572,7 +572,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	if err != nil {
 		return "", err
 	}
-	usageModelRef := t.usageModelRef(modelRef, effortRef)
+	usageModelRef := t.identifyChild(trk, modelRef, effortRef)
 	parentID, _, _, _ := agent.CallContext(ctx)
 	prov, pricing, ctxWin, err := t.resolveSubSessionRuntime(modelRef, effortRef)
 	if err != nil {

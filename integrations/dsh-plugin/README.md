@@ -26,6 +26,14 @@ dsh plugin --profile <profile> add github:esengine/DeepSeek-Reasonix#path:/integ
 
 The package is not on npm; `pnpm` installs the `integrations/dsh-plugin` subdirectory of this repository (the `path:` selector, see [pnpm package sources](https://pnpm.io/package-sources)).
 
+## After installing: switch it on
+
+An installed plugin starts **off**. Open its page in the DSH Web UI and turn the switch on.
+
+- The switch and both components must read Running. Turning it on in a running `dsh web` is enough: the next new session has the `reasonix` tool (observed on `dsh` 0.2.1-rc.2). Restart `dsh` only if it is still missing.
+- While it is off the model may run `reasonix -p` in its own shell.
+- That looks like a delegation and is not one: there is no subagent, and the permission policy below does not apply.
+
 ## What it changes
 
 | Row | Effect |
@@ -65,6 +73,14 @@ dsh plugin --profile <profile> add github:esengine/DeepSeek-Reasonix#path:/integ
 ```
 
 包不在 npm 上：`pnpm` 通过 `path:` 选择器安装本仓库的 `integrations/dsh-plugin` 子目录（见 [pnpm package sources](https://pnpm.io/package-sources)）。
+
+**安装后：打开开关**
+
+插件装好后默认是“关闭”的。到 DSH Web 界面的插件页打开它的开关。
+
+- 开关和两个组件都显示 Running 才算生效。在运行中的 `dsh web` 里直接打开就够了，下一个新会话里就有 `reasonix` 工具（在 `dsh` 0.2.1-rc.2 上实测）；仍然没有再重启 `dsh`。
+- 没打开时，模型可能改在自己的 shell 里直接运行 `reasonix -p`。
+- 这看起来像委派，其实不是：没有子智能体，下面的权限策略也不起作用。
 
 **权限**
 

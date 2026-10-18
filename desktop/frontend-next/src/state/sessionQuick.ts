@@ -1,5 +1,3 @@
-// Whether session rows carry hover Archive and Delete buttons. Off unless this
-// machine turned it on; both actions are always in the row's context menu.
 const KEY = "rx-session-quick-actions";
 const listeners = new Set<() => void>();
 

@@ -49,6 +49,8 @@ const (
 	MethodExtensionUIAction             = "extension/ui/action"
 	MethodExtensionUISubmit             = "extension/ui/submit"
 	MethodHostContentRead               = "host/content/read"
+	MethodHostPromptSubmit              = "host/prompt/submit"
+	MethodHostSessionRead               = "host/session/read"
 	MethodHostUIPublish                 = "host/ui/publish"
 	MethodHostUIRequest                 = "host/ui/request"
 )
@@ -263,6 +265,7 @@ type InterceptParams struct {
 type InterceptResult struct {
 	Decision     InterceptDecision   `json:"decision"`
 	Reason       string              `json:"reason,omitempty"`
+	Answer       string              `json:"answer,omitempty"`
 	Replacement  json.RawMessage     `json:"replacement,omitempty" externalizable:"true"`
 	Externalized []ExternalizedField `json:"externalized,omitempty"`
 }
@@ -512,6 +515,51 @@ type ContentEncoding string
 const (
 	ContentUTF8 ContentEncoding = "utf8"
 )
+
+// PromptSubmitParams is a generated Extension Protocol v2 wire DTO.
+type PromptSubmitParams struct {
+	Text string `json:"text" validate:"nonempty"`
+}
+
+// PromptSubmitResult is a generated Extension Protocol v2 wire DTO.
+type PromptSubmitResult struct {
+	Queued  bool   `json:"queued"`
+	Refused string `json:"refused,omitempty"`
+}
+
+// SessionReadParams is a generated Extension Protocol v2 wire DTO.
+type SessionReadParams struct {
+	What  SessionReadKind `json:"what"`
+	Limit int             `json:"limit,omitempty" validate:"min=0"`
+}
+
+// SessionReadKind is a generated Extension Protocol v2 string enum.
+type SessionReadKind string
+
+const (
+	SessionReadUsage    SessionReadKind = "usage"
+	SessionReadMessages SessionReadKind = "messages"
+)
+
+// SessionReadResult is a generated Extension Protocol v2 wire DTO.
+type SessionReadResult struct {
+	Usage    *SessionUsage    `json:"usage,omitempty"`
+	Messages []SessionMessage `json:"messages,omitempty"`
+	Omitted  int              `json:"omitted,omitempty" validate:"min=0"`
+}
+
+// SessionUsage is a generated Extension Protocol v2 wire DTO.
+type SessionUsage struct {
+	PromptTokens     int `json:"promptTokens" validate:"min=0"`
+	CompletionTokens int `json:"completionTokens" validate:"min=0"`
+	CachedTokens     int `json:"cachedTokens" validate:"min=0"`
+}
+
+// SessionMessage is a generated Extension Protocol v2 wire DTO.
+type SessionMessage struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
+}
 
 // UIPublishParams is a generated Extension Protocol v2 wire DTO.
 type UIPublishParams struct {

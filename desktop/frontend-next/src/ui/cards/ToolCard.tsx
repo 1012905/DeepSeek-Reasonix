@@ -2,7 +2,7 @@ import { JsonText } from "./JsonText";
 import { useEffect, useRef, useState } from "react";
 import { useStartsOpen } from "../../state/foldpref";
 import { t } from "../../i18n";
-import { nestLabel } from "../delegation";
+import { nestLabel, ranLabel } from "../delegation";
 import type { ExtensionSurface, Tool } from "../../port/wire";
 import type { RewindPlan, RewindResult } from "../../port/port";
 import { categoryOf, labelFor, mcpOrigin, runLabelFor } from "../icons";
@@ -246,6 +246,7 @@ export function ToolCard({
             <i className="pip" />
             <span className="who">{nestLabel(who, tool.profile?.count, children.length)}</span>
             <span className="prof">{t("独立上下文 · 不进主轨迹")}</span>
+            {ranLabel(tool.profile) && <span className="ran" title={ranLabel(tool.profile)}>{ranLabel(tool.profile)}</span>}
             {/* 委派出去那部分的账：耗时是父调用的，token 是子步骤各自留下的 */}
             <span className="rt">
               {[

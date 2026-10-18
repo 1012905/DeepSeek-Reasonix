@@ -57,6 +57,7 @@ function fault(key = FAULT): string {
 // the same reason: "l0".."l6", "legacy", "lapsed", "revoked", or "none" for a
 // service that states no profile.
 const STANDING = "rx-mock-feedback-standing";
+const PROMOTION = "rx-mock-feedback-promotion";
 
 const THRESHOLDS = [0, 1, 3, 6, 12, 24, 48];
 const LEVEL_LIMITS = [[3, 10, 3], [5, 15, 4], [6, 20, 5], [8, 25, 6], [10, 30, 8], [12, 40, 10], [12, 60, 10]] as const;
@@ -129,7 +130,19 @@ export class MockFeedback extends MockCommit {
       return { ...i, needsInput: i.statusUnavailable ? false : i.needsInput, unreadReplies };
     });
     const unread = items.filter((i) => i.unreadReplies > 0 || i.needsInput).length;
-    return { items, offline: code === "mine_offline", unread, hasNew: unread > 0, profile: standing(fault(STANDING)) };
+    return { items, offline: code === "mine_offline", unread, hasNew: unread > 0, profile: standing(fault(STANDING)), promotion: this.promotion() };
+  }
+
+  // A tab's own sessionStorage ("2:3") stages a level-up for a dev page, until it is acknowledged.
+  private promotion(): { from: number; to: number } | null {
+    const [from, to] = fault(PROMOTION).split(":").map(Number);
+    return Number.isInteger(from) && Number.isInteger(to) && to > from && !this.acked.has(to) ? { from, to } : null;
+  }
+
+  private acked = new Set<number>();
+
+  async ackFeedbackPromotion(level: number): Promise<void> {
+    this.acked.add(level);
   }
 
   announced = 0;

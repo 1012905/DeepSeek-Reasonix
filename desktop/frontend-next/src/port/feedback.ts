@@ -170,6 +170,13 @@ export interface FeedbackMine {
   unread: number;
   hasNew: boolean;
   profile?: FeedbackProfile | null;
+  // A level the service now states that this machine has not told the person about.
+  promotion?: FeedbackPromotion | null;
+}
+
+export interface FeedbackPromotion {
+  from: number;
+  to: number;
 }
 
 // One install an account holds, as the service lists it: the short id, when it

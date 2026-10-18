@@ -271,6 +271,9 @@ type modelEntry struct {
 	Answers string `json:"answers,omitempty"`
 	Active  bool   `json:"active,omitempty"`
 	Default bool   `json:"default,omitempty"`
+	// NotAdded marks a connection outside the desktop's access list: it is
+	// configured, but not one the person added, so a role cannot pick it.
+	NotAdded bool `json:"notAdded,omitempty"`
 	// Vendor is the endpoint host. Entries sharing it are one service reached
 	// under different protocols, which is what lets a picker fold the routes.
 	Vendor string `json:"vendor,omitempty"`

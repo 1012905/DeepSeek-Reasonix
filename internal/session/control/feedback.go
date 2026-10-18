@@ -18,6 +18,7 @@ type Feedback interface {
 	ListFeedback(ctx context.Context) (feedback.Mine, error)
 	ReplyFeedback(ctx context.Context, receipt, body string, images ...feedback.Image) (feedback.ReplyReceipt, error)
 	MarkFeedbackSeen(receipt string, upTo feedback.ReplyID) error
+	AckFeedbackPromotion(level int) error
 	WithdrawFeedback(ctx context.Context, receipt string) error
 	LinkFeedbackAccount(ctx context.Context) error
 	UnlinkFeedbackAccount(ctx context.Context) error
@@ -68,7 +69,24 @@ func (c *Controller) ListFeedback(ctx context.Context) (feedback.Mine, error) {
 	if c.feedback.Service == nil {
 		return feedback.Mine{}, feedback.ErrDisabled
 	}
-	return c.feedback.Service.ListMine(ctx)
+	got, err := c.feedback.Service.ListMine(ctx)
+	if err == nil && got.Promotion != nil && !c.FeedbackLevelNotices().Enabled {
+		// Nothing is said, but the baseline follows the level: switching the
+		// notices on later never announces a promotion that already happened.
+		if aerr := c.feedback.Service.AckPromotion(got.Promotion.To); aerr != nil {
+			return got, aerr
+		}
+		got.Promotion = nil
+	}
+	return got, err
+}
+
+// AckFeedbackPromotion records that the person was told about level.
+func (c *Controller) AckFeedbackPromotion(level int) error {
+	if c.feedback.Service == nil {
+		return feedback.ErrDisabled
+	}
+	return c.feedback.Service.AckPromotion(level)
 }
 
 func (c *Controller) ReplyFeedback(ctx context.Context, receipt, body string, images ...feedback.Image) (feedback.ReplyReceipt, error) {

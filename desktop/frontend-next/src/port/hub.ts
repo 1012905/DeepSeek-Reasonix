@@ -1,6 +1,6 @@
 import { watchTree } from "./tree_events";
 import { HttpError, type AgentPort } from "./port";
-import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe } from "./remote";
+import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe, WSLDistros } from "./remote";
 import type { CloudShareOffer, DeviceSelf, ShareOffer, SharePort, ShareStatus } from "./share";
 import { SsePort } from "./sse";
 import { host } from "./host";
@@ -183,9 +183,9 @@ export interface HubPort extends SharePort {
   removeSession(path: string): Promise<void>;
   /** The conversation moves into the named project; originalRemoved is false when the copy arrived but the original could not be taken away. */
   moveSessionTo(path: string, target: string): Promise<{ path: string; originalRemoved: boolean }>;
-  archiveSession(path: string, archived: boolean): Promise<void>;
+  archiveSession(path: string, archived: boolean, host?: string): Promise<void>;
   // Tells the kernel which conversations automatic archiving must leave alone.
-  pinSession(path: string, pinned: boolean): Promise<void>;
+  pinSession(path: string, pinned: boolean, host?: string): Promise<void>;
   // Adds pins made before the kernel kept them. The first call also opens the
   // gate: until then the kernel archives nothing on its own.
   syncPins(paths: string[]): Promise<void>;
@@ -224,6 +224,8 @@ export interface HubPort extends SharePort {
   // taken yet. Filling it by hand when the addresses are written down next
   // door is the step people skip.
   remoteCandidates(): Promise<string[]>;
+  // The WSL distributions on this machine, for the choice of one as a host.
+  wslDistros(): Promise<WSLDistros>;
   // Questions a connect stopped for. Nothing arrives here in a browser: the
   // kernel that would ask is the one this build cannot reach.
   onRemoteAsk(cb: (ask: RemoteAsk) => void): () => void;
@@ -386,12 +388,12 @@ export class SseHub implements HubPort {
     await this.post<void>("/tree/sessions/remove", { path });
   }
 
-  async archiveSession(path: string, archived: boolean) {
-    await this.post<void>("/tree/sessions/archive", { path, archived });
+  async archiveSession(path: string, archived: boolean, host?: string) {
+    await this.post<void>(host ? `/remotes/${encodeURIComponent(host)}/sessions/archive` : "/tree/sessions/archive", { path, archived });
   }
 
-  async pinSession(path: string, pinned: boolean) {
-    await this.post<void>("/tree/sessions/pin", { path, pinned });
+  async pinSession(path: string, pinned: boolean, host?: string) {
+    await this.post<void>(host ? `/remotes/${encodeURIComponent(host)}/sessions/pin` : "/tree/sessions/pin", { path, pinned });
   }
 
   async syncPins(paths: string[]) {
@@ -440,9 +442,6 @@ export class SseHub implements HubPort {
   async remoteTree(host: string) {
     const path = `/remotes/${encodeURIComponent(host)}/tree`;
     const res = await fetch(path, { credentials: "same-origin" });
-    // Nothing open on that machine yet, which is a step to take rather than a
-    // failure to report.
-    if (res.status === 409) return null;
     if (!res.ok) await SseHub.fail(path, res);
     return (await res.json()) as TreeWorkspace[];
   }
@@ -478,6 +477,10 @@ export class SseHub implements HubPort {
 
   remoteCandidates() {
     return this.get<string[]>("/remotes/candidates");
+  }
+
+  wslDistros() {
+    return this.get<WSLDistros>("/remotes/wsl");
   }
 
   // The question is state the kernel holds, and this is how it is found. No
