@@ -193,7 +193,7 @@ func (f *dispatchFixture) wantReleasedByDispatch(receiver, sender string) {
 	files, _ := filepath.Glob(filepath.Join(f.peersDir, "audit", "*.jsonl"))
 	for _, name := range files {
 		data, _ := os.ReadFile(name)
-		for _, line := range strings.Split(string(data), "\n") {
+		for _, line := range strings.SplitSeq(string(data), "\n") {
 			if strings.Contains(line, `"receiver":"`+receiver+`"`) && strings.Contains(line, `"sender":"`+sender+`"`) &&
 				strings.Contains(line, `"decision":"released"`) && strings.Contains(line, `"consent":"dispatch"`) {
 				return
