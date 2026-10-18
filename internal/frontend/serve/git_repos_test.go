@@ -144,3 +144,93 @@ func TestARepositoryTheWorkspaceDoesNotHoldIsRefusedWithItsOwnCode(t *testing.T)
 		}
 	}
 }
+
+func TestACommitOpensIntoItsFilesAndEachDiff(t *testing.T) {
+	srv, root := projectsFolder(t)
+	id := strings.TrimSpace(gitIn(t, filepath.Join(root, "api"), "rev-parse", "HEAD"))
+	files := hubGet[struct {
+		Repo  bool `json:"repo"`
+		Files []struct {
+			Path   string `json:"path"`
+			Status string `json:"status"`
+		} `json:"files"`
+	}](t, srv, "/git/commit?repo=api&id="+id)
+	if !files.Repo || len(files.Files) != 1 || files.Files[0].Path != "base.go" || files.Files[0].Status != "A" {
+		t.Fatalf("files = %+v, want base.go added", files)
+	}
+	diff := hubGet[struct {
+		Diff string `json:"diff"`
+	}](t, srv, "/git/commit/diff?repo=api&id="+id+"&path=base.go")
+	if !strings.Contains(diff.Diff, "+package a") {
+		t.Fatalf("diff = %q", diff.Diff)
+	}
+	for url, want := range map[string]struct {
+		status int
+		code   string
+	}{
+		"/git/commit?repo=api&id=HEAD":                                     {400, "git.commit_bad_id"},
+		"/git/commit?repo=api&id=--output=x":                               {400, "git.commit_bad_id"},
+		"/git/commit?repo=api&id=0000000000000000000000000000000000000000": {404, "git.commit_unknown"},
+		"/git/commit?repo=missing&id=" + id:                                {404, "git.repo_unknown"},
+		"/git/commit/diff?repo=api&id=" + id + "&path=../x":                {400, "changes.path_outside_tree"},
+	} {
+		resp, err := http.Get(srv.URL + url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body struct {
+			Code string `json:"code"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		resp.Body.Close()
+		if resp.StatusCode != want.status || body.Code != want.code {
+			t.Errorf("%s = %d %q, want %d %q", url, resp.StatusCode, body.Code, want.status, want.code)
+		}
+	}
+}
+
+func TestDiscardingOneChangeThrowsItAwayAndRefusesWhatCannotBe(t *testing.T) {
+	srv, root := projectsFolder(t)
+	api := filepath.Join(root, "api")
+	if err := os.WriteFile(filepath.Join(api, "base.go"), []byte("package a\nvar X = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(api, "fresh.go"), []byte("package a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	discard := func(body string) (int, string) {
+		resp, err := http.Post(srv.URL+"/changes/discard", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out struct {
+			Code string `json:"code"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out.Code
+	}
+	for body, want := range map[string][2]any{
+		`{"repo":"api","path":"fresh.go"}`:   {409, "discard.not_discardable"},
+		`{"repo":"api","path":"nothing.go"}`: {400, "discard.unknown_path"},
+		`{"repo":"..","path":"base.go"}`:     {404, "git.repo_unknown"},
+		`{"repo":"web","path":"base.go"}`:    {400, "discard.unknown_path"},
+		`not json`:                           {400, "discard.bad_request"},
+	} {
+		if status, code := discard(body); status != want[0].(int) || code != want[1].(string) {
+			t.Errorf("%s = %d %q, want %d %q", body, status, code, want[0], want[1])
+		}
+	}
+	if got, _ := os.ReadFile(filepath.Join(api, "base.go")); !strings.Contains(string(got), "var X = 1") {
+		t.Fatal("a refused discard changed the file")
+	}
+	if status, _ := discard(`{"repo":"api","path":"base.go"}`); status != http.StatusNoContent {
+		t.Fatalf("discard base.go = %d, want 204", status)
+	}
+	if got, _ := os.ReadFile(filepath.Join(api, "base.go")); string(got) != "package a\n" {
+		t.Fatalf("base.go = %q, want the committed content", got)
+	}
+	if _, err := os.Stat(filepath.Join(api, "fresh.go")); err != nil {
+		t.Fatal("discarding one file removed an untracked one")
+	}
+}

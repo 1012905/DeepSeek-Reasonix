@@ -521,6 +521,7 @@ type Commits interface {
 	RepoFor(ctx context.Context, dir string) (gitcmd.Repo, error)
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
 	StageChanges(ctx context.Context, req StageRequest) error
+	DiscardChange(ctx context.Context, req DiscardRequest) error
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 
