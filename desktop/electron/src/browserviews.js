@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const { WebContentsView, session } = require("electron");
 const { installPaneReload } = require("./reload");
 const { guestNavigationAllowed, typed } = require("./browserguard");
+const { InputWake } = require("./inputwake");
 const { KeyboardKeeper } = require("./keyboard");
 
 // The size a page lays out at while nobody is looking at it: the kernel drives
@@ -38,6 +39,7 @@ class BrowserViews {
     this.trusted = new Set();
     this.shown = "";
     this.keyboard = new KeyboardKeeper({ win });
+    this.wake = new InputWake({ win });
     // Moves with every show and hide, so a freeze that finishes after one does
     // not put away a page shown since.
     this.placed = 0;
@@ -138,8 +140,9 @@ class BrowserViews {
     return {
       targetId,
       send: (method, params) => {
-        if (method.startsWith("Input.")) entry.synthUntil = Date.now() + 250;
-        return contents.debugger.sendCommand(method, params);
+        if (!method.startsWith("Input.")) return contents.debugger.sendCommand(method, params);
+        entry.synthUntil = Date.now() + 250;
+        return this.wake.run(() => contents.debugger.sendCommand(method, params));
       },
       close,
       mainFrame: () => mainFrame,
