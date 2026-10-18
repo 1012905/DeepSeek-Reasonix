@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"sync"
 
@@ -117,10 +118,8 @@ func stringLeaves(v any, into []string) []string {
 }
 
 func appendOrigin(list []tool.Provenance, p tool.Provenance) []tool.Provenance {
-	for _, e := range list {
-		if e == p {
-			return list
-		}
+	if slices.Contains(list, p) {
+		return list
 	}
 	return append(list, p)
 }
