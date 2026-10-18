@@ -89,27 +89,7 @@ func scheduleManage(args []string, sio scheduleIO) int {
 }
 
 func openScheduleStore(now func() time.Time) (*schedule.Store, schedule.Policy, error) {
-	roots := config.RootsForHome("")
-	dir := roots.ScheduleDir()
-	if dir == "" {
-		return nil, schedule.Policy{}, errors.New("the state directory is unknown")
-	}
-	store, err := schedule.Open(dir)
-	if err != nil {
-		return nil, schedule.Policy{}, err
-	}
-	user, err := schedule.LoadOverrides(roots.UserConfigLoadPath())
-	if err != nil {
-		return nil, schedule.Policy{}, err
-	}
-	policy, _, err := schedule.Resolve(user, schedule.Overrides{})
-	if err != nil {
-		return nil, schedule.Policy{}, err
-	}
-	if now != nil {
-		store = store.WithClock(now)
-	}
-	return store, policy, nil
+	return scheduler.OpenUserStore(now)
 }
 
 // requireHuman refuses what only a person at a terminal may do. A command run by

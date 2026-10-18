@@ -32,6 +32,7 @@ import (
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
+	"reasonix/internal/frontend/cli"
 	"reasonix/internal/frontend/remotehost"
 	"reasonix/internal/frontend/serve"
 	"reasonix/internal/frontend/traystate"
@@ -121,6 +122,11 @@ func main() {
 	// with the plan, waits for the application to exit and moves it in.
 	if handled, code := update.MaybeRunTreeHandoff(os.Args[1:]); handled {
 		os.Exit(code)
+	}
+	// A scheduled run is this same binary started by the in-kernel ticker; the
+	// CLI's own entry runs it.
+	if scheduleChildArgs(os.Args[1:]) {
+		os.Exit(cli.Run(os.Args[1:], version))
 	}
 	page := flag.String("page", "", "directory holding the built Studio page")
 	identity := flag.Bool("instance-id", false, "print the Studio instance this data home belongs to, and exit")
@@ -251,6 +257,7 @@ func run(lease io.Reader, handshakeTo, logs io.Writer, page string, shell shellI
 	// After the socket has drained, never before: a pane torn down under a live
 	// request answers it with a half-closed kernel.
 	defer hub.Shutdown()
+	startScheduleTicker(ctx, lease != nil, hub, logs)
 
 	bound, err := bind(hub.Handler())
 	phases.mark(startupBind)

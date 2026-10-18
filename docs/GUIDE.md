@@ -1706,9 +1706,12 @@ reasonix schedule tick            # claim and run what is due now, then exit
 - **A person confirms it.** `add`, `resume`, `renew`, `rm` and `resume-all` need a terminal: the command
   shows the first run, the folder, the model, the most it can spend and when it ends, and asks. A command run
   by a tool, a pipe or a scheduler is refused.
-- **Nothing runs by itself yet.** Call `reasonix schedule tick` from the operating system's scheduler (cron,
-  launchd, Task Scheduler). Every tick goes through the store's own budget and expiry checks, so a scheduler
-  that only calls `tick` cannot bypass them. An in-kernel ticker is a later change.
+- **When it runs.**
+  - Studio ticks while it is open, with a window or a tray icon showing; a kernel nobody can see, or one with
+    no parent that ends it, never starts a run. One kernel at a time ticks.
+  - Otherwise call `reasonix schedule tick` from the operating system's scheduler (cron, launchd, Task
+    Scheduler).
+  - Every tick goes through the store's own budget and expiry checks, so neither route can bypass them.
 - **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
   for you and never answered on your behalf.
 - **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only
