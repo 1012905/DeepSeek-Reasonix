@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -47,6 +48,17 @@ func (s *safeBuf) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 func (s *safeBuf) String() string { s.mu.Lock(); defer s.mu.Unlock(); return string(s.b) }
+
+// waitStderr returns the script's stderr once it holds want, or what it has after
+// ten seconds: the pipe is copied by another goroutine, so a reply on stdout does
+// not mean the line written before it has arrived.
+func (h *fakeHost) waitStderr(want string) string {
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(h.stderr.String(), want) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	return h.stderr.String()
+}
 
 func startHost(t *testing.T, module string, cfg map[string]any) *fakeHost {
 	t.Helper()

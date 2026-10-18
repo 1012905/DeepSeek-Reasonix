@@ -114,8 +114,8 @@ export function register(on) {
 	if time.Since(start) > 5*time.Second {
 		t.Fatalf("a stuck hook held the turn for %v", time.Since(start))
 	}
-	if !strings.Contains(h.stderr.String(), "mod.hook_timeout") {
-		t.Fatalf("the timeout was not attributed:\n%s", h.stderr.String())
+	if got := h.waitStderr("mod.hook_timeout"); !strings.Contains(got, "mod.hook_timeout") {
+		t.Fatalf("the timeout was not attributed:\n%s", got)
 	}
 }
 
@@ -128,8 +128,8 @@ func TestRegisteringAnEventClaudeDoesNotNameFailsTheModuleAndAServedGapIsReporte
 	if res := gap.initialize(); res["error"] != nil {
 		t.Fatalf("initialize: %v", res["error"])
 	}
-	if !strings.Contains(gap.stderr.String(), "telemetry.log") {
-		t.Fatalf("an event this host never raises was not named:\n%s", gap.stderr.String())
+	if got := gap.waitStderr("telemetry.log"); !strings.Contains(got, "telemetry.log") {
+		t.Fatalf("an event this host never raises was not named:\n%s", got)
 	}
 }
 
