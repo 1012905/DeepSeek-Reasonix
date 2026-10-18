@@ -1,13 +1,13 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useModalFocus } from "./useModalFocus";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
 import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
-import { arrowTabs } from "./tablist";
 import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV, SECTION_NAME } from "./prefsnav";
+import { SECTION_NAME } from "./prefsnav";
+import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
 import { PlanApproval } from "./PlanApproval";
 import { SessionCoordination } from "./SessionCoordination";
@@ -428,33 +428,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
       </div>
       <ConfigTrouble port={port} onRepaired={onChanged} />
       <div className="prefs-body">
-        <nav className="prefs-nav" role="tablist" aria-label={t("设置分类")} onKeyDown={arrowTabs}>
-          {NAV.map(([group, items]) => {
-            const rows = items.filter(([id]) => shown(id));
-            // A heading over nothing is worse than no heading: remote is absent
-            // on a kernel without it, advanced until something moves in.
-            if (rows.length === 0) return null;
-            return (
-              <Fragment key={group}>
-                <div className="navsec">{t(group)}</div>
-                {/* One tab stop for the list, arrows move inside it: twelve
-                    stops made Tab the wrong way through this screen. */}
-                {rows.map(([id, name]) => (
-                  <button key={id} id={`prefs-${id}`} role="tab" title={t(name)}
-                    data-action="settings.section" data-value={id}
-                    tabIndex={at === id ? 0 : -1}
-                    aria-selected={at === id} disabled={updatingPkg.applying} onClick={() => setAt(id)}>
-                    <svg viewBox="0 0 16 16" aria-hidden="true">{ICON[id]}</svg>
-                    <span className="nm">{t(name)}</span>
-                    <span className="nv" title={nav[id] || undefined} data-danger={danger(id) ? "" : undefined}>
-                      {nav[id]}
-                    </span>
-                  </button>
-                ))}
-              </Fragment>
-            );
-          })}
-        </nav>
+        <SettingsNav at={at} values={nav} shown={shown} danger={danger} disabled={updatingPkg.applying} onSelect={setAt} />
 
         <div className="prefs-main" role="tabpanel" aria-labelledby={`prefs-${at}`} data-sec={at}>
           <Boundary
