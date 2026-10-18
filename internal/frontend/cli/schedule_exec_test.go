@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/frontend/schedulerun"
 	"reasonix/internal/runtime/schedrun"
 	"reasonix/internal/state/schedule"
 	"reasonix/internal/state/sessionstore"
@@ -22,8 +23,8 @@ var observeCeilingTools = []string{"ask", "code_index", "conclude_blocked", "glo
 
 func TestScheduleExecWithoutASupervisorRefuses(t *testing.T) {
 	isolateCLIConfigHome(t)
-	if code := Run([]string{"schedule", "exec", "sch_x/1"}, "test"); code != execExitUsage {
-		t.Fatalf("exit %d, want %d: a person at a terminal cannot start a run", code, execExitUsage)
+	if code := Run([]string{"schedule", "exec", "sch_x/1"}, "test"); code != schedulerun.ExitUsage {
+		t.Fatalf("exit %d, want %d: a person at a terminal cannot start a run", code, schedulerun.ExitUsage)
 	}
 }
 
@@ -223,8 +224,8 @@ func TestScheduleExecTwoExecutorsOnOneClaimOnlyOneStarts(t *testing.T) {
 			select {
 			case err := <-k.done:
 				var ee *exec.ExitError
-				if !errors.As(err, &ee) || ee.ExitCode() != execExitRunHeld {
-					t.Fatalf("executor %d ended with %v, want exit %d", i, err, execExitRunHeld)
+				if !errors.As(err, &ee) || ee.ExitCode() != schedulerun.ExitRunHeld {
+					t.Fatalf("executor %d ended with %v, want exit %d", i, err, schedulerun.ExitRunHeld)
 				}
 				loser = i
 			default:
@@ -240,8 +241,8 @@ func TestScheduleExecTwoExecutorsOnOneClaimOnlyOneStarts(t *testing.T) {
 	select {
 	case err := <-winner.done:
 		var ee *exec.ExitError
-		if !errors.As(err, &ee) || ee.ExitCode() != execExitParentGone {
-			t.Fatalf("the executor that was never released ended with %v, want exit %d", err, execExitParentGone)
+		if !errors.As(err, &ee) || ee.ExitCode() != schedulerun.ExitParentGone {
+			t.Fatalf("the executor that was never released ended with %v, want exit %d", err, schedulerun.ExitParentGone)
 		}
 	case <-time.After(60 * time.Second):
 		t.Fatal("the executor did not leave when its supervisor stream ended")
@@ -365,7 +366,7 @@ func TestWatchSupervisorCancelsAndForcesTheProcessOut(t *testing.T) {
 	gone := make(chan struct{})
 	cancelled := make(chan struct{})
 	exited := make(chan int, 1)
-	orphan := watchSupervisor(gone, func() { close(cancelled) }, 50*time.Millisecond, func(c int) { exited <- c })
+	orphan := schedulerun.WatchSupervisor(gone, func() { close(cancelled) }, 50*time.Millisecond, func(c int) { exited <- c })
 	if orphan.Load() {
 		t.Fatal("orphaned while the supervisor is alive")
 	}
@@ -377,7 +378,7 @@ func TestWatchSupervisorCancelsAndForcesTheProcessOut(t *testing.T) {
 	}
 	select {
 	case c := <-exited:
-		if c != execExitParentGone {
+		if c != schedulerun.ExitParentGone {
 			t.Fatalf("exit code %d", c)
 		}
 	case <-time.After(5 * time.Second):
@@ -385,5 +386,31 @@ func TestWatchSupervisorCancelsAndForcesTheProcessOut(t *testing.T) {
 	}
 	if !orphan.Load() {
 		t.Fatal("the flag did not record the supervisor leaving")
+	}
+}
+
+// The Studio host starts the child without the command line around it, so the
+// child has to leave its usage on disk itself: the run's tokens reach the
+// statistics whichever program started it.
+func TestScheduleExecStartedByTheHostStillRecordsItsUsage(t *testing.T) {
+	for name, asHost := range map[string]bool{"the command line": false, "the host": true} {
+		t.Run(name, func(t *testing.T) {
+			w := newExecWorld(t, "", "Summarize.", fakeModelRef, fakeTurn{text: "all quiet", prompt: 800, cl: 100})
+			w.asHost = asHost
+			rep, err := w.supervisor().Run(t.Context(), w.run.TriggerID)
+			if err != nil || rep.State != schedule.RunSucceeded || rep.Observed != 900 {
+				t.Fatalf("Run = %+v, %v", rep, err)
+			}
+			var recorded int64
+			files, _ := filepath.Glob(filepath.Join(config.StatsDir(), "*.jsonl"))
+			for _, f := range files {
+				if b, err := os.ReadFile(f); err == nil {
+					recorded += int64(strings.Count(string(b), "\n"))
+				}
+			}
+			if recorded == 0 {
+				t.Fatalf("no usage reached %s after a run started by %s", config.StatsDir(), name)
+			}
+		})
 	}
 }

@@ -18,6 +18,7 @@ import (
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/frontend/schedulerun"
 	"reasonix/internal/runtime/schedrun"
 	"reasonix/internal/state/schedule"
 	"reasonix/internal/state/workspacelist"
@@ -25,6 +26,7 @@ import (
 
 const (
 	asCLIEnv        = "RX_TEST_AS_CLI"
+	asHostEnv       = "RX_TEST_AS_HOST"
 	asSupervisorEnv = "RX_TEST_AS_SUPERVISOR"
 )
 
@@ -41,6 +43,10 @@ func scheduleTestHelperProcess() (int, bool) {
 		sup := &schedrun.Supervisor{Store: store, Policy: schedule.DefaultPolicy()}
 		_, _ = sup.Run(context.Background(), id)
 		return 0, true
+	}
+	if os.Getenv(asHostEnv) == "1" {
+		// The Studio host's entry: no command line around the child.
+		return schedulerun.Exec(os.Args[3:]), true
 	}
 	if os.Getenv(asCLIEnv) == "1" {
 		return Run(os.Args[1:], "test"), true
@@ -166,6 +172,8 @@ type execWorld struct {
 	sc    schedule.Schedule
 	run   schedule.Run
 	pol   schedule.Policy
+	// asHost starts the child the way the Studio host does, with no command line.
+	asHost bool
 }
 
 type testClock struct {
@@ -241,6 +249,9 @@ var fakeModelRef = schedule.Model{Provider: "fake", Model: "fake-model"}
 func (w *execWorld) child() *exec.Cmd {
 	cmd := exec.Command(os.Args[0], "schedule", "exec", w.run.TriggerID)
 	cmd.Env = append(os.Environ(), asCLIEnv+"=1")
+	if w.asHost {
+		cmd.Env = append(cmd.Env, asHostEnv+"=1")
+	}
 	cmd.Dir = os.TempDir()
 	return cmd
 }

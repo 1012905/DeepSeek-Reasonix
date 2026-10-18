@@ -360,9 +360,6 @@ func (p *Pool) dial(l *link, call Call) (unsubscribe func()) {
 	}
 	var client Link
 	if configured && entry.HostKind() == config.RemoteKindWSL {
-		// A distribution has no tunnel to publish this machine's broker through,
-		// so it resolves providers from its own configuration.
-		l.provider = config.RemoteProviderRemote
 		client, err = p.openWSL(entry)
 	} else {
 		client, err = p.openSSH(cfg, l.host)

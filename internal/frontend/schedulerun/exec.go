@@ -1,4 +1,9 @@
-package cli
+// Package schedulerun is the child half of one supervised scheduled run: the
+// supervisor starts a binary as `schedule exec <id>`, and this builds the
+// read-only session, drives it to a result and reports it back over the pipe.
+// It is a frontend of its own so the Studio host can run a scheduled child
+// without carrying the command line.
+package schedulerun
 
 import (
 	"context"
@@ -19,6 +24,7 @@ import (
 	"reasonix/internal/contract/observe"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
+	"reasonix/internal/frontend/clisession"
 	"reasonix/internal/runtime/schedrun"
 	"reasonix/internal/runtime/scheduler"
 	"reasonix/internal/session/control"
@@ -28,20 +34,24 @@ import (
 // Exit statuses of the child. A run that reached a result exits 0 whatever the
 // result says; the supervisor reads the state from the result line.
 const (
-	execExitUsage      = 2
-	execExitParentGone = 73
-	execExitRunHeld    = 75
-	execExitSetup      = 1
+	ExitUsage      = 2
+	ExitParentGone = 73
+	ExitRunHeld    = 75
+	ExitSetup      = 1
 )
 
-func scheduleExec(args []string) int {
+// Exec runs one claimed run named by args[0] and returns the process exit status.
+func Exec(args []string) int {
+	// The run's usage is recorded asynchronously; a process that ends after one
+	// run drains it before it goes. The command line does the same around Run.
+	defer clisession.CloseUsageCatalogs()
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
 		fmt.Fprintln(os.Stderr, "usage: reasonix schedule exec <trigger-id>")
-		return execExitUsage
+		return ExitUsage
 	}
 	if !schedrun.SupervisorPipe(os.Stdin) {
 		fmt.Fprintln(os.Stderr, schedrun.ErrNoSupervisor)
-		return execExitUsage
+		return ExitUsage
 	}
 	return (&scheduleRun{id: args[0], out: schedrun.NewWriter(os.Stdout)}).exec()
 }
@@ -66,54 +76,54 @@ func (r *scheduleRun) exec() int {
 	dir := roots.ScheduleDir()
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "schedule: the state directory is unknown")
-		return execExitSetup
+		return ExitSetup
 	}
 	store, err := schedule.Open(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "schedule:", err)
-		return execExitSetup
+		return ExitSetup
 	}
 	r.store = store
 	release, err := store.HoldRun(r.id)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, schedrun.CodeRunHeld, err)
-		return execExitRunHeld
+		return ExitRunHeld
 	}
 	defer release()
 
 	if err := r.out.Ready(); err != nil {
-		return execExitParentGone
+		return ExitParentGone
 	}
 	token, gone, err := schedrun.AwaitGo(os.Stdin, schedrun.StartTimeout)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, schedrun.CodeParentGone, err)
-		return execExitParentGone
+		return ExitParentGone
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	orphan := watchSupervisor(gone, cancel, schedrun.ForceExitGrace, os.Exit)
+	orphan := WatchSupervisor(gone, cancel, schedrun.ForceExitGrace, os.Exit)
 
 	done := r.execute(ctx, roots, token)
 	orphaned := orphan.Load()
 	if orphaned {
 		r.settleOrphan()
-		return execExitParentGone
+		return ExitParentGone
 	}
 	if err := r.out.Result(done); err != nil {
 		fmt.Fprintln(os.Stderr, "schedule: the result could not be delivered:", err)
-		return execExitSetup
+		return ExitSetup
 	}
 	return 0
 }
 
-// watchSupervisor cancels the run when the supervisor's stream ends and, if the
+// WatchSupervisor cancels the run when the supervisor's stream ends and, if the
 // process is still there after grace, ends it: a tool that ignores cancellation
 // must not keep an orphan alive. The flag says the supervisor left.
-func watchSupervisor(gone <-chan struct{}, cancel func(), grace time.Duration, exit func(int)) *atomic.Bool {
+func WatchSupervisor(gone <-chan struct{}, cancel func(), grace time.Duration, exit func(int)) *atomic.Bool {
 	var orphan atomic.Bool
-	schedrun.ExitWhenGone(gone, grace, execExitParentGone, exit)
+	schedrun.ExitWhenGone(gone, grace, ExitParentGone, exit)
 	go func() {
 		<-gone
 		orphan.Store(true)
@@ -238,7 +248,7 @@ func (r *scheduleRun) execute(ctx context.Context, roots config.Roots, token str
 		RequireKey:     true,
 		Sink:           r.sink,
 		AgentPreset:    boot.NormalizeAgentPreset(""),
-		SessionDir:     resolveCLISessionDirFor(ws),
+		SessionDir:     clisession.DirFor(ws),
 		WorkspaceRoot:  ws,
 		EffortOverride: effort,
 		StatsSource:    surface.CLI,
@@ -258,7 +268,7 @@ func (r *scheduleRun) execute(ctx context.Context, roots config.Roots, token str
 
 	leases := control.NewSessionLeaseKeeper()
 	defer leases.Release()
-	if err := bindRunSession(ctrl, leases, nil, ""); err != nil {
+	if err := clisession.BindRun(ctrl, leases, nil, ""); err != nil {
 		fmt.Fprintln(os.Stderr, "schedule:", control.SessionInUseMessage(err))
 		return failed(schedrun.CodeBuild)
 	}
