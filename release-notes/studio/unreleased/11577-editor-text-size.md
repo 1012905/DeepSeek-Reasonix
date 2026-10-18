@@ -1,0 +1,2 @@
+- 修复：代码编辑器及其查找栏的字号现在跟随外观里的界面字号，不再固定在 12px 和 11px。关联 #11577。
+- Fixed: The code editor and its search bar now follow the interface text size in Appearance instead of staying at 12px and 11px. Refs #11577.

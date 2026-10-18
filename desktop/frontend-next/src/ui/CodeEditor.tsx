@@ -65,7 +65,7 @@ const highlight = HighlightStyle.define([
 const theme = (dark: boolean) =>
   EditorView.theme(
     {
-      "&": { height: "100%", color: "var(--text)", backgroundColor: "var(--face-code)", fontSize: "12px" },
+      "&": { height: "100%", color: "var(--text)", backgroundColor: "var(--face-code)", fontSize: "calc(12px * var(--fs-scale, 1))" },
       "&.cm-focused": { outline: "none" },
       ".cm-scroller": { fontFamily: "var(--mono)", lineHeight: "1.65" },
       ".cm-content": { caretColor: "var(--text)", paddingBottom: "80px" },
@@ -82,7 +82,7 @@ const theme = (dark: boolean) =>
       ".cm-panels": { backgroundColor: "var(--raised)", color: "var(--text)" },
       ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--border)" },
       ".cm-panel input, .cm-panel button, .cm-textfield": {
-        fontFamily: "var(--ui)", fontSize: "11px", color: "var(--text)",
+        fontFamily: "var(--ui)", fontSize: "calc(11px * var(--fs-scale, 1))", color: "var(--text)",
       },
       ".cm-textfield": {
         backgroundColor: "var(--surface)", border: "1px solid var(--border)", borderRadius: "5px", padding: "2px 6px",

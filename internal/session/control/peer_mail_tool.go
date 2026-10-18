@@ -36,7 +36,7 @@ func peerErrorCode(err error) string {
 		"peer.disabled": ErrPeersDisabled, "peer.not_found": ErrPeerNotFound, "peer.ambiguous": ErrPeerAmbiguous,
 		"peer.self": ErrPeerSelf, "peer.refused": ErrPeerRefused, "peer.rate_limited": ErrPeerRateLimited,
 		"peer.empty": ErrPeerEmpty, "peer.too_large": ErrPeerTooLarge,
-		"dispatch.unavailable": ErrDispatchUnavailable, "dispatch.unknown_project": ErrDispatchUnknownProject,
+		"dispatch.disabled": ErrDispatchDisabled, "dispatch.unavailable": ErrDispatchUnavailable, "dispatch.unknown_project": ErrDispatchUnknownProject,
 		"dispatch.ambiguous": ErrDispatchAmbiguous, "dispatch.nested": ErrDispatchNested,
 		"dispatch.untrusted": ErrDispatchUntrusted, "dispatch.failed": ErrDispatchFailed,
 	} {
