@@ -15,7 +15,7 @@ type sample struct {
 }
 
 func TestAnEntryWithoutAClassOrTimingFailsRegistration(t *testing.T) {
-	root := reflect.TypeOf(sample{})
+	root := reflect.TypeFor[sample]()
 	for name, rows := range map[string][]Entry{
 		"no class":  {{ID: "a", Effect: Immediate}, {ID: "b", Class: Preference, Effect: Immediate}},
 		"no timing": {{ID: "a", Class: Preference}, {ID: "b", Class: Preference, Effect: Immediate}},
@@ -27,7 +27,7 @@ func TestAnEntryWithoutAClassOrTimingFailsRegistration(t *testing.T) {
 }
 
 func TestAKeyNoRowDeclaresFailsRegistration(t *testing.T) {
-	err := register([]Entry{{ID: "a", Class: Preference, Effect: Immediate}}, reflect.TypeOf(sample{}))
+	err := register([]Entry{{ID: "a", Class: Preference, Effect: Immediate}}, reflect.TypeFor[sample]())
 	if CodeOf(err) != codeUndeclared || !strings.Contains(err.Error(), "b") {
 		t.Fatalf("err = %v, want the undeclared key named", err)
 	}
@@ -35,13 +35,13 @@ func TestAKeyNoRowDeclaresFailsRegistration(t *testing.T) {
 
 func TestARowForNoKeyFailsRegistration(t *testing.T) {
 	rows := []Entry{{ID: "a", Class: Preference, Effect: Immediate}, {ID: "b", Class: Preference, Effect: Immediate}, {ID: "c", Class: Preference, Effect: Immediate}}
-	if err := register(rows, reflect.TypeOf(sample{})); err == nil {
+	if err := register(rows, reflect.TypeFor[sample]()); err == nil {
 		t.Fatal("a declared key the config does not have was accepted")
 	}
 }
 
 func TestTheDeclarationsCoverTheUserConfigExactly(t *testing.T) {
-	if err := register(table, reflect.TypeOf(config.Config{})); err != nil {
+	if err := register(table, reflect.TypeFor[config.Config]()); err != nil {
 		t.Fatal(err)
 	}
 	if len(All()) != len(fields) {

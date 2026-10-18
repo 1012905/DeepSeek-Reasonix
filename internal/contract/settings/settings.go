@@ -96,7 +96,7 @@ var (
 )
 
 func init() {
-	if err := register(table, reflect.TypeOf(config.Config{})); err != nil {
+	if err := register(table, reflect.TypeFor[config.Config]()); err != nil {
 		panic(err)
 	}
 }
@@ -130,7 +130,7 @@ func register(rows []Entry, root reflect.Type) error {
 }
 
 func walk(t reflect.Type, prefix string, index []int, out map[string]field) {
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		f := t.Field(i)
 		name := strings.Split(f.Tag.Get("toml"), ",")[0]
 		if !f.IsExported() || name == "" || name == "-" {
