@@ -347,7 +347,10 @@ type Options struct {
 	// Balance reads the active provider's optional wallet endpoint. Nil, or a
 	// cache built on an empty URL, means the provider declares none. Hosts that
 	// build several runtimes hand every pane the same cache.
-	Balance  *billing.Cache
+	Balance *billing.Cache
+	// Tariff reads the vendor schedule the model's rate is billed under, at an
+	// instant. Nil, or an answer of false, means no schedule applies.
+	Tariff   func(time.Time) (pricing.Tariff, bool)
 	Feedback FeedbackOptions // nil service refuses every feedback call
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager

@@ -380,6 +380,7 @@ type Status interface {
 	ContextMaintenanceSnapshot() agent.ContextMaintenanceSnapshot
 	LastUsage() *provider.Usage
 	Balance(ctx context.Context) billing.Reading
+	Tariff() (pricing.Tariff, bool)
 	Jobs() []jobs.View
 	Todos() []evidence.TodoItem
 	BrowserTabs() []browser.TabInfo

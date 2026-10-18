@@ -98,6 +98,7 @@ type controllerDeps struct {
 	// when the provider declares none). Captured at build so a model/key switch —
 	// which rebuilds the controller — refreshes it.
 	balance *billing.Cache
+	tariff  func(time.Time) (pricing.Tariff, bool)
 
 	feedback FeedbackOptions
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/model/billing"
 	"reasonix/internal/runtime/agent"
@@ -26,6 +27,15 @@ func (c *Controller) ModelVisibleMessages() []provider.Message {
 		return nil
 	}
 	return c.executor.ModelVisibleMessages()
+}
+
+// Tariff is the vendor schedule window the active model is billed in right now
+// and when it next flips; false where no vendor schedule applies to its rate.
+func (c *Controller) Tariff() (pricing.Tariff, bool) {
+	if c.tariff == nil {
+		return pricing.Tariff{}, false
+	}
+	return c.tariff(time.Now())
 }
 
 // Balance reads the active provider's wallet. One declaring no balance_url
