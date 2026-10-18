@@ -8,6 +8,7 @@ import { SkillSpecInfo } from "./SkillSpecInfo";
 import { reason } from "../i18n/kernel";
 import { CopyButton } from "./CopyButton";
 import { SkillUpdate } from "./SkillUpdate";
+import { SkillRemove } from "./SkillRemove";
 
 // One skill, and the two things a reader wants from it: whether the model can
 // reach it at all, and which of the layers it was switched at.
@@ -77,6 +78,8 @@ export function SkillRow({
   const note = triggerNote(sk, implicit);
   const drift = driftNote(sk.source);
   const [updating, setUpdating] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const removable = !root && !!sk.removes;
   const updatable = sk.source?.mode === "copy" && (sk.source.state === "source_changed" || sk.source.state === "local_edited" || sk.source.state === "diverged");
   const local = sk.switchScope === "project";
   const command = sk.slashName ? "/" + sk.slashName : "";
@@ -109,6 +112,7 @@ export function SkillRow({
         {sk.readOnly && <i className="ro">{t("只读")}</i>}
         {drift && <i className="w" data-drift={sk.source?.state} title={drift.says} aria-label={`${drift.text}. ${drift.says}`}>{drift.text}</i>}
         {updatable && !updating && <button className="act sm" data-action="skills.update-open" data-target={sk.name} onClick={() => setUpdating(true)}>{t("从源文件夹更新…")}</button>}
+        {removable && !removing && <button className="act sm" data-action="skills.remove-open" data-target={sk.name} onClick={() => setRemoving(true)}>{t("卸载…")}</button>}
       </span>
       <span className="sc" title={sk.path}>
         {sk.plugin || t(SCOPE[sk.scope ?? ""] ?? "") || sk.scope}
@@ -119,6 +123,7 @@ export function SkillRow({
       <SkillSpecInfo sk={sk} />
     </div>
     {updating && <SkillUpdate port={port} name={sk.name} onClose={() => setUpdating(false)} onDone={() => { setUpdating(false); onDone(); }} />}
+    {removing && <SkillRemove port={port} sk={sk} onClose={() => setRemoving(false)} onDone={() => { setRemoving(false); onDone(); }} />}
     </>
   );
 }
