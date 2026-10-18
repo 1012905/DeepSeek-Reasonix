@@ -709,6 +709,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 		// The host names content written outside the workspace before the model
 		// reads it; the label is fixed once here and never rewritten.
 		if i < len(batch.outcomes) {
+			a.task.origins.note(batch.outcomes[i].provenance, results[i])
 			head := tool.ProvenanceHeader(batch.outcomes[i].provenance)
 			if flagged[i] {
 				head += suspectedInjectionLine

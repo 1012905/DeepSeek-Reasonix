@@ -140,6 +140,7 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	// tool.before: extensions rule on the parsed call before any policy or
 	// permission check. A valid replacement is re-parsed so every later stage
 	// sees the call that will actually execute.
+	a.noteOriginMatch(plan)
 	if blocked, early := a.interceptToolBefore(ctx, plan); early {
 		return blocked
 	}
