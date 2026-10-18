@@ -1,6 +1,9 @@
 package permission
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 type originKey struct{}
 
@@ -18,4 +21,17 @@ func WithOrigin(ctx context.Context, label string) context.Context {
 func OriginFrom(ctx context.Context) string {
 	s, _ := ctx.Value(originKey{}).(string)
 	return s
+}
+
+// WithAskOnOrigin returns a copy of p with the origin question switched on or off.
+func (p Policy) WithAskOnOrigin(on bool) Policy {
+	p.AskOnOrigin = on
+	return p
+}
+
+// allowedOnlyByMode reports that the call runs because the fallback Mode says so:
+// with the fallback turned to Ask, no rule and no read classification allows it.
+func (p Policy) allowedOnlyByMode(toolName string, readOnly bool, args json.RawMessage) bool {
+	p.Mode = Ask
+	return p.Decide(toolName, readOnly, args) != Allow
 }

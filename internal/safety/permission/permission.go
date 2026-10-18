@@ -120,22 +120,8 @@ type Policy struct {
 	// broad Bash allow rules alone must not re-open nested-command bypasses.
 	AllowDynamicBash bool
 	ReadOnly         bool // denies every call that is not a read, whatever the rules allow
-	// AskOnOrigin puts a call to a person when it repeats text an external result
-	// gave the task and only the writer fallback Mode would let it run.
+	// AskOnOrigin puts a call that repeats external text to a person when only Mode allows it.
 	AskOnOrigin bool
-}
-
-// WithAskOnOrigin returns a copy of p with the origin question switched on or off.
-func (p Policy) WithAskOnOrigin(on bool) Policy {
-	p.AskOnOrigin = on
-	return p
-}
-
-// allowedOnlyByMode reports that the call runs because the fallback Mode says so:
-// with the fallback turned to Ask, no rule and no read classification allows it.
-func (p Policy) allowedOnlyByMode(toolName string, readOnly bool, args json.RawMessage) bool {
-	p.Mode = Ask
-	return p.Decide(toolName, readOnly, args) != Allow
 }
 
 // WithSessionAllow returns a copy of p with additional ephemeral allow rules.

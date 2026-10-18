@@ -272,16 +272,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		mode = "ask"
 	}
 	fmt.Fprintf(&b, "mode  = %q\n", mode)
-	if c.Permissions.AllowDynamicBash {
-		b.WriteString("allow_dynamic_bash = true   # advanced: let mode=allow cover command substitution and interpreter -c/-e\n")
-	} else {
-		b.WriteString("# allow_dynamic_bash = false   # advanced opt-in; deny/ask and exact rules still take precedence\n")
-	}
-	if c.Permissions.AskOnExternalOrigin {
-		b.WriteString("ask_on_external_origin = true   # ask before a call that repeats text a web page or tool result gave the task, even in auto and YOLO\n")
-	} else {
-		b.WriteString("# ask_on_external_origin = false   # opt-in: ask before a call that repeats text an external result gave the task\n")
-	}
+	renderPermissionFlags(&b, c, true)
 	b.WriteString(renderRuleList("deny", c.Permissions.Deny, `["Bash(rm -rf*)", "Bash(git push*)"]   # hard-blocked in every mode`))
 	b.WriteString(renderRuleList("allow", c.Permissions.Allow, `["Bash(go test:*)", "Bash(git status:*)"]   # never prompted`))
 	b.WriteString(renderRuleList("ask", c.Permissions.Ask, `["Edit(src/**)"]   # force a prompt even if otherwise allowed`))
@@ -615,12 +606,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 		if mode != "ask" {
 			fmt.Fprintf(&b, "mode = %q\n", mode)
 		}
-		if c.Permissions.AllowDynamicBash {
-			b.WriteString("allow_dynamic_bash = true\n")
-		}
-		if c.Permissions.AskOnExternalOrigin {
-			b.WriteString("ask_on_external_origin = true\n")
-		}
+		renderPermissionFlags(&b, c, false)
 		if len(c.Permissions.Deny) > 0 {
 			fmt.Fprintf(&b, "deny = %s\n", renderStringArray(c.Permissions.Deny))
 		}
