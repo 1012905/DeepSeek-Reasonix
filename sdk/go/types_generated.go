@@ -523,7 +523,8 @@ type PromptSubmitParams struct {
 
 // PromptSubmitResult is a generated Extension Protocol v2 wire DTO.
 type PromptSubmitResult struct {
-	Queued bool `json:"queued"`
+	Queued  bool   `json:"queued"`
+	Refused string `json:"refused,omitempty"`
 }
 
 // SessionReadParams is a generated Extension Protocol v2 wire DTO.
