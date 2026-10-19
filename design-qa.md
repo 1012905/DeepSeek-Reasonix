@@ -42,6 +42,14 @@ Settings shell remains the application-owned frame.
   parameters, failed saves, navigation/close confirmation, pending saves and focus.
   These are jsdom checks and do not substitute for browser visual evidence.
 
+The catalog-button follow-up uses the user's 1374 × 916 browser annotation as
+the before evidence. The create button now uses one horizontal flex row, a
+36px minimum height and 16px horizontal padding.
+
+The heading uses a two-column
+grid, with its description on a separate full-width row. After-render visual
+verification remains blocked by the browser policy described above.
+
 Remaining checklist:
 
 1. Acquire the authorized preview and capture the specified creation state and catalog.

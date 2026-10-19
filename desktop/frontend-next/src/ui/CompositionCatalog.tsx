@@ -11,8 +11,9 @@ export function CompositionCatalog({ catalog, onSelect, onCreate, onCopy }: {
 }) {
   return <div className="composition-catalog">
     <header className="composition-list-heading">
-      <div><h2>{t("Agent 预设")}</h2><p>{t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。")}</p></div>
+      <h2>{t("Agent 预设")}</h2>
       <button className="btn" data-primary="" data-action="agent-preset.create" onClick={onCreate}><StudioIcon name="plus" />{t("新建预设")}</button>
+      <p>{t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。")}</p>
     </header>
     <p className="composition-default-note">{t("新会话默认使用标准模式。选择其他模式后才会启用对应预设。")}</p>
     {(["builtin", "user", "project"] as const).map((scope) => {

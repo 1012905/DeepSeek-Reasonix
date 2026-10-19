@@ -3,11 +3,11 @@
 .prefs-col:has(.preset-page) { height: 100%; max-width: none; animation: none; }
 .preset-workspace[data-editor] { height: 100%; min-height: 0; }
 .preset-list { padding-bottom: 16px; }
-.composition-list-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-.composition-list-heading h2 { margin: 0 0 8px; font-size: var(--fs-display); }
-.composition-list-heading p { margin: 0; color: var(--muted); line-height: 1.7; }
-.composition-list-heading .btn { flex-shrink: 0; gap: 6px; }
-.composition-list-heading svg { width: 16px; height: 16px; }
+.composition-list-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 24px; margin-bottom: 24px; }
+.composition-list-heading h2 { margin: 0; font-size: var(--fs-display); }
+.composition-list-heading p { grid-column: 1 / -1; margin: 0; color: var(--muted); line-height: 1.7; }
+.composition-list-heading .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 8px 16px; white-space: nowrap; }
+.composition-list-heading svg { width: 16px; height: 16px; flex: none; }
 .composition-default-note { color: var(--muted); margin: 0 0 28px; line-height: 1.7; }
 .composition-list-group { margin-bottom: 28px; }
 .composition-list-group h3 { color: var(--muted); font-size: var(--fs-ui); font-weight: var(--w-med); margin: 0 0 12px; }
@@ -77,7 +77,7 @@
 .preset-workspace :is(button, summary, input, select, textarea):focus-visible, .preset-confirm button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .preset-workspace :is(input, select):disabled { opacity: .65; }
 @media (max-width: 700px) {
-  .composition-list-heading { flex-direction: column; gap: 16px; }
+  .composition-list-heading { column-gap: 12px; }
   .composition-row-main { gap: 10px; padding: 16px 4px; }
   .composition-row-icon { width: 32px; height: 32px; }
   .composition-row { padding-right: 4px; }
