@@ -2,8 +2,10 @@ package historycatalog
 
 import (
 	"context"
-	"reasonix/internal/state/sessionstore"
+	"path/filepath"
+	"strings"
 
+	"reasonix/internal/state/sessionstore"
 	"reasonix/internal/state/store"
 )
 
@@ -91,4 +93,45 @@ func (c *Catalog) tryAppendPath(ctx context.Context, root Root, path string, gen
 	}
 	c.publish(newRevision, []string{root.Path}, "source-appended")
 	return true, nil
+}
+
+// RecordReadFailure marks a source the reader could not open as corrupt and
+// queues it for reconciliation: an unreadable transcript cannot serve a hit,
+// so leaving health ok would let Indexed == Total certify an empty result.
+// The scan already retries every non-ok source, so retries stay bounded
+// there; a row that is already corrupt is not re-queued by each search.
+func (c *Catalog) RecordReadFailure(ctx context.Context, path string, cause error) bool {
+	if c == nil || strings.TrimSpace(path) == "" {
+		return false
+	}
+	path = filepath.Clean(path)
+	message := ""
+	if cause != nil {
+		message = cause.Error()
+	}
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE history_sources SET health='corrupt',last_error=? WHERE path=? AND health='ok'`,
+		message, path)
+	if err != nil {
+		_ = tx.Rollback()
+		return false
+	}
+	updated, _ := result.RowsAffected()
+	if updated != 1 {
+		_ = tx.Rollback()
+		return false
+	}
+	revision, err := bump(ctx, tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return false
+	}
+	if err := tx.Commit(); err != nil {
+		return false
+	}
+	c.publish(revision, nil, "source-unreadable")
+	return c.EnqueueExisting(ctx, path)
 }
