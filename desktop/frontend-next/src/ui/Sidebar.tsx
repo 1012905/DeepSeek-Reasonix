@@ -341,9 +341,11 @@ export function Sidebar({
       </Workspaces>
       </RailSearch>
       </div>
-      <button className="projects-manage" data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}>
-        <StudioIcon name="server" /><span>{t("连接与机器")}</span><StudioIcon name="chevron" />
-      </button>
+      {!navShown && (
+        <button className="projects-manage" data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}>
+          <StudioIcon name="server" /><span>{t("连接与机器")}</span><StudioIcon name="chevron" />
+        </button>
+      )}
       {!navShown && <div className="railfoot">
         <button className="studio-wallet" data-action="settings.section" data-value="usage" onClick={() => onSettings("usage")}><span aria-hidden="true"><StudioIcon name="wallet" /></span><b>{t("钱包与用量")}</b>{wallet && <small>{hideAmounts ? MASK : wallet}</small>}</button>
         <button className="studio-wallet studio-feedback" data-action="feedback.open" onClick={() => onFeedback(feedbackEntryTab(feedbackUnread))}>
