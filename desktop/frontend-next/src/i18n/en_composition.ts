@@ -1,4 +1,7 @@
 export const EN_COMPOSITION: Record<string,string> = {
+  "显示模式选择器": "Show mode picker",
+  "默认关闭。开启后在聊天输入框顶部显示模式选择器；关闭只隐藏入口，不改变会话模式。": "Off by default. Enable to show the mode picker above the chat input. Turning it off hides the picker without changing the conversation's mode.",
+  "无法保存模式选择器设置，请检查本地存储权限。": "Could not save the mode picker setting. Check local storage permissions.",
   "标准模式": "Standard mode",
   "精简模式": "Minimal mode",
   "处理代码、文件和资料，适合大多数任务。创建会话时继承当前配置，按需检索、编辑和运行工具。": "Work with code, files and research for everyday tasks. Inherit current configuration when creating the conversation, then search, edit and run tools as needed.",

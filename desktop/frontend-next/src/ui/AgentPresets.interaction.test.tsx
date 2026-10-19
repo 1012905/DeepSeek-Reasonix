@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "./testkit";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { MockPort } from "../port/mock";
@@ -10,9 +10,9 @@ import { AgentCompositionPicker } from "./AgentCompositionPicker";
 import { RunLine } from "./RunLine";
 import { NEW_TASK_PRESET_KEY } from "../state/newTaskPreset";
 
-afterEach(() => { cleanup(); localStorage.removeItem(NEW_TASK_PRESET_KEY); localStorage.setItem(STORAGE, "zh"); boot(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); localStorage.removeItem("rx-show-agent-composition"); localStorage.removeItem(NEW_TASK_PRESET_KEY); localStorage.setItem(STORAGE, "zh"); boot(); });
 
-it("keeps the mode picker visible without a visibility setting or automatic selection", async () => {
+it("persists the visibility toggle without selecting or changing the current composition", async () => {
   const port = new MockPort();
   const select = vi.spyOn(port, "selectAgentComposition");
   const user = userEvent.setup();
@@ -22,15 +22,53 @@ it("keeps the mode picker visible without a visibility setting or automatic sele
     </RunLine>
   </>);
   await screen.findByRole("button", { name: "查看 日常搭档" });
+  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
+  const toggle = screen.getByRole("switch", { name: "显示模式选择器" });
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  await user.click(toggle);
   const picker = await screen.findByRole("button", { name: /^Agent 组合/ });
   expect(picker.textContent).toBe("日常搭档");
-  expect(screen.queryByRole("switch", { name: "显示模式选择器" })).toBeNull();
+  expect(localStorage.getItem("rx-show-agent-composition")).toBe("on");
   expect(await port.agentComposition()).toBeNull();
   expect(select).not.toHaveBeenCalled();
   await user.click(picker);
   await user.click(screen.getByRole("menuitem", { name: /轻装搭档/ }));
   expect((await port.agentComposition())?.id).toBe("builtin:minimal");
   expect(select).toHaveBeenCalledExactlyOnceWith("builtin:minimal");
+  await user.click(toggle);
+  expect(localStorage.getItem("rx-show-agent-composition")).toBe("off");
+  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
+  expect((await port.agentComposition())?.id).toBe("builtin:minimal");
+  await user.click(toggle);
+  expect((await screen.findByRole("button", { name: /^Agent 组合/ })).textContent).toBe("轻装搭档");
+  expect(select).toHaveBeenCalledTimes(1);
+});
+
+it("restores an enabled choice and follows storage changes from another window", async () => {
+  localStorage.setItem("rx-show-agent-composition", "on");
+  const port = new MockPort();
+  const select = vi.spyOn(port, "selectAgentComposition");
+  render(<><AgentPresets port={port} /><RunLine label="空闲" running={false} blocked={false} sent={0} received={0} estimated={false}>
+    <AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}} />
+  </RunLine></>);
+  await screen.findByRole("button", { name: /^Agent 组合/ });
+  expect(screen.getByRole("switch", { name: "显示模式选择器" }).getAttribute("aria-checked")).toBe("true");
+  act(() => {
+    localStorage.removeItem("rx-show-agent-composition");
+    window.dispatchEvent(new StorageEvent("storage", { key: "rx-show-agent-composition" }));
+  });
+  expect(screen.getByRole("switch", { name: "显示模式选择器" }).getAttribute("aria-checked")).toBe("false");
+  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
+  expect(select).not.toHaveBeenCalled();
+});
+
+it("keeps visibility off and reports a refused persistence write", async () => {
+  render(<AgentPresets port={new MockPort()} />);
+  await screen.findByRole("button", { name: "查看 日常搭档" });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage denied"); });
+  await userEvent.click(screen.getByRole("switch", { name: "显示模式选择器" }));
+  expect(screen.getByRole("switch", { name: "显示模式选择器" }).getAttribute("aria-checked")).toBe("false");
+  expect(screen.getByRole("alert").textContent).toContain("无法保存模式选择器设置");
 });
 
 it("copies both built-in name and description in the window language", async () => {

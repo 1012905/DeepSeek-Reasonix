@@ -6,6 +6,7 @@ import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import { ApplyNote } from "./Group";
 import { CompositionCatalog } from "./CompositionCatalog";
+import { CompositionPickerSetting } from "./CompositionPickerSetting";
 import { PresetPage, type PresetEntry } from "./PresetPage";
 import { PresetPersonaPage } from "./PresetPersonaPage";
 import { newPreset } from "./presetDraft";
@@ -99,7 +100,7 @@ export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; 
           {current && <p className="ds">{t("当前会话")}: {current.id.startsWith("builtin:") ? t(current.name) : current.name} · {current.revision.slice(0, 12)} {t(current.started ? "已锁定" : "首次提交前可切换")}</p>}
           {catalog.diagnostics.map((d, i) => <p className="ds" key={i}>{d.module}: {d.detail}</p>)}
           <ApplyNote id="agent-presets" />
-        </> : <div className="empty"><p>{error || t("读取预设中…")}</p><button className="act" data-action="agent-preset.reload" onClick={() => setRefresh(v => v + 1)}>{t("重新加载")}</button></div>}
+        </> : <><CompositionPickerSetting /><div className="empty"><p>{error || t("读取预设中…")}</p><button className="act" data-action="agent-preset.reload" onClick={() => setRefresh(v => v + 1)}>{t("重新加载")}</button></div></>}
         {saved && <p className="find" role="status">{saved}</p>}
         {catalog && error && <p className="find" data-lvl="err" role="alert">{error}</p>}
       </div>}

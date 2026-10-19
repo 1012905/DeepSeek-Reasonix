@@ -21,12 +21,17 @@ to bind a version.
 
 ## Choosing and editing
 
-The mode picker is always visible above the input in every pane. Everyday partner is the
-initial mode. Clicking a built-in card explicitly sets this machine's new-task
-default, including local and remote tasks.
+The mode picker is hidden by default. Enable **Show mode picker** on the Persona
+management page to add it above the chat input in every pane. Settings search
+also leads directly to this switch. Hiding it leaves the conversation's mode intact.
+
+Everyday partner is the initial mode. Clicking a built-in card explicitly sets
+this machine's new-task default, including local and remote tasks.
 
 Saved server preferences alone do not
 activate it. Showing the picker reads the catalog without binding a composition.
+When hidden, it mounts no picker and makes no picker catalog reads; run status
+and token counts remain visible.
 
 An explicit mode in a new-task request overrides the card default. Restoring
 history retains its original binding. Clicking a card leaves existing tasks
@@ -118,6 +123,14 @@ conflicts while preserving the draft. Models remain independently selectable.
 | Definition revisions and explicit defaults | `<state>/agent-presets/` |
 | Studio new-task card choice | Browser-local `rx-new-task-agent-preset` |
 | Local authorization records and retained files | `<state>/trusted/agent-presets/` |
+
+Picker visibility reuses the original browser-local `rx-show-agent-composition`
+key. Only `on` enables it; missing, `off`, unknown or unreadable values leave it
+hidden. A failed write preserves the old value and reports an error.
+
+The original reader follows the same `on`/`off` values; the intermediate
+always-visible revision ignores this key. Other windows follow storage changes.
+Visibility is independent of new-task card choices and existing bindings.
 
 The new browser key accepts only the shipped Everyday partner/Lightweight partner identities.
 It is separate from server preferences and never read by CLI or ACP.

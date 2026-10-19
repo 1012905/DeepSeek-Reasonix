@@ -2,16 +2,34 @@
 import {cleanup,render,screen,waitFor} from "@testing-library/react";
 import "./testkit";
 import userEvent from "@testing-library/user-event";
-import {afterEach,expect,it,vi} from "vitest";
+import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {MockPort} from "../port/mock";
 import {AgentCompositionPicker} from "./AgentCompositionPicker";
 import {CompositionNewContext} from "./CompositionNewContext";
 import {RunLine} from "./RunLine";
+beforeEach(() => { localStorage.setItem("rx-show-agent-composition", "on"); });
 afterEach(() => { cleanup(); localStorage.removeItem("rx-show-agent-composition"); });
 
-it.each([null, "off", "on"])("shows Standard by default regardless of the retired visibility preference %s", async (stored) => {
+it.each([null, "off", "unexpected"])("hides the picker and avoids catalog reads for visibility %s", async (stored) => {
   if (stored === null) localStorage.removeItem("rx-show-agent-composition");
   else localStorage.setItem("rx-show-agent-composition", stored);
+  const port = new MockPort();
+  const catalog = vi.spyOn(port, "agentPresets");
+  const select = vi.spyOn(port, "selectAgentComposition");
+  const drawPicker = () => <AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>;
+  const view = render(<RunLine label="空闲" running={false} blocked={false} sent={0} received={0} estimated={false}>
+    {drawPicker()}
+  </RunLine>);
+  expect(screen.getByRole("status")).toBeTruthy();
+  expect(document.querySelector(".compose-context")).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
+  view.rerender(drawPicker());
+  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
+  expect(catalog).not.toHaveBeenCalled();
+  expect(select).not.toHaveBeenCalled();
+});
+
+it("shows the initial default only after opt-in without applying a server preference", async () => {
   const port = new MockPort();
   await port.setDefaultAgentPreset("builtin:minimal", false);
   const select = vi.spyOn(port, "selectAgentComposition");

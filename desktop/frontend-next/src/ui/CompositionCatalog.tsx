@@ -3,6 +3,7 @@ import type { AgentPresetCatalog, AgentPresetVersion } from "../port/composition
 import { t } from "../i18n";
 import { StudioIcon } from "./StudioIcon";
 import { BuiltinPresetCard } from "./BuiltinPresetCard";
+import { CompositionPickerSetting } from "./CompositionPickerSetting";
 import { setNewTaskPreset, useNewTaskPreset } from "../state/newTaskPreset";
 import "../styles/composition-presets.css";
 
@@ -20,6 +21,7 @@ export function CompositionCatalog({ catalog, onSelect, onCreate, onCopy }: {
       <button className="btn" data-primary="" data-action="agent-preset.create" onClick={onCreate}><StudioIcon name="plus" />{t("新建预设")}</button>
       <p>{t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。")}</p>
     </header>
+    <CompositionPickerSetting />
     <p className="composition-default-note">{t("点击卡片，设置本机新任务的默认模式；已有会话保持当前配置。")}</p>
     {error && <p className="find" role="alert">{error}</p>}
     {(["builtin", "user", "project"] as const).map((scope) => {
