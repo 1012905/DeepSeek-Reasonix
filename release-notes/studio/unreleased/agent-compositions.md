@@ -12,11 +12,13 @@
 - 原生归档直接交给后端解析，错误按码翻译；内置副本使用窗口语言，标识字段跟随主题。#13613
 - 设置导航改为人设；独立编辑页直接展示两段提示词、运行环境、范围和 ID，能力按需展开；保留固定保存栏与未保存保护。#13613
 
-- 加固预设文件路径与分配边界，内部继承绑定不放入 HTTP 请求对象；修正 Windows 上保留 Hook 测试的路径引用。#13613
+- 加固预设文件路径与分配边界，内部继承绑定不放入 HTTP 请求对象。#13613
+- 修正 Windows 上保留 Hook 测试的路径引用；按参数边界检查凭据，避免误拒绝带引号的盘符路径。#13613
 
 <!-- lang:en -->
 
-- Harden preset filesystem and allocation boundaries; pass inherited bindings outside the HTTP request DTO. Quote retained hook test paths portably for Windows. #13613
+- Harden preset filesystem and allocation boundaries; pass inherited bindings outside the HTTP request DTO. #13613
+- Quote retained hook test paths portably for Windows; check credentials at argument boundaries to preserve quoted drive paths. #13613
 
 - Add session Agent presets with versioned personas, tools and modules, building on #13588. #13613
 - Keep compositions opt-in: unselected and Everyday partner sessions keep the existing format without binding or persona migration. Only explicitly bound sessions use the version boundary. #13613

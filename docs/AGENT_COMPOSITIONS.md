@@ -216,6 +216,9 @@ Keep hook code in a dedicated directory; retain credentials
 through environment references. External interpreters and services keep their
 existing platform/authorization contracts.
 
+Retention checks credentials at argument boundaries, preserving quoted Windows
+file paths while rejecting literal credential arguments and unparseable shell launches.
+
 Credential lookups remain
 with the existing credential/configuration owner. Sessions use separate MCP
 connections and process state, and extensions run from private copies. Existing

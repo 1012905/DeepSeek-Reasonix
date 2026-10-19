@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"reasonix/internal/base/shellparse"
 	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/hook"
@@ -21,19 +22,8 @@ type retainedHook struct {
 }
 
 func (b *builder) retainHook(id string, h hook.ResolvedHook) error {
-	launch, err := json.Marshal(map[string]any{"command": h.Command, "args": h.Argv})
-	if err != nil {
+	if err := validateRetainedHookLaunch(id, h); err != nil {
 		return err
-	}
-	sanitized, _, err := pluginpkg.StripCredentials(launch)
-	if err != nil {
-		return err
-	}
-	var original, redacted any
-	_ = json.Unmarshal(launch, &original)
-	_ = json.Unmarshal(sanitized, &redacted)
-	if agentcomposition.Digest(original) != agentcomposition.Digest(redacted) {
-		return agentcomposition.Unavailable(id, "Hook credentials must use environment references.")
 	}
 	assets, paths, err := agentpreset.CaptureHookResources(h.ResourcePaths(b.root))
 	plugin := h.Env["REASONIX_PLUGIN_NAME"]
@@ -64,6 +54,32 @@ func (b *builder) retainHook(id string, h hook.ResolvedHook) error {
 	saved := retainedHook{Snapshot: h.Snapshot(), Assets: assets, Root: root, Plugin: plugin}
 	saved.Snapshot.Hook.Env, saved.EnvKeys = agentpreset.CaptureEnvironment(h.Env)
 	return keepResource(b.opts.Composition, "hook", id, saved)
+}
+
+func validateRetainedHookLaunch(id string, h hook.ResolvedHook) error {
+	argv := append([]string{h.Command}, h.Argv...)
+	if h.ExecutionMode != hook.ExecutionExec && !(h.ExecutionMode == hook.ExecutionLegacy && h.Argv != nil) {
+		command, err := shellparse.ParseStaticCommand(h.Command, shellparse.StaticCommandPolicy{})
+		if err != nil {
+			return agentcomposition.Unavailable(id, "Hook credentials must use environment references.")
+		}
+		argv = append(command.Argv, h.Argv...)
+	}
+	launch, err := json.Marshal(map[string]any{"args": argv})
+	if err != nil {
+		return err
+	}
+	sanitized, _, err := pluginpkg.StripCredentials(launch)
+	if err != nil {
+		return err
+	}
+	var original, redacted any
+	_ = json.Unmarshal(launch, &original)
+	_ = json.Unmarshal(sanitized, &redacted)
+	if agentcomposition.Digest(original) != agentcomposition.Digest(redacted) {
+		return agentcomposition.Unavailable(id, "Hook credentials must use environment references.")
+	}
+	return nil
 }
 
 func (b *builder) compositionHookPackage(h hook.ResolvedHook, name string) (agentpreset.DirectorySnapshot, map[string]string, error) {
