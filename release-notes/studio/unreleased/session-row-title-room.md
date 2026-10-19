@@ -1,0 +1,2 @@
+- 侧栏会话行的标题不再被过早截断：右侧不再为没显示的按钮留空位，归档按钮只在悬停或聚焦时占位。反馈 FB-J73V-ZH3V，议题 #13904。
+- Session titles in the sidebar are no longer cut short: nothing is held back for buttons that are not showing, and the archive button takes room only while hovered or focused. Issue #13904.

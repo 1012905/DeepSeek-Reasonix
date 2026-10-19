@@ -50,7 +50,9 @@
 .rail .sessrow[data-run="running"] > .pip { display: block; }
 .rail .rmtws-node .sessdel { opacity: 0; }
 .rail .rmtws-node .sessrow:is(:hover, :focus-within) .sessdel { opacity: 1; }
-.rail .sessage { margin-left: auto; font-size: var(--fs-micro); }
+.rail .sessage { margin-left: auto; margin-right: 0; font-size: var(--fs-micro); }
+.rail .sessage + .sesscopies { margin-inline-start: 6px; }
+.rail .sessrow[data-unread]:not(:has(> .sesscopies)) > .sessage { margin-inline-end: 22px; }
 .rail .sessmore { width: calc(100% - 12px); margin: 2px 0 5px 3px; padding-left: 9px; text-align: left; }
 .rail .sessrow:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
 .rail .sessrow[aria-selected="true"] { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font-weight: var(--w-reg); box-shadow: none; }
