@@ -32,4 +32,10 @@ describe("what the page keeps of a finished call's output", () => {
     expect(capToolOutput(tool(big, { name: "todo_write" })).output).toBe(big);
     expect(capToolOutput(tool(big, { name: "remember" })).output).toBe(big);
   });
+
+  it("leaves a lookup whole, because the manifest card counts its lines and hits from the text", () => {
+    const lines = Array.from({ length: 2000 }, (_, i) => `line ${i}`).join("\n");
+    for (const name of ["read_file", "grep", "glob", "ls"]) expect(capToolOutput(tool(lines, { name })).output).toBe(lines);
+    expect(capToolOutput(tool(lines, { name: "bash" })).hidden).toBeGreaterThan(0);
+  });
 });

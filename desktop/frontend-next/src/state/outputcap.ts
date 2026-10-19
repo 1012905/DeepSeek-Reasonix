@@ -6,8 +6,9 @@ export const OUTPUT_CAP = 16 * 1024;
 export const OUTPUT_EDGE = 4 * 1024;
 
 // The calls whose output something other than the output card reads: a plan, a
-// remembered fact, a diff drawn as a diff.
-const WHOLE = new Set(["todo_write", "remember", "update_goal"]);
+// remembered fact, a diff drawn as a diff, and the lookups whose line and hit
+// counts the manifest card counts from the text.
+const WHOLE = new Set(["todo_write", "remember", "update_goal", "read_file", "grep", "glob", "ls"]);
 
 /** What the page keeps of a tool: the same call with `hidden` counting the
  *  characters of the middle of its output that it let go of. */
