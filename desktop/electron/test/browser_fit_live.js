@@ -94,7 +94,7 @@ app.whenReady().then(async () => {
 
   await page.send("Emulation.setDeviceMetricsOverride", { width: 0, height: 0, deviceScaleFactor: 0, mobile: false });
   await wait(600);
-  check("a zero-sized override is no override: the page fills the panel and a click lands", JSON.stringify(view.getBounds()) === JSON.stringify(panel) && (await evalIn("innerWidth")) === 560 && (await click()) === "hit", JSON.stringify(view.getBounds()));
+  check("a zero-sized override is no override: the page fills the panel and a click lands", JSON.stringify(view.getBounds()) === JSON.stringify(panel) && (await evalIn("innerWidth")) === 560 && (await click("lc")) === "hit", JSON.stringify(view.getBounds()));
 
   await page.send("Emulation.clearDeviceMetricsOverride", {});
   await wait(600);
