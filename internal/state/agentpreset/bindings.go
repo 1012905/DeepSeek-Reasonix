@@ -23,7 +23,7 @@ func (s *Store) VerifyBinding(binding *agentcomposition.Binding) error {
 	if err := binding.ValidateForExecution(); err != nil {
 		return err
 	}
-	if len(binding.Digest) != 64 || strings.Trim(binding.Digest, "0123456789abcdef") != "" {
+	if len(binding.Digest) != 64 || !filepath.IsLocal(binding.Digest) || strings.Trim(binding.Digest, "0123456789abcdef") != "" {
 		return agentcomposition.ErrInvalid
 	}
 	data, err := os.ReadFile(filepath.Join(s.trustedDirectory(), "bindings", binding.Digest+".json"))

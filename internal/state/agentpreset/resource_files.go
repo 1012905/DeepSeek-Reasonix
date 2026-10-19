@@ -2,6 +2,7 @@ package agentpreset
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -13,17 +14,7 @@ func CaptureFiles(paths []string) (DirectorySnapshot, map[string]string, error) 
 	asset := DirectorySnapshot{Files: []AssetFile{}}
 	mapping := map[string]string{}
 	for i, path := range paths {
-		info, err := os.Lstat(path)
-		if err != nil {
-			return asset, nil, err
-		}
-		if !info.Mode().IsRegular() || secrets.SensitiveFileName(info.Name()) {
-			return asset, nil, fmt.Errorf("%w: unsupported hook resource", agentcomposition.ErrUnavailable)
-		}
-		if info.Size() > maxAssetBytes {
-			return asset, nil, agentcomposition.ErrUnavailable
-		}
-		data, err := os.ReadFile(path)
+		info, data, err := readAssetFile(path)
 		if err != nil {
 			return asset, nil, err
 		}
@@ -35,4 +26,30 @@ func CaptureFiles(paths []string) (DirectorySnapshot, map[string]string, error) 
 		}
 	}
 	return asset, mapping, nil
+}
+
+func readAssetFile(path string) (os.FileInfo, []byte, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer root.Close()
+	name := filepath.Base(path)
+	info, err := root.Lstat(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !info.Mode().IsRegular() || secrets.SensitiveFileName(info.Name()) || info.Size() > maxAssetBytes {
+		return nil, nil, fmt.Errorf("%w: unsupported hook resource", agentcomposition.ErrUnavailable)
+	}
+	file, err := root.Open(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxAssetBytes+1))
+	if len(data) > maxAssetBytes {
+		return nil, nil, agentcomposition.ErrUnavailable
+	}
+	return info, data, err
 }

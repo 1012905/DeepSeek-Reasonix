@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"reasonix/internal/state/sessionstore"
@@ -16,13 +17,23 @@ func (h *Hub) importNativeSession(w http.ResponseWriter, r *http.Request) {
 		refuseNativeArchive(w, err)
 		return
 	}
-	root, err := resolveWorkspaceDir(strings.TrimSpace(workspace))
+	if strings.TrimSpace(workspace) == "" {
+		missingField(w, "workspace")
+		return
+	}
+	root, err := filepath.Abs(strings.TrimSpace(workspace))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if !h.ownsSessionDir(SessionDirFor(root)) {
+	root = h.knownSessionWorkspace(root)
+	if root == "" {
 		refuse(w, http.StatusForbidden, "workspace.unknown", "select a known workspace", nil)
+		return
+	}
+	root, err = resolveWorkspaceDir(root)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
 	session, err := sessionstore.DecodeNativeArchive(content)
@@ -36,6 +47,15 @@ func (h *Hub) importNativeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"path": path, "agentComposition": compositionView(session.Composition())})
+}
+
+func (h *Hub) knownSessionWorkspace(asked string) string {
+	for _, ref := range h.sessionRoots() {
+		if known, err := filepath.Abs(ref.dir); err == nil && known == asked {
+			return ref.dir
+		}
+	}
+	return ""
 }
 
 func readNativeUpload(w http.ResponseWriter, r *http.Request) (string, []byte, error) {

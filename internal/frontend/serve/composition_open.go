@@ -28,6 +28,7 @@ func loadOpenComposition(root, path string) (*agentcomposition.Binding, error) {
 	if err != nil || !filepath.IsLocal(rel) {
 		return nil, refusal(http.StatusForbidden, codeSessionOutside, errors.New("path outside session dir"), nil)
 	}
+	realPath = filepath.Join(realDir, rel)
 	if err := sessionstore.PrepareSessionPath(realPath); err != nil {
 		return nil, err
 	}

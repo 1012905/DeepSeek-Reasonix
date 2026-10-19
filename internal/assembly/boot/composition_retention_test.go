@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"mvdan.cc/sh/v3/syntax"
+
 	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/hook"
@@ -20,9 +22,13 @@ func TestCompositionRetainsPersonaSkillsCommandsAndHooksAcrossSourceDeletion(t *
 	commandPath := filepath.Join(root, ".reasonix", "commands", "frozen.md")
 	writeFile(t, root, ".reasonix/skills/frozen/SKILL.md", "---\nname: frozen\ndescription: frozen skill\nuser-invocable: false\n---\nORIGINAL SKILL")
 	writeFile(t, root, ".reasonix/commands/frozen.md", "ORIGINAL COMMAND")
-	script := filepath.Join(home, "scripts", "startup.txt")
-	writeFile(t, home, "scripts/startup.txt", "ORIGINAL HOOK")
-	settings := hook.Settings{Hooks: map[hook.Event][]hook.HookConfig{hook.SessionStart: {{Command: "cat " + script}}}}
+	script := filepath.Join(home, "scripts with spaces", "startup.txt")
+	writeFile(t, home, "scripts with spaces/startup.txt", "ORIGINAL HOOK")
+	quoted, err := syntax.Quote(filepath.ToSlash(script), syntax.LangBash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := hook.Settings{Hooks: map[hook.Event][]hook.HookConfig{hook.SessionStart: {{Command: "cat " + quoted}}}}
 	raw, _ := json.Marshal(settings)
 	writeFile(t, home, hook.SettingsFilename, string(raw))
 	store := agentpreset.New(home, root)

@@ -32,7 +32,7 @@ func TestDispatchKeepsTheExactCompositionAndRefusesAnotherWorkspace(t *testing.T
 	if _, err := f.hub.openDispatchSession(t.Context(), rt, ctrl, root, []byte("pair")); err != nil {
 		t.Fatal(err)
 	}
-	got := f.requests[0].composition
+	got := f.bindings[0]
 	if got == nil || got.Digest != b.Digest || got.SystemPrompt != b.SystemPrompt {
 		t.Fatalf("dispatched runtime lost its exact composition: %+v", got)
 	}
@@ -44,7 +44,7 @@ func TestDispatchKeepsTheExactCompositionAndRefusesAnotherWorkspace(t *testing.T
 		t.Fatal("cross-workspace refusal still opened a runtime")
 	}
 
-	if _, err := f.hub.Open(t.Context(), OpenRequest{Root: other, composition: b}); !errors.Is(err, agentcomposition.ErrUnavailable) {
+	if _, err := f.hub.openBound(t.Context(), OpenRequest{Root: other}, b); !errors.Is(err, agentcomposition.ErrUnavailable) {
 		t.Fatalf("an invalid inherited binding opened a history-only runtime: %v", err)
 	}
 	if len(f.hub.localRuntimes()) != 2 {

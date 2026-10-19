@@ -16,7 +16,7 @@ const maxDefinitionBytes = 4 << 20
 
 func (s *Store) lockDeclaration(id, path string) (func(), error) {
 	if strings.HasPrefix(id, "project:") {
-		path = filepath.Join(s.directory("user"), "project-locks", agentcomposition.Digest(path))
+		path = filepath.Join(s.UserDirectory(), "project-locks", agentcomposition.Digest(path))
 	}
 	return lock(path)
 }
@@ -38,23 +38,20 @@ func readDeclarationFile(file *os.File) ([]byte, error) {
 }
 
 func (s *Store) readDeclaration(id, path string) ([]byte, error) {
+	base := s.UserDirectory()
 	if strings.HasPrefix(id, "project:") {
-		root, err := os.OpenRoot(s.Workspace)
-		if err != nil {
-			return nil, err
-		}
-		defer root.Close()
-		rel, err := filepath.Rel(s.Workspace, path)
-		if err != nil {
-			return nil, err
-		}
-		file, err := root.Open(rel)
-		if err != nil {
-			return nil, err
-		}
-		return readDeclarationFile(file)
+		base = s.Workspace
 	}
-	file, err := os.Open(path)
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	rel, err := filepath.Rel(base, path)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, agentcomposition.ErrInvalid
+	}
+	file, err := root.Open(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -121,10 +118,15 @@ func (s *Store) checkProjectDeclaration(path string) error {
 	if err != nil || !filepath.IsLocal(rel) {
 		return agentcomposition.ErrInvalid
 	}
-	current := s.Workspace
+	root, err := os.OpenRoot(s.Workspace)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	current := "."
 	for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
 		current = filepath.Join(current, part)
-		info, err := os.Lstat(current)
+		info, err := root.Lstat(current)
 		if os.IsNotExist(err) {
 			return nil
 		}

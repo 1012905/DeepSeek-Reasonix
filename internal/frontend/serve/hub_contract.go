@@ -1,10 +1,7 @@
 package serve
 
-import "reasonix/internal/contract/agentcomposition"
-
 // OpenRequest creates a fresh runtime or focuses the owner of SessionPath.
 type OpenRequest struct {
-	composition      *agentcomposition.Binding
 	AgentComposition string `json:"agentComposition,omitempty"`
 	Root             string `json:"root"`
 	SessionPath      string `json:"sessionPath"`

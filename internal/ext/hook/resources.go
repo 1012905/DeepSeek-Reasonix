@@ -24,11 +24,21 @@ func (h ResolvedHook) ResourcePaths(cwd string) []string {
 	files := config.NewProjectProgram(config.ProjectProgramHooks, "retained-hook", "", root, base, nil, words).Files
 	out := []string{}
 	for _, file := range files {
-		if info, err := os.Stat(file); err == nil && info.Mode().IsRegular() {
+		if regularHookResource(file) {
 			out = append(out, file)
 		}
 	}
 	return out
+}
+
+func regularHookResource(path string) bool {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	info, err := root.Stat(filepath.Base(path))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func hookResourceWords(command string) []string {

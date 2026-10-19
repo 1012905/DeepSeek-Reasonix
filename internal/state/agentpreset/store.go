@@ -35,7 +35,7 @@ func (s *Store) directory(scope string) string {
 	return filepath.Join(s.StateRoot, "agent-presets")
 }
 
-func (s *Store) UserDirectory() string { return s.directory("user") }
+func (s *Store) UserDirectory() string { return filepath.Join(s.StateRoot, "agent-presets") }
 
 func (s *Store) trustedDirectory() string {
 	return filepath.Join(s.StateRoot, trustedstate.DirectoryName, "agent-presets")
@@ -48,6 +48,9 @@ func (s *Store) declarationPath(id string) (string, error) {
 		return "", err
 	}
 	scope, name, _ := strings.Cut(id, ":")
+	if !filepath.IsLocal(name) {
+		return "", agentcomposition.ErrInvalid
+	}
 	if scope == "builtin" {
 		return "", ErrReadOnly
 	}
@@ -114,7 +117,7 @@ func (s *Store) Save(d agentcomposition.Definition, expected string) (agentcompo
 		return agentcomposition.Version{}, ErrConflict
 	}
 	v := agentcomposition.Version{Definition: d, Revision: agentcomposition.Revision(d)}
-	if err := writeJSON(filepath.Join(s.directory("user"), "revisions", v.Revision+".json"), v); err != nil {
+	if err := writeJSON(filepath.Join(s.UserDirectory(), "revisions", v.Revision+".json"), v); err != nil {
 		return v, err
 	}
 	return v, s.writeDeclaration(path, d)
@@ -125,7 +128,7 @@ func (s *Store) Version(revision string) (agentcomposition.Version, error) {
 		return agentcomposition.Version{}, agentcomposition.ErrInvalid
 	}
 	var v agentcomposition.Version
-	b, err := os.ReadFile(filepath.Join(s.directory("user"), "revisions", revision+".json"))
+	b, err := os.ReadFile(filepath.Join(s.UserDirectory(), "revisions", revision+".json"))
 	if err != nil {
 		return v, err
 	}

@@ -468,7 +468,11 @@ func ProjectSessionDir(workspaceRoot string) string {
 	if abs, err := filepath.Abs(root); err == nil {
 		root = abs
 	}
-	return filepath.Join(base, "projects", WorkspaceSlug(root), "sessions")
+	slug := WorkspaceSlug(root)
+	if !filepath.IsLocal(slug) {
+		return ""
+	}
+	return filepath.Join(base, "projects", slug, "sessions")
 }
 
 // WorkspaceSlug flattens an absolute workspace path into the directory name

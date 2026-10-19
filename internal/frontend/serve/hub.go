@@ -19,6 +19,7 @@ import (
 	"reasonix/internal/platform/wsl"
 
 	"reasonix/internal/base/fileutil"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -307,6 +308,10 @@ func (h *Hub) ownSession(srv *Server) (keeper *control.SessionLeaseKeeper, err e
 // Open builds a runtime for req, or returns the one already driving that
 // session. The caller gets a runtime it can address immediately.
 func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
+	return h.openBound(ctx, req, nil)
+}
+
+func (h *Hub) openBound(ctx context.Context, req OpenRequest, inherited *agentcomposition.Binding) (*Runtime, error) {
 	if rt := h.findSession(req.SessionPath); rt != nil {
 		return rt, nil
 	}
@@ -319,7 +324,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	binding := req.composition
+	binding := inherited
 	if req.SessionPath != "" {
 		binding, err = loadOpenComposition(root, req.SessionPath)
 		if err != nil {
@@ -355,7 +360,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 			CleanupPendingReconciler: BackgroundCleanupReconciler,
 			NewConversation:          strings.TrimSpace(req.SessionPath) == "",
 		}
-		if req.composition != nil {
+		if inherited != nil {
 			return boot.BuildRuntime(ctx, opts)
 		}
 		return buildCompositionOrHistory(ctx, opts)

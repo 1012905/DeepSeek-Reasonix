@@ -164,6 +164,19 @@ Presets cannot replace an installed extension's executable declaration.
 
 ## Definition sources and authority
 
+HTTP workspace selectors resolve to registered workspace values before native
+session import probes the filesystem. Inherited dispatch bindings travel outside
+the HTTP request DTO; the wire format is unchanged.
+
+Personal declaration reads and retained-resource copies use directory handles.
+Personal links may resolve inside their store, but not outside it. Generated
+session-directory slugs and resource-relative paths are checked before joining
+them to their owning directories.
+
+Hook resource reads are bounded even if a file grows after inspection. Collection
+capacity hints avoid unchecked size addition, and legacy text decoding checks
+its expansion size before allocating.
+
 Selecting a definition never grants permission. Built-ins are shipped, read-only
 templates; user definitions are explicitly authored in personal state; project
 definitions are untrusted repository files, even in a trusted workspace.

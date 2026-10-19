@@ -45,7 +45,7 @@ func buildRuntimeGraph(home string, hostProvides []extensioncontract.Capability,
 			return nil, err
 		}
 	}
-	comps := make([]extension.ComponentDescriptor, 0, len(packages)+1)
+	comps := make([]extension.ComponentDescriptor, 0, len(packages))
 	if len(hostProvides) > 0 {
 		comps = append(comps, extension.ComponentDescriptor{
 			ID:       "host",

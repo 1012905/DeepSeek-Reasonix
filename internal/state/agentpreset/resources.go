@@ -122,7 +122,11 @@ func (s *Store) Materialize(snapshot DirectorySnapshot) (string, error) {
 	}
 	defer os.RemoveAll(temp)
 	for _, f := range snapshot.Files {
-		path := filepath.Join(temp, filepath.FromSlash(f.Path))
+		rel := filepath.FromSlash(f.Path)
+		if !filepath.IsLocal(rel) {
+			return "", agentcomposition.ErrInvalid
+		}
+		path := filepath.Join(temp, rel)
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return "", err
 		}

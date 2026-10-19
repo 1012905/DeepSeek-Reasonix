@@ -53,14 +53,13 @@ func (s *Server) resumeInto(path string) (int, error) {
 	}
 	realDir, dirErr := filepath.EvalSymlinks(absDir)
 	absPath, err := filepath.Abs(strings.TrimSpace(path))
-	if err != nil || !store.IsSessionTranscriptName(filepath.Base(absPath)) {
+	name := filepath.Base(absPath)
+	if err != nil || !store.IsSessionTranscriptName(name) {
 		return http.StatusBadRequest, refusal(http.StatusBadRequest, codeSessionBadPath, errors.New("invalid session path"), nil)
 	}
 	// A 1.x v4 conversation the list offered becomes a transcript here first.
-	if filepath.Dir(absPath) == absDir {
-		if err := sessionstore.PrepareSessionPath(absPath); err != nil {
-			return http.StatusBadRequest, fmt.Errorf("open 1.x session: %w", err)
-		}
+	if absPath, err = prepareResumeSessionPath(absDir, absPath); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("open 1.x session: %w", err)
 	}
 	// A transcript that is gone lands here: the delete took the file, and the
 	// list the click came from was drawn before it did.
@@ -147,6 +146,18 @@ func (s *Server) resumeInto(path string) (int, error) {
 	}
 	s.resetSessionView()
 	return http.StatusNoContent, nil
+}
+
+func prepareResumeSessionPath(dir, path string) (string, error) {
+	if filepath.Dir(path) != dir {
+		return path, nil
+	}
+	name := filepath.Base(path)
+	if !filepath.IsLocal(name) {
+		return "", refusal(http.StatusBadRequest, codeSessionBadPath, errors.New("invalid session path"), nil)
+	}
+	path = filepath.Join(dir, name)
+	return path, sessionstore.PrepareSessionPath(path)
 }
 
 // pathUnresolved tells a path that is not there from one the host could not

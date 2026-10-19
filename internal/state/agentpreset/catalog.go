@@ -66,7 +66,7 @@ func (s *Store) List() (Catalog, error) {
 
 func (s *Store) preferences() (preferences, error) {
 	p := preferences{Default: "builtin:general", Workspaces: map[string]string{}}
-	b, err := os.ReadFile(filepath.Join(s.directory("user"), "settings.json"))
+	b, err := os.ReadFile(filepath.Join(s.UserDirectory(), "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return p, nil
 	}
@@ -100,7 +100,7 @@ func (s *Store) SetDefault(id string, workspace bool) error {
 	if !workspace && strings.HasPrefix(id, "project:") || workspace && s.Workspace == "" {
 		return agentcomposition.ErrInvalid
 	}
-	path := filepath.Join(s.directory("user"), "settings.json")
+	path := filepath.Join(s.UserDirectory(), "settings.json")
 	unlock, err := lock(path)
 	if err != nil {
 		return err

@@ -24,7 +24,7 @@ type dispatchBook struct {
 	// pending holds a pane opened in a project the user has not decided about yet;
 	// it shows its own trust card, and the next dispatch reuses it.
 	pending map[dispatchKey]string
-	open    func(context.Context, OpenRequest) (*Runtime, error) // nil: Hub.Open
+	open    func(context.Context, OpenRequest, *agentcomposition.Binding) (*Runtime, error)
 }
 
 type dispatchKey struct{ from, root string }
@@ -147,13 +147,13 @@ func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, sender *co
 	}
 	open := h.dispatch.open
 	if open == nil {
-		open = h.Open
+		open = h.openBound
 	}
 	grant := sender.DispatchGrant()
 	target := h.runtimeByID(h.dispatch.getPending(from.ID, root))
 	if target == nil {
 		var err error
-		if target, err = open(ctx, OpenRequest{Root: root, Model: grant.Model, composition: binding}); err != nil {
+		if target, err = open(ctx, OpenRequest{Root: root, Model: grant.Model}, binding); err != nil {
 			return nil, fmt.Errorf("%w: %w", control.ErrDispatchFailed, err)
 		}
 	}

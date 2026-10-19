@@ -41,7 +41,13 @@ func privateCompositionPackages(root string, packages []pluginpkg.InstalledPacka
 	out := make([]pluginpkg.InstalledPackage, 0, len(packages))
 	for i, p := range packages {
 		private := filepath.Join(root, fmt.Sprintf("%d", i))
-		if err := os.CopyFS(private, os.DirFS(p.Package.Root)); err != nil {
+		source, err := os.OpenRoot(p.Package.Root)
+		if err != nil {
+			return nil, err
+		}
+		err = os.CopyFS(private, source.FS())
+		_ = source.Close()
+		if err != nil {
 			return nil, err
 		}
 		if rt := p.Package.Manifest.Runtime; rt != nil {

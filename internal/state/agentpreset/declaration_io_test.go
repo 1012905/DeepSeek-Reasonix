@@ -1,13 +1,48 @@
 package agentpreset
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"reasonix/internal/contract/agentcomposition"
 )
+
+func TestPersonalDeclarationReadsStayWithinTheStoreRoot(t *testing.T) {
+	for _, external := range []bool{false, true} {
+		t.Run(fmt.Sprint(external), func(t *testing.T) {
+			s := New(t.TempDir(), t.TempDir())
+			if err := os.MkdirAll(filepath.Join(s.UserDirectory(), "definitions"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			d := agentcomposition.Builtins()[0]
+			d.ID = "user:linked"
+			data, err := json.Marshal(d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(s.UserDirectory(), "payload.json")
+			link := "../payload.json"
+			if external {
+				target = filepath.Join(t.TempDir(), "payload.json")
+				link = target
+			}
+			if err := os.WriteFile(target, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(link, filepath.Join(s.UserDirectory(), "definitions", "linked.json")); err != nil {
+				t.Fatal(err)
+			}
+			got, err := s.Get(d.ID)
+			if external && err == nil || !external && (err != nil || got.Definition.ID != d.ID) {
+				t.Fatalf("external=%v: declaration=%+v err=%v", external, got, err)
+			}
+		})
+	}
+}
 
 func TestProjectDeclarationCannotFollowSymlinkOutsideWorkspace(t *testing.T) {
 	s := New(t.TempDir(), t.TempDir())
