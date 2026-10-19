@@ -724,6 +724,8 @@ export const ACTIONS: UIAction[] = [
   { id: "peers.enable", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.dispatch", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.release-revoke", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "peers.release-add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.release-pick", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.deny", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.

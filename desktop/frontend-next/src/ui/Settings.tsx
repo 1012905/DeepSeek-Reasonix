@@ -10,6 +10,7 @@ import { SECTION_NAME } from "./prefsnav";
 import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
 import { PlanApproval, DefaultMode } from "./PlanApproval";
+import { PeersSection } from "./PeersSection";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -304,6 +305,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
     model: status?.modelRef?.split("/").pop() ?? "—",
     providers: models.length ? t("{n} 个服务", { n: groupVendors(models).length }) : "",
     tools: ruleCount ? `${approval} · ${ruleCount}` : approval,
+    peers: "",
     hooks: hookCount ? t("{n} 条", { n: hookCount }) : t("关"),
     ext: broken ? t("{n} 个异常", { n: broken }) : packages.length ? t("{n} 个包", { n: packages.length }) : `${looseMcp.length + looseOn}`,
     network: netMode,
@@ -601,6 +603,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <SessionCoordination port={port} onChanged={onChanged} />
             </>
           )}
+
+          {at === "peers" && <PeersSection port={port} hub={hub} />}
 
           {at === "hooks" && (
             <Group id="hooks"

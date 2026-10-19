@@ -1,0 +1,2 @@
+- 新增：设置里「会话间消息」成为独立的一项，不再藏在「工具与权限」最底部；可以在这里从已添加的项目里选择放行、一键撤销已放行的项目。关联 #13794。
+- Added: Session messages is its own entry in Settings instead of the foot of Tools and permissions, and projects can be allowed through, from those already added, or taken back there. Refs #13794.
