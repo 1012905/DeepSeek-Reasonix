@@ -459,3 +459,24 @@ func TestADispatchToTheSendersOwnProjectOpensNothing(t *testing.T) {
 		t.Fatalf("err = %v, opened %d; want dispatch.same_project and no pane", err, f.opened)
 	}
 }
+
+func TestPanesWaitingForATrustAnswerCountAgainstTheSessionCeiling(t *testing.T) {
+	f := newDispatchFixture(t, dispatchOn)
+	setPeersCeilings(t, 1, 2)
+	for _, name := range []string{"one", "two", "three"} {
+		f.project(name, false)
+	}
+	sender := f.sender(f.project("alpha", true))
+	ctx := context.Background()
+	for _, name := range []string{"one", "two"} {
+		if _, err := sender.DispatchToProject(ctx, name, "x"); !errors.Is(err, control.ErrDispatchAwaitingTrust) {
+			t.Fatalf("%s = %v, want awaiting_trust", name, err)
+		}
+	}
+	if _, err := sender.DispatchToProject(ctx, "one", "again"); !errors.Is(err, control.ErrDispatchAwaitingTrust) || f.opened != 2 {
+		t.Fatalf("retry of a waiting project = %v with %d panes opened; want awaiting_trust on the same pane", err, f.opened)
+	}
+	if _, err := sender.DispatchToProject(ctx, "three", "x"); !errors.Is(err, control.ErrDispatchLimit) || f.opened != 2 {
+		t.Fatalf("third undecided project = %v with %d panes opened; want dispatch.limit and no new pane", err, f.opened)
+	}
+}

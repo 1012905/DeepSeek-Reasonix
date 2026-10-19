@@ -38,9 +38,11 @@ func (b *dispatchBook) targets(from string) []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var out []string
-	for k, id := range b.sessions {
-		if k.from == from {
-			out = append(out, id)
+	for _, m := range []map[dispatchKey]string{b.sessions, b.pending} {
+		for k, id := range m {
+			if k.from == from {
+				out = append(out, id)
+			}
 		}
 	}
 	return out
@@ -98,7 +100,8 @@ func (h *Hub) dispatchTo(ctx context.Context, from *Runtime, project, text strin
 		if sender.TrustOfWorkspace(root) == config.WorkspaceTrustDeclined {
 			return control.DispatchResult{}, projectError(control.ErrDispatchUntrusted, root)
 		}
-		if limit := config.LoadForEdit(config.UserConfigPath()).PeersMaxDispatchedSessions(); limit > 0 && h.liveDispatched(from.ID) >= limit {
+		waiting := h.runtimeByID(h.dispatch.getPending(from.ID, root)) != nil
+		if limit := config.LoadForEdit(config.UserConfigPath()).PeersMaxDispatchedSessions(); !waiting && limit > 0 && h.liveDispatched(from.ID) >= limit {
 			return control.DispatchResult{}, control.ErrDispatchLimit
 		}
 		if secret, err = newPairSecret(); err != nil {
@@ -176,8 +179,8 @@ func projectError(sentinel error, root string) error {
 	return fmt.Errorf("%w (project %q)", sentinel, filepath.Base(root))
 }
 
-// liveDispatched counts the panes from opened for its dispatches that are still
-// open; a pane the user closed no longer counts against the ceiling.
+// liveDispatched counts the panes from opened for its dispatches, waiting for a
+// trust answer or not, that are still open; a pane the user closed no longer counts against the ceiling.
 func (h *Hub) liveDispatched(from string) int {
 	n := 0
 	for _, id := range h.dispatch.targets(from) {
