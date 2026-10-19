@@ -66,6 +66,11 @@ reasonix setup --local            # manage ./reasonix.toml
 reasonix setup /path/to/config.toml
 ```
 
+Local commands use `./reasonix.toml` when present, otherwise an existing
+`.reasonix/reasonix.toml`. New project files are created at the root. This applies
+to `setup --local`, `config compact-ratio --local`, and
+`config reasoning-language --local`.
+
 In an interactive terminal, `reasonix setup` is a staged provider manager. It
 lists configured providers and lets you:
 
