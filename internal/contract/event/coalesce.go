@@ -52,11 +52,10 @@ type coalescer struct {
 	draining    bool
 }
 
-// deltaKey is the identity a buffered burst merges under. Source is part of it:
-// every progress chunk an executor emits sets Source="executor", and leaving it
-// in the zero-probe below kept ToolProgress on the passthrough path — a shell
-// writing one line per chunk crossed the sink as one frame per line. A key
-// change flushes, so text, reasoning and one tool's progress never merge.
+// deltaKey is the identity a buffered burst merges under. Source belongs here
+// rather than to the payload: it names who emitted the delta, and two sources
+// must not merge. A key change flushes, so text, reasoning and one tool's
+// progress never merge into another's.
 type deltaKey struct {
 	kind   Kind
 	source string

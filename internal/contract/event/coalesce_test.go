@@ -336,11 +336,9 @@ func TestCoalesceBypassesToolProgressWithoutID(t *testing.T) {
 	}
 }
 
-// Every progress chunk an executor emits carries Source. Merging must survive
-// it: leaving Source in the zero-probe made the event look impure, and a shell
-// writing one line per chunk crossed the sink as one frame per line. The e2e
-// run is what caught it — the unit tests did not, because they emitted deltas
-// with no Source at all.
+// Every progress chunk an executor emits carries Source, and text from a
+// planner carries a different one. Merging must survive the first and never
+// cross the second.
 func TestCoalesceMergesDeltasCarryingSource(t *testing.T) {
 	inner := &coalesceRecordSink{}
 	c := Coalesce(inner, time.Hour)
