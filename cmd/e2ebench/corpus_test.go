@@ -37,6 +37,10 @@ const (
 	projectCheckDir = "../../benchmarks/project-check"
 )
 
+// realRepoDir holds long tasks over a pinned snapshot of this repository, so
+// its seeds and reference solutions answer to the same guards.
+const realRepoDir = "../../benchmarks/realrepo"
+
 // protectedFiles reads the manifest embedded in a no-solution grader. The
 // manifest lives inside verify.sh precisely because e2ebench drops that file
 // in only after the run, so the agent never sees which files are watched.
