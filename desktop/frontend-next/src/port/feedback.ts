@@ -33,6 +33,16 @@ export const FEEDBACK_WITHDRAWABLE: readonly FeedbackStatus[] = ["received", "ne
 export const canWithdraw = (item: Pick<FeedbackItem, "status" | "statusUnavailable">): boolean =>
   !item.statusUnavailable && FEEDBACK_WITHDRAWABLE.includes(item.status);
 
+// One process's memory as a report carries it: a type from a fixed list and two
+// sizes in kilobytes. Nothing in it names a path, a process id or a user.
+export type FeedbackProcessType = "browser" | "renderer" | "gpu" | "utility" | "kernel";
+
+export interface FeedbackProcessMemory {
+  process: FeedbackProcessType;
+  workingSetKB: number;
+  privateKB: number;
+}
+
 export interface FeedbackEnvInfo {
   version: string;
   commit: string;
@@ -43,6 +53,8 @@ export interface FeedbackEnvInfo {
   locale: string;
   channel: string;
   providerKind: string;
+  // The kernel's own row; the window's shell adds the rest when a report is sent.
+  memory?: FeedbackProcessMemory[];
 }
 
 // uploadBytes bounds one raw file the page may hand over; the kernel shrinks
@@ -77,6 +89,8 @@ export interface FeedbackRequest {
   // The UI language tag, so the issue can be triaged in the reporter's language.
   locale?: string;
   images: FeedbackImage[];
+  // The shell's process rows; the kernel keeps the fixed types and adds its own.
+  memory?: FeedbackProcessMemory[];
   // Answer to a feedback.challenge_required refusal.
   turnstileToken?: string;
 }
