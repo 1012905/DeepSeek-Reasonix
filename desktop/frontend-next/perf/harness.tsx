@@ -360,7 +360,7 @@ class BenchPort extends MockPort {
     const goalRuntime = usage
       ? { turnsUsed: 4, tokensUsed: 128_400, requestsUsed: 9, workDurationMs: 12 * 60_000, noProgressTurns: usage === "blocked" ? 2 : 0, ...(usage === "blocked" ? { stopCause: "goal_stuck", lastReason: "测试一直没有通过，改动没有让失败的数量减少" } : {}) }
       : undefined;
-    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}), ...(usage ? { goalStatus: usage, goalRuntime } : {}) };
+    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}), ...(usage ? { goalStatus: usage, goalRuntime } : {}), ...(query.has("trustpending") ? { toolApprovalMode: "ask" as const, approvalDefault: { defaulted: true, writesConfined: true, trust: "" as const, trustable: true } } : {}) };
     if (STATUS_MS > 0) await new Promise((r) => setTimeout(r, STATUS_MS));
     if (!JOBS) return st;
     const jobs = Array.from({ length: JOBS }, (_, i) => ({
@@ -506,6 +506,11 @@ class BenchHub extends MockHub {
     }
     const wait = TREE_AT - performance.now();
     if (wait > 0) return new Promise((resolve) => setTimeout(() => resolve(this.tree()), wait));
+    if (!WORKSPACES && query.has("trustpending") && PANES > 1) {
+      return super.tree().then((all) => all.map((ws, i) => i > 0 ? ws : { ...ws, sessions: Array.from({ length: PANES }, (_, k) => ({
+        path: `/sessions/pane-${k + 1}.jsonl`, name: `pane-${k + 1}`, title: `并行会话 ${k + 1}`, turns: 3, runtimeId: `r${k + 1}`,
+      })) }));
+    }
     if (!WORKSPACES) return super.tree();
     return Promise.resolve(
       Array.from({ length: WORKSPACES }, (_, w) => ({

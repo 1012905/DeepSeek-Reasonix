@@ -56,7 +56,7 @@ import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
 import { PeerHeldBar } from "./PeerHeldBar";
-import { PostureNote } from "./PostureNote";
+import { PostureNote, postureNote } from "./PostureNote";
 import { SidePanel } from "./SidePanel";
 import { cancelJob } from "./jobcancel";
 import { ConnectNote } from "./ConnectNote";
@@ -440,6 +440,11 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : null;
   const walletDisplay = wallet.kind === "read" ? wallet.reading.display : "";
 
+  // A pane out of sight that is asking whether to trust its folder is waiting on
+  // the person, though the kernel counts no decision for it; the one in front
+  // shows the card itself.
+  const trustWaiting = !active && postureNote(status) === "trust";
+
   // The chrome reads the focused pane. Reporting from an effect keeps it out of
   // render, where it would set state on the parent mid-paint.
   useEffect(() => {
@@ -447,8 +452,8 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       status,
       title,
       steer: waiting(queue).filter((it) => it.intent === "steer").length,
-      run,
-      live: running || blocked,
+      run: trustWaiting && run === "idle" ? "halt" : run,
+      live: running || blocked || trustWaiting,
       cost,
       contextPercent,
       context: ctx,
@@ -459,7 +464,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       rows: traj.rows.length,
       surfaces,
     });
-  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions, docked, tab, traj.rows.length, surfaces]);
+  }, [rt.id, onReport, status, title, queue, run, running, blocked, trustWaiting, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions, docked, tab, traj.rows.length, surfaces]);
 
   return (
     <section
