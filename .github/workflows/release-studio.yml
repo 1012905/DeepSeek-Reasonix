@@ -1302,6 +1302,25 @@ jobs:
             --cache-control "public, max-age=300, stale-if-error=86400"
           echo "Studio catalog -> $VERSION"
 
+  website:
+    name: publish the Studio website changelog
+    needs: [resolve, publish]
+    if: github.repository == 'esengine/DeepSeek-Reasonix' && needs.resolve.outputs.candidate != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+      - name: Deploy and verify the website changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: bash scripts/publish-studio-changelog.sh
+
   # A CLI channel that moves while 1.x still publishes would have two lines
   # writing it, so every CLI job waits for this check. It runs no repository code.
   cli-gate:
