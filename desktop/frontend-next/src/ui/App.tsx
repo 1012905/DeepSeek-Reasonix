@@ -106,7 +106,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [panesRead, setPanesRead] = useState(false);
   const [active, setActive] = useState(savedActivePane);
   const treeWindow = useTreeWindow();
-  const { tree, treeRead, readTree, reloadTree, retryTree } = useTreeRead(hub, treeWindow);
+  const { tree, treeRead, answered, readTree, reloadTree, retryTree } = useTreeRead(hub, treeWindow);
   // Null until asked, and null again where this kernel refuses remote panes —
   // which is what keeps the section out of a browser rather than drawing a
   // heading over a feature that cannot work there.
@@ -598,6 +598,7 @@ export function App({ hub }: { hub: HubPort }) {
           navShown={navRail.shown}
           tree={viewed.tree}
           treeRead={treeRead}
+          answered={answered}
           runtimes={runtimes}
           runs={runs}
           active={active}
