@@ -412,9 +412,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 			}
 			body, bound, truncMsg := a.boundToolOutput(result, plan.call.Name, plan.call.ID, plan.call.Arguments, false)
 			out := toolOutcome{output: body, bound: bound, truncMsg: truncMsg}
-			if truncMsg != "" {
-				out.rawOutput = result
-			}
+			out.keepFull(result)
 			return out, true
 		}
 	} else if outcome, blocked := a.readOnlyExecutionBlock(t, nil); blocked {
@@ -726,9 +724,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 			output: body, images: media.images, videos: media.videos, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
 			execution: execution, provenance: origin, refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
-		if truncMsg != "" {
-			out.rawOutput = rawErr
-		}
+		out.keepFull(rawErr)
 		return out
 	}
 	a.observeTouchedPaths(runTool, runArgs)
@@ -738,9 +734,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		output: body, images: media.images, videos: media.videos, bound: bound, truncMsg: truncMsg,
 		execution: execution, provenance: origin, checkpointErr: checkpointErr,
 	}
-	if truncMsg != "" {
-		out.rawOutput = result
-	}
+	out.keepFull(result)
 	return out
 }
 
