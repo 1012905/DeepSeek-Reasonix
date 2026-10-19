@@ -18,6 +18,11 @@ source is the user's attached `exec-e196c6a9-d8d9-437d-a6ee-0e99a3651845.png`,
 The image specifies a catalog followed by a separate content editor, not a drawer. The existing
 Settings shell remains the application-owned frame.
 
+The latest editor instruction supersedes the original advanced disclosure:
+the user's `codex-clipboard-c3951359-4571-4572-ad30-9f4517a2f7db.png` reference
+places both textareas and the runtime-context switch directly in the editor.
+Scope and ID are also exposed. Settings navigation now reads Persona / 人设.
+
 本节取代下方旧预设卡片的视觉验收。采用用户重新指定的首张效果图，列表与独立
 编辑页切换，保留现有设置外框。编辑态为新建、名称与用途已填写、能力及高级设置
 收起、个人范围、取消与保存操作固定在底部。
@@ -35,8 +40,8 @@ Settings shell remains the application-owned frame.
   contrast remains unverified.
 - Assets: existing product icons retained; no generated product assets or new
   handcrafted icon geometry. Source brand is supplied by the existing shell.
-- Copy: name, purpose, persona, capabilities, scope and advanced hierarchy follows
-  the selected source, with Chinese/English labels. Existing backend limits remain
+- Copy: name, purpose, persona, capabilities, scope and ID follow the selected
+  references, with Chinese/English labels. Existing backend limits remain
   authoritative rather than adopting illustrative mockup character limits.
 - Interaction regressions cover creation, copy, literal persona fields, invalid
   parameters, failed saves, navigation/close confirmation, pending saves and focus.
@@ -60,6 +65,36 @@ Earlier passing sections below are historical evidence for their own changes.
 
 待办：恢复浏览器访问后，在相同编辑状态比较整页与局部，并检查深浅主题、窄屏
 滚动及控制台；解决 P0–P2 问题后再将视觉验收标记为通过。
+
+## Built-in cards and new-task default / 内置卡片与新任务默认
+
+final result: blocked
+
+Source: the user's selected Harness screenshot
+`codex-clipboard-be3c8df5-ada5-4683-a66d-81cdf31010e7.png`, 1178 × 760 image pixels.
+It is a section crop; viewport, CSS size and density are unspecified.
+
+Implementation capture and full-view/focused comparison remain unavailable
+because browser observation was rejected by the URL security policy. No
+alternative browser surface was used to bypass that refusal.
+
+- Typography: inherited Studio font, scale and weight tokens. Rendering remains
+  unverified; source-specific font substitution was not introduced.
+- Layout: responsive two-column cards, large rounded borders, equal-height bodies,
+  separate footer actions and single-column narrow layouts. Rendered rhythm and
+  scrolling remain unverified.
+- Color: existing surface, border, text and selected tokens. The selected badge
+  uses the text/page pair. Theme contrast still needs browser inspection.
+- Assets: supplied product icon library reused for copy; no new raster assets
+  or handcrafted icon geometry.
+- Content: Standard/Minimal remain the shipped modes; IDs remain canonical.
+  Details, usage and copy remain separate from the card's default selection.
+- Behavior: card clicks persist a machine-local built-in choice. New local and
+  remote requests carry it explicitly; history and explicit per-task choices
+  retain priority. Old server preferences alone remain inert.
+
+待浏览器恢复后，对照所选卡片截图检查字体、留白、颜色、图标和文案，并覆盖
+深浅主题、窄屏、默认状态及展开的使用说明。当前功能测试不能替代视觉验收。
 
 ## Historical palette verification / 历史配色验收
 

@@ -22,7 +22,7 @@ export const EN_PERSONA: Record<string, string> = {
   "补充要求": "Additional instructions",
   "放在内置系统指令之后，留空则不添加": "Placed after the built-in system instructions. Leave blank to add nothing.",
   "不注入可选运行时上下文": "Do not inject optional runtime context",
-  "关闭后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。": "When on, the probed environment and the offline note are not injected; instructions, memory and skills are written as usual.",
+  "开启后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。": "When on, the probed environment and the offline note are not injected; instructions, memory and skills are written as usual.",
   "写入用户配置，在新会话及现有会话下一次重建时生效；保存本身不会重建会话。": "Writes the user config; applies to new sessions and the next rebuild of an existing session. Saving itself does not rebuild it.",
   "已保存，下次会话构建时生效": "Saved; applies at the next session build",
 };

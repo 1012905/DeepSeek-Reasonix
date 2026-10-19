@@ -6,13 +6,15 @@ import { HttpError } from "../port/http_error";
 import type { HubPort, RuntimeView } from "../port/hub";
 import { clearToasts, readToasts } from "../state/toasts";
 import { useOpenPane } from "./useOpenPane";
+import { NEW_TASK_PRESET_KEY, setNewTaskPreset } from "../state/newTaskPreset";
 
-afterEach(() => { cleanup(); clearToasts(); });
+afterEach(() => { cleanup(); clearToasts(); localStorage.removeItem(NEW_TASK_PRESET_KEY); });
 
 function blankPane() {
   const port = {
     agentPresets: vi.fn().mockRejectedValue(new Error("presets unavailable")),
     selectAgentComposition: vi.fn().mockResolvedValue(null),
+    resume: vi.fn().mockResolvedValue(null),
   };
   const setActive = vi.fn();
   const hub = { open: vi.fn(), close: vi.fn() };
@@ -21,12 +23,12 @@ function blankPane() {
     runtimes: [{ id: "blank", root: "/w" } as RuntimeView],
     panePorts: new Map([["blank", port as unknown as AgentPort]]),
     active: "other", reportsRef: { current: {} }, runsRef: { current: {} },
-    setRuntimes: vi.fn(), setActive, setTakeover: vi.fn(), reloadPanes: vi.fn(),
+    setRuntimes: vi.fn(), setActive, setTakeover: vi.fn(), reloadPanes: vi.fn(async () => {}),
     sw: { path: "", pending: false, opening: () => false, begin: () => 1,
       current: () => true, landed: vi.fn(), end: vi.fn(), cancel: vi.fn() },
   }));
-  return { port, setActive, hub, open: async (agentComposition?: string) => {
-    await act(async () => { await hook.result.current({ root: "/w", agentComposition }); });
+  return { port, setActive, hub, open: async (agentComposition?: string, sessionPath?: string) => {
+    await act(async () => { await hook.result.current({ root: "/w", agentComposition, sessionPath }); });
   } };
 }
 
@@ -38,6 +40,25 @@ it("keeps an existing blank pane's chosen mode without reading the catalog", asy
   expect(pane.port.agentPresets).not.toHaveBeenCalled();
   expect(pane.setActive).toHaveBeenLastCalledWith("blank");
   expect(pane.hub.open).not.toHaveBeenCalled();
+});
+
+it("applies a newly chosen default when New reuses an unused pane", async () => {
+  const pane = blankPane();
+  setNewTaskPreset("builtin:minimal");
+  await pane.open();
+  expect(pane.port.selectAgentComposition).toHaveBeenLastCalledWith("builtin:minimal");
+  setNewTaskPreset("builtin:general");
+  await pane.open();
+  expect(pane.port.selectAgentComposition).toHaveBeenLastCalledWith("builtin:general");
+  expect(pane.port.agentPresets).not.toHaveBeenCalled();
+});
+
+it("restores history into a blank pane without applying the new-task default", async () => {
+  const pane = blankPane();
+  setNewTaskPreset("builtin:minimal");
+  await pane.open(undefined, "/w/history.jsonl");
+  expect(pane.port.resume).toHaveBeenCalledWith("/w/history.jsonl");
+  expect(pane.port.selectAgentComposition).not.toHaveBeenCalled();
 });
 
 it("still opens the pane and reports a refused explicit mode without rebuilding it", async () => {

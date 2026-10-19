@@ -62,7 +62,9 @@ it("starts with a catalog and opens creation in a separate editor", async () => 
   expect(within(editor).getByRole("textbox", { name: "预设名称" })).toBe(document.activeElement);
   expect(within(editor).getByText("基于标准模式创建")).toBeTruthy();
   expect(within(editor).getByRole<HTMLButtonElement>("button", { name: "保存预设" }).disabled).toBe(true);
-  expect(within(editor).getByLabelText("预设 ID").closest("details")?.open).toBe(false);
+  expect(within(editor).getByLabelText("预设 ID").closest("details")).toBeNull();
+  expect(within(editor).getByRole("textbox", { name: "补充要求" })).toBeTruthy();
+  expect(within(editor).queryByText("高级设置")).toBeNull();
 });
 
 it("saves a named preset, returns to its catalog and leaves the conversation unbound", async () => {

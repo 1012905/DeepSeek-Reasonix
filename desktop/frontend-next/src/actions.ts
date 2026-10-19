@@ -44,6 +44,8 @@ export const ACTIONS: UIAction[] = [
   {id:"agent-composition.new",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
   {id:"agent-preset.reload",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.view",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.new-task-default",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.usage",kind:"view",target:"entity",proof:"interaction"},
   {id:"agent-preset.create",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.leave",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.leave-cancel",kind:"view",target:"none",proof:"interaction"},

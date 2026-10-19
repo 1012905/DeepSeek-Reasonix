@@ -1,6 +1,9 @@
+import { useState } from "react";
 import type { AgentPresetCatalog, AgentPresetVersion } from "../port/composition";
 import { t } from "../i18n";
 import { StudioIcon } from "./StudioIcon";
+import { BuiltinPresetCard } from "./BuiltinPresetCard";
+import { setNewTaskPreset, useNewTaskPreset } from "../state/newTaskPreset";
 import "../styles/composition-presets.css";
 
 export function CompositionCatalog({ catalog, onSelect, onCreate, onCopy }: {
@@ -9,19 +12,26 @@ export function CompositionCatalog({ catalog, onSelect, onCreate, onCopy }: {
   onCreate: () => void;
   onCopy: (version: AgentPresetVersion) => void;
 }) {
+  const preferred = useNewTaskPreset() ?? "builtin:general";
+  const [error, setError] = useState("");
   return <div className="composition-catalog">
     <header className="composition-list-heading">
       <h2>{t("Agent 预设")}</h2>
       <button className="btn" data-primary="" data-action="agent-preset.create" onClick={onCreate}><StudioIcon name="plus" />{t("新建预设")}</button>
       <p>{t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。")}</p>
     </header>
-    <p className="composition-default-note">{t("新会话默认使用标准模式。选择其他模式后才会启用对应预设。")}</p>
+    <p className="composition-default-note">{t("点击卡片，设置本机新任务的默认模式；已有会话保持当前配置。")}</p>
+    {error && <p className="find" role="alert">{error}</p>}
     {(["builtin", "user", "project"] as const).map((scope) => {
       const items = catalog.presets.filter(v => v.definition.id.startsWith(scope + ":"));
       if (!items.length) return null;
       return <section className="composition-list-group" key={scope} aria-label={t(scope === "builtin" ? "内置" : scope === "user" ? "个人" : "项目共享")}>
         <h3>{t(scope === "builtin" ? "内置" : scope === "user" ? "个人" : "项目共享")}</h3>
-        {items.map(v => <PresetRow key={v.definition.id} version={v} onSelect={() => onSelect(v)} onCopy={() => onCopy(v)} />)}
+        {scope === "builtin" ? <div className="composition-builtin-grid">{items.map(v =>
+          <BuiltinPresetCard key={v.definition.id} version={v} selected={preferred === v.definition.id}
+            onDefault={() => setError(setNewTaskPreset(v.definition.id) ? "" : t("无法保存新任务默认模式，请检查本地存储权限。"))}
+            onSelect={() => onSelect(v)} onCopy={() => onCopy(v)} />)}</div>
+          : items.map(v => <PresetRow key={v.definition.id} version={v} onSelect={() => onSelect(v)} onCopy={() => onCopy(v)} />)}
       </section>;
     })}
     <details className="composition-how"><summary>{t("如何使用")}</summary><p>{t("在输入框顶部选择 Agent 模式，首次提交前可切换。开始对话后，请用其他模式新建会话。精简模式的终端仍可修改文件，并非只读模式。")}</p></details>

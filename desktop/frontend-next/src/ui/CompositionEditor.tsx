@@ -66,18 +66,45 @@ export function CompositionEditor({
       </label>
       <label className="pers-field">
         <span className="lb">{t("人设与要求")}</span>
+        <span className="ds" id={`${helpId}-persona`}>{t("描述预设的角色、工作方式与要求；内容写在系统提示词开头。")}</span>
         <textarea
           aria-label={t("人设与要求")}
           aria-describedby={`${helpId}-persona`}
           data-action-change="persona.prefix"
-          rows={4}
+          rows={5}
           maxLength={32768}
           disabled={disabled}
           value={persona.prefix}
           onChange={(e) => updatePersona({ prefix: e.target.value })}
         />
-        <span className="ds" id={`${helpId}-persona`}>{t("描述预设的角色、工作方式与要求；内容写在系统提示词开头。")}</span>
       </label>
+      <label className="pers-field">
+        <span className="lb">{t("补充要求")}</span>
+        <span className="ds" id={`${helpId}-suffix`}>{t("放在内置系统指令之后，留空则不添加")}</span>
+        <textarea
+          aria-label={t("补充要求")}
+          aria-describedby={`${helpId}-suffix`}
+          data-action-change="persona.suffix"
+          rows={5}
+          maxLength={32768}
+          disabled={disabled}
+          value={persona.suffix}
+          onChange={(e) => updatePersona({ suffix: e.target.value })}
+        />
+      </label>
+      <div className="lrow">
+        <span className="tx">
+          <span className="lb">{t("不注入可选运行时上下文")}</span>
+          <span className="ds">{t("开启后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。")}</span>
+        </span>
+        <Switch
+          data-action="persona.runtime-context"
+          label={t("不注入可选运行时上下文")}
+          on={!persona.include_runtime_context}
+          busy={disabled}
+          onClick={() => updatePersona({ include_runtime_context: !persona.include_runtime_context })}
+        />
+      </div>
       <div className="composition-capabilities">
         <h3>{t("能力配置")}</h3>
         <p className="ds">{t("继承当前的工具、技能与扩展配置，可按需单独调整。")}</p>
@@ -105,41 +132,12 @@ export function CompositionEditor({
         </select>
         <span className="ds" id={`${helpId}-scope`}>{t("个人：保存在本机，可跨项目使用。项目共享：保存在当前项目，可随仓库共享。")}</span>
       </label>
-      <details className="composition-advanced">
-        <summary><StudioIcon name="settings" />{t("高级设置")}<StudioIcon name="chevron" /></summary>
-        <label className="pers-field">
-          <span className="lb">{t("预设 ID")}</span>
-          <input className="in" aria-label={t("预设 ID")} aria-describedby={`${helpId}-id`} disabled={disabled || !creating} data-action-change="agent-preset.id"
-            value={draft.id.split(":")[1]} onChange={(e) => onChange({ ...draft, id: `${draft.id.split(":")[0]}:${e.target.value}` })} />
-          <span className="ds" id={`${helpId}-id`}>{t("自动生成，用于保存和引用预设；保存后不可修改。")}</span>
-        </label>
       <label className="pers-field">
-        <span className="lb">{t("补充要求")}</span>
-        <textarea
-          aria-label={t("补充要求")}
-          aria-describedby={`${helpId}-suffix`}
-          data-action-change="persona.suffix"
-          rows={3}
-          maxLength={32768}
-          disabled={disabled}
-          value={persona.suffix}
-          onChange={(e) => updatePersona({ suffix: e.target.value })}
-        />
-        <span className="ds" id={`${helpId}-suffix`}>{t("放在内置系统指令之后，留空则不添加")}</span>
+        <span className="lb">{t("预设 ID")}</span>
+        <input className="in" aria-label={t("预设 ID")} aria-describedby={`${helpId}-id`} disabled={disabled || !creating} data-action-change="agent-preset.id"
+          value={draft.id.split(":")[1]} onChange={(e) => onChange({ ...draft, id: `${draft.id.split(":")[0]}:${e.target.value}` })} />
+        <span className="ds" id={`${helpId}-id`}>{t("自动生成，用于保存和引用预设；保存后不可修改。")}</span>
       </label>
-      <div className="lrow">
-        <span className="tx">
-          <span className="lb">{t("注入运行环境与离线提示")}</span>
-        </span>
-        <Switch
-          data-action="persona.runtime-context"
-          label={t("注入运行环境与离线提示")}
-          on={persona.include_runtime_context}
-          busy={disabled}
-          onClick={() => updatePersona({ include_runtime_context: !persona.include_runtime_context })}
-        />
-      </div>
-      </details>
     </div>
   );
 }

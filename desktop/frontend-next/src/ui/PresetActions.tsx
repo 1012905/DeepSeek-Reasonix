@@ -36,7 +36,7 @@ export function PresetActions({ port, version, busy, run, onDeleted, onPersona }
     </div>}
     <details>
       <summary>{t("显式默认配置")}</summary>
-      <p className="ds">{t("仅在显式选择 default 时使用，不改变新会话的标准模式。")}</p>
+      <p className="ds">{t("仅在显式选择 default 时使用，与本机卡片设置的新任务默认独立。")}</p>
       <div className="composition-toolbar">
         <button type="button" className="act" data-action="agent-preset.default" disabled={busy || d.id.startsWith("project:")}
           onClick={() => void run(async () => { await port.setDefaultAgentPreset(d.id, false); setNote(t("已设为个人首选预设")); })}>{t("设为个人首选")}</button>

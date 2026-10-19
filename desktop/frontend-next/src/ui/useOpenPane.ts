@@ -4,6 +4,7 @@ import type { AgentPort } from "../port/port";
 import type { PaneReport } from "./Pane";
 import { t } from "../i18n";
 import { openSessionLimit } from "../state/prefs";
+import { newTaskComposition } from "../state/newTaskPreset";
 import { pushNote, pushToast } from "../state/toasts";
 import { reason } from "../i18n/kernel";
 import type { SessionSwitch } from "./sessionswitch";
@@ -33,6 +34,8 @@ interface Deps {
 export function useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes, sw }: Deps) {
   const placePane = useCallback(
     async (req: { root?: string; sessionPath?: string; agentComposition?: string }): Promise<Placed> => {
+      const composition = newTaskComposition(req.agentComposition, req.sessionPath);
+      if (composition !== undefined && req.agentComposition === undefined) req = { ...req, agentComposition: composition };
       // Blank means never written to and not working: a new session mid-turn has
       // no path in a stale pane list yet, and taking it over would hide its run.
       const blank = runtimes.find(

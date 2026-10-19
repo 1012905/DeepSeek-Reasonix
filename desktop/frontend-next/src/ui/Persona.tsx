@@ -176,7 +176,7 @@ export function Persona({ port, onDirtyChange, onBusyChange, onSaved }: { port: 
           <div className="lrow">
             <span className="tx">
               <span className="lb">{t("不注入可选运行时上下文")}</span>
-              <span className="ds">{t("关闭后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。")}</span>
+              <span className="ds">{t("开启后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。")}</span>
             </span>
             <Switch
               data-action="persona.runtime-context"

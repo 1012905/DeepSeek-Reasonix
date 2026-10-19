@@ -22,6 +22,7 @@ function draw(port = new MockPort()) {
 it.each(["close", "navigation", "search"])("protects a draft on settings %s", async (destination) => {
   const user = userEvent.setup();
   const { onClose } = draw();
+  expect(screen.getByRole("tab", { name: "人设" })).toBeTruthy();
   await user.click(await screen.findByRole("button", { name: "新建预设" }));
   await user.type(screen.getByLabelText("预设名称"), "保留草稿");
   const leave = async () => {

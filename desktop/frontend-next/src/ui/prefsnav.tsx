@@ -107,7 +107,7 @@ export const NAV: [string, [Section, string][]][] = [
     "本轮执行",
     [
       ["session", "会话"],
-      ["persona", "Agent 预设"],
+      ["persona", "人设"],
       ["model", "模型偏好"],
       ["providers", "模型服务"],
       ["tools", "工具与权限"],

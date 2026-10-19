@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "./testkit";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { MockPort } from "../port/mock";
@@ -8,8 +8,9 @@ import { AgentPresets } from "./AgentPresets";
 import { boot, STORAGE, t } from "../i18n";
 import { AgentCompositionPicker } from "./AgentCompositionPicker";
 import { RunLine } from "./RunLine";
+import { NEW_TASK_PRESET_KEY } from "../state/newTaskPreset";
 
-afterEach(() => { cleanup(); localStorage.setItem(STORAGE, "zh"); boot(); });
+afterEach(() => { cleanup(); localStorage.removeItem(NEW_TASK_PRESET_KEY); localStorage.setItem(STORAGE, "zh"); boot(); });
 
 it("keeps the mode picker visible without a visibility setting or automatic selection", async () => {
   const port = new MockPort();
@@ -75,7 +76,7 @@ describe("Agent preset management", () => {
     render(<AgentPresets port={port} />);
     expect(await screen.findByRole("button", { name: "查看 标准模式" })).toBeTruthy();
     const minimal = screen.getByRole("button", { name: "查看 精简模式" });
-    expect(document.querySelectorAll(".composition-row")).toHaveLength(2);
+    expect(within(screen.getByRole("region", { name: "内置" })).getAllByRole("article")).toHaveLength(2);
     expect(screen.queryByText("代码审查")).toBeNull();
     expect(screen.queryByText("资料研究")).toBeNull();
     await user.click(minimal);
@@ -101,10 +102,9 @@ describe("Agent preset management", () => {
     await user.clear(screen.getByLabelText("预设名称"));
     await user.type(screen.getByLabelText("预设名称"), "My agent");
     await user.type(screen.getByLabelText("人设与要求"), "Literal prefix");
-    await user.click(screen.getByText("高级设置", { selector: "summary" }));
     await user.type(screen.getByLabelText("补充要求"), "Literal suffix");
     expect(screen.queryByRole("switch", { name: /complete/ })).toBeNull();
-    await user.click(screen.getByRole("switch", { name: "注入运行环境与离线提示" }));
+    await user.click(screen.getByRole("switch", { name: "不注入可选运行时上下文" }));
     await user.click(screen.getByRole("button", { name: "保存预设" }));
     expect((await screen.findByRole("status")).textContent).toContain("新会话使用新版");
     expect((await port.agentPresets()).presets.some((v) => v.definition.name === "My agent")).toBe(true);

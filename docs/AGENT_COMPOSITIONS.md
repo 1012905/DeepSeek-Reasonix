@@ -21,9 +21,16 @@ to bind a version.
 
 ## Choosing and editing
 
-The mode picker is always visible above the input in every pane. New conversations
-start in Standard mode, even when another preset is marked as preferred. Showing
-the picker reads the catalog without selecting or binding a composition.
+The mode picker is always visible above the input in every pane. Standard is the
+initial mode. Clicking a built-in card explicitly sets this machine's new-task
+default, including local and remote tasks.
+
+Saved server preferences alone do not
+activate it. Showing the picker reads the catalog without binding a composition.
+
+An explicit mode in a new-task request overrides the card default. Restoring
+history retains its original binding. Clicking a card leaves existing tasks
+unchanged; pressing New may reuse an unused pane with the chosen default.
 
 Choose the mode at the left of the composer status row before
 the first prompt. One menu lists compositions with their sources and capabilities;
@@ -40,6 +47,10 @@ composition does not unlock it.
 
 The catalog groups built-in, personal and project presets. New and duplicate
 actions open a separate editor within Settings:
+
+Built-ins use responsive cards with a new-task-default badge, canonical ID,
+description, details, usage and copy actions. Personal/project entries remain
+editable rows. Usage, details and copy do not change the new-task default.
 
 | Mode | Behavior |
 | --- | --- |
@@ -63,11 +74,11 @@ when a conversation binds, or uses only the selected IDs. An empty explicit
 selection disables the group. The editor lists locally available modules;
 imports preview missing dependencies without installing or launching them.
 
-The editor shows name, purpose and persona first. Tools and skills/extensions
-expand on demand; storage scope follows them.
+Settings lists the page as Persona. The editor shows name, purpose and both
+persona text fields directly, followed by the optional-runtime-context switch.
 
-Advanced settings hold the generated ID, persona suffix and runtime-context
-toggle. ID and scope become read-only after saving.
+Tools and skills/extensions expand on demand. Storage scope and the generated
+ID remain visible; both become read-only after saving.
 
 A persistent footer offers Cancel and Save. Returning, closing Settings or
 navigating elsewhere confirms unsaved changes; save errors retain the draft.
@@ -87,7 +98,19 @@ conflicts while preserving the draft. Models remain independently selectable.
 | Personal definitions | `<state>/agent-presets/definitions/<id>.json` |
 | Shared definitions | `<workspace>/.reasonix/agent-presets/definitions/<id>.json` |
 | Definition revisions and explicit defaults | `<state>/agent-presets/` |
+| Studio new-task card choice | Browser-local `rx-new-task-agent-preset` |
 | Local authorization records and retained files | `<state>/trusted/agent-presets/` |
+
+The new browser key accepts only the shipped Standard/Minimal identities.
+It is separate from server preferences and never read by CLI or ACP.
+
+| Stored choice | Current reader | Previous reader |
+| --- | --- | --- |
+| Missing, unreadable or unknown | Original Standard behavior | Ignores the key |
+| Standard/Minimal | Explicit choice on new Studio requests | Ignores the key |
+
+An unsuccessful storage write retains the previous choice and reports an error.
+Existing server selection/admission permissions still apply to new requests.
 
 `<state>` is Reasonix's resolved state root, including relocation. IDs start
 with `builtin:`, `user:` or `project:`. A project binding also records its
