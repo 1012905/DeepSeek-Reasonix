@@ -39,8 +39,9 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	var b strings.Builder
 
 	b.WriteString("# Reasonix configuration.\n")
-	fmt.Fprintf(&b, "# Resolution order: flag > ./reasonix.toml > %s > built-in defaults.\n", processRoots().userConfigDisplayPath())
-	b.WriteString("# Fields marked user/global only are not overridden by ./reasonix.toml.\n")
+	fmt.Fprintf(&b, "# Resolution order: flag > project config > %s > built-in defaults.\n", processRoots().userConfigDisplayPath())
+	b.WriteString("# Project config: ./reasonix.toml, otherwise .reasonix/reasonix.toml.\n")
+	b.WriteString("# Fields marked user/global only are not overridden by project config.\n")
 	b.WriteString("# Secrets are named via api_key_env and stored in Reasonix's global .env; never put keys here.\n\n")
 
 	fmt.Fprintf(&b, "config_version = %d   # schema marker for diagnostics; old versions may ignore it\n", configVersion(c))
