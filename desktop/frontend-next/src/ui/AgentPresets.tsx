@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { AgentPort } from "../port/port";
 import type {
   AgentComposition,
@@ -17,6 +17,7 @@ import { Switch } from "./Switch";
 import { setShowsCompositionPicker, useShowsCompositionPicker } from "../state/compositionPicker";
 
 export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; focusPersona?: boolean }) {
+  const helpId = useId();
   const showsPicker = useShowsCompositionPicker();
   const [catalog, setCatalog] = useState<AgentPresetCatalog | null>(null);
   const [version, setVersion] = useState<AgentPresetVersion | null>(null);
@@ -173,11 +174,12 @@ export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; 
               {draft && (
                 <>
                   {!version && (
-                    <label className="pers-field">
-                      <span className="lb">{t("预设标识")}</span>
-                      <div className="composition-toolbar">
+                    <div className="composition-editor">
+                      <label className="pers-field">
+                        <span className="lb">{t("存放范围")}</span>
                         <select
                           aria-label={t("存放范围")}
+                          aria-describedby={`${helpId}-scope`}
                           data-action-change="agent-preset.scope"
                           value={draft.id.split(":")[0]}
                           onChange={(e) =>
@@ -187,17 +189,27 @@ export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; 
                           <option value="user">{t("个人")}</option>
                           <option value="project">{t("项目共享")}</option>
                         </select>
+                        <span className="ds" id={`${helpId}-scope`}>
+                          {t("个人：保存在本机，可跨项目使用。项目共享：保存在当前项目，可随仓库共享。")}
+                        </span>
+                      </label>
+                      <label className="pers-field">
+                        <span className="lb">{t("预设 ID")}</span>
                         <input
                           className="in"
-                          aria-label={t("预设标识")}
+                          aria-label={t("预设 ID")}
+                          aria-describedby={`${helpId}-id`}
                           data-action-change="agent-preset.id"
                           value={draft.id.split(":")[1]}
                           onChange={(e) =>
                             setDraft({ ...draft, id: `${draft.id.split(":")[0]}:${e.target.value}` })
                           }
                         />
-                      </div>
-                    </label>
+                        <span className="ds" id={`${helpId}-id`}>
+                          {t("用于保存和引用，区别于显示名称。例如 code-review，保存后不可修改。")}
+                        </span>
+                      </label>
+                    </div>
                   )}
                   {immutable && draft.id !== "builtin:general" && (
                     <p className="ds">{t("内置预设只读，复制后即可编辑。")}</p>
