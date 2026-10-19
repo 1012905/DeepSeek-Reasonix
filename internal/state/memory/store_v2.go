@@ -52,11 +52,13 @@ func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
 		if err != nil {
 			return report, err
 		}
-		// A migration rewrites facts and then the index. An unreadable index would
-		// leave those facts out of it permanently, because the next run skips facts
-		// that already carry an id.
+		// A migration rewrites facts and then the index. A deterministic read
+		// fault is republished from the facts instead; a transient one still
+		// returns, because the existing bytes may still be good.
 		if _, err := readIndexIn(dir); err != nil {
-			return report, err
+			if err := s.repairIndexIn(dir, entries, err); err != nil {
+				return report, err
+			}
 		}
 		for _, entry := range entries {
 			if entry.IsDir() || entry.Name() == indexFile || !strings.HasSuffix(entry.Name(), ".md") {
