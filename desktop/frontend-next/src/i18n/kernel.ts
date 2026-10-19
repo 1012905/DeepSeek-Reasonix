@@ -468,6 +468,8 @@ const SAID: Record<string, string> = {
   "history.query_required": "请输入要搜索的内容",
   "history.search_failed": "对话内容索引暂时无法回答，稍后再试",
   "job.not_running": "这个后台任务已经不在运行了",
+  "tool.output_unknown": "这个会话里没有这条调用的输出",
+  "tool.output_range": "要取的输出范围不对，请重新展开这条输出",
   "mux.unknown_connection": "事件流连接已经关闭，需要重新打开并重新订阅各窗格",
   "mux.pane_not_local": "这个窗格由另一台机器驱动，使用它自己的事件流",
   "job.stop_in_progress": "已经请求停止这个后台任务，它的进程还没有退出，仍在等待",

@@ -466,6 +466,8 @@ export const EN_KERNEL: Record<string, string> = {
   "该插件未安装": "That plugin is not installed",
   "图片数据不是 base64 编码": "The image data is not base64",
   "HTTP 上不提供 shell 命令": "Shell commands are not served over HTTP",
+  "这个会话里没有这条调用的输出": "This session has no output for that call",
+  "要取的输出范围不对，请重新展开这条输出": "The part of the output asked for is not valid; open the output again",
   "不存在「{role}」这个角色": "There is no “{role}” role",
   "没有已配置的模型匹配「{model}」": "No configured model matches “{model}”",
   "「{model}」是决策来源，只服务 system_one 的询问，不能用作对话模型": "“{model}” is a decision source: it only answers system_one's questions and cannot be used as a conversation model",

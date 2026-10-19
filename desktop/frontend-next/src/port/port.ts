@@ -24,7 +24,7 @@ export type { MemoryEdit } from "./memory";
 export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
 import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
-import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
+import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, ToolOutputPage, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
 import type { SubagentRun, SubagentTranscript } from "./subagent";
@@ -704,6 +704,10 @@ export interface AgentPort {
   // not take output from the model's own reader; a job that ended is refused
   // (job.not_running).
   jobOutput(jobId: string): Promise<JobOutput>;
+  // A window onto one tool call's output as the history carries it, for a page
+  // that kept only the ends. Refused with tool.output_unknown for a call this
+  // session has no record of and tool.output_range for a window it cannot cut.
+  toolOutput(callId: string, offset?: number, limit?: number): Promise<ToolOutputPage>;
   // Re-freezes the files an entry references. A line that waited through the
   // work that changed them would otherwise arrive quoting what is no longer.
   refreshQueued(itemId: string): Promise<void>;

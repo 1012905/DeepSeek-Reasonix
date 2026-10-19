@@ -20,6 +20,8 @@ import { ExtensionView } from "./ExtensionView";
 import { toolChangedFile, toolErrorDetail, toolFailed, toolFailureLabel, toolOutputEchoed, toolRefusalReason } from "./outcome";
 import { StudioIcon } from "../StudioIcon";
 import { registerNest } from "./nestreveal";
+import { useFullOutput, type ReadOutput } from "./useFullOutput";
+import type { StateTool } from "../../state/outputcap";
 import { ImagePreview } from "../ImagePreview";
 
 // The spec pops a symbol as it settles — colour arriving is the finish signal.
@@ -61,12 +63,14 @@ function useSettling(running: boolean): { pop: boolean; swap: boolean } {
 }
 
 export function ToolCard({
-  tool, running, children = [], omitted = 0, takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, onStop, onBring, pinned = false, activity = false,
+  tool, running, children = [], readOutput, omitted = 0, takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, onStop, onBring, pinned = false, activity = false,
 }: {
-  tool: Tool;
+  tool: StateTool;
   running: boolean;
   activity?: boolean;
-  children?: Tool[];
+  children?: StateTool[];
+  // Reads a call's whole output back from the kernel when the page kept only its ends.
+  readOutput?: ReadOutput;
   // Characters of a running call's output the page let go of from the front.
   omitted?: number;
   // Reverting the file this call wrote. Optional: a card drawn outside a live
@@ -119,6 +123,7 @@ export function ToolCard({
   // model as output and to the reader as an error. Rendering both prints it
   // twice, and the second copy reads like a second failure.
   const echoed = toolOutputEchoed(tool);
+  const full = useFullOutput(tool, readOutput);
   // update_goal's payload is the model's own prose about the turn. Its shape is
   // one claim — done, still going, or stuck — so the card says the claim rather
   // than the object carrying it.
@@ -247,7 +252,8 @@ export function ToolCard({
           {!tool.diff && !tool.outputDiff && !goal && tool.name !== "todo_write" && tool.output && !echoed && children.length === 0 && (
             <>
               {omitted > 0 && <div className="bound">{t("此前省略了 {n} 个字符，这里只显示最近的输出", { n: count(omitted) })}</div>}
-              <ToolOutput name={shown} text={tool.output} bound={tool.bound} id={tool.id} />
+              {full.note}
+              <ToolOutput name={shown} text={full.text ?? ""} bound={tool.bound} id={tool.id} />
             </>
           )}
           <ToolShots images={tool.images} />
@@ -279,7 +285,7 @@ export function ToolCard({
             <>
               <div className="nest-bd">
                 {children.map((c) => (
-                  <NestedCall key={c.id} tool={c} />
+                  <NestedCall key={c.id} tool={c} read={readOutput} />
                 ))}
               </div>
               {/* What the delegate handed back closes its own panel: outside it,
@@ -360,12 +366,14 @@ function changeCounts(tool: Tool): { added: number; removed: number } | null {
 const NESTED_PREVIEW = 400;
 const NESTED_WHOLE_CAP = 200_000;
 
-export function NestedCall({ tool, whole = false }: { tool: Tool; whole?: boolean }) {
+export function NestedCall({ tool, whole = false, read }: { tool: StateTool; whole?: boolean; read?: ReadOutput }) {
   const [all, setAll] = useState(false);
+  const full = useFullOutput(tool, read);
+  const body = full.text ?? "";
   const shown = tool.resolvedName || tool.name;
   const tag = tagFor(tool);
   const bad = toolFailed(tool);
-  const clipped = !whole && (tool.output?.length ?? 0) > NESTED_PREVIEW;
+  const clipped = !whole && body.length > NESTED_PREVIEW;
   const echoed = toolOutputEchoed(tool);
   const refusal = toolRefusalReason(tool);
   const errorDetail = toolErrorDetail(tool);
@@ -384,8 +392,9 @@ export function NestedCall({ tool, whole = false }: { tool: Tool; whole?: boolea
         </div>
         {tool.output && !echoed && (
           <div className="out">
-            <Term text={clipped && !all ? tool.output.slice(0, NESTED_PREVIEW) : tool.output.slice(0, NESTED_WHOLE_CAP)} />
-            {(whole || all) && tool.output.length > NESTED_WHOLE_CAP && <div className="bound bad">{t("输出过长，仅显示前 200000 个字符")}</div>}
+            {full.note}
+            <Term text={clipped && !all ? body.slice(0, NESTED_PREVIEW) : body.slice(0, NESTED_WHOLE_CAP)} />
+            {(whole || all) && body.length > NESTED_WHOLE_CAP && <div className="bound bad">{t("输出过长，仅显示前 200000 个字符")}</div>}
             {clipped && (
               <div className="bound">
                 {all ? null : t("仅显示前 400 个字符")}

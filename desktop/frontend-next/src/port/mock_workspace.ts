@@ -2,7 +2,7 @@ import { reason } from "../i18n/kernel";
 import { HttpError } from "./http_error";
 import type { KeptText } from "./attachment";
 import type { ChangeDiff, GitHistory, StageRequest, WorkspaceChange, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
-import { MockGit } from "./mock_git";
+import { MockToolOutput } from "./mock_tooloutput";
 
 export function mockWorkspaces(root: string): import("./workspace").WorkspaceInfo {
   return { current: root, canSwitch: true, canIsolate: true, recents: [
@@ -19,7 +19,7 @@ export function mockWorktreeSources(root: string, branch: string): import("./wor
   ] };
 }
 
-export class MockWorkspace extends MockGit {
+export class MockWorkspace extends MockToolOutput {
   opensFiles() { return false; }
   async openFile() {}
 

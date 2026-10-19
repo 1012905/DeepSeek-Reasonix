@@ -324,6 +324,16 @@ export interface JobOutput {
   truncated: boolean;
 }
 
+// One window onto the output of one tool call as the history carries it: where
+// Text starts, the whole length, and whether more follows.
+export interface ToolOutputPage {
+  callId: string;
+  text: string;
+  bytes: number;
+  offset: number;
+  truncated: boolean;
+}
+
 // The UI depends on this and nothing else. SsePort talks to internal/frontend/serve;
 // MockPort replays a fixture. Neither is allowed to leak transport details
 // upward, which is what keeps the same UI usable in a browser and in a shell.
