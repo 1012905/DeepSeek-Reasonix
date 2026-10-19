@@ -34,10 +34,16 @@ func reanchorPattern(line, relDir string) string {
 		neg = "!"
 		line = line[1:]
 	}
-	line = strings.TrimPrefix(line, `\`) // escaped leading '#' or '!'
 	if relDir == "" || relDir == "." {
+		// The pattern goes to the matcher as it is, so an escaped leading
+		// '#' or '!' must stay escaped: without the backslash "\!name"
+		// would be read as a negation and "\#name" as a comment.
+		if !strings.HasPrefix(line, `\!`) && !strings.HasPrefix(line, `\#`) {
+			line = strings.TrimPrefix(line, `\`)
+		}
 		return neg + line
 	}
+	line = strings.TrimPrefix(line, `\`) // escaped leading '#' or '!'
 	anchored := strings.HasPrefix(line, "/") || strings.Contains(strings.TrimSuffix(line, "/"), "/")
 	line = strings.TrimPrefix(line, "/")
 	if anchored {
