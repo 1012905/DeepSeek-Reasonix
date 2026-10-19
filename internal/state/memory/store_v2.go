@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +33,9 @@ type SaveResult struct {
 
 type MigrationReport struct {
 	Migrated int
+	// Unreadable names each fact the pass could not read, by basename, sorted.
+	// Those facts were skipped, not deleted.
+	Unreadable []string
 }
 
 var memoryStoreMutationMu sync.Mutex
@@ -40,10 +44,12 @@ func (s Store) MigrateV2() (MigrationReport, error) {
 	return s.MigrateV2WithVersion("dev")
 }
 
-func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
+func (s Store) MigrateV2WithVersion(version string) (report MigrationReport, err error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
-	var report MigrationReport
+	// The caller receives this report even when a later directory fails, so the
+	// names stay sorted on every return path.
+	defer func() { slices.Sort(report.Unreadable) }()
 	for _, dir := range s.dirs() {
 		if strings.TrimSpace(dir) == "" {
 			continue
@@ -67,7 +73,10 @@ func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
 			path := filepath.Join(dir, entry.Name())
 			raw, err := os.ReadFile(path)
 			if err != nil {
-				return report, err
+				// A fact this pass cannot read is skipped, not fatal: the rest
+				// of the store still migrates, and the caller learns the name.
+				report.Unreadable = append(report.Unreadable, entry.Name())
+				continue
 			}
 			frontmatter, _ := splitFrontmatter(string(raw))
 			if strings.TrimSpace(frontmatter["id"]) != "" && parsePositiveInt(frontmatter["revision"]) > 0 {
