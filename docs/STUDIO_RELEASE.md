@@ -62,6 +62,7 @@ Jobs in the run:
 | `windows-install-smoke` | Runs `scripts/install-smoke.ps1` (the script pull requests run against the unsigned installer) with each architecture's installer on a runner of that architecture: silent per-user install, waits for the files to settle, checks the installed tree (the declared PE set, every image's architecture, the shell's own architecture, the kernel starting) and uninstalls. Holds no secrets and no environment. | `publish` waits for it |
 | `cli` | Builds `reasonix` archives for six OS/arch targets plus `SHA256SUMS`. | fails on a missing archive |
 | `publish` | Renders the notes with their authors, minisigns, writes `latest.json`, creates the GitHub release (a stable tag is GitHub latest only when it is the highest stable `studio-v*` tag; a candidate is a prerelease), mirrors to R2. `latest.json` goes to R2 only, never to the GitHub release. | environment `studio-release`; skipped unless `windows-install-smoke` and all four Windows signing jobs (every leg) succeeded, or signing is off (the smoke still runs); an unresolved `#N` stops it before signing |
+| `website` | Dispatches the `website` branch's Pages workflow after a stable publication, and waits for that deployment. / 正式版发布后触发 `website` 分支的官网工作流，并等待该次部署完成。 | official repository, stable releases only; requested version must appear in the generated changelog / 仅官方仓库正式版；生成的日志必须包含本次发布版本 |
 | `cli-gate` | Only with `STUDIO_PUBLISHES_CLI=true`. Requires `CLI_PUBLISH_FROZEN=true`. Checks out nothing and reads no secret. | fails while 1.x is not frozen, and then no other CLI job runs |
 | `cli-tag` | Only with `STUDIO_PUBLISHES_CLI=true`. For a stable or `-preview.N` version, creates the tag `vX.Y.Z` on the studio commit with the release tag identity (`RELEASE_TAG_TOKEN`, see below); an existing tag on that commit is kept, one elsewhere fails. | environment `studio-release`; runs after `publish` and `cli-gate`; checks out nothing, one inline step reads the token |
 | `cli-channels` | Only with `STUDIO_PUBLISHES_CLI=true` (unset today; 1.x owns the channels). Publishes `reasonix` and `@reasonix/cli-*` to npm with `--provenance`, then updates the Homebrew cask (not for a candidate). | no environment and no approval; `id-token: write` on this job only; runs after `publish`, `cli-gate` and `cli-tag` |
@@ -106,6 +107,24 @@ No other job requests `id-token` or references these two secrets, and no workflo
 
 Verify a published package with `npm view reasonix dist.attestations`: the attestation is present and names this repository.
 
+### Website changelog / 官网更新日志
+
+Every website build synchronizes missing published Studio releases before rendering.
+
+- Notes come verbatim from `release-notes/studio/X.Y.Z.md` at each release tag's commit, independently of the moving `studio` branch.
+- Sync errors or a missing requested version fail the build.
+- The release job dispatches Pages with `--ref website`, preserving the environment's branch restriction, and waits for the run identified by its release request ID.
+- The default branch's `pages.yml` only registers dispatch inputs; running it on `studio` fails.
+- Deploy the website changes before merging the Studio caller.
+
+每次官网构建都会先补齐已发布的 Studio 版本。
+
+- 原文取自各版本发布标签对应提交中的 `release-notes/studio/X.Y.Z.md`，不依赖持续变化的 `studio` 分支。
+- 同步失败或缺少本次发布版本时构建失败。
+- 发布任务通过 `--ref website` 触发官网部署，保留生产环境的分支限制，并按请求编号等待对应部署完成。
+- 默认分支的 `pages.yml` 仅注册触发参数，在 `studio` 上运行会失败。
+- 接入时先部署官网变更，再合并 Studio 调用方。
+
 ## 4. Verification
 
 | ID | Expected | Command |
@@ -117,6 +136,7 @@ Verify a published package with `npm view reasonix dist.attestations`: the attes
 | V5 | The manifest carries both Windows platforms, each resolving to its own installer. | `curl -s https://dl.reasonix.io/studio-vX.Y.Z/latest.json \| jq -r '.platforms["windows-amd64"].url, .platforms["windows-arm64"].url'` |
 | V6 | The arm64 installer is signed, and every PE image in it is ARM64 except the 32-bit `resources/elevate.exe` and uninstaller. | On Windows: `Get-AuthenticodeSignature ReasonixStudio-windows-arm64-installer.exe`, then `node desktop/electron/packaging/pe.js <unpacked-zip-dir> arm64` over the extracted portable zip. |
 | V7 | `windows-install-smoke` ran both legs and `windows-sign-payload` / `windows-sign-installer` each show an amd64 and an arm64 leg. | `gh run view <run> --json jobs --jq '.jobs[] \| select(.name \| test("Windows\|Certum")) \| "\(.name) \(.conclusion)"'` |
+| V8 | The `website` jobs succeed and the published version has a complete website changelog. / 官网任务成功，发布版本具有完整更新日志。 | Open `https://reasonix.io/changelog/vX.Y.Z/` and check its title, date and source link. / 核对标题、日期及原文链接。 |
 
 ## 5. Recovery
 
