@@ -1,2 +1,0 @@
-- 新增：Linux 增加 `.AppImage` 下载（amd64 和 arm64），可直接运行；它不会自更新，新版本需重新下载。关联 #11653。
-- Added: Linux gets an `.AppImage` download for amd64 and arm64 that runs in place. It does not update itself: download the next release. Refs #11653.

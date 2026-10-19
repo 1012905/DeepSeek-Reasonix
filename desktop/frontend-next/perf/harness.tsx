@@ -50,10 +50,11 @@ import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
-import type { AgentPort, Appearance, HistoryMessage, McpEntry } from "../src/port/port";
+import { HttpError } from "../src/port/port";
+import type { AgentPort, Appearance, ChipCall, HistoryMessage, McpEntry } from "../src/port/port";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
-import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
+import type { RuntimeView, TreeWindow, TreeWorkspace } from "../src/port/hub";
 import type { WireEvent } from "../src/port/wire";
 
 // Saves are coalesced (src/ui/trailing.ts), and a fixture answers too fast for
@@ -106,6 +107,26 @@ class BenchPort extends MockPort {
         release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
       };
     }
+    // ?git=multi is a folder of projects: three repositories, each with changes of its own.
+    if (query.get("git") === "multi") {
+      this.repoRows = [
+        { dir: "api", name: "api", branch: "main", detached: false },
+        { dir: "web", name: "web", branch: "feature/login", detached: false },
+        { dir: "tools/release", name: "release", branch: "main", detached: false },
+      ];
+      this.repoChanges = {
+        api: [
+          { path: "internal/server/routes.go", status: "M", unstaged: true, insertions: 12, deletions: 3 },
+          { path: "internal/server/routes_test.go", status: "M", staged: true, insertions: 20, deletions: 0 },
+          { path: "README.md", status: "??", unstaged: true },
+        ],
+        web: [
+          { path: "src/login/Form.tsx", status: "M", unstaged: true, insertions: 31, deletions: 9 },
+          { path: "src/login/api.ts", status: "M", staged: true, unstaged: true, insertions: 4, deletions: 1 },
+        ],
+        "tools/release": [],
+      };
+    }
     if (!query.has("mcpactions")) return;
     (this as unknown as { servers: McpEntry[] }).servers.push(
       { name: "notes", state: "ready", enabled: true, transport: "stdio", tools: 2, description: "Notes the agent can search and add to.",
@@ -114,16 +135,31 @@ class BenchPort extends MockPort {
     );
   }
 
+  // ?netshell=1 is a connection over HTTP: a `!` line is refused as the kernel refuses it.
+  async submit(text: string, chips?: ChipCall) {
+    (window.__sent ??= []).push(text);
+    if (query.has("netshell") && text.trimStart().startsWith("!")) throw new HttpError(403, "shell commands are unavailable over HTTP", { code: "shell.unavailable_over_http" });
+    return super.submit(text, chips);
+  }
+
   // ?checkfail=<name> makes a plain test of that source answer 401.
   protected async answerCheck(name: string) {
     if (query.get("checkfail") !== name) return super.answerCheck(name);
     return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
   }
 
+  // ?twoports=1: two local servers on one host, told apart by port, sharing a key slot.
   // ?badprice=1: DeepSeek's flash price is a card the vendor's table does not have,
   // under a pinned display currency.
   async providers() {
     const all = await super.providers();
+    if (query.has("twoports")) {
+      const local = (name: string, port: number) => ({
+        ...all[0], name, baseUrl: `http://127.0.0.1:${port}/v1`, keyEnv: "LOCAL_API_KEY", inUse: false, preset: false,
+        models: [`${name}-chat`], default: `${name}-chat`,
+      });
+      return [...all, local("local", 8756), local("local-2", 8788)];
+    }
     if (!query.has("badprice")) return all;
     return all.map((p) => p.name === "deepseek"
       ? { ...p, officialPricing: true, modelPrices: { "deepseek-flash": { input: 0.3, output: 1.2, cacheHit: 0, currency: "USD", official: false } } }
@@ -454,7 +490,19 @@ class BenchHub extends MockHub {
     return super.moveSessionTo(path, target);
   }
 
-  tree(): Promise<TreeWorkspace[]> {
+  // ?slowarchive=<ms>: one project with 27 active and 2127 archived conversations,
+  // whose archived read answers after that many milliseconds.
+  tree(window?: TreeWindow): Promise<TreeWorkspace[]> {
+    const slow = Number(query.get("slowarchive") ?? "");
+    if (slow > 0) {
+      const archived = window?.scope === "archived";
+      const rows = Array.from({ length: archived ? 8 : 6 }, (_, i) => ({
+        path: `/sessions/${archived ? "old" : "new"}-${i}.jsonl`, name: `${archived ? "old" : "new"}-${i}`,
+        title: `${archived ? "归档的" : "活跃的"}会话 ${i + 1}`, turns: i + 1, archived,
+      }));
+      const answer = [{ root: "~/projects/workspace-0", name: "workspace-0", remembered: true, open: true, total: 2154, archived: 2127, remaining: archived ? 2119 : 21, sessions: rows }];
+      return new Promise((resolve) => setTimeout(() => resolve(answer), archived ? slow : 0));
+    }
     const wait = TREE_AT - performance.now();
     if (wait > 0) return new Promise((resolve) => setTimeout(() => resolve(this.tree()), wait));
     if (!WORKSPACES) return super.tree();
@@ -489,6 +537,7 @@ createRoot(document.getElementById("root")!).render(<App hub={hub} />);
 declare global {
   interface Window {
     __moves?: { path: string; target: string }[];
+    __sent?: string[];
     // Feeds every open pane, so a split-view measurement costs what two live
     // conversations really cost.
     __feed: (ev: WireEvent) => void;

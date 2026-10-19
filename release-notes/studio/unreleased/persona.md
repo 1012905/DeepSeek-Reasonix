@@ -1,2 +1,0 @@
-- 新增：Studio「人设」页提供用户级前后缀及运行时上下文开关；内置指令保留，项目不能设置人设。保存后在新会话或下次会话重建时生效。关联 #13588。
-- New: Studio Persona settings add user-level prefix/suffix text and a runtime-context switch, preserving built-in guidance. Applies at the next session build. Refs #13588.

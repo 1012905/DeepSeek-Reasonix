@@ -1,2 +1,0 @@
-- 修复：`[[keep]]` 标记的回合现在有自己的保留预算（窗口的 15%，新的优先），超出的旧回合并入摘要并提示；共享窗口的模型在回复空间用尽前就会压缩。见 #13320、#12773。
-- Fixed: [[keep]] turns now have their own budget (15% of the window, newest first); older ones fold with a notice. Shared-window models fold before the reply runs out of room. See #13320, #12773.

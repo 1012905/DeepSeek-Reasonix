@@ -123,6 +123,7 @@ var table = []Entry{
 	{ID: "agent.max_parallel_writers", Class: Guarded, Effect: OnOpen},
 	{ID: "agent.subagent_claims", Class: Guarded, Effect: OnOpen},
 	{ID: "agent.write_lease", Class: Elevated, Effect: OnOpen},
+	{ID: "agent.write_lease_max_wait_minutes", Class: Guarded, Effect: OnOpen},
 	{ID: "agent.plan_approval", Class: Guarded, Effect: OnOpen},
 	{ID: "agent.default_mode", Class: Preference, Effect: OnOpen},
 	{ID: "agent.goal_auto_retry", Class: Guarded, Effect: OnOpen},

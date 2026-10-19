@@ -692,7 +692,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 		return false, boundaryErr
 	}
 
-	state.snapshot.await(ctx)
+	state.snapshot.await(ctx, snapshotWait)
 	mark := a.markProgressRound()
 	batch := a.executeBatch(ctx, state, calls)
 	results, images := batch.results, batch.images

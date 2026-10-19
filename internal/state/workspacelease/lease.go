@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -76,6 +77,15 @@ func WithoutWholeWorkspaceHold() Option {
 	return func(o *Owner) { o.undeclaredFree = true }
 }
 
+// WithFolderClaim makes a writer that declared no extent claim the folder the
+// session was opened on, not the repository that folds it into a larger domain.
+// It is for a session whose shell an OS sandbox confines to that folder; without
+// the confinement nothing stops the write landing beside it, so the whole
+// domain stays claimed.
+func WithFolderClaim() Option {
+	return func(o *Owner) { o.folderClaim = true }
+}
+
 // Owner is one Delivery session's re-entrant workspace lease. One Owner may be
 // shared by the root agent and all of its subagents. Different sessions must
 // use different Owners, even when they share a workspace.
@@ -86,8 +96,10 @@ type Owner struct {
 	// holder names this session to a session waiting on it. Read when the
 	// lease is taken, so a rename mid-hold shows on the next hold.
 	holder func() string
-	// undeclaredFree is set at construction and never changes.
+	// undeclaredFree, folderClaim and maxWait are set at construction and never change.
 	undeclaredFree bool
+	folderClaim    bool
+	maxWait        time.Duration
 
 	mu            sync.Mutex
 	activeRuns    int
@@ -123,6 +135,8 @@ func (o *Owner) State() State {
 
 type localLock struct {
 	token chan struct{}
+	// logFailures counts claims granted here whose log entry could not be written.
+	logFailures atomic.Uint64
 }
 
 var localRegistry = struct {
@@ -165,6 +179,7 @@ func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Own
 	}
 	if selected != canonical {
 		o.scope.repository = canonical
+		o.scope.folder = selected
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -292,24 +307,28 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 	return err
 }
 
-func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(), error) {
+// acquire returns the call's hold when hold is set and the claim is not waived.
+func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (*callHold, error) {
 	if o == nil {
-		return func() {}, nil
+		return nil, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if o.undeclaredFree && len(paths) == 0 {
-		return func() {}, nil
+		return nil, nil
 	}
 	claim := o.normalizePaths(paths)
+	if len(paths) == 0 && o.folderClaim && o.scope.folder != "" {
+		claim = []string{o.scope.folder}
+	}
 	for {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
 		if o.acquired && coversPaths(o.scope.paths, claim) {
-			end := o.holdLocked(hold)
+			h := o.holdLocked(hold, paths)
 			o.mu.Unlock()
-			return end, nil
+			return h, nil
 		}
 		if o.acquiring {
 			done := o.acquireDone
@@ -334,7 +353,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 		o.mu.Lock()
 		o.acquiring = false
 		o.waiting = false
-		end := func() {}
+		var h *callHold
 		if err == nil {
 			o.acquired = true
 			o.scope.paths = claim
@@ -342,7 +361,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 				o.acquiredAt = time.Now()
 				o.releaseSystem = release
 			}
-			end = o.holdLocked(hold)
+			h = o.holdLocked(hold, paths)
 		}
 		close(done)
 		releaseIfIdle := o.releaseIfIdleLocked()
@@ -350,7 +369,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 		if releaseIfIdle != nil {
 			releaseIfIdle()
 		}
-		return end, err
+		return h, err
 	}
 }
 

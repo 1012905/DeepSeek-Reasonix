@@ -168,7 +168,7 @@ func TestFeedbackIsCompletedAsACommand(t *testing.T) {
 	for _, it := range items {
 		labels = append(labels, it.Label)
 	}
-	if strings.Join(labels, ",") != "bug,idea,question,other,list,show,reply,withdraw,link,unlink,links,name" {
+	if strings.Join(labels, ",") != "bug,idea,question,other,list,show,reply,withdraw,link,unlink,links,board,name" {
 		t.Fatalf("labels = %v", labels)
 	}
 	found := false

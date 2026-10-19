@@ -185,7 +185,10 @@ function DailyTable({ days }: { days: UsageDay[] }) {
               <tr key={d.day} data-day={d.day}>
                 <td className="ud">{d.day}</td>
                 <td>{count(d.total)}</td>
-                <td>{moneyList(d.cost)}</td>
+                <td>
+                  {moneyList(d.cost)}
+                  {d.estimateCost?.length ? <span className="udaily-est" title={t("按 API 价格估算的订阅用量，不是实际扣费")}>{t("等价估算")} {moneyList(d.estimateCost)}</span> : null}
+                </td>
                 <td>{count(d.requests)}</td>
               </tr>
             ))}
@@ -271,7 +274,7 @@ export function Usage({ port }: { port: AgentPort }) {
     () => report?.daily.filter((d) => d.cost?.length) ?? [],
     [report],
   );
-  const unpricedDays = (report?.daily.filter((d) => d.total > 0 && !d.cost?.length) ?? []).length;
+  const unpricedDays = (report?.daily.filter((d) => d.total > 0 && !d.cost?.length && !d.estimateCost?.length) ?? []).length;
   // Every currency the range touched, in the order the kernel sorted them.
   const currencies = useMemo(() => {
     const seen: string[] = [];
@@ -342,6 +345,13 @@ export function Usage({ port }: { port: AgentPort }) {
           {pricedFrom && <span className="uhero-scope">{t("{day} 起 · {n} 天有记录", { day: pricedFrom.slice(5), n: priced.length })}</span>}
           {report.costEstimated && <span className="uhero-scope">{t("含估算")}</span>}
         </div>
+        {report.estimateCost?.length ? (
+          <div className="uhero-est">
+            <span className="uhero-estk">{t("等价估算")}</span>
+            <span className="uhero-estv">{moneyList(report.estimateCost)}</span>
+            <span className="uhero-scope">{t("订阅用量按 API 价格估算，不是实际扣费，也不计入上面的实付")}</span>
+          </div>
+        ) : null}
         <p className="uhero-note">
           {t("该时间段送入的 {tok} 输入 tokens 中，{rate}% 命中前缀缓存 —— 命中部分按缓存价计费，较未命中低一个数量级。", {
             tok: fmtTokens(input), rate: hitRate.toFixed(1),

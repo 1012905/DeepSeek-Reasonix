@@ -123,6 +123,7 @@ export interface SubagentSteerSettings {
 // opened after it.
 export interface WriteLeaseSettings {
   optimistic: boolean;
+  maxWaitMinutes: number;
   path: string;
 }
 

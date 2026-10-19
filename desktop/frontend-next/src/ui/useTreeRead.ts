@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { HubPort, TreeWorkspace } from "../port/hub";
 import { singleFlight } from "./singleflight";
-import type { useTreeWindow } from "./treewindow";
+import type { TreeView, useTreeWindow } from "./treewindow";
 
 /** The machine's folders and sessions as the kernel last answered. Reloads
  *  overlap into one request in flight; a retry starts a fresh one that no
@@ -12,12 +12,19 @@ export function useTreeRead(hub: Pick<HubPort, "tree">, window: Pick<ReturnType<
   // An empty tree before the first read settles is an unread one, not a
   // machine with no folders; only the kernel's answer can say the latter.
   const [treeRead, setTreeRead] = useState(false);
+  // The view the rows in hand answer. A different view being asked for leaves
+  // them describing the last one until its own answer arrives.
+  const [answered, setAnswered] = useState<TreeView | null>(null);
   const newest = useRef(0);
   const make = useCallback(() => singleFlight(async () => {
     const mine = ++newest.current;
     try {
-      const rows = await hub.tree(window.current());
-      if (mine === newest.current) setTree(rows);
+      const asked = window.current();
+      const rows = await hub.tree(asked);
+      if (mine === newest.current) {
+        setTree(rows);
+        setAnswered({ scope: asked.scope ?? "", q: asked.q ?? "" });
+      }
     } finally {
       if (mine === newest.current) setTreeRead(true);
     }
@@ -29,5 +36,5 @@ export function useTreeRead(hub: Pick<HubPort, "tree">, window: Pick<ReturnType<
     lane.run = make();
     return reloadTree();
   }, [lane, make, reloadTree]);
-  return { tree, treeRead, readTree, reloadTree, retryTree };
+  return { tree, treeRead, answered, readTree, reloadTree, retryTree };
 }

@@ -1,0 +1,2 @@
+- 改进：技能子代理（explore、locate 等）在子代理列表里除了名字，也显示它收到的任务的第一行，和 task 子代理一致。见 #13458。
+- Improved: a skill sub-agent (explore, locate and the like) now shows the first line of its task in the sub-agent list beside its name, as a task sub-agent does. See #13458.

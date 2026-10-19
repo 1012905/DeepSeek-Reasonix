@@ -51,6 +51,8 @@ func commitDraftFailure(err error) string {
 // CommitRequest is a commit the person confirmed. AcknowledgeSecrets answers
 // the warning a proposal carried; it does not widen what is committed.
 type CommitRequest struct {
+	// Repo names the repository below the workspace; empty is the workspace's own.
+	Repo               string `json:"repo,omitempty"`
 	Message            string `json:"message"`
 	Fingerprint        string `json:"fingerprint"`
 	AcknowledgeSecrets bool   `json:"acknowledgeSecrets"`
@@ -65,6 +67,7 @@ type CommitResult struct {
 // StageRequest names the changes to move into the index, or out of it when
 // Unstage is set. All means every change the workspace lists.
 type StageRequest struct {
+	Repo    string   `json:"repo,omitempty"`
 	Paths   []string `json:"paths,omitempty"`
 	All     bool     `json:"all,omitempty"`
 	Unstage bool     `json:"unstage,omitempty"`
@@ -73,18 +76,26 @@ type StageRequest struct {
 // StageChanges stages or unstages the named changes. It shares the commit lock,
 // so the index never moves under a commit in flight.
 func (c *Controller) StageChanges(ctx context.Context, req StageRequest) error {
+	repo, err := c.RepoFor(ctx, req.Repo)
+	if err != nil {
+		return err
+	}
 	c.commitMu.Lock()
 	defer c.commitMu.Unlock()
 	if req.Unstage {
-		return gitcommit.Unstage(ctx, c.WorkspaceRepo(), req.Paths, req.All)
+		return gitcommit.Unstage(ctx, repo, req.Paths, req.All)
 	}
-	return gitcommit.Stage(ctx, c.WorkspaceRepo(), req.Paths, req.All)
+	return gitcommit.Stage(ctx, repo, req.Paths, req.All)
 }
 
 // ProposeCommit reads the staged changes and has the session's model propose a
 // message. Nothing is staged or committed: the person edits the text first.
-func (c *Controller) ProposeCommit(ctx context.Context) (CommitProposal, error) {
-	snap, err := gitcommit.Staged(ctx, c.WorkspaceRepo())
+func (c *Controller) ProposeCommit(ctx context.Context, repoDir string) (CommitProposal, error) {
+	repo, err := c.RepoFor(ctx, repoDir)
+	if err != nil {
+		return CommitProposal{}, err
+	}
+	snap, err := gitcommit.Staged(ctx, repo)
 	if err != nil {
 		return CommitProposal{}, err
 	}
@@ -93,8 +104,10 @@ func (c *Controller) ProposeCommit(ctx context.Context) (CommitProposal, error) 
 		files[i] = commitmsg.File{Path: f.Path, Status: f.Status}
 	}
 	workspace := ""
-	if root := c.WorkspaceRoot(); root != "" {
+	if root := c.WorkspaceRoot(); repoDir == "" && root != "" {
 		workspace = filepath.Base(root)
+	} else if repoDir != "" {
+		workspace = filepath.Base(repo.WorkTree)
 	}
 	msg, err := c.committer.Generate(ctx, commitmsg.Input{
 		Files: files, Diff: snap.Diff, Truncated: snap.Truncated, Recent: snap.Recent, Workspace: workspace,
@@ -116,6 +129,10 @@ func (c *Controller) ProposeCommit(ctx context.Context) (CommitProposal, error) 
 // CommitStaged records the confirmed message as one local commit of exactly the
 // staged set the person saw.
 func (c *Controller) CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error) {
+	repo, err := c.RepoFor(ctx, req.Repo)
+	if err != nil {
+		return CommitResult{}, err
+	}
 	c.commitMu.Lock()
 	defer c.commitMu.Unlock()
 	releaseWorkspace, err := c.holdWorkspaceActivity(ctx)
@@ -123,7 +140,7 @@ func (c *Controller) CommitStaged(ctx context.Context, req CommitRequest) (Commi
 		return CommitResult{}, err
 	}
 	defer releaseWorkspace.release()
-	res, err := gitcommit.Commit(ctx, c.WorkspaceRepo(), req.Message, req.Fingerprint, req.AcknowledgeSecrets)
+	res, err := gitcommit.Commit(ctx, repo, req.Message, req.Fingerprint, req.AcknowledgeSecrets)
 	if err != nil {
 		return CommitResult{}, err
 	}

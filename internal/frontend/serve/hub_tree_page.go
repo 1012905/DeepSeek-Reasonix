@@ -141,10 +141,10 @@ func decorateWorkingDirectory(rows []treeSession, root string) {
 func openLookup(open map[string]string) func(path string) string {
 	names := make(map[string]bool, len(open))
 	for held := range open {
-		names[filepath.Base(held)] = true
+		names[strings.ToLower(filepath.Base(held))] = true
 	}
 	return func(path string) string {
-		if !names[filepath.Base(path)] {
+		if !names[strings.ToLower(filepath.Base(path))] {
 			return ""
 		}
 		return open[sessionstore.CanonicalSessionPath(path)]
