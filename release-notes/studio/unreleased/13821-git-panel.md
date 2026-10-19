@@ -1,2 +1,0 @@
-- 新增：工作台里的 Git 面板：改动按文件夹树显示，可整个文件夹暂存、丢弃单个文件的改动，推送前先预览目的地，历史里的提交可展开看文件和差异，非仓库的项目文件夹会按仓库分组显示。关联 #13821。
-- Added: A Git panel in the workbench: a folder tree of changes to stage and discard, push with a preview, commit details, and a section per repository. Refs #13821.

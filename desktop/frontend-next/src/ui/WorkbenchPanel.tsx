@@ -166,6 +166,9 @@ export function WorkbenchPanel({
     [directories, setDirectories] = useState<string[]>([]),
     [openFiles, setOpenFiles] = useState<string[]>([]);
   const [showFiles, setShowFiles] = useState(false);
+  // The file picked out of the explorer, if that is how it was opened: closing
+  // it comes back to the list it was stepped aside from.
+  const fromExplorer = useRef("");
   const [launcher, setLauncher] = useState(false);
   const newTab = useRef<HTMLButtonElement>(null);
   const toggleLauncher = () => { supersede(); setLauncher((open) => !open); };
@@ -398,8 +401,11 @@ export function WorkbenchPanel({
       n.delete(`file:${path}`);
       return n;
     });
+    // A file picked while the explorer is shown leaves that list stepped aside
+    // rather than closed, so closing this file comes back to the list.
+    fromExplorer.current = showFiles ? path : "";
     pick(`file:${path}`);
-  }, [pick]);
+  }, [pick, showFiles]);
   useEffect(() => { if (fileRequest) openFile(fileRequest.path); }, [fileRequest, openFile]);
   // A rendered document's own links open beside it and its images load from the
   // tree. Held stable per document, so typing re-renders the text alone.
@@ -452,7 +458,7 @@ export function WorkbenchPanel({
       if (openingBrowser.current === page) openingBrowser.current = null;
     }
   };
-  const { close: closeTabs, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles: showFiles || launcher, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
+  const { close: closeTabs, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles: showFiles || launcher, fromExplorer, setBrowsers, setOpenFiles, setDismissed, setSelected, setShowFiles, setLauncher, onCloseManual, onCloseSelected: () => setFailed("") });
   const close = (targets: Surface[]) => { supersede(); return closeTabs(targets); };
   const dismissTabMenu = useCallback(() => setTabMenu(null), []);
   const [tabMenu, setTabMenu] = useState<{ surface: Surface; x: number; y: number; anchor: HTMLElement } | null>(null);

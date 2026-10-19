@@ -51,7 +51,7 @@ import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, Ses
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
-import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { FeedbackBoard, FeedbackBoardMe, FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 export type * from "./plugin";
@@ -308,7 +308,7 @@ export interface AgentPort {
   toolSettings(): Promise<ToolSettings>;
   saveToolDisabled(name: string, disabled: boolean): Promise<ToolSettings>;
   writeLease(): Promise<WriteLeaseSettings>;
-  saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
+  saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }): Promise<WriteLeaseSettings>;
   peers(): Promise<PeersState>;
   sendPeerMessage(to: string, text: string): Promise<PeerReceipt>;
   resolvePeerMessage(id: string, approve: boolean, remember?: PeerRemember): Promise<void>;
@@ -495,6 +495,12 @@ export interface AgentPort {
   linkFeedbackAccount(): Promise<void>;
   unlinkFeedbackAccount(): Promise<void>;
   unlinkFeedbackInstall(id: string): Promise<void>;
+  // The public contribution board, all releases or one; a person is on it only by
+  // their own choice, under a name they pick, and can leave at any time.
+  feedbackBoard(release?: string): Promise<FeedbackBoard>;
+  feedbackBoardMe(): Promise<FeedbackBoardMe>;
+  joinFeedbackBoard(displayName: string): Promise<FeedbackBoardMe>;
+  leaveFeedbackBoard(): Promise<FeedbackBoardMe>;
   // Asks the window to raise the neutral "new reply" notification; the kernel
   // answers for the switches. Rejects where there is no window to raise it.
   announceFeedbackReply(): Promise<void>;

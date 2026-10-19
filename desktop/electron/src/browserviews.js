@@ -11,8 +11,6 @@ const { KeyboardKeeper } = require("./keyboard");
 // a phone layout or not at all.
 const AGENT_VIEWPORT = { width: 1280, height: 900 };
 
-const fitScale = (at, metrics) => Math.min(1, at.width / metrics.width, at.height / metrics.height);
-
 // How long a page may be held out of the window while its navigation runs. A
 // server that accepts the connection and never answers would otherwise keep the
 // panel blank, with nothing turning, for as long as it likes; past this the page
@@ -118,7 +116,7 @@ class BrowserViews {
       }
       onEvent(method, params);
     });
-    const entry = { view, onDownload, typed: 0, synthUntil: 0, attached: false };
+    const entry = { view, onDownload, typed: 0, synthUntil: 0, attached: false, panel: null, override: null, scale: 1 };
     this.keyboard.watch(contents, () => Date.now() < entry.synthUntil);
     this.watchLoads(targetId, entry);
     let closed = false;
@@ -142,16 +140,15 @@ class BrowserViews {
     return {
       targetId,
       send: (method, params) => {
-        if (method === "Emulation.setDeviceMetricsOverride") {
-          entry.override = params;
-          entry.scale = entry.at ? fitScale(entry.at, params) : 1;
-          return contents.debugger.sendCommand(method, { ...params, scale: entry.scale });
+        if (method === "Emulation.setDeviceMetricsOverride") return this.emulate(entry, params);
+        if (method === "Emulation.clearDeviceMetricsOverride") return this.emulate(entry, null);
+        try {
+          params = scaleInput(method, params, entry.scale);
+        } catch (e) {
+          return Promise.reject(e);
         }
-        if (method === "Emulation.clearDeviceMetricsOverride") entry.override = undefined;
-        if (method === "Page.captureScreenshot") {
-          // A capture puts the emulation back without its scale.
-          return contents.debugger.sendCommand(method, params).finally(() => this.fit(entry, true));
-        }
+        // A capture puts the page's emulation back without its scale.
+        if (method === "Page.captureScreenshot") return contents.debugger.sendCommand(method, params).finally(() => void this.fit(entry, true));
         if (!method.startsWith("Input.")) return contents.debugger.sendCommand(method, params);
         entry.synthUntil = Date.now() + 250;
         return this.wake.run(() => contents.debugger.sendCommand(method, params));
@@ -176,7 +173,7 @@ class BrowserViews {
     // which during a turn is constantly, and nearly always the same rectangle:
     // re-adding the view and setting the bounds it already has is work for
     // every one of those.
-    if (this.shown === targetId && sameRect(entry.at, at)) return;
+    if (this.shown === targetId && sameRect(entry.panel, at)) return;
     this.placed++;
     for (const [id, other] of this.entries) {
       if (id !== targetId) this.putAway(other.view, other);
@@ -188,20 +185,49 @@ class BrowserViews {
     if (entry.attached && !entry.at) this.win.contentView.removeChildView(entry.view);
     this.win.contentView.addChildView(entry.view);
     entry.attached = true;
-    entry.view.setBounds(at);
-    entry.at = at;
+    entry.panel = at;
     this.fit(entry);
     this.keepKeyboard();
   }
 
-  // A page the agent laid out wider than the pane is shown whole, scaled to the pane:
-  // the layout viewport stays what the agent asked for, so its screenshots and clicks are unchanged.
+  // fit puts the view where its page is drawn whole and tells the page how it is
+  // scaled; a page parked out of sight is not scaled. force sends the scale again
+  // though it has not changed, for a capture that put the page's emulation back.
   fit(entry, force = false) {
-    if (!entry.override || !entry.at || entry.view.webContents.isDestroyed()) return;
-    const scale = fitScale(entry.at, entry.override);
-    if (scale === entry.scale && !force) return;
+    if (!entry.panel) return Promise.resolve();
+    const { at, scale } = placement(entry.panel, entry.override && { width: entry.override.width, height: entry.override.height });
+    entry.view.setBounds(at);
+    entry.at = at;
+    return this.scaled(entry, scale, force);
+  }
+
+  scaled(entry, scale, force = false) {
+    if (!entry.override || (entry.scale === scale && !force)) return Promise.resolve();
     entry.scale = scale;
-    void entry.view.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", { ...entry.override, scale }).catch(() => {});
+    return this.override(entry).catch(() => {});
+  }
+
+  override(entry) {
+    return entry.view.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", { ...entry.override, scale: entry.scale });
+  }
+
+  // emulate records the viewport a page was told to lay out in, which the view
+  // is then fitted to; null is the page going back to the size of its view.
+  async emulate(entry, params) {
+    entry.override = sized(params) ? { ...params } : null;
+    if (!entry.override) {
+      entry.scale = 1;
+      if (entry.panel) this.fit(entry);
+      return entry.view.webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride", {});
+    }
+    entry.scale = 1;
+    if (entry.panel) {
+      const { at, scale } = placement(entry.panel, entry.override);
+      entry.view.setBounds(at);
+      entry.at = at;
+      entry.scale = scale;
+    }
+    return this.override(entry);
   }
 
   // Attaching a view can leave nobody holding the keyboard, and the platform
@@ -276,7 +302,11 @@ class BrowserViews {
   putAway(view, entry) {
     const { height } = this.win.getContentBounds();
     view.setBounds({ x: 1 - AGENT_VIEWPORT.width, y: height - 1, ...AGENT_VIEWPORT });
-    if (entry) entry.at = null;
+    if (entry) {
+      entry.at = null;
+      entry.panel = null;
+      void this.scaled(entry, 1);
+    }
   }
 
   control(targetId, action) {
@@ -443,6 +473,44 @@ async function loadResult(contents, url) {
   }
 }
 
+// Where a page's view sits in the rectangle the panel gave it. A page laid out
+// in a viewport of its own is shown whole: scaled down to fit and never up,
+// centred, with the view sized to exactly what it draws.
+const sized = (v) => !!v && Number.isFinite(v.width) && Number.isFinite(v.height) && v.width > 0 && v.height > 0;
+
+function placement(panel, emulated) {
+  if (!sized(emulated)) return { at: panel, scale: 1 };
+  const scale = Math.min(1, panel.width / emulated.width, panel.height / emulated.height);
+  const width = Math.max(1, Math.round(emulated.width * scale));
+  const height = Math.max(1, Math.round(emulated.height * scale));
+  const x = panel.x + Math.round((panel.width - width) / 2);
+  const y = panel.y + Math.round((panel.height - height) / 2);
+  return { at: { x, y, width, height }, scale };
+}
+
+// Input that carries a point. The page reads it in the viewport it was told it
+// has, the view draws that viewport scaled, and a point meant for the page lands
+// where it is drawn only after the same scaling. The mouse is measured to; the
+// rest are not, and a point that silently lands elsewhere is worse than a
+// refusal, so they are refused while the page is scaled.
+const POINTED_INPUT = new Set([
+  "Input.dispatchTouchEvent",
+  "Input.dispatchDragEvent",
+  "Input.emulateTouchFromMouseEvent",
+  "Input.synthesizeTapGesture",
+  "Input.synthesizeScrollGesture",
+  "Input.synthesizePinchGesture",
+]);
+
+function scaleInput(method, params, scale) {
+  if (scale === 1) return params;
+  if (method === "Input.dispatchMouseEvent") return { ...params, x: params.x * scale, y: params.y * scale };
+  if (POINTED_INPUT.has(method)) {
+    throw Object.assign(new Error(`${method} is not available while the page is scaled to fit the panel`), { code: "input_unscaled" });
+  }
+  return params;
+}
+
 function sameRect(a, b) {
   return !!a && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
@@ -451,4 +519,4 @@ function validRect(rect) {
   return rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) && rect.width > 0 && rect.height > 0;
 }
 
-module.exports = { BrowserViews, AGENT_VIEWPORT, LEAVE_LIMIT_MS };
+module.exports = { BrowserViews, AGENT_VIEWPORT, LEAVE_LIMIT_MS, placement, scaleInput };

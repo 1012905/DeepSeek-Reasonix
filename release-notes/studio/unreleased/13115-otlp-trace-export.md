@@ -1,2 +1,0 @@
-- 新增：可选的追踪导出，在用户配置里开启并填写收集器地址后，每轮对话以 OpenTelemetry 追踪发给你自己的观测系统；默认关闭，只发结构和名称。关联 #13115。
-- Added: Opt-in trace export: once your user config enables it and names a collector, each turn goes to your own observability stack as OpenTelemetry traces; off by default. Refs #13115.

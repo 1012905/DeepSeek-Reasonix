@@ -209,14 +209,14 @@ export class MockBoundary extends MockShell {
     return structuredClone(this.toolList);
   }
 
-  private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };
+  private lease: WriteLeaseSettings = { optimistic: false, maxWaitMinutes: 0, path: "/Users/you/.reasonix/config.toml" };
 
   async writeLease(): Promise<WriteLeaseSettings> {
     return { ...this.lease };
   }
 
-  async saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings> {
-    this.lease = { ...this.lease, optimistic };
+  async saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }): Promise<WriteLeaseSettings> {
+    this.lease = { ...this.lease, ...edit };
     return { ...this.lease };
   }
 

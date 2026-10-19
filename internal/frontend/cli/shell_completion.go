@@ -152,7 +152,7 @@ func cliCompletionRootSpec() cliCompletionSpec {
 		completionSpec("whoami", []cliCompletionFlag{help}),
 		completionSpec("logout", []cliCompletionFlag{help}),
 		completionSpec("acp", []cliCompletionFlag{
-			model, profile,
+			model, profile, permissionMode,
 			completionFlag("--planner", cliCompletionStaticValue, "auto", "off"),
 			completionFlag("--sandbox-network", cliCompletionStaticValue, "auto", "on", "off"),
 			completionFlag("--sandbox-bash", cliCompletionStaticValue, "auto", "enforce"),

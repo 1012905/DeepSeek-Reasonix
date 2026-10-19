@@ -71,6 +71,7 @@ type controllerDeps struct {
 	modelRef            string
 	effort              string
 	providerFingerprint string
+	effortSel           effortSelection    // set by an in-place depth change; see effort_in_place.go
 	modelModes          []config.ModelMode // what SetModelMode accepts; see model_modes.go
 	modelFace           *ModelFace         // what the build resolved for the session's model; see model_face.go
 	sessionDir          string

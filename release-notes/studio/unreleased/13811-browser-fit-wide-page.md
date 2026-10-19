@@ -1,2 +1,0 @@
-- 修复：智能体把页面排版到比窗格更宽的视口（如 1440 宽）时，内置浏览器只显示页面左侧一部分；现在整页缩放到窗格内显示。关联 #13811。
-- Fixed: A page the agent laid out wider than the pane (for example 1440 wide) showed only its left part in the built-in browser; it is now scaled to fit. Refs #13811.

@@ -146,6 +146,7 @@ jobs:
           node perf/explorersize.mjs
           node perf/git-panel.mjs
           node perf/session-move-to.mjs
+          node perf/shell-refused.mjs
           node perf/rail-search-hold.mjs
           node perf/session-move.mjs
           node perf/session-ref.mjs
@@ -175,6 +176,7 @@ jobs:
           node perf/mcp-actions.mjs
           node perf/web-access.mjs
           node perf/peers-settings.mjs
+          node perf/provider-ports.mjs
           node perf/peer-threads.mjs
           node perf/text-size.mjs
           node perf/fs-scale.mjs

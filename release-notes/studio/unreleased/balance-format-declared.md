@@ -1,2 +1,0 @@
-- 新增：连接可以声明余额接口的返回格式；其他域名（如中转站）必须选择格式，否则显示未配置，也不发密钥。关联 #13736。
-- Added: A connection can declare the format its balance endpoint answers in; a relay must pick one or shows as not configured and is not sent the key. Refs #13736.

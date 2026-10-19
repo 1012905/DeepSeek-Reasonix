@@ -129,6 +129,8 @@ type Transcript struct {
 	// the order sent. Steered input is not among them: a steer event takes it.
 	awaiting []int
 	next     int
+	// grown are the buffers behind the text a stream is still appending to.
+	grown map[growKey]*growing
 }
 
 func (t *Transcript) id() int {
@@ -280,6 +282,7 @@ func (t *Transcript) Apply(ev eventwire.Event) {
 		t.foldNotice(ev)
 	case "turn_done":
 		t.Running = false
+		t.grown = nil
 		t.Terminal, t.EndReason = terminalOf(ev)
 		t.sealSays()
 		t.sealTools(ev.Err != "")
@@ -337,10 +340,11 @@ func (t *Transcript) appendSay(text string, reasoning bool) {
 		t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemSay})
 		at = len(t.Items) - 1
 	}
+	it := &t.Items[at]
 	if reasoning {
-		t.Items[at].Reasoning += text
+		t.appendTo(it.ID, fieldReasoning, &it.Reasoning, text)
 	} else {
-		t.Items[at].Text += text
+		t.appendTo(it.ID, fieldText, &it.Text, text)
 	}
 }
 
@@ -447,7 +451,7 @@ func (t *Transcript) foldTool(tool eventwire.Tool, running bool) {
 				merged := mergeTool(*it.Tool, tool)
 				it.Tool, it.Running = &merged, running
 				if running {
-					it.Streamed += tool.Output
+					t.appendTo(it.ID, fieldStreamed, &it.Streamed, tool.Output)
 				}
 				return
 			}

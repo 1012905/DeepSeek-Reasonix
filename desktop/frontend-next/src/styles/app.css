@@ -3118,6 +3118,13 @@
   .mp-row { grid-template-columns: repeat(4, minmax(0, 1fr)) }
   .mp-row .me-name { grid-column: 1 / -1 }
   .mp-row .why { grid-column: 1 / -1 }
+  .mp-source { grid-column: 1 / -1 }
+  .mp-source summary { cursor: pointer; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
+  .mp-source-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 6px 10px; margin-top: 6px }
+  .mp-source .why { display: block; margin-top: 4px; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--err-ink) }
+  @media (max-width: 520px) { .mp-source-fields { grid-template-columns: minmax(0, 1fr) } }
+  .mp-source-line { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
+  .mp-host { font-family: var(--mono); color: var(--text) }
   .mp-foreign { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px }
   .mp-row select { padding: 6px 8px; font-size: var(--fs-meta) }
   .ml-row .me-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--w-med) var(--fs-ui) var(--mono); color: var(--text) }
@@ -5457,6 +5464,10 @@
   padding: 4px 10px; border-radius: var(--r-pill); background: var(--overlay);
   color: var(--muted); font: var(--w-med) var(--fs-ui) var(--ui);
 }
+.uhero-est { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hair) }
+.uhero-estk { color: var(--muted); font: var(--w-med) var(--fs-meta) var(--ui); letter-spacing: var(--track-lead) }
+.uhero-estv { font: var(--w-med) calc(20px * var(--fs-scale, 1))/1.2 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted) }
+.udaily-est { display: block; color: var(--faint); font-size: var(--fs-meta) }
 .uhero-note { margin: 11px 0 0; max-width: 62ch; color: var(--muted); font: var(--w-reg) var(--fs-ui)/1.6 var(--ui) }
 
 .utiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(142px, 1fr)); gap: 12px }

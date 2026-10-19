@@ -207,6 +207,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	renderConcurrencyLimits(&b, c, defaults)
 	agentSetting(&b, "subagent_claims", c.Agent.SubagentClaims, defaults.Agent.SubagentClaims, "optimistic: a sub-agent that declared no write_paths holds only the path it is writing, not the whole workspace; user file only")
 	agentSetting(&b, "write_lease", c.Agent.WriteLease, defaults.Agent.WriteLease, "optimistic: a writer that declared no path does not hold the whole workspace against other sessions; user file only")
+	agentSetting(&b, "write_lease_max_wait_minutes", c.Agent.WriteLeaseMaxWaitMinutes, defaults.Agent.WriteLeaseMaxWaitMinutes, "minutes a write waits behind another session's claim before it fails with workspace.claim_timeout; 0 = wait as long as the turn lasts (default), 120 is a sensible limit; user file only")
 	agentSetting(&b, "plan_approval", c.Agent.PlanApproval, defaults.Agent.PlanApproval, "auto: the plan card answers itself and execution starts; user file only")
 	agentSetting(&b, "default_mode", c.Agent.DefaultMode, defaults.Agent.DefaultMode, "plan: a new conversation starts in plan mode (the mode picker still switches it); a resumed one keeps its own; user file only")
 	agentSetting(&b, "host_verification", c.Agent.HostVerification, defaults.Agent.HostVerification, "off: the host does not hold a turn open to ask for a check, a review or a sign-off on files it changed; the receipt still says what was and was not checked; user file only")
@@ -680,8 +681,14 @@ func renderPricingInline(p *provider.Pricing) string {
 	if p == nil {
 		return "{}"
 	}
-	return fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q }",
-		p.CacheHit, p.Input, p.Output, p.Symbol())
+	out := fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q", p.CacheHit, p.Input, p.Output, p.Symbol())
+	if p.SourceURL != "" {
+		out += fmt.Sprintf(", source_url = %q", p.SourceURL)
+	}
+	if p.Checked != "" {
+		out += fmt.Sprintf(", checked = %q", p.Checked)
+	}
+	return out + " }"
 }
 
 func renderPricingMap(prices map[string]*provider.Pricing) string {

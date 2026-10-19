@@ -1,2 +1,0 @@
-- 新增：可选的等级提示（设置里“等级提升时通知我”，默认关）：反馈等级提高时在窗口顶部提示一次，终端 /feedback list 说一行。关联 #12025。
-- Added: An optional level-up notice (Settings "Tell me when my level goes up", off by default): one note at the top of the window, one line in /feedback list. Refs #12025.

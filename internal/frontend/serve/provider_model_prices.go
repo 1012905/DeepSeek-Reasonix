@@ -20,6 +20,10 @@ type modelPriceView struct {
 	Output   float64 `json:"output"`
 	CacheHit float64 `json:"cacheHit"`
 	Currency string  `json:"currency,omitempty"`
+	// SourceURL and Checked say where the price was read and when (a UTC date);
+	// they describe the price and are not part of it.
+	SourceURL string `json:"sourceUrl,omitempty"`
+	Checked   string `json:"checked,omitempty"`
 	// Official is true when the card is a rate this project shipped for the
 	// model; false for the user's own and for anything on an endpoint with no
 	// table to measure it against.
@@ -43,6 +47,7 @@ func modelPricesOf(p *config.ProviderEntry) map[string]modelPriceView {
 			card := pricing.RateCard{CacheHit: price.CacheHit, Input: price.Input, Output: price.Output, Currency: price.Currency}
 			out[model] = modelPriceView{
 				Input: price.Input, Output: price.Output, CacheHit: price.CacheHit, Currency: pricing.NormalizeCurrency(price.Currency),
+				SourceURL: price.SourceURL, Checked: price.Checked,
 				Official: vendor != "" && pricing.IsOfficialCard(vendor, model, card),
 			}
 		}
@@ -72,11 +77,18 @@ func applyModelPrices(entry *config.ProviderEntry, models []string, sent *map[st
 		}
 		var price *provider.Pricing
 		if want != nil {
-			price = &provider.Pricing{Input: want.Input, Output: want.Output, CacheHit: want.CacheHit, Currency: want.Currency}
+			price = &provider.Pricing{Input: want.Input, Output: want.Output, CacheHit: want.CacheHit, Currency: want.Currency, SourceURL: want.SourceURL, Checked: want.Checked}
 		}
-		if err := entry.SetModelPrice(model, price); errors.Is(err, config.ErrModelPriceInvalid) {
+		switch err := entry.SetModelPrice(model, price); {
+		case errors.Is(err, config.ErrModelPriceInvalid):
 			return &editRefusal{"provider.bad_model_price",
 				fmt.Sprintf("the price for %s must be a non-negative number in a known currency", model), map[string]any{"model": model}}
+		case errors.Is(err, config.ErrPriceSourceInvalid):
+			return &editRefusal{"provider.bad_price_source",
+				fmt.Sprintf("the source of the price for %s must be an http or https link", model), map[string]any{"model": model}}
+		case errors.Is(err, config.ErrPriceCheckedInvalid):
+			return &editRefusal{"provider.bad_price_checked",
+				fmt.Sprintf("the check date of the price for %s must be a date, not later than today in UTC", model), map[string]any{"model": model}}
 		}
 	}
 	return nil

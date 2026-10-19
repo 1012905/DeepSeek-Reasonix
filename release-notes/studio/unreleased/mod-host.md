@@ -1,2 +1,0 @@
-- 变更：已装的全信任权限扩展现在也会被已安装的 MCP 工具咨询（只能收紧，不能放宽）。见 #13694。
-- Changed: existing full-trust permission extensions are now also consulted for installed MCP tools (they can only tighten). See #13694.

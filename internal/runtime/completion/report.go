@@ -79,6 +79,9 @@ const (
 	// GapModEffectsUnobserved: a Claude Code mod was live, and nothing the host
 	// watches bounds what it wrote.
 	GapModEffectsUnobserved
+	// GapWorkspaceClaimYielded: the session gave up its write claim to wait on a
+	// person, and another session was granted an overlapping one meanwhile.
+	GapWorkspaceClaimYielded
 )
 
 func (k GapKind) String() string {
@@ -101,6 +104,8 @@ func (k GapKind) String() string {
 		return "unreviewed_change"
 	case GapModEffectsUnobserved:
 		return "mod_effects_unobserved"
+	case GapWorkspaceClaimYielded:
+		return "workspace_claim_yielded"
 	default:
 		return "unknown"
 	}

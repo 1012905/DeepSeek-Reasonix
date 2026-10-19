@@ -3,6 +3,7 @@ import { bytes } from "../i18n/format";
 import { current, t } from "../i18n";
 import type { UpdateProgress, VersionHub, VersionNotes } from "../port/port";
 import { reason } from "../i18n/kernel";
+import { refreshUpdateWatch } from "../state/updatewatch";
 import { HttpError } from "../port/http_error";
 import { LazyMarkdown } from "./LazyMarkdown";
 import { NOTES_LANGUAGE_NAMES, splitNotes } from "./notesLanguages";
@@ -116,6 +117,10 @@ export function Versions({ port }: { port: Port }) {
   const reload = useCallback(() => load(true), [load]);
 
   useEffect(() => load(false), [load]);
+  // Opening the page is a look at the releases, so the background watch reads now
+  // instead of at its next daily turn: with automatic download chosen, a release
+  // published since the last read starts downloading without a click.
+  useEffect(() => { void refreshUpdateWatch(); }, []);
   useEffect(() => port.onUpdateProgress(setProgress), [port]);
 
   // Starting ends once the kernel's own answer names the move; from then on

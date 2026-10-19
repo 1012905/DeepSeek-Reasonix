@@ -24,6 +24,10 @@ type Feedback interface {
 	UnlinkFeedbackAccount(ctx context.Context) error
 	UnlinkFeedbackInstall(ctx context.Context, shortID string) error
 	FeedbackLinks(ctx context.Context) ([]feedback.LinkedInstall, error)
+	FeedbackBoard(ctx context.Context, release string) (feedback.Board, error)
+	FeedbackBoardMe(ctx context.Context) (feedback.BoardMe, error)
+	JoinFeedbackBoard(ctx context.Context, displayName string) (feedback.BoardMe, error)
+	LeaveFeedbackBoard(ctx context.Context) (feedback.BoardMe, error)
 }
 
 // FeedbackOptions is what assembly hands the controller for Feedback: the
@@ -140,4 +144,37 @@ func (c *Controller) FeedbackLinks(ctx context.Context) ([]feedback.LinkedInstal
 		return nil, feedback.ErrDisabled
 	}
 	return c.feedback.Service.Links(ctx)
+}
+
+// FeedbackBoard reads the public contribution board, all releases or one.
+func (c *Controller) FeedbackBoard(ctx context.Context, release string) (feedback.Board, error) {
+	if c.feedback.Service == nil {
+		return feedback.Board{}, feedback.ErrDisabled
+	}
+	return c.feedback.Service.Board(ctx, release)
+}
+
+// FeedbackBoardMe reads the signed-in account's own choice about the board.
+func (c *Controller) FeedbackBoardMe(ctx context.Context) (feedback.BoardMe, error) {
+	if c.feedback.Service == nil {
+		return feedback.BoardMe{}, feedback.ErrDisabled
+	}
+	return c.feedback.Service.BoardMe(ctx)
+}
+
+// JoinFeedbackBoard puts the account on the board under the name the person gave.
+// It is only ever the answer to a person asking, and the service decides the name.
+func (c *Controller) JoinFeedbackBoard(ctx context.Context, displayName string) (feedback.BoardMe, error) {
+	if c.feedback.Service == nil {
+		return feedback.BoardMe{}, feedback.ErrDisabled
+	}
+	return c.feedback.Service.JoinBoard(ctx, displayName)
+}
+
+// LeaveFeedbackBoard takes the account off the board.
+func (c *Controller) LeaveFeedbackBoard(ctx context.Context) (feedback.BoardMe, error) {
+	if c.feedback.Service == nil {
+		return feedback.BoardMe{}, feedback.ErrDisabled
+	}
+	return c.feedback.Service.LeaveBoard(ctx)
 }
