@@ -26,7 +26,7 @@ func (n *nestedInvoker) Invoke(ctx context.Context, name string, args json.RawMe
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
-	call := provider.ToolCall{ID: fmt.Sprintf("%s.%d", n.parent.call.ID, n.seq.Add(1)), Name: name, Arguments: string(args)}
+	call := provider.ToolCall{ID: tool.NestedCallID(n.parent.call.ID, int(n.seq.Add(1))), Name: name, Arguments: string(args)}
 	n.a.emitFullToolDispatch(ctx, call, false)
 	started := time.Now()
 	out := n.a.executeOne(tool.MarkNested(ctx), n.turn, call)
