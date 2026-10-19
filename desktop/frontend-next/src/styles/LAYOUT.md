@@ -1105,6 +1105,13 @@ what exists.
 - Sub-agents and background jobs are readings about this turn, so they sit with
   the turn's other readings at the right end of the run rail rather than in a
   panel of their own above it.
+- A sub-agent row is one line while it can hold its name, what it was asked, the
+  model it ran on and its status. Below 460px of the list's own width it takes
+  two more: the name and status stay on the first, the task has the second to
+  itself, and the model chip the third. The task was the first thing to go when
+  the row was squeezed (the name, chip and status are all content-sized, and the
+  task only took what was left), so it was the first to disappear at the widths
+  where a person most needs to tell two rows apart.
 - The detail is inside the same anchor as the reading, which is what lets hover
   and keyboard focus reach it. A click pins it: a panel that closes when the
   pointer leaves is one nobody can scroll.
