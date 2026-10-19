@@ -1,2 +1,0 @@
-- 改进：命令运行期间页面只保留最近 64 KB 的输出并说明前面省略了多少，长时间不停输出的命令不再让页面内存无限增长；结束后照常显示结果。关联 #13899。
-- Improved: While a command runs the page keeps only its last 64 KB of output and says how much came before, so a command that never stops printing no longer grows the page without bound. Refs #13899.

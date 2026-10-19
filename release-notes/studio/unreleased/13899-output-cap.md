@@ -1,2 +1,0 @@
-- 改进：已完成的长输出在页面里只保留开头和结尾各 4 KB，并说明中间省略了多少，可点「显示完整输出」从内核取回；长会话占用的内存更少。关联 #13899。
-- Improved: A finished call's long output is kept in the page as its first and last 4 KB with a note of what was left out, and "Show full output" fetches it from the kernel. Refs #13899.

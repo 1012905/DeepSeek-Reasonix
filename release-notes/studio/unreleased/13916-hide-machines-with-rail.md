@@ -1,2 +1,0 @@
-- 修复：显示左侧图标栏时，侧栏底部的“连接与机器”不再重复出现（它和图标栏里的“远程”打开同一处）；没有图标栏时仍保留。见 #13916。
-- Fixed: the sidebar's "Connections and machines" button no longer repeats the Remote entry of the icon rail while the rail is shown; without the rail it stays. See #13916.

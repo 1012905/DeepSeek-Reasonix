@@ -1,2 +1,0 @@
-- 新增：提问卡片的自由填写框也能「优化提示词」：点旁边的星标或按 Ctrl+Shift+E，改写只在你点「采用」后才替换。关联 #13870。
-- Added: The free-text box of a question card can optimise the prompt like the composer: click the sparkle or press Ctrl+Shift+E; the rewrite replaces your text only when you take it. Refs #13870.

@@ -1,2 +1,0 @@
-- 修复：会话很多时点开「归档」，读取期间列表显示「没有匹配的会话」，像是归档丢了；现在显示「正在读取文件夹…」，读完才出结果。关联 #13884。
-- Fixed: With a long history, Archived said "No matching sessions" while it was still being read, as if the archive were lost; it now says it is reading. Refs #13884.

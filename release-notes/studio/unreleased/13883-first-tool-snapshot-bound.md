@@ -1,2 +1,0 @@
-- 修复：工作区很大（如整个盘根）时，首个工具要等工作区快照走完才开始；现在最多等 10 秒，超时记为观察不完整，不再一直卡住。见 #13883。
-- Fixed: in a very large workspace (a drive root, say) the first tool waited for the workspace snapshot to finish; it now waits at most 10 s and records the observation as incomplete. See #13883.

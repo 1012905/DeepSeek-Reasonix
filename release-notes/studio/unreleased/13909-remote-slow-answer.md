@@ -1,2 +1,0 @@
-- 修复：公网远程时，较大的历史或文件传输超过半分钟会被误报“请检查电脑是否在线”；现在电脑仍在回传就继续等。关联 #13909。
-- Fixed: Over the public relay, a history or file taking over 30 seconds to arrive was reported as "check the computer is online"; it is now waited for. Refs #13909.

@@ -1,2 +1,0 @@
-- 改进：长会话里，已完成的子代理卡片收起时不再把它的子调用放进页面，展开时才加载；120 个子代理的页面节点从约 5 万降到约 5 千。关联 #13899。
-- Improved: A finished sub-agent's card no longer keeps its child calls in the page while closed; they load on opening. 120 sub-agents drop from about 50,000 nodes to 5,000. Refs #13899.
