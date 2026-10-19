@@ -32,6 +32,7 @@ const { groundFor, themeSourceFor } = require("./ground");
 const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
 const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
+const { processMemoryHandler } = require("./procmem");
 const { captureHandler } = require("./capture");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
@@ -392,6 +393,7 @@ nativeTheme.on("updated", () => {
 });
 
 ipcMain.handle("shell:graphics", (event) => graphicsHandler(app, fromWindow, gpuLaunch)(event));
+ipcMain.handle("shell:process-memory", (event) => processMemoryHandler(app, fromWindow)(event));
 
 ipcMain.handle("window:unread-badge", (event, unread) => {
   const target = fromWindow(event);

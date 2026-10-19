@@ -105,6 +105,9 @@ type feedbackSubmitBody struct {
 	Locale         string              `json:"locale"`
 	TurnstileToken string              `json:"turnstileToken,omitempty"`
 	Images         []feedbackImageBody `json:"images"`
+	// Memory is what the window's shell says about its own processes; the
+	// feedback package keeps only the fixed types and fills the kernel row itself.
+	Memory []feedback.ProcessMemory `json:"memory,omitempty"`
 }
 
 func (s *Server) feedbackSubmit(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +125,7 @@ func (s *Server) feedbackSubmit(w http.ResponseWriter, r *http.Request) {
 	d := feedback.Draft{
 		IdempotencyKey: req.IdempotencyKey, Category: req.Category, Body: req.Body,
 		DisplayName: req.DisplayName, Contact: req.Contact, TurnstileToken: req.TurnstileToken,
-		Env: feedback.EnvContext{Surface: feedback.SurfaceStudio, Locale: req.Locale},
+		Env: feedback.EnvContext{Surface: feedback.SurfaceStudio, Locale: req.Locale, Shell: req.Memory},
 	}
 	images, ok := decodeFeedbackImages(w, req.Images)
 	if !ok {

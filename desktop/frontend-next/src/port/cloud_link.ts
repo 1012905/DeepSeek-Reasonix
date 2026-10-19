@@ -62,6 +62,8 @@ interface Pending {
   contentType?: string;
   etag?: string;
   timer?: ReturnType<typeof setTimeout>;
+  // When this request last made progress: sent whole, or one more chunk of its answer.
+  progressAt?: number;
   resolve: (value: Response) => void;
   reject: (reason: unknown) => void;
 }
@@ -72,6 +74,11 @@ export interface RemoteLinkOptions {
 }
 
 const MAX_RETRY_AFTER_MS = 2 * 60 * 1000;
+
+// The desktop answers one request at a time, so a request can wait behind others
+// it knows nothing about. While the link is delivering their answers it is waited
+// for, up to this long without a word of its own.
+const MAX_QUEUED_MS = 5 * 60 * 1000;
 
 // The desktop reads at most 64 KiB from the relay in one message and closes the
 // link on a larger one, taking every other request on it down too. A request
@@ -250,6 +257,12 @@ export class RemoteLink {
       while (connection.socket.bufferedAmount > BUFFER_HIGH && live()) await new Promise((resolve) => setTimeout(resolve, 20));
       if (!live()) return;
     }
+    this.arm(entry);
+  }
+
+  private arm(entry: Pending) {
+    clearTimeout(entry.timer);
+    entry.progressAt = Date.now();
     entry.timer = setTimeout(() => this.timedOut(entry), this.options.requestTimeoutMs);
   }
 
@@ -261,6 +274,10 @@ export class RemoteLink {
       const stale = this.current;
       this.lost(CLOSE_RESYNC, "Desktop stopped answering");
       try { stale.socket.close(CLOSE_RESYNC, "Resync"); } catch { /* already closing */ }
+      return;
+    }
+    if (Date.now() - (entry.progressAt ?? 0) < MAX_QUEUED_MS) {
+      entry.timer = setTimeout(() => this.timedOut(entry), this.options.requestTimeoutMs);
       return;
     }
     this.pending.delete(entry.id);
@@ -367,7 +384,10 @@ export class RemoteLink {
     pending.contentType = typeof message.contentType === "string" ? message.contentType : pending.contentType;
     pending.etag = typeof message.etag === "string" ? message.etag : pending.etag;
     pending.chunks.set(message.index, message.body);
-    if (message.done !== true) return;
+    if (message.done !== true) {
+      this.arm(pending);
+      return;
+    }
     clearTimeout(pending.timer);
     this.pending.delete(id);
     const headers = new Headers();

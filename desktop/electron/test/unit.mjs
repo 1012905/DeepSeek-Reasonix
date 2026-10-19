@@ -2868,3 +2868,39 @@ test("a window that fails to raise is given its opacity and mouse back", async (
   await assert.rejects(wakeOf(win).run(async () => {}), /no window/);
   assert.deepEqual(calls.slice(-3), ["ignore false", "opacity 1", "minimize"]);
 });
+
+const { processMemoryRows, processMemoryHandler } = require("../src/procmem.js");
+
+test("the shell's process memory is only a fixed type and two whole numbers per process", () => {
+  const metrics = [
+    { pid: 4740, type: "Tab", name: "C:\\Users\\someone\\x", cmd: "--user-data-dir=/home/someone", memory: { workingSetSize: 3992908, privateBytes: 3900000, peakWorkingSetSize: 9 } },
+    { pid: 11, type: "Browser", memory: { workingSetSize: 120000, privateBytes: 90000 } },
+    { pid: 12, type: "GPU", memory: { workingSetSize: 76000 } },
+    { pid: 13, type: "Utility", memory: { workingSetSize: 6000, privateBytes: 5000 } },
+    { pid: 14, type: "Zygote", memory: { workingSetSize: 1000, privateBytes: 900 } },
+    { pid: 15, type: "Tab", memory: { workingSetSize: Number.NaN, privateBytes: -4 } },
+  ];
+  const rows = processMemoryRows(metrics);
+  assert.deepEqual(rows, [
+    { process: "renderer", workingSetKB: 3992908, privateKB: 3900000 },
+    { process: "browser", workingSetKB: 120000, privateKB: 90000 },
+    { process: "gpu", workingSetKB: 76000, privateKB: 0 },
+    { process: "utility", workingSetKB: 6000, privateKB: 5000 },
+    { process: "utility", workingSetKB: 1000, privateKB: 900 },
+    { process: "renderer", workingSetKB: 0, privateKB: 0 },
+  ]);
+  assert.ok(rows.every((r) => Object.keys(r).sort().join() === "privateKB,process,workingSetKB"));
+  assert.doesNotMatch(JSON.stringify(rows), /Users|pid|user-data|cmd/i);
+});
+
+test("the shell reports at most eleven processes, since the kernel adds its own row to a dozen", () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ pid: i, type: "Utility", memory: { workingSetSize: 1, privateBytes: 1 } }));
+  assert.equal(processMemoryRows(many).length, 11);
+});
+
+test("only the app's own window is answered, and nothing is read from the asker", () => {
+  const app = { getAppMetrics: () => [{ type: "Tab", memory: { workingSetSize: 5, privateBytes: 4 } }] };
+  assert.deepEqual(processMemoryHandler(app, () => true)({}), [{ process: "renderer", workingSetKB: 5, privateKB: 4 }]);
+  assert.deepEqual(processMemoryHandler(app, () => null)({}), []);
+  assert.deepEqual(processMemoryHandler({ getAppMetrics: () => { throw new Error("x"); } }, () => true)({}), []);
+});

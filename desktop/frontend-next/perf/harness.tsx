@@ -430,6 +430,7 @@ const WORKSPACES = Number(query.get("ws") ?? 0);
 const PREF = query.get("pref");
 const ONBOARDING = query.has("onboarding");
 const SESSIONS = Number(query.get("sess") ?? 0);
+const ROW_TITLES = ["rx home目录里有没有 obsidian 的笔记仓库，帮我整理一下", "obsidian 插件同步方案怎么选", "查一下 studio 最近一次发布改了什么", "阅读一下最近的提交记录并总结"];
 // ?turns= is how long the conversation being opened already is.
 const TURNS = Number(query.get("turns") ?? 0);
 const STATUS_MS = Number(query.get("statusms") ?? 0);
@@ -520,8 +521,12 @@ class BenchHub extends MockHub {
         sessions: this.placed(`~/projects/workspace-${w}`, Array.from({ length: SESSIONS }, (_, s) => ({
           path: `/sessions/w${w}-s${s}.jsonl`,
           name: `w${w}-s${s}`,
-          title: `第 ${s} 次会话，标题是内核起的一句话`,
+          title: query.has("rows") ? ROW_TITLES[s % ROW_TITLES.length] : `第 ${s} 次会话，标题是内核起的一句话`,
           turns: (s % 40) + 1,
+          ...(query.has("rows") ? {
+            lastActiveAt: Date.now() - (9 + s) * 86_400_000,
+            versions: s % 2 === 1 ? [{ path: `/sessions/w${w}-s${s}-v1.jsonl`, name: `w${w}-s${s}-v1`, title: ROW_TITLES[s % ROW_TITLES.length], turns: 1 }] : undefined,
+          } : {}),
         }))),
       })),
     );
