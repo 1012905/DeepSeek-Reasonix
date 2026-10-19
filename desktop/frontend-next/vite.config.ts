@@ -13,6 +13,7 @@ const ROUTES = [
   // so without it a second session's traffic answers with the SPA shell.
   "/runtimes", "/tree", "/rt", "/remotes", "/side",
   "/appearance",
+  "/agent-presets", "/agent-composition",
   "/events", "/history", "/status", "/balance", "/submit", "/cancel", "/approve", "/answer",
   "/adjudications", "/execution-graph", "/jobs", "/tool-calls", "/subagents",
   "/plan", "/plan-decision", "/goal", "/resume", "/models", "/tool-approval-mode", "/workspace-trust", "/preset",

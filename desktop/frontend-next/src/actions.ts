@@ -1,15 +1,5 @@
-// What Studio claims a person can do, as a set of stable identities.
-//
-// The oracle for the census, and deliberately not something production imports:
-// a button writes the id as a literal and this file writes it again, so the two
-// can disagree and be caught. Sharing one constant would make the check compare
-// a value with itself — the shape of false green this tree keeps removing.
-//
-// An id is <surface>.<intent>: the semantic class, never the instance and never
-// the wording. Which entry a click is about rides on data-target, and which of
-// several answers it gives rides on data-value, so a row rendered seventy times
-// is still one contract, and 「取消」 — seventeen buttons, eight destinations —
-// is never an identity.
+// The census oracle is independent of production literals so disagreements fail.
+// An id names the intent; data-target and data-value name its entity and choice.
 
 export type ActionKind =
   /** Changes only what is on screen. Must not reach the kernel. */
@@ -48,6 +38,39 @@ export interface UIAction {
 }
 
 export const ACTIONS: UIAction[] = [
+  {id:"agent-composition.select",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-composition.manage",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.show-picker",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-composition.unavailable",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-composition.new",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.reload",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.view",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.new-task-default",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.usage",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.create",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave-cancel",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave-discard",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.persona",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.copy",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.scope",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.id",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.name",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.description",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.module-mode",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-id",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-parameters",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-add",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-choose",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-remove",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.save",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.default",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.workspace-default",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.delete-preview",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.delete",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.delete-cancel",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.export",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.import",kind:"view",target:"none",proof:"interaction"},
   // ── The window's own switches, and the way into the turn's policy ────────
   // Completion verification is adaptive now, rather than a user-facing preset.
   // The legacy endpoint remains in the port for older clients and sessions,
@@ -666,6 +689,7 @@ export const ACTIONS: UIAction[] = [
   { id: "posture-note.dismiss", kind: "view", target: "none", proof: "interaction" },
   { id: "storage.move", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "session.import-legacy", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "session.import-native", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "network.diagnose", kind: "repeatable", target: "none", proof: "interaction" },
 
   // ── Permissions, the sandbox, and the endpoints a session can reach.
@@ -738,8 +762,8 @@ export const ACTIONS: UIAction[] = [
   { id: "persona.prefix", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.suffix", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.preset", kind: "view", target: "optional", proof: "interaction" },
-  { id: "persona.runtime-context", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "persona.runtime-context", kind: "view", target: "none", proof: "interaction" },
   // The kernel announces the change on the stream, so no rebuild stands between
   // the click and the canonical change.
   { id: "currency.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

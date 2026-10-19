@@ -1,4 +1,5 @@
 import { SseShell } from "./sse_shell";
+import type { AgentComposition, AgentPresetVersion, AgentPresetCatalog, CompositionSummary } from "./composition";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
 import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, ToolSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
@@ -6,6 +7,14 @@ import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, Ses
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
 export class SseBoundary extends SseShell {
+  agentPresets() { return this.get<AgentPresetCatalog>("/agent-presets"); }
+  saveAgentPreset(definition: AgentComposition, expectedRevision: string) { return this.post0<AgentPresetVersion>("/agent-presets", { definition, expectedRevision }); }
+  deleteAgentPreset(id: string, revision: string) { return this.del(`/agent-presets/${encodeURIComponent(id)}?revision=${encodeURIComponent(revision)}`); }
+  setDefaultAgentPreset(id: string, workspace: boolean) { return this.post0<void>("/agent-presets/default", { id, workspace }); }
+  exportAgentPreset(id: string) { return this.get<AgentComposition>(`/agent-presets/${encodeURIComponent(id)}/export`); }
+  importAgentPreset(content: AgentComposition) { return this.post0<{definition:AgentComposition;diagnostics:AgentPresetCatalog["diagnostics"]}>("/agent-presets/import", { content }); }
+  agentComposition() { return this.get<CompositionSummary | null>("/agent-composition"); }
+  selectAgentComposition(id: string) { return this.post0<CompositionSummary | null>("/agent-composition", { id }); }
   adjudications() {
     return this.get<Adjudications>("/adjudications");
   }

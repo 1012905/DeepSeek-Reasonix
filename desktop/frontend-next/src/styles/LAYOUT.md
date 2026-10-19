@@ -1630,6 +1630,16 @@ A sub-agent row, by the list's own width:
 - The badge has a transparent fill, a 1px `--hair` border and `--muted` text, so it reads as a label and not as a notice; its outer size is unchanged.
 - The badge is hidden at 760px and below. The wordmark box is cropped to its drawn width so the badge sits next to the letters, not next to the asset's padding.
 
+## Composer context
+
+- The Agent mode selector sits at the left of the top row; run status and token counts align at the right and wrap below on narrow panes. Controls remain outside the live status region; the input toolbar keeps task actions, model and execution settings.
+- The row and composition controls wrap independently when space is constrained. Long composition names truncate inside the selector; diagnostics wrap without widening the composer.
+- Preset editor and identifier controls share field tokens in `composition-presets.css`; the composer row remains in `app.css`. The row is mounted only after the person enables the mode picker; otherwise the original run status is rendered directly.
+- Composition selection and management share one menu: choices show source and capability notes; the separated footer opens management. Started conversations keep the same trigger with lock details inside the menu, and choices explicitly create another conversation.
+- The trigger shows only the mode name and arrow. Source and lock state remain in its accessible name, tooltip and menu; they do not widen the trigger.
+- Preset management separates two built-in mode cards from custom presets. Card selection inspects a definition; setting a default affects new conversations and never switches the active binding.
+- Open floating controls follow responsive fold changes and recheck their anchor after layout transitions finish; window resize alone precedes the body observer's fold publication.
+
 ## Side question
 
 - The panel stays anchored above its own composer. Collapsing it leaves a header with separate expand and close controls so the conversation can be read without discarding the side question.

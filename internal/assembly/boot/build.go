@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -123,9 +124,15 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(life, opts)
 	defer b.retireUnownedSidecars()
 	delivered := false
+	var constructed *control.Controller
 	defer func() {
 		if !delivered {
 			closeLifetime()
+			if constructed != nil {
+				constructed.ReleaseResources()
+			} else {
+				b.discardBuildResources()
+			}
 		}
 	}()
 	if b.owner.Notices != nil && b.opts.Sink != nil {
@@ -139,10 +146,14 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	if err := b.wireTools(); err != nil {
 		return nil, err
 	}
+	if err := b.bindCompositionMCPContracts(ctx); err != nil {
+		return nil, err
+	}
 	ctrl, err := b.controller()
 	if err != nil {
 		return nil, err
 	}
+	constructed = ctrl
 	b.tools.candidates.bind(ctrl)
 	b.tools.isolation.bind(ctrl)
 	res, err := b.freeze(ctrl)
@@ -202,6 +213,10 @@ func (b *builder) load() error {
 	if b.cfg, err = b.loadConfig(); err != nil {
 		return err
 	}
+	if err := b.prepareComposition(); err != nil {
+		return err
+	}
+	opts = b.opts
 	cfg := b.cfg
 	migrations.deepSeekErr = deepSeekProtocolMigrationNoticeError(handleConfigLoadWarnings(opts, cfg, b.stderr), migrations.deepSeekErr)
 	// [secrets] is user-global, so arming these package globals before any
@@ -270,6 +285,9 @@ func (b *builder) load() error {
 	b.timer.mark("shell")
 	slog.Debug("boot: shell tool interpreter resolved", "kind", b.shell.Kind.String(), "path", b.shell.Path, "prefer", cfg.Tools.Shell.Prefer)
 	b.prompt, err = buildPromptAssembly(b.ctx, opts, cfg, b.root, b.shell, b.sink, b.timer)
+	if err == nil {
+		err = b.bindCompositionSkills()
+	}
 	return err
 }
 
@@ -355,7 +373,9 @@ func (b *builder) wireTools() error {
 	if cfg.Agent.CodeMode {
 		t.reg.Add(script.New())
 	}
-	b.wireMCP()
+	if err := b.wireMCP(); err != nil {
+		return err
+	}
 	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession, opts.ComputerDriver)
 	b.timer.mark("mcp")
 
@@ -376,7 +396,10 @@ func (b *builder) wireTools() error {
 		WithAllowDynamicBashFallback(cfg.Permissions.AllowDynamicBash).
 		WithSessionAllow(opts.PermissionAllow)
 	t.gate = control.NewSharedHeadlessGate(t.policy, opts.HeadlessApprovalMode)
-	t.hooks, t.hookRunner = loadHooks(opts, b.roots, root, b.shell, b.sink)
+	t.hooks, t.hookRunner, err = loadHooks(opts, b.roots, root, b.shell, b.sink)
+	if err != nil {
+		return err
+	}
 
 	t.roles = roleWiring{cfg: cfg, roots: b.roots, resolver: b.providers.effective, extension: b.providers.extension,
 		proxy: b.proxy, sink: b.sink, gate: t.gate, reg: t.reg, keep: b.keep, hooks: t.hookRunner, checkTargetAccess: t.env.targetAccessCheck()}
@@ -403,7 +426,7 @@ func (b *builder) wireTools() error {
 	addInstallSourceTool(b.ctx, t.reg, t.host, root, b.balanceClient, t.specOptions, opts.Stderr)
 	registerSkillTools(t.reg, opts.Ablation, b.prompt.skillStore, b.prompt.implicitSkills, t.runners, t.cmds)
 
-	t.caps = newCapabilitySurface(b.ctx, cfg, root, t.specOptions, t.host, t.reg, b.prompt.skillStore, b.model.profile, t.mcp.enabled)
+	t.caps = newCapabilitySurface(b.ctx, cfg, root, t.specOptions, t.host, t.reg, b.prompt.skillStore, b.model.profile, t.mcp.enabled, t.mcp.extra...)
 	t.skillRun.capRuntime = t.caps.runtime
 	addExtensionTools(t.reg, b.ext.mgr, b.ext.warn)
 	t.reg.Add(t.caps.proxy)
@@ -414,7 +437,7 @@ func (b *builder) wireTools() error {
 // wireMCP registers the MCP servers and LSP tools and chains their shutdown
 // into the controller's cleanup. A caller-supplied shared host lets
 // controllers for one workspace reuse running MCP processes; its owner closes it.
-func (b *builder) wireMCP() {
+func (b *builder) wireMCP() error {
 	opts, cfg, root, t := b.opts, b.cfg, b.root, &b.tools
 	t.host = opts.SharedHost
 	if t.host == nil {
@@ -436,14 +459,20 @@ func (b *builder) wireMCP() {
 		PackageOwners:         pluginspec.PackageOwners(cfg),
 		OAuthHTTPClient:       b.balanceClient,
 	}
+	if opts.Composition != nil {
+		t.specOptions.ProcessScope = rand.Text()
+	}
 	t.mcp = resolveMCPSpecs(opts, cfg, root, t.specOptions)
-	reportProjectMCPAwaitingApproval(b.sink, cfg, root)
-	t.configSpecs, t.mcpSchemaKnown = registerMCPTools(b.ctx, t.host, t.reg, t.mcp, b.sink)
-	registerResourceTool(t.host, t.reg, cfg, t.mcp)
 	b.cleanup = t.host.Close
 	if opts.SharedHost != nil {
 		b.cleanup = func() {}
 	}
+	if err := b.isolateCompositionMCPPackages(); err != nil {
+		return err
+	}
+	reportProjectMCPAwaitingApproval(b.sink, cfg, root)
+	t.configSpecs, t.mcpSchemaKnown = registerMCPTools(b.ctx, t.host, t.reg, t.mcp, b.sink)
+	registerResourceTool(t.host, t.reg, cfg, t.mcp)
 	// The LSP manager is session-scoped: its servers stop with the controller.
 	if t.lsp = registerLSP(t.reg, cfg, root); t.lsp != nil {
 		prev, mgr := b.cleanup, t.lsp
@@ -454,6 +483,7 @@ func (b *builder) wireMCP() {
 		b.cleanup = func() { prev(); _ = proxy.Close() }
 	}
 	b.cleanup = closeAfter(b.cleanup, b.trace)
+	return nil
 }
 
 // controller builds the executor, the optional planner around it, and the
@@ -493,6 +523,13 @@ func (b *builder) controller() (*control.Controller, error) {
 	// snapshot freezes registry schemas for cache diagnostics.
 	if b.opts.Observe == nil {
 		applyUnifiedProviderToolSurface(t.reg, b.opts.GoalTurnsUnreachable, b.opts.Ablation, pinnedMCPServers(t.mcp.alwaysLoad, t.mcpSchemaKnown))
+	}
+	if binding := b.opts.Composition; binding != nil {
+		if binding.Digest != "" {
+			t.reg.SetProviderVisibleTools(binding.ToolSurface)
+		} else if binding.Version.Definition.Tools.Mode == "select" {
+			t.reg.SetProviderVisibleTools(nil)
+		}
 	}
 	return ctrl, nil
 }
@@ -714,6 +751,11 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		}
 	}
 	ctrl.SealObserveSurface()
+	ctrl.ConfigureCompositions(b.roots.Home(), nil)
+	if err := b.finishComposition(ctrl, snap); err != nil {
+		ctrl.ReleaseResources()
+		return nil, err
+	}
 	assembly := &ReusedAssembly{
 		SystemPrompt:            b.prompt.prompt,
 		Skills:                  b.prompt.skills,

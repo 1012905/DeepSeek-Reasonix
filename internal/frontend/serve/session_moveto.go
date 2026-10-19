@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/state/sessionstore"
 )
 
@@ -49,6 +50,8 @@ func (h *Hub) moveSessionTo(w http.ResponseWriter, r *http.Request) {
 	moved, err := sessionstore.MoveSession(path, SessionDirFor(known), known)
 	var held *sessionstore.SessionLeaseError
 	switch {
+	case errors.Is(err, agentcomposition.ErrWorkspaceBound):
+		busy(w, "agent_composition.workspace_bound", "this conversation's composition is bound to its project; start a new conversation in the target project", nil)
 	case errors.Is(err, sessionstore.ErrSameFolder):
 		busy(w, "session.same_project", "the conversation is already in that project", nil)
 	case errors.As(err, &held):

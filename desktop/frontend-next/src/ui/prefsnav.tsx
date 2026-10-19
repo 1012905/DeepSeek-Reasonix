@@ -232,8 +232,10 @@ export const SETTINGS: SettingEntry[] = [
   { section: "session", anchor: "fold-work", title: "折叠中间过程", scope: "machine", apply: "immediate", keywords: ["折叠", "中间过程", "工具调用", "思考", "最后一句", "收起", "摘要"] },
   // Written to the user file only; the kernel's background sweep reads it on each pass.
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
-  // Saving does not rebuild; any later runtime build reads the user persona.
-  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "next-rebuild", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀", "预设"] },
+  { section: "persona", anchor: "composition-picker", title: "显示模式选择器", scope: "machine", apply: "immediate", keywords: ["预设", "模式", "picker", "Agent"] },
+  // Explicit selections bind immutable versions; catalog saves do not rebuild.
+  { section: "persona", anchor: "agent-presets", title: "Agent 预设", scope: "machine", apply: "on-open", keywords: ["预设", "组合", "Agent"] },
+  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "next-rebuild", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
   { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "网页搜索", "web search", "system one", "typesafe", "laya", "自动命名", "思考强度", "推理", "reasoning", "档位"] },

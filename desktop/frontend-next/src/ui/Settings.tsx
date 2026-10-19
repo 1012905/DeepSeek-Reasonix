@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useModalFocus } from "./useModalFocus";
+import { SettingsLeaveContext, useSettingsLeave } from "./SettingsLeave";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
@@ -44,7 +45,7 @@ import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
-import { Persona } from "./Persona";
+import { AgentPresets } from "./AgentPresets";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
 import { BackupFile } from "./BackupFile";
@@ -107,6 +108,8 @@ interface Props {
   workspaceRoot?: string;
 }
 export function Settings({ hub, onError, port, networkPort, localWorkspacePort, networkHost, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, onSessionsRecovered, reloadThemes, at: opened, account: acct, accountUnread, reloadAccount, workspaceRoot }: Props) {
+  const navigation = useSettingsLeave();
+  const close = useCallback(() => navigation.leave(onClose), [navigation.leave, onClose]);
   const homePort = networkPort ?? port;
   const localPort = localWorkspacePort ?? homePort;
   const [openedSection, openedAnchor = ""] = (opened ?? "").split(":", 2);
@@ -226,9 +229,9 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   }, []);
 
   useEffect(() => {
-    const onKey = (e: Event) => (e as KeyboardEvent).key === "Escape" && !updatingPkg.applying && onClose();
+    const onKey = (e: Event) => (e as KeyboardEvent).key === "Escape" && !updatingPkg.applying && close();
     return listenAction(window, "keydown", { action: "settings.close", listener: onKey });
-  }, [onClose, updatingPkg.applying]);
+  }, [close, updatingPkg.applying]);
 
   useEffect(() => {
     loadModels();
@@ -330,10 +333,12 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   const found = useSettingsSearch(query, shown, remoteBook);
   // 落点：跳过去之后短暂标一下「就是这里」。这是导航反馈，不是状态变化。
   const go = (section: Section, anchor: string) => {
-    setAt(section);
-    setQuery("");
-    setLanded(anchor);
-    if (section === "ext") setExtTab(anchor === "market" ? "market" : "installed");
+    navigation.leave(() => {
+      setAt(section);
+      setQuery("");
+      setLanded(anchor);
+      if (section === "ext") setExtTab(anchor === "market" ? "market" : "installed");
+    });
   };
   useEffect(() => {
     if (!landed) return;
@@ -363,14 +368,14 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   }, [landed, at]);
 
   return (
-    <div
+    <SettingsLeaveContext.Provider value={navigation.register}><div
       className="prefs"
       ref={root}
       tabIndex={-1}
       onMouseDown={(e) => { veiled.current = e.target === e.currentTarget; }}
       // Both ends of the press have to land on the veil. A drag that started
       // inside the sheet and let go outside is a selection, not a dismissal.
-      onMouseUp={(e) => { if (veiled.current && e.target === e.currentTarget && !updatingPkg.applying) onClose(); }}
+      onMouseUp={(e) => { if (veiled.current && e.target === e.currentTarget && !updatingPkg.applying) close(); }}
       data-action-mouseup="settings.close"
     >
       <div className="prefs-sheet" role="dialog" aria-modal="true" aria-labelledby="prefs-title">
@@ -398,7 +403,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
             }
           }}
         />
-        <button className="btn sm" data-action="settings.close" disabled={updatingPkg.applying} onClick={onClose}>
+        <button className="btn sm" data-action="settings.close" disabled={updatingPkg.applying} onClick={close}>
           {t("关闭")} <span className="esc">Esc</span>
         </button>
         {found !== null && (
@@ -436,7 +441,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
       </div>
       <ConfigTrouble port={port} onRepaired={onChanged} />
       <div className="prefs-body">
-        <SettingsNav at={at} values={nav} shown={shown} danger={danger} disabled={updatingPkg.applying} onSelect={setAt} />
+        <SettingsNav at={at} values={nav} shown={shown} danger={danger} disabled={updatingPkg.applying} onSelect={(section) => { if (section !== at) navigation.leave(() => setAt(section)); }} />
 
         <div className="prefs-main" role="tabpanel" aria-labelledby={`prefs-${at}`} data-sec={at}>
           <Boundary
@@ -515,7 +520,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
             </>
           )}
 
-          {at === "persona" && <Persona port={port} />}
+          {at === "persona" && <AgentPresets port={port} focusPersona={landed === "persona"} />}
 
           {at === "providers" && (
             <Group id="providers" title={t("模型服务")}
@@ -782,6 +787,6 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
         </div>
       </div>
       </div>
-    </div>
+    </div></SettingsLeaveContext.Provider>
   );
 }

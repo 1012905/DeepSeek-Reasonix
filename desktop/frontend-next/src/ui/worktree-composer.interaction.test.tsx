@@ -101,7 +101,7 @@ it("shows real preparation state and restores the draft only after confirmed can
   await choose();
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
   await screen.findByRole("heading", { name: "正在创建 worktree…" });
-  expect(screen.getByText("正在检出已提交文件")).toBeTruthy();
+  expect(await screen.findByText("正在检出已提交文件")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "取消创建" }));
   await screen.findByRole("heading", { name: "已取消创建" });
   await waitFor(() => expect((screen.getByLabelText("任务输入") as HTMLTextAreaElement).value).toBe("添加搜索功能"));

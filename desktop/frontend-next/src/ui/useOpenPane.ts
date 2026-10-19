@@ -4,7 +4,9 @@ import type { AgentPort } from "../port/port";
 import type { PaneReport } from "./Pane";
 import { t } from "../i18n";
 import { openSessionLimit } from "../state/prefs";
-import { pushNote } from "../state/toasts";
+import { newTaskComposition } from "../state/newTaskPreset";
+import { pushNote, pushToast } from "../state/toasts";
+import { reason } from "../i18n/kernel";
 import type { SessionSwitch } from "./sessionswitch";
 
 interface Placed {
@@ -31,7 +33,9 @@ interface Deps {
 // only the latest one moves focus and a failure of an older one changes nothing.
 export function useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes, sw }: Deps) {
   const placePane = useCallback(
-    async (req: { root?: string; sessionPath?: string }): Promise<Placed> => {
+    async (req: { root?: string; sessionPath?: string; agentComposition?: string }): Promise<Placed> => {
+      const composition = newTaskComposition(req.agentComposition, req.sessionPath);
+      if (composition !== undefined && req.agentComposition === undefined) req = { ...req, agentComposition: composition };
       // Blank means never written to and not working: a new session mid-turn has
       // no path in a stale pane list yet, and taking it over would hide its run.
       const blank = runtimes.find(
@@ -41,6 +45,13 @@ export function useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runs
       // folder: it is the pane being asked for. Rebuilding it would cost a full
       // assembly to arrive back where we started.
       if (blank && !req.sessionPath && blank.root === req.root) {
+        if (req.agentComposition !== undefined) {
+          try {
+            await panePorts.get(blank.id)?.selectAgentComposition(req.agentComposition);
+          } catch (e) {
+            pushToast(reason(e));
+          }
+        }
         return { id: blank.id, changed: false };
       }
       // Same folder: the pane just rebinds, so nothing is torn down and a draft
@@ -93,7 +104,7 @@ export function useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runs
 
   const flights = useRef(new Map<string, Promise<Placed>>());
   const openPane = useCallback(
-    async (req: { root?: string; sessionPath?: string }) => {
+    async (req: { root?: string; sessionPath?: string; agentComposition?: string }) => {
       const wanted = req.sessionPath ?? "";
       if (wanted && sw.opening(wanted)) return;
       const ticket = sw.begin(wanted);

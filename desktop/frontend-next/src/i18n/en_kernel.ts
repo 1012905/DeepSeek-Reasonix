@@ -3,6 +3,7 @@
 // code adds one here. i18n.test.ts is what stops one from being forgotten.
 
 export const EN_KERNEL: Record<string, string> = {
+  "此会话的组合已绑定原项目，请在目标项目新建会话": "This conversation's composition is bound to its project. Start a new conversation in the target project",
   "起始分支已不存在，请重新选择分支": "The source branch no longer exists. Choose another branch",
   "会话或工作目录已改变，请新建会话后重新选择 worktree": "The session or workspace changed. Start a new session to select a worktree",
   "请先打开一个本机会话，再读取本机设置": "Open a local session to read this machine’s settings",

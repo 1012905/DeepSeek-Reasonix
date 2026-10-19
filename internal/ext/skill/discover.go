@@ -3,6 +3,9 @@ package skill
 import "reasonix/internal/contract/config"
 
 func (s *Store) discover(scan func(discoveryRoot) []Skill) []Skill {
+	if s != nil && s.snapshot != nil {
+		return s.snapshotSkills()
+	}
 	if s == nil || s.disableDiscovery {
 		return nil
 	}

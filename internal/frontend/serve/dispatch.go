@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessionstore"
@@ -23,7 +24,7 @@ type dispatchBook struct {
 	// pending holds a pane opened in a project the user has not decided about yet;
 	// it shows its own trust card, and the next dispatch reuses it.
 	pending map[dispatchKey]string
-	open    func(context.Context, OpenRequest) (*Runtime, error) // nil: Hub.Open
+	open    func(context.Context, OpenRequest, *agentcomposition.Binding) (*Runtime, error)
 }
 
 type dispatchKey struct{ from, root string }
@@ -140,15 +141,19 @@ func newPairSecret() ([]byte, error) {
 // the user declined is not opened for someone else's task; an undecided one keeps
 // its pane open so the trust card is in front of the user, and the task is not sent.
 func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, sender *control.Controller, root string, secret []byte) (*Runtime, error) {
+	binding := sender.CompositionBinding()
+	if binding != nil && binding.Workspace != "" && binding.Workspace != root {
+		return nil, fmt.Errorf("%w: %w", control.ErrDispatchFailed, agentcomposition.Unavailable(binding.Version.Definition.ID, "A bound composition cannot dispatch into another workspace."))
+	}
 	open := h.dispatch.open
 	if open == nil {
-		open = h.Open
+		open = h.openBound
 	}
 	grant := sender.DispatchGrant()
 	target := h.runtimeByID(h.dispatch.getPending(from.ID, root))
 	if target == nil {
 		var err error
-		if target, err = open(ctx, OpenRequest{Root: root, Model: grant.Model}); err != nil {
+		if target, err = open(ctx, OpenRequest{Root: root, Model: grant.Model}, binding); err != nil {
 			return nil, fmt.Errorf("%w: %w", control.ErrDispatchFailed, err)
 		}
 	}

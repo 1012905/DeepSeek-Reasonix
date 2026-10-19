@@ -37,13 +37,13 @@ describe("the system persona page", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "严谨工程师" }));
     expect((await field("系统提示词开头")).value).toBe("Rigorous engineer prefix.");
-    expect((await field("第一方指令之后")).value).toBe("");
+    expect((await field("补充要求")).value).toBe("");
     expect(screen.queryByRole("switch", { name: /complete/ })).toBeNull();
     expect(now(container)).toBe("严谨工程师");
 
     await userEvent.click(screen.getByRole("button", { name: "简洁" }));
     expect((await field("系统提示词开头")).value).toBe("");
-    expect((await field("第一方指令之后")).value).toBe("Be terse.");
+    expect((await field("补充要求")).value).toBe("Be terse.");
     // The runtime-context switch shows the inverse of the field it writes.
     expect(screen.getByRole("switch", { name: "不注入可选运行时上下文" }).getAttribute("aria-checked")).toBe("true");
   });
@@ -63,7 +63,7 @@ describe("the system persona page", () => {
     expect(saveButton().disabled).toBe(true);
 
     await userEvent.type(prefix, "Lead with evidence.");
-    await userEvent.type(await field("第一方指令之后"), "Stay terse.");
+    await userEvent.type(await field("补充要求"), "Stay terse.");
     await userEvent.click(screen.getByRole("switch", { name: "不注入可选运行时上下文" }));
 
     expect(saveButton().disabled).toBe(false);

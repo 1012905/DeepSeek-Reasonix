@@ -27,6 +27,13 @@ export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_runni
 export const savedNotApplied = (e: unknown): boolean => e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
 
 const SAID: Record<string, string> = {
+  "agent_composition.invalid": "预设内容无效，请检查标识、模块和参数",
+  "agent_composition.unavailable": "组合所需资源不可用，无法继续执行",
+  "agent_composition.locked": "会话已开始或正在工作，不能切换组合",
+  "agent_composition.workspace_bound": "此会话的组合已绑定原项目，请在目标项目新建会话",
+  "agent_composition.conflict": "预设已被其他操作修改，草稿已保留，请重新加载后再保存",
+  "agent_composition.not_found": "找不到该 Agent 预设",
+  "agent_composition.read_only": "内置预设只读，请复制后编辑",
   "surface.value_invalid": "填写内容不符合字段要求，请检查后重试",
   "surface.expired": "界面已失效，请等待新的请求",
   "surface.schema_invalid": "界面描述不符合约定",
@@ -45,6 +52,9 @@ const SAID: Record<string, string> = {
   "shell.command_line_too_long": "命令超过主机长度限制；请拆分命令或从文件读取长文本",
   "tool.arguments_invalid": "参数不符合该工具的约定，本次调用没有执行；请按工具说明补全或更正参数后重试",
   "workspace.write_conflict": "另一个会话持有所需的写入范围。本次操作未执行；请结束当前轮次，待该范围释放后再重试",
+  "session.archive_invalid": "会话文件无效，请选择完整的原生会话导出文件。",
+  "session.archive_unsupported": "不支持此会话文件版本，请使用兼容版本导出。",
+  "session.archive_too_large": "会话文件超过安全导入限制（大小或记录数）。",
   "session.title_empty": "请输入聊天标题",
   "session.title_no_message": "该会话还没有可用于命名的用户消息",
   "session.title_unavailable": "未配置可用于自动命名的模型，请先配置模型",

@@ -1,4 +1,5 @@
 import { useBranchSession } from "./useBranchSession";
+import { CompositionNewContext } from "./CompositionNewContext";
 import { keepSame } from "./stable";
 import { usePaneCallbacks } from "./usePaneCallbacks";
 import { watchTreeWake } from "./treewake";
@@ -542,6 +543,7 @@ export function App({ hub }: { hub: HubPort }) {
   }
 
   return (
+    <CompositionNewContext.Provider value={(id) => {const rt=runtimes.find((v)=>v.id===active);void (rt?.host?openRemotePane(rt.host,rt.root,undefined,id):openPane({root:newSessionRoot,agentComposition:id})).catch(fail);}}>
     <PeerThreadsProvider port={activePort} hub={hub} onOpen={openPeerSession}>
     <div
       className="app"
@@ -784,5 +786,6 @@ export function App({ hub }: { hub: HubPort }) {
       <StopHint armed={stopArmed} />
     </div>
     </PeerThreadsProvider>
+    </CompositionNewContext.Provider>
   );
 }

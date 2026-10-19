@@ -3,6 +3,8 @@ import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, Ses
 import { mockMods } from "./mock_mods";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
+import { MockCompositions } from "./mock_composition";
+import type { AgentComposition } from "./composition";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
@@ -21,6 +23,16 @@ function effectiveBash(s: SandboxSettings): string {
 let levelNotices: FeedbackLevelNotices = { enabled: false, path: "/Users/you/.reasonix/config.toml" };
 
 export class MockBoundary extends MockShell {
+  protected compositions = new MockCompositions();
+  shareAgentPresetsFrom(other: MockBoundary, workspace:string) { this.compositions=other.compositions.fork(workspace); }
+  agentPresets() { return this.compositions.agentPresets(); }
+  saveAgentPreset(d: AgentComposition, expected: string) { return this.compositions.saveAgentPreset(d, expected); }
+  deleteAgentPreset(id: string, revision: string) { return this.compositions.deleteAgentPreset(id, revision); }
+  setDefaultAgentPreset(id: string, workspace: boolean) { return this.compositions.setDefaultAgentPreset(id, workspace); }
+  exportAgentPreset(id: string) { return this.compositions.exportAgentPreset(id); }
+  importAgentPreset(d: AgentComposition) { return this.compositions.importAgentPreset(d); }
+  agentComposition() { return this.compositions.agentComposition(); }
+  selectAgentComposition(id: string) { return this.compositions.selectAgentComposition(id); }
   async decideWorkspaceTrust(_trust: "trusted" | "declined") {}
   // One interrupted barrier and one that a later turn took over, so the card
   // and the reason it disappears are both reachable without a crash.
@@ -445,17 +457,7 @@ export class MockBoundary extends MockShell {
     return { ...this.watch };
   }
 
-  // The fixture carries the broken file, because a banner nobody can reach is
-  // a banner nobody designs. Repairing it here clears it, so the whole
-  // interaction is reachable without a Go build.
-  private broken: ConfigProblem | null = {
-    path: "C:\\Users\\you\\AppData\\Roaming\\reasonix\\config.toml",
-    line: 263,
-    key: "plugins.command",
-    excerpt: 'command = "C:\\Scripts\\mcp.exe"',
-    repair: 'command = "C:\\\\Scripts\\\\mcp.exe"',
-    recovered: "last-known-good",
-  };
+  private broken: ConfigProblem | null = null;
 
   async configProblem(): Promise<ConfigProblem | null> {
     return this.broken && { ...this.broken };

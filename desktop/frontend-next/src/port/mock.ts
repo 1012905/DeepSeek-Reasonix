@@ -9,7 +9,7 @@ import { MockWorkspace, mockWorkspaces, mockWorktreeSources, MockPreparations } 
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
 import { MockExecutionHold, mockExecutionGraph } from "./mock_graph";
 import { mockStorage, mockStoragePlan } from "./mock_storage";
-import { MEMORIES } from "./mock_memory";
+import { MEMORIES, mockMemoryCatalog } from "./mock_memory";
 import { mockModels } from "./mock_models";
 import { mockUsage } from "./mock_usage";
 
@@ -117,11 +117,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   }
 
   async memories(): Promise<MemoryCatalog> {
-    return {
-      memories: this.mem.map((m) => ({ ...m })),
-      recallQuery: "缓存命中率为什么会掉",
-      indexPath: "~/.reasonix/projects/reasonix/memory/MEMORY.md",
-    };
+    return mockMemoryCatalog(this.mem);
   }
 
   // The fixture reports a clean revert on the first ask and a conflicted one
@@ -360,7 +356,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   async markSessionViewed() {}
 
   async status(): Promise<SessionStatus> {
-    return { ...this.state, ...(location.search.includes("tariff") && { tariff: { peak: !location.search.includes("tariff=off"), changesAt: new Date(Date.now() + 130 * 60_000).toISOString() } }) };
+    return { ...this.state, agentCompositionLocked: this.compositions.compositionStarted, ...(location.search.includes("tariff") && { tariff: { peak: !location.search.includes("tariff=off"), changesAt: new Date(Date.now() + 130 * 60_000).toISOString() } }) };
   }
 
   async balance(): Promise<WalletReading | null> {
@@ -694,6 +690,7 @@ export class MockPort extends MockWorkspace implements AgentPort {
   }
 
   async submit(text: string, chips?: ChipCall): Promise<Queued | void> {
+    this.compositions.markCompositionStarted();
     if (chips && this.queuePaused) return this.queueFollowup(text);
     if (this.state.running) {
       this.emit({ kind: "steer", text });

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"reasonix/internal/base/testenv"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/peermail"
@@ -23,6 +24,7 @@ type dispatchFixture struct {
 	home     string
 	opened   int
 	requests []OpenRequest
+	bindings []*agentcomposition.Binding
 	// startMode is the approval posture a pane the hub opens starts in, as the
 	// user's own default would make it.
 	startMode string
@@ -41,9 +43,10 @@ func newDispatchFixture(t *testing.T, userFile string) *dispatchFixture {
 		}
 	}
 	f := &dispatchFixture{t: t, hub: NewHub(HubOptions{}), peersDir: filepath.Join(home, "peers"), home: home}
-	f.hub.dispatch.open = func(_ context.Context, req OpenRequest) (*Runtime, error) {
+	f.hub.dispatch.open = func(_ context.Context, req OpenRequest, binding *agentcomposition.Binding) (*Runtime, error) {
 		f.opened++
 		f.requests = append(f.requests, req)
+		f.bindings = append(f.bindings, binding)
 		rt := f.adopt(req.Root, "")
 		if f.startMode != "" {
 			rt.Server.Controller().(*control.Controller).SetToolApprovalMode(f.startMode)

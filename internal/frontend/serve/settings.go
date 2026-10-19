@@ -195,7 +195,8 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	used, window := s.ctl().ContextSnapshot()
 	hit, miss := s.ctl().SessionCache()
 	sess := map[string]any{
-		"label": s.ctl().Label(),
+		"agentCompositionLocked": compositionLocked(s.ctl()),
+		"label":                  s.ctl().Label(),
 		// running is what a window shows; busy is what refuses a new turn, which
 		// also holds through the delivery of the previous turn's TurnDone.
 		"running":          s.ctl().TurnInFlight(),
@@ -215,6 +216,9 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		"window":           window,
 		"cacheHit":         hit,
 		"cacheMiss":        miss,
+	}
+	if binding := compositionControllerView(s.ctl()); binding != nil {
+		sess["agentComposition"] = binding
 	}
 	if view := s.goalRuntime(); view != nil {
 		sess["goalRuntime"] = view

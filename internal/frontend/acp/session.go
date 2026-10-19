@@ -157,7 +157,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 
 	// Fold in the live controller's extension catalog so plugin/... models
 	// are discoverable from the very first session/new result.
-	cfgState = enrichStateWithExtensionModels(cfgState, ctrl.ProviderCatalog())
+	cfgState = withCompositionConfig(enrichStateWithExtensionModels(cfgState, ctrl.ProviderCatalog()), ctrl)
 	return afterResponse{
 		result: SessionNewResult{
 			SessionID:     id,
@@ -489,6 +489,11 @@ func (s *service) sessionSetConfigOption(ctx context.Context, raw json.RawMessag
 
 	var next SessionConfigState
 	switch configOptionCategory(option) {
+	case "agent_composition":
+		err = sess.currentCtrl().SelectAgentComposition(ctx, p.Value)
+		if err == nil {
+			next, err = s.configStateForSession(ctx, sess)
+		}
 	case "model":
 		next, err = s.switchSessionModel(ctx, sess, p.Value)
 	case "thought_level":

@@ -456,6 +456,7 @@ func (s *service) configStateForSession(ctx context.Context, sess *acpSession) (
 	// Fold in the live controller's extension catalog so plugin/... models
 	// are discoverable on every config-state read, not only when current.
 	state = enrichStateWithExtensionModels(state, sess.currentCtrl().ProviderCatalog())
+	state = withCompositionConfig(state, sess.currentCtrl())
 	return s.withToolApprovalConfig(state, sess.currentToolApprovalMode()), nil
 }
 
