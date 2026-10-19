@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "../testkit";
 import { Transcript } from "../Transcript";
@@ -79,5 +79,22 @@ describe("the child calls of a sub-agent card", () => {
     rerender(view([agent(false)]));
     expect(card().open).toBe(true);
     expect(kids()).toBe(2);
+  });
+});
+
+describe("a find landing that is still settling when the transcript goes away", () => {
+  it("does nothing further once its row has left the document", () => {
+    const queued: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => { queued.push(cb); return queued.length; });
+    const style = vi.spyOn(window, "getComputedStyle");
+    const { unmount } = render(view([agent(false)], { find: { id: "t1", nth: 0, n: 1 }, query: "needle-in-the-child" }));
+    act(() => { card().dispatchEvent(new Event("toggle")); });
+    unmount();
+    style.mockClear();
+    raf.mockClear();
+    const pending = queued.splice(0);
+    for (const cb of pending) cb(0);
+    expect(style).not.toHaveBeenCalled();
+    expect(queued).toHaveLength(0);
   });
 });

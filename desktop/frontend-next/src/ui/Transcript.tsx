@@ -327,7 +327,7 @@ export function Transcript({ items, port, entering, onEntered, brought, revision
       const chunk = inner.querySelectorAll<HTMLElement>(".chunk")[block];
       if (chunk) root.scrollTop = topOf(chunk) + into * chunk.offsetHeight - clear;
       const settle = (tries: number, last = NaN) => {
-        if (mine !== landing.current) return;
+        if (mine !== landing.current || !inner.isConnected) return;
         const found = inner.querySelector<HTMLElement>(selector);
         if (found) {
           const el = landingBox(found);

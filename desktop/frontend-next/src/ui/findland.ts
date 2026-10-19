@@ -51,7 +51,7 @@ export function useFindLanding(
  *  could: a row can be taller than the view, so its top is not enough. Rows
  *  above it may still mount and move it, so it holds for a few frames. */
 function reveal(row: HTMLElement, root: HTMLElement, needle: string, nth: number, mine: () => boolean, tries = 8): boolean {
-  if (!needle || !mine()) return false;
+  if (!needle || !mine() || !row.isConnected) return false;
   landingBox(row);
   const range = currentRange(row, needle, nth);
   if (!range) {
@@ -109,6 +109,7 @@ export function useFindPaint(
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
+        if (!flow.current?.isConnected) return;
         paintFind(flow.current, query, current === null ? null : { id: current, nth });
       });
     };
