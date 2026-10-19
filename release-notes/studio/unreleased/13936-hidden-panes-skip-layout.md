@@ -1,2 +1,2 @@
 - 修复：打开两个及以上标签页时，展开或收起左侧会话栏会掉帧卡顿；现在隐藏的标签页不再参与这次重排，帧耗时与只开一个标签页时相当。见 #13936。
-- Fixed: with two or more tabs open, folding or unfolding the left session rail dropped frames; hidden tabs no longer take part in that relayout, so frames cost about what they do with one tab. See #13936.
+- Fixed: with two or more tabs open, folding the left session rail dropped frames; hidden tabs no longer take part in that relayout, so frames cost about what they do with one tab. See #13936.
