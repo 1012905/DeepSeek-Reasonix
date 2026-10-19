@@ -310,7 +310,7 @@ func TestCoalesceSeparatesToolProgressByCallID(t *testing.T) {
 func TestCoalescePassesThroughRichToolProgress(t *testing.T) {
 	inner := &coalesceRecordSink{}
 	c := Coalesce(inner, time.Hour)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		c.Emit(Event{Kind: ToolProgress, Tool: Tool{ID: "sub", Name: SubagentProgressStatusName, Output: "running", RateTokensPerSec: 40}})
 	}
 	got := inner.snapshot()
@@ -343,7 +343,7 @@ func TestCoalesceMergesDeltasCarryingSource(t *testing.T) {
 	inner := &coalesceRecordSink{}
 	c := Coalesce(inner, time.Hour)
 	c.Emit(Event{Kind: ToolProgress, Source: UsageSourceExecutor, Tool: Tool{ID: "call-1", Output: "line 1\n"}})
-	for i := 0; i < 99; i++ {
+	for range 99 {
 		c.Emit(Event{Kind: ToolProgress, Source: UsageSourceExecutor, Tool: Tool{ID: "call-1", Output: "line\n"}})
 	}
 	c.Emit(Event{Kind: ToolResult, Tool: Tool{ID: "call-1", Output: "done"}})
