@@ -1,2 +1,0 @@
-- 修复：Studio 窗口最小化时，智能体在内置浏览器里的点击被页面丢弃却报成功；现在输入前会不可见地升起窗口、之后恢复最小化（Windows）。见 #13628。
-- Fixed: clicks the agent sent the built-in browser were dropped yet reported done while Studio was minimized; the window is now raised unseen for input, then minimized again (Windows). See #13628.

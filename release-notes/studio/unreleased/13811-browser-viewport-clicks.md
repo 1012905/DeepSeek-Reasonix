@@ -1,2 +1,0 @@
-- 修复：智能体给内置浏览器页面设了比窗格小的视口时，页面居中显示，不再缩在窗格左上角；页面被缩小适配窗格时，智能体的点击仍落在原来瞄准的位置。关联 #13811。
-- Fixed: A built-in browser page given a viewport smaller than the panel is centred at its own size, and clicks on a page scaled to fit the panel land where they were aimed. Refs #13811.

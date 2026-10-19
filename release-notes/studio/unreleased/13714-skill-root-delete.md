@@ -1,2 +1,0 @@
-- 修复：技能目录顶层放了 SKILL.md 时，卸载它会把整个技能目录连同其他技能一起删掉；现在只删这一个文件。关联 #13714。
-- Fixed: Removing a skill whose SKILL.md sits at the top of a skills folder deleted the whole folder with every other skill; it now deletes only that file. Refs #13714.

@@ -1,2 +1,0 @@
-- 修复：有系统沙盒把 shell 限在项目文件夹里时，同一 git 仓库下两个项目里的会话不再因 bash 等无声明写入互相等待；没有沙盒（如 Windows）时仍整库互斥。见 #13335。
-- Fixed: with an OS sandbox confining the shell to its folder, sessions in two projects of one git repository no longer wait on each other for bash writes; without one they still do. See #13335.

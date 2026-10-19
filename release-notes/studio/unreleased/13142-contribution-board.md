@@ -1,2 +1,0 @@
-- 新增：反馈面板里的“贡献榜”，按版本有名次，自己选择加入并预览名字，随时退出；终端用 /feedback board。服务端开启后才显示。关联 #13142。
-- Added: A contribution board in the feedback panel, ranked per release; you choose to join, preview the name and can leave. Terminal: /feedback board. Refs #13142.

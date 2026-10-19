@@ -1,2 +1,0 @@
-- 修复：自定义提供商没有声明推理档位时，/effort 不再说“不支持”，而是告诉你在该条目里写 supported_efforts。关联 #13857。
-- Fixed: /effort on a custom provider with no declared reasoning levels now says so and points at supported_efforts instead of claiming the model does not support them. Refs #13857.

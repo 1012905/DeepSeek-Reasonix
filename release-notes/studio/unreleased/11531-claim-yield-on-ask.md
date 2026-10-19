@@ -1,2 +1,0 @@
-- 改进：会话等你回答时（含 Auto Guard 确认卡、沙盒越界提问）让出写入权；其间别的会话占了这些路径，会告知模型并记入回执，最长等待可设。见 #11531。
-- Improved: a session waiting on you gives up its write claim, Auto Guard and sandbox-escape asks included; contention reaches the model and receipt, and the longest wait is a setting. See #11531.

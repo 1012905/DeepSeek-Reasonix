@@ -1,2 +1,0 @@
-- 修复：HTTP 连接里输入 `!` 命令被拒后，命令会整段选中留在输入框，接着打字就是替换，下一条普通消息能直接发出。关联 #13810。
-- Fixed: Over an HTTP connection a refused `!` command now stays selected in the box, so what you type next replaces it and the next ordinary message sends. Refs #13810.

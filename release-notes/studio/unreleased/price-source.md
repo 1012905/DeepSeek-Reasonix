@@ -1,2 +1,0 @@
-- 连接编辑器里，每个模型价格下可填价格来源链接和核对日期（UTC）；只显示主机名，点击才打开，不会自动访问。议题 #13276。
-- A model's price in the connection editor can carry a source link and a check date (UTC); only the host is shown, the link opens when clicked and is never fetched. Issue #13276.

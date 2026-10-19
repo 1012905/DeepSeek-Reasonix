@@ -1,2 +1,0 @@
-- `reasonix acp --permission-mode` 供把 Reasonix 当子代理嵌入的宿主使用：固定审批姿态，客户端只能降低不能抬高，旧存档的更高姿态被限制且文件不改。议题 #13839。
-- `reasonix acp --permission-mode`, for hosts embedding Reasonix as a subagent, fixes the approval posture: clients can lower it, never raise it; a higher saved posture is clamped. Issue #13839.

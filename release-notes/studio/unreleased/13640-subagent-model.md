@@ -1,2 +1,0 @@
-- 新增：子代理的面板行、完整记录标题和嵌套卡片都会显示它实际跑在哪个模型和强度上，失败或中断的也有。见 #13640。
-- Added: a sub-agent's panel row, full-record header and nested card now show the model and effort it actually ran on, failed or interrupted runs included. See #13640.

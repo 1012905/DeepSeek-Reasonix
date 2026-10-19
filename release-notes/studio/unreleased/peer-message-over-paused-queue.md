@@ -1,4 +1,0 @@
-- 修复：你在卡片上批准的、别的会话发来的消息，在发送队列被暂停时不再只入队不处理，会单独开始，更早排队的内容仍保持暂停。关联 #13775。
-- 改进：常驻放行的会话间消息只会越过宿主自己设的暂停，不会越过你主动按下的暂停，它会留在队列里等你。关联 #13775。
-- Fixed: A message from another session that you approved on its card now starts even when the send queue is paused; what was queued before stays paused. Refs #13775.
-- Improved: A message let in by a standing release starts only over a pause the host set itself, never over one you pressed; it stays queued for you. Refs #13775.

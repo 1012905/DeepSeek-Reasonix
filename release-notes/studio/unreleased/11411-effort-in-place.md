@@ -1,2 +1,0 @@
-- 改进：服务商支持逐请求设置思考强度时，切换强度不再重建会话，进行中的回合里也能切，下一次请求起生效。见 #11411。
-- Improved: when the provider takes reasoning depth per request, changing it no longer rebuilds the session and works mid-turn, taking effect on the next request. See #11411.

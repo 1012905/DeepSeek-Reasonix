@@ -1,2 +1,0 @@
-- 修复：终端里刚启动就输入 /feedback 会提示“当前会话不可用”，要先 /reload 才行；现在启动后即可用。关联 #12073。
-- Fixed: In the terminal, /feedback said "not available in this session" until a /reload; it now works from the start. Refs #12073.

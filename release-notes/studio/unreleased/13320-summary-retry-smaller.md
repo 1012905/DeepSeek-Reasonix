@@ -1,2 +1,0 @@
-- 修复：压缩时摘要请求被供应商以“输入超长”拒绝，现在会按更小的输入重试（70%、50%、35%），而不是放弃这次压缩。见 #13320。
-- Fixed: when the provider refuses a compaction's summary request as too large, it is retried with a smaller input (70%, 50%, 35%) instead of giving up the fold. See #13320.
