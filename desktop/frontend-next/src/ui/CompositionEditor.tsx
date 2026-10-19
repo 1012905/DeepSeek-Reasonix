@@ -114,9 +114,10 @@ export function CompositionEditor({
           <span className="ds" id={`${helpId}-id`}>{t("自动生成，用于保存和引用预设；保存后不可修改。")}</span>
         </label>
       <label className="pers-field">
-        <span className="lb">{t("第一方指令之后")}</span>
+        <span className="lb">{t("补充要求")}</span>
         <textarea
-          aria-label={t("第一方指令之后")}
+          aria-label={t("补充要求")}
+          aria-describedby={`${helpId}-suffix`}
           data-action-change="persona.suffix"
           rows={3}
           maxLength={32768}
@@ -124,6 +125,7 @@ export function CompositionEditor({
           value={persona.suffix}
           onChange={(e) => updatePersona({ suffix: e.target.value })}
         />
+        <span className="ds" id={`${helpId}-suffix`}>{t("放在内置系统指令之后，留空则不添加")}</span>
       </label>
       <div className="lrow">
         <span className="tx">

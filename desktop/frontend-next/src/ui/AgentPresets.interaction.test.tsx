@@ -102,7 +102,7 @@ describe("Agent preset management", () => {
     await user.type(screen.getByLabelText("预设名称"), "My agent");
     await user.type(screen.getByLabelText("人设与要求"), "Literal prefix");
     await user.click(screen.getByText("高级设置", { selector: "summary" }));
-    await user.type(screen.getByLabelText("第一方指令之后"), "Literal suffix");
+    await user.type(screen.getByLabelText("补充要求"), "Literal suffix");
     expect(screen.queryByRole("switch", { name: /complete/ })).toBeNull();
     await user.click(screen.getByRole("switch", { name: "注入运行环境与离线提示" }));
     await user.click(screen.getByRole("button", { name: "保存预设" }));

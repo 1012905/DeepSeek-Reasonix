@@ -156,15 +156,16 @@ export function Persona({ port, onDirtyChange, onBusyChange, onSaved }: { port: 
           </div>
 
           <div className="pers-field">
-            <label className="lb" htmlFor={suffixId}>{t("第一方指令之后")}</label>
-            <span className="ds">{t("紧跟在内置指令之后、运行时上下文之前；留空表示不添加。")}</span>
+            <label className="lb" htmlFor={suffixId}>{t("补充要求")}</label>
+            <span className="ds" id={`${suffixId}-help`}>{t("放在内置系统指令之后，留空则不添加")}</span>
             <textarea
               id={suffixId}
               dir="auto"
               rows={5}
               maxLength={LIMIT}
               spellCheck={false}
-              aria-label={t("第一方指令之后")}
+              aria-label={t("补充要求")}
+              aria-describedby={`${suffixId}-help`}
               data-action-change="persona.suffix"
               value={draft.suffix}
               disabled={busy}
