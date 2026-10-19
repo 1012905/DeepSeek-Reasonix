@@ -1,2 +1,2 @@
 - 修复：长时间使用后偶发“缺少本次启动的凭据，请重新打开 Studio 后重试”、发送按钮失效——外壳现在会在认证 cookie 被移除时立即补回，并在日志里记下原因。见 #13932。
-- Fixed: the occasional "this launch's credential is missing" refusal after long use, with a dead send button; the shell now restores its authentication cookie as soon as something removes it and logs the cause. See #13932.
+- Fixed: the occasional "this launch's credential is missing" refusal after long use, with a dead send button; the shell now restores its cookie if it is removed. See #13932.
