@@ -746,6 +746,7 @@ const Row = memo(function Row({
             activity={activity}
             children={it.children}
             readOutput={port?.toolOutput?.bind(port)}
+            omitted={it.omitted}
             takeover={it.tool.id ? takeovers[`tool:${it.tool.id}`] : undefined}
             onExtInvoke={onExtInvoke}
             onPrepareFileRevert={onPrepareFileRevert}

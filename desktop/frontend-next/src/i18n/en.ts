@@ -517,6 +517,7 @@ export const EN: Record<string, string> = {
   "显示完整输出": "Show full output",
   "正在取回…": "Fetching…",
   "取回失败，请重试": "Could not fetch it; try again",
+  "此前省略了 {n} 个字符，这里只显示最近的输出": "{n} characters before this are left out; only the most recent output is shown",
   "在 {name} 下新建会话": "Start a new session in {name}",
   "关闭这个会话面板": "Close this pane",
   "不会删除任何文件": "No files are deleted",
