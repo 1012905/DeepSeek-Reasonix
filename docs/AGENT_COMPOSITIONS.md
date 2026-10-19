@@ -21,15 +21,9 @@ to bind a version.
 
 ## Choosing and editing
 
-The mode picker is hidden by default. Enable **Settings → Agent presets → Show
-mode picker** on this machine to show it immediately in every pane.
-
-With it off,
-the composer keeps its original controls and status layout; no catalog is read
-and no composition is selected by the hidden control.
-
-Turning it off hides the
-entry without changing a conversation's binding or a saved preference.
+The mode picker is always visible above the input in every pane. New conversations
+start in Standard mode, even when another preset is marked as preferred. Showing
+the picker reads the catalog without selecting or binding a composition.
 
 Choose the mode at the left of the composer status row before
 the first prompt. One menu lists compositions with their sources and capabilities;

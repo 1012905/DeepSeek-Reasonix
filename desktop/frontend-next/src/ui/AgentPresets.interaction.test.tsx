@@ -8,12 +8,10 @@ import { AgentPresets } from "./AgentPresets";
 import { boot, STORAGE, t } from "../i18n";
 import { AgentCompositionPicker } from "./AgentCompositionPicker";
 import { RunLine } from "./RunLine";
-import { setShowsCompositionPicker } from "../state/compositionPicker";
 
 afterEach(() => { cleanup(); localStorage.setItem(STORAGE, "zh"); boot(); });
 
-it("enables the picker from Settings without changing the active conversation, then hides it", async () => {
-  localStorage.removeItem("rx-show-agent-composition");
+it("keeps the mode picker visible without a visibility setting or automatic selection", async () => {
   const port = new MockPort();
   const select = vi.spyOn(port, "selectAgentComposition");
   const user = userEvent.setup();
@@ -23,20 +21,15 @@ it("enables the picker from Settings without changing the active conversation, t
     </RunLine>
   </>);
   await screen.findByRole("button", { name: "标准模式" });
-  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
-  expect(document.querySelector(".compose-context")).toBeNull();
-  const toggle = screen.getByRole("switch", { name: "显示模式选择器" });
-  expect(toggle.getAttribute("aria-checked")).toBe("false");
-  await user.click(toggle);
   const picker = await screen.findByRole("button", { name: /^Agent 组合/ });
+  expect(picker.textContent).toBe("标准模式");
+  expect(screen.queryByRole("switch", { name: "显示模式选择器" })).toBeNull();
+  expect(await port.agentComposition()).toBeNull();
+  expect(select).not.toHaveBeenCalled();
   await user.click(picker);
   await user.click(screen.getByRole("menuitem", { name: /精简模式/ }));
-  const before = await port.agentComposition();
-  await user.click(toggle);
-  expect(screen.queryByRole("button", { name: /^Agent 组合/ })).toBeNull();
-  expect(await port.agentComposition()).toEqual(before);
+  expect((await port.agentComposition())?.id).toBe("builtin:minimal");
   expect(select).toHaveBeenCalledExactlyOnceWith("builtin:minimal");
-  setShowsCompositionPicker(false);
 });
 
 it("copies both built-in name and description in the window language", async () => {

@@ -3,8 +3,6 @@ export const EN_COMPOSITION: Record<string,string> = {
   "不支持此会话文件版本，请使用兼容版本导出。": "Unsupported session file version. Export it with a compatible version.",
   "会话文件超过安全导入限制（大小或记录数）。": "The session file exceeds safe import limits (size or record count).",
   "Agent 预设暂不可用": "Agent presets unavailable",
-  "显示模式选择器": "Show mode picker",
-  "默认关闭。开启后在输入框顶部选择模式；关闭只隐藏入口，不改变已有会话的模式。": "Off by default. Enable to choose a mode above the input. Turning it off hides the picker without changing existing conversations.",
   "当前会话已绑定预设，标准模式的人设修改不会更新此绑定。": "This conversation is bound to a preset. Editing the Standard-mode persona will not update that binding.",
   "默认使用标准模式。其他模式仅在明确选择后启用；首选标记不会自动切换会话。": "Standard mode is used by default. Other modes require an explicit choice; a preference never switches a conversation automatically.",
   "标准模式": "Standard mode",

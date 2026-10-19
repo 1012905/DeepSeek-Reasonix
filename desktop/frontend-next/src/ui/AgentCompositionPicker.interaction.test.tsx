@@ -1,29 +1,27 @@
 // @vitest-environment jsdom
-import {act,cleanup,render,screen,waitFor} from "@testing-library/react";
+import {cleanup,render,screen,waitFor} from "@testing-library/react";
 import "./testkit";
 import userEvent from "@testing-library/user-event";
-import {afterEach,beforeEach,expect,it,vi} from "vitest";
+import {afterEach,expect,it,vi} from "vitest";
 import {MockPort} from "../port/mock";
 import {AgentCompositionPicker} from "./AgentCompositionPicker";
 import {CompositionNewContext} from "./CompositionNewContext";
 import {RunLine} from "./RunLine";
-import { setShowsCompositionPicker } from "../state/compositionPicker";
+afterEach(() => { cleanup(); localStorage.removeItem("rx-show-agent-composition"); });
 
-beforeEach(() => setShowsCompositionPicker(true));
-afterEach(cleanup);
-
-it("hides the picker and performs no composition reads until explicitly enabled", async () => {
-  setShowsCompositionPicker(false);
+it.each([null, "off", "on"])("shows Standard by default regardless of the retired visibility preference %s", async (stored) => {
+  if (stored === null) localStorage.removeItem("rx-show-agent-composition");
+  else localStorage.setItem("rx-show-agent-composition", stored);
   const port = new MockPort();
-  const read = vi.spyOn(port, "agentPresets");
+  await port.setDefaultAgentPreset("builtin:minimal", false);
   const select = vi.spyOn(port, "selectAgentComposition");
-  render(<AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>);
-  expect(screen.queryByRole("button")).toBeNull();
-  expect(read).not.toHaveBeenCalled();
-  act(() => setShowsCompositionPicker(true));
-  await screen.findByRole("button", { name: /^Agent 组合/ });
-  act(() => setShowsCompositionPicker(false));
-  expect(screen.queryByRole("button")).toBeNull();
+  render(<RunLine label="空闲" running={false} blocked={false} sent={0} received={0} estimated={false}>
+    <AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>
+  </RunLine>);
+  const picker = await screen.findByRole("button", { name: /^Agent 组合/ });
+  expect(picker.textContent).toBe("标准模式");
+  expect(screen.getByRole("status").parentElement?.contains(picker)).toBe(true);
+  expect(await port.agentComposition()).toBeNull();
   expect(select).not.toHaveBeenCalled();
 });
 

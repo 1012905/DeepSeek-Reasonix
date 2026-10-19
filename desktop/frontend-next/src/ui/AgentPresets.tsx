@@ -13,12 +13,9 @@ import { Group } from "./Group";
 import { CompositionEditor } from "./CompositionEditor";
 import { CompositionCatalog } from "./CompositionCatalog";
 import { Persona } from "./Persona";
-import { Switch } from "./Switch";
-import { setShowsCompositionPicker, useShowsCompositionPicker } from "../state/compositionPicker";
 
 export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; focusPersona?: boolean }) {
   const helpId = useId();
-  const showsPicker = useShowsCompositionPicker();
   const [catalog, setCatalog] = useState<AgentPresetCatalog | null>(null);
   const [version, setVersion] = useState<AgentPresetVersion | null>(null);
   const [draft, setDraft] = useState<AgentComposition | null>(null);
@@ -98,23 +95,6 @@ export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; 
   const changed = draft && (!version || JSON.stringify(draft) !== JSON.stringify(version.definition));
   return (
     <>
-      <Group
-        id="composition-picker"
-        title={t("显示模式选择器")}
-        hint={t("默认关闭。开启后在输入框顶部选择模式；关闭只隐藏入口，不改变已有会话的模式。")}
-      >
-        <div className="lrow">
-          <span className="tx">
-            <span className="lb">{t("显示模式选择器")}</span>
-          </span>
-          <Switch
-            label={t("显示模式选择器")}
-            data-action="agent-preset.show-picker"
-            on={showsPicker}
-            onClick={() => setShowsCompositionPicker(!showsPicker)}
-          />
-        </div>
-      </Group>
       <Group
         id="agent-presets"
         title={t("Agent 预设")}

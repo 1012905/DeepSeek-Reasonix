@@ -3,7 +3,6 @@ import { t } from "../i18n";
 import { RMark } from "./RMark";
 import { RunClock } from "./RunClock";
 import { RunTokens } from "./RunTokens";
-import { useShowsCompositionPicker } from "../state/compositionPicker";
 
 export function RunLine({
   label,
@@ -24,7 +23,6 @@ export function RunLine({
   estimated: boolean;
   children?: ReactNode;
 }) {
-  const showsPicker = useShowsCompositionPicker();
   const status = (
     <div
       className="studio-runstate"
@@ -42,7 +40,7 @@ export function RunLine({
       <RunTokens sent={sent} received={received} estimated={estimated} />
     </div>
   );
-  return showsPicker && children ? (
+  return children ? (
     <div className="compose-context">
       {children}
       {status}
