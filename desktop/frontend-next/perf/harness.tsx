@@ -54,7 +54,7 @@ import { HttpError } from "../src/port/port";
 import type { AgentPort, Appearance, ChipCall, HistoryMessage, McpEntry } from "../src/port/port";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
-import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
+import type { RuntimeView, TreeWindow, TreeWorkspace } from "../src/port/hub";
 import type { WireEvent } from "../src/port/wire";
 
 // Saves are coalesced (src/ui/trailing.ts), and a fixture answers too fast for
@@ -491,7 +491,19 @@ class BenchHub extends MockHub {
     return super.moveSessionTo(path, target);
   }
 
-  tree(): Promise<TreeWorkspace[]> {
+  // ?slowarchive=<ms>: one project with 27 active and 2127 archived conversations,
+  // whose archived read answers after that many milliseconds.
+  tree(window?: TreeWindow): Promise<TreeWorkspace[]> {
+    const slow = Number(query.get("slowarchive") ?? "");
+    if (slow > 0) {
+      const archived = window?.scope === "archived";
+      const rows = Array.from({ length: archived ? 8 : 6 }, (_, i) => ({
+        path: `/sessions/${archived ? "old" : "new"}-${i}.jsonl`, name: `${archived ? "old" : "new"}-${i}`,
+        title: `${archived ? "归档的" : "活跃的"}会话 ${i + 1}`, turns: i + 1, archived,
+      }));
+      const answer = [{ root: "~/projects/workspace-0", name: "workspace-0", remembered: true, open: true, total: 2154, archived: 2127, remaining: archived ? 2119 : 21, sessions: rows }];
+      return new Promise((resolve) => setTimeout(() => resolve(answer), archived ? slow : 0));
+    }
     const wait = TREE_AT - performance.now();
     if (wait > 0) return new Promise((resolve) => setTimeout(() => resolve(this.tree()), wait));
     if (!WORKSPACES) return super.tree();

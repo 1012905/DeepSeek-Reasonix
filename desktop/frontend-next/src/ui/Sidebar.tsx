@@ -19,7 +19,7 @@ import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
 import { Workspaces } from "./Workspaces";
 import { OpenProject } from "./OpenProject";
-import type { TreePaging } from "./treewindow";
+import type { TreePaging, TreeView } from "./treewindow";
 import { MASK, useHidesAmounts } from "./wallet";
 import { useFileDrop } from "./filedrop";
 import type { PaneView } from "../state/paneview";
@@ -32,6 +32,7 @@ interface Props {
   navShown: boolean;
   tree: TreeWorkspace[];
   treeRead: boolean;
+  answered?: TreeView | null;
   runtimes: RuntimeView[];
   runs: Record<string, { run: string; live: boolean }>;
   active: string;
@@ -88,6 +89,7 @@ export function Sidebar({
   navShown,
   tree,
   treeRead,
+  answered,
   runtimes,
   runs,
   active,
@@ -283,6 +285,7 @@ export function Sidebar({
         hub={hub}
         tree={tree}
         treeRead={treeRead}
+        answered={answered}
         runtimes={runtimes}
         active={active}
         folded={folded}
