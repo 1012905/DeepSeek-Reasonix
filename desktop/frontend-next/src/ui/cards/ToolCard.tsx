@@ -19,6 +19,7 @@ import { Term, ToolOutput, BoundNote } from "./ToolOutput";
 import { ExtensionView } from "./ExtensionView";
 import { toolChangedFile, toolErrorDetail, toolFailed, toolFailureLabel, toolOutputEchoed, toolRefusalReason } from "./outcome";
 import { StudioIcon } from "../StudioIcon";
+import { registerNest } from "./nestreveal";
 import { ImagePreview } from "../ImagePreview";
 
 // The spec pops a symbol as it settles — colour arriving is the finish signal.
@@ -129,6 +130,18 @@ export function ToolCard({
     if (bad) setOpen(null);
   }, [bad]);
   const open = touched ?? start;
+  // A delegate's child calls are the bulk of a long session, so a finished,
+  // closed card does not mount them; once opened they stay, so what the reader
+  // did inside (show all) survives closing it again.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (open) opened.current = true;
+  }, [open]);
+  const nestMounted = open || running || opened.current;
+  useEffect(() => {
+    if (nestMounted || children.length === 0) return;
+    return registerNest(children.map((c) => c.id).filter((id): id is string => !!id), () => setOpen(true));
+  }, [nestMounted, children]);
   const changes = changeCounts(tool);
   const activityArgs = activity ? prettyArgs(tool.args) : "";
   // A call being watched in the activity group opens to its input even with no
@@ -257,14 +270,18 @@ export function ToolCard({
                 .join(" · ")}
             </span>
           </div>
-          <div className="nest-bd">
-            {children.map((c) => (
-              <NestedCall key={c.id} tool={c} />
-            ))}
-          </div>
-          {/* What the delegate handed back closes its own panel: outside it,
-              the sentence reads as the main run's conclusion. */}
-          {tool.output && <div className="nest-ret">{tool.output}</div>}
+          {nestMounted && (
+            <>
+              <div className="nest-bd">
+                {children.map((c) => (
+                  <NestedCall key={c.id} tool={c} />
+                ))}
+              </div>
+              {/* What the delegate handed back closes its own panel: outside it,
+                  the sentence reads as the main run's conclusion. */}
+              {tool.output && <div className="nest-ret">{tool.output}</div>}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -284,7 +301,7 @@ export function ToolCard({
       </div>
       <div className="c">
         {hasBody ? (
-          <details className="tool-disclosure" open={open} onToggle={(event) => event.currentTarget.open !== open && setOpen(event.currentTarget.open)}>
+          <details className="tool-disclosure" data-lazy={children.length > 0 && !nestMounted ? "" : undefined} open={open} onToggle={(event) => event.currentTarget.open !== open && setOpen(event.currentTarget.open)}>
             <summary className="hl" data-swap={settling.swap ? "" : undefined}>{heading}</summary>
             {body}
           </details>
