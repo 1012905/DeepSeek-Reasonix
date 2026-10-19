@@ -4217,3 +4217,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .skupd-diff span[data-d="-"] { color: color-mix(in srgb, var(--del) 58%, var(--text)); background: color-mix(in srgb, var(--del) 8%, transparent); }
 .skupd { margin: 6px 0 14px; }
 .workbench-tab-in { min-width: 0; width: 100%; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--page); color: var(--text); font: 500 calc(11px * var(--fs-scale, 1))/1.4 var(--ui); outline: none; }
+.other-field { display: flex; align-items: center; gap: 8px; }
+.other-field input { flex: 1; min-width: 0; }
+.other-wrap .refine-card { margin: 8px 0 0; }
