@@ -137,8 +137,10 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
     onConceal(true);
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 60))));
     const bytes = await host().captureWindow();
-    onConceal(false);
+    // The send panel is mounted for as long as the dialog is, so a form that is gone
+    // has nothing left to unveil, and setting state then is a write into a torn-down page.
     if (!mounted.current) return;
+    onConceal(false);
     setCapture(bytes ? "idle" : "failed");
     if (bytes) await add([new File([bytes as BlobPart], "window.png", { type: "image/png" })]);
     if (mounted.current) focusFrame.current = requestAnimationFrame(() => captureButton.current?.focus());

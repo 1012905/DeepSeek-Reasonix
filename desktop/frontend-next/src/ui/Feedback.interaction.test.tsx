@@ -673,6 +673,31 @@ describe("capturing the window", () => {
     expect(heldDraft().shots).toEqual([]);
   });
 
+  it("touches no state at all when the shell answers after the window global is gone", async () => {
+    vi.spyOn(host(), "capturesWindow").mockReturnValue(true);
+    let finish: (b: Uint8Array) => void = () => {};
+    const taking = vi.spyOn(host(), "captureWindow").mockImplementation(() => new Promise((r) => { finish = r; }));
+    const unhandled = vi.fn();
+    const proc = (globalThis as unknown as { process: { on(e: string, f: () => void): void; off(e: string, f: () => void): void } }).process;
+    proc.on("unhandledRejection", unhandled);
+    setup();
+    await ready();
+    await userEvent.click(button());
+    await waitFor(() => expect(taking).toHaveBeenCalled());
+    cleanup();
+    const later = globalThis.setTimeout.bind(globalThis);
+    const own = Object.getOwnPropertyDescriptor(globalThis, "window")!;
+    Object.defineProperty(globalThis, "window", { configurable: true, get() { throw new ReferenceError("window is not defined"); } });
+    try {
+      finish(new Uint8Array([137, 80, 78, 71]));
+      await new Promise((r) => later(r, 30));
+    } finally {
+      Object.defineProperty(globalThis, "window", own);
+      proc.off("unhandledRejection", unhandled);
+    }
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+
   it("finishes quietly when the shell answers after the page is torn down", async () => {
     vi.spyOn(host(), "capturesWindow").mockReturnValue(true);
     let finish: (b: Uint8Array) => void = () => {};
