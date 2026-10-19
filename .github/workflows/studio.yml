@@ -176,6 +176,7 @@ jobs:
           node perf/mcp-actions.mjs
           node perf/web-access.mjs
           node perf/peers-settings.mjs
+          node perf/trust-wait.mjs
           node perf/provider-ports.mjs
           node perf/peer-threads.mjs
           node perf/text-size.mjs

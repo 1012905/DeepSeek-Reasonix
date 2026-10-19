@@ -1,0 +1,2 @@
+- 改进：后台窗格在等你决定是否信任文件夹时，侧栏里它的会话行会和其他等你的会话一样标出来，不必切过去才发现。关联 #13890。
+- Improved: A conversation out of sight that is asking whether to trust its folder is now marked in the sidebar like any other waiting one. Refs #13890.
