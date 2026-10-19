@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,9 @@ func indexAsides(t *testing.T, dir string) []string {
 // permission, so this process cannot read it but can still rename it away.
 func makeIndexUnreadable(t *testing.T, dir, body string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod does not remove read permission on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("permission faults do not apply to root")
 	}

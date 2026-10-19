@@ -2,6 +2,7 @@ package memory
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -98,6 +99,9 @@ func TestMigrateV2RebuildsAMissingIndex(t *testing.T) {
 // unreadable index, an ordinary save of another fact must succeed, and the
 // rebuilt index must name every fact that could be read.
 func TestIndexRebuildUnblocksLaterSaves(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod does not remove read permission on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("permission faults do not apply to root")
 	}

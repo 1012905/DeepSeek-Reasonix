@@ -3,6 +3,7 @@ package memory
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,9 @@ func auditSeed(t *testing.T, store Store, names ...string) {
 // first, so a read failure freezes the whole store. Today the one rebuild pass
 // refuses to run because it cannot read the file it exists to repair.
 func TestAuditIndexRebuildRunsWhenTheIndexIsUnreadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod does not remove read permission on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("permission faults do not apply to root")
 	}
