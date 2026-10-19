@@ -1,6 +1,6 @@
 import type { ChangeDiff, StageRequest, WorkspaceBranches, WorkspaceChanges, WorkspaceGit } from "./port";
 import type { DiscardRequest, GitCommitFiles, GitHistory, GitRepos, PushPlan, PushRequest, PushResult } from "./workspace";
-import type { JobOutput } from "./session";
+import type { JobOutput, ToolOutputPage } from "./session";
 import type { SubagentRun, SubagentTranscript } from "./subagent";
 import { SseFeedback } from "./sse_feedback";
 import { host } from "./host";
@@ -94,5 +94,9 @@ export class SseWorkspace extends SseFeedback {
   }
   jobOutput(jobId: string) {
     return this.get<JobOutput>("/jobs/" + encodeURIComponent(jobId) + "/output");
+  }
+  toolOutput(callId: string, offset = 0, limit?: number) {
+    const q = new URLSearchParams({ offset: String(offset), ...(limit === undefined ? {} : { limit: String(limit) }) });
+    return this.get<ToolOutputPage>("/history/tool/" + encodeURIComponent(callId) + "?" + q);
   }
 }

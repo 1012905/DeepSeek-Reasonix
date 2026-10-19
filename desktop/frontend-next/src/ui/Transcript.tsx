@@ -39,7 +39,7 @@ import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion" | "stopToolCall" | "refinePrompt">>;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion" | "stopToolCall" | "refinePrompt" | "toolOutput">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -745,6 +745,7 @@ const Row = memo(function Row({
             running={it.running}
             activity={activity}
             children={it.children}
+            readOutput={port?.toolOutput?.bind(port)}
             takeover={it.tool.id ? takeovers[`tool:${it.tool.id}`] : undefined}
             onExtInvoke={onExtInvoke}
             onPrepareFileRevert={onPrepareFileRevert}

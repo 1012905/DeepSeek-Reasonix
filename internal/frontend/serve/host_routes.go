@@ -20,6 +20,8 @@ var hostOnlyRoutes = []hostRoute{
 	{http.MethodPost, "/feedback/board/leave"},
 }
 
+// GET /history/tool/{id} is not listed on purpose: it is a window onto what GET /history
+// carries, so a device that may read one may read the other; a test holds them together.
 func hostOnlyRoute(method, p string) bool {
 	if method == http.MethodHead {
 		method = http.MethodGet

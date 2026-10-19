@@ -141,6 +141,7 @@ export const ACTIONS: UIAction[] = [
   { id: "image.close", kind: "view", target: "none", proof: "interaction" },
   { id: "image.focus-trap", kind: "navigation", target: "none", proof: "interaction" },
   { id: "tool.show-all", kind: "view", target: "none", proof: "interaction" },
+  { id: "tool.show-full", kind: "view", target: "none", proof: "interaction" },
   { id: "agent.open", kind: "view", target: "entity", proof: "interaction" },
   { id: "agent.focus-trap", kind: "navigation", target: "none", proof: "interaction" },
   { id: "agent.close", kind: "view", target: "none", proof: "interaction" },
