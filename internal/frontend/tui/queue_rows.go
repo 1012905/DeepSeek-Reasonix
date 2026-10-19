@@ -203,8 +203,8 @@ func (m *model) queueKey(k string) (tea.Cmd, bool) {
 // composer; past the newest it ends the selection.
 func (m *model) queueSelect(delta int) tea.Cmd {
 	at := m.queueIndex()
-	switch {
-	case m.queue.selID == "":
+	switch m.queue.selID {
+	case "":
 		m.queue.draft = m.composer.Value()
 		at = len(m.queue.items) - 1
 	default:
