@@ -252,6 +252,7 @@ var mirroredWireTypes = []wireMirror{
 	// The report form draws what the kernel will send and reads back what
 	// became of it; a field the page cannot read is a status it cannot show.
 	{"internal/platform/feedback/types.go", "Env", tsFeedbackFile, "FeedbackEnvInfo"},
+	{"internal/platform/feedback/env_memory.go", "ProcessMemory", tsFeedbackFile, "FeedbackProcessMemory"},
 	{"internal/platform/feedback/types.go", "Limits", tsFeedbackFile, "FeedbackLimits"},
 	{"internal/platform/feedback/types.go", "Receipt", tsFeedbackFile, "FeedbackReceipt"},
 	{"internal/platform/feedback/types.go", "Item", tsFeedbackFile, "FeedbackItem"},

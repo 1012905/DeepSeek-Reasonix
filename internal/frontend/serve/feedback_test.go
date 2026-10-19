@@ -501,3 +501,48 @@ func TestFeedbackWithdrawWithoutAServiceOrAReceiptIsRefused(t *testing.T) {
 		t.Fatalf("an unknown receipt: %d %s", resp.StatusCode, out)
 	}
 }
+
+func TestFeedbackSubmitCarriesTheShellsMemoryRowsAndOnlyThose(t *testing.T) {
+	stub := &feedbackStub{}
+	srv := feedbackServer(t, stub, true)
+	resp, out := feedbackPost(t, srv.URL+"/feedback", map[string]any{
+		"idempotencyKey": "k-mem", "category": "bug", "body": "slow", "displayName": "kim", "locale": "en-US",
+		"memory": []map[string]any{
+			{"process": "renderer", "workingSetKB": 3992908, "privateKB": 3900000},
+			{"process": `C:\Users\someone\Reasonix Studio.exe`, "workingSetKB": 1, "privateKB": 1},
+			{"process": "kernel", "workingSetKB": 7, "privateKB": 7},
+		},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("a service that ignores memory must still answer: %d %s", resp.StatusCode, out)
+	}
+	rows := stub.posts[0]["env"].(map[string]any)["memory"].([]any)
+	var seen []string
+	for _, r := range rows {
+		seen = append(seen, r.(map[string]any)["process"].(string))
+	}
+	if strings.Join(seen, ",") != "renderer,kernel" {
+		t.Fatalf("the service was sent %v, want the renderer row and the kernel's own", seen)
+	}
+	if k := rows[1].(map[string]any); k["workingSetKB"].(float64) == 7 {
+		t.Fatalf("the kernel row came from the page: %v", k)
+	}
+}
+
+func TestFeedbackEnvAnswersWithTheKernelRowOnly(t *testing.T) {
+	srv := feedbackServer(t, &feedbackStub{}, true)
+	resp, err := http.Get(srv.URL + "/feedback/env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var got struct {
+		Env feedback.Env `json:"env"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Env.Memory) != 1 || got.Env.Memory[0].Process != "kernel" {
+		t.Fatalf("memory = %+v", got.Env.Memory)
+	}
+}

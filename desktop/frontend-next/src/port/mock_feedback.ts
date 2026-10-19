@@ -7,6 +7,7 @@ const LIMITS = { bodyBytes: 8192, nameChars: 40, contactChars: 120, images: 3, i
 const ENV = {
   version: "v2.24.0", commit: "7ee4bbb", surface: "studio", os: "windows", osVersion: "10.0.19045",
   arch: "amd64", locale: "en-US", channel: "stable", providerKind: "deepseek",
+  memory: [{ process: "kernel" as const, workingSetKB: 196608, privateKB: 150000 }],
 };
 
 const DAY = 86_400_000;
