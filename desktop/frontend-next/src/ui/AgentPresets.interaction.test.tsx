@@ -21,14 +21,14 @@ it("keeps the mode picker visible without a visibility setting or automatic sele
       <AgentCompositionPicker port={port} running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>
     </RunLine>
   </>);
-  await screen.findByRole("button", { name: "查看 标准模式" });
+  await screen.findByRole("button", { name: "查看 日常搭档" });
   const picker = await screen.findByRole("button", { name: /^Agent 组合/ });
-  expect(picker.textContent).toBe("标准模式");
+  expect(picker.textContent).toBe("日常搭档");
   expect(screen.queryByRole("switch", { name: "显示模式选择器" })).toBeNull();
   expect(await port.agentComposition()).toBeNull();
   expect(select).not.toHaveBeenCalled();
   await user.click(picker);
-  await user.click(screen.getByRole("menuitem", { name: /精简模式/ }));
+  await user.click(screen.getByRole("menuitem", { name: /轻装搭档/ }));
   expect((await port.agentComposition())?.id).toBe("builtin:minimal");
   expect(select).toHaveBeenCalledExactlyOnceWith("builtin:minimal");
 });
@@ -37,13 +37,13 @@ it("copies both built-in name and description in the window language", async () 
   localStorage.setItem(STORAGE, "en"); boot();
   const port = new MockPort();
   render(<AgentPresets port={port} />);
-  await userEvent.click(await screen.findByRole("button", { name: "Duplicate Standard mode" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Duplicate Everyday partner" }));
   await userEvent.click(screen.getByRole("button", { name: "Save preset" }));
   await screen.findByRole("status");
   const catalog = await port.agentPresets();
   const base = catalog.presets.find((v) => v.definition.id === "builtin:general")!.definition;
   const copy = catalog.presets.find((v) => v.definition.id === "user:custom")!.definition;
-  expect(copy.name).toBe("Standard mode Copy");
+  expect(copy.name).toBe("Everyday partner Copy");
   expect(copy.description).toBe(t(base.description));
 });
 
@@ -52,9 +52,9 @@ describe("Agent preset management", () => {
     const user = userEvent.setup();
     const port = new MockPort();
     render(<AgentPresets port={port} />);
-    await user.click(await screen.findByRole("button", { name: "查看 标准模式" }));
+    await user.click(await screen.findByRole("button", { name: "查看 日常搭档" }));
     await user.click(screen.getByText("更多操作"));
-    await user.click(screen.getByRole("button", { name: "编辑标准模式人设" }));
+    await user.click(screen.getByRole("button", { name: "编辑日常搭档人设" }));
     await user.type(await screen.findByLabelText("系统提示词开头"), "User identity");
     await user.click(screen.getByRole("button", { name: "保存" }));
     await screen.findByRole("button", { name: "新建预设" });
@@ -74,8 +74,8 @@ describe("Agent preset management", () => {
     const user = userEvent.setup();
     const port = new MockPort();
     render(<AgentPresets port={port} />);
-    expect(await screen.findByRole("button", { name: "查看 标准模式" })).toBeTruthy();
-    const minimal = screen.getByRole("button", { name: "查看 精简模式" });
+    expect(await screen.findByRole("button", { name: "查看 日常搭档" })).toBeTruthy();
+    const minimal = screen.getByRole("button", { name: "查看 轻装搭档" });
     expect(within(screen.getByRole("region", { name: "内置" })).getAllByRole("article")).toHaveLength(2);
     expect(screen.queryByText("代码审查")).toBeNull();
     expect(screen.queryByText("资料研究")).toBeNull();
@@ -98,7 +98,7 @@ describe("Agent preset management", () => {
     const user = userEvent.setup();
     const port = new MockPort();
     render(<AgentPresets port={port} />);
-    await user.click(await screen.findByRole("button", { name: "复制 标准模式" }));
+    await user.click(await screen.findByRole("button", { name: "复制 日常搭档" }));
     await user.clear(screen.getByLabelText("预设名称"));
     await user.type(screen.getByLabelText("预设名称"), "My agent");
     await user.type(screen.getByLabelText("人设与要求"), "Literal prefix");
@@ -116,7 +116,7 @@ describe("Agent preset management", () => {
     const port = new MockPort();
     vi.spyOn(port, "saveAgentPreset").mockRejectedValue(new Error("conflict"));
     render(<AgentPresets port={port} />);
-    await user.click(await screen.findByRole("button", { name: "复制 标准模式" }));
+    await user.click(await screen.findByRole("button", { name: "复制 日常搭档" }));
     await user.type(screen.getByLabelText("预设名称"), " draft");
     await user.click(screen.getByRole("button", { name: "保存预设" }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
@@ -125,7 +125,7 @@ describe("Agent preset management", () => {
   it("does not save an earlier parameter value when the visible JSON is invalid", async () => {
     const user=userEvent.setup();const port=new MockPort();const save=vi.spyOn(port,"saveAgentPreset");
     render(<AgentPresets port={port}/>);
-    await user.click(await screen.findByRole("button",{name:"复制 标准模式"}));
+    await user.click(await screen.findByRole("button",{name:"复制 日常搭档"}));
     await user.click(screen.getByText("技能与扩展", { selector: "summary" }));
     await user.selectOptions(screen.getByLabelText("MCP 服务 选择方式"),"select");
     const group=screen.getByRole("group",{name:"MCP 服务"});

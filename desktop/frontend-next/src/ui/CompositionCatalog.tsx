@@ -34,7 +34,7 @@ export function CompositionCatalog({ catalog, onSelect, onCreate, onCopy }: {
           : items.map(v => <PresetRow key={v.definition.id} version={v} onSelect={() => onSelect(v)} onCopy={() => onCopy(v)} />)}
       </section>;
     })}
-    <details className="composition-how"><summary>{t("如何使用")}</summary><p>{t("在输入框顶部选择 Agent 模式，首次提交前可切换。开始对话后，请用其他模式新建会话。精简模式的终端仍可修改文件，并非只读模式。")}</p></details>
+    <details className="composition-how"><summary>{t("如何使用")}</summary><p>{t("在输入框顶部选择 Agent 模式，首次提交前可切换。开始对话后，请用其他模式新建会话。轻装搭档的终端仍可修改文件，并非只读模式。")}</p></details>
   </div>;
 }
 

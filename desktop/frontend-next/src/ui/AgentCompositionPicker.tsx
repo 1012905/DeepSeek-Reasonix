@@ -44,7 +44,7 @@ export function AgentCompositionPicker({ port, binding, locked: statusLocked, ru
   if (!catalog) return null;
   const selected = catalog.presets.find((v) => v.definition.id === (current?.id ?? "builtin:general"))?.definition;
   const locked = running || statusLocked || !!current?.started;
-  const label = current ? compositionName(current.id, current.name) : t("标准模式");
+  const label = current ? compositionName(current.id, current.name) : t(selected?.name ?? "日常搭档");
   const items: MenuItem[] = locked && !createNew ? [] : catalog.presets.map(({ definition }) => ({
     value: definition.id,
     label: compositionName(definition.id, definition.name),

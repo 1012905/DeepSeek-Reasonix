@@ -60,7 +60,7 @@ it("starts with a catalog and opens creation in a separate editor", async () => 
   await user.click(screen.getByRole("button", { name: "新建预设" }));
   const editor = await screen.findByRole("form", { name: "新建预设" });
   expect(within(editor).getByRole("textbox", { name: "预设名称" })).toBe(document.activeElement);
-  expect(within(editor).getByText("基于标准模式创建")).toBeTruthy();
+  expect(within(editor).getByText("基于日常搭档创建")).toBeTruthy();
   expect(within(editor).getByRole<HTMLButtonElement>("button", { name: "保存预设" }).disabled).toBe(true);
   expect(within(editor).getByLabelText("预设 ID").closest("details")).toBeNull();
   expect(within(editor).getByRole("textbox", { name: "补充要求" })).toBeTruthy();

@@ -23,11 +23,11 @@ it("uses the clicked card for fresh local and remote tasks, with explicit choice
   await port.setDefaultAgentPreset("builtin:minimal", false);
   render(<AgentPresets port={port} />);
   const user = userEvent.setup();
-  const general = await screen.findByRole("button", { name: "将标准模式设为新任务默认" });
+  const general = await screen.findByRole("button", { name: "将日常搭档设为新任务默认" });
   expect(general.getAttribute("aria-pressed")).toBe("true");
   expect(newTaskPreset()).toBeUndefined();
-  await user.click(screen.getByRole("button", { name: "将精简模式设为新任务默认" }));
-  expect(screen.getByRole("button", { name: "将精简模式设为新任务默认" }).getAttribute("aria-pressed")).toBe("true");
+  await user.click(screen.getByRole("button", { name: "将轻装搭档设为新任务默认" }));
+  expect(screen.getByRole("button", { name: "将轻装搭档设为新任务默认" }).getAttribute("aria-pressed")).toBe("true");
   expect(await port.agentComposition()).toBeNull();
   const local = renderHook(() => useOpenPane({ hub, runtimes: [], panePorts: new Map(), active: "",
     reportsRef: { current: {} }, runsRef: { current: {} }, setRuntimes: vi.fn(), setActive: vi.fn(),
@@ -44,7 +44,7 @@ it("uses the clicked card for fresh local and remote tasks, with explicit choice
   expect((await hub.portFor(remoteCreated).agentComposition())?.id).toBe("builtin:minimal");
   await act(async () => { await local.result.current({ root: "/task", agentComposition: "builtin:general" }); });
   expect(localOpen).toHaveBeenLastCalledWith({ root: "/task", agentComposition: "builtin:general" });
-  await user.click(screen.getByRole("button", { name: "将标准模式设为新任务默认" }));
+  await user.click(screen.getByRole("button", { name: "将日常搭档设为新任务默认" }));
   await act(async () => { await local.result.current({ root: "/reset" }); });
   const reset = (await hub.runtimes()).find(v => v.root === "/reset")!;
   expect(await hub.portFor(reset).agentComposition()).toBeNull();
@@ -59,16 +59,16 @@ it("keeps usage, details and copy actions separate from selecting the new task d
   const user = userEvent.setup();
   setNewTaskPreset("builtin:general");
   render(<AgentPresets port={new MockPort()} />);
-  const usage = await screen.findByRole("button", { name: "如何使用 精简模式" });
+  const usage = await screen.findByRole("button", { name: "如何使用 轻装搭档" });
   await user.click(usage);
   expect(usage.getAttribute("aria-expanded")).toBe("true");
-  expect(screen.getByText(/在新任务输入框选择精简模式/)).toBeTruthy();
+  expect(screen.getByText(/在新任务输入框选择轻装搭档/)).toBeTruthy();
   expect(newTaskPreset()).toBe("builtin:general");
-  await user.click(screen.getByRole("button", { name: "查看 精简模式" }));
+  await user.click(screen.getByRole("button", { name: "查看 轻装搭档" }));
   await screen.findByRole("form", { name: "预设详情" });
   expect(newTaskPreset()).toBe("builtin:general");
   await user.click(screen.getByRole("button", { name: "返回预设列表" }));
-  await user.click(screen.getByRole("button", { name: "复制 精简模式" }));
+  await user.click(screen.getByRole("button", { name: "复制 轻装搭档" }));
   expect(await screen.findByRole("form", { name: "新建预设" })).toBeTruthy();
   expect(newTaskPreset()).toBe("builtin:general");
 });
@@ -76,9 +76,9 @@ it("keeps usage, details and copy actions separate from selecting the new task d
 it("keeps the old default badge and reports a storage refusal", async () => {
   const user = userEvent.setup();
   render(<AgentPresets port={new MockPort()} />);
-  await screen.findByRole("button", { name: "将精简模式设为新任务默认" });
+  await screen.findByRole("button", { name: "将轻装搭档设为新任务默认" });
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage denied"); });
-  await user.click(screen.getByRole("button", { name: "将精简模式设为新任务默认" }));
+  await user.click(screen.getByRole("button", { name: "将轻装搭档设为新任务默认" }));
   expect(await screen.findByRole("alert")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "将标准模式设为新任务默认" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("button", { name: "将日常搭档设为新任务默认" }).getAttribute("aria-pressed")).toBe("true");
 });

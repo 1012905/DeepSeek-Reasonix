@@ -17,7 +17,7 @@ export function PresetActions({ port, version, busy, run, onDeleted, onPersona }
   const d = version.definition;
   return <details className="composition-extra">
     <summary>{t("更多操作")}</summary>
-    {d.id === "builtin:general" && <button type="button" className="act" data-action="agent-preset.persona" disabled={busy} onClick={onPersona}>{t("编辑标准模式人设")}</button>}
+    {d.id === "builtin:general" && <button type="button" className="act" data-action="agent-preset.persona" disabled={busy} onClick={onPersona}>{t("编辑日常搭档人设")}</button>}
     <div className="composition-toolbar">
       <button type="button" className="act" data-action="agent-preset.export" disabled={busy} onClick={() => void run(async () => {
         setExported(JSON.stringify(await port.exportAgentPreset(d.id), null, 2));

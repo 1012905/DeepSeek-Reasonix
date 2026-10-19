@@ -37,7 +37,7 @@ func TestRevisionCanonicalizesParameterObjects(t *testing.T) {
 
 func TestMinimalTemplateHasNoAutomationOrDelegation(t *testing.T) {
 	definitions := Builtins()
-	if len(definitions) != 2 || definitions[0].Name != "标准模式" || definitions[1].Name != "精简模式" {
+	if len(definitions) != 2 || definitions[0].Name != "日常搭档" || definitions[1].Name != "轻装搭档" {
 		t.Fatalf("built-in modes = %+v", definitions)
 	}
 	for _, d := range Builtins()[1:] {

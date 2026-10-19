@@ -16,7 +16,7 @@ export function PresetPersonaPage({ port, onClose }: { port: AgentPort; onClose:
     }}>
       <header className="preset-page-heading">
         <button type="button" className="preset-back" data-action="agent-preset.leave" onClick={() => leave.request(onClose)}><StudioIcon name="chevron" />{t("返回预设列表")}</button>
-        <h2>{t("标准模式人设")}</h2>
+        <h2>{t("日常搭档人设")}</h2>
         <p>{t("修改用户配置，与自定义预设独立保存。")}</p>
       </header>
       <div className="preset-page-content"><Persona port={port} onDirtyChange={setDirty} onBusyChange={setBusy} onSaved={onClose} /></div>

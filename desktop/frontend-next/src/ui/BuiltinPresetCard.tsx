@@ -30,7 +30,7 @@ export function BuiltinPresetCard({ version: { definition: d }, selected, onDefa
         aria-label={t("复制 {name}", { name })} title={t("复制为自定义预设")} onClick={onCopy}><StudioIcon name="copy" /></button>
     </footer>
     <p className="composition-builtin-usage" id={helpId} hidden={!usage}>{t(d.id === "builtin:general"
-      ? "标准模式默认启用，可直接输入任务；如需自定义，先复制此预设。"
-      : "在新任务输入框选择精简模式，再发送首条消息。需要支持读图的模型；终端操作继续遵守权限设置。")}</p>
+      ? "初次使用会选择日常搭档，直接说说你想做什么。你也可以点击卡片更改新任务默认，或复制一份自定义。"
+      : "在新任务输入框选择轻装搭档，再发送首条消息。需要支持读图的模型；终端操作继续遵守权限设置。")}</p>
   </article>;
 }

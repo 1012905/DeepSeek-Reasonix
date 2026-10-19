@@ -12,16 +12,16 @@ MCP servers, extensions, hooks and custom commands. A composition is independent
 of the model, reasoning effort and the existing balanced/delivery role setting.
 It uses Reasonix's runtime; it does not load Harness's Cordis plugins.
 
-Compositions are opt-in. No selection and Standard use the ordinary configuration
+Compositions are opt-in. No selection and Everyday partner use the ordinary configuration
 without a binding, a new transcript schema or persona migration. Saved preset
-preferences do not activate themselves. Explicitly choose a non-Standard mode
+preferences do not activate themselves. Explicitly choose another preset
 to bind a version.
 
 `--agent-composition default` explicitly chooses the saved preference.
 
 ## Choosing and editing
 
-The mode picker is always visible above the input in every pane. Standard is the
+The mode picker is always visible above the input in every pane. Everyday partner is the
 initial mode. Clicking a built-in card explicitly sets this machine's new-task
 default, including local and remote tasks.
 
@@ -54,13 +54,31 @@ editable rows. Usage, details and copy do not change the new-task default.
 
 | Mode | Behavior |
 | --- | --- |
-| Standard (`builtin:general`) | Inherit current configuration for everyday code, file and research work. The stable ID preserves existing defaults. |
-| Minimal (`builtin:minimal`) | A concise system persona, terminal (`bash`) and image reading (`view_image`), with native context compaction. Requires a vision-capable model. |
+| Everyday partner (`builtin:general`) | Inherit current configuration for everyday code, file and research work. The stable ID preserves existing defaults. |
+| Lightweight partner (`builtin:minimal`) | A concise system persona, terminal (`bash`) and image reading (`view_image`), with native context compaction. Requires a vision-capable model. |
 
-Minimal loads no custom skills, commands, MCP, extensions, hooks or subagents.
+These display names replace Standard and Minimal; their IDs and capabilities
+stay unchanged. Retained conversations keep their saved names and revisions.
+
+The persona reference is DeepSeek Harness commit
+`687f282e8625c6b8d11ff58211a90524be2e4317`:
+[standard][harness-standard] uses a short coding-agent identity, while
+[minimal][harness-minimal] uses a short software-engineer identity and a reduced
+tool set. Reasonix already uses that minimal opener.
+
+Everyday partner inherits the user's persona; Lightweight
+partner retains Reasonix's native system instructions rather than Harness's
+complete-prompt replacement. This copy update changes no provider-visible prompt
+or tool bytes.
+
+[harness-standard]: https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/bundle/web-app/presets/standard.patch.yml
+
+[harness-minimal]: https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/bundle/web-app/presets/minimal.patch.yml
+
+Lightweight partner loads no custom skills, commands, MCP, extensions, hooks or subagents.
 It retains the host controls needed to answer and ask questions. Its terminal
 can still modify files and access the network under existing permissions and
-sandbox rules; Minimal is not a read-only mode.
+sandbox rules; Lightweight partner is not a read-only mode.
 
 Missing image capability or
 disabled tools produce an explicit dependency error rather than another tool set.
@@ -83,7 +101,7 @@ ID remain visible; both become read-only after saving.
 A persistent footer offers Cancel and Save. Returning, closing Settings or
 navigating elsewhere confirms unsaved changes; save errors retain the draft.
 
-Standard's user-config persona has a separate editor, accessible from Standard
+Everyday partner's user-config persona has a separate editor, accessible from Everyday partner
 details or Settings search.
 
 Saving creates a definition revision. Existing conversations retain their
@@ -101,13 +119,13 @@ conflicts while preserving the draft. Models remain independently selectable.
 | Studio new-task card choice | Browser-local `rx-new-task-agent-preset` |
 | Local authorization records and retained files | `<state>/trusted/agent-presets/` |
 
-The new browser key accepts only the shipped Standard/Minimal identities.
+The new browser key accepts only the shipped Everyday partner/Lightweight partner identities.
 It is separate from server preferences and never read by CLI or ACP.
 
 | Stored choice | Current reader | Previous reader |
 | --- | --- | --- |
-| Missing, unreadable or unknown | Original Standard behavior | Ignores the key |
-| Standard/Minimal | Explicit choice on new Studio requests | Ignores the key |
+| Missing, unreadable or unknown | Original Everyday partner behavior | Ignores the key |
+| Everyday partner/Lightweight partner | Explicit choice on new Studio requests | Ignores the key |
 
 An unsuccessful storage write retains the previous choice and reports an error.
 Existing server selection/admission permissions still apply to new requests.
@@ -225,7 +243,7 @@ ACP composition changes preserve the session's vetted additional directories.
 
 A dispatched session inherits the exact binding instead of selecting today's
 default. A binding scoped to one workspace cannot dispatch into another; the
-request is refused before opening a runtime. Unbound Standard dispatch keeps
+request is refused before opening a runtime. Unbound Everyday partner dispatch keeps
 the existing behavior.
 
 A fresh dispatch never falls back to a history viewer
@@ -236,7 +254,7 @@ deleting it (`agent_composition.workspace_bound`). Start a new conversation in
 the target project. Unbound conversations retain the ordinary move behavior.
 
 The user persona is not migrated. `/persona` retains the user-config behavior
-from #13588, and Standard's settings reuse that Persona editor. Standard reads
+from #13588, and Everyday partner's settings reuse that Persona editor. Everyday partner reads
 it on each runtime build. Explicit compositions
 retain their selected persona; saving either configuration does not rewrite
 an existing binding.
