@@ -513,6 +513,7 @@ export const EN: Record<string, string> = {
   "完整输出已保存（{lines} 行 · {size}），模型按需读取": "Full output saved to disk ({lines} lines · {size}); the model reads it on demand",
   "已显示开头部分，模型可继续往下读": "Showing the start; the model can read on from there",
   "模型只收到 {kept}，共 {size} — 其余未进入上下文": "The model received only {kept} of {size} — the rest never entered its context",
+  "此前省略了 {n} 个字符，这里只显示最近的输出": "{n} characters before this are left out; only the most recent output is shown",
   "在 {name} 下新建会话": "Start a new session in {name}",
   "关闭这个会话面板": "Close this pane",
   "不会删除任何文件": "No files are deleted",

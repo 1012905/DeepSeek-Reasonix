@@ -9,7 +9,7 @@ import { categoryOf, labelFor, mcpOrigin, runLabelFor } from "../icons";
 import { Sym, glyphFor } from "../Sym";
 import { GOAL_STATUS, argOf, goalUpdate, shortArgs } from "../args";
 import { Cost } from "../Cost";
-import { bytes, seconds, tokens } from "../../i18n/format";
+import { bytes, count, seconds, tokens } from "../../i18n/format";
 import { currentStep, parsePlan, stepDone } from "../../state/session";
 import { DiffView } from "./DiffView";
 import { BringCall } from "./BringCall";
@@ -61,12 +61,14 @@ function useSettling(running: boolean): { pop: boolean; swap: boolean } {
 }
 
 export function ToolCard({
-  tool, running, children = [], takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, onStop, onBring, pinned = false, activity = false,
+  tool, running, children = [], omitted = 0, takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, onStop, onBring, pinned = false, activity = false,
 }: {
   tool: Tool;
   running: boolean;
   activity?: boolean;
   children?: Tool[];
+  // Characters of a running call's output the page let go of from the front.
+  omitted?: number;
   // Reverting the file this call wrote. Optional: a card drawn outside a live
   // pane (history, a fixture) has nothing to revert against.
   onPrepareFileRevert?: (path: string) => Promise<RewindPlan>;
@@ -243,7 +245,10 @@ export function ToolCard({
             </div>
           )}
           {!tool.diff && !tool.outputDiff && !goal && tool.name !== "todo_write" && tool.output && !echoed && children.length === 0 && (
-            <ToolOutput name={shown} text={tool.output} bound={tool.bound} id={tool.id} />
+            <>
+              {omitted > 0 && <div className="bound">{t("此前省略了 {n} 个字符，这里只显示最近的输出", { n: count(omitted) })}</div>}
+              <ToolOutput name={shown} text={tool.output} bound={tool.bound} id={tool.id} />
+            </>
           )}
           <ToolShots images={tool.images} />
           <ToolVideos videos={tool.videos} />

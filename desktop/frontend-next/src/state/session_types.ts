@@ -34,7 +34,8 @@ export type Item =
   // source names which model wrote it — a turn can carry two, and the card is
   // where the answer has to survive.
   | { t: "say"; id: string; text: string; reasoning?: string; done: boolean; thoughtMs?: number; source?: string; model?: string }
-  | { t: "tool"; id: string; tool: Tool; running: boolean; children: Tool[] }
+  // omitted counts the characters of a running call's output that the page let go of from the front.
+  | { t: "tool"; id: string; tool: Tool; running: boolean; children: Tool[]; omitted?: number }
   | { t: "reads"; id: string; tools: Tool[] }
   | { t: "guardian"; id: string; g: Guardian }
   // by is who settled it when that was not this screen: the device named on
