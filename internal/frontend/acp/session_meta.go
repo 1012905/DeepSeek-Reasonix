@@ -52,7 +52,7 @@ func (s *acpSession) metaLocked() acpSessionMeta {
 		Model:             s.model,
 		EffortOverride:    cloneStringPtr(s.effortOverride),
 		RuntimeProfile:    s.runtimeProfile,
-		ToolApprovalMode:  normalizeACPToolApprovalMode(s.toolApprovalMode),
+		ToolApprovalMode:  firstNonEmpty(s.posture.kept, normalizeACPToolApprovalMode(s.posture.mode)),
 		CollaborationMode: normalizeACPCollaborationMode(s.modeID),
 		Title:             s.title,
 		CreatedAt:         s.createdAt,

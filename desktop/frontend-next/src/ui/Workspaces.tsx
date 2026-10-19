@@ -10,7 +10,7 @@ import type { Adder } from "./addws";
 import { pinToViewport } from "./place";
 import { useRailQuery } from "./railsearch";
 import { StudioIcon } from "./StudioIcon";
-import { TreeReading } from "./TreeReading";
+import { TreeEmpty, TreeReading } from "./TreeReading";
 import { RowCount } from "./RowCount";
 import { Cross } from "./glyphs";
 import { copyText } from "./CopyButton";
@@ -29,7 +29,7 @@ import { pinnedFirst } from "./pinorder";
 import { Confirm, removeHint, sessionDeleteHint } from "./WorkspaceConfirm";
 import { UnreadCount, UnreadDot } from "./UnreadMark";
 import { PeerThreadMark } from "./peerthreads";
-import { NO_PAGING, atCap, sessionCount, unloaded, type TreePaging } from "./treewindow";
+import { NO_PAGING, atCap, sessionCount, answers, unloaded, type TreePaging, type TreeView } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
 import { ProjectsHeader } from "./ProjectsHeader";
 import { useWorkspaceDrag } from "./useWorkspaceDrag";
@@ -44,6 +44,7 @@ interface Props {
   tree: TreeWorkspace[];
   // False until the kernel first answers; an empty tree before then is unread.
   treeRead: boolean;
+  answered?: TreeView | null;
   runtimes: RuntimeView[];
   active: string;
   // Collapsed workspaces are the window's own state, not the kernel's, so the
@@ -89,7 +90,7 @@ interface Props {
 const rowLabel = (session: TreeSession) =>
   session.title || (session.runtimeId && !session.turns ? t("新会话") : session.name);
 
-function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, retry, paging = NO_PAGING, previewLimit = Infinity, onFold, onToggleAll, allFolded, canFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onBranch, onArchive = async () => {}, onRename, onError, adder, children, hasOtherRows }: Props) {
+function WorkspacesView({ hub, tree, treeRead, answered = null, runtimes, active, folded, reload, retry, paging = NO_PAGING, previewLimit = Infinity, onFold, onToggleAll, allFolded, canFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onBranch, onArchive = async () => {}, onRename, onError, adder, children, hasOtherRows }: Props) {
   const [busy, setBusy] = useState("");
   const [confirm, setConfirm] = useState("");
   const [selection, setSelection] = useState<Set<string> | null>(null);
@@ -763,9 +764,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
               </div>
             );
           })}
-          {!otherRows && shownTree.length === 0 && (tree.length > 0 || treeRead && (!!needle || scope !== "all")) && (
-            <div className="ws-empty">{t("没有匹配的会话")}</div>
-          )}
+          {!otherRows && shownTree.length === 0 && (tree.length > 0 || treeRead && (!!needle || scope !== "all")) && <TreeEmpty settled={answers(answered, { scope: kernelScope, q: asked })} onRetry={retry} />}
           {tree.length === 0 && (!treeRead || !otherRows && !needle && scope === "all") && (treeRead ? (
             <div className="ws-empty">{t("尚无文件夹")}<button className="projects-open" data-action="workspace.add"
               disabled={adder.busy} onClick={() => adder.add()}><StudioIcon name="folder" />{t("打开第一个项目")}</button></div>

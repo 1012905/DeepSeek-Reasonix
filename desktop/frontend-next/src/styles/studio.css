@@ -2420,6 +2420,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 
 @container conversation (max-width: 360px) {
   .studio-branch-pop { display: none; }
+  .studio-meterrail .studio-meter-tariff i,
   .studio-meterrail .studio-meter-cost,
   .studio-meterrail .studio-meter-mask { display: none; }
   .studio-meterrail .studio-meter-wallet { margin-left: auto; }
@@ -3227,6 +3228,9 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-meterrail b,
 .studio-meterrail .studio-meter-cost { color: var(--text); }
 .studio-meterrail .studio-meter-wallet[data-short] b { color: var(--warn-ink); }
+.studio-meterrail .studio-meter-tariff { display: inline-flex; align-items: baseline; gap: 4px; color: var(--ok-ink); font: 500 calc(10px * var(--fs-scale, 1))/1.2 var(--ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.studio-meterrail .studio-meter-tariff[data-peak] { color: var(--warn-ink); }
+.studio-meterrail .studio-meter-tariff i { font-style: normal; color: var(--muted); }
 .studio-meterrail > button:hover,
 .studio-meterrail .studio-context-anchor > button:hover {
   background: var(--overlay);
@@ -4214,3 +4218,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .skupd-diff span[data-d="-"] { color: color-mix(in srgb, var(--del) 58%, var(--text)); background: color-mix(in srgb, var(--del) 8%, transparent); }
 .skupd { margin: 6px 0 14px; }
 .workbench-tab-in { min-width: 0; width: 100%; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--page); color: var(--text); font: 500 calc(11px * var(--fs-scale, 1))/1.4 var(--ui); outline: none; }
+.other-field { display: flex; align-items: center; gap: 8px; }
+.other-field input { flex: 1; min-width: 0; }
+.other-wrap .refine-card { margin: 8px 0 0; }

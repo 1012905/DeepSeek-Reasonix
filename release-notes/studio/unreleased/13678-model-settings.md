@@ -1,2 +1,0 @@
-- 新增：模型现在可以请你打开它需要的开关（比如派发到其他项目），你点一下确认才生效；安全边界类设置它永远改不了。关联 #13678。
-- Added: The model can now ask you to turn on a switch it needs (such as dispatching to another project), applied only when you confirm; boundary settings it can never change. Refs #13678.

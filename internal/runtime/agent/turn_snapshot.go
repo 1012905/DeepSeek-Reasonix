@@ -13,13 +13,18 @@ import (
 // turnSnapshot is the workspace as the turn found it, taken while the first
 // model request is in flight and waited on before any tool runs.
 type turnSnapshot struct {
-	done chan struct{}
-	snap observation.Snapshot
+	done   chan struct{}
+	cancel context.CancelFunc
+	snap   observation.Snapshot
 }
 
-// snapshotWait bounds the end-of-turn snapshot; past it the snapshot records
-// itself as cancelled rather than holding the turn open.
+// snapshotWait bounds the snapshot at both ends of a turn; past it the snapshot
+// records itself as cancelled rather than holding the turn open.
 const snapshotWait = 10 * time.Second
+
+// snapshotCancelGrace is how long a cancelled start-of-turn snapshot is given to
+// stop before the first tool runs without it.
+const snapshotCancelGrace = 2 * time.Second
 
 // maxRecordsBack bounds how far back previousSnapshot looks for a bundle.
 const maxRecordsBack = 8
@@ -33,26 +38,43 @@ func (a *Agent) startTurnSnapshot(ctx context.Context) {
 	if seal == nil || seal.Observer == nil || seal.Root == "" {
 		return
 	}
-	ts := &turnSnapshot{done: make(chan struct{})}
+	snapCtx, cancel := context.WithCancel(ctx)
+	ts := &turnSnapshot{done: make(chan struct{}), cancel: cancel}
 	a.turn.snapshot = ts
 	go func() {
-		ts.snap = seal.Observer.Take(ctx, seal.Root)
+		defer cancel()
+		ts.snap = seal.take(snapCtx, seal.Root)
 		close(ts.done)
 	}()
 }
 
-// awaitTurnSnapshot holds the first tool until the turn-start snapshot exists,
-// so nothing the turn does can land in what it is compared against.
-func (ts *turnSnapshot) await(ctx context.Context) (observation.Snapshot, bool) {
+// await holds the first tool until the turn-start snapshot exists, so nothing
+// the turn does can land in what it is compared against, but never past limit:
+// a workspace too big to observe in that time is observed incompletely, which
+// the bundle records as a gap, rather than making every command wait for a walk.
+func (ts *turnSnapshot) await(ctx context.Context, limit time.Duration) (observation.Snapshot, bool) {
 	if ts == nil {
 		return observation.Snapshot{}, false
 	}
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
 	select {
 	case <-ts.done:
 		return ts.snap, true
 	case <-ctx.Done():
 		return observation.Snapshot{}, false
+	case <-timer.C:
 	}
+	ts.cancel()
+	grace := time.NewTimer(snapshotCancelGrace)
+	defer grace.Stop()
+	select {
+	case <-ts.done:
+		return ts.snap, true
+	case <-ctx.Done():
+	case <-grace.C:
+	}
+	return observation.Snapshot{}, false
 }
 
 // snapshotDelta is how two snapshots differ, or why that is not established.
@@ -125,7 +147,7 @@ func (a *Agent) observeWorkspace(seal *EvidenceSeal) workspaceObservation {
 	}
 	waitCtx, cancel := context.WithTimeout(context.Background(), snapshotWait)
 	defer cancel()
-	before, haveBefore := a.turn.snapshot.await(waitCtx)
+	before, haveBefore := a.turn.snapshot.await(waitCtx, snapshotWait)
 	after := seal.Observer.Take(waitCtx, seal.Root)
 	obs.After = &after
 	if !haveBefore {

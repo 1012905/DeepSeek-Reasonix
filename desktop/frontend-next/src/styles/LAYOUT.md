@@ -1105,6 +1105,14 @@ what exists.
 - Sub-agents and background jobs are readings about this turn, so they sit with
   the turn's other readings at the right end of the run rail rather than in a
   panel of their own above it.
+A sub-agent row, by the list's own width:
+
+- Wide: one line holding the name, the task, the model chip and the status.
+- Below 460px: the name and status stay on the first line, the task has the
+  second to itself, and the model chip the third.
+- Why: the name, chip and status are content-sized and the task took what was
+  left, so it was the first thing to disappear at the widths where a person
+  most needs to tell two rows apart.
 - The detail is inside the same anchor as the reading, which is what lets hover
   and keyboard focus reach it. A click pins it: a panel that closes when the
   pointer leaves is one nobody can scroll.
@@ -1531,6 +1539,15 @@ what exists.
 - A scope filter shows its count only when it is above zero; the label stays at 12px.
 - The row actions (`+`, `…`, refresh) are revealed on hover or focus, 22px, outlined, and share one hover, press, expanded and busy state, whichever row they sit on. Remote host actions are always drawn and outline only on those states.
 - Every row's last action ends on the same edge: the machine row keeps a 15px right margin like a project row, so a machine's `+` sits over a project's `…`.
+
+## Session rows
+
+- The title takes every pixel the row's visible content leaves it. The age sits against the row's right padding and the earlier-versions badge beside it; nothing is held back on the right for a control that is not showing.
+- The hover buttons (archive) take no width until the row is hovered or focused, then 24px plus 6px; on a device without hover they are always drawn.
+- Taking the room only while shown means the title shortens when the buttons appear, never before. Pinning stays an overlay at the left, so the pin never moves the title.
+- An unread dot is an overlay 11px from the right edge: an unread row keeps 22px after its age (or after its badge, 26px) for it, and the dot hides while the buttons are shown.
+- A legacy `margin-right: 44px` on the age made room for a delete button the rail has long since hidden; the rail's rule sets it to zero.
+- `perf/sessionrows.mjs` measures this in a real browser: with no button showing, a row with an age leaves at most 2px (8px with a badge) of its right side unused, and the buttons take no width at rest.
 
 ## Session rename dialog
 

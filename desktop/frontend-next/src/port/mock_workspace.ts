@@ -2,7 +2,7 @@ import { reason } from "../i18n/kernel";
 import { HttpError } from "./http_error";
 import type { KeptText } from "./attachment";
 import type { ChangeDiff, GitHistory, StageRequest, WorkspaceChange, WorkspaceChanges, WorkspaceGit, WorkspaceBranches } from "./workspace";
-import { MockFeedback } from "./mock_feedback";
+import { MockToolOutput } from "./mock_tooloutput";
 
 export function mockWorkspaces(root: string): import("./workspace").WorkspaceInfo {
   return { current: root, canSwitch: true, canIsolate: true, recents: [
@@ -19,7 +19,7 @@ export function mockWorktreeSources(root: string, branch: string): import("./wor
   ] };
 }
 
-export class MockWorkspace extends MockFeedback {
+export class MockWorkspace extends MockToolOutput {
   opensFiles() { return false; }
   async openFile() {}
 
@@ -81,17 +81,16 @@ export class MockWorkspace extends MockFeedback {
     { path: "docs/notes.md", status: "??", unstaged: true },
   ];
 
-  async changes(): Promise<WorkspaceChanges> {
-    return { repo: true, changes: this.changeList.map((c) => ({ ...c })) };
+  async changes(repo?: string): Promise<WorkspaceChanges> {
+    return { repo: true, changes: (repo ? this.repoChanges[repo] ?? [] : this.changeList).map((c) => ({ ...c })) };
   }
 
   async stageChanges(req: StageRequest): Promise<void> {
     const named = new Set(req.paths ?? []);
-    this.changeList = this.changeList.map((c) =>
-      req.all || named.has(c.path)
-        ? { ...c, staged: !req.unstage, unstaged: !!req.unstage }
-        : c,
-    );
+    const mark = (list: WorkspaceChange[]) =>
+      list.map((c) => (req.all || named.has(c.path) ? { ...c, staged: !req.unstage, unstaged: !!req.unstage } : c));
+    if (req.repo) this.repoChanges[req.repo] = mark(this.repoChanges[req.repo] ?? []);
+    else this.changeList = mark(this.changeList);
   }
 
   // Scripted, because there is no tree to read: enough of a diff for the

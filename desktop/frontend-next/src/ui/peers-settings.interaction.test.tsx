@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { PeerMessages } from "./PeerMessages";
+import { usePeersSettings } from "./usePeersSettings";
 import { HeldPeerMessage } from "./HeldPeerMessage";
 import { MockPort } from "../port/mock";
 import { HttpError } from "../port/http_error";
 import { boot, STORAGE } from "../i18n";
 import type { AgentPort, PeerHeld, PeersSettings } from "../port/port";
+
+function Messages({ port }: { port: Parameters<typeof PeerMessages>[0]["port"] }) {
+  return <PeerMessages port={port} settings={usePeersSettings(port)} />;
+}
 
 beforeEach(() => {
   localStorage.setItem(STORAGE, "zh");
@@ -43,7 +48,7 @@ function portWith(initial: PeersSettings) {
 describe("the session messages switches", () => {
   it("turns messages on from the page instead of asking for a hand-written config", async () => {
     const { port, save } = portWith(settings());
-    render(<PeerMessages port={port} />);
+    render(<Messages port={port} />);
     const on = await screen.findByRole("switch", { name: "启用会话间消息" });
     expect(on.getAttribute("aria-checked")).toBe("false");
     expect(screen.queryByText(/\[peers\] enabled = true/)).toBeNull();
@@ -54,7 +59,7 @@ describe("the session messages switches", () => {
 
   it("says a saved switch takes effect from the next turn, never at once", async () => {
     const { port } = portWith(settings());
-    render(<PeerMessages port={port} />);
+    render(<Messages port={port} />);
     expect(screen.queryByText(/下个回合起生效/)).toBeNull();
     await userEvent.click(await screen.findByRole("switch", { name: "启用会话间消息" }));
     expect(await screen.findByText(/下个回合起生效/)).toBeTruthy();
@@ -63,7 +68,7 @@ describe("the session messages switches", () => {
 
   it("holds the hand-off switch inert until messages are on", async () => {
     const { port, save } = portWith(settings());
-    render(<PeerMessages port={port} />);
+    render(<Messages port={port} />);
     const dispatch = await screen.findByRole("switch", { name: "允许模型把任务交给别的会话" });
     expect((dispatch as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(dispatch);
@@ -72,28 +77,15 @@ describe("the session messages switches", () => {
 
   it("saves the hand-off switch on its own once messages are on", async () => {
     const { port, save } = portWith(settings({ enabled: true }));
-    render(<PeerMessages port={port} />);
+    render(<Messages port={port} />);
     await userEvent.click(await screen.findByRole("switch", { name: "允许模型把任务交给别的会话" }));
     expect(save).toHaveBeenCalledExactlyOnceWith({ dispatch: true });
-  });
-
-  it("lists the projects released for good, each with a way to take it back", async () => {
-    const { port, save } = portWith(settings({
-      enabled: true,
-      release_projects: [{ path: "/work/site", name: "site" }, { path: "/work/api", name: "api" }],
-    }));
-    render(<PeerMessages port={port} />);
-    const list = await screen.findByRole("list", { name: "已长期放行的项目" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(list).getByText("/work/site")).toBeTruthy();
-    await userEvent.click(within(within(list).getAllByRole("listitem")[0]).getByRole("button", { name: /撤销/ }));
-    expect(save).toHaveBeenCalledExactlyOnceWith({ release_projects: ["/work/api"] });
   });
 
   it("names the file the switches live in, and shows a refusal beside them", async () => {
     const { port } = portWith(settings({ enabled: true }));
     vi.spyOn(port, "savePeersSettings").mockRejectedValue(new HttpError(500, "x", { code: "peer.settings_unwritable", params: { detail: "/home/me/.reasonix/config.toml" } }));
-    render(<PeerMessages port={port} />);
+    render(<Messages port={port} />);
     expect(await screen.findByText("/home/me/.reasonix/config.toml")).toBeTruthy();
     await userEvent.click(await screen.findByRole("switch", { name: "允许模型把任务交给别的会话" }));
     const alert = (await screen.findByRole("alert")).textContent ?? "";
@@ -101,12 +93,11 @@ describe("the session messages switches", () => {
     expect(alert).toContain("/home/me/.reasonix/config.toml");
   });
 
-  it("holds both switches and the revokes inert where the session has no folder to open", async () => {
-    const { port } = portWith(settings({ enabled: true, available: false, release_projects: [{ path: "/work/site", name: "site" }] }));
-    render(<PeerMessages port={port} />);
+  it("holds both switches inert where the session has no folder to open", async () => {
+    const { port } = portWith(settings({ enabled: true, available: false }));
+    render(<Messages port={port} />);
     expect(await screen.findByText(/此会话不支持/)).toBeTruthy();
     for (const name of ["启用会话间消息", "允许模型把任务交给别的会话"]) expect((screen.getByRole("switch", { name }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /撤销放行/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

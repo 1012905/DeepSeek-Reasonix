@@ -112,10 +112,11 @@ func TestStoreV2LegacyMemoryGetsDeterministicIdentity(t *testing.T) {
 	}
 }
 
-// A migration rewrites a fact and then the index. An unreadable index must stop
-// the fact from being rewritten: the next run skips facts that already carry an
-// id, so the entry would stay out of the index for good.
-func TestStoreV2MigrationLeavesFactsAloneWhenTheIndexIsUnreadable(t *testing.T) {
+// A directory where the index file belongs is a deterministic fault: the pass
+// moves it aside without reading it and republishes the index, so the migration
+// that follows can rewrite the legacy fact and index it. Returning here would
+// freeze the store for good.
+func TestStoreV2MigrationMovesADirectoryIndexAside(t *testing.T) {
 	dir := testenv.TempDir(t)
 	path := filepath.Join(dir, "legacy-fact.md")
 	legacy := "---\nname: legacy-fact\ndescription: old file\nmetadata:\n  type: project\n  scope: project\n---\n\nlegacy body\n"
@@ -128,11 +129,23 @@ func TestStoreV2MigrationLeavesFactsAloneWhenTheIndexIsUnreadable(t *testing.T) 
 	}
 
 	store := Store{Dir: dir}
-	if _, err := store.MigrateV2(); err == nil {
-		t.Fatal("migration must refuse while the index is unreadable")
+	report, err := store.MigrateV2()
+	if err != nil {
+		t.Fatalf("a directory named MEMORY.md is a deterministic fault and must not freeze the migration: %v", err)
 	}
-	if got := mustReadString(t, path); got != legacy {
-		t.Fatalf("migration rewrote the fact while the index was unreadable:\n%s", got)
+	if report.Migrated != 1 {
+		t.Fatalf("migration report = %+v, want the legacy fact migrated", report)
+	}
+	frontmatter, _ := splitFrontmatter(mustReadString(t, path))
+	if !strings.HasPrefix(frontmatter["id"], "legacy-") {
+		t.Fatalf("the legacy fact was not migrated after the directory index was moved aside: %+v", frontmatter)
+	}
+	index, readable := auditReadIndex(t, dir)
+	if !readable || !strings.Contains(index, "(legacy-fact.md)") {
+		t.Fatalf("the rebuilt index does not name the migrated fact: readable = %v, MEMORY.md = %q", readable, index)
+	}
+	if asides := indexAsides(t, dir); len(asides) != 1 {
+		t.Fatalf("want exactly one stamped aside copy of the directory, got %v", asides)
 	}
 }
 

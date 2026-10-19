@@ -1,0 +1,2 @@
+- 新增：发送反馈时附上各进程的内存（只有进程类型和数字），表单里能先看到具体数字，方便判断是界面还是内核占得多。关联 #13899。
+- Added: A report now carries each process's memory (only the process type and numbers), shown in the form first, to tell the interface from the kernel. Refs #13899.

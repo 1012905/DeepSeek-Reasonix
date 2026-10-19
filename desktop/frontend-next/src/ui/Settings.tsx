@@ -10,6 +10,7 @@ import { SECTION_NAME } from "./prefsnav";
 import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
 import { PlanApproval, DefaultMode } from "./PlanApproval";
+import { PeersSection } from "./PeersSection";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -30,7 +31,7 @@ import { SkillGroups } from "./SkillRow";
 import { Hooks } from "./Hooks";
 import { Network } from "./Network";
 import { Shell as ShellPicker } from "./Shell";
-import { Rules } from "./Rules";
+import { Rules, ToolList } from "./Rules";
 import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
@@ -304,6 +305,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
     model: status?.modelRef?.split("/").pop() ?? "—",
     providers: models.length ? t("{n} 个服务", { n: groupVendors(models).length }) : "",
     tools: ruleCount ? `${approval} · ${ruleCount}` : approval,
+    peers: "",
     hooks: hookCount ? t("{n} 条", { n: hookCount }) : t("关"),
     ext: broken ? t("{n} 个异常", { n: broken }) : packages.length ? t("{n} 个包", { n: packages.length }) : `${looseMcp.length + looseOn}`,
     network: netMode,
@@ -578,7 +580,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 hint={t("上一项决定是否请求确认，此处决定哪些操作始终禁止、哪些无需确认。修改会重建运行时，任务运行期间无法变更。")}
               >
                 <Rules port={port} onChanged={onChanged} />
-              </Group>
+              </Group><ToolList port={port} />
               <Group id="sandbox"
                 title={t("沙箱")}
                 hint={t("批准之后可以操作的范围。该限制不依赖 agent 自觉：写入范围由工具实施，命令隔离由操作系统实施。")}
@@ -601,6 +603,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <SessionCoordination port={port} onChanged={onChanged} />
             </>
           )}
+
+          {at === "peers" && <PeersSection port={port} hub={hub} />}
 
           {at === "hooks" && (
             <Group id="hooks"

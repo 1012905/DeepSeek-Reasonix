@@ -95,3 +95,14 @@ func TestANetworkedClientCannotTurnMessagesOn(t *testing.T) {
 		t.Fatal("the refused save still wrote the user file")
 	}
 }
+
+func TestANetworkedClientCannotAllowAProjectThrough(t *testing.T) {
+	srv := standbyServer(t, false)
+	body := map[string]any{"release_projects": []string{t.TempDir()}}
+	if status, raw := postSide(t, srv.URL+"/peers/settings", body); status != http.StatusForbidden {
+		t.Fatalf("allowing a project without the grant = %d %s", status, raw)
+	}
+	if got := config.UserPeers().ReleaseProjects; len(got) != 0 {
+		t.Fatalf("the refused save still wrote the user file: %v", got)
+	}
+}

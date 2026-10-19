@@ -43,9 +43,20 @@ func v4ImportPath(sessionsDir, id string) string {
 	return filepath.Join(sessionsDir, v4ImportPrefix+id+".jsonl")
 }
 
+// v4DesktopIDPrefixes are the markers 1.x Desktop puts before the hex digits of
+// a conversation it created itself; the longer one is tried first.
+var v4DesktopIDPrefixes = []string{"desktop-manual-", "desktop-"}
+
 // isV4SessionID admits the lowercase hex ids 1.x generates (32 digits in
-// sessions-v4, 24 in Desktop's by-id store), which are safe as a file name.
+// sessions-v4, 24 in Desktop's by-id store), with or without a Desktop prefix,
+// which are safe as a file name.
 func isV4SessionID(id string) bool {
+	for _, prefix := range v4DesktopIDPrefixes {
+		if rest, ok := strings.CutPrefix(id, prefix); ok {
+			id = rest
+			break
+		}
+	}
 	if len(id) < 16 || len(id) > 64 {
 		return false
 	}
@@ -94,10 +105,19 @@ func PrepareSessionPath(path string) error {
 	if err := current.SaveRewrite(path); err != nil {
 		return fmt.Errorf("refresh 1.x session: %w", err)
 	}
-	return saveImportMeta(path, s, t)
+	// This path refreshes a copy that already exists, so its meta already carries
+	// whatever the first import decided — including the archived mark. Passing an
+	// empty start is what keeps that decision rather than resetting it.
+	return saveImportMeta(path, s, t, BranchMeta{})
 }
 
 func importV4(path string, s sessionv4.Session) error {
+	return importV4As(path, s, BranchMeta{})
+}
+
+// importV4As copies one conversation and starts its meta from the caller's, which
+// carries what the transcript cannot say — that 1.x had filed it away, for one.
+func importV4As(path string, s sessionv4.Session, start BranchMeta) error {
 	t, err := s.Transcript()
 	if err != nil {
 		return fmt.Errorf("import 1.x session %s: %w", s.Manifest.SessionID, err)
@@ -107,7 +127,7 @@ func importV4(path string, s sessionv4.Session) error {
 	if err := sess.SaveIfAbsent(path); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("import 1.x session %s: %w", s.Manifest.SessionID, err)
 	}
-	return saveImportMeta(path, s, t)
+	return saveImportMeta(path, s, t, start)
 }
 
 // importedTitle is the name 1.x showed for the conversation: the title its log
@@ -139,7 +159,7 @@ func healImportedTitle(path string, s sessionv4.Session) {
 	_ = SaveBranchMeta(path, meta)
 }
 
-func saveImportMeta(path string, s sessionv4.Session, t sessionv4.Transcript) error {
+func saveImportMeta(path string, s sessionv4.Session, t sessionv4.Transcript, start BranchMeta) error {
 	digest, err := DigestSessionMessages(t.Messages)
 	if err != nil {
 		return err
@@ -154,6 +174,11 @@ func saveImportMeta(path string, s sessionv4.Session, t sessionv4.Transcript) er
 	if title := importedTitle(s, t); title != "" {
 		meta.CustomTitle = title
 	}
+	// The caller's starting meta carries what the transcript cannot say: 1.x kept
+	// its archive list outside the session store, so a conversation filed away
+	// there has to arrive already filed away.
+	meta.Archived = meta.Archived || start.Archived
+	meta.Pinned = meta.Pinned || start.Pinned
 	meta.ImportedFrom = &ImportSource{Line: importLineV4, LogSize: s.LogSize, Digest: hex.EncodeToString(digest[:])}
 	return SaveBranchMeta(path, meta)
 }
@@ -201,12 +226,12 @@ func withV4Sessions(dir string, out []SessionInfo) []SessionInfo {
 	return out
 }
 
-// ImportV4From copies the 1.x v4 conversations directly under store into dir
-// as transcripts, for a store that does not sit beside dir. A non-empty
-// route(sessionID) names the directory a conversation goes to instead of dir. A conversation already
-// imported, or one with no turns, is skipped silently; one that cannot be read
-// is returned as a SkippedSession (Path relative to store) and does not stop the rest.
-func ImportV4From(store fs.FS, dir string, route func(sessionID string) string) (int, []SkippedSession, error) {
+// ImportV4From copies the 1.x v4 conversations under store into dir. A non-empty
+// route names one's destination instead. Imported copies and empty ones are
+// skipped silently; one that cannot be read becomes a SkippedSession. importedAs
+// supplies each copy's starting meta: 1.x kept its archive list outside the
+// session store, so without it every archived conversation arrives as active.
+func ImportV4From(store fs.FS, dir string, route func(sessionID string) string, importedAs func(sessionID string) BranchMeta) (int, []SkippedSession, error) {
 	entries, err := fs.ReadDir(store, ".")
 	if err != nil {
 		return 0, nil, err
@@ -259,7 +284,11 @@ func ImportV4From(store fs.FS, dir string, route func(sessionID string) string) 
 			skip(e.Name(), classifyWriteSkip(err))
 			continue
 		}
-		if err := importV4(path, s); err != nil {
+		start := BranchMeta{}
+		if importedAs != nil {
+			start = importedAs(id)
+		}
+		if err := importV4As(path, s, start); err != nil {
 			skip(e.Name(), classifyWriteSkip(err))
 			continue
 		}

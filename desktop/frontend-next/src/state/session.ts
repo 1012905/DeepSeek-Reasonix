@@ -24,6 +24,7 @@ import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
 import { nameQueued, withoutPendingRow } from "./queued";
+import { capToolOutput } from "./outputcap";
 import { dropTool, foldLastRead, foldProgress, foldTool, isSubagentProgress, mergeReads, notePhase, noteRan } from "./fold";
 import { rebuild } from "./rebuild";
 export { chipLabel };
@@ -430,7 +431,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         executions,
         doing: handedBack ? WAITING_MODEL : s.doing,
         waiting: handedBack ? { ...s.waiting, ttftSince: Date.now() } : s.waiting,
-        items: mergeReads(foldTool(s.items, ev.tool, false)),
+        items: mergeReads(foldTool(s.items, capToolOutput(ev.tool), false)),
       };
     }
 
@@ -778,12 +779,12 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
         }
         out[at] = {
           ...prev,
-          tool: {
+          tool: capToolOutput({
             ...prev.tool,
             output: m.content,
             ...(m.outputDiff ? { outputDiff: true } : {}),
             ...(m.toolFailed ? { err: m.content, refusalCode: m.toolRefusalCode } : {}),
-          },
+          }),
         };
       }
     }

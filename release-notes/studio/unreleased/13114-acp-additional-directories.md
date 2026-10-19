@@ -1,2 +1,0 @@
-- 新增：ACP 会话支持 `additionalDirectories`，多文件夹工作区可让会话写入额外文件夹，仅限该会话，且经过与手动授权相同的检查。关联 #13114。
-- Added: ACP sessions accept `additionalDirectories`, so a multi-folder workspace can give a session extra write roots, for that session only and with the usual vetting. Refs #13114.

@@ -57,7 +57,7 @@ import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
 import { PeerHeldBar } from "./PeerHeldBar";
-import { PostureNote } from "./PostureNote";
+import { PostureNote, postureNote } from "./PostureNote";
 import { SidePanel } from "./SidePanel";
 import { cancelJob } from "./jobcancel";
 import { ConnectNote } from "./ConnectNote";
@@ -68,6 +68,7 @@ import { LiveWork, useLiveWork } from "../state/foldpref";
 import { loadChangedFilesPref, useShowsChangedFiles } from "../state/changedfiles";
 import { loadFoldWorkPref, useFoldsTurnWork } from "../state/foldwork";
 import { ChangedFilesPill } from "./ChangedFilesPill";
+import { RootMissingBanner } from "./RootMissingBanner";
 import { useConversationFiles } from "./useConversationFiles";
 
 export type { PaneReport };
@@ -423,7 +424,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref, findTogglePulse);
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
-  const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit, reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
+  const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit: (line) => submit(line).then((r) => r === true), reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
   const fileReply = useMemo(() => ({ ...reply, files: conversationFiles.refs }), [reply, conversationFiles.refs]);
 
   // Where the bottom is moves as blocks mount under it, so this only asks the
@@ -440,6 +441,11 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : null;
   const walletDisplay = wallet.kind === "read" ? wallet.reading.display : "";
 
+  // A pane out of sight that is asking whether to trust its folder is waiting on
+  // the person, though the kernel counts no decision for it; the one in front
+  // shows the card itself.
+  const trustWaiting = !active && postureNote(status) === "trust";
+
   // The chrome reads the focused pane. Reporting from an effect keeps it out of
   // render, where it would set state on the parent mid-paint.
   useEffect(() => {
@@ -447,8 +453,8 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       status,
       title,
       steer: waiting(queue).filter((it) => it.intent === "steer").length,
-      run,
-      live: running || blocked,
+      run: trustWaiting && run === "idle" ? "halt" : run,
+      live: running || blocked || trustWaiting,
       cost,
       contextPercent,
       context: ctx,
@@ -459,7 +465,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       rows: traj.rows.length,
       surfaces,
     });
-  }, [rt.id, onReport, status, title, queue, run, running, blocked, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions, docked, tab, traj.rows.length, surfaces]);
+  }, [rt.id, onReport, status, title, queue, run, running, blocked, trustWaiting, cost, contextPercent, ctx, mcp, walletDisplay, s.interactions, docked, tab, traj.rows.length, surfaces]);
 
   return (
     <section
@@ -610,6 +616,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
           )}
         </div>
         {alert && <div className="cmpalert">{alert}</div>}
+        <RootMissingBanner items={s.items} onPick={onOpenProject} />
         {pill && <ChangedFilesPill changes={tree?.changes ?? []} onOpen={openChanges} />}
         <Composer worktreeTarget={worktreeTarget} onWorktreePhase={setWorktreePhase} port={port} fresh={ready && !rt.host && s.items.length === 0} status={status} running={running} quote={quote} restore={restored} inject={inserted} focus={askFocus} onSubmit={submit} onChanged={refreshStatus} onError={notify} onSettings={onSettings} side={sideAsk} onSide={() => setSideAsk((on) => !on)} sidePanel={sideAsk ? <SidePanel port={port} onClose={() => setSideAsk(false)} /> : null} changeCount={changeCount} countElsewhere={pill} git={git} onTreeChanged={refreshTree} pulse={pulse} draftKey={draftKey(rt.host ?? "", rt.root, rt.sessionPath || status?.sessionPath || "")} />
         <MeterRail
@@ -617,7 +624,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
           wallet={wallet} hideAmounts={hideAmounts} tasks={rail.tasks} jobs={jobs} onSettings={onSettings}
           onCancelJob={(id) => cancelJob(port, id, notify, refreshStatus).then(() => {})}
           onReadJob={readJob}
-          usage={status?.sessionUsage} quote={status?.sessionCostQuote}
+          usage={status?.sessionUsage} quote={status?.sessionCostQuote} tariff={status?.tariff} onTariffFlip={refreshStatus}
         />
         {reloadFailure && <ReloadNotice failure={reloadFailure} onReload={onReloadSession} />}
         {/* Below the box, under a ceiling of their own. Both arrive unbidden and

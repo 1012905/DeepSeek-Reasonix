@@ -65,10 +65,10 @@ func TestRestoreArchivedIndexFailureLeavesNoDoubleIdentity(t *testing.T) {
 	}
 }
 
-func TestRestoreArchivedArchiveRemovalFailureLeavesNoDoubleIdentity(t *testing.T) {
+func TestRestoreArchivedStagingRemovalFailureLeavesNoDoubleIdentity(t *testing.T) {
 	s, dir, archivePath := restoreFixture(t)
 	withFault(t, func(op, path string) error {
-		if op == "remove" && path == archivePath {
+		if op == "remove" && strings.HasPrefix(filepath.Base(path), restoreStagingPrefix) {
 			return &os.PathError{Op: "remove", Path: path, Err: os.ErrPermission}
 		}
 		return nil

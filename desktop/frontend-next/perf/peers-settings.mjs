@@ -17,7 +17,7 @@ for (const scheme of ["light", "dark"]) {
     const tag = `${scheme} ${width}px`;
     const page = await browser.newPage({ viewport: { width, height: 900 }, locale: "zh-CN", colorScheme: scheme, reducedMotion: "reduce" });
     page.on("pageerror", (e) => fails.push("页面异常: " + e.message));
-    await page.goto(`${BASE}?pref=zh&turns=2&peers=1&peerset=1&pending=1`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}?pref=zh&turns=2&peers=1&peerset=1&pending=1&ws=3`, { waitUntil: "networkidle" });
     await page.waitForSelector(".app");
 
     await page.waitForSelector(".peerbar");
@@ -37,7 +37,12 @@ for (const scheme of ["light", "dark"]) {
 
     await page.evaluate(() => document.querySelector('[data-action="chrome.settings"]')?.click());
     await page.waitForSelector(".prefs-nav button");
+    const navLabels = await page.evaluate(() => [...document.querySelectorAll(".prefs-nav button")].map((b) => b.textContent));
+    check(`${tag}: session messages have a settings entry of their own`, navLabels.some((l) => l.includes("会话间消息")));
     await page.evaluate(() => [...document.querySelectorAll(".prefs-nav button")].find((b) => b.textContent.includes("工具与权限"))?.click());
+    await page.waitForTimeout(300);
+    check(`${tag}: and no longer sit at the foot of tools and permissions`, (await page.locator('[role="switch"][aria-label="启用会话间消息"]').count()) === 0);
+    await page.evaluate(() => [...document.querySelectorAll(".prefs-nav button")].find((b) => b.textContent.includes("会话间消息"))?.click());
     await page.waitForSelector('[role="switch"][aria-label="启用会话间消息"]', { timeout: 8000 });
     const s = await page.evaluate(() => {
       const sw = (n) => document.querySelector(`[role="switch"][aria-label="${n}"]`);
@@ -62,11 +67,18 @@ for (const scheme of ["light", "dark"]) {
     check(`${tag}: a saved switch says the next turn, never at once`, s.pending && !s.immediate);
     check(`${tag}: the file the switches live in is named`, s.path);
     check(`${tag}: nothing spills out of the box`, s.within && s.spill <= 1, `${s.spill}px`);
+    const pick = page.getByRole("combobox", { name: "放行这个项目" });
+    const options = await pick.locator("option").count();
+    check(`${tag}: a project can be chosen from those already added`, options >= 1, `${options} choices`);
+    await page.getByRole("button", { name: "放行", exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".peerreleased li").length === 3);
+    check(`${tag}: allowing it through adds it to the list`, true);
     if (shotDir && width === 1280) {
       await page.addStyleTag({ content: ".cfgbad { display: none !important; }" });
       await page.setViewportSize({ width, height: 1100 });
       await page.waitForTimeout(250);
       await page.locator("#set-peers").screenshot({ path: `${shotDir}/${scheme}-settings.png` });
+      await page.locator("#set-peer-projects").screenshot({ path: `${shotDir}/${scheme}-projects.png` });
     }
     await page.close();
   }

@@ -1,2 +1,0 @@
-- 新增：设置 → 扩展里，你自己和项目文件夹里的技能多了「卸载…」，确认框写明要删除的位置；内置技能和由包提供的技能不显示。关联 #13714。
-- Added: Settings > Extensions can remove a skill of your own or the project's, after a confirmation naming the place to be deleted; built-in and package skills do not offer it. Refs #13714.

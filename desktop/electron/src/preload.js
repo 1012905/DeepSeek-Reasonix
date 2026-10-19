@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld("reasonixHost", {
   captureWindow: () => ipcRenderer.invoke("window:capture"),
   // What the shell's graphics are running as this launch.
   graphics: () => ipcRenderer.invoke("shell:graphics"),
+  // The window's processes as type and two sizes, for the memory a report may carry.
+  processMemory: () => ipcRenderer.invoke("shell:process-memory"),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", String(url)),
   // A pane and a path inside its workspace; main asks the kernel where that is.
   revealPath: (base, rel) => ipcRenderer.invoke("shell:reveal", String(base), String(rel)),

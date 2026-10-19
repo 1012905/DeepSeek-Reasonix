@@ -1,0 +1,2 @@
+- 新增：Studio 项目配置支持 `.reasonix/reasonix.toml`，仅在根目录的 `reasonix.toml` 不存在时使用。CLI 本地设置、MCP/技能安装及配置修复使用同一选定路径；项目权限限制保持不变。关联 #6007。
+- Added: Studio loads `.reasonix/reasonix.toml` when root `reasonix.toml` is absent. Local edits, installs, and repair use that path with unchanged project restrictions. Refs #6007.

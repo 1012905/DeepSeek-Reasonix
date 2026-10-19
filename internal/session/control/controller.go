@@ -347,10 +347,10 @@ type Options struct {
 	Hooks               *hook.Runner
 	Memory              *memory.Set
 	Cleanup             func()
-	// Balance reads the active provider's optional wallet endpoint. Nil, or a
-	// cache built on an empty URL, means the provider declares none. Hosts that
-	// build several runtimes hand every pane the same cache.
+	// Balance reads the active provider's optional wallet endpoint; nil or an empty
+	// URL means none. Hosts that build several runtimes share one cache across panes.
 	Balance  *billing.Cache
+	Tariff   TariffSource
 	Feedback FeedbackOptions // nil service refuses every feedback call
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager

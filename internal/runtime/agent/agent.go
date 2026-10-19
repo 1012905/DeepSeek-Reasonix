@@ -749,6 +749,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 	a.SetResponseLanguage(opts.ResponseLanguage)
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
 	a.SetProgressWatch(opts.ProgressWatch)
+	a.SetRequestEffort(opts.RequestEffort)
 	return a
 }
 

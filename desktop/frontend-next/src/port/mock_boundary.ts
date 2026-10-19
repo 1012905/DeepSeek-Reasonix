@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, ToolSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
 import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { mockMods } from "./mock_mods";
 import { HttpError } from "./http_error";
@@ -198,14 +198,37 @@ export class MockBoundary extends MockShell {
     return { ...this.modes };
   }
 
-  private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };
+  private toolList: ToolSettings = {
+    tools: [
+      { name: "bash", description: "Run a shell command in the workspace.", disabled: false },
+      { name: "read_file", description: "Read a file, or a line range of it.", disabled: false },
+      { name: "recall", description: "Search what earlier turns folded away.", disabled: false },
+      { name: "todo_write", description: "Keep a checklist for a multi-step task.", disabled: false, requiredBy: "plan_steps" },
+      { name: "web_search", description: "Search the web.", disabled: true, byProject: true },
+      { name: "update_goal", description: "Report a goal as complete, blocked or stopped.", disabled: false, requiredBy: "goal_mode" },
+      { name: "use_capability", description: "Reach a deferred MCP tool.", disabled: false, requiredBy: "deferred_mcp_tools" },
+      { name: "web_fetch", description: "Fetch a web page.", disabled: false },
+    ],
+    path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async toolSettings(): Promise<ToolSettings> {
+    return structuredClone(this.toolList);
+  }
+
+  async saveToolDisabled(name: string, disabled: boolean): Promise<ToolSettings> {
+    this.toolList = { ...this.toolList, tools: this.toolList.tools.map((x) => (x.name === name ? { ...x, disabled } : x)) };
+    return structuredClone(this.toolList);
+  }
+
+  private lease: WriteLeaseSettings = { optimistic: false, maxWaitMinutes: 0, path: "/Users/you/.reasonix/config.toml" };
 
   async writeLease(): Promise<WriteLeaseSettings> {
     return { ...this.lease };
   }
 
-  async saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings> {
-    this.lease = { ...this.lease, optimistic };
+  async saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }): Promise<WriteLeaseSettings> {
+    this.lease = { ...this.lease, ...edit };
     return { ...this.lease };
   }
 
@@ -255,7 +278,7 @@ export class MockBoundary extends MockShell {
       dispatch: edit.dispatch ?? this.peerSettings.dispatch,
       max_dispatch_depth: edit.max_dispatch_depth ?? this.peerSettings.max_dispatch_depth,
       max_dispatched_sessions: edit.max_dispatched_sessions ?? this.peerSettings.max_dispatched_sessions,
-      release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
+      release_projects: keep ? keep.map((path) => this.peerSettings.release_projects.find((p) => p.path === path) ?? { path, name: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path }) : this.peerSettings.release_projects,
       pending: true,
     };
     return this.peersSettings();

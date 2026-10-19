@@ -31,6 +31,7 @@ import { usePromptRefine } from "./PromptRefine";
 import { useProviderOrder } from "../state/providerorder";
 import { useModelFilter, writeModelFilter } from "../state/modelfilter";
 import { useDraft } from "./useDraft";
+import type { Submitted } from "./usesubmit";
 import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
 import { SideAskButton } from "./SideAskButton";
@@ -58,7 +59,7 @@ interface Props {
   // Bumped when something outside asks for the cursor — answering a plan card
   // with "revise" is a request to say what to change, and the saying happens here.
   focus?: number;
-  onSubmit: (text: string, chips?: ChipCall) => Promise<boolean>;
+  onSubmit: (text: string, chips?: ChipCall) => Promise<Submitted>;
   onChanged: () => void;
   onError: (e: unknown) => void;
   onSettings?: (section?: string) => void;
@@ -121,7 +122,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const attachTipId = useId();
   // Set only when a completion moved the caret: the browser puts it at the end
   // of a programmatic value, which is wrong for anything accepted mid-line.
-  const pending = useRef<number | null>(null);
+  const pending = useRef<number | [number, number] | null>(null);
 
   const loadModels = useCallback(() => {
     port.models().then(setModels).catch(() => setModels([]));
@@ -211,7 +212,8 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
 
   const placeCaret = useCallback((el: HTMLTextAreaElement) => {
     if (pending.current === null) return;
-    el.setSelectionRange(pending.current, pending.current);
+    const [from, to] = typeof pending.current === "number" ? [pending.current, pending.current] : pending.current;
+    el.setSelectionRange(from, to);
     pending.current = null;
   }, []);
   useFitHeight(box, text, placeCaret);
@@ -237,9 +239,9 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     const call = chips.call(compose);
     const draft = { text, shots, caret: caretRef.current, chips: chips.held() };
     if (worktree.selection || worktree.stage) setSetupDraft({ text: v, files: shots.map(chipName) });
-    const restoreDraft = () => {
+    const restoreDraft = (select = false) => {
       finishSubmit(false);
-      pending.current = draft.caret;
+      pending.current = select ? [0, draft.text.length] : draft.caret;
       type(draft.text, draft.caret);
       chips.restore(draft.chips);
       setShots((current) => [...draft.shots, ...current]);
@@ -257,13 +259,15 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
           if (!prepared) { restoreDraft(); return; }
         }
         const sent = await (call ? onSubmit(line, call) : onSubmit(line));
-        if (sent) {
+        if (sent === true) {
           finishSubmit(true);
           worktree.dismiss();
           draft.shots.forEach(releaseChip);
         }
         else {
-          restoreDraft();
+          // A command this connection will never run is left selected, so the
+          // next thing typed replaces it instead of joining it.
+          restoreDraft(sent === "shell_unavailable");
           worktree.dismiss();
         }
       } catch (e) {

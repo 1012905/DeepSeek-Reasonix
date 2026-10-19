@@ -128,6 +128,8 @@ type configurableFactory struct {
 	withCtrl      func(ctx context.Context, sink event.Sink, input string, p SessionParams, ctrl *control.Controller) error
 	onBuild       func(index int, p SessionParams)
 	fingerprint   string
+	// requestEfforts, when set, gives each controller a real executor whose provider takes those depths per request.
+	requestEfforts []string
 }
 
 func (f *configurableFactory) NewSession(_ context.Context, p SessionParams) (*control.Controller, error) {
@@ -171,6 +173,9 @@ func (f *configurableFactory) NewSession(_ context.Context, p SessionParams) (*c
 	opts := control.Options{
 		Runner: runner, Sink: p.Sink, SessionDir: f.dir, OnSessionRecovered: p.OnSessionRecovered,
 		ModelRef: model, Effort: effort, ProviderFingerprint: f.providerFingerprint(model, effort),
+	}
+	if len(f.requestEfforts) > 0 {
+		opts.Executor = agent.New(requestEffortStub{levels: f.requestEfforts}, tool.NewRegistry(), sessionstore.NewSession("sys"), agent.Options{}, event.Discard)
 	}
 	if f.withHooks {
 		opts.Hooks = f.hookRunner()

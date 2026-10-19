@@ -9,6 +9,8 @@ import { useViewer } from "../../state/viewer";
 import { useIme } from "../ime";
 import { LazyMarkdown } from "../LazyMarkdown";
 import { clock, useAskCountdown } from "./useAskCountdown";
+import { AskFreeText } from "./AskFreeText";
+import type { AgentPort } from "../../port/port";
 
 const ADVANCE_MS = 220;
 
@@ -16,9 +18,10 @@ interface Props {
   item: Extract<Item, { t: "ask" }>;
   onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
   onEngage?: (id: string) => Promise<void>;
+  refine?: AgentPort["refinePrompt"];
 }
 
-export function AskCard({ item, onAnswer, onEngage }: Props) {
+export function AskCard({ item, onAnswer, onEngage, refine }: Props) {
   const qs = item.ask.questions;
   const answeredBy = answerSource(item.by, useViewer(), item.said);
   const [tab, setTab] = useState(0);
@@ -244,22 +247,19 @@ export function AskCard({ item, onAnswer, onEngage }: Props) {
                   </button>
                 </div>
                 <div className="other-wrap" data-on={customChosen(i) || noteShown(i) ? "" : undefined}>
-                  <input
-                    ref={(el) => {
+                  <AskFreeText
+                    inputRef={(el) => {
                       boxes.current[i] = el;
                     }}
-                    data-action-keydown="ask.answer"
-                    aria-label={noteShown(i) ? t("补充说明（可选）") : (customOption(i)?.label ?? t("其他 —— 自行填写"))}
+                    label={noteShown(i) ? t("补充说明（可选）") : (customOption(i)?.label ?? t("其他 —— 自行填写"))}
                     value={freeShown(i)}
                     readOnly={sealed}
                     placeholder={noteShown(i) ? t("补充说明（可选），会随所选项一起发送") : t("或直接输入你的回答")}
-                    onChange={(e) => type(i, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" || sealed || ime.isIme(e.nativeEvent)) return;
-                      e.preventDefault();
-                      onEnter();
-                    }}
-                    {...ime.handlers}
+                    onChange={(text) => type(i, text)}
+                    onEnter={onEnter}
+                    isIme={ime.isIme}
+                    imeHandlers={ime.handlers}
+                    refine={refine}
                   />
                 </div>
               </div>

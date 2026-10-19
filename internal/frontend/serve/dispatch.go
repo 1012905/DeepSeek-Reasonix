@@ -21,7 +21,10 @@ import (
 type dispatchBook struct {
 	mu       sync.Mutex
 	sessions map[dispatchKey]string
-	open     func(context.Context, OpenRequest) (*Runtime, error) // nil: Hub.Open
+	// pending holds a pane opened in a project the user has not decided about yet;
+	// it shows its own trust card, and the next dispatch reuses it.
+	pending map[dispatchKey]string
+	open    func(context.Context, OpenRequest) (*Runtime, error) // nil: Hub.Open
 }
 
 type dispatchKey struct{ from, root string }
@@ -36,9 +39,11 @@ func (b *dispatchBook) targets(from string) []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var out []string
-	for k, id := range b.sessions {
-		if k.from == from {
-			out = append(out, id)
+	for _, m := range []map[dispatchKey]string{b.sessions, b.pending} {
+		for k, id := range m {
+			if k.from == from {
+				out = append(out, id)
+			}
 		}
 	}
 	return out
@@ -50,7 +55,24 @@ func (b *dispatchBook) set(from, root, id string) {
 	if b.sessions == nil {
 		b.sessions = map[dispatchKey]string{}
 	}
-	b.sessions[dispatchKey{from, root}] = id
+	k := dispatchKey{from, root}
+	b.sessions[k] = id
+	delete(b.pending, k)
+}
+
+func (b *dispatchBook) getPending(from, root string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.pending[dispatchKey{from, root}]
+}
+
+func (b *dispatchBook) setPending(from, root, id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.pending == nil {
+		b.pending = map[dispatchKey]string{}
+	}
+	b.pending[dispatchKey{from, root}] = id
 }
 
 // dispatcherFor is what a pane's controller calls to hand a task to another of
@@ -70,10 +92,17 @@ func (h *Hub) dispatchTo(ctx context.Context, from *Runtime, project, text strin
 	if !ok {
 		return control.DispatchResult{}, control.ErrDispatchNotLocal
 	}
+	if sameFolder(root, sender.WorkspaceRoot()) {
+		return control.DispatchResult{}, projectError(control.ErrDispatchSameProject, root)
+	}
 	target := h.runtimeByID(h.dispatch.get(from.ID, root))
 	var secret []byte
 	if target == nil {
-		if limit := config.LoadForEdit(config.UserConfigPath()).PeersMaxDispatchedSessions(); limit > 0 && h.liveDispatched(from.ID) >= limit {
+		if sender.TrustOfWorkspace(root) == config.WorkspaceTrustDeclined {
+			return control.DispatchResult{}, projectError(control.ErrDispatchUntrusted, root)
+		}
+		waiting := h.runtimeByID(h.dispatch.getPending(from.ID, root)) != nil
+		if limit := config.LoadForEdit(config.UserConfigPath()).PeersMaxDispatchedSessions(); !waiting && limit > 0 && h.liveDispatched(from.ID) >= limit {
 			return control.DispatchResult{}, control.ErrDispatchLimit
 		}
 		if secret, err = newPairSecret(); err != nil {
@@ -107,9 +136,10 @@ func newPairSecret() ([]byte, error) {
 	return secret, err
 }
 
-// openDispatchSession opens a fresh pane in root and gives it the file the
-// sender will write to. A folder the user has not trusted is not opened for
-// someone else's task: the pane is closed again and the dispatch refused.
+// openDispatchSession opens a fresh pane in root, or takes back the one an
+// earlier dispatch left waiting for the user's answer about the folder. A folder
+// the user declined is not opened for someone else's task; an undecided one keeps
+// its pane open so the trust card is in front of the user, and the task is not sent.
 func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, sender *control.Controller, root string, secret []byte) (*Runtime, error) {
 	binding := sender.CompositionBinding()
 	if binding != nil && binding.Workspace != "" && binding.Workspace != root {
@@ -120,18 +150,26 @@ func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, sender *co
 		open = h.Open
 	}
 	grant := sender.DispatchGrant()
-	target, err := open(ctx, OpenRequest{Root: root, Model: grant.Model, composition: binding})
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", control.ErrDispatchFailed, err)
+	target := h.runtimeByID(h.dispatch.getPending(from.ID, root))
+	if target == nil {
+		var err error
+		if target, err = open(ctx, OpenRequest{Root: root, Model: grant.Model, composition: binding}); err != nil {
+			return nil, fmt.Errorf("%w: %w", control.ErrDispatchFailed, err)
+		}
 	}
 	ctrl, ok := target.Server.Controller().(*control.Controller)
 	if !ok {
 		_ = h.Close(target.ID)
 		return nil, control.ErrDispatchNotLocal
 	}
-	if ctrl.WorkspaceTrust() != config.WorkspaceTrusted {
+	switch ctrl.WorkspaceTrust() {
+	case config.WorkspaceTrusted:
+	case config.WorkspaceTrustDeclined:
 		_ = h.Close(target.ID)
-		return nil, control.ErrDispatchUntrusted
+		return nil, projectError(control.ErrDispatchUntrusted, root)
+	default:
+		h.dispatch.setPending(from.ID, root, target.ID)
+		return nil, projectError(control.ErrDispatchAwaitingTrust, root)
 	}
 	ctrl.AdoptSessionGrant(grant)
 	ctrl.MarkOpenedByDispatch(sender.PeerKey(), secret, sender.DispatchDepth()+1)
@@ -140,8 +178,14 @@ func (h *Hub) openDispatchSession(ctx context.Context, from *Runtime, sender *co
 	return target, nil
 }
 
-// liveDispatched counts the panes from opened for its dispatches that are still
-// open; a pane the user closed no longer counts against the ceiling.
+// projectError names the project a refusal is about; errors.Is still finds the
+// sentinel, which is the identity.
+func projectError(sentinel error, root string) error {
+	return fmt.Errorf("%w (project %q)", sentinel, filepath.Base(root))
+}
+
+// liveDispatched counts the panes from opened for its dispatches, waiting for a
+// trust answer or not, that are still open; a pane the user closed no longer counts against the ceiling.
 func (h *Hub) liveDispatched(from string) int {
 	n := 0
 	for _, id := range h.dispatch.targets(from) {

@@ -221,9 +221,9 @@ type acpSession struct {
 	additionalDirs []string
 	model          string
 	// nil means use config; non-nil empty string means provider default.
-	effortOverride   *string
-	runtimeProfile   string
-	toolApprovalMode string
+	effortOverride *string
+	runtimeProfile string
+	posture        approvalPosture
 	// runtimeState is the effective planner/sandbox posture captured after CLI
 	// hard overrides. status snapshots never reconstruct it from user config.
 	runtimeState SessionRuntimeState
@@ -595,7 +595,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 	if err := resumeACPControllerForWrite(ctrl, loaded, path, lease); err != nil {
 		return SessionConfigState{}, sessionLeaseBindError(method, err)
 	}
-	toolApprovalMode := normalizeACPToolApprovalMode(saved.ToolApprovalMode)
+	toolApprovalMode, keptApproval := s.restoredPosture(saved.ToolApprovalMode)
 	ctrl.SetToolApprovalMode(toolApprovalMode)
 	modeID := normalizeACPCollaborationMode(saved.CollaborationMode)
 	goalDraftMode := false
@@ -618,29 +618,29 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 	meta.Model = cfgState.Model
 	meta.EffortOverride = cloneStringPtr(cfgState.EffortOverride)
 	meta.RuntimeProfile = cfgState.RuntimeProfile
-	meta.ToolApprovalMode = toolApprovalMode
+	meta.ToolApprovalMode = firstNonEmpty(keptApproval, toolApprovalMode)
 	meta.CollaborationMode = modeID
-	cfgState = withToolApprovalConfig(cfgState, toolApprovalMode)
+	cfgState = s.withToolApprovalConfig(cfgState, toolApprovalMode)
 	sess := &acpSession{
-		id:               id,
-		ctrl:             ctrl,
-		sink:             sink,
-		transcript:       path,
-		cwd:              meta.Cwd,
-		mcpServers:       clonePluginSpecs(mcpServers),
-		additionalDirs:   additionalDirs,
-		model:            cfgState.Model,
-		effortOverride:   cloneStringPtr(cfgState.EffortOverride),
-		runtimeProfile:   cfgState.RuntimeProfile,
-		toolApprovalMode: toolApprovalMode,
-		runtimeState:     runtimeState,
-		status:           restoreStatusTelemetry(saved.Status),
-		modeID:           modeID,
-		goalDraftMode:    goalDraftMode,
-		title:            meta.Title,
-		createdAt:        meta.CreatedAt,
-		updatedAt:        meta.UpdatedAt,
-		lease:            lease,
+		id:             id,
+		ctrl:           ctrl,
+		sink:           sink,
+		transcript:     path,
+		cwd:            meta.Cwd,
+		mcpServers:     clonePluginSpecs(mcpServers),
+		additionalDirs: additionalDirs,
+		model:          cfgState.Model,
+		effortOverride: cloneStringPtr(cfgState.EffortOverride),
+		runtimeProfile: cfgState.RuntimeProfile,
+		posture:        approvalPosture{mode: toolApprovalMode, kept: keptApproval},
+		runtimeState:   runtimeState,
+		status:         restoreStatusTelemetry(saved.Status),
+		modeID:         modeID,
+		goalDraftMode:  goalDraftMode,
+		title:          meta.Title,
+		createdAt:      meta.CreatedAt,
+		updatedAt:      meta.UpdatedAt,
+		lease:          lease,
 	}
 	s.bindSessionHealthEvents(sess)
 	if err := saveACPMeta(path, sess.meta()); err != nil {
@@ -973,7 +973,7 @@ func (s *service) rebuildSessionLocked(ctx context.Context, sess *acpSession, cf
 	cwd := sess.cwd
 	modeID := normalizeACPCollaborationMode(sess.modeID)
 	goalDraftMode := sess.goalDraftMode
-	toolApprovalMode := normalizeACPToolApprovalMode(sess.toolApprovalMode)
+	toolApprovalMode := normalizeACPToolApprovalMode(sess.posture.mode)
 	if strings.TrimSpace(cfgState.RuntimeProfile) == "" {
 		cfgState.RuntimeProfile = sess.runtimeProfile
 	}
@@ -1088,7 +1088,7 @@ func (s *service) rebuildSessionLocked(ctx context.Context, sess *acpSession, cf
 	sess.model = cfgState.Model
 	sess.effortOverride = cloneStringPtr(cfgState.EffortOverride)
 	sess.runtimeProfile = cfgState.RuntimeProfile
-	sess.toolApprovalMode = toolApprovalMode
+	sess.posture.mode = toolApprovalMode
 	sess.runtimeState = runtimeState
 	sess.modeID = modeID
 	sess.goalDraftMode = goalDraftMode

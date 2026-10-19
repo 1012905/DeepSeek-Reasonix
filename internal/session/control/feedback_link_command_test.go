@@ -49,6 +49,10 @@ func newLinkRig(t *testing.T, assertion string) *linkRig {
 			_, _ = io.WriteString(w, linkRigAccount)
 		case req.URL.Path == "/v1/feedback/link" && req.Method == http.MethodGet:
 			_, _ = io.WriteString(w, `{"installs":[{"id":"aaaaaaaaaaaa","linkedAt":"2026-10-02T00:00:00Z","current":true},{"id":"bbbbbbbbbbbb","linkedAt":"2026-10-03T00:00:00Z","current":false}]}`)
+		case req.URL.Path == "/v1/feedback/board" && req.Method == http.MethodGet:
+			_, _ = io.WriteString(w, `{"view":"release","release":"v2.1.0","entries":[{"displayName":"Sample User","credits":2,"rank":1,"releases":[{"version":"v2.1.0","count":2}]},{"displayName":"Other Sample","credits":1,"rank":2,"releases":[{"version":"v2.1.0","count":1}]}]}`)
+		case req.URL.Path == "/v1/feedback/board/me":
+			_, _ = io.WriteString(w, `{"listed":true,"displayName":"Sample User","delisted":false}`)
 		default:
 			_, _ = io.WriteString(w, "{}")
 		}
@@ -114,9 +118,15 @@ func TestFeedbackLinkSaysWhatItDoesAndNeedsAnExplicitYes(t *testing.T) {
 		t.Fatal("the install was linked without --yes")
 	}
 	r.c.Submit("/feedback link --yes")
-	r.say(t, "Linked")
+	got := r.say(t, "Linked")
 	if r.called("POST /v1/feedback/link assert-1") != 1 {
 		t.Fatalf("the link did not carry the assertion:\n%v", r.calls)
+	}
+	if !strings.Contains(got, "/feedback board join <name>") {
+		t.Fatalf("linking did not say how to join the board:\n%s", got)
+	}
+	if n := r.called("PUT /v1/feedback/board/optin") + r.called("POST /v1/feedback/board/optin"); n != 0 {
+		t.Fatalf("linking joined the board on its own:\n%v", r.calls)
 	}
 }
 
@@ -172,8 +182,56 @@ func TestFeedbackListMarksAReportFromAnotherDevice(t *testing.T) {
 
 func TestFeedbackLinkWordsAreInEveryCatalogue(t *testing.T) {
 	for tag, m := range map[string]i18n.Messages{"en": i18n.English, "zh": i18n.Chinese, "zh-TW": i18n.ChineseTraditional} {
-		if m.Feedback.LinkExplain == "" || m.Feedback.LinkDone == "" || m.Feedback.NeedSignIn == "" || m.Feedback.OtherDeviceMark == "" {
+		if m.Feedback.LinkExplain == "" || m.Feedback.LinkDone == "" || m.Feedback.LinkBoardHint == "" || m.Feedback.NeedSignIn == "" || m.Feedback.OtherDeviceMark == "" {
 			t.Errorf("%s: link words are missing", tag)
 		}
+	}
+}
+
+func TestFeedbackBoardListsWithPlacesForAReleaseAndNeedsNoAccountToRead(t *testing.T) {
+	r := newLinkRig(t, "")
+	r.c.Submit("/feedback board v2.1.0")
+	got := r.say(t, "Sample User")
+	if !strings.Contains(got, "1. Sample User - 2 adopted") || !strings.Contains(got, "2. Other Sample - 1 adopted") {
+		t.Fatalf("board = %q", got)
+	}
+	if r.called("/v1/feedback/board v") != 0 || strings.Contains(strings.Join(r.calls, "\n"), "GET /v1/feedback/board assert") {
+		t.Fatalf("a public read carried an assertion: %v", r.calls)
+	}
+}
+
+func TestFeedbackBoardJoinSaysTheNameFirstAndSendsNothingUntilYes(t *testing.T) {
+	r := newLinkRig(t, "assert-1")
+	r.c.Submit("/feedback board join Sample Person")
+	r.say(t, "\"Sample Person\"")
+	if r.called("PUT /v1/feedback/board/optin") != 0 {
+		t.Fatal("the account was put on the board without --yes")
+	}
+	r.c.Submit("/feedback board join Sample Person --yes")
+	r.say(t, "You are on the board")
+	if r.called("PUT /v1/feedback/board/optin assert-1") != 1 {
+		t.Fatalf("the join did not carry the assertion:\n%v", r.calls)
+	}
+	r.c.Submit("/feedback board leave")
+	r.say(t, "You are off the board")
+	if r.called("DELETE /v1/feedback/board/optin assert-1") != 1 {
+		t.Fatalf("the leave did not carry the assertion:\n%v", r.calls)
+	}
+}
+
+func TestFeedbackBoardJoinSignedOutAndRefusedAreSaidFromTheirIdentity(t *testing.T) {
+	out := newLinkRig(t, "")
+	out.c.Submit("/feedback board join Sample --yes")
+	out.say(t, "reasonix login")
+	if out.called("/v1/feedback/board/optin") != 0 {
+		t.Fatal("a request went out with no sign-in")
+	}
+	r := newLinkRig(t, "assert-1")
+	for code, says := range map[string]string{"feedback.board_name_reserved": "reserved", "feedback.board_name_taken": "already uses", "feedback.board_delisted": "removed", "feedback.board_no_link": "/feedback link"} {
+		r.mu.Lock()
+		r.refuse["PUT /v1/feedback/board/optin"] = code
+		r.mu.Unlock()
+		r.c.Submit("/feedback board join Sample --yes")
+		r.say(t, says)
 	}
 }

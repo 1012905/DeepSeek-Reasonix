@@ -132,6 +132,9 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if cmd, handled := m.menuKey(msg.String()); handled {
 		return m, cmd
 	}
+	if cmd, handled := m.queueKey(msg.String()); handled {
+		return m, cmd
+	}
 	if cmd, handled := m.viKey(msg); handled {
 		return m, cmd
 	}

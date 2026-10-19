@@ -100,6 +100,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/todos.go", "todoItem", tsSessionFile, "HostTodo"},
 	{"internal/frontend/serve/session_usage.go", "SessionUsage", tsSessionFile, "SessionUsage"},
 	{"internal/frontend/serve/jobs.go", "JobOutput", tsSessionFile, "JobOutput"},
+	{"internal/frontend/serve/history.go", "ToolOutputPage", tsSessionFile, "ToolOutputPage"},
 	// The background-job list. A name or full command the page cannot read is
 	// a task it can only call by its short preview.
 	{"internal/tools/jobs/jobs_view.go", "View", tsSessionFile, "JobEntry"},
@@ -131,6 +132,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/write_lease_settings.go", "WriteLeaseSettings", tsBoundaryFile, "WriteLeaseSettings"},
 	{"internal/session/control/plan_approval_settings.go", "PlanApprovalSettings", tsBoundaryFile, "PlanApprovalSettings"},
 	{"internal/session/control/default_mode_settings.go", "DefaultModeSettings", tsBoundaryFile, "DefaultModeSettings"},
+	{"internal/session/control/tool_settings.go", "ToolSettings", tsBoundaryFile, "ToolSettings"},
+	{"internal/session/control/tool_settings.go", "ToolSetting", tsBoundaryFile, "ToolSetting"},
 	{"internal/session/control/peer_settings.go", "PeersSettings", tsBoundaryFile, "PeersSettings"},
 	{"internal/session/control/peer_settings.go", "PeerReleased", tsBoundaryFile, "PeerProject"},
 	{"internal/session/control/mods.go", "ModStatus", tsBoundaryFile, "ModStatus"},
@@ -250,6 +253,7 @@ var mirroredWireTypes = []wireMirror{
 	// The report form draws what the kernel will send and reads back what
 	// became of it; a field the page cannot read is a status it cannot show.
 	{"internal/platform/feedback/types.go", "Env", tsFeedbackFile, "FeedbackEnvInfo"},
+	{"internal/platform/feedback/env_memory.go", "ProcessMemory", tsFeedbackFile, "FeedbackProcessMemory"},
 	{"internal/platform/feedback/types.go", "Limits", tsFeedbackFile, "FeedbackLimits"},
 	{"internal/platform/feedback/types.go", "Receipt", tsFeedbackFile, "FeedbackReceipt"},
 	{"internal/platform/feedback/types.go", "Item", tsFeedbackFile, "FeedbackItem"},
@@ -257,6 +261,10 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/feedback/types.go", "ReplyReceipt", tsFeedbackFile, "FeedbackReplyReceipt"},
 	{"internal/platform/feedback/types.go", "Mine", tsFeedbackFile, "FeedbackMine"},
 	{"internal/platform/feedback/types.go", "Promotion", tsFeedbackFile, "FeedbackPromotion"},
+	{"internal/platform/feedback/board.go", "Board", tsFeedbackFile, "FeedbackBoard"},
+	{"internal/platform/feedback/board.go", "BoardEntry", tsFeedbackFile, "FeedbackBoardEntry"},
+	{"internal/platform/feedback/board.go", "BoardRelease", tsFeedbackFile, "FeedbackBoardRelease"},
+	{"internal/platform/feedback/board.go", "BoardMe", tsFeedbackFile, "FeedbackBoardMe"},
 	{"internal/platform/feedback/types.go", "Profile", tsFeedbackFile, "FeedbackProfile"},
 	{"internal/platform/feedback/types.go", "EffectiveLimits", tsFeedbackFile, "FeedbackEffectiveLimits"},
 	{"internal/frontend/serve/feedback.go", "feedbackEnvView", tsFeedbackFile, "FeedbackEnv"},
@@ -270,6 +278,14 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/commit.go", "CommitResult", tsWorkspaceFile, "CommitResult"},
 	{"internal/session/control/commit.go", "StageRequest", tsWorkspaceFile, "StageRequest"},
 	{"internal/platform/gitcommit/gitcommit.go", "File", tsWorkspaceFile, "CommitFile"},
+	{"internal/session/control/discard.go", "DiscardRequest", tsWorkspaceFile, "DiscardRequest"},
+	{"internal/session/control/git_push.go", "PushRequest", tsWorkspaceFile, "PushRequest"},
+	{"internal/platform/gitpush/plan.go", "Plan", tsWorkspaceFile, "PushPlan"},
+	{"internal/platform/gitpush/push.go", "Result", tsWorkspaceFile, "PushResult"},
+	{"internal/frontend/serve/changes.go", "gitRepoRow", tsWorkspaceFile, "GitRepoRow"},
+	{"internal/frontend/serve/changes.go", "gitReposView", tsWorkspaceFile, "GitRepos"},
+	{"internal/platform/gitstatus/commitdetail.go", "CommitFile", tsWorkspaceFile, "GitCommitFile"},
+	{"internal/frontend/serve/git_commit_detail.go", "commitFilesView", tsWorkspaceFile, "GitCommitFiles"},
 	// The scale range the slider is drawn from: a bound the page cannot read
 	// would leave it a range of its own.
 	{"internal/frontend/serve/appearance.go", "zoomRangeView", tsLookFile, "ZoomRange"},

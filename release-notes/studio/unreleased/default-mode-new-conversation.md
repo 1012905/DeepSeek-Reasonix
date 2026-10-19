@@ -1,2 +1,0 @@
-- 新增：设置里可以让新对话默认进入计划模式（agent.default_mode，默认关闭）；已有对话保持自己的模式。关联 #7852。
-- Added: Settings can start new conversations in plan mode (agent.default_mode, off by default); existing conversations keep their own mode. Refs #7852.

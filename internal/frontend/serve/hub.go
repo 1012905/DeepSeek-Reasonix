@@ -633,7 +633,7 @@ func (h *Hub) routeDefault(w http.ResponseWriter, r *http.Request) {
 // prefix is stripped here so the runtime's own routes stay unprefixed.
 func (h *Hub) publish(rt *Runtime) error {
 	if rt.remote != nil {
-		rt.handler = http.StripPrefix(runtimePrefix+rt.ID, refuseLocalOnly(remoteProxy(rt.remote.ep)))
+		rt.handler = http.StripPrefix(runtimePrefix+rt.ID, refuseDeviceBeforeForwarding(refuseLocalOnly(remoteProxy(rt.remote.ep))))
 	} else {
 		rt.Server.bindMu.Lock()
 		rt.Server.mu.Lock()

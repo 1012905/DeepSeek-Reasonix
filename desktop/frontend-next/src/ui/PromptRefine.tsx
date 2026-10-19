@@ -12,7 +12,7 @@ type Refine =
 
 // A rewrite of the draft, offered rather than applied: the draft stays in the
 // box until the person takes the rewrite, and leaving it costs nothing.
-export function usePromptRefine(port: AgentPort, text: string, adopt: (next: string) => void) {
+export function usePromptRefine(port: Pick<AgentPort, "refinePrompt">, text: string, adopt: (next: string) => void) {
   const [state, setState] = useState<Refine>({ phase: "idle" });
   const pending = useRef<AbortController | null>(null);
   const tipId = useId();

@@ -1,2 +1,0 @@
-- 新增：可在设置里打开“把视频地址交给模型厂商”（默认关闭）；只交你亲手写的 https 地址，厂商自己访问，智谱 GLM 与 Gemini（YouTube）支持。关联 #13616。
-- Added: a Settings switch (off by default) to hand a public video address you wrote to the model vendor, which visits it itself; Zhipu GLM and Gemini (YouTube). Refs #13616.

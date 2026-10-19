@@ -111,6 +111,7 @@ func (c *Controller) withTurnImages(ctx context.Context, line string) (context.C
 // model cannot. Without it the candidates reach whichever sub-agent runs next,
 // whose model was chosen for cost or speed and usually drops them on the wire.
 func (c *Controller) withVisionRouting(ctx context.Context) context.Context {
+	ctx = agent.WithTaskImageBinder(ctx, c.bindTaskImages)
 	if len(agent.SubagentImageCandidates(ctx)) == 0 {
 		return ctx
 	}

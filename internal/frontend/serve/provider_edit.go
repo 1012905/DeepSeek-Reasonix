@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/model/billing"
 )
@@ -78,6 +79,9 @@ func (s *Server) editProvider(w http.ResponseWriter, r *http.Request) {
 	if !applyEndpointSwitches(w, entry, body.WebSearch, body.Continuation) {
 		return
 	}
+	if !applyBillingMode(w, entry, body.BillingMode) {
+		return
+	}
 	if !applyBalanceFields(w, entry, body.BalanceURL, body.BalanceFormat) {
 		return
 	}
@@ -105,8 +109,8 @@ func (s *Server) editProvider(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := config.NoteBalanceFormat(config.UserConfigPath(), entry); err != nil {
-		slog.Warn("serve: could not record the balance format", "provider", entry.Name, "err", err)
+	if err := config.NoteProviderKeys(config.UserConfigPath(), entry); err != nil {
+		slog.Warn("serve: could not record the keys the 1.x line drops", "provider", entry.Name, "err", err)
 	}
 	s.applyEditedProvider(w, r, entry, assemblyShape(entry) != assembled, wasListed)
 }
@@ -157,6 +161,9 @@ type providerEditBody struct {
 	// removes the readout and takes its format with it.
 	BalanceURL    *string `json:"balanceUrl"`
 	BalanceFormat *string `json:"balanceFormat"`
+	// How the connection is billed: payg, or subscription_equivalent where the
+	// figures shown are an API-priced estimate of a plan. Unsent leaves it alone.
+	BillingMode *string `json:"billingMode"`
 }
 
 // applyEditedProvider answers a saved edit. What the agent binds at assembly
@@ -196,6 +203,18 @@ func (s *Server) runsListedModelOf(entry *config.ProviderEntry) bool {
 	return running == entry.Name && slices.Contains(entry.ModelList(), model)
 }
 
+// priceRates is what quotes read of a price. Where it was read and when are not
+// part of it, so noting a source does not rebuild a running conversation.
+func priceRates(prices map[string]*provider.Pricing) map[string][4]any {
+	out := make(map[string][4]any, len(prices))
+	for model, p := range prices {
+		if p != nil {
+			out[model] = [4]any{p.Input, p.Output, p.CacheHit, p.Currency}
+		}
+	}
+	return out
+}
+
 // assemblyShape is what of an entry the agent binds when it is built. Empty and
 // absent collections are one answer, because the form sends {} for a field it
 // leaves blank and the file drops it.
@@ -211,7 +230,7 @@ func assemblyShape(e *config.ProviderEntry) string {
 		orNil(len(e.ModelOverrides), e.ModelOverrides), e.ContextWindow, e.MaxOutputTokens,
 		orNil(len(e.Headers), e.Headers), orNil(len(e.ExtraBody), e.ExtraBody), e.ReasoningProtocol,
 		orNil(len(e.SupportedEfforts), e.SupportedEfforts), e.DefaultEffort, e.IdleTimeoutSeconds,
-		orNil(len(e.Prices), e.Prices), orNil(len(e.VideoModels), e.VideoModels), e.VideoProtocol,
+		orNil(len(e.Prices), priceRates(e.Prices)), e.ProviderBillingMode(), orNil(len(e.VideoModels), e.VideoModels), e.VideoProtocol,
 	}
 	b, err := json.Marshal(shape)
 	if err != nil {
@@ -386,6 +405,21 @@ func visionSettableOf(cfg *config.Config, p *config.ProviderEntry) []string {
 		}
 	}
 	return out
+}
+
+// applyBillingMode sets the billing mode from the closed set the quotes know.
+func applyBillingMode(w http.ResponseWriter, entry *config.ProviderEntry, mode *string) bool {
+	if mode == nil {
+		return true
+	}
+	switch m := strings.TrimSpace(*mode); m {
+	case pricing.BillingModePAYG, pricing.BillingModeSubscriptionEquivalent:
+		entry.BillingMode = m
+		return true
+	}
+	refuse(w, http.StatusBadRequest, "provider.billing_mode_unknown", "the billing mode must be payg or subscription_equivalent",
+		map[string]any{"modes": []string{pricing.BillingModePAYG, pricing.BillingModeSubscriptionEquivalent}})
+	return false
 }
 
 // applyBalanceFields sets the wallet endpoint and its declared format, the
