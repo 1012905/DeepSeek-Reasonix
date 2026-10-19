@@ -1,0 +1,2 @@
+- 改进：模型派任务给尚未决定信任的项目时，对方窗口保持打开并显示信任问题，并告知任务未发送。关联 #13681。
+- Improved: Dispatching to a project you have not yet trusted keeps its window open with the trust question and says the task was not sent. Refs #13681.
