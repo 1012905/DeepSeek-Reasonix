@@ -43,9 +43,20 @@ func v4ImportPath(sessionsDir, id string) string {
 	return filepath.Join(sessionsDir, v4ImportPrefix+id+".jsonl")
 }
 
+// v4DesktopIDPrefixes are the markers 1.x Desktop puts before the hex digits of
+// a conversation it created itself; the longer one is tried first.
+var v4DesktopIDPrefixes = []string{"desktop-manual-", "desktop-"}
+
 // isV4SessionID admits the lowercase hex ids 1.x generates (32 digits in
-// sessions-v4, 24 in Desktop's by-id store), which are safe as a file name.
+// sessions-v4, 24 in Desktop's by-id store), with or without a Desktop prefix,
+// which are safe as a file name.
 func isV4SessionID(id string) bool {
+	for _, prefix := range v4DesktopIDPrefixes {
+		if rest, ok := strings.CutPrefix(id, prefix); ok {
+			id = rest
+			break
+		}
+	}
 	if len(id) < 16 || len(id) > 64 {
 		return false
 	}

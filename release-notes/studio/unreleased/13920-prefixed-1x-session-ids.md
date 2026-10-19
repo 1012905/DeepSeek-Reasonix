@@ -1,0 +1,2 @@
+- 修复：恢复旧会话时，1.x 桌面端自己新建的、编号带 desktop- 或 desktop-manual- 前缀的会话不再被当成“格式不可读”跳过。见 #13920。
+- Fixed: recovering older sessions no longer skips the conversations 1.x Desktop created itself (ids prefixed desktop- or desktop-manual-). See #13920.
