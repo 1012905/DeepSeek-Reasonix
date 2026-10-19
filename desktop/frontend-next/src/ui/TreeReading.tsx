@@ -32,3 +32,9 @@ export function TreeReading({ onRetry }: { onRetry?: () => void }) {
     </div>
   );
 }
+
+/** What a list with no rows in hand says: still reading while the rows belong to
+ *  another view, and "no match" only once the kernel has answered for this one. */
+export function TreeEmpty({ settled, onRetry }: { settled: boolean; onRetry?: () => void }) {
+  return settled ? <div className="ws-empty">{t("没有匹配的会话")}</div> : <TreeReading onRetry={onRetry} />;
+}
