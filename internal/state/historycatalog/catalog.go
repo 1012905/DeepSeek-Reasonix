@@ -385,8 +385,14 @@ func (c *Catalog) reconcileRoot(ctx context.Context, root Root) error {
 	slices.Sort(paths)
 	signature := historyRootSignature(paths)
 	var previousSig, previousState string
-	_ = c.db.QueryRowContext(ctx, `SELECT signature,state FROM history_roots WHERE path=?`, root.Path).Scan(&previousSig, &previousState)
-	if previousState == "ready" && previousSig == signature && signature != "" {
+	var previousIndexed, previousTotal int64
+	_ = c.db.QueryRowContext(ctx, `SELECT signature,state,indexed,total FROM history_roots WHERE path=?`, root.Path).
+		Scan(&previousSig, &previousState, &previousIndexed, &previousTotal)
+	// Skip a completed, fully healthy directory: a corrupt/stale/missing source
+	// is retry work the size/mtime signature cannot see. Healthy roots still
+	// short-circuit before any transcript is opened.
+	if previousState == "ready" && previousSig == signature && signature != "" &&
+		previousIndexed == previousTotal && c.rootProjectionHealthy(ctx, root.Path) {
 		return nil
 	}
 	now := c.opts.Now().UnixMilli()
@@ -481,13 +487,13 @@ func (c *Catalog) indexPath(ctx context.Context, root Root, path string, generat
 	if identityErr == nil && known {
 		digest, revision = state.DigestHex, state.Revision
 	}
-	var oldFingerprint, oldMetaFingerprint, oldDigest string
+	var oldFingerprint, oldMetaFingerprint, oldDigest, oldHealth string
 	var oldGeneration, oldRevision int64
 	var oldMessageCount int
-	err := c.db.QueryRowContext(ctx, `SELECT content_fingerprint,meta_fingerprint,content_digest,seen_generation,
+	err := c.db.QueryRowContext(ctx, `SELECT content_fingerprint,meta_fingerprint,content_digest,health,seen_generation,
 		content_revision,indexed_message_count FROM history_sources WHERE path=?`, path).Scan(
-		&oldFingerprint, &oldMetaFingerprint, &oldDigest, &oldGeneration, &oldRevision, &oldMessageCount)
-	if sourceProjectionUnchanged(err, oldFingerprint, contentFingerprint, oldMetaFingerprint, metaFingerprint, oldDigest, digest) {
+		&oldFingerprint, &oldMetaFingerprint, &oldDigest, &oldHealth, &oldGeneration, &oldRevision, &oldMessageCount)
+	if sourceProjectionUnchanged(err, oldHealth, oldFingerprint, contentFingerprint, oldMetaFingerprint, metaFingerprint, oldDigest, digest) {
 		if generation != 0 && oldGeneration != generation {
 			_, _ = c.db.ExecContext(ctx, `UPDATE history_sources SET seen_generation=?,missing_since=0,health='ok' WHERE path=?`, generation, path)
 		}
