@@ -14,7 +14,7 @@ func TestImportV4AcceptsADesktopPrefixedSessionID(t *testing.T) {
 		"desktop-manual-204ce9bca4ff7fb3ae03f51c4eb91ee5",
 	} {
 		s, sessions := v4StoreWith(t, id)
-		n, skipped, err := ImportV4From(os.DirFS(s.Root), sessions, nil)
+		n, skipped, err := ImportV4From(os.DirFS(s.Root), sessions, nil, nil)
 		if err != nil || n != 1 || len(skipped) != 0 {
 			t.Fatalf("%s: imported %d, skipped %+v, err %v; want the session imported", id, n, skipped, err)
 		}
