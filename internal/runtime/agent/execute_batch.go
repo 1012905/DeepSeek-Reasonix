@@ -53,6 +53,7 @@ type toolOutcome struct {
 	preview   *event.FileDiff
 	output    string
 	rawOutput string // full original when different from output
+	unbounded string // what the tool returned, whenever bound moved or cut it
 	images    []string
 	videos    []provider.VideoRef
 	blocked   bool
@@ -85,6 +86,17 @@ type toolOutcome struct {
 	execution *tool.ShellExecution
 	// todoEcho marks a todo_write that wrote the list the host already held.
 	todoEcho bool
+}
+
+// keepFull records what the bound replaced: rawOutput for the conversation when
+// it cut the middle, unbounded for a nested caller whenever it changed anything.
+func (o *toolOutcome) keepFull(full string) {
+	if o.truncMsg != "" {
+		o.rawOutput = full
+	}
+	if o.bound.Kind != event.BoundWhole {
+		o.unbounded = full
+	}
 }
 
 // refusedShellExecution describes a shell call the host stopped before launch,
