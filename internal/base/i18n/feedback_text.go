@@ -19,6 +19,7 @@ type FeedbackText struct {
 
 	LinkExplain         string
 	LinkDone            string
+	LinkBoardHint       string
 	UnlinkExplain       string
 	UnlinkDone          string
 	LinksHeader         string
@@ -75,6 +76,7 @@ var feedbackEnglish = FeedbackText{
 	RefusedPermanentFmt: "not sent: %s was reached; it does not reset.",
 	LinkExplain:         "Linking ties this device to your signed-in account: its reports and the replies on them also show on your other linked devices, and theirs show here. You can unlink at any time.\nNothing was sent. To link, run the same line again with --yes.",
 	LinkDone:            "Linked - reports from your other linked devices now appear in /feedback list.",
+	LinkBoardHint:       "You can also join the public contribution board under a name you choose: /feedback board join <name>. Nothing is listed until you run it.",
 	UnlinkExplain:       "Unlinking stops this device showing, and being shown on, your other devices. Reports, level and limits do not change.\nNothing was sent. To unlink, run the same line again with --yes.",
 	UnlinkDone:          "Unlinked - this device now lists only its own reports.",
 	LinksHeader:         "Devices linked to your account:",
@@ -131,6 +133,7 @@ var feedbackChinese = FeedbackText{
 	RefusedPermanentFmt: "未发送：已达到%s，它不会自动重置。",
 	LinkExplain:         "关联会把这台设备绑定到你已登录的账号：它的反馈和回复也会出现在你其他已关联的设备上，别的设备上的也会出现在这里。随时可以取消关联。\n什么都没有发出。要关联，请在同一行后面加 --yes 再运行一次。",
 	LinkDone:            "已关联——你其他已关联设备上的反馈现在会出现在 /feedback list 里。",
+	LinkBoardHint:       "也可以用你自己选的名字加入公开的贡献榜：/feedback board join <名字>。不运行这条就不会上榜。",
 	UnlinkExplain:       "取消关联后，这台设备不再显示你其他设备的反馈，也不再被它们显示。反馈、等级和额度都不变。\n什么都没有发出。要取消关联，请在同一行后面加 --yes 再运行一次。",
 	UnlinkDone:          "已取消关联——这台设备现在只列出自己的反馈。",
 	LinksHeader:         "已关联到你账号的设备：",
@@ -187,6 +190,7 @@ var feedbackTraditional = FeedbackText{
 	RefusedPermanentFmt: "未傳送：已達到%s，它不會自動重置。",
 	LinkExplain:         "關聯會把這台裝置綁定到你已登入的帳號：它的回饋和回覆也會出現在你其他已關聯的裝置上，別的裝置上的也會出現在這裡。隨時可以取消關聯。\n什麼都沒有送出。要關聯，請在同一行後面加 --yes 再執行一次。",
 	LinkDone:            "已關聯——你其他已關聯裝置上的回饋現在會出現在 /feedback list 裡。",
+	LinkBoardHint:       "也可以用你自己選的名字加入公開的貢獻榜：/feedback board join <名字>。不執行這條就不會上榜。",
 	UnlinkExplain:       "取消關聯後，這台裝置不再顯示你其他裝置的回饋，也不再被它們顯示。回饋、等級和額度都不變。\n什麼都沒有送出。要取消關聯，請在同一行後面加 --yes 再執行一次。",
 	UnlinkDone:          "已取消關聯——這台裝置現在只列出自己的回饋。",
 	LinksHeader:         "已關聯到你帳號的裝置：",

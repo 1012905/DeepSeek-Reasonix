@@ -2,12 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { current, t } from "../i18n";
 import type { FeedbackLinkedInstall } from "../port/feedback";
 import type { AgentPort } from "../port/port";
+import { reason } from "../i18n/kernel";
+import { boardNameProblem, boardPrefill, markBoardOfferSeen } from "./boardname";
+import { FeedbackBoardJoin } from "./FeedbackBoardJoin";
 import { linkFailure } from "./feedbackfailure";
 
 interface Props {
   port: AgentPort;
   // Linking names this install, which only exists once a report has been sent.
   hasReport: boolean;
+  // The board changed under the page: the link step may have listed the person.
+  onBoardChanged?: () => void;
 }
 
 const day = (iso: string): string => {
@@ -17,11 +22,14 @@ const day = (iso: string): string => {
 
 // The account link is the person's own call: nothing here runs at sign-in, and
 // every control is inert until an account is signed in.
-export function FeedbackLink({ port, hasReport }: Props) {
+export function FeedbackLink({ port, hasReport, onBoardChanged }: Props) {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [links, setLinks] = useState<FeedbackLinkedInstall[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [join, setJoin] = useState(true);
+  const [name, setName] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +63,38 @@ export function FeedbackLink({ port, hasReport }: Props) {
     }
   };
 
+  const ask = () => {
+    setAsking(true);
+    setJoin(true);
+    setProblem(null);
+    port.feedbackEnv(document.documentElement.lang).then((e) => setName((prev) => prev || boardPrefill(e.displayName)), () => {});
+  };
+
+  // Linking happens on confirm; the board name rides along only when it is
+  // ticked and valid, and a refusal of the name leaves the link in place.
+  const confirm = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await port.linkFeedbackAccount();
+    } catch (e) {
+      setProblem(linkFailure(e).message);
+      setBusy(false);
+      return;
+    }
+    markBoardOfferSeen();
+    setAsking(false);
+    try {
+      setLinks(await port.feedbackLinks());
+      if (join && boardNameProblem(name) === null) await port.joinFeedbackBoard(name.trim());
+    } catch (e) {
+      setProblem(join ? t("已关联，但没能加入贡献榜：{why}。可以在下面的贡献榜里改个名字再加入。", { why: reason(e) }) : linkFailure(e).message);
+    } finally {
+      setBusy(false);
+      onBoardChanged?.();
+    }
+  };
+
   if (signedIn === null) return null;
   const here = links?.find((l) => l.current) ?? null;
   const others = (links ?? []).filter((l) => !l.current);
@@ -77,11 +117,24 @@ export function FeedbackLink({ port, hasReport }: Props) {
             </button>
           </>
         ) : (
-          <button type="button" className="btn sm" data-action="feedback.account-link" disabled={!canLink} onClick={() => void run(() => port.linkFeedbackAccount())}>
+          <button type="button" className="btn sm" data-action="feedback.account-link" disabled={!canLink || asking} onClick={ask}>
             {t("把这台电脑关联到我的账号")}
           </button>
         )}
       </div>
+      {asking && !here && (
+        <div className="fbk-link-confirm" role="group" aria-label={t("确认关联")}>
+          <FeedbackBoardJoin checked={join} name={name} disabled={busy} onChecked={setJoin} onName={setName} />
+          <div className="fbk-link-row">
+            <button type="button" className="btn sm" data-primary data-action="feedback.account-link-confirm" disabled={busy || (join && boardNameProblem(name) !== null)} onClick={() => void confirm()}>
+              {t("确认")}
+            </button>
+            <button type="button" className="btn sm" data-action="feedback.account-link-cancel" disabled={busy} onClick={() => setAsking(false)}>
+              {t("取消")}
+            </button>
+          </div>
+        </div>
+      )}
       {others.length > 0 && (
         <ul className="fbk-link-list" aria-label={t("账号下的其他电脑")}>
           {others.map((l) => (

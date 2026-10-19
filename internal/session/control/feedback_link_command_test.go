@@ -118,9 +118,15 @@ func TestFeedbackLinkSaysWhatItDoesAndNeedsAnExplicitYes(t *testing.T) {
 		t.Fatal("the install was linked without --yes")
 	}
 	r.c.Submit("/feedback link --yes")
-	r.say(t, "Linked")
+	got := r.say(t, "Linked")
 	if r.called("POST /v1/feedback/link assert-1") != 1 {
 		t.Fatalf("the link did not carry the assertion:\n%v", r.calls)
+	}
+	if !strings.Contains(got, "/feedback board join <name>") {
+		t.Fatalf("linking did not say how to join the board:\n%s", got)
+	}
+	if n := r.called("PUT /v1/feedback/board/optin") + r.called("POST /v1/feedback/board/optin"); n != 0 {
+		t.Fatalf("linking joined the board on its own:\n%v", r.calls)
 	}
 }
 
@@ -176,7 +182,7 @@ func TestFeedbackListMarksAReportFromAnotherDevice(t *testing.T) {
 
 func TestFeedbackLinkWordsAreInEveryCatalogue(t *testing.T) {
 	for tag, m := range map[string]i18n.Messages{"en": i18n.English, "zh": i18n.Chinese, "zh-TW": i18n.ChineseTraditional} {
-		if m.Feedback.LinkExplain == "" || m.Feedback.LinkDone == "" || m.Feedback.NeedSignIn == "" || m.Feedback.OtherDeviceMark == "" {
+		if m.Feedback.LinkExplain == "" || m.Feedback.LinkDone == "" || m.Feedback.LinkBoardHint == "" || m.Feedback.NeedSignIn == "" || m.Feedback.OtherDeviceMark == "" {
 			t.Errorf("%s: link words are missing", tag)
 		}
 	}

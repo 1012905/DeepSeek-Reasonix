@@ -37,7 +37,11 @@ func (c *Controller) feedbackLinkCommand(args string, link bool) {
 			c.notice(feedbackLinkFailure(err))
 			return
 		}
-		c.notice(map[bool]string{true: m.LinkDone, false: m.UnlinkDone}[link])
+		if link {
+			c.notice(m.LinkDone + "\n" + m.LinkBoardHint)
+			return
+		}
+		c.notice(m.UnlinkDone)
 	}()
 }
 
