@@ -1573,6 +1573,26 @@ test("a host that exits before its handshake is logged and shown, not swallowed"
   }
 });
 
+test("the launch credential cookie is put back when something removes it, and only then", async () => {
+  const { keepCredential } = require("../src/credential.js");
+  const { EventEmitter } = require("node:events");
+  const jar = new EventEmitter();
+  const sets = [];
+  const ses = { cookies: Object.assign(jar, { set: async (c) => void sets.push(c) }) };
+  const cookie = { url: "http://127.0.0.1:5000/", name: "reasonix_token", value: "t" };
+  const lines = [];
+  keepCredential(ses, cookie, (l) => lines.push(l));
+  const gone = { name: "reasonix_token", domain: "127.0.0.1" };
+  jar.emit("changed", {}, { ...gone, name: "other" }, "explicit", true);
+  jar.emit("changed", {}, { ...gone, domain: "example.com" }, "explicit", true);
+  jar.emit("changed", {}, gone, "overwrite", true);
+  jar.emit("changed", {}, gone, "explicit", false);
+  assert.equal(sets.length, 0, "an unrelated change must not touch the jar");
+  jar.emit("changed", {}, gone, "evicted", true);
+  assert.deepEqual(sets, [cookie]);
+  assert.match(lines[0], /evicted/);
+});
+
 test("the tray has a file for every Windows scale, at exactly 16 * scale pixels", () => {
   const { trayAsset, SCALES } = require("../src/trayimage.js");
   const dim = (f) => {
