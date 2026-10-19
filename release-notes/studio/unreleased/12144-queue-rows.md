@@ -1,2 +1,2 @@
-- 新增：终端里，回合运行时排队的消息会画在工作行下面（最多三条）；按 ↑ 选中并载入输入框，Alt+↑/↓ 调序，Enter 原位保存修改，连按两次 d 删除，r 重试，空输入框按空格暂停或继续队列。关联 #12144。
-- Added: In the terminal, messages queued while a turn runs are drawn under the working line (up to three). Up selects one into the composer, Alt+Up/Down reorders, Enter saves an edit in place, d twice deletes, r retries, and Space on an empty composer pauses or resumes the queue. Refs #12144.
+- 新增：终端里排队的消息画在工作行下，↑ 选中改，Alt+↑/↓ 调序，Enter 保存，d d 删除，r 重试，空格暂停。关联 #12144。
+- Added: in the terminal, queued messages show under the working line: Up selects, Alt+Up/Down reorders, Enter saves, d twice deletes, r retries, Space pauses. Refs #12144.
