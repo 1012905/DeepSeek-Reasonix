@@ -54,7 +54,12 @@ function reveal(row: HTMLElement, root: HTMLElement, needle: string, nth: number
   if (!needle || !mine()) return false;
   landingBox(row);
   const range = currentRange(row, needle, nth);
-  if (!range) return false;
+  if (!range) {
+    const lazy = [...row.querySelectorAll<HTMLDetailsElement>("details[data-lazy]:not([open])")];
+    for (const fold of lazy) fold.open = true;
+    if (lazy.length > 0 && tries > 0) requestAnimationFrame(() => reveal(row, root, needle, nth, mine, tries - 1));
+    return false;
+  }
   for (let fold = range.startContainer.parentElement?.closest("details:not([open])"); fold && row.contains(fold);
     fold = fold.parentElement?.closest("details:not([open])")) {
     (fold as HTMLDetailsElement).open = true;

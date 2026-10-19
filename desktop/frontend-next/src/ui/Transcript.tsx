@@ -12,6 +12,7 @@ import { chartOfTool } from "./chart/spec";
 import { GuardianCard } from "./cards/GuardianCard";
 import { ApprovalCard, type PlanAction } from "./cards/ApprovalCard";
 import { AskCard } from "./cards/AskCard";
+import { revealNested } from "./cards/nestreveal";
 import { SurfaceCard, surfaceTool } from "./surface/SurfaceCard";
 import { ElicitCard } from "./cards/ElicitCard";
 import { SayCard, type ReplyActions } from "./cards/SayCard";
@@ -435,6 +436,7 @@ export function Transcript({ items, port, entering, onEntered, brought, revision
     if (hidden || !focus || landed.current === focus.n) return;
     landed.current = focus.n;
     const where = callBlock.get(focus.call);
+    revealNested(focus.call);
     if (where) land(where.block, where.into, `[data-call="${CSS.escape(focus.call)}"]`);
   }, [hidden, focus, callBlock, land]);
 
