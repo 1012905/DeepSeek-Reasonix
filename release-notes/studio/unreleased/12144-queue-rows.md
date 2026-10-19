@@ -1,0 +1,2 @@
+- 新增：终端里排队的消息画在工作行下，↑ 选中改，Alt+↑/↓ 调序，Enter 保存，d d 删除，r 重试，空格暂停。关联 #12144。
+- Added: in the terminal, queued messages show under the working line: Up selects, Alt+Up/Down reorders, Enter saves, d twice deletes, r retries, Space pauses. Refs #12144.

@@ -187,6 +187,20 @@ func (t *Transcript) Drop(row int) {
 	t.awaiting = slices.DeleteFunc(t.awaiting, func(id int) bool { return id == row })
 }
 
+// DropQueued removes the pending row of a message the person deleted from the
+// queue, which the kernel will never run.
+func (t *Transcript) DropQueued(queueID string) {
+	if queueID == "" {
+		return
+	}
+	for _, it := range t.Items {
+		if it.Pending && it.QueueID == queueID {
+			t.Drop(it.ID)
+			return
+		}
+	}
+}
+
 // Decide seals an approval or ask this screen answered.
 func (t *Transcript) Decide(id int, verdict string) {
 	for i := range t.Items {
