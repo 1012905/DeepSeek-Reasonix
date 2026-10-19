@@ -48,6 +48,11 @@ function rendered(): { ids: string[]; unnamed: string[] } {
       }
       if (n.type !== "JSXElement") return;
       const open = n.openingElement as Node;
+      const declared = literal(attr(open, "data-setting"));
+      if (declared && literal(attr(open, "id")) === "set-" + declared) {
+        ids.push(declared);
+        return;
+      }
       if (literal(attr(open, "className")) !== "grp") return;
       const titled = ((n.children as Node[]) ?? []).some((child) => {
         if (child.type !== "JSXElement") return false;

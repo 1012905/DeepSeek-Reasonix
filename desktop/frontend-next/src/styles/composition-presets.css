@@ -1,41 +1,89 @@
-.composition-catalog { padding: 16px 12px; }
-.composition-catalog h4 { margin: 0 0 12px; color: var(--muted); font: var(--w-med) var(--fs-ui)/1.4 var(--ui); }
-.composition-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
-.composition-card { min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
-.composition-card[data-selected] { border-color: var(--faint); background: var(--overlay); }
-.composition-card-select { position: relative; width: 100%; min-height: 176px; flex: 1; padding: 18px; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
-.composition-card-select:hover { background: var(--overlay); }
-.composition-card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.composition-card-title strong { font: 650 var(--fs-ui)/1.4 var(--ui); }
-.composition-card-badge { padding: 2px 7px; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--muted); font: var(--w-med) var(--fs-meta)/1.5 var(--ui); }
-.composition-card-select[aria-pressed="true"] .composition-card-badge { color: var(--text); }
-.composition-card-id { display: block; margin-top: 6px; color: var(--ghost); font: var(--w-reg) var(--fs-meta)/1.5 var(--mono); }
-.composition-card-description { display: block; margin-top: 14px; color: var(--muted); font: var(--w-reg) var(--fs-ui)/1.7 var(--ui); overflow-wrap: anywhere; }
-.composition-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--hair); }
-.composition-card-footer .act { font-size: var(--fs-meta); }
-.composition-how { margin: 14px 0 24px; color: var(--muted); font: var(--w-reg) var(--fs-ui)/1.7 var(--ui); }
+.prefs-main[data-sec="persona"]:has(.preset-workspace) .prefs-intro { display: none; }
+.prefs-main[data-sec="persona"]:has(.preset-page) { padding: 0; overflow: hidden; }
+.prefs-col:has(.preset-page) { height: 100%; max-width: none; animation: none; }
+.preset-workspace[data-editor] { height: 100%; min-height: 0; }
+.preset-list { padding-bottom: 16px; }
+.composition-list-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.composition-list-heading h2 { margin: 0 0 8px; font-size: var(--fs-display); }
+.composition-list-heading p { margin: 0; color: var(--muted); line-height: 1.7; }
+.composition-list-heading .btn { flex-shrink: 0; gap: 6px; }
+.composition-list-heading svg { width: 16px; height: 16px; }
+.composition-default-note { color: var(--muted); margin: 0 0 28px; line-height: 1.7; }
+.composition-list-group { margin-bottom: 28px; }
+.composition-list-group h3 { color: var(--muted); font-size: var(--fs-ui); font-weight: var(--w-med); margin: 0 0 12px; }
+.composition-row { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--hair); padding-right: 12px; }
+.composition-row:first-of-type { border-top: 1px solid var(--hair); }
+.composition-row-main { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); padding: 20px 12px; cursor: pointer; text-align: left; }
+.composition-row:hover { background: var(--overlay); }
+.composition-row-main > svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
+.composition-row-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-md); background: var(--overlay); flex-shrink: 0; }
+.composition-row-icon svg { width: 20px; height: 20px; }
+.composition-row-copy { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.composition-row-copy strong { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: var(--fs-ui); font-weight: var(--w-semi); }
+.composition-row-copy small { font: var(--w-med) var(--fs-meta)/1.5 var(--ui); color: var(--muted); background: var(--overlay); padding: 1px 7px; border-radius: var(--r-sm); }
+.composition-row-copy > span { color: var(--muted); font-size: var(--fs-meta); line-height: 1.7; }
+.composition-how { margin: 20px 0; color: var(--muted); font-size: var(--fs-meta); line-height: 1.7; }
 .composition-how summary { cursor: pointer; }
-.composition-how p { margin: 8px 0 0; }
-.composition-create { width: 100%; min-height: 48px; border: 1px dashed var(--border); border-radius: var(--r-md); background: transparent; color: var(--text); font: var(--w-med) var(--fs-ui)/1.5 var(--ui); cursor: pointer; }
-.composition-create:hover { border-color: var(--faint); background: var(--overlay); }
-.composition-custom-list { display: grid; gap: 6px; margin-bottom: 12px; }
-.composition-custom-list .act { display: flex; justify-content: space-between; gap: 12px; text-align: left; }
-.composition-custom-list small { color: var(--muted); font: inherit; }
-.composition-custom-list [aria-pressed="true"] { background: var(--overlay); border-color: var(--faint); }
-.composition-catalog button:focus-visible, .composition-how summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
-.composition-catalog button:disabled { cursor: default; opacity: .6; }
-.composition-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
-.composition-editor { display: grid; gap: 12px; margin-block: 16px; }
-.composition-editor input, .composition-editor select { min-width: 0; max-width: 100%; }
-.composition-modules { border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; }
-.composition-modules legend { font-weight: 600; padding-inline: 4px; }
+.composition-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 16px; }
+.preset-import { position: relative; overflow: hidden; }
+.preset-import input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.preset-import:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.preset-page { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--text); }
+.preset-page-heading { padding: 24px 32px 20px; flex-shrink: 0; }
+.preset-back { display: inline-flex; align-items: center; gap: 10px; border: 0; padding: 4px 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.preset-back svg { width: 16px; height: 16px; transform: rotate(180deg); }
+.preset-page-heading h2 { margin: 18px 0 6px; font-size: var(--fs-display); line-height: 1.3; }
+.preset-page-heading p { margin: 0; color: var(--muted); line-height: 1.6; }
+.preset-revision { display: block; margin-top: 6px; color: var(--muted); font-size: var(--fs-meta); }
+.preset-page-content { flex: 1; min-height: 0; overflow: auto; padding: 0 32px 28px; }
+.composition-editor { display: grid; gap: 24px; padding-top: 24px; border-top: 1px solid var(--hair); }
+.composition-editor .pers-field { padding: 0; gap: 8px; }
+.composition-editor .pers-field .lb { font-weight: var(--w-med); }
+.composition-editor input, .composition-editor select { min-width: 0; max-width: 100%; width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised); color: var(--text); padding: 8px 12px; font: var(--w-reg) var(--fs-ui)/1.5 var(--ui); }
+.composition-editor textarea { width: 100%; min-height: 96px; }
+.composition-editor > .pers-field > select { max-width: 280px; }
+.composition-editor .ds { color: var(--muted); font-size: var(--fs-meta); line-height: 1.6; }
+.composition-capabilities h3 { margin: 0 0 6px; font-size: var(--fs-ui); font-weight: var(--w-med); }
+.composition-capabilities p { margin: 0 0 12px; }
+.composition-capabilities > details { background: var(--overlay); padding-inline: 16px; }
+.composition-capabilities > details:first-of-type { border-radius: var(--r-md) var(--r-md) 0 0; }
+.composition-capabilities > details:last-of-type { border-radius: 0 0 var(--r-md) var(--r-md); }
+.composition-capabilities summary, .composition-advanced > summary { display: flex; align-items: center; gap: 12px; min-height: 52px; cursor: pointer; list-style: none; font-weight: var(--w-med); }
+.composition-capabilities summary::-webkit-details-marker, .composition-advanced > summary::-webkit-details-marker { display: none; }
+.composition-capabilities summary > svg:last-child, .composition-advanced > summary > svg:last-child { margin-left: auto; color: var(--muted); }
+.composition-capabilities details[open] > summary > svg:last-child, .composition-advanced[open] > summary > svg:last-child { transform: rotate(90deg); }
+.composition-capabilities summary svg, .composition-advanced > summary svg { width: 18px; height: 18px; flex-shrink: 0; }
+.composition-capabilities summary span { margin-left: auto; color: var(--muted); font-size: var(--fs-meta); font-weight: var(--w-reg); }
+.composition-capabilities summary:has(span) > svg:last-child { margin-left: 4px; }
+.composition-capabilities > details + details { border-top: 1px solid var(--hair); }
+.composition-advanced { border-top: 1px solid var(--hair); }
+.composition-advanced .pers-field { margin-block: 16px; }
+.composition-modules { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 12px; margin: 0 0 16px; min-width: 0; }
+.composition-modules legend { font-weight: var(--w-med); padding-inline: 4px; }
 .composition-module { margin-block: 8px; }
 .composition-module .in { flex: 1; min-width: 100px; }
-#set-agent-presets :is(.composition-editor, .composition-toolbar) :is(input, select) {
-  width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: var(--r-sm);
-  background: var(--raised); color: var(--text); padding: 6px 9px; font: var(--w-reg) var(--fs-ui)/1.5 var(--ui);
+.composition-modules select + select { margin-top: 8px; }
+.preset-page-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; border-top: 1px solid var(--hair); padding: 16px 32px; background: var(--surface); }
+.preset-page-footer p { margin: 0; color: var(--muted); font-size: var(--fs-meta); line-height: 1.6; }
+.preset-page-footer > div { display: flex; gap: 10px; flex-shrink: 0; }
+.preset-page-footer .btn { min-width: 84px; }
+.composition-extra { border-top: 1px solid var(--hair); margin-top: 24px; padding-top: 16px; }
+.composition-extra summary { cursor: pointer; color: var(--muted); }
+.preset-confirm-veil { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: color-mix(in oklab, var(--page) 80%, transparent); z-index: 1100; }
+.preset-confirm { width: min(100%, 420px); padding: 24px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--lit); }
+.preset-confirm h3 { margin: 0 0 12px; font-size: var(--fs-title); }
+.preset-confirm p { color: var(--muted); margin: 0 0 24px; line-height: 1.6; }
+.preset-confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.preset-workspace :is(button, summary, input, select, textarea):focus-visible, .preset-confirm button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.preset-workspace :is(input, select):disabled { opacity: .65; }
+@media (max-width: 700px) {
+  .composition-list-heading { flex-direction: column; gap: 16px; }
+  .composition-row-main { gap: 10px; padding: 16px 4px; }
+  .composition-row-icon { width: 32px; height: 32px; }
+  .composition-row { padding-right: 4px; }
+  .preset-page-heading { padding: 20px 16px; }
+  .preset-page-content { padding: 0 16px 20px; }
+  .preset-page-footer { padding: 12px 16px; flex-wrap: wrap; }
+  .preset-page-footer > div { margin-left: auto; }
+  .composition-capabilities summary { flex-wrap: wrap; gap: 8px; }
 }
-#set-agent-presets :is(.composition-editor, .composition-toolbar) :is(input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-#set-agent-presets :is(.composition-editor, .composition-toolbar) :is(input, select):disabled { opacity: .65; }
-#set-agent-presets .composition-toolbar :is(input, select) { flex: 1; min-width: 100px; max-width: 100%; }
-.composition-editor h4 { margin: 10px 12px 0; font-size: var(--fs-ui); }

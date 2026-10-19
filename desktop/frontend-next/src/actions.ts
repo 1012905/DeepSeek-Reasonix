@@ -1,15 +1,5 @@
-// What Studio claims a person can do, as a set of stable identities.
-//
-// The oracle for the census, and deliberately not something production imports:
-// a button writes the id as a literal and this file writes it again, so the two
-// can disagree and be caught. Sharing one constant would make the check compare
-// a value with itself — the shape of false green this tree keeps removing.
-//
-// An id is <surface>.<intent>: the semantic class, never the instance and never
-// the wording. Which entry a click is about rides on data-target, and which of
-// several answers it gives rides on data-value, so a row rendered seventy times
-// is still one contract, and 「取消」 — seventeen buttons, eight destinations —
-// is never an identity.
+// The census oracle is independent of production literals so disagreements fail.
+// An id names the intent; data-target and data-value name its entity and choice.
 
 export type ActionKind =
   /** Changes only what is on screen. Must not reach the kernel. */
@@ -55,6 +45,10 @@ export const ACTIONS: UIAction[] = [
   {id:"agent-preset.reload",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.view",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.create",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave-cancel",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave-discard",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.persona",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.copy",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.scope",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.id",kind:"view",target:"none",proof:"interaction"},

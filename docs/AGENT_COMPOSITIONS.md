@@ -38,7 +38,8 @@ background jobs also prevent switching. The locked selector offers a new
 conversation with another composition. Clearing or rewinding an existing
 composition does not unlock it.
 
-Two built-in cards sit above the separate custom-preset section:
+The catalog groups built-in, personal and project presets. New and duplicate
+actions open a separate editor within Settings:
 
 | Mode | Behavior |
 | --- | --- |
@@ -61,6 +62,18 @@ Copy a built-in to customize it. Each module group either inherits configuration
 when a conversation binds, or uses only the selected IDs. An empty explicit
 selection disables the group. The editor lists locally available modules;
 imports preview missing dependencies without installing or launching them.
+
+The editor shows name, purpose and persona first. Tools and skills/extensions
+expand on demand; storage scope follows them.
+
+Advanced settings hold the generated ID, persona suffix and runtime-context
+toggle. ID and scope become read-only after saving.
+
+A persistent footer offers Cancel and Save. Returning, closing Settings or
+navigating elsewhere confirms unsaved changes; save errors retain the draft.
+
+Standard's user-config persona has a separate editor, accessible from Standard
+details or Settings search.
 
 Saving creates a definition revision. Existing conversations retain their
 resolved persona, parameters and resources. The page displays the definition

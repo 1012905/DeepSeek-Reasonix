@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { t } from "../i18n";
 import type {
   AgentComposition,
@@ -9,6 +9,7 @@ import type {
 } from "../port/composition";
 import { COMPOSITION_KINDS } from "../port/composition";
 import { Switch } from "./Switch";
+import { StudioIcon } from "./StudioIcon";
 
 const labels: Record<CompositionKind, string> = {
   tools: "工具",
@@ -23,16 +24,19 @@ export function CompositionEditor({
   draft,
   modules,
   disabled,
+  creating = false,
   onChange,
   onValidityChange,
 }: {
   draft: AgentComposition;
   modules: AgentPresetCatalog["modules"];
   disabled: boolean;
+  creating?: boolean;
   onChange: (d: AgentComposition) => void;
   onValidityChange: (valid: boolean) => void;
 }) {
   const [valid, setValid] = useState<Record<string, boolean>>({});
+  const helpId = useId();
   useEffect(() => onValidityChange(Object.values(valid).every(Boolean)), [valid, onValidityChange]);
   const persona = draft.persona;
   const updatePersona = (patch: Partial<AgentComposition["persona"]>) =>
@@ -51,7 +55,7 @@ export function CompositionEditor({
         />
       </label>
       <label className="pers-field">
-        <span className="lb">{t("预设说明")}</span>
+        <span className="lb">{t("用途说明")}</span>
         <input
           className="in"
           data-action-change="agent-preset.description"
@@ -60,11 +64,11 @@ export function CompositionEditor({
           onChange={(e) => onChange({ ...draft, description: e.target.value })}
         />
       </label>
-      <h4>{t("系统人设")}</h4>
       <label className="pers-field">
-        <span className="lb">{t("系统提示词开头")}</span>
+        <span className="lb">{t("人设与要求")}</span>
         <textarea
-          aria-label={t("系统提示词开头")}
+          aria-label={t("人设与要求")}
+          aria-describedby={`${helpId}-persona`}
           data-action-change="persona.prefix"
           rows={4}
           maxLength={32768}
@@ -72,7 +76,43 @@ export function CompositionEditor({
           value={persona.prefix}
           onChange={(e) => updatePersona({ prefix: e.target.value })}
         />
+        <span className="ds" id={`${helpId}-persona`}>{t("描述预设的角色、工作方式与要求；内容写在系统提示词开头。")}</span>
       </label>
+      <div className="composition-capabilities">
+        <h3>{t("能力配置")}</h3>
+        <p className="ds">{t("继承当前的工具、技能与扩展配置，可按需单独调整。")}</p>
+        <details>
+          <summary><StudioIcon name="settings" />{t("工具")}<span>{t(draft.tools.mode === "inherit" ? "继承当前配置" : "仅使用所选项")}</span><StudioIcon name="chevron" /></summary>
+          <ModuleEditor kind="tools" choices={modules?.tools ?? []} value={draft.tools} disabled={disabled}
+            onValidityChange={(ok) => setValid(prev => ({ ...prev, tools: ok }))}
+            onChange={(value) => onChange({ ...draft, tools: value })} />
+        </details>
+        <details>
+          <summary><StudioIcon name="layers" />{t("技能与扩展")}<span>{t(COMPOSITION_KINDS.filter(k => k !== "tools").every(k => draft[k].mode === "inherit") ? "继承当前配置" : "自定义")}</span><StudioIcon name="chevron" /></summary>
+          {COMPOSITION_KINDS.filter(kind => kind !== "tools").map((kind) => (
+            <ModuleEditor key={kind} kind={kind} choices={modules?.[kind] ?? []} value={draft[kind]} disabled={disabled}
+              onValidityChange={(ok) => setValid(prev => ({ ...prev, [kind]: ok }))}
+              onChange={(value) => onChange({ ...draft, [kind]: value })} />
+          ))}
+        </details>
+      </div>
+      <label className="pers-field">
+        <span className="lb">{t("存放范围")}</span>
+        <select aria-label={t("存放范围")} aria-describedby={`${helpId}-scope`} disabled={disabled || !creating} data-action-change="agent-preset.scope"
+          value={draft.id.split(":")[0]} onChange={(e) => onChange({ ...draft, id: `${e.target.value}:${draft.id.split(":")[1]}` })}>
+          {draft.id.startsWith("builtin:") && <option value="builtin">{t("内置")}</option>}
+          <option value="user">{t("个人")}</option><option value="project">{t("项目共享")}</option>
+        </select>
+        <span className="ds" id={`${helpId}-scope`}>{t("个人：保存在本机，可跨项目使用。项目共享：保存在当前项目，可随仓库共享。")}</span>
+      </label>
+      <details className="composition-advanced">
+        <summary><StudioIcon name="settings" />{t("高级设置")}<StudioIcon name="chevron" /></summary>
+        <label className="pers-field">
+          <span className="lb">{t("预设 ID")}</span>
+          <input className="in" aria-label={t("预设 ID")} aria-describedby={`${helpId}-id`} disabled={disabled || !creating} data-action-change="agent-preset.id"
+            value={draft.id.split(":")[1]} onChange={(e) => onChange({ ...draft, id: `${draft.id.split(":")[0]}:${e.target.value}` })} />
+          <span className="ds" id={`${helpId}-id`}>{t("自动生成，用于保存和引用预设；保存后不可修改。")}</span>
+        </label>
       <label className="pers-field">
         <span className="lb">{t("第一方指令之后")}</span>
         <textarea
@@ -97,17 +137,7 @@ export function CompositionEditor({
           onClick={() => updatePersona({ include_runtime_context: !persona.include_runtime_context })}
         />
       </div>
-      {COMPOSITION_KINDS.map((kind) => (
-        <ModuleEditor
-          key={`${draft.id}:${kind}`}
-          kind={kind}
-          choices={modules?.[kind] ?? []}
-          value={draft[kind]}
-          disabled={disabled}
-          onValidityChange={(ok) => setValid((prev) => ({ ...prev, [kind]: ok }))}
-          onChange={(value) => onChange({ ...draft, [kind]: value })}
-        />
-      ))}
+      </details>
     </div>
   );
 }

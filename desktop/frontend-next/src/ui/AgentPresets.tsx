@@ -1,369 +1,107 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentPort } from "../port/port";
-import type {
-  AgentComposition,
-  AgentPresetCatalog,
-  AgentPresetVersion,
-  CompositionSummary,
-} from "../port/composition";
+import type { AgentComposition, AgentPresetCatalog, AgentPresetVersion, CompositionSummary } from "../port/composition";
 import { builtinCompositions } from "../port/composition";
 import { t } from "../i18n";
-import { reason, say } from "../i18n/kernel";
-import { Group } from "./Group";
-import { CompositionEditor } from "./CompositionEditor";
+import { reason } from "../i18n/kernel";
+import { ApplyNote } from "./Group";
 import { CompositionCatalog } from "./CompositionCatalog";
-import { Persona } from "./Persona";
+import { PresetPage, type PresetEntry } from "./PresetPage";
+import { PresetPersonaPage } from "./PresetPersonaPage";
+import { newPreset } from "./presetDraft";
+
+type EditorTarget = { kind: "preset"; entry: PresetEntry } | { kind: "persona" };
+type Editor = EditorTarget & { key: number };
 
 export function AgentPresets({ port, focusPersona = false }: { port: AgentPort; focusPersona?: boolean }) {
-  const helpId = useId();
   const [catalog, setCatalog] = useState<AgentPresetCatalog | null>(null);
-  const [version, setVersion] = useState<AgentPresetVersion | null>(null);
-  const [draft, setDraft] = useState<AgentComposition | null>(null);
   const [current, setCurrent] = useState<CompositionSummary | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [editor, setEditor] = useState<Editor | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [exported, setExported] = useState("");
-  const [valid, setValid] = useState(true);
-  const [editorEpoch, setEditorEpoch] = useState(0);
-  const [importDiagnostics, setImportDiagnostics] = useState<AgentPresetCatalog["diagnostics"]>([]);
-  const select = (v: AgentPresetVersion) => {
-    setVersion(v);
-    setDraft(structuredClone(v.definition));
-    setSaved("");
+  const [refresh, setRefresh] = useState(0);
+  const epoch = useRef(0);
+  const root = useRef<HTMLElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const openerAction = useRef("");
+  const focusID = useRef("");
+  useEffect(() => {
+    let active = true;
+    setCatalog(null);
     setError("");
-    setDeleting(false);
-    setExported("");
-    setImportDiagnostics([]);
-    setValid(true);
-    setEditorEpoch((n) => n + 1);
-  };
-  const load = async () => {
-    try {
-      const [next, binding] = await Promise.all([port.agentPresets(), port.agentComposition()]);
-      setCatalog(next);
-      setCurrent(binding);
-      const v =
-        next.presets.find((v) => v.definition.id === (focusPersona ? "builtin:general" : binding?.id)) ??
-        next.presets.find((v) => v.definition.id === next.default) ??
-        next.presets[0];
-      if (v) select(v);
-    } catch (e) {
-      setError(reason(e));
-    }
-  };
+    Promise.all([port.agentPresets(), port.agentComposition()]).then(([next, binding]) => {
+      if (active) { setCatalog(next); setCurrent(binding); }
+    }).catch(e => { if (active) setError(reason(e)); });
+    return () => { active = false; ++epoch.current; };
+  }, [port, refresh]);
   useEffect(() => {
-    void load();
-  }, [port]);
-  useEffect(() => {
-    const standard = catalog?.presets.find((v) => v.definition.id === "builtin:general");
-    if (focusPersona && standard) select(standard);
+    if (focusPersona) setEditor({ kind: "persona", key: ++epoch.current });
   }, [focusPersona]);
-  const perform = async (work: () => Promise<void>) => {
-    setBusy(true);
-    setError("");
-    setSaved("");
-    try {
-      await work();
-    } catch (e) {
-      setError(reason(e));
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    if (editor) return;
+    const row = [...(root.current?.querySelectorAll<HTMLElement>("button[data-target]") ?? [])].find(el => el.dataset.target === focusID.current);
+    const trigger = root.current?.querySelector<HTMLElement>(`[data-action="${openerAction.current}"]`);
+    (row ?? (opener.current?.isConnected ? opener.current : trigger))?.focus();
+    focusID.current = "";
+  }, [editor]);
+  const open = (entry: EditorTarget) => {
+    if (!editor) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      openerAction.current = opener.current?.dataset.action ?? "";
+      focusID.current = opener.current?.dataset.target ?? "";
     }
-  };
-  const copy = (base: AgentComposition) => {
-    const ids = new Set(catalog?.presets.map((v) => v.definition.id));
-    let id = "user:custom";
-    let n = 1;
-    while (ids.has(id)) id = `user:custom-${n++}`;
-    setVersion(null);
-    setDraft({
-      ...structuredClone(base),
-      id,
-      name: `${base.id.startsWith("builtin:") ? t(base.name) : base.name} ${t("副本")}`,
-      description: base.id.startsWith("builtin:") ? t(base.description) : base.description,
-    });
-    setSaved("");
+    setEditor({ ...entry, key: ++epoch.current });
     setError("");
-    setDeleting(false);
-    setImportDiagnostics([]);
-    setValid(true);
-    setEditorEpoch((n) => n + 1);
+    setSaved("");
   };
-  const immutable = draft?.id.startsWith("builtin:") ?? true;
-  const changed = draft && (!version || JSON.stringify(draft) !== JSON.stringify(version.definition));
-  return (
-    <>
-      <Group
-        id="agent-presets"
-        title={t("Agent 预设")}
-        hint={t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。")}
-      >
-        <div className="box">
-          {!catalog ? (
-            <>
-              <p>{error || t("读取预设中…")}</p>
-              <button className="act" data-action="agent-preset.reload" onClick={() => void load()}>
-                {t("重新加载")}
-              </button>
-            </>
-          ) : (
-            <>
-              <CompositionCatalog
-                catalog={catalog}
-                selected={version?.definition.id}
-                busy={busy}
-                onSelect={select}
-                onCreate={() => copy(builtinCompositions()[0])}
-                onDefault={(id) =>
-                  void perform(async () => {
-                    await port.setDefaultAgentPreset(id, false);
-                    setCatalog(await port.agentPresets());
-                    setSaved(t("已设为个人首选预设"));
-                  })
-                }
-              />
-              <div className="composition-toolbar">
-                <button
-                  className="act"
-                  data-action="agent-preset.copy"
-                  disabled={!draft || busy}
-                  onClick={() => draft && copy(draft)}
-                >
-                  {t("复制为自定义预设")}
-                </button>
-                <button
-                  className="act"
-                  data-action="agent-preset.reload"
-                  disabled={busy}
-                  onClick={() => void load()}
-                >
-                  {t("重新加载")}
-                </button>
-              </div>
-              {current && (
-                <p className="ds">
-                  {t("当前会话")}: {current.id.startsWith("builtin:") ? t(current.name) : current.name} ·{" "}
-                  {current.revision.slice(0, 12)} {current.started ? t("已锁定") : t("首次提交前可切换")}
-                  {version && current.id === version.definition.id && current.revision !== version.revision
-                    ? ` · ${t("当前会话使用旧版")}`
-                    : ""}
-                </p>
-              )}
-              {draft && (
-                <>
-                  {!version && (
-                    <div className="composition-editor">
-                      <label className="pers-field">
-                        <span className="lb">{t("存放范围")}</span>
-                        <select
-                          aria-label={t("存放范围")}
-                          aria-describedby={`${helpId}-scope`}
-                          data-action-change="agent-preset.scope"
-                          value={draft.id.split(":")[0]}
-                          onChange={(e) =>
-                            setDraft({ ...draft, id: `${e.target.value}:${draft.id.split(":")[1]}` })
-                          }
-                        >
-                          <option value="user">{t("个人")}</option>
-                          <option value="project">{t("项目共享")}</option>
-                        </select>
-                        <span className="ds" id={`${helpId}-scope`}>
-                          {t("个人：保存在本机，可跨项目使用。项目共享：保存在当前项目，可随仓库共享。")}
-                        </span>
-                      </label>
-                      <label className="pers-field">
-                        <span className="lb">{t("预设 ID")}</span>
-                        <input
-                          className="in"
-                          aria-label={t("预设 ID")}
-                          aria-describedby={`${helpId}-id`}
-                          data-action-change="agent-preset.id"
-                          value={draft.id.split(":")[1]}
-                          onChange={(e) =>
-                            setDraft({ ...draft, id: `${draft.id.split(":")[0]}:${e.target.value}` })
-                          }
-                        />
-                        <span className="ds" id={`${helpId}-id`}>
-                          {t("用于保存和引用，区别于显示名称。例如 code-review，保存后不可修改。")}
-                        </span>
-                      </label>
-                    </div>
-                  )}
-                  {immutable && draft.id !== "builtin:general" && (
-                    <p className="ds">{t("内置预设只读，复制后即可编辑。")}</p>
-                  )}
-                  {draft.id === "builtin:general" ? (
-                    <>
-                      {current && (
-                        <p className="ds">{t("当前会话已绑定预设，标准模式的人设修改不会更新此绑定。")}</p>
-                      )}
-                      <Persona port={port} />
-                    </>
-                  ) : (
-                    <CompositionEditor
-                      key={editorEpoch}
-                      draft={draft}
-                      modules={catalog.modules}
-                      disabled={busy || immutable}
-                      onValidityChange={setValid}
-                      onChange={(d) => {
-                        setDraft(d);
-                        setSaved("");
-                      }}
-                    />
-                  )}
-                  <div className="composition-toolbar">
-                    <button
-                      className="act"
-                      data-action="agent-preset.save"
-                      disabled={busy || immutable || !changed || !valid}
-                      onClick={() =>
-                        void perform(async () => {
-                          const result = await port.saveAgentPreset(draft, version?.revision ?? "");
-                          setCatalog(await port.agentPresets());
-                          setVersion(result);
-                          setDraft(structuredClone(result.definition));
-                          setSaved(t("已保存，新会话使用新版"));
-                        })
-                      }
-                    >
-                      {t("保存预设")}
-                    </button>
-                    <button
-                      className="act"
-                      data-action="agent-preset.default"
-                      disabled={busy || !version || !!changed || draft.id.startsWith("project:")}
-                      onClick={() =>
-                        void perform(async () => {
-                          await port.setDefaultAgentPreset(draft.id, false);
-                          setCatalog(await port.agentPresets());
-                          setSaved(t("已设为个人首选预设"));
-                        })
-                      }
-                    >
-                      {t("设为个人首选")}
-                    </button>
-                    <button
-                      className="act"
-                      data-action="agent-preset.workspace-default"
-                      disabled={busy || !version || !!changed}
-                      onClick={() =>
-                        void perform(async () => {
-                          await port.setDefaultAgentPreset(draft.id, true);
-                          setCatalog(await port.agentPresets());
-                          setSaved(t("已设为当前项目首选预设"));
-                        })
-                      }
-                    >
-                      {t("设为项目首选")}
-                    </button>
-                    <button
-                      className="act"
-                      data-action="agent-preset.export"
-                      disabled={busy || !version || !!changed}
-                      onClick={() =>
-                        void perform(async () =>
-                          setExported(JSON.stringify(await port.exportAgentPreset(draft.id), null, 2)),
-                        )
-                      }
-                    >
-                      {t("导出文件")}
-                    </button>
-                    {!immutable && version && (
-                      <button
-                        className="act"
-                        data-action="agent-preset.delete-preview"
-                        disabled={busy}
-                        onClick={() => setDeleting(true)}
-                      >
-                        {t("删除预设")}
-                      </button>
-                    )}
-                  </div>
-                  {deleting && version && (
-                    <div className="find">
-                      <p>{t("删除后不再供新会话选择，已有会话保留绑定版本。")}</p>
-                      <button
-                        className="act"
-                        data-action="agent-preset.delete"
-                        onClick={() =>
-                          void perform(async () => {
-                            await port.deleteAgentPreset(version.definition.id, version.revision);
-                            await load();
-                          })
-                        }
-                      >
-                        {t("确认删除")}
-                      </button>
-                      <button
-                        className="act"
-                        data-action="agent-preset.delete-cancel"
-                        onClick={() => setDeleting(false)}
-                      >
-                        {t("取消")}
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-              <label className="pers-field">
-                <span className="lb">{t("导入预设文件（先预览，再保存）")}</span>
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  data-action-change="agent-preset.import"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    void perform(async () => {
-                      if (file.size > 4 * 1024 * 1024) throw { code: "agent_composition.invalid" };
-                      const imported = await port.importAgentPreset(
-                        JSON.parse(await file.text()) as AgentComposition,
-                      );
-                      copy(imported.definition);
-                      setImportDiagnostics(imported.diagnostics);
-                      setSaved(t("导入预览已就绪，检查模块后保存。"));
-                    });
-                  }}
-                />
-              </label>
-              {exported && (
-                <a
-                  className="act"
-                  data-action="agent-preset.download"
-                  download="agent-preset.json"
-                  href={`data:application/json;charset=utf-8,${encodeURIComponent(exported)}`}
-                >
-                  {t("下载预设 JSON")}
-                </a>
-              )}
-              {catalog.diagnostics.map((d, i) => (
-                <p className="ds" key={i}>
-                  {d.module}: {d.detail}
-                </p>
-              ))}
-              {importDiagnostics.map((d, i) => (
-                <p className="ds" key={`import-${i}`}>
-                  {d.module}: {say({ code: d.code })}
-                </p>
-              ))}
-            </>
-          )}
-          {saved && (
-            <p className="find" role="status">
-              {saved}
-            </p>
-          )}
-          {error && (
-            <p className="find" data-lvl="err" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-      </Group>
-    </>
-  );
+  const copy = (base: AgentComposition, duplicate: boolean) => {
+    if (!catalog) return;
+    open({ kind: "preset", entry: { definition: newPreset(base, catalog, duplicate), version: null,
+      source: base.id.startsWith("builtin:") ? t(base.name) : base.name } });
+  };
+  const close = () => setEditor(null);
+  const savedPreset = (version: AgentPresetVersion) => {
+    setCatalog(prev => prev && ({ ...prev, presets: [...prev.presets.filter(v => v.definition.id !== version.definition.id), version] }));
+    focusID.current = version.definition.id;
+    setSaved(t("已保存，新会话使用新版"));
+    close();
+  };
+  const importFile = async (file: File) => {
+    if (!catalog) return;
+    const generation = epoch.current;
+    const active = () => root.current !== null && epoch.current === generation;
+    try {
+      if (file.size > 4 * 1024 * 1024) throw { code: "agent_composition.invalid" };
+      const imported = await port.importAgentPreset(JSON.parse(await file.text()) as AgentComposition);
+      if (!active()) return;
+      open({ kind: "preset", entry: { definition: newPreset(imported.definition, catalog, true), version: null,
+        source: t("导入的预设"), diagnostics: imported.diagnostics } });
+    } catch (e) { if (active()) setError(reason(e)); }
+  };
+  return <section ref={root} id="set-agent-presets" data-setting="agent-presets" className="preset-workspace" data-editor={editor ? "" : undefined}>
+    {editor?.kind === "persona" ? <PresetPersonaPage key={editor.key} port={port} onClose={close} />
+      : editor?.kind === "preset" && catalog ? <PresetPage key={editor.key} entry={editor.entry} catalog={catalog} port={port}
+        onClose={close} onSaved={savedPreset} onDeleted={() => {
+          setCatalog(prev => prev && ({ ...prev, presets: prev.presets.filter(v => v.definition.id !== editor.entry.definition.id) }));
+          setSaved(t("预设已删除，已有会话保持原版本。")); close();
+        }} onCopy={d => copy(d, true)} onPersona={() => open({ kind: "persona" })} />
+      : <div className="preset-list">
+        {catalog ? <>
+          <CompositionCatalog catalog={catalog} onCreate={() => copy(builtinCompositions()[0], false)}
+            onCopy={v => copy(v.definition, true)} onSelect={v => open({ kind: "preset", entry: { definition: v.definition, version: v,
+              source: v.definition.id.startsWith("builtin:") ? t(v.definition.name) : v.definition.name } })} />
+          <div className="composition-toolbar">
+            <label className="act preset-import">{t("导入预设文件（先预览，再保存）")}<input type="file" accept="application/json,.json"
+              aria-label={t("导入预设文件（先预览，再保存）")} data-action-change="agent-preset.import"
+              onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void importFile(file); }} /></label>
+            <button className="act" data-action="agent-preset.reload" onClick={() => setRefresh(v => v + 1)}>{t("重新加载")}</button>
+          </div>
+          {current && <p className="ds">{t("当前会话")}: {current.id.startsWith("builtin:") ? t(current.name) : current.name} · {current.revision.slice(0, 12)} {t(current.started ? "已锁定" : "首次提交前可切换")}</p>}
+          {catalog.diagnostics.map((d, i) => <p className="ds" key={i}>{d.module}: {d.detail}</p>)}
+          <ApplyNote id="agent-presets" />
+        </> : <div className="empty"><p>{error || t("读取预设中…")}</p><button className="act" data-action="agent-preset.reload" onClick={() => setRefresh(v => v + 1)}>{t("重新加载")}</button></div>}
+        {saved && <p className="find" role="status">{saved}</p>}
+        {catalog && error && <p className="find" data-lvl="err" role="alert">{error}</p>}
+      </div>}
+  </section>;
 }

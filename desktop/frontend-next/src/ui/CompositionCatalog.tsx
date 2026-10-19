@@ -1,36 +1,43 @@
 import type { AgentPresetCatalog, AgentPresetVersion } from "../port/composition";
 import { t } from "../i18n";
+import { StudioIcon } from "./StudioIcon";
 import "../styles/composition-presets.css";
 
-export function CompositionCatalog({ catalog, selected, busy, onSelect, onCreate, onDefault }: {
+export function CompositionCatalog({ catalog, onSelect, onCreate, onCopy }: {
   catalog: AgentPresetCatalog;
-  selected?: string;
-  busy: boolean;
   onSelect: (version: AgentPresetVersion) => void;
   onCreate: () => void;
-  onDefault: (id: string) => void;
+  onCopy: (version: AgentPresetVersion) => void;
 }) {
-  const builtins = catalog.presets.filter((v) => v.definition.id.startsWith("builtin:"));
-  const custom = catalog.presets.filter((v) => !v.definition.id.startsWith("builtin:"));
   return <div className="composition-catalog">
-    <p className="ds">{t("默认使用标准模式。其他模式仅在明确选择后启用；首选标记不会自动切换会话。")}</p>
-    <h4>{t("内置")}</h4>
-    <div className="composition-cards">
-      {builtins.map((v) => <article className="composition-card" key={v.definition.id} data-selected={selected === v.definition.id ? "" : undefined}>
-        <button type="button" className="composition-card-select" aria-label={t(v.definition.name)} aria-pressed={selected === v.definition.id} disabled={busy} data-action="agent-preset.view" data-target={v.definition.id} onClick={() => onSelect(v)}>
-          <span className="composition-card-title"><strong>{t(v.definition.name)}</strong><span className="composition-card-badge">{t(catalog.default === v.definition.id ? "首选预设" : "内置")}</span></span>
-          <span className="composition-card-id">{v.definition.id === "builtin:general" ? "standard" : v.definition.id.slice("builtin:".length)}</span>
-          <span className="composition-card-description">{t(v.definition.description)}</span>
-        </button>
-        <div className="composition-card-footer">
-          <button className="act" data-action="agent-preset.view" data-target={v.definition.id} disabled={busy} onClick={() => onSelect(v)}>{t("模式说明")}</button>
-          <button className="act" data-action="agent-preset.default" data-target={v.definition.id} disabled={busy || catalog.default === v.definition.id} onClick={() => onDefault(v.definition.id)}>{t(catalog.default === v.definition.id ? "首选预设" : "设为个人首选")}</button>
-        </div>
-      </article>)}
-    </div>
+    <header className="composition-list-heading">
+      <div><h2>{t("Agent 预设")}</h2><p>{t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。")}</p></div>
+      <button className="btn" data-primary="" data-action="agent-preset.create" onClick={onCreate}><StudioIcon name="plus" />{t("新建预设")}</button>
+    </header>
+    <p className="composition-default-note">{t("新会话默认使用标准模式。选择其他模式后才会启用对应预设。")}</p>
+    {(["builtin", "user", "project"] as const).map((scope) => {
+      const items = catalog.presets.filter(v => v.definition.id.startsWith(scope + ":"));
+      if (!items.length) return null;
+      return <section className="composition-list-group" key={scope} aria-label={t(scope === "builtin" ? "内置" : scope === "user" ? "个人" : "项目共享")}>
+        <h3>{t(scope === "builtin" ? "内置" : scope === "user" ? "个人" : "项目共享")}</h3>
+        {items.map(v => <PresetRow key={v.definition.id} version={v} onSelect={() => onSelect(v)} onCopy={() => onCopy(v)} />)}
+      </section>;
+    })}
     <details className="composition-how"><summary>{t("如何使用")}</summary><p>{t("在输入框顶部选择 Agent 模式，首次提交前可切换。开始对话后，请用其他模式新建会话。精简模式的终端仍可修改文件，并非只读模式。")}</p></details>
-    <h4>{t("自定义")}</h4>
-    {custom.length > 0 && <div className="composition-custom-list">{custom.map((v) => <button className="act" key={v.definition.id} aria-pressed={selected === v.definition.id} disabled={busy} data-action="agent-preset.view" data-target={v.definition.id} onClick={() => onSelect(v)}><span>{v.definition.name}</span><small>{t(v.definition.id.startsWith("project:") ? "项目" : "个人")}{catalog.default === v.definition.id ? ` · ${t("首选预设")}` : ""}</small></button>)}</div>}
-    <button className="composition-create" data-action="agent-preset.create" disabled={busy} onClick={onCreate}>{t("新建自定义预设")}</button>
   </div>;
+}
+
+function PresetRow({ version: { definition: d }, onSelect, onCopy }: { version: AgentPresetVersion; onSelect: () => void; onCopy: () => void }) {
+  const builtin = d.id.startsWith("builtin:");
+  const name = builtin ? t(d.name) : d.name;
+  return <article className="composition-row">
+    <button className="composition-row-main" data-action="agent-preset.view" data-target={d.id}
+      aria-label={t(builtin ? "查看 {name}" : "编辑 {name}", { name })} onClick={onSelect}>
+      <span className="composition-row-icon"><StudioIcon name={d.id === "builtin:minimal" ? "code" : "layers"} /></span>
+      <span className="composition-row-copy"><strong>{name}{d.id === "builtin:general" && <small>{t("默认")}</small>}</strong>
+        <span>{builtin ? t(d.description) : d.description}</span></span>
+      <StudioIcon name="chevron" />
+    </button>
+    <button className="act" data-action="agent-preset.copy" data-target={d.id} aria-label={t("复制 {name}", { name })} onClick={onCopy}>{t("复制")}</button>
+  </article>;
 }

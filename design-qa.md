@@ -7,6 +7,54 @@ reviewed: 2026-10-18
 
 # Foundation palette verification
 
+## Current preset editor verification / 当前预设编辑页验收
+
+final result: blocked
+
+This section supersedes earlier preset-card visual acceptance below. The selected
+source is the user's attached `exec-e196c6a9-d8d9-437d-a6ee-0e99a3651845.png`,
+1487 × 1058 image pixels; CSS viewport and density are unspecified.
+
+The image specifies a catalog followed by a separate content editor, not a drawer. The existing
+Settings shell remains the application-owned frame.
+
+本节取代下方旧预设卡片的视觉验收。采用用户重新指定的首张效果图，列表与独立
+编辑页切换，保留现有设置外框。编辑态为新建、名称与用途已填写、能力及高级设置
+收起、个人范围、取消与保存操作固定在底部。
+
+- Implementation screenshot: unavailable. Browser acquisition of the local
+  preview was rejected by the browser URL security policy. No alternative browser
+  surface or raw browser command was used to bypass the refusal.
+- Viewport, implementation pixel dimensions, CSS size and density normalization:
+  unmeasured. Full-view and focused visual comparisons remain blocked.
+- Typography: existing Studio family and weight tokens retained; rendering,
+  wrapping and optical weight require browser comparison.
+- Spacing/layout: separate editor, expandable rows and flex footer implemented;
+  actual proportions, scrolling and narrow-screen overflow remain unverified.
+- Colors: existing surface, text, focus and border tokens reused; rendered theme
+  contrast remains unverified.
+- Assets: existing product icons retained; no generated product assets or new
+  handcrafted icon geometry. Source brand is supplied by the existing shell.
+- Copy: name, purpose, persona, capabilities, scope and advanced hierarchy follows
+  the selected source, with Chinese/English labels. Existing backend limits remain
+  authoritative rather than adopting illustrative mockup character limits.
+- Interaction regressions cover creation, copy, literal persona fields, invalid
+  parameters, failed saves, navigation/close confirmation, pending saves and focus.
+  These are jsdom checks and do not substitute for browser visual evidence.
+
+Remaining checklist:
+
+1. Acquire the authorized preview and capture the specified creation state and catalog.
+2. Compare the full view and editor regions; verify light/dark, narrow scrolling and console output.
+3. Resolve P0–P2 findings before marking visual acceptance passed.
+
+Earlier passing sections below are historical evidence for their own changes.
+
+待办：恢复浏览器访问后，在相同编辑状态比较整页与局部，并检查深浅主题、窄屏
+滚动及控制台；解决 P0–P2 问题后再将视觉验收标记为通过。
+
+## Historical palette verification / 历史配色验收
+
 final result: passed
 
 Clear Blue and Tea Green implement the two approved colour directions for

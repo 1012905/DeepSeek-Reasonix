@@ -47,7 +47,7 @@ function presetAbout(id: string): string {
   }
 }
 
-export function Persona({ port }: { port: AgentPort }) {
+export function Persona({ port, onDirtyChange, onBusyChange, onSaved }: { port: AgentPort; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onSaved?: () => void }) {
   const [state, setState] = useState<PersonaSettings | null>(null);
   const [draft, setDraft] = useState<PersonaDraft>(BLANK);
   const [busy, setBusy] = useState(false);
@@ -79,6 +79,7 @@ export function Persona({ port }: { port: AgentPort }) {
     try {
       adopt(await port.savePersonaSettings(draft));
       setSaved(true);
+      onSaved?.();
     } catch (e) {
       setError(reason(e));
     } finally {
@@ -92,6 +93,8 @@ export function Persona({ port }: { port: AgentPort }) {
   // answer to "which of these am I looking at".
   const now = !state ? undefined : preset ? presetName(preset.id) : blank ? undefined : t("自定义");
   const changed = !!state && !sameDraft(draft, draftOf(state));
+  useEffect(() => { onDirtyChange?.(changed); }, [onDirtyChange, changed]);
+  useEffect(() => { onBusyChange?.(busy); }, [onBusyChange, busy]);
 
   return (
     <Group
