@@ -58,3 +58,43 @@ func TestFindRepoRoot(t *testing.T) {
 		t.Fatalf("a dir with no .git ancestor should return \"\", got %q", rr)
 	}
 }
+
+// "\!name" and "\#name" ignore a file literally named "!name" or "#name". In a
+// nested .gitignore that already worked; at the root the escape was dropped,
+// turning the first into a negation and the second into a comment.
+func TestRootPatternWithEscapedBangOrHashIgnoresLiteralName(t *testing.T) {
+	dir := testenv.TempDir(t)
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n!keep.log\n\\!important.txt\n\\#notes.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", ".gitignore"), []byte("\\!sub.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rules := At(dir, Options{})
+	sub := rules.Descend(filepath.Join(dir, "sub"))
+	cases := []struct {
+		rules *Rules
+		path  string
+		want  bool
+	}{
+		{rules, "!important.txt", true},
+		{rules, "#notes.txt", true},
+		{rules, "important.txt", false},
+		{rules, "notes.txt", false},
+		{rules, "debug.log", true},
+		{rules, "keep.log", false},
+		{sub, "sub/!sub.txt", true},
+		{sub, "sub/sub.txt", false},
+	}
+	for _, tc := range cases {
+		if got := tc.rules.Ignored(filepath.Join(dir, filepath.FromSlash(tc.path)), false); got != tc.want {
+			t.Errorf("Ignored(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
