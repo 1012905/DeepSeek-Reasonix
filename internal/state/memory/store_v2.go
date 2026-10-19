@@ -448,6 +448,12 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
 
+	// A restore killed after it staged its entry leaves the entry hidden. The
+	// sweep resolves it by id before this call stages anything: an active id
+	// means the dead attempt published, an absent one means it never did.
+	if err := s.sweepRestoreStaging(); err != nil {
+		return SaveResult{}, err
+	}
 	archivePath = cleanMemoryPath(strings.TrimSpace(archivePath))
 	archived, base, ok, err := s.findArchivedByPath(archivePath)
 	if err != nil {
@@ -501,36 +507,14 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	if err := writeMemoryCreate(path, []byte(render(restored, restored.Name)), 0o644); err != nil {
-		if os.IsExist(err) {
-			return SaveResult{}, fmt.Errorf("memory name %q is already active", restored.Name)
-		}
+	// The archive entry is hidden before the active file exists, so a crash
+	// between the two can never leave the id listed as active and archived.
+	stagedPath, err := stageArchivedEntry(base, archivePath, archived.ID)
+	if err != nil {
 		return SaveResult{}, err
 	}
-	// A failed recovery must not leave one id active and archived at once. Both
-	// steps below run after the active file exists, so each undoes it; if the
-	// index write fails too, the retry below rewrites that line.
-	drop := func(cause error) (SaveResult, error) {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return SaveResult{}, fmt.Errorf("%w (and the restored %q could not be withdrawn: %w)", cause, restored.Name, err)
-		}
-		lines, _, err := indexLinesExceptIn(base, restored.Name)
-		if err != nil {
-			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
-		}
-		if err := flushIndexIn(base, lines); err != nil {
-			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
-		}
-		return SaveResult{}, cause
-	}
-	if err := reindexIn(base, restored.Name, restored); err != nil {
-		return drop(err)
-	}
-	if err := fault("remove", archivePath); err != nil {
-		return drop(err)
-	}
-	if err := os.Remove(archivePath); err != nil && !os.IsNotExist(err) {
-		return drop(err)
+	if err := publishRestored(base, archivePath, path, stagedPath, restored); err != nil {
+		return SaveResult{}, err
 	}
 	return SaveResult{Path: path, Memory: restored}, nil
 }
