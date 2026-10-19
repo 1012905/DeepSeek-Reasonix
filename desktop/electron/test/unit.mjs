@@ -1590,6 +1590,25 @@ test("the tray has a file for every Windows scale, at exactly 16 * scale pixels"
   assert.equal(trayAsset(NaN).pixels, 16);
 });
 
+test("the macOS tray is a black-on-transparent Template pair, not the colour badge", () => {
+  const { trayImage } = require("../src/trayimage.js");
+  const asked = [];
+  const nativeImage = { createFromPath: (f) => (asked.push(f), { isEmpty: () => false }) };
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    trayImage(nativeImage, 2);
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+  }
+  assert.match(path.basename(asked[0]), /^trayTemplate\.png$/);
+  for (const [file, px] of [["trayTemplate.png", 18], ["trayTemplate@2x.png", 36]]) {
+    const b = fs.readFileSync(path.join(path.dirname(asked[0]), file));
+    assert.deepEqual([b.readUInt32BE(16), b.readUInt32BE(20)], [px, px], file);
+    assert.equal(b[25], 6, `${file} must carry an alpha channel`);
+  }
+});
+
 function pe(machine) {
   const b = Buffer.alloc(0x100);
   b.writeUInt16LE(0x5a4d, 0);
