@@ -1,0 +1,2 @@
+- 修复：macOS 菜单栏里的托盘图标不再是整个彩色应用图标，改为随浅色、深色菜单栏自动着色的单色图标。见 #13929。
+- Fixed: on macOS the menu-bar tray icon is no longer the full-colour app badge; it is now a monochrome template glyph that follows the light or dark menu bar. See #13929.
