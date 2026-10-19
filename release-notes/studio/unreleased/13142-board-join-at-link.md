@@ -1,0 +1,2 @@
+- 新增：关联电脑到账号时多一个默认勾选的「加入贡献榜」，旁边是将公开的名字，点「确认」才生效；终端关联后也会提示加入命令。关联 #13142。
+- Added: Linking a computer offers a pre-ticked "join the contribution board" with the public name, applied only on Confirm; the terminal prints the join command. Refs #13142.

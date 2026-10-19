@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import type { FeedbackBoard as Board, FeedbackBoardMe } from "../port/feedback";
 import type { AgentPort } from "../port/port";
+import { boardNameProblem, boardOfferSeen, boardPrefill, markBoardOfferSeen } from "./boardname";
 
 const newest = (a: string, b: string): number => {
   const pa = a.replace(/^v/, "").split(".").map(Number);
@@ -16,7 +17,7 @@ const failure = (e: unknown): string => reason(e);
 // The public board of people whose suggestions shipped, and the person's own switch
 // for being on it. Hidden where the service serves no board. The name is the only
 // thing shown, and being listed is always the person's own, separate choice.
-export function FeedbackBoard({ port }: { port: AgentPort }) {
+export function FeedbackBoard({ port, reload = 0 }: { port: AgentPort; reload?: number }) {
   const [all, setAll] = useState<Board | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [release, setRelease] = useState("");
@@ -25,6 +26,9 @@ export function FeedbackBoard({ port }: { port: AgentPort }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
+  const [linked, setLinked] = useState(false);
+  const [offered, setOffered] = useState(() => !boardOfferSeen());
+  const [offerName, setOfferName] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -35,11 +39,13 @@ export function FeedbackBoard({ port }: { port: AgentPort }) {
       const on = !!account && account.signedIn && !account.expired;
       setSignedIn(on);
       if (on) setMe(await port.feedbackBoardMe().catch(() => null));
+      setLinked(on && ((await port.feedbackLinks().catch(() => [])).some((l) => l.current)));
+      if (on) await port.feedbackEnv(document.documentElement.lang).then((e) => setOfferName((prev) => prev || boardPrefill(e.displayName)), () => {});
     } catch {
       setAll(null);
     }
   }, [port]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, reload]);
 
   const versions = useMemo(
     () => [...new Set((all?.entries ?? []).flatMap((e) => e.releases.map((r) => r.version)))].sort(newest),
@@ -107,6 +113,17 @@ export function FeedbackBoard({ port }: { port: AgentPort }) {
       )}
       <p className="fbk-hint">{t("名次取决于维护者选择发布的内容：被婉拒的好反馈不计入。")}</p>
 
+      {signedIn && linked && offered && !me?.listed && !me?.delisted && (
+        <div className="fbk-board-offer" role="group" aria-label={t("要不要加入贡献榜")}>
+          <span className="fbk-link-name">{t("要不要加入贡献榜？")}</span>
+          <p className="fbk-hint">{t("这台电脑已关联账号。加入后榜上公开显示你选的名字和被采纳的条数，不显示邮箱、安装 ID 或路径；这个提示只出现一次，随时可以退出。")}</p>
+          <div className="fbk-link-row">
+            <input className="fbk-board-name-field" data-action-change="feedback.board-name" aria-label={t("榜上显示的名字")} value={offerName} maxLength={40} placeholder={t("榜上显示的名字")} onChange={(e) => setOfferName(e.target.value)} />
+            <button type="button" className="btn sm" data-primary data-action="feedback.board-join" disabled={busy || boardNameProblem(offerName) !== null} onClick={() => { markBoardOfferSeen(); setOffered(false); void run(() => port.joinFeedbackBoard(offerName.trim())); }}>{t("加入贡献榜")}</button>
+            <button type="button" className="btn sm" data-action="feedback.board-offer-dismiss" disabled={busy} onClick={() => { markBoardOfferSeen(); setOffered(false); }}>{t("不用了")}</button>
+          </div>
+        </div>
+      )}
       <div className="fbk-board-me">
         <span className="fbk-link-name">{t("我在榜上")}</span>
         {!signedIn ? (
@@ -120,7 +137,7 @@ export function FeedbackBoard({ port }: { port: AgentPort }) {
           </div>
         ) : (
           <>
-            <p className="fbk-hint">{t("默认不上榜。加入后榜上只显示下面这个名字和采纳数，不显示邮箱、安装 ID 或路径；随时可以退出，退出后下一次刷新就不再出现。")}</p>
+            <p className="fbk-hint">{t("加入后榜上只显示下面这个名字和采纳数，不显示邮箱、安装 ID 或路径；随时可以退出，退出后下一次刷新就不再出现。")}</p>
             <div className="fbk-link-row">
               <input className="fbk-board-name-field" data-action-change="feedback.board-name" aria-label={t("榜上显示的名字")} value={draft} maxLength={30} placeholder={t("榜上显示的名字")} onChange={(e) => setDraft(e.target.value)} />
               <button type="button" className="btn sm" data-primary data-action="feedback.board-join" disabled={busy || typed.length < 2} onClick={() => void run(() => port.joinFeedbackBoard(typed))}>{t("加入贡献榜")}</button>

@@ -119,6 +119,7 @@ interface Props {
 // A reply is read only in an expanded thread; its "new" mark stays for this visit.
 export function FeedbackMine({ port, onFile, onUnread }: Props) {
   const [mine, setMine] = useState<Mine | null>(null);
+  const [boardTick, setBoardTick] = useState(0);
   const [failure, setFailure] = useState<FeedbackFailure | null>(null);
   const [loading, setLoading] = useState(true);
   const [fresh, setFresh] = useState<Record<string, number>>({});
@@ -223,8 +224,8 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
         mine !== null && mine.items.length > 0 && <p className="fbk-hint fbk-level-gone">{t("等级暂时无法显示。")}</p>
       )}
 
-      {mine && <FeedbackLink port={port} hasReport={mine.items.length > 0} />}
-      {mine && <FeedbackBoard port={port} />}
+      {mine && <FeedbackLink port={port} hasReport={mine.items.length > 0} onBoardChanged={() => setBoardTick((n) => n + 1)} />}
+      {mine && <FeedbackBoard port={port} reload={boardTick} />}
 
       {mine?.offline && (
         <div className="fbk-note" role="status" data-tone="info">
