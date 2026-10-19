@@ -743,6 +743,7 @@ const Row = memo(function Row({
             running={it.running}
             activity={activity}
             children={it.children}
+            omitted={it.omitted}
             takeover={it.tool.id ? takeovers[`tool:${it.tool.id}`] : undefined}
             onExtInvoke={onExtInvoke}
             onPrepareFileRevert={onPrepareFileRevert}
