@@ -287,11 +287,11 @@ rules are written in.
 - A tweened inherited property on `.app` restyles every node under it on every
   frame, which made opening the workbench stutter with a long transcript.
 - The rail, nav and side widths are tweened inherited properties on `.app` too.
-  Nothing under the transcript reads them, so `.flow` resets them and the fold
-  no longer restyles every row on every frame: at 300 turns that was about
-  430 ms of style recalculation per fold against 3 ms of layout, and the
-  median frame fell from 128 ms to 46 ms (4x CPU throttle, the perf fixture).
-  `perf/rail-toggle-panes.mjs` holds it, by reading the widths inside `.flow`
+  Nothing under the transcript reads them, so `.flow` resets them.
+- Without the reset, a fold at 300 turns cost about 430 ms of style
+  recalculation against 3 ms of layout; with it the median frame fell from 128 ms
+  to 46 ms (4x CPU throttle, the perf fixture).
+- `perf/rail-toggle-panes.mjs` holds it by reading the widths inside `.flow`
   while the rail folds. `.srail-peek` is outside `.flow` and still reads `--rail-w`.
 - The gutter writes the width on the pane for the same reason (`DOCK.owner`).
 - The side track is closed unless a panel mounts in it. It was written open and
