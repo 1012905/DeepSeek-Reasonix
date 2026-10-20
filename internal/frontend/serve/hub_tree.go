@@ -325,8 +325,10 @@ func (h *Hub) listedSessionPaths() map[string]string {
 }
 
 // importLegacySessions is the user-facing recovery path for old installations.
-// Unknown historical workspaces fall back to the workspace the user selected,
-// so a successful import is never stranded outside the desktop tree.
+// A conversation goes back to the project it was made in; one whose project is
+// gone falls back to the workspace the user selected so it is not stranded outside
+// the desktop tree, and one that records no project is left in the source and listed
+// as skipped.
 func (h *Hub) importLegacySessions(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Path      string `json:"path"`

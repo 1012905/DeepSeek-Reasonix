@@ -360,8 +360,18 @@ func TestExplicitImportFindsEveryLayoutA1xInstallKeepsSessionsIn(t *testing.T) {
 			root := filepath.Join(home, "Roaming", "reasonix")
 			seed(root)
 			dest := filepath.Join(config.SessionDir(), "ws")
+			if name == "desktop v5" {
+				// Desktop's by-id store is scoped: a conversation is filed where its own
+				// header says it was made, not where the person pointed the import.
+				cwd := filepath.Join(home, "proj")
+				if err := os.MkdirAll(cwd, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				writeSourceHeader(t, root, id, cwd)
+				dest = config.ProjectSessionDir(cwd)
+			}
 
-			res := RunLegacySessionImportInto(root, dest, event.Discard)
+			res := RunLegacySessionImportInto(root, filepath.Join(config.SessionDir(), "ws"), event.Discard)
 			if got := totalImported(res.SessionImports); got != 1 || len(res.SessionErrs) != 0 {
 				t.Fatalf("imported %d, errs %v; want 1", got, res.SessionErrs)
 			}

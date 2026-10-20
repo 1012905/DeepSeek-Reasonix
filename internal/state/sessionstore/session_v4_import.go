@@ -2,10 +2,12 @@ package sessionstore
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -232,12 +234,42 @@ func withV4Sessions(dir string, out []SessionInfo) []SessionInfo {
 	return out
 }
 
-// ImportV4From copies the 1.x v4 conversations under store into dir. A non-empty
-// route names one's destination instead. Imported copies and empty ones are
-// skipped silently; one that cannot be read becomes a SkippedSession. importedAs
-// supplies each copy's starting meta: 1.x kept its archive list outside the
-// session store, so without it every archived conversation arrives as active.
-func ImportV4From(store fs.FS, dir string, route func(sessionID string) string, importedAs func(sessionID string) BranchMeta) (int, []SkippedSession, error) {
+// V4Origin is what a source conversation says about where it was made: its id
+// and the working folder its header records, "" when it records none.
+type V4Origin struct {
+	ID  string
+	Cwd string
+}
+
+// V4Placement is a route's answer. Dir is the project sessions directory the
+// conversation belongs in. An empty Dir with Known set means its origin is known
+// but no folder answers for it any more (the project was deleted), so it falls
+// back to dir. Known unset means it names no project at all.
+type V4Placement struct {
+	Dir   string
+	Known bool
+}
+
+// readV4Cwd is the working folder a 1.x Desktop conversation's header records.
+func readV4Cwd(store fs.FS, name string) string {
+	raw, err := fs.ReadFile(store, path.Join(name, "header.json"))
+	if err != nil {
+		return ""
+	}
+	var header struct {
+		Cwd string `json:"cwd"`
+	}
+	if json.Unmarshal(raw, &header) != nil {
+		return ""
+	}
+	return strings.TrimSpace(header.Cwd)
+}
+
+// ImportV4From copies the 1.x v4 conversations under store into dir. With a route
+// each goes where it is placed, and one naming no project is skipped as SkipNoProject;
+// without one everything goes to dir. Imported and empty ones are skipped silently,
+// an unreadable one becomes a SkippedSession, and importedAs supplies each copy's meta.
+func ImportV4From(store fs.FS, dir string, route func(V4Origin) V4Placement, importedAs func(sessionID string) BranchMeta) (int, []SkippedSession, error) {
 	entries, err := fs.ReadDir(store, ".")
 	if err != nil {
 		return 0, nil, err
@@ -263,15 +295,20 @@ func ImportV4From(store fs.FS, dir string, route func(sessionID string) string, 
 			continue
 		}
 		id := s.Manifest.SessionID
-		target := dir
-		if route != nil {
-			if routed := route(id); routed != "" {
-				target = routed
-			}
-		}
 		if !isV4SessionID(id) {
 			skip(e.Name(), SkipUnreadableFormat)
 			continue
+		}
+		target := dir
+		if route != nil {
+			placed := route(V4Origin{ID: id, Cwd: readV4Cwd(store, e.Name())})
+			switch {
+			case placed.Dir != "":
+				target = placed.Dir
+			case !placed.Known:
+				skip(e.Name(), SkipNoProject)
+				continue
+			}
 		}
 		path := v4ImportPath(target, id)
 		if sessionArtifactExists(path) {

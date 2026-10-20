@@ -153,9 +153,9 @@ func RunLegacySessionImportFrom(sourceRoot string, sink event.Sink) Result {
 }
 
 // RunLegacySessionImportInto is the desktop recovery form. Sessions whose
-// historical workspace still exists keep that workspace; orphaned or unscoped
-// sessions land in fallbackDest so the user can see and resume them instead of
-// being copied into the global store that the workspace sidebar cannot list.
+// historical workspace still exists keep that workspace; orphaned ones and
+// sources with no workspace at all land in fallbackDest, where the sidebar can list
+// them. A Desktop conversation that records no workspace is left in the source.
 func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink) Result {
 	sink = event.Sync(sink)
 	emit := func(level event.Level, text string) {
@@ -563,7 +563,7 @@ type explicitSessionSource struct {
 	label string
 	v4    bool
 	store fs.FS
-	route func(sessionID string) string
+	route func(sessionstore.V4Origin) sessionstore.V4Placement
 	// archived answers whether 1.x had filed this conversation away. The archive
 	// list lived in the desktop shell, so a migration that ignores it turns every
 	// archived conversation into an active one.
@@ -623,7 +623,7 @@ func explicitLegacySessionSources(picked string, note func(root string)) ([]expl
 	tree := root.FS()
 	var out []explicitSessionSource
 	seen := map[string]bool{}
-	add := func(rel string, v4 bool, route func(string) string, archived func(string) bool) {
+	add := func(rel string, v4 bool, route func(sessionstore.V4Origin) sessionstore.V4Placement, archived func(string) bool) {
 		if seen[rel] {
 			return
 		}
@@ -642,7 +642,7 @@ func explicitLegacySessionSources(picked string, note func(root string)) ([]expl
 		hidden := desktopArchivedSessions(tree, home)
 		add(path.Join(home, "sessions"), false, nil, nil)
 		add(path.Join(home, "sessions-v4"), true, nil, isArchived(hidden))
-		add(path.Join(home, "desktop-sessions-v5", "by-id"), true, routeToOwner(desktopSessionOwners(tree, home), note), isArchived(hidden))
+		add(path.Join(home, "desktop-sessions-v5", "by-id"), true, routeV4(desktopSessionOwners(tree, home), note), isArchived(hidden))
 		projects, _ := fs.ReadDir(tree, path.Join(home, "projects"))
 		for _, project := range projects {
 			if !project.IsDir() {
