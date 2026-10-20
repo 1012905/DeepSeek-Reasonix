@@ -157,7 +157,7 @@ func (a *approvalManager) preApprovedForDecisionOptions(tool, subject string, ar
 		return a.sessionGrantAllowsLocked(tool, subject)
 	}
 	if requireHuman {
-		return a.posture.mode == ToolApprovalYolo || a.sessionGrantAllowsLocked(tool, subject)
+		return a.requiredHumanAnsweredLocked(tool, subject)
 	}
 	return a.bypassAllowsLocked(tool, subject, args) || a.sessionGrantAllowsLocked(tool, subject)
 }
@@ -165,6 +165,16 @@ func (a *approvalManager) preApprovedForDecisionOptions(tool, subject string, ar
 func (a *approvalManager) preApprovedForRequiredHuman(tool, subject string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.requiredHumanAnsweredLocked(tool, subject)
+}
+
+// requiredHumanAnsweredLocked is whether YOLO or a session grant stands in for
+// the person on a call that needs one. A fresh-human tool is never answered that
+// way: its card says so, and a grant for it is not something the host records.
+func (a *approvalManager) requiredHumanAnsweredLocked(tool, subject string) bool {
+	if requiresFreshApprovalTool(tool) {
+		return false
+	}
 	return a.posture.mode == ToolApprovalYolo || a.sessionGrantAllowsLocked(tool, subject)
 }
 
