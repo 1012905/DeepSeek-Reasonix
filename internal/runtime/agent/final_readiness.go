@@ -21,8 +21,10 @@ import (
 // says what is missing rather than merely that something is.
 
 type finalReadinessCheck struct {
-	applies                   bool
-	reason                    string
+	applies bool
+	reason  string
+	// abridged pairs each short reference in reason with the full line it stands for.
+	abridged                  [][2]string
 	missingProjectChecks      int
 	incompleteTodos           int
 	missingAcceptanceCriteria int
@@ -48,8 +50,19 @@ func (c finalReadinessCheck) progressSignature() string {
 		c.missingCapabilities,
 		c.missingRender,
 		boolInt(c.applies),
-		c.reason,
+		c.unabridgedReason(),
 	)
+}
+
+// unabridgedReason is reason with every short reference spelled out again. How
+// much of a debt a round explains is a courtesy to the reader; whether the
+// round moved is not, so the progress signature never sees one change into the other.
+func (c finalReadinessCheck) unabridgedReason() string {
+	reason := c.reason
+	for _, p := range c.abridged {
+		reason = strings.ReplaceAll(reason, p[0], p[1])
+	}
+	return reason
 }
 
 func (c finalReadinessCheck) missingIDs() []string {
@@ -486,6 +499,7 @@ func (a *Agent) appendUnprovenMutationGap(out *finalReadinessCheck, missing []st
 		return missing
 	}
 	if slices.Contains(a.task.explained, owed.ID) {
+		out.abridged = append(out.abridged, [2]string{unprovenMutationAgain, unprovenMutationAsk})
 		return append(missing, unprovenMutationAgain)
 	}
 	return append(missing, unprovenMutationAsk)
@@ -558,6 +572,10 @@ func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string
 	if !owed {
 		return missing
 	}
+	if gap == verificationOwedAgain {
+		full, _ := a.verificationGapIn(writer, false)
+		out.abridged = append(out.abridged, [2]string{gap, full})
+	}
 	out.applies = true
 	out.missingVerification++
 	return append(missing, gap)
@@ -569,6 +587,11 @@ func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string
 // to the model that just ran one; what it needs is the command named and a
 // shape whose status answers for the check.
 func (a *Agent) verificationGap(writer int) (string, bool) {
+	return a.verificationGapIn(writer, a.verificationExplained())
+}
+
+// verificationGapIn is verificationGap with the choice of abridging made by the caller.
+func (a *Agent) verificationGapIn(writer int, abridge bool) (string, bool) {
 	ask := "run a relevant verification command after the latest write for the current role setting" + a.verificationCause()
 	if _, unproven := a.task.ledger.LatestUnprovenMutationIndex(); unproven {
 		ask += " — but a check cannot settle a change the host could not read: " + evidence.UnprovenMutationSettle
@@ -596,7 +619,7 @@ func (a *Agent) verificationGap(writer int) (string, bool) {
 		!a.task.ledger.HasUnrecognizedMutationAfter(writer) {
 		return "", false
 	}
-	if a.verificationExplained() {
+	if abridge {
 		return verificationOwedAgain, true
 	}
 	return ask, true

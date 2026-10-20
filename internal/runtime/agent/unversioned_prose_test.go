@@ -86,3 +86,40 @@ func TestAVerificationDebtIsExplainedOnceThenReferredTo(t *testing.T) {
 		t.Fatalf("a later change is a new debt and is explained in full: %q", again)
 	}
 }
+
+// Whether a round moved is read off what is owed, never off how much of it the
+// round spells out: a debt shortened on the second round is the same debt, and
+// a changed signature there would count as progress and buy the loop another round.
+func TestAbridgingADebtDoesNotChangeTheProgressSignature(t *testing.T) {
+	code := evidence.Receipt{ToolName: "write_file", Success: true, Mutation: true, Write: true, MutationEvidence: evidence.MutationProven, Paths: []string{"main.go"}}
+	unproven := evidence.Receipt{ToolName: "bash", Success: true, Write: true, Mutation: true, MutationEvidence: evidence.MutationUnknown, Command: "./gen.sh"}
+	for _, tc := range []struct {
+		name     string
+		delivery bool
+		receipts []evidence.Receipt
+	}{
+		{name: "verification debt", receipts: []evidence.Receipt{code}},
+		{name: "unproven change under delivery", delivery: true, receipts: []evidence.Receipt{unproven}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := tool.NewRegistry()
+			reg.Add(fakeTool{name: "bash"})
+			a := &Agent{
+				task: taskRuntime{ledger: readinessLedger(tc.receipts...)},
+				svc:  agentServices{tools: reg},
+				turn: turnRuntime{policySet: true, policy: taskpolicy.TaskPolicy{Verification: taskpolicy.VerifyTargeted}},
+			}
+			a.observeRoot = t.TempDir()
+			a.deliveryProfile = tc.delivery
+			first := a.finalReadinessCheckFor()
+			a.noteObligationsExplained()
+			second := a.finalReadinessCheckFor()
+			if first.reason == second.reason {
+				t.Fatalf("the second round was not abridged: %q", second.reason)
+			}
+			if first.progressSignature() != second.progressSignature() {
+				t.Errorf("signature moved when the same debt was merely shortened:\n%q\n%q", first.progressSignature(), second.progressSignature())
+			}
+		})
+	}
+}
