@@ -129,6 +129,10 @@ rules are written in.
 
 ## Pickers and menus
 
+- The preset editor's drop-downs draw their own arrow, 14px in from the border.
+  The native arrow's inset belongs to the platform, and on Windows it sat close
+  enough to the border to read as clipped; the text keeps room for the arrow.
+
 - A menu drawn outside its anchor's box cannot be dismissed by the pointer
   leaving that box: the offset between them belongs to neither, and crossing it
   is how the menu is reached, so it closes exactly when it is being aimed at.

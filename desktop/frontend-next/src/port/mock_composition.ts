@@ -5,6 +5,20 @@ import type { AgentComposition, AgentPresetVersion, AgentPresetCatalog, Composit
 
 type Library = { revision:number; user:AgentPresetVersion[]; projects:Map<string,AgentPresetVersion[]>; personalDefault:string; workspaceDefaults:Map<string,string> };
 
+const MOCK_MODULES: AgentPresetCatalog["modules"] = {
+  tools: [
+    { id: "bash", description: "Run a shell command in the workspace and return its output." },
+    { id: "bash_output", description: "Read new output from a shell command that is still running." },
+    { id: "browser_act", description: "Click, type or scroll on the page open in the built-in browser." },
+    { id: "edit_file", description: "Replace an exact piece of text in a file." },
+    { id: "task" },
+  ],
+  skills: [
+    { id: "review", description: "Review the changes on this branch and report problems by severity." },
+    { id: "tidy-notes", description: "Tidy the notes folder" },
+  ],
+};
+
 export class MockCompositions {
   private current: CompositionSummary | null = null;
   private started = false;
@@ -13,7 +27,7 @@ export class MockCompositions {
   get compositionStarted() { return this.started; }
   fork(workspace:string) { return new MockCompositions(this.library,workspace); }
   private get catalog():AgentPresetCatalog {
-    return {presets:[...builtinCompositions().map((definition)=>({definition,revision:revisions[definition.id as keyof typeof revisions]})),...this.library.user,...(this.library.projects.get(this.workspace) ?? [])],default:this.library.workspaceDefaults.get(this.workspace) ?? this.library.personalDefault,diagnostics:[]};
+    return {presets:[...builtinCompositions().map((definition)=>({definition,revision:revisions[definition.id as keyof typeof revisions]})),...this.library.user,...(this.library.projects.get(this.workspace) ?? [])],default:this.library.workspaceDefaults.get(this.workspace) ?? this.library.personalDefault,diagnostics:[],modules:MOCK_MODULES};
   }
   private summary(v:AgentPresetVersion):CompositionSummary { return {id:v.definition.id,name:v.definition.name,revision:v.revision,digest:`mock-${v.revision}`,started:false}; }
   private fail(status:number,code:string):never { throw new HttpError(status,"",{code:`agent_composition.${code}`}); }
