@@ -127,10 +127,7 @@ func hostileNames(t *testing.T, fsys sftpfs.Volume, dir string) {
 		}
 	}
 
-	deep := root
-	for range 15 {
-		deep += "/" + strings.Repeat("d", 200)
-	}
+	deep := root + strings.Repeat("/"+strings.Repeat("d", 200), 15)
 	if err := fsys.MkdirAll(ctx, deep); err != nil {
 		t.Fatalf("a %d-byte path: %v", len(deep), err)
 	}
