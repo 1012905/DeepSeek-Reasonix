@@ -127,13 +127,14 @@ export class MockHub implements HubPort {
       "/home": ["ada"],
       "/home/ada": [".config", "notes", "projects"],
       "/home/ada/projects": ["pipeline", "site"],
-      "/srv": ["eval", "training"],
+      "/srv": ["eval", "private", "training"],
     };
     const folders = (kids[at] ?? []).map((name) => ({ name, path: at === "/" ? "/" + name : at + "/" + name }));
     return Promise.resolve<RemoteListing>({
       path: at,
       parent: at === "/" ? undefined : at.slice(0, at.lastIndexOf("/")) || "/",
       folders,
+      unlisted: at === "/srv/private" || undefined,
     });
   }
 
