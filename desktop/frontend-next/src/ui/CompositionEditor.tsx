@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import type {
   AgentComposition,
   AgentPresetCatalog,
-  CompositionModule,
+  CompositionChoice,
   CompositionKind,
   CompositionSelection,
 } from "../port/composition";
@@ -151,7 +151,7 @@ function ModuleEditor({
   onValidityChange,
 }: {
   kind: CompositionKind;
-  choices: CompositionModule[];
+  choices: CompositionChoice[];
   value: CompositionSelection;
   disabled: boolean;
   onChange: (value: CompositionSelection) => void;
@@ -211,8 +211,8 @@ function ModuleEditor({
               {choices
                 .filter((m) => !value.members.some((s) => s.id === m.id))
                 .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.id}
+                  <option key={m.id} value={m.id} title={m.description || undefined}>
+                    {m.description ? `${m.id} — ${m.description}` : m.id}
                   </option>
                 ))}
             </select>
