@@ -64,7 +64,7 @@ export interface TreeSession {
   versions?: TreeSession[];
 }
 
-export type LegacySkipReason = "too_large" | "unreadable_format" | "schema_unsupported" | "permission" | "corrupt" | "copy_failed";
+export type LegacySkipReason = "too_large" | "unreadable_format" | "schema_unsupported" | "permission" | "corrupt" | "copy_failed" | "no_project";
 
 // A 1.x session the import could not read. The entry at `path` was neither
 // moved nor deleted.

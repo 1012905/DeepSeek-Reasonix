@@ -22,6 +22,7 @@ func TestDesktopV5SessionsImportBesideEmptyLegacyMarkers(t *testing.T) {
 	ids := []string{"727525f3e44fa790368ca635", "0a1b2c3d4e5f60718293a4b5"}
 	for _, id := range ids {
 		seedV4Conversation(t, filepath.Join(root, "desktop-sessions-v5", "by-id"), id)
+		writeSourceHeader(t, root, id, ws)
 	}
 	dest := config.ProjectSessionDir(ws)
 	if err := os.MkdirAll(dest, 0o755); err != nil {

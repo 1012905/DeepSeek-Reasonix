@@ -23,6 +23,7 @@ export const EN_STORAGE: Record<string, string> = {
     "These files are still where they were; nothing was moved or deleted. Copy a path to deal with it yourself, or fix it and import again.",
   体积超过读取上限: "Larger than the size limit for reading",
   "不是本版本能读取的会话格式": "Not a session format this version can read",
+  "没有记录它属于哪个项目，所以没有导入": "It records no project it belongs to, so it was not imported",
   "来自本版本尚不支持的存储版本": "Written by a storage version this version does not support yet",
   没有读取权限: "No permission to read it",
   文件已损坏: "The file is damaged",
