@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reasonix/internal/tools/shellrun"
 	"strings"
 	"testing"
 	"time"
@@ -15,9 +16,7 @@ import (
 
 func TestBashHereDocIssue5624CommandsReturnPromptly(t *testing.T) {
 	sh := requireHereDocBash(t)
-	prevBashShellPATH := bashShellPATH
-	bashShellPATH = func(context.Context) string { return "" }
-	t.Cleanup(func() { bashShellPATH = prevBashShellPATH })
+	t.Cleanup(shellrun.UseShellPATHProbe(func(context.Context) string { return "" }))
 
 	root := testenv.TempDir(t)
 	if err := os.MkdirAll(filepath.Join(root, "app", "platform", "github"), 0o755); err != nil {
