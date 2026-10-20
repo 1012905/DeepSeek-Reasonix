@@ -118,6 +118,17 @@ describe("what a reader is told a refusal was", () => {
     expect(said).toContain("mac-mini.local");
   });
 
+  it("names the module and the cause when a composition is unavailable, in both languages", () => {
+    const refusal = coded("fixture fallback", "agent_composition.unavailable", { module: "tools:browser_act", detail: "Required module is unavailable or was revoked." });
+    localStorage.setItem(STORAGE, "zh");
+    boot();
+    expect(reason(refusal)).toContain("tools:browser_act");
+    expect(reason(refusal)).toContain("Required module is unavailable or was revoked.");
+    localStorage.setItem(STORAGE, "en");
+    boot();
+    expect(reason(refusal)).toContain("tools:browser_act");
+    expect(reason(refusal)).toContain("Required module is unavailable or was revoked.");
+  });
   it("fills a code's sentence from the params, not from the kernel's prose", () => {
     const said = reason(coded("workspace has 3 open panes", "workspace.has_open_panes", { n: 3 }));
     expect(said).toContain("3");

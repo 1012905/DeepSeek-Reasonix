@@ -135,7 +135,7 @@ func compositionPackages(home string, packages []pluginpkg.InstalledPackage, bin
 		return packages, nil
 	}
 	installed, warnings := pluginpkg.LoadInstalled(home)
-	if err := verifySelected(binding.Resolved.Extensions, installed, func(p pluginpkg.InstalledPackage) string { return p.Installed.Name }); err != nil {
+	if err := verifySelected("extensions", binding.Resolved.Extensions, installed, func(p pluginpkg.InstalledPackage) string { return p.Installed.Name }); err != nil {
 		return nil, fmt.Errorf("%w: %s", err, strings.Join(warnings, "; "))
 	}
 	out := []pluginpkg.InstalledPackage{}

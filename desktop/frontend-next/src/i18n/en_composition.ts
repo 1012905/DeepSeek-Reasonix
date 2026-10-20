@@ -121,7 +121,7 @@ export const EN_COMPOSITION: Record<string,string> = {
   "用其他组合新建会话": "Start a conversation with another composition",
   "组合资源不可用，当前会话仅可查看历史。": "Composition resources are unavailable. This conversation is open for history only.",
   "预设内容无效，请检查标识、模块和参数": "Invalid preset. Check its ID, modules and parameters.",
-  "组合所需资源不可用，无法继续执行": "Required composition resources are unavailable; execution is blocked.",
+  "组合所需模块 {module} 当前不可用：{detail}": "Module {module} required by this composition is unavailable: {detail}",
   "会话已开始或正在工作，不能切换组合": "This conversation has started or is busy; its composition cannot be changed.",
   "预设已被其他操作修改，草稿已保留，请重新加载后再保存": "The preset changed elsewhere. Your draft is retained; reload before saving.",
   "找不到该 Agent 预设": "Agent preset not found",
