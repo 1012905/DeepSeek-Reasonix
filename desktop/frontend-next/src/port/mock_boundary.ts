@@ -1,7 +1,11 @@
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, ToolSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import { mockMods } from "./mock_mods";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
+import { MockCompositions } from "./mock_composition";
+import type { AgentComposition } from "./composition";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
 // far an approved write reaches. It carries one rule of each kind already, so
@@ -15,7 +19,20 @@ function effectiveBash(s: SandboxSettings): string {
   return s.bash.trim() === "off" ? "off" : "enforce";
 }
 
+// One file per machine, so every port of the demo reads the same answer.
+let levelNotices: FeedbackLevelNotices = { enabled: false, path: "/Users/you/.reasonix/config.toml" };
+
 export class MockBoundary extends MockShell {
+  protected compositions = new MockCompositions();
+  shareAgentPresetsFrom(other: MockBoundary, workspace:string) { this.compositions=other.compositions.fork(workspace); }
+  agentPresets() { return this.compositions.agentPresets(); }
+  saveAgentPreset(d: AgentComposition, expected: string) { return this.compositions.saveAgentPreset(d, expected); }
+  deleteAgentPreset(id: string, revision: string) { return this.compositions.deleteAgentPreset(id, revision); }
+  setDefaultAgentPreset(id: string, workspace: boolean) { return this.compositions.setDefaultAgentPreset(id, workspace); }
+  exportAgentPreset(id: string) { return this.compositions.exportAgentPreset(id); }
+  importAgentPreset(d: AgentComposition) { return this.compositions.importAgentPreset(d); }
+  agentComposition() { return this.compositions.agentComposition(); }
+  selectAgentComposition(id: string) { return this.compositions.selectAgentComposition(id); }
   async decideWorkspaceTrust(_trust: "trusted" | "declined") {}
   // One interrupted barrier and one that a later turn took over, so the card
   // and the reason it disappears are both reachable without a crash.
@@ -148,6 +165,17 @@ export class MockBoundary extends MockShell {
     return { ...this.claims };
   }
 
+  private steerLimits: SubagentSteerSettings = { maxBytes: 16384, perMinute: 30, defaultMaxBytes: 16384, defaultPerMinute: 30, path: "/Users/you/.reasonix/config.toml" };
+
+  async subagentSteerSettings(): Promise<SubagentSteerSettings> {
+    return { ...this.steerLimits };
+  }
+
+  async saveSubagentSteerSettings(maxBytes: number, perMinute: number): Promise<SubagentSteerSettings> {
+    this.steerLimits = { ...this.steerLimits, maxBytes, perMinute };
+    return { ...this.steerLimits };
+  }
+
   private plans: PlanApprovalSettings = { auto: false, path: "/Users/you/.reasonix/config.toml" };
 
   async planApproval(): Promise<PlanApprovalSettings> {
@@ -159,14 +187,48 @@ export class MockBoundary extends MockShell {
     return { ...this.plans };
   }
 
-  private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };
+  private modes: DefaultModeSettings = { plan: false, path: "/Users/you/.reasonix/config.toml" };
+
+  async defaultMode(): Promise<DefaultModeSettings> {
+    return { ...this.modes };
+  }
+
+  async saveDefaultMode(plan: boolean): Promise<DefaultModeSettings> {
+    this.modes = { ...this.modes, plan };
+    return { ...this.modes };
+  }
+
+  private toolList: ToolSettings = {
+    tools: [
+      { name: "bash", description: "Run a shell command in the workspace.", disabled: false },
+      { name: "read_file", description: "Read a file, or a line range of it.", disabled: false },
+      { name: "recall", description: "Search what earlier turns folded away.", disabled: false },
+      { name: "todo_write", description: "Keep a checklist for a multi-step task.", disabled: false, requiredBy: "plan_steps" },
+      { name: "web_search", description: "Search the web.", disabled: true, byProject: true },
+      { name: "update_goal", description: "Report a goal as complete, blocked or stopped.", disabled: false, requiredBy: "goal_mode" },
+      { name: "use_capability", description: "Reach a deferred MCP tool.", disabled: false, requiredBy: "deferred_mcp_tools" },
+      { name: "web_fetch", description: "Fetch a web page.", disabled: false },
+    ],
+    path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async toolSettings(): Promise<ToolSettings> {
+    return structuredClone(this.toolList);
+  }
+
+  async saveToolDisabled(name: string, disabled: boolean): Promise<ToolSettings> {
+    this.toolList = { ...this.toolList, tools: this.toolList.tools.map((x) => (x.name === name ? { ...x, disabled } : x)) };
+    return structuredClone(this.toolList);
+  }
+
+  private lease: WriteLeaseSettings = { optimistic: false, maxWaitMinutes: 0, path: "/Users/you/.reasonix/config.toml" };
 
   async writeLease(): Promise<WriteLeaseSettings> {
     return { ...this.lease };
   }
 
-  async saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings> {
-    this.lease = { ...this.lease, optimistic };
+  async saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }): Promise<WriteLeaseSettings> {
+    this.lease = { ...this.lease, ...edit };
     return { ...this.lease };
   }
 
@@ -186,6 +248,22 @@ export class MockBoundary extends MockShell {
     this.peerState = { ...this.peerState, held: this.peerState.held.filter((h) => h.id !== id) };
   }
 
+  protected modConfig: ModsSettings = { enabled: false, hook_budget_ms: 0, path: "/Users/you/.reasonix/config.toml", available: false, applies: "next_session" };
+
+  async modsSettings(): Promise<ModsSettings> {
+    return { ...this.modConfig };
+  }
+
+  async saveModsSettings(edit: ModsSettingsEdit): Promise<ModsSettings> {
+    if (edit.hook_budget_ms !== undefined && (edit.hook_budget_ms < 0 || edit.hook_budget_ms > 55000)) throw new Error("a hook budget is 0 to 55000 milliseconds");
+    this.modConfig = { ...this.modConfig, enabled: edit.enabled ?? this.modConfig.enabled, hook_budget_ms: edit.hook_budget_ms ?? this.modConfig.hook_budget_ms };
+    return this.modsSettings();
+  }
+
+  async mods(): Promise<ModStatus[]> {
+    return mockMods(this.modConfig.enabled);
+  }
+
   protected peerSettings: PeersSettings = { enabled: false, dispatch: false, release_projects: [], max_dispatch_depth: 1, max_dispatched_sessions: 8, path: "/Users/you/.reasonix/config.toml", applies: "next_turn", pending: false, available: true };
 
   async peersSettings(): Promise<PeersSettings> {
@@ -200,7 +278,7 @@ export class MockBoundary extends MockShell {
       dispatch: edit.dispatch ?? this.peerSettings.dispatch,
       max_dispatch_depth: edit.max_dispatch_depth ?? this.peerSettings.max_dispatch_depth,
       max_dispatched_sessions: edit.max_dispatched_sessions ?? this.peerSettings.max_dispatched_sessions,
-      release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
+      release_projects: keep ? keep.map((path) => this.peerSettings.release_projects.find((p) => p.path === path) ?? { path, name: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path }) : this.peerSettings.release_projects,
       pending: true,
     };
     return this.peersSettings();
@@ -216,6 +294,32 @@ export class MockBoundary extends MockShell {
     if (s.days < 1 || s.days > 3650) throw new Error("auto archive setting out of range");
     this.archive = { ...this.archive, ...s };
     return { ...this.archive };
+  }
+  private personaState: PersonaSettings = {
+    prefix: "", suffix: "", include_runtime_context: true,
+    path: "/Users/you/.reasonix/config.toml",
+    presets: [
+      {
+        id: "engineer",
+        prefix: "You are a rigorous staff engineer. Verify before claiming, make the smallest correct change, and state the residual risk.",
+        suffix: "", include_runtime_context: true,
+      },
+      {
+        id: "concise",
+        prefix: "",
+        suffix: "Be terse. Skip the preamble; prefer code and bullets.",
+        include_runtime_context: false,
+      },
+    ],
+  };
+
+  async persona(): Promise<PersonaSettings> {
+    return { ...this.personaState, presets: this.personaState.presets.map((p) => ({ ...p })) };
+  }
+
+  async savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings> {
+    this.personaState = { ...this.personaState, ...s };
+    return this.persona();
   }
 
   private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml", unconverted: [] };
@@ -240,6 +344,15 @@ export class MockBoundary extends MockShell {
     return { ...this.changedFiles };
   }
 
+  async feedbackLevelNotices(): Promise<FeedbackLevelNotices> {
+    return { ...levelNotices };
+  }
+
+  async saveFeedbackLevelNotices(enabled: boolean): Promise<FeedbackLevelNotices> {
+    levelNotices = { ...levelNotices, enabled };
+    return { ...levelNotices };
+  }
+
   private foldWork: FoldWorkSettings = { fold: false, path: "/Users/you/.reasonix/config.toml" };
 
   async foldWorkSettings(): Promise<FoldWorkSettings> {
@@ -257,10 +370,24 @@ export class MockBoundary extends MockShell {
     return { ...this.narration };
   }
 
+  private observability: ObservabilitySettings = {
+    enabled: false, endpoint: "", headerName: "", headerEnv: "", serviceName: "", headerEnvSet: false,
+    path: "/Users/you/.reasonix/config.toml", applies: "next_session",
+  };
+
+  async observabilitySettings(): Promise<ObservabilitySettings> {
+    return { ...this.observability };
+  }
+
+  async saveObservabilitySettings(patch: ObservabilityPatch): Promise<ObservabilitySettings> {
+    this.observability = { ...this.observability, ...patch };
+    return { ...this.observability };
+  }
+
   private webAccess: WebAccessSettings = {
     search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
     known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"],
-    paid_backends: ["deepseek_api"], deepseek_api_ready: false, path: "/Users/you/.reasonix/config.toml",
+    paid_backends: ["deepseek_api"], deepseek_api_ready: false, video_url_passthrough: false, path: "/Users/you/.reasonix/config.toml",
   };
 
   async webAccessSettings(): Promise<WebAccessSettings> {
@@ -270,6 +397,10 @@ export class MockBoundary extends MockShell {
   async saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings> {
     this.webAccess = { ...this.webAccess, ...patch };
     return { ...this.webAccess };
+  }
+
+  async probeSearxng(): Promise<SearxngProbe> {
+    return this.webAccess.searxng_url.trim() ? { ok: true } : { ok: false, code: "search.searxng_unreachable" };
   }
 
   async saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings> {
@@ -293,6 +424,18 @@ export class MockBoundary extends MockShell {
     this.ask = { ...this.ask, seconds };
     return { ...this.ask };
   }
+  private sessionRef: SessionRefSettings = { tokens: 8000, defaultTokens: 8000, minTokens: 500, maxTokens: 200000, path: "/Users/you/.reasonix/config.toml" };
+
+  async sessionRefSettings(): Promise<SessionRefSettings> {
+    return { ...this.sessionRef };
+  }
+
+  async saveSessionRefSettings(tokens: number): Promise<SessionRefSettings> {
+    if (tokens !== 0 && (tokens < this.sessionRef.minTokens || tokens > this.sessionRef.maxTokens)) throw new Error("session reference limit out of range");
+    this.sessionRef = { ...this.sessionRef, tokens: tokens || this.sessionRef.defaultTokens };
+    return { ...this.sessionRef };
+  }
+
   private receipt: ReceiptSettings = { show: false, path: "/Users/you/.reasonix/config.toml" };
 
   async receiptSettings(): Promise<ReceiptSettings> {
@@ -314,17 +457,7 @@ export class MockBoundary extends MockShell {
     return { ...this.watch };
   }
 
-  // The fixture carries the broken file, because a banner nobody can reach is
-  // a banner nobody designs. Repairing it here clears it, so the whole
-  // interaction is reachable without a Go build.
-  private broken: ConfigProblem | null = {
-    path: "C:\\Users\\you\\AppData\\Roaming\\reasonix\\config.toml",
-    line: 263,
-    key: "plugins.command",
-    excerpt: 'command = "C:\\Scripts\\mcp.exe"',
-    repair: 'command = "C:\\\\Scripts\\\\mcp.exe"',
-    recovered: "last-known-good",
-  };
+  private broken: ConfigProblem | null = null;
 
   async configProblem(): Promise<ConfigProblem | null> {
     return this.broken && { ...this.broken };

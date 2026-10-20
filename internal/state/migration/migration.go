@@ -153,9 +153,9 @@ func RunLegacySessionImportFrom(sourceRoot string, sink event.Sink) Result {
 }
 
 // RunLegacySessionImportInto is the desktop recovery form. Sessions whose
-// historical workspace still exists keep that workspace; orphaned or unscoped
-// sessions land in fallbackDest so the user can see and resume them instead of
-// being copied into the global store that the workspace sidebar cannot list.
+// historical workspace still exists keep that workspace; ones whose workspace is
+// gone, and stores that carry no workspace concept, land in fallbackDest, where the
+// sidebar can list them. A Desktop conversation that records no workspace is left in the source.
 func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink) Result {
 	sink = event.Sync(sink)
 	emit := func(level event.Level, text string) {
@@ -189,7 +189,7 @@ func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink
 		var err error
 		var skipped []sessionstore.SkippedSession
 		if src.v4 {
-			n, skipped, err = sessionstore.ImportV4From(src.store, fallbackDest, src.route)
+			n, skipped, err = sessionstore.ImportV4From(src.store, fallbackDest, src.route, startMeta(src.archived))
 			for i := range skipped {
 				skipped[i].Path = filepath.Join(src.dir, filepath.FromSlash(skipped[i].Path))
 			}
@@ -536,12 +536,38 @@ func migrateLegacySessionSources(sink event.Sink, verbose bool) sessionMigration
 	return result
 }
 
+// startMeta builds the meta an imported conversation begins with, asking the 1.x
+// archive list. A conversation the old shell had filed away keeps that mark, so
+// it lands in Archived rather than in the everyday list.
+func startMeta(archived func(sessionID string) bool) func(sessionID string) sessionstore.BranchMeta {
+	if archived == nil {
+		return nil
+	}
+	return func(sessionID string) sessionstore.BranchMeta {
+		return sessionstore.BranchMeta{Archived: archived(sessionID)}
+	}
+}
+
+// isArchived turns the 1.x archive list into the predicate the importer asks for.
+// A nil or empty list archives nothing, which is what an install that never
+// archived anything means.
+func isArchived(hidden map[string]bool) func(sessionID string) bool {
+	if len(hidden) == 0 {
+		return nil
+	}
+	return func(sessionID string) bool { return hidden[sessionID] }
+}
+
 type explicitSessionSource struct {
 	dir   string
 	label string
 	v4    bool
 	store fs.FS
-	route func(sessionID string) string
+	route func(sessionstore.V4Origin) sessionstore.V4Placement
+	// archived answers whether 1.x had filed this conversation away. The archive
+	// list lived in the desktop shell, so a migration that ignores it turns every
+	// archived conversation into an active one.
+	archived func(sessionID string) bool
 }
 
 func parseLegacyRescueArgs(args string) (source string, explicit bool, err error) {
@@ -597,7 +623,7 @@ func explicitLegacySessionSources(picked string, note func(root string)) ([]expl
 	tree := root.FS()
 	var out []explicitSessionSource
 	seen := map[string]bool{}
-	add := func(rel string, v4 bool, route func(string) string) {
+	add := func(rel string, v4 bool, route func(sessionstore.V4Origin) sessionstore.V4Placement, archived func(string) bool) {
 		if seen[rel] {
 			return
 		}
@@ -610,25 +636,26 @@ func explicitLegacySessionSources(picked string, note func(root string)) ([]expl
 		}
 		seen[rel] = true
 		dir := filepath.Join(picked, filepath.FromSlash(rel))
-		out = append(out, explicitSessionSource{dir: dir, label: dir, v4: v4, store: sub, route: route})
+		out = append(out, explicitSessionSource{dir: dir, label: dir, v4: v4, store: sub, route: route, archived: archived})
 	}
 	for _, home := range []string{".", ".reasonix", "reasonix"} {
-		add(path.Join(home, "sessions"), false, nil)
-		add(path.Join(home, "sessions-v4"), true, nil)
-		add(path.Join(home, "desktop-sessions-v5", "by-id"), true, routeToOwner(desktopSessionOwners(tree, home), note))
+		hidden := desktopArchivedSessions(tree, home)
+		add(path.Join(home, "sessions"), false, nil, nil)
+		add(path.Join(home, "sessions-v4"), true, nil, isArchived(hidden))
+		add(path.Join(home, "desktop-sessions-v5", "by-id"), true, routeV4(desktopSessionOwners(tree, home), note), isArchived(hidden))
 		projects, _ := fs.ReadDir(tree, path.Join(home, "projects"))
 		for _, project := range projects {
 			if !project.IsDir() {
 				continue
 			}
 			dir := path.Join(home, "projects", project.Name())
-			add(path.Join(dir, "sessions"), false, nil)
-			add(path.Join(dir, "sessions-v4"), true, nil)
+			add(path.Join(dir, "sessions"), false, nil, nil)
+			add(path.Join(dir, "sessions-v4"), true, nil, isArchived(hidden))
 		}
 	}
 	if len(out) == 0 {
-		add(".", false, nil)
-		add(".", true, nil)
+		add(".", false, nil, nil)
+		add(".", true, nil, nil)
 	}
 	return out, func() { _ = root.Close() }, nil
 }

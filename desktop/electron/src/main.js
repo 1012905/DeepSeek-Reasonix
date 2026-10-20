@@ -33,10 +33,12 @@ const { groundFor, themeSourceFor } = require("./ground");
 const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
 const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
+const { processMemoryHandler } = require("./procmem");
 const { captureHandler } = require("./capture");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
 const { raise } = require("./raise");
+const { keepCredential } = require("./credential");
 const { actHandler } = require("./acts");
 const { crashDir, recordHostExit, pendingHostExit, clearHostExit, hostExitNotice } = require("./hostexit");
 
@@ -283,7 +285,7 @@ function cleanUpLegacyInstalls() {
 // it, Strict because no cross-site navigation ever needs to carry it, and no
 // expiry so it dies with this session rather than outliving the launch.
 async function armCredential(ready) {
-  await session.defaultSession.cookies.set({
+  const cookie = {
     url: ready.origin + "/",
     name: TOKEN_COOKIE,
     value: ready.token,
@@ -291,7 +293,9 @@ async function armCredential(ready) {
     httpOnly: true,
     secure: false,
     sameSite: "strict",
-  });
+  };
+  await session.defaultSession.cookies.set(cookie);
+  keepCredential(session.defaultSession, cookie, (line) => logs.shell.line(line));
 }
 
 // The close button hides where an icon can bring the window back, and quits
@@ -395,6 +399,7 @@ nativeTheme.on("updated", () => {
 });
 
 ipcMain.handle("shell:graphics", (event) => graphicsHandler(app, fromWindow, gpuLaunch)(event));
+ipcMain.handle("shell:process-memory", (event) => processMemoryHandler(app, fromWindow)(event));
 
 ipcMain.handle("window:unread-badge", (event, unread) => {
   const target = fromWindow(event);

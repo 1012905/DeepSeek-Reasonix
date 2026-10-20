@@ -95,7 +95,7 @@
 }
 
 body { background: var(--page); }
-.app { --rail-open: 238px; background: var(--page); }
+.app { --rail-open: 316px; background: var(--page); }
 .app[data-nav="on"] { --nav-w: var(--nav-open); }
 .app::after { opacity: .012; }
 
@@ -643,8 +643,8 @@ body { background: var(--page) !important; }
   transform: translateY(-40px); opacity: 0; pointer-events: none; border: 0; background: var(--surface);
   transition: opacity 120ms ease, transform 140ms ease;
 }
-.rail .wsfind:focus-within { position: relative; left: auto; right: auto; width: calc(100% - 38px); margin: 0 19px 7px; transform: none; opacity: 1; pointer-events: auto; }
-.rail .wsfind:focus-within { background: var(--overlay); box-shadow: 0 0 0 1px var(--border); }
+.rail .wsfind:is(:focus-within, [data-query]) { position: relative; left: auto; right: auto; width: calc(100% - 38px); margin: 0 19px 7px; transform: none; opacity: 1; pointer-events: auto; }
+.rail .wsfind:is(:focus-within, [data-query]) { background: var(--overlay); box-shadow: 0 0 0 1px var(--border); }
 .rail .scroll { padding-bottom: 8px; }
 .rail .wsrow { margin-inline: 15px; min-height: 35px; border-radius: 6px; }
 .rail .wsnode[data-current] > .wsrow .wsname { color: var(--text); font-weight: 620; }
@@ -655,7 +655,6 @@ body { background: var(--page) !important; }
 .rail .kids { margin-left: 18px; border-left-color: var(--hair); }
 .rail .sessrow { min-height: 42px; margin: 1px 12px 1px 3px; padding-inline: 9px 6px; border-radius: 7px; color: var(--muted); }
 .rail .sessrow:hover { background: var(--overlay); color: var(--text); }
-.rail .sessrow[aria-selected="true"] { background: var(--raised); color: var(--text); box-shadow: inset 2px 0 var(--text); }
 .rail .sessrow .pip { opacity: .45; }
 .rail .sesstitle { font-size: calc(11px * var(--fs-scale, 1)); line-height: 1.35; }
 .rail .sessmeta { flex: none; color: var(--faint); font-size: calc(9px * var(--fs-scale, 1)); white-space: nowrap; }
@@ -1364,7 +1363,7 @@ body { background: var(--page) !important; }
 .workbench-canvas .bbar > .vtabs { display: none; }
 .workbench-explorer { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--hair); background: var(--page); }
 .workbench-explorer-head { height: 36px; padding: 0 12px; flex: none; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--hair); color: var(--muted); font: 620 calc(12px * var(--fs-scale, 1))/1 var(--ui); text-transform: uppercase; }
-.workbench-explorer-head small { color: var(--faint); }
+.workbench-explorer-head small { color: var(--faint); font-size: calc(10px * var(--fs-scale, 1)); }
 .workbench-explorer-head small { margin-left: auto; }
 .workbench-open-editor {
   width: 28px; height: 28px; margin-left: 8px; padding: 0; flex: none;
@@ -1876,11 +1875,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 }
 .rail .sessrow:hover { background: var(--overlay); color: var(--text); }
 .rail .sessrow .pip { display: none; }
-.rail .sessrow[aria-selected="true"] {
-  background: var(--overlay);
-  color: var(--text);
-  box-shadow: none;
-}
 .rail .sesstitle {
   flex: 1; min-width: 0; align-self: stretch; box-sizing: border-box;
   min-height: 34px; height: 34px; padding: 0 34px 0 9px;
@@ -1893,12 +1887,10 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   flex: 1; min-width: 0; display: block;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.rail .sessrow[aria-selected="true"] .sesstitle { font-weight: 590; }
 .rail .sessrow:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
 .rail .sessmeta { color: var(--faint); font-family: var(--ui); font-size: calc(9px * var(--fs-scale, 1)); }
 .rail .sessrow { position: relative; }
-.rail .sessrow[data-run]::before,
-.rail .sessrow[aria-selected="true"]::before {
+.rail .sessrow[data-run]::before {
   content: "";
   position: absolute; inset-block: 50% auto; inset-inline-start: 3px;
   width: 2px; height: 14px; translate: 0 -50%;
@@ -2428,6 +2420,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 
 @container conversation (max-width: 360px) {
   .studio-branch-pop { display: none; }
+  .studio-meterrail .studio-meter-tariff i,
   .studio-meterrail .studio-meter-cost,
   .studio-meterrail .studio-meter-mask { display: none; }
   .studio-meterrail .studio-meter-wallet { margin-left: auto; }
@@ -3037,15 +3030,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .rail .wsname,
 .rail .sessrow { color: var(--muted); }
 .rail .kids { border-color: var(--hair); }
-.rail .sessrow[aria-selected="true"] {
-  /* The open conversation is marked by the same short bar a running one gets,
-     in the theme's accent. A filled row would say "act on me", which
-     navigation does not, and at any saturation it is the loudest thing in the
-     list. */
-  background: var(--overlay);
-  color: var(--text);
-  box-shadow: none;
-}
 
 .hero .mk { color: var(--faint); }
 .hero .t { color: var(--text); }
@@ -3130,9 +3114,10 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   align-items: center;
   gap: 7px;
   min-height: 26px;
-  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
-  margin: -3px 0 4px;
+  margin: 0;
   color: var(--muted);
   font: 550 calc(10px * var(--fs-scale, 1))/1.2 var(--ui);
 }
@@ -3243,6 +3228,9 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-meterrail b,
 .studio-meterrail .studio-meter-cost { color: var(--text); }
 .studio-meterrail .studio-meter-wallet[data-short] b { color: var(--warn-ink); }
+.studio-meterrail .studio-meter-tariff { display: inline-flex; align-items: baseline; gap: 4px; color: var(--ok-ink); font: 500 calc(10px * var(--fs-scale, 1))/1.2 var(--ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.studio-meterrail .studio-meter-tariff[data-peak] { color: var(--warn-ink); }
+.studio-meterrail .studio-meter-tariff i { font-style: normal; color: var(--muted); }
 .studio-meterrail > button:hover,
 .studio-meterrail .studio-context-anchor > button:hover {
   background: var(--overlay);
@@ -4230,3 +4218,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .skupd-diff span[data-d="-"] { color: color-mix(in srgb, var(--del) 58%, var(--text)); background: color-mix(in srgb, var(--del) 8%, transparent); }
 .skupd { margin: 6px 0 14px; }
 .workbench-tab-in { min-width: 0; width: 100%; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--page); color: var(--text); font: 500 calc(11px * var(--fs-scale, 1))/1.4 var(--ui); outline: none; }
+.other-field { display: flex; align-items: center; gap: 8px; }
+.other-field input { flex: 1; min-width: 0; }
+.other-wrap .refine-card { margin: 8px 0 0; }

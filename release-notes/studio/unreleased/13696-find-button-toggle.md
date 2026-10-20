@@ -1,2 +1,0 @@
-- 修复：标题栏的搜索按钮在查找栏已打开时再点一次会关闭它，不再只是重新聚焦；快捷键和命令面板仍然是打开。关联 #13696。
-- Fixed: Pressing the title bar search button while the find bar is open now closes it instead of only re-focusing; the shortcut and the palette still open it. Refs #13696.

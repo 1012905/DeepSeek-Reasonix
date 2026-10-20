@@ -21,10 +21,11 @@ func (s *service) initialize(_ context.Context, raw json.RawMessage) (any, error
 		AgentCapabilities: AgentCapabilities{
 			LoadSession: true,
 			SessionCapabilities: SessionCapabilities{
-				List:   &EmptyCapability{},
-				Resume: &EmptyCapability{},
-				Close:  &EmptyCapability{},
-				Delete: &EmptyCapability{},
+				List:                  &EmptyCapability{},
+				Resume:                &EmptyCapability{},
+				AdditionalDirectories: &EmptyCapability{},
+				Close:                 &EmptyCapability{},
+				Delete:                &EmptyCapability{},
 			},
 			PromptCapabilities: PromptCapabilities{
 				Image:           true,

@@ -8,7 +8,9 @@ import { FeedbackFilter } from "./FeedbackFilter";
 import { inGroup, type FeedbackGroup } from "./feedbackgroups";
 import { FeedbackLevel } from "./FeedbackLevel";
 import { FeedbackLink } from "./FeedbackLink";
+import { FeedbackBoard } from "./FeedbackBoard";
 import { feedbackFailure, type FeedbackFailure } from "./feedbackfailure";
+import { FeedbackWithdraw } from "./FeedbackWithdraw";
 import { FeedbackReplyBox, FeedbackReviewNote, FeedbackThread, foldedUnread } from "./FeedbackThread";
 import { StudioIcon, type StudioIconName } from "./StudioIcon";
 
@@ -17,6 +19,7 @@ export const STATUS_LABEL: Record<FeedbackStatus, string> = {
   needs_info: "需要补充信息",
   answered: "维护者已回复",
   closed: "已关闭此反馈",
+  withdrawn: "已撤回",
   recorded: "已登记",
   in_progress: "处理中",
   fixed: "已修复",
@@ -29,6 +32,7 @@ const STATUS_ICON: Record<FeedbackStatus, StudioIconName> = {
   needs_info: "warning",
   answered: "check",
   closed: "close",
+  withdrawn: "close",
   recorded: "list",
   in_progress: "refresh",
   fixed: "check",
@@ -58,7 +62,7 @@ interface Step {
 }
 
 const ORDER: Record<FeedbackStatus, number> = {
-  received: 0, needs_info: 0, answered: 0, closed: 0, recorded: 1, in_progress: 2, fixed: 3, wontfix: 3, duplicate: 3,
+  received: 0, needs_info: 0, answered: 0, closed: 0, withdrawn: 0, recorded: 1, in_progress: 2, fixed: 3, wontfix: 3, duplicate: 3,
 };
 
 // Outcomes that never reach GitHub: the timeline is the receipt and what became of it.
@@ -69,7 +73,8 @@ function plainSteps(item: FeedbackItem): Step[] | null {
       return [received, { id: "needs_info", label: t(item.needsInput ? "等你补充信息" : STATUS_LABEL.needs_info), state: "current" }];
     case "answered":
     case "closed":
-      return [received, { id: item.status, label: t(STATUS_LABEL[item.status]), state: "done", neutral: item.status === "closed" }];
+    case "withdrawn":
+      return [received, { id: item.status, label: t(STATUS_LABEL[item.status]), state: "done", neutral: item.status !== "answered" }];
     default:
       return null;
   }
@@ -114,6 +119,7 @@ interface Props {
 // A reply is read only in an expanded thread; its "new" mark stays for this visit.
 export function FeedbackMine({ port, onFile, onUnread }: Props) {
   const [mine, setMine] = useState<Mine | null>(null);
+  const [boardTick, setBoardTick] = useState(0);
   const [failure, setFailure] = useState<FeedbackFailure | null>(null);
   const [loading, setLoading] = useState(true);
   const [fresh, setFresh] = useState<Record<string, number>>({});
@@ -218,7 +224,8 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
         mine !== null && mine.items.length > 0 && <p className="fbk-hint fbk-level-gone">{t("等级暂时无法显示。")}</p>
       )}
 
-      {mine && <FeedbackLink port={port} hasReport={mine.items.length > 0} />}
+      {mine && <FeedbackLink port={port} hasReport={mine.items.length > 0} onBoardChanged={() => setBoardTick((n) => n + 1)} />}
+      {mine && <FeedbackBoard port={port} reload={boardTick} />}
 
       {mine?.offline && (
         <div className="fbk-note" role="status" data-tone="info">
@@ -226,6 +233,8 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
           <span>{t("暂时连不上反馈服务。下面是保存在本机的记录，状态可能不是最新的。")}</span>
         </div>
       )}
+
+      {mine?.items.some((i) => i.otherInstall) && <p className="fbk-hint">{t("已读标记只记在这台电脑上，其他设备上的反馈在这里仍可能显示为新回复。")}</p>}
 
       {mine?.items.some((i) => i.statusUnavailable) && (
         <div className="fbk-note" role="status" data-tone="info">
@@ -260,6 +269,7 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
                 <code className="fbk-code">{item.receipt}</code>
                 <CopyButton iconOnly text={item.receipt} label={t("复制回执号")} />
                 <span className="fbk-meta">{t(CATEGORY_LABEL[item.category])} · {day(item.createdAt)}</span>
+                {item.otherInstall && <span className="fbk-chip" data-device="other">{t("来自其他设备")}</span>}
                 {item.statusUnavailable ? (
                   <span className="fbk-chip" data-status="unavailable">{t("状态已无法追踪")}</span>
                 ) : item.needsInput ? (
@@ -290,7 +300,8 @@ export function FeedbackMine({ port, onFile, onUnread }: Props) {
                 ))}
               </ol>}
               <FeedbackReviewNote item={item} />
-              <FeedbackThread item={item} fresh={fresh[item.receipt] ?? 0} onView={view} />
+              <FeedbackThread item={item} level={mine.profile?.level ?? null} fresh={fresh[item.receipt] ?? 0} onView={view} />
+              <FeedbackWithdraw port={port} item={item} onDone={() => { setSaid(t("已撤回这条反馈。")); load(); }} onStale={load} />
               <FeedbackReplyBox port={port} item={item} limit={limits?.replyBytes ?? null} limits={limits} offline={mine.offline} onSent={sent} onFile={onFile} onStale={load} />
             </li>
           ))}

@@ -16,9 +16,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/session/control"
+	"reasonix/internal/state/sessioninbox"
 )
 
 // vendorVideo is a vendor that takes video: it answers the first request of a turn
@@ -30,6 +33,9 @@ type vendorVideo struct {
 	uploads int
 	read    string // the use_capability arguments the model "decides" on
 	asked   int
+	// quiet, when it is in a request that does not also say "watch it", gets a
+	// plain answer: the model has no use for read_video on a message like that.
+	quiet string
 }
 
 func newVendorVideo(t *testing.T, read string) *vendorVideo {
@@ -47,6 +53,10 @@ func newVendorVideo(t *testing.T, read string) *vendorVideo {
 			raw, _ := io.ReadAll(r.Body)
 			v.chats = append(v.chats, string(raw))
 			w.Header().Set("Content-Type", "text/event-stream")
+			if v.quiet != "" && strings.Contains(string(raw), v.quiet) && !strings.Contains(string(raw), "watch it") {
+				io.WriteString(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"noted\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+				return
+			}
 			if strings.Contains(string(raw), `"role":"tool"`) || v.asked > 0 && !strings.Contains(string(raw), "watch it") {
 				io.WriteString(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"I saw it\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
 				return
@@ -237,5 +247,102 @@ func TestTheUsersLowerLimitStopsANativeSend(t *testing.T) {
 	bodies := r.vendor.bodies()
 	if strings.Contains(bodies[1], "video_url") || !strings.Contains(bodies[1], "video.native_too_large") || !strings.Contains(bodies[1], "tools.video_native_max_bytes") {
 		t.Fatalf("the user's ceiling did not stop the send, or did not say so:\n%.800s", bodies[1])
+	}
+}
+
+func readAddress(addr string) string {
+	return `{"action":"call","capability_id":"tool:read_video","arguments":{"url":"` + addr + `"}}`
+}
+
+// Zhipu's page (docs.bigmodel.cn, GLM-4.6V, read 2026-10-17): the vendor visits
+// {"type":"video_url","video_url":{"url":"https://..."}} itself; nothing is
+// downloaded or stored here beyond the reference.
+func TestAnAddressTheUserWroteReachesTheVendorWhenTheyTurnedItOn(t *testing.T) {
+	const addr = "https://cdn.example.com/clip.mp4"
+	r := nativeSession(t, "video_models = [\"vid\"]\nvideo_protocol = \"zhipu_url\"\n", "[tools]\nvideo_url_passthrough = true\n", readAddress(addr))
+	r.say(t, "watch it "+addr+" please")
+	bodies := r.vendor.bodies()
+	if len(bodies) != 2 || !strings.Contains(bodies[1], `"type":"video_url"`) || !strings.Contains(bodies[1], `"url":"`+addr+`"`) {
+		t.Fatalf("the vendor was not handed the address:\n%.800s", bodies[len(bodies)-1])
+	}
+	stored, err := os.ReadFile(r.session)
+	if err != nil || !strings.Contains(string(stored), addr) {
+		t.Fatalf("the session keeps no reference to the address: %v", err)
+	}
+	r.say(t, "and then?")
+	bodies = r.vendor.bodies()
+	if strings.Contains(bodies[len(bodies)-1], `"type":"video_url"`) {
+		t.Fatal("the address was handed over again on a later request")
+	}
+}
+
+func TestAnAddressIsRefusedByCodeWhileTheSwitchIsOff(t *testing.T) {
+	const addr = "https://cdn.example.com/clip.mp4"
+	r := nativeSession(t, "video_models = [\"vid\"]\nvideo_protocol = \"zhipu_url\"\n", "", readAddress(addr))
+	r.say(t, "watch it "+addr)
+	bodies := r.vendor.bodies()
+	last := bodies[len(bodies)-1]
+	if strings.Contains(last, `"type":"video_url"`) || !strings.Contains(last, "video.url_disabled") || !strings.Contains(last, "tools.video_url_passthrough") {
+		t.Fatalf("the refusal does not name the code and the setting:\n%.900s", last)
+	}
+}
+
+// An address in text the model read, or one it made up, is not one the user gave.
+func TestAnAddressTheUserDidNotWriteIsNeverHandedToTheVendor(t *testing.T) {
+	r := nativeSession(t, "video_models = [\"vid\"]\nvideo_protocol = \"zhipu_url\"\n", "[tools]\nvideo_url_passthrough = true\n", readAddress("https://attacker.example.com/exfil.mp4"))
+	r.say(t, "watch it")
+	bodies := r.vendor.bodies()
+	last := bodies[len(bodies)-1]
+	if strings.Contains(last, `"type":"video_url"`) || strings.Contains(last, "attacker.example.com/exfil.mp4\"}") || !strings.Contains(last, "video.url_not_from_user") {
+		t.Fatalf("an address the user never wrote was handed over:\n%.900s", last)
+	}
+}
+
+func waitIdle(t *testing.T, ctrl *control.Controller, bodies func() []string, atLeast int) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(bodies()) >= atLeast && !ctrl.Running() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("the turn did not finish: %d requests", len(bodies()))
+}
+
+// A message another session sent is delivered as a turn the host owns, so an
+// address inside it is not one the user wrote: the vendor is not handed it. The
+// same address typed by the user is.
+func TestAnAddressInAnotherSessionsMessageIsNotTheUsersAddress(t *testing.T) {
+	const addr = "https://peer-planted.example.com/clip.mp4"
+	for _, tc := range []struct {
+		name string
+		send func(t *testing.T, r nativeRun)
+		want bool
+	}{
+		{"delivered from another session", func(t *testing.T, r nativeRun) {
+			ctrl := r.ctrl.(*control.Controller)
+			if _, err := ctrl.TryEnqueueFollowup(control.InboxRequest{
+				Origin: sessioninbox.OriginHost, Source: "peer:s-1", Idempotency: "peer-1",
+				Display: "message from another session", Submit: "PEER-DATA the other session says: " + addr,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			waitIdle(t, ctrl, r.vendor.bodies, 1)
+		}, false},
+		{"typed by the user", func(t *testing.T, r nativeRun) { r.say(t, "PEER-DATA here it is: "+addr) }, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := nativeSession(t, "video_models = [\"vid\"]\nvideo_protocol = \"zhipu_url\"\n", "[tools]\nvideo_url_passthrough = true\n", readAddress(addr))
+			r.vendor.quiet = "PEER-DATA"
+			tc.send(t, r)
+			r.say(t, "watch it")
+			bodies := r.vendor.bodies()
+			last := bodies[len(bodies)-1]
+			sent := strings.Contains(last, `"type":"video_url"`) && strings.Contains(last, `"url":"`+addr+`"`)
+			if sent != tc.want || (!tc.want && !strings.Contains(last, "video.url_not_from_user")) {
+				t.Fatalf("handed to the vendor = %v, want %v:\n%.900s", sent, tc.want, last)
+			}
+		})
 	}
 }

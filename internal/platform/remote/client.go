@@ -193,6 +193,15 @@ func (c *Client) SFTP() (*sftpfs.FS, error) {
 	return c.sftp, nil
 }
 
+// Files is the SFTP handle as the file layer a kernel bootstrap needs.
+func (c *Client) Files() (sftpfs.Files, error) {
+	fsys, err := c.SFTP()
+	if err != nil {
+		return nil, err
+	}
+	return fsys, nil
+}
+
 // ExecResult is the outcome of a one-shot remote command.
 type ExecResult struct {
 	Stdout   []byte

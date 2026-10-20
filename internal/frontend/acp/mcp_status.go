@@ -21,6 +21,8 @@ func registerSessionHealthMethods(conn *Conn, s *service) {
 }
 
 func (s *service) bindSessionHealthEvents(sess *acpSession) {
+	s.bindCompositionSelector(sess)
+	s.bindControllerIdle(sess)
 	s.bindStatusEvents(sess)
 	s.bindMCPStatusEvents(sess)
 }
@@ -76,7 +78,7 @@ func (s *service) sessionMCPStatus(_ context.Context, raw json.RawMessage) (any,
 }
 
 func (s *service) publishMCPStatus(sess *acpSession) {
-	if sess == nil {
+	if sess == nil || !s.statusUpdatesSupported() {
 		return
 	}
 	_ = s.conn.Notify(sessionMCPStatusUpdateMethod,

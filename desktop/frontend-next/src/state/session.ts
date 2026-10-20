@@ -24,7 +24,8 @@ import { worked } from "./worked";
 import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
 import { nameQueued, withoutPendingRow } from "./queued";
-import { dropTool, foldLastRead, foldProgress, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
+import { capToolOutput } from "./outputcap";
+import { dropTool, foldLastRead, foldProgress, foldTool, isSubagentProgress, mergeReads, notePhase, noteRan } from "./fold";
 import { rebuild } from "./rebuild";
 export { chipLabel };
 export { quoteAmount };
@@ -397,7 +398,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         : s;
 
     case "tool_progress":
-      if (ev.tool && isSubagentProgress(ev.tool.name)) return { ...s, subagentPhase: notePhase(s.subagentPhase, ev.tool) };
+      if (ev.tool && isSubagentProgress(ev.tool.name)) return { ...s, subagentPhase: notePhase(s.subagentPhase, ev.tool), items: noteRan(s.items, ev.tool) };
       return ev.tool
         ? { ...s, executions: noteTool(s.executions, ev.tool, false), items: foldProgress(s.items, ev.tool) }
         : s;
@@ -430,7 +431,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         executions,
         doing: handedBack ? WAITING_MODEL : s.doing,
         waiting: handedBack ? { ...s.waiting, ttftSince: Date.now() } : s.waiting,
-        items: mergeReads(foldTool(s.items, ev.tool, false)),
+        items: mergeReads(foldTool(s.items, capToolOutput(ev.tool), false)),
       };
     }
 
@@ -650,7 +651,7 @@ function withReceipt(items: Item[], r?: Receipt): Item[] {
 // eleven. The server strips these before /history now — this is what covers
 // sessions already on disk.
 const CONTROL =
-  /<(reasoning-language|turn-narration|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|current-date|project-instructions|capability-route|interrupted-turn-recovery|workspace|scheduled-run|mcp-prompt-failure|refused-calls)[\s\S]*?<\/\1>\s*/g;
+  /<(reasoning-language|turn-narration|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|current-date|project-instructions|project-rules|scoped-rules|capability-route|interrupted-turn-recovery|workspace|scheduled-run|mcp-prompt-failure|refused-calls)[\s\S]*?<\/\1>\s*/g;
 const stripControl = (s: string) => s.replace(CONTROL, "").trim();
 
 // A plan that ran to the end is spent: struck through in the rail it reads as
@@ -778,12 +779,12 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
         }
         out[at] = {
           ...prev,
-          tool: {
+          tool: capToolOutput({
             ...prev.tool,
             output: m.content,
             ...(m.outputDiff ? { outputDiff: true } : {}),
             ...(m.toolFailed ? { err: m.content, refusalCode: m.toolRefusalCode } : {}),
-          },
+          }),
         };
       }
     }

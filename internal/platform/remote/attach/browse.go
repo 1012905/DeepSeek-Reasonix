@@ -59,21 +59,10 @@ func (p *Pool) Browse(ctx context.Context, host, dir string) (Listing, error) {
 	// Released on a timer, not at return — see browseLinger.
 	defer func() { time.AfterFunc(browseLinger, func() { p.dropLink(l) }) }()
 
-	fsys, err := l.client.SFTP()
-	if err != nil {
-		return Listing{}, err
-	}
 	if strings.TrimSpace(dir) == "" {
 		dir = "~"
 	}
-	// The far machine resolves it: ~ belongs to the account that logged in, and
-	// a symlinked project must be listed under the path it really has, or
-	// stepping up from it would leave the tree it was reached through.
-	at, err := fsys.RealPath(ctx, dir)
-	if err != nil {
-		return Listing{}, err
-	}
-	entries, err := fsys.List(ctx, at)
+	at, entries, err := l.client.Dirs(ctx, dir)
 	if err != nil {
 		return Listing{}, err
 	}

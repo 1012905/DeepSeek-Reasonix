@@ -2,14 +2,9 @@
 // is a named, described prompt body the model can invoke via the run_skill tool
 // (or the user via a slash name): an "inline" skill folds its body into the turn as
 // a tool result, a "subagent" skill runs in an isolated child loop and returns
-// only its final answer. Project scope wins over global; only names+descriptions
-// enter the cache-stable system-prompt index (see index.go) — bodies load on
-// demand. Discovery scans several conventions (.reasonix / .agents / .agent /
-// .claude under the project root and the home dir — see config.ConventionDirs) so
-// skills authored for other agent tools migrate in unchanged. Directory skills
-// use <name>/SKILL.md; flat <name>.md files from Claude roots are loaded only
-// when they carry skill frontmatter. Discovery follows symlinks, so linked
-// skills are picked up like real ones.
+// only its final answer. Project scope wins over global. Catalogs ride the turn,
+// not the cache-stable prefix. Ordinary stores rediscover current sources;
+// composition snapshots retain the resolved playbooks belonging to one session.
 package skill
 
 import (
@@ -171,6 +166,7 @@ type Options struct {
 
 // Store resolves skills across the configured roots.
 type Store struct {
+	snapshot         *[]Skill
 	homeDir          string
 	reasonixHomeDir  string
 	projectRoot      string
@@ -1078,10 +1074,36 @@ func (s *Store) Delete(name string, scope Scope) error {
 	if sk.Path == "" || sk.Path == "(builtin)" {
 		return fmt.Errorf("skill %q has no file to delete", name)
 	}
-	if filepath.Base(sk.Path) == SkillFile {
-		return os.RemoveAll(filepath.Dir(sk.Path)) // directory-layout skill: <name>/SKILL.md + siblings
+	target, folder := s.RemovalTarget(sk)
+	if folder {
+		return os.RemoveAll(target)
 	}
-	return os.Remove(sk.Path) // legacy flat <name>.md skill
+	return os.Remove(target)
+}
+
+// RemovalTarget is what Delete removes for sk, and whether it is a folder: the
+// folder of a directory-layout skill (its SKILL.md and every sibling), or just
+// the file of a flat <name>.md skill and of a SKILL.md at the top of a root,
+// whose folder is the root that holds every other skill. Delete follows it, so
+// what a person is shown is what goes.
+func (s *Store) RemovalTarget(sk Skill) (target string, folder bool) {
+	if filepath.Base(sk.Path) == SkillFile && !s.isRoot(filepath.Dir(sk.Path)) {
+		return filepath.Dir(sk.Path), true
+	}
+	return sk.Path, false
+}
+
+func (s *Store) isRoot(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for _, root := range s.roots() {
+		if r, err := filepath.Abs(root.Dir); err == nil && r == abs {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) globalSkillsRoot() string {

@@ -31,6 +31,7 @@
 - [@ references](#-references)
 - [Two-model collaboration](#two-model-collaboration)
 - [Letting the model change a setting](#letting-the-model-change-a-setting)
+- [Google Gemini, native (experimental)](#google-gemini-native-experimental)
 
 ## Configuration
 
@@ -74,9 +75,13 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_side_sessions = 0              # side conversations open at once; 0 = no limit (user config only)
 # max_provider_retries = 10          # retries of a failed provider connection before the turn stops; 0 = keep trying until cancelled (user config only)
 # max_queued_inputs = 0              # prompts waiting in a session's queue; 0 = no limit, the queue's byte limits still apply (user config only)
+# max_subagent_steer_bytes = 16384    # bytes in one message of guidance to a running sub-agent, which keeps one message from filling its context; 0 = no limit (user config only)
+# max_subagent_steers_per_minute = 30  # messages of guidance per minute to one running sub-agent, a stop for a loop; 0 = no limit (user config only)
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
+# write_lease_max_wait_minutes = 0    # minutes a write waits behind another session's claim before it fails with workspace.claim_timeout; 0 (default) = wait as long as the turn lasts, 120 is a sensible limit (user config only)
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
 # plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
+# default_mode = "plan"              # user file only; a new conversation starts in plan mode (a resumed one keeps its own; Settings has a switch); default normal
 # host_verification = "off"          # user file only; the host stops holding a turn that changed files to a check, a review and a sign-off; the receipt still says what was checked; default on
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
@@ -97,6 +102,7 @@ web_search  = true
 
 [tools]
 enabled = []   # omit/empty = all built-ins
+# disabled = ["web_fetch", "ask"]   # removed from every request by name, framework and MCP tools included; a call to one is refused with the reason; a tool the host itself reads (todo_write, complete_step, await_user, conclude_blocked, update_goal, use_capability) stays on and a warning says which; a project file can only add names, and Settings lists those as turned off by the project; Settings has a switch per tool; applies to conversations opened afterwards
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
 protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
 browser_tools = true   # built-in browser tools; the browser starts on first use
@@ -144,10 +150,14 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [peers]
 # enabled = false              # your sessions on this machine can message each other; every message waits for that session's user to approve it; also a switch in Settings, applied at the next turn (user config only)
-# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card (user config only)
+# dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card; the opened session keeps the sender's model, preset, approval mode and planning, so a YOLO sender opens a YOLO session that answers the target project's ask rules too (deny rules still hold) (user config only)
 # max_dispatch_depth = 1       # how many sessions deep a dispatch may chain; 0 removes the ceiling (user config only)
 # max_dispatched_sessions = 8  # sessions one session may keep open from its dispatches; 0 removes the ceiling (user config only)
-# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
+# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply; they start over a pause the host set itself (session switch, unreadable @ reference, reopen) but never over one you pressed (user config only)
+
+[mods]
+# enabled = false              # run the hooks module of installed Claude Code mods; full trust, no sandbox (user config only)
+# hook_budget_ms = 0           # one hook's own running time in milliseconds; 0 keeps 10000 (user config only)
 
 [serve]
 # auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
@@ -157,6 +167,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 
 [desktop]
 # max_workspaces = 0           # most projects the sidebar remembers; 0 = no limit (user config only)
+# session_ref_tokens = 8000     # most tokens one referenced past conversation (@session:<id>) adds to a message; 500..200000
 
 [[plugins]]
 name    = "example"
@@ -245,6 +256,44 @@ uploads nothing; it asks again the next time.
 Reasonix never uploads prompts, answers, reasoning, tool names/arguments/output,
 paths, repositories/branches, session IDs, exact token or cost values,
 Provider/model names, base URLs, or environment variables.
+
+### Trace export (OpenTelemetry)
+
+Reasonix can hand each turn to your own observability stack as OpenTelemetry
+GenAI traces. It is off, and nothing leaves the machine, until your user config
+switches it on and names a collector:
+
+```toml
+[observability.otlp]
+enabled = true
+endpoint = "http://localhost:4318"   # OTLP/HTTP; /v1/traces is appended
+header_name = "Authorization"        # optional: the header carrying a credential
+header_env = "OTEL_EXPORTER_AUTH"    # the variable holding its value, never the value
+service_name = "reasonix"            # optional
+```
+
+- **What is sent.** One trace per turn: an `invoke_agent` span, a `chat` span per
+  model attempt (provider, model, token counts, finish reason), and an
+  `execute_tool` span per tool call (tool name, failure class), nested under the
+  tool that delegated the work.
+- **What is never sent.** Prompts, answers, tool arguments and results, file
+  paths and error text. Spans are built from typed event fields through one fixed
+  attribute set, and a name that does not look like a name is sent as `unknown`.
+- **Who decides.** Only your user config. A repository's `reasonix.toml` cannot
+  switch it on or move it; the ignored key is reported at load.
+- **Credentials.** `header_env` must be an `OTEL_*` or `REASONIX_OTEL_*` variable, so no
+  setting can read an unrelated secret. A credential is refused over plain `http`
+  to any host but loopback, the endpoint may not contain user info, and redirects
+  are not followed.
+- **Failure.** Export never blocks a turn: a slow or dead collector drops spans
+  from a bounded queue.
+- **Stability.** The upstream conventions are marked Development (read
+  2026-10-18); every payload carries `reasonix.semconv_experimental = true` and
+  attribute names can change. Not run against a real backend: built against the
+  OTLP/HTTP JSON encoding and tested with a local collector.
+
+Studio has the same switches under Settings, Network. A save reaches sessions
+opened afterwards.
 
 ### CLI crash reports
 
@@ -371,6 +420,10 @@ startup, capability negotiation, session lifecycle, independent model/work/
 collaboration/approval controls, client filesystem and terminal capabilities,
 MCP servers, permission requests, and the Reasonix mid-turn steering extension.
 
+## Using Reasonix from DeepSeek Harness
+
+DeepSeek Harness (`dsh`) can delegate a task to Reasonix as a subagent over ACP, with configuration only. [Using Reasonix from DeepSeek Harness](./DSH.md) covers the install through DSH's plugin market or by hand, switching the plugin on, the permission policy and the limits.
+
 ## Remote SSH
 
 The remote module runs Reasonix on a remote host and reaches it over your own
@@ -390,6 +443,24 @@ follow the provider idiom: the host names an env var (`passphrase_env`,
 `password_env`) whose value lives in Reasonix's global `.env`; key material
 itself is never stored — `identity_file` is a path.
 
+Studio uses that host's explicit `workspace` as the default for host-level reads
+and opens that omit a workspace.
+
+Only when it is unset does the first nonempty
+`workspaces` entry supply the default; with neither set, the attach receives an
+empty workspace. An explicit open path takes precedence.
+
+Reordering other
+entries cannot override a declared `workspace`. These values come only from the
+user's host configuration, and disabled hosts are refused before any link reuse.
+
+The active SSH project's secondary line shows its actual connection directory,
+including isolated worktrees. Its project menu shows the default connection
+directory used by Refresh; these can differ. Settings' default action explicitly
+chooses a new default.
+
+A host-level read never borrows an unrelated pane's path.
+
 ```toml
 [remote]
 [[remote.hosts]]
@@ -406,6 +477,36 @@ type   = "local"                  # local (-L) | remote (-R)
 bind   = "127.0.0.1:5432"
 target = "127.0.0.1:5432"
 ```
+
+A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `distro` (see `reasonix remote wsl list`):
+
+- It has no address, so it takes only the folder and install fields. `host`, `port`, `user`, keys, passwords,
+  `proxy_jump`, `use_ssh_config` and forwards are rejected on it.
+- Add one under Settings, Remote: the "WSL distribution" choice appears only on a machine that has WSL, and lists
+  its distributions (WSL 1 ones are shown disabled). Studio then opens it like any other machine in the list.
+- Connecting needs WSL 2 and a distribution that has `ps`
+  and `nohup`; a minimal image without them is refused with the missing name.
+- The kernel runs inside a shell session Studio keeps open, because WSL ends everything a session started when it ends.
+  - When Studio closes its link, the kernel goes away with the distribution (WSL stops an idle one after about 15
+    seconds).
+  - Conversations are kept on disk and resume on the next connect.
+  - Nothing keeps a distribution running behind your back.
+- Model credentials come from the distribution's own configuration (`provider = "remote"`): under WSL's default
+  networking the distribution cannot reach this machine's loopback, so this machine's provider is not shared.
+- A folder chosen as a Windows path (`C:\work\app` or `\\wsl.localhost\<distro>\home\me\app`) is translated by
+  the distribution; a folder it cannot see is refused.
+- From the command line, `reasonix remote wsl add <name> <distribution>` adds one, and `remote test` and
+  `remote connect` then work as they do for an SSH host.
+  - `connect` keeps the session open until you press Ctrl-C, and the kernel stops with it.
+  - `status`, `forward`, `serve` and `fs` stay SSH-only and refuse a WSL machine with
+    `remote: host is not reached over ssh`.
+
+For an agent's own shell commands, only `list`, `help` and `wsl list|test` run:
+
+- Every other `reasonix remote` subcommand refuses there (exit 77), because it changes the machine book or opens a
+  link, which a person does.
+- The host marks the commands it runs for the agent to tell them apart. It guards against an agent that does not
+  hide; it is not the sandbox.
 
 CLI:
 
@@ -623,7 +724,8 @@ For Anthropic-compatible services, such as some coding-plan endpoints, choose
 | Authorization: Bearer | For Anthropic-compatible providers, sends the saved API key as `Authorization: Bearer <key>` instead of `x-api-key`. | Enable it only when the gateway documents Bearer auth, such as MiniMax Global or Vercel AI Gateway. |
 | Model capability mode | Which reasoning request protocol Reasonix should use for this provider. | Keep **Auto-detect** unless the gateway is misdetected or the model docs require a specific reasoning format. |
 | Thinking override | Provider-specific override for `thinking.type`. | Keep **Auto** unless the backend documents `enabled`, `disabled`, or `adaptive`. Unsupported values can make some OpenAI-compatible gateways reject the request. |
-| Balance URL | Optional endpoint for wallet/balance lookup. | Set it when the provider exposes a balance endpoint and you want the desktop status bar to show it. |
+| Balance URL | Optional endpoint for wallet/balance lookup. | Set it when the provider exposes a balance endpoint and you want the desktop status bar to show it. The key is sent only to this address and never follows a redirect. |
+| Balance format | How that endpoint answers: `deepseek`, `moonshot` or `openrouter` (`balance_format`). | A vendor's own domain (`api.deepseek.com`, `api.moonshot.cn`/`.ai`, `openrouter.ai`) is read in that vendor's format with nothing set. Any other address, a relay for example, must name the format, or it is shown as not configured and the endpoint is not asked. Existing entries on such addresses are written as `deepseek` once, which is how they were always read. Reasonix 1.x rewrites the shared config file without keys it does not know, so a format it dropped is put back at the next start from `provider-keys.json` beside the config, unless you removed it in the connection editor. |
 | Context window | The provider-wide token budget Reasonix uses for automatic context cleanup. `0` disables automatic compaction. | Set it to the provider's model context limit; use a per-model override below when selected models differ. |
 
 Each selected model also has an optional **Context window** input. Leave it blank
@@ -976,7 +1078,8 @@ Chat and transcript shortcuts:
 | `Enter` | Sends the current message | While a turn is running, non-empty input is durably queued as a follow-up before the composer clears. On an empty composer it jumps back to the newest output and keeps following it. |
 | `Ctrl+Enter` or `/steer <text>` | Adds guidance to the active turn | The guidance is persisted first; if the turn cannot accept it, it remains a normal follow-up. |
 | `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` | Inserts a newline | Plain `Enter` is reserved for send/confirm. |
-| Plain `Up` / `Down` | Recalls older or newer submitted prompts | Only from the composer's first or last line, so multi-line editing keeps the arrows; the same while a turn runs. Manage queued follow-ups with `/queue` (below). |
+| Plain `Up` / `Down` | Recalls older or newer submitted prompts | Only from the composer's first or last line, so multi-line editing keeps the arrows. While a turn runs (or the queue is paused) and messages are queued, `Up` selects the newest queued message into the composer instead; see the queue keys below. |
+| Queue keys, with a message selected | Edit, reorder, delete or retry a queued message | `Up` / `Down` move the selection (past the newest puts your draft back); `Alt+Up` / `Alt+Down` move the message in the queue; `Enter` saves your edit in place; `d` twice deletes it (the first press only asks, and is not typed) and `r` runs a blocked one again (both only while the composer still holds the full message unedited and, in vi command mode, before the vi keys: once you edit, those letters are typed); `Enter` and the edit keys wait until the full message has been read, and a message that cannot be read, or that has already started, ends the selection and brings your draft back; `Esc` lets go. `Space` on an empty composer pauses or resumes the queue. Up to three queued messages are drawn under the working line; `/queue` (below) shows the rest. |
 | `PageUp` / `PageDown` | Scrolls the transcript | Works regardless of the current chat state. |
 | `Ctrl+Home` / `Ctrl+End` | Jumps to the top or bottom of the transcript | Useful after long tool output. |
 | `Ctrl+L` or `/cls` | Clears only the visible transcript | The LLM context, session file, tools, memory, and plugins stay loaded. Use `/clear` when you want to discard the conversation context. |
@@ -1202,10 +1305,11 @@ inherit the chat session's temporary directory. An approved sandbox-escape
 command still receives the private temp environment variables, but on Linux its
 literal `/tmp` is no longer mapped by bubblewrap.
 
-**Windows note:** Reasonix does not ship an OS-level Bash sandbox on Windows.
-The effective mode is fixed to `off`; even an older config containing
+**Windows note:** the OS-level Bash sandbox on Windows is off unless the user
+turns on `[sandbox] windows_integrity = true` (see "On Windows" below). While it
+is off the effective mode is `off`; even an older config containing
 `bash = "enforce"` resolves to `off`, `reasonix doctor` flags the ignored value,
-and the desktop selector is read-only. Bash commands therefore run unconfined,
+and the desktop selector is read-only. Bash commands then run unconfined,
 while the dedicated file tools still enforce `workspace_root`, `allow_write`,
 and `forbid_read` in process. Saved credential variables are still removed from
 the child environment, but an approved unconfined shell runs as the user and is
@@ -1215,7 +1319,82 @@ When no OS sandbox backend is available, `bash = "enforce"` refuses bash
 execution instead of running unconfined. Install the platform sandbox backend
 (bubblewrap/`bwrap` on Linux, `sandbox-exec` on macOS) or set
 `[sandbox] bash = "off"` to explicitly restore the pre-1.16 unconfined shell
-behavior. On Windows the compatible value is always `off`.
+behavior.
+
+On Windows the sandbox is off unless you turn on
+`[sandbox] windows_integrity = true` (Settings > Sandbox; user file only).
+
+### On Windows
+
+With `windows_integrity` on, a bash command runs under a write-restricted token.
+
+- The first session grants a synthetic Windows identity write access on the
+  workspace, your `allow_write` folders and the data caches of your toolchains.
+- The caches are Go build and module, npm, pip, cargo registry and NuGet packages.
+  A folder that holds programs you run (`~/go/bin`, `.cargo/bin`) is never granted.
+- The grant is a permission entry on those folders, recorded in the Reasonix
+  state folder. It gives nobody else access and is inert if the sandbox is turned off.
+- `reasonix sandbox list` shows what is granted; `reasonix sandbox revoke` takes it back.
+
+What it bounds, measured on Windows 11 and for every child process:
+
+- Creating, appending to and overwriting files outside the granted folders.
+- `mkdir`, registry writes under your user (HKCU), and global git configuration.
+- Writes through a junction or symbolic link that points out of a granted folder.
+- Backup-semantics writes (`robocopy /B`): the token carries no privileges.
+- Creating a scheduled task, creating a service and writing HKLM from the command
+  were refused when measured.
+
+What it does not bound:
+
+- **Deleting or renaming away** an existing file outside the granted folders.
+  Windows does not apply the restriction to those two. The delete guard and the
+  approval layer remain the control for deletes.
+- **Reading** files, and **the network**.
+- **Host authorities**: the Windows named pipes of ssh-agent and docker, and COM
+  and RPC services such as the task scheduler, are reachable.
+- Writes anywhere that Everyone or your logon session can already write: both are
+  in the restricting set, so a folder open to them is open to the command.
+- The toolchain caches that are granted are writable by the command, so a
+  poisoned cache can reach your later unsandboxed builds. macOS and Linux have the
+  same exposure for their caches.
+
+Other facts:
+
+- The command runs with every privilege except the traverse check removed, and in
+  a job that cannot reach the other windows, clipboard or display settings of your session.
+- Only the three standard handles cross into the command.
+- A command cannot start its own launcher: the launcher refuses to run under a
+  restricted token, and grants only session temp folders the host made.
+- It needs an interactive desktop session. In an SSH or service session `enforce`
+  refuses to run commands (`sandbox.win_no_logon_sid`) instead of running them unconfined.
+- Not measured: standard (non-admin) accounts, other Windows versions, ReFS and
+  network drives. Linux and macOS are unchanged and bound every kind of write.
+
+### In a dev container or Docker
+
+Bubblewrap has to create user and mount namespaces (and a network namespace for
+a closed network), which a default container blocks. Measured on Docker Desktop
+(Linux VM, Debian 12, bubblewrap 0.8.0), by launching a confined command under
+`enforce` in each configuration:
+
+| Container configuration | Sandbox | Reported cause |
+|---|---|---|
+| bubblewrap not installed | unavailable | `sandbox.no_bubblewrap` |
+| default `docker run`; seccomp unconfined only; `SYS_ADMIN` only; seccomp and AppArmor unconfined without `SYS_ADMIN` | unavailable | `sandbox.bwrap_namespace_denied` |
+| `SYS_ADMIN` with seccomp and AppArmor unconfined | works with the network open; a closed network is unavailable | `sandbox.bwrap_network_denied` for the closed network |
+| the above plus `NET_ADMIN`, or `--privileged` | works, network open or closed | none |
+
+- Both `CAP_SYS_ADMIN` and an unconfined seccomp profile are needed; either alone is not enough.
+- Reasonix does not look for a container. The message comes from what bubblewrap
+  could and could not do, so a container granted those privileges gets its
+  sandbox, and one that is not is told which privilege is missing.
+- Granting them widens the container itself. The other choice is
+  `[sandbox] bash = "off"`; the container is then the only boundary, and what
+  you mount writable (a credentials file in a bind-mounted workspace included)
+  is writable by every command.
+- Only the Linux sandbox was measured. A Dev Containers or Codespaces session,
+  rootless Docker and SELinux hosts were not run.
 
 For coding-quality reports, run `reasonix doctor quality <branch-id-or-path>`
 (add `--json` for structured output). This reads the selected session but emits
@@ -1283,6 +1462,14 @@ rotation. Discovery and token requests use the same Reasonix network-proxy
 settings as the MCP connection.
 
 Before a browser opens, Reasonix names the authorization host the server chose and asks. "Always" is remembered for that server and host only, beside its OAuth state, and cleared with it.
+
+When a signed-in server refuses a call (HTTP 403, `insufficient_scope`) because the access you granted is too narrow:
+
+- The model is told to stop and say so, and you get a notice.
+- Only you can grant more: click **Grant more access** on the server's row, or run `reasonix mcp auth <name> --upgrade`.
+- The scope names are the server's own words, shown as written.
+- You are asked every time, in every approval mode, and the answer is never remembered.
+- A server that keeps asking after being granted is refused for good.
 
 Tools whose definitions change after you approved them are held back until you accept them (`reasonix mcp trust <name>`). To take one server's changes without being asked, run it with `--follow` (`--unfollow` undoes it); each change is still announced.
 
@@ -1480,6 +1667,16 @@ Context Engine v2 separates two intentionally different layers:
   and `CLAUDE.md` files. Put rules here when they must be present on every
   relevant turn. User-global files load first, then workspace and deeper target
   directories; within one directory, `.local.md` variants win.
+- **Rules** are Markdown files in `.reasonix/rules/`, `.claude/rules/` (project)
+  and `<Reasonix home>/rules/` (user), subdirectories included.
+  - A rule with no `paths:` frontmatter is delivered like the standing instructions.
+  - A rule with `paths: ["src/**/*.ts"]` (a list or a comma-separated string) is
+    delivered on the next turn after the session reads or edits a matching file,
+    and is retracted if it stops applying.
+  - Rules load user first, then project, so a later rule is the more specific one.
+  - A file is limited to 32 KB and each of the two layers to 64 KB. What exceeds a
+    limit is skipped and shown in capability diagnostics. Symlinks are not followed.
+  - Neither layer touches the cache-stable prefix.
 - **Background memory** stores one durable fact per Markdown file. Each fact has
   an immutable ID, monotonic revision, timestamps, independent `type`
   (`user`, `feedback`, `project`, `reference`) and `scope` (`project`,
@@ -1680,6 +1877,44 @@ plus the bounded Goal evaluator. Legacy `.reasonix/autoresearch/<task-id>/` arch
 read-only: an explicit old path can be recovered as an ordinary Goal, but new
 runs never create or update those directories. Deprecated budget flags are
 accepted for compatibility but are hidden from help and completion.
+
+## Scheduled runs
+
+A schedule makes Reasonix run a read-only task for you at a time you chose and leave the result waiting. It is
+the command line only for now; Studio gets a list later.
+
+```bash
+reasonix schedule add --every 2h --prompt "Summarize what changed in the open TODOs" --workspace ~/src/app
+reasonix schedule list
+reasonix schedule pause <id>      # pause-all, resume, resume-all, renew and rm work the same way
+reasonix schedule tick            # claim and run what is due now, then exit
+```
+
+- **A person confirms it.** `add`, `resume`, `renew`, `rm` and `resume-all` need a terminal. `add` shows the whole
+  plan (prompt, folder, model, budget, expiry) and asks you to type back its short id; `list` shows who created
+  each one. A command run by a tool, a pipe or a scheduler is refused.
+  - The host marks every subprocess it starts for the agent with `REASONIX_AGENT_CHILD=1`, and these commands
+    refuse when it is set, so an agent that opens its own pty is stopped too.
+  - That is a guard against accidents and a trick, not a boundary: a child can clear its own environment, and
+    only the sandbox confines what an agent can do.
+- **When it runs.**
+  - Studio ticks while it is open, with a window or a tray icon showing; a kernel nobody can see, or one with
+    no parent that ends it, never starts a run. One kernel at a time ticks.
+  - Otherwise call `reasonix schedule tick` from the operating system's scheduler (cron, launchd, Task
+    Scheduler).
+  - Every tick goes through the store's own budget and expiry checks, so neither route can bypass them.
+- **Read-only.** A run reads files in its folder and writes nothing. Anything that needs your approval is parked
+  for you and never answered on your behalf.
+- **Ceilings.** `[schedule]` in your user config can change them; a repository's `reasonix.toml` can only
+  tighten them.
+  - One run at a time, and by default at least 60 minutes between runs (never under 10).
+  - Per run: 250,000 tokens, 40 steps and 15 minutes.
+  - 4 runs a day for one schedule and 6 for all of them, and a lifetime budget per schedule.
+  - A 30 day expiry that only you renew.
+- **Late and missed runs.** Only the latest slot counts. It still runs if it is at most 15 minutes late (never
+  more than a quarter of the interval); otherwise it is recorded as skipped and not made up.
+- **The model is pinned** when you create the schedule, from your own configuration. If it later becomes
+  unavailable the run fails and says so.
 
 ## @ references
 
@@ -1914,6 +2149,19 @@ are scoped to the current conversation lineage and workspace. Headless runs
 without a persisted parent session remain ephemeral and receive fair bounded
 previews, but cannot mint durable references.
 
+A sub-agent that is still running can be sent guidance:
+
+- The model calls `task` with `task_id` set to the sub-agent's `sa_...` reference
+  and the guidance as `prompt`. You send it from Settings or the sub-agent's view.
+- The sub-agent reads it at its next tool call, framed as coming from the
+  delegating session (or from you). Its own approvals still apply.
+- If the sub-agent has already finished, `task_id` continues its transcript
+  exactly as `continue_from` does.
+- `max_subagent_steer_bytes` and `max_subagent_steers_per_minute` bound one
+  message and the rate (user config only; Settings > Tools > Guidance to running
+  sub-agents; `0` lifts a limit).
+- Guidance cannot be sent from a paired device.
+
 The interactive two-model Planner uses a dedicated construction path
 (`NewPlannerAgent`): it still blocks bash, file writers, and ordinary writers,
 but may call authorized, non-destructive MCP through the fixed
@@ -2043,6 +2291,19 @@ A backend counts as not answering when:
 Each time that happens Reasonix shows a notice naming the backend and the cause, then tries the next one. If none answers, the model receives `search.all_backends_failed`.
 
 - Engines inside SearXNG that rate-limit you do not fail a search while one engine still answers.
+
+In Settings, **Web access** has a **Test connection** button beside the address. It saves the field, then sends one search to the saved address, follows no redirect, uses no proxy, and says why the instance does not answer.
+
+It never connects to a link-local, cloud-metadata or unspecified address; a loopback or local-network address is fine. The model is told the same code when a real search fails.
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `search.searxng_json_disabled` | The instance answered 403. SearXNG does that when `json` is not in `search.formats` of its `settings.yml`; a reverse proxy in front of it can also answer 403. | Add `json` to `search.formats` and restart it; if that is set, look at the proxy. |
+| `search.searxng_unreachable` | Nothing answered at the address. | Check that it runs and that host and port are right. |
+| `search.searxng_not_searxng` | It answered 200 but not with SearXNG's JSON results. | Point at SearXNG itself, not a login page or another service. |
+| `search.searxng_redirected` | The address redirects. | Enter the final address, for example the `https` one. |
+| `search.searxng_address_refused` | The test will not connect to this address (link-local, cloud metadata or unspecified). | Use a loopback or local-network address for a self-hosted instance. |
+| `search.searxng_status` | Any other HTTP status, for example 429 or 500. | Retry later or read the instance's log. |
 - Results are third-party content and are labelled as such to the model.
 
 ### Paid fallback: the DeepSeek Search API
@@ -2128,3 +2389,63 @@ A refusal that a setting would lift ends with `(fix: setting ...)`. The tool can
 - The card shows the whole new value; a value too long to show is refused instead of cut. The change is written to your user file, a project file cannot grant it, and values are checked with the same rules as the Settings screen.
 - At most three proposals are put to you per turn, and none while plan mode is on (the model can still look at settings and point you at one).
 - To remove the tool, set `[tools] setting_tool = false`, or leave `setting` out of an explicit `[tools] enabled` list.
+## Google Gemini, native (experimental)
+
+The `gemini` provider kind speaks Google's Interactions API. It is experimental: it was written from Google's documentation (read 2026-10-17) and has not been run against the real endpoint, so expect rough edges and report them.
+
+Install the **Google Gemini, native (experimental)** preset, or write the entry yourself:
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- Every request carries the whole conversation and `store` is false, so the transcript stays yours; Google keeps nothing of it.
+- Thinking runs at the level the entry sets (`/effort`); the preset lists the levels each model documents. Thought summaries are streamed as reasoning, and the thought steps are sent back exactly as received, in order, on the next request.
+- `temperature` and `top_p` are never sent: Google's reference page does not list them for this API.
+- The preset lists only models whose own pages were read: `gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` and `gemini-3.1-pro-preview`, all with a 1,048,576-token window, image and video input. Others work if you list them and say what they read.
+- The older **Google Gemini** preset uses Google's OpenAI-compatible endpoint. That endpoint documents no video input.
+
+### Watching video
+
+Declare the models and how a file reaches them, as for any provider (see Letting a model watch a video file):
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # or "gemini_inline"
+```
+
+- `gemini_inline` puts the file in the request as base64. Google's page says "under 20MB total request size" while its table says 100 MB; the narrower reading is used, so the file is held to 15,000,000 bytes (the encoded request is a third larger). You can only lower it with `[tools] video_native_max_bytes`.
+- `gemini_files` uploads the file with the Files API resumable protocol, waits until Google reports it `ACTIVE`, refers to it by its uri, and deletes it when the request ends. Google allows 2 GB per file and 20 GB per project and removes files after 48 hours on its own.
+- MP4, WebM and MOV are sent natively on both protocols; any other container is sampled into frames. A file Google reports as `FAILED`, or in a state this build does not know, is not sent and the model is told `video.upload_failed`.
+- A public YouTube address cannot be given to the model through `read_video`: the host does not fetch addresses, and handing one to the vendor is a separate setting.
+
+### Cost
+
+Reasonix prices Google's list rates per 1M tokens (https://ai.google.dev/gemini-api/docs/pricing, read 2026-10-17):
+
+| Model | Input | Cached | Output (incl. thinking) |
+|---|---|---|---|
+| `gemini-3.8-flash`, `gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| the same two from 2027-01-01 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview` (up to 200k prompt tokens) | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` costs more above 200k prompt tokens ($4.00 / $0.40 / $18.00), which one rate card cannot say, so a long prompt reads low. `gemini-4-argon` shows no price on the page and is not priced. Storage for explicit context caching is not counted.
+
+### Handing a video address to the model vendor
+
+Some vendors read a video from a public address instead of a file. `read_video` can take `url` in place of `path`, but only when you turn this on in Settings (**Web access → Video addresses**, or `[tools] video_url_passthrough = true` in your user file; a project file cannot set it).
+
+Turning it on is a confirmation of its own: the model can propose it, and you answer a card every time.
+
+- The vendor visits the address itself; nothing is downloaded on your machine. Turn it on only if you accept that the vendor's servers open the address.
+- Only an address you wrote in the conversation is handed over. An address the model found in a page, a file or a tool result, or made up, is refused (`video.url_not_from_user`), so a page's author cannot make the vendor visit an address of their choosing.
+- The address must be `https`, with a public host name: no credentials, no IP address, no `localhost`, single-label or local-network name, and at most 2,048 characters (`video.url_invalid`).
+- Zhipu GLM takes a public https address in a `video_url` part and no file ([docs.bigmodel.cn](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v), read 2026-10-17). Declare it with `video_models = ["glm-4.6v"]` and `video_protocol = "zhipu_url"` on the entry; a local file is then read as frames.
+- Gemini takes a public YouTube address as a video `uri` on `gemini_inline` and `gemini_files`; no other address is handed to it (`video.url_unsupported_model`).
+- A reference restored from a stored or imported transcript is never sent: only an address checked in this process is.

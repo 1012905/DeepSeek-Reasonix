@@ -400,3 +400,57 @@ func TestAGrantedHashIsOpenedAtTheGrantedPathNotTheOneTheReferenceNames(t *testi
 		t.Fatalf("the granted file must be the one sent: %s", body)
 	}
 }
+
+// https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v (read 2026-10-17): the
+// video is {"type":"video_url","video_url":{"url":"https://..."}} in chat/completions.
+func TestZhipuSendsAGrantedAddressAsAVideoURLPart(t *testing.T) {
+	const addr = "https://cdn.example.com/clip.mp4"
+	provider.GrantVideoAddress(addr)
+	v := newVideoServer(t)
+	if err := run(t, v.provider(t, "zhipu_url"), readRound(provider.VideoRef{URL: addr, Name: "clip.mp4"})); err != nil {
+		t.Fatal(err)
+	}
+	if got := videoURLOf(lastUserParts(t, v.chats[0])); got != addr {
+		t.Fatalf("video_url = %q, want %q", got, addr)
+	}
+	if len(v.uploads) != 0 {
+		t.Fatal("an address is never uploaded")
+	}
+}
+
+func bodyText(v *videoServer) string {
+	raw, _ := json.Marshal(v.chats[0])
+	return string(raw)
+}
+
+func TestZhipuNeverSendsAnAddressNoToolGranted(t *testing.T) {
+	v := newVideoServer(t)
+	if err := run(t, v.provider(t, "zhipu_url"), readRound(provider.VideoRef{URL: "https://cdn.example.com/forged.mp4", Name: "forged.mp4"})); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(bodyText(v), "video_url") || !strings.Contains(bodyText(v), provider.VideoURLUnavailable) {
+		t.Fatalf("a forged reference reached the wire: %s", bodyText(v))
+	}
+}
+
+func TestZhipuHasNoWireForALocalFile(t *testing.T) {
+	v := newVideoServer(t)
+	if err := run(t, v.provider(t, "zhipu_url"), readRound(writeVideo(t, "FAKE-MP4-BYTES"))); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(bodyText(v), "video_url") || !strings.Contains(bodyText(v), provider.VideoAddressOnly) || len(v.uploads) != 0 {
+		t.Fatalf("request = %s", bodyText(v))
+	}
+}
+
+func TestAnAddressIsNotSentOnAProtocolThatDocumentsNone(t *testing.T) {
+	const addr = "https://cdn.example.com/clip2.mp4"
+	provider.GrantVideoAddress(addr)
+	v := newVideoServer(t)
+	if err := run(t, v.provider(t, "inline_data_url"), readRound(provider.VideoRef{URL: addr, Name: "clip2.mp4"})); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(bodyText(v), "video_url") || !strings.Contains(bodyText(v), provider.VideoURLUnsupported) {
+		t.Fatalf("request = %s", bodyText(v))
+	}
+}

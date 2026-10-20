@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import { t } from "../i18n";
 import { systemLabel } from "./osname";
+import { memoryLines } from "./memoryrows";
 import { tx } from "../i18n/rich";
-import { FEEDBACK_CATEGORIES, FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, type FeedbackCategory, type FeedbackEnv, type FeedbackReceipt } from "../port/feedback";
+import { FEEDBACK_CATEGORIES, FEEDBACK_CODE, FEEDBACK_REPO_ISSUES, type FeedbackCategory, type FeedbackEnv, type FeedbackProcessMemory, type FeedbackReceipt } from "../port/feedback";
 import { host } from "../port/host";
 import type { AgentPort } from "../port/port";
 import { CopyButton } from "./CopyButton";
@@ -40,6 +41,7 @@ interface Props {
 
 export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props) {
   const [env, setEnv] = useState<FeedbackEnv | null>(null);
+  const [shellMemory, setShellMemory] = useState<FeedbackProcessMemory[]>([]);
   const [envFailure, setEnvFailure] = useState<FeedbackFailure | null>(null);
   const [category, setCategory] = useState<FeedbackCategory>(() => heldDraft().category);
   const [body, setBody] = useState(() => heldDraft().body);
@@ -82,6 +84,11 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
   }, [port]);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    let alive = true;
+    void host().processMemory().then((rows) => alive && setShellMemory(rows));
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (env && document.activeElement?.closest('[role="tablist"]')) field.current?.focus();
@@ -130,8 +137,10 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
     onConceal(true);
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 60))));
     const bytes = await host().captureWindow();
-    onConceal(false);
+    // The send panel is mounted for as long as the dialog is, so a form that is gone
+    // has nothing left to unveil, and setting state then is a write into a torn-down page.
     if (!mounted.current) return;
+    onConceal(false);
     setCapture(bytes ? "idle" : "failed");
     if (bytes) await add([new File([bytes as BlobPart], "window.png", { type: "image/png" })]);
     if (mounted.current) focusFrame.current = requestAnimationFrame(() => captureButton.current?.focus());
@@ -180,6 +189,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
         contact: contact.trim() || undefined,
         locale: document.documentElement.lang,
         images: payload(shots),
+        ...(shellMemory.length > 0 ? { memory: shellMemory } : {}),
       });
       shotEpoch.current++;
       dropDraft();
@@ -407,8 +417,12 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
             <dd>{env.env.channel}</dd>
             <dt>{t("模型服务")}</dt>
             <dd>{env.env.providerKind}</dd>
+            <dt>{t("内存")}</dt>
+            <dd>
+              {memoryLines([...shellMemory, ...(env.env.memory ?? [])]).map((line) => <div key={line}>{line}</div>)}
+            </dd>
           </dl>
-          <p className="fbk-hint">{t("只读。不包含密钥、地址或任何文件内容。")}</p>
+          <p className="fbk-hint">{t("只读。不包含密钥、地址或任何文件内容。内存一项只有进程类型和上面这些数字，用来判断是哪一部分占用高。")}</p>
           {host().revealsLogs() && (
             <div className="fbk-logs">
               <button

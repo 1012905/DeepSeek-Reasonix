@@ -389,6 +389,14 @@ jobs:
           version="${{ needs.resolve.outputs.version }}"
           bash scripts/linux-install-smoke.sh "dist/ReasonixStudio-linux-$arch.deb" "$arch" "${version#v}"
 
+      - name: Verify the AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          platform="${{ matrix.platform }}"
+          arch="${platform#linux/}"
+          bash scripts/verify-linux-appimage.sh "dist/ReasonixStudio-linux-$arch.AppImage" "$arch"
+
       # With signing on, this leg only hands the bundle on: the signing jobs
       # run nothing but the signer, and windows-package packages in between.
       - name: Upload the unsigned Windows bundle for signing
@@ -1199,7 +1207,7 @@ jobs:
           fi
           {
             printf '%s\n\n' '---'
-            printf "**macOS** 已用 Developer ID 签名并公证，打开时不需要清除隔离属性。%s**Linux** Debian 系从 \`.deb\` 安装，Fedora、RHEL、openSUSE 等从 \`.rpm\` 安装（\`sudo dnf install ./ReasonixStudio-linux-amd64.rpm\`）。x86_64 用文件名带 amd64 的包，aarch64（统信 UOS、麒麟等）用带 arm64 的包。\n\n" "$windows"
+            printf "**macOS** 已用 Developer ID 签名并公证，打开时不需要清除隔离属性。%s**Linux** Debian 系从 \`.deb\` 安装，Fedora、RHEL、openSUSE 等从 \`.rpm\` 安装（\`sudo dnf install ./ReasonixStudio-linux-amd64.rpm\`）。x86_64 用文件名带 amd64 的包，aarch64（统信 UOS、麒麟等）用带 arm64 的包。也提供 \`.AppImage\`（只提供下载，不会自更新；需要 FUSE 2，或用 \`--appimage-extract-and-run\` 启动）。\n\n" "$windows"
             printf "%s\n" "三个平台都能自更新：Linux 的 \`.deb\` 走自己的包（\`.rpm\` 的自更新尚未提供，请手动下载新包），Windows 运行下一个安装器，macOS 替换自身 bundle。"
           } >> "$notes"
           assets=()
@@ -1293,6 +1301,25 @@ jobs:
             --content-type "application/json; charset=utf-8" \
             --cache-control "public, max-age=300, stale-if-error=86400"
           echo "Studio catalog -> $VERSION"
+
+  website:
+    name: publish the Studio website changelog
+    needs: [resolve, publish]
+    if: github.repository == 'esengine/DeepSeek-Reasonix' && needs.resolve.outputs.candidate != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+      - name: Deploy and verify the website changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: bash scripts/publish-studio-changelog.sh
 
   # A CLI channel that moves while 1.x still publishes would have two lines
   # writing it, so every CLI job waits for this check. It runs no repository code.

@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,7 +38,7 @@ func runSegments(ctx context.Context, cfg suiteConfig, t task, work, trajDir str
 	var runErr error
 	for _, seg := range segs {
 		metricsPath := filepath.Join(metricsDir, fmt.Sprintf(".run-metrics-%d.json", seg.index))
-		trajPath := segmentTrajectoryPath(trajDir, t.ID, seg, len(segs))
+		trajPath := segmentTrajectoryPath(trajDir, trajectoryStem(t.ID, cfg.trial, cfg.trials), seg, len(segs))
 		args := buildSegmentArgs(cfg, seg, metricsPath, trajPath)
 
 		cmd := exec.CommandContext(ctx, cfg.bin, args...)
@@ -83,6 +85,35 @@ func legMetrics(path string) (m runMetrics, partial bool, err error) {
 		return m, true, nil
 	}
 	return m, false, err
+}
+
+// trajectoryStem names one run's trajectory files: the task id, and the trial
+// when -trials repeats the task, so a later trial cannot overwrite an earlier
+// one. A single run keeps the bare id every reader already knows.
+func trajectoryStem(id string, trial, trials int) string {
+	if trials < 2 {
+		return id
+	}
+	return fmt.Sprintf("%s.trial-%d", id, trial)
+}
+
+// trajectoryTaskID is the task a trajectory file recorded: its name without
+// the trial mark of trajectoryStem or the leg mark of segmentTrajectoryPath.
+func trajectoryTaskID(path string) string {
+	id := strings.TrimSuffix(filepath.Base(path), ".trajectory.jsonl")
+	id = trimNumberedMark(id, ".seg")
+	return trimNumberedMark(id, ".trial-")
+}
+
+func trimNumberedMark(id, mark string) string {
+	i := strings.LastIndex(id, mark)
+	if i < 0 {
+		return id
+	}
+	if _, err := strconv.Atoi(id[i+len(mark):]); err != nil {
+		return id
+	}
+	return id[:i]
 }
 
 // segmentTrajectoryPath keeps one file per leg so a resumed leg cannot truncate

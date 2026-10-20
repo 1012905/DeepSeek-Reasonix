@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"reasonix/internal/base/testenv"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/peermail"
@@ -23,9 +24,13 @@ type dispatchFixture struct {
 	home     string
 	opened   int
 	requests []OpenRequest
+	bindings []*agentcomposition.Binding
 	// startMode is the approval posture a pane the hub opens starts in, as the
 	// user's own default would make it.
 	startMode string
+	// startPlan is whether a pane the hub opens starts in plan mode, as the
+	// user's default mode would make it.
+	startPlan bool
 }
 
 func newDispatchFixture(t *testing.T, userFile string) *dispatchFixture {
@@ -38,13 +43,15 @@ func newDispatchFixture(t *testing.T, userFile string) *dispatchFixture {
 		}
 	}
 	f := &dispatchFixture{t: t, hub: NewHub(HubOptions{}), peersDir: filepath.Join(home, "peers"), home: home}
-	f.hub.dispatch.open = func(_ context.Context, req OpenRequest) (*Runtime, error) {
+	f.hub.dispatch.open = func(_ context.Context, req OpenRequest, binding *agentcomposition.Binding) (*Runtime, error) {
 		f.opened++
 		f.requests = append(f.requests, req)
+		f.bindings = append(f.bindings, binding)
 		rt := f.adopt(req.Root, "")
 		if f.startMode != "" {
 			rt.Server.Controller().(*control.Controller).SetToolApprovalMode(f.startMode)
 		}
+		rt.Server.Controller().(*control.Controller).SetPlanMode(f.startPlan)
 		return rt, nil
 	}
 	return f
@@ -133,7 +140,10 @@ func TestDispatchRefusesWithTypedIdentities(t *testing.T) {
 	a := f.project("alpha", true)
 	f.project("same", true)
 	f.project("same", true)
-	f.project("stranger", false)
+	stranger := f.project("stranger", false)
+	if err := config.NewProjectGrantStore(f.home).SetTrust(stranger, config.WorkspaceTrustDeclined); err != nil {
+		t.Fatal(err)
+	}
 	sender := f.sender(a)
 	ctx := context.Background()
 
@@ -151,7 +161,7 @@ func TestDispatchRefusesWithTypedIdentities(t *testing.T) {
 		}
 	}
 	if got := len(f.hub.localRuntimes()); got != 1 {
-		t.Fatalf("%d panes left open, want only the sender's (the untrusted one closed again)", got)
+		t.Fatalf("%d panes left open, want only the sender's (a declined folder is never opened)", got)
 	}
 }
 
@@ -217,16 +227,17 @@ func (f *dispatchFixture) paneOf(key string) *control.Controller {
 func TestAnOpenedSessionNeverOutranksTheOneThatOpenedIt(t *testing.T) {
 	for name, tc := range map[string]struct {
 		sender, start, want string
-		plan                bool
+		plan, startPlan     bool
 	}{
-		"a sender that asks caps a pane that would start in yolo": {sender: "ask", start: "yolo", want: "ask"},
-		"a read-only sender yields a read-only pane":              {sender: "readOnly", start: "yolo", want: "readOnly"},
-		"a sender in yolo passes its own posture, no more":        {sender: "yolo", start: "ask", want: "yolo"},
-		"a sender that is planning has the pane plan":             {sender: "ask", start: "ask", want: "ask", plan: true},
+		"a sender that asks caps a pane that would start in yolo":                                {sender: "ask", start: "yolo", want: "ask"},
+		"a read-only sender yields a read-only pane":                                             {sender: "readOnly", start: "yolo", want: "readOnly"},
+		"a sender in yolo passes its own posture, no more":                                       {sender: "yolo", start: "ask", want: "yolo"},
+		"a sender that is planning has the pane plan":                                            {sender: "ask", start: "ask", want: "ask", plan: true},
+		"a sender that is not planning yields a pane that is not, whatever new panes default to": {sender: "ask", start: "ask", want: "ask", startPlan: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newDispatchFixture(t, dispatchOn)
-			f.startMode = tc.start
+			f.startMode, f.startPlan = tc.start, tc.startPlan
 			f.project("billing", true)
 			sender := f.sender(f.project("alpha", true))
 			sender.SetToolApprovalMode(tc.sender)
@@ -392,5 +403,83 @@ func TestTheSessionCeilingBoundsHowManyPanesOneSessionKeepsOpen(t *testing.T) {
 	f.project("four", true)
 	if _, err := sender.DispatchToProject(ctx, "four", "x"); err != nil {
 		t.Fatalf("0 must remove the ceiling: %v", err)
+	}
+}
+
+func TestAnUndecidedProjectKeepsItsPaneOpenAndTheTaskIsNotSent(t *testing.T) {
+	f := newDispatchFixture(t, dispatchOn)
+	a := f.project("alpha", true)
+	b := f.project("newcomer", false)
+	sender := f.sender(a)
+	ctx := context.Background()
+
+	_, err := sender.DispatchToProject(ctx, "newcomer", "do it")
+	if !errors.Is(err, control.ErrDispatchAwaitingTrust) {
+		t.Fatalf("err = %v, want dispatch.awaiting_trust", err)
+	}
+	if !strings.Contains(err.Error(), "newcomer") || !strings.Contains(err.Error(), "not sent") {
+		t.Fatalf("err = %q, want the project name and that the task was not sent", err)
+	}
+	if got := len(f.hub.localRuntimes()); got != 2 {
+		t.Fatalf("%d panes open, want the sender's and the waiting one", got)
+	}
+	for _, rt := range f.hub.localRuntimes() {
+		if c := rt.Server.Controller().(*control.Controller); c.WorkspaceRoot() == b && c.OpenedByDispatch() {
+			t.Fatal("the waiting pane was marked as opened by a dispatch before the user answered")
+		}
+	}
+
+	if err := config.NewProjectGrantStore(f.home).SetTrust(b, config.WorkspaceTrusted); err != nil {
+		t.Fatal(err)
+	}
+	got, err := sender.DispatchToProject(ctx, "newcomer", "do it")
+	if err != nil || got.Project != b || f.opened != 1 {
+		t.Fatalf("after the answer: %+v, %v, %d panes opened; want the same pane reused", got, err, f.opened)
+	}
+}
+
+func TestADeclinedProjectIsRefusedBeforeAnyPaneOpens(t *testing.T) {
+	f := newDispatchFixture(t, dispatchOn)
+	a := f.project("alpha", true)
+	b := f.project("closed", false)
+	if err := config.NewProjectGrantStore(f.home).SetTrust(b, config.WorkspaceTrustDeclined); err != nil {
+		t.Fatal(err)
+	}
+	_, err := f.sender(a).DispatchToProject(context.Background(), "closed", "x")
+	if !errors.Is(err, control.ErrDispatchUntrusted) || !strings.Contains(err.Error(), "closed") {
+		t.Fatalf("err = %v, want dispatch.untrusted naming the project", err)
+	}
+	if f.opened != 0 {
+		t.Fatalf("%d panes opened for a declined folder", f.opened)
+	}
+}
+
+func TestADispatchToTheSendersOwnProjectOpensNothing(t *testing.T) {
+	f := newDispatchFixture(t, dispatchOn)
+	a := f.project("alpha", true)
+	_, err := f.sender(a).DispatchToProject(context.Background(), "alpha", "x")
+	if !errors.Is(err, control.ErrDispatchSameProject) || f.opened != 0 {
+		t.Fatalf("err = %v, opened %d; want dispatch.same_project and no pane", err, f.opened)
+	}
+}
+
+func TestPanesWaitingForATrustAnswerCountAgainstTheSessionCeiling(t *testing.T) {
+	f := newDispatchFixture(t, dispatchOn)
+	setPeersCeilings(t, 1, 2)
+	for _, name := range []string{"one", "two", "three"} {
+		f.project(name, false)
+	}
+	sender := f.sender(f.project("alpha", true))
+	ctx := context.Background()
+	for _, name := range []string{"one", "two"} {
+		if _, err := sender.DispatchToProject(ctx, name, "x"); !errors.Is(err, control.ErrDispatchAwaitingTrust) {
+			t.Fatalf("%s = %v, want awaiting_trust", name, err)
+		}
+	}
+	if _, err := sender.DispatchToProject(ctx, "one", "again"); !errors.Is(err, control.ErrDispatchAwaitingTrust) || f.opened != 2 {
+		t.Fatalf("retry of a waiting project = %v with %d panes opened; want awaiting_trust on the same pane", err, f.opened)
+	}
+	if _, err := sender.DispatchToProject(ctx, "three", "x"); !errors.Is(err, control.ErrDispatchLimit) || f.opened != 2 {
+		t.Fatalf("third undecided project = %v with %d panes opened; want dispatch.limit and no new pane", err, f.opened)
 	}
 }

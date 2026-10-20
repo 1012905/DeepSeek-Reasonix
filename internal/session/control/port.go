@@ -4,8 +4,10 @@ import (
 	"context"
 	"reasonix/internal/state/sessionstore"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/command"
 	"reasonix/internal/ext/hook"
@@ -13,13 +15,18 @@ import (
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/gitcmd"
+	"reasonix/internal/platform/gitpush"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/delegation"
 	"reasonix/internal/safety/evidence"
+	"reasonix/internal/state/agentpreset"
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
 	"reasonix/internal/tools/jobs"
+	"reasonix/internal/tools/websearch"
 )
 
 // This file defines the driving port: the typed, segregated interface surface
@@ -225,6 +232,12 @@ type Skills interface {
 	CreateSkill(name string, scope skill.Scope, content string) (string, error)
 	UpdateSkill(name string, scope skill.Scope, content string) error
 	DeleteSkill(name string, scope skill.Scope) error
+	// RemoveSkill deletes the skill the person was shown, named by scope and path;
+	// a package's skill or a built-in is refused (ErrSkillNotRemovable).
+	RemoveSkill(name string, scope skill.Scope, path string) error
+	// SkillRemoval says what RemoveSkill would delete for sk and whether it is a
+	// folder; ok is false for a skill that cannot be removed.
+	SkillRemoval(sk skill.Skill) (target string, folder, ok bool)
 }
 
 // Hooks covers the session's lifecycle hooks: the live runner, what is
@@ -287,26 +300,41 @@ type RuntimeSettings interface {
 	SaveBrowserToolsSettings(enabled bool) error
 	SubagentClaimsSettings() SubagentClaimsSettings
 	SaveSubagentClaimsSettings(optimistic bool) error
+	SubagentSteerSettings() SubagentSteerSettings
+	SaveSubagentSteerSettings(maxBytes, perMinute int) error
 	WriteLeaseSettings() WriteLeaseSettings
-	SaveWriteLeaseSettings(optimistic bool) error
+	SaveWriteLeaseSettings(optimistic *bool, maxWaitMinutes *int) error
 	PlanApprovalSettings() PlanApprovalSettings
 	SavePlanApprovalSettings(auto bool) error
+	DefaultModeSettings() DefaultModeSettings
+	SaveDefaultModeSettings(plan bool) error
+	ToolSettings() ToolSettings
+	SaveToolDisabled(name string, disabled bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
 	SaveDisplayCurrency(mode string) error
 	ChangedFilesSettings() ChangedFilesSettings
 	SaveChangedFilesSettings(show bool) error
+	FeedbackLevelNotices() FeedbackLevelNoticeSettings
+	SaveFeedbackLevelNotices(enabled bool) error
+	ObservabilitySettings() ObservabilitySettings
+	SaveObservabilitySettings(patch ObservabilityPatch) (ObservabilitySettings, error)
 	FoldWorkSettings() FoldWorkSettings
 	SaveFoldWorkSettings(fold bool) error
 	TurnNarrationSettings() TurnNarrationSettings
 	SaveTurnNarrationSettings(level string) error
+	PersonaSettings() PersonaSettings
+	SavePersonaSettings(in config.PersonaConfig) error
 	WebAccessSettings() WebAccessSettings
 	SaveWebAccessSettings(patch WebAccessPatch) (WebAccessSettings, error)
+	ProbeSearxng(ctx context.Context) (websearch.SearxngProbe, error)
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	AskTimeoutSettings() AskTimeoutSettings
 	SaveAskTimeoutSettings(seconds int) error
+	SessionRefSettings() SessionRefSettings
+	SaveSessionRefSettings(tokens int) error
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int
@@ -360,6 +388,7 @@ type Status interface {
 	ContextMaintenanceSnapshot() agent.ContextMaintenanceSnapshot
 	LastUsage() *provider.Usage
 	Balance(ctx context.Context) billing.Reading
+	Tariff() (pricing.Tariff, bool)
 	Jobs() []jobs.View
 	Todos() []evidence.TodoItem
 	BrowserTabs() []browser.TabInfo
@@ -375,6 +404,7 @@ type Status interface {
 // own to offer, so only the full session port carries it.
 type MCPSignIn interface {
 	AuthorizeMCPServer(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
+	UpgradeMCPServerAccess(ctx context.Context, name string, open func(url string) error) (MCPSignInResult, error)
 }
 
 // BackgroundJobs stops work a session left running outside any turn.
@@ -407,6 +437,17 @@ type PeerMail interface {
 type SubagentView interface {
 	SubagentRuns() ([]delegation.RunInfo, error)
 	SubagentTranscript(ref string, after, limit int) (delegation.RunTranscript, error)
+	// SteerSubagent sends the person's guidance to a running sub-agent; see the
+	// delegation errors for what is refused and why.
+	SteerSubagent(ref, text string) error
+}
+
+// Mods is Claude Code mods: which are installed and what became of each, and the
+// user's switch and budget for running them.
+type Mods interface {
+	Mods() []ModStatus
+	ModsSettings() ModsSettings
+	SaveModsSettings(patch ModsPatch) (ModsSettings, error)
 }
 
 // DiffRendering reports the session's diff-rendering choices, resolved once at
@@ -479,12 +520,18 @@ type LocalShell interface {
 
 // Commits proposes a commit message for the staged changes and records a local
 // commit once the person has confirmed the text. It stages or unstages only what
-// the person names, and never pushes or rewrites history. It also moves the workspace between local git branches —
+// the person names, and pushes only the confirmed branch to the upstream it already
+// has, from a trusted workspace; it never forces or rewrites history. It also moves the workspace between local git branches —
 // a workspace write like a commit, refused typed while a turn runs.
 type Commits interface {
-	ProposeCommit(ctx context.Context) (CommitProposal, error)
+	ProposeCommit(ctx context.Context, repo string) (CommitProposal, error)
+	GitRepos(ctx context.Context) (gitrepos.Result, error)
+	RepoFor(ctx context.Context, dir string) (gitcmd.Repo, error)
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
 	StageChanges(ctx context.Context, req StageRequest) error
+	DiscardChange(ctx context.Context, req DiscardRequest) error
+	GitPushPreview(ctx context.Context, repo string) (gitpush.Plan, error)
+	GitPush(ctx context.Context, req PushRequest) (gitpush.Result, error)
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 
@@ -506,6 +553,8 @@ type SurfaceHistory interface {
 }
 
 type SessionAPI interface {
+	AgentCompositions
+	AgentPresetManagement
 	SurfaceActions
 	SurfaceHistory
 	Lifecycle
@@ -528,6 +577,7 @@ type SessionAPI interface {
 	ToolCallStopper
 	SubagentView
 	PeerMail
+	Mods
 	MCPSignIn
 	LocalShell
 	DiffRendering
@@ -542,6 +592,7 @@ type SessionAPI interface {
 // point — an editor authors no skill, edits no hook, saves no sandbox rule, and files no
 // feedback: the report form belongs to the surfaces that own a screen for it.
 type EditorAPI interface {
+	AgentCompositions
 	Lifecycle
 	TurnControl
 	Approvals
@@ -551,6 +602,18 @@ type EditorAPI interface {
 	Extensions
 	Goals
 	SessionPersistence
+}
+
+type AgentCompositions interface {
+	AgentPresets() (agentpreset.Catalog, error)
+	SelectAgentComposition(context.Context, string) error
+	CompositionBinding() *agentcomposition.Binding
+}
+
+type AgentPresetManagement interface {
+	SaveAgentPreset(agentcomposition.Definition, string) (agentcomposition.Version, error)
+	DeleteAgentPreset(string, string) error
+	SetDefaultAgentPreset(string, bool) error
 }
 
 // Compile-time proof that the concrete controller satisfies each sub-port and
@@ -567,6 +630,7 @@ var (
 	_ ToolCallStopper    = (*Controller)(nil)
 	_ SubagentView       = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
+	_ Mods               = (*Controller)(nil)
 	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)

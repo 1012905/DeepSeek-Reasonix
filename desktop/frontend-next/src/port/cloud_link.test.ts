@@ -400,3 +400,62 @@ describe("a request too large for one message", () => {
     expect(again[0].id).toBe(partsOf(first.socket)[0].id);
   });
 });
+
+describe("a slow answer over a live link", () => {
+  function chunk(socket: FakeSocket, id: string, index: number, done: boolean) {
+    socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({
+      type: "desktop.response", id, index, done, status: 200,
+      body: linkCodec.bytesToBase64(new TextEncoder().encode(`part${index};`)),
+    }) }));
+  }
+
+  it("is not failed while its own chunks keep arriving, however long the whole takes", async () => {
+    const first = connection();
+    const link = new RemoteLink(first.conn, vi.fn(async () => first.conn), (end) => ends.push(end), { requestTimeoutMs: 30_000 });
+    const answer = link.fetch(request());
+    const settled = answer.then(() => "answered", (error: Error) => error.message);
+    await vi.advanceTimersByTimeAsync(0);
+    const id = String(first.socket.sent[0]?.id);
+
+    for (let index = 0; index < 5; index++) {
+      await vi.advanceTimersByTimeAsync(20_000);
+      chunk(first.socket, id, index, index === 4);
+    }
+
+    await expect(settled).resolves.toBe("answered");
+    await expect((await answer).text()).resolves.toBe("part0;part1;part2;part3;part4;");
+  });
+
+  it("keeps waiting for a request queued behind others while the desktop is still answering them", async () => {
+    const first = connection();
+    const link = new RemoteLink(first.conn, vi.fn(async () => first.conn), (end) => ends.push(end), { requestTimeoutMs: 30_000 });
+    const queued = link.fetch(request("GET", "/rt/two/events/replay"));
+    const settled = queued.then(() => "answered", (error: Error) => error.message);
+    await vi.advanceTimersByTimeAsync(0);
+    const id = String(first.socket.sent[0]?.id);
+
+    for (let beat = 0; beat < 6; beat++) {
+      await vi.advanceTimersByTimeAsync(20_000);
+      chunk(first.socket, "someone-elses-request", beat, false);
+    }
+    first.socket.reply(id, "finally");
+
+    await expect(settled).resolves.toBe("answered");
+  });
+
+  it("still gives up on a request nothing has answered, so a silent desktop is not waited on forever", async () => {
+    const first = connection();
+    const second = connection();
+    const link = new RemoteLink(first.conn, vi.fn(async () => second.conn), (end) => ends.push(end), { requestTimeoutMs: 30_000 });
+    const answer = link.fetch(request());
+    const settled = answer.then(() => "answered", (error: Error) => error.message);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let beat = 0; beat < 40; beat++) {
+      await vi.advanceTimersByTimeAsync(10_000);
+      chunk(first.socket, "someone-elses-request", beat, false);
+    }
+
+    await expect(settled).resolves.toMatch(/Remote Studio|远程 Studio/);
+  });
+});

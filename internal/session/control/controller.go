@@ -83,7 +83,10 @@ var errNoSessionPath = errors.New("session has content but no session path; conv
 // Controller drives one chat session. Construct with New; drive with the command
 // methods; observe through the Sink passed in Options.
 type Controller struct {
-	surfacePublications liveSurfacePublications
+	composition           *compositionControl
+	compositionMutationMu sync.Mutex
+	idleObserver          func()
+	surfacePublications   liveSurfacePublications
 	controllerDeps
 
 	guardianPath string // persisted guardian session file ("" when disabled)
@@ -344,10 +347,10 @@ type Options struct {
 	Hooks               *hook.Runner
 	Memory              *memory.Set
 	Cleanup             func()
-	// Balance reads the active provider's optional wallet endpoint. Nil, or a
-	// cache built on an empty URL, means the provider declares none. Hosts that
-	// build several runtimes hand every pane the same cache.
+	// Balance reads the active provider's optional wallet endpoint; nil or an empty
+	// URL means none. Hosts that build several runtimes share one cache across panes.
 	Balance  *billing.Cache
+	Tariff   TariffSource
 	Feedback FeedbackOptions // nil service refuses every feedback call
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager
@@ -1059,63 +1062,6 @@ func (c *Controller) ToolResult(toolID string) *ToolResultData {
 // Host returns the running MCP host (nil when no plugins), for frontends that
 // list servers / resolve MCP prompts.
 func (c *Controller) Host() *plugin.Host { return c.mcp.hostRef() }
-
-// Commands returns the loaded custom slash commands.
-func (c *Controller) Commands() []command.Command {
-	if p := c.commands.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// ReloadCommands rescans all command directories and hot-swaps the slash_command
-// tool and the internal command slice — no MCP restart, no hook rerun.
-func (c *Controller) ReloadCommands(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-	cmds, loadErr := command.LoadRoots(config.CommandRootsForRoot(c.workspaceRoot)...)
-	var cmdSkills []skill.Skill
-	if !c.skills.noImplicitInvocation {
-		cmdSkills = skill.ModelInvocable(c.SlashSkills())
-	}
-
-	entries := make([]command.SlashEntry, 0, len(cmdSkills)+len(cmds))
-	for _, sk := range cmdSkills {
-		entries = append(entries, command.SlashEntry{
-			Name:        sk.SlashName(),
-			Description: sk.Description,
-			ArgHint:     sk.ArgumentHint,
-			Skill:       true,
-			Unlisted:    func() bool { return !c.skills.pathHits.Eligible(sk) },
-			Render: func(args []string) string {
-				cur, err := c.skills.forModel(sk)
-				if err != nil {
-					return ""
-				}
-				return c.skills.renderInvocation(cur, strings.Join(args, " "))
-			},
-		})
-	}
-	for _, cmd := range cmds {
-		if cmd.Hidden {
-			continue
-		}
-
-		entries = append(entries, command.SlashEntry{
-			Name:        cmd.Name,
-			Description: cmd.Description,
-			ArgHint:     cmd.ArgHint,
-			Render:      func(args []string) string { return cmd.Render(args) },
-		})
-	}
-	c.mcp.registerTool(command.NewSlashCommandTool(entries, c.skills.modelGate()))
-	cmdSlice := cmds
-	c.commands.Store(&cmdSlice)
-	return loadErr
-}
 
 // HookRunner returns the session's hook runner (nil-safe; may hold zero hooks),
 // so a frontend can list the active hooks via `/hooks`.

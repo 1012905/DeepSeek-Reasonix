@@ -63,6 +63,35 @@ describe("signing in to a server that answered 401", () => {
   });
 });
 
+describe("granting a server the access it asked for", () => {
+  const asking = (over: Partial<McpEntry> = {}): McpEntry => ({
+    name: "figma", state: "ready", enabled: true, transport: "http", tools: 2, scopeUpgrade: ["files:write", "admin"], ...over,
+  });
+
+  it("shows the server's scope names as written, beside a button that asks", () => {
+    draw(asking());
+    expect(screen.getByText("files:write admin")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "授权更多权限" })).toBeTruthy();
+  });
+
+  it("offers nothing for a server that asked for nothing, or a row that cannot be driven", () => {
+    draw(asking({ scopeUpgrade: undefined }));
+    expect(screen.queryByRole("button", { name: "授权更多权限" })).toBeNull();
+    cleanup();
+    draw(asking(), {}, false);
+    expect(screen.queryByRole("button", { name: "授权更多权限" })).toBeNull();
+  });
+
+  it("waits for the browser, and shows the kernel's refusal by its code", async () => {
+    const upgradeMcp = vi.fn(async () => { throw new HttpError(409, "x", { code: "mcp.signin_declined", error: "declined" }); });
+    draw(asking(), { upgradeMcp });
+    await userEvent.click(screen.getByRole("button", { name: "授权更多权限" }));
+    expect(upgradeMcp).toHaveBeenCalledExactlyOnceWith("figma");
+    expect((await screen.findByRole("alert")).textContent).toBeTruthy();
+    expect((screen.getByRole("button", { name: "授权更多权限" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
 describe("following a server's changes", () => {
   it("approves what was shown, and only then asks to follow from now on", async () => {
     const order: string[] = [];

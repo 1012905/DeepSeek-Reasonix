@@ -53,6 +53,12 @@ func sources() []source {
 			Read:   readLongCat,
 		},
 		{
+			Provider: "google", Currency: "USD",
+			Models: []string{"gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"},
+			URL:    pricing.DocGeminiPricing,
+			Unread: "no reader yet: the page lists several tiers and a dated step per model, so a person re-reads it and moves CheckedOn",
+		},
+		{
 			Provider: "mimo", Currency: "CNY",
 			Models: []string{"mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.6-pro-ultraspeed", "mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-flash"},
 			URL:    pricing.DocMiMoPAYG,

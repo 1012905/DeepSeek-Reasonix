@@ -55,13 +55,11 @@ func TestUnavailableMessageIsActionable(t *testing.T) {
 		"Settings -> Sandbox",
 	}
 	if runtime.GOOS == "windows" {
-		// Windows ships no OS-level Bash backend and the effective mode is
-		// fixed to off, so the remediation states that fact instead of
-		// pointing at a config edit the platform would ignore.
+		// Windows enforces only on windows_integrity, so the remediation names
+		// that key rather than a bash setting the platform would ignore.
 		want = []string{
 			"refusing to run unconfined",
-			"OS-level Bash sandbox",
-			`fixed to "off"`,
+			"windows_integrity",
 		}
 	}
 	for _, w := range want {

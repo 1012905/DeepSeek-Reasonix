@@ -53,6 +53,9 @@ type Message struct {
 	Hops   int       `json:"hops"`
 	Body   string    `json:"body"`
 	Proof  string    `json:"proof,omitempty"`
+	// Seq numbers the messages one session signs for one partner, from 1. The
+	// proof covers it, so the receiver can refuse a number it has already taken.
+	Seq uint64 `json:"seq,omitempty"`
 }
 
 // Live describes one running session. It is a description: whether the session

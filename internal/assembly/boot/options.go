@@ -5,6 +5,7 @@ import (
 	"reasonix/internal/state/sessionstore"
 	"time"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/platform/browser"
 	"reasonix/internal/platform/feedback"
@@ -32,7 +33,9 @@ import (
 // run/serve pass true so a missing key fails fast, chat/desktop false so the UI
 // is reachable before one is set.
 type Options struct {
-	ComputerDriver *computer.Driver
+	AgentComposition string
+	Composition      *agentcomposition.Binding
+	ComputerDriver   *computer.Driver
 	// Version is the host declaring a real installation, which is what lets an
 	// assembly record the last-known-good config snapshot recovery reads back.
 	Version        string
@@ -73,6 +76,10 @@ type Options struct {
 	// empty follows the environment. It binds this assembly only — a
 	// Controller's later re-reads and the history index still read the process.
 	Home string
+	// NewConversation says this build opens a fresh conversation for a person, so
+	// the user's default mode applies. A resume, a headless run and a sub-agent
+	// leave it false and start as they always did.
+	NewConversation bool
 	// Tests that compare prompt bytes must not depend on host discovery probes.
 	resolvedShell *sandbox.Shell
 	clock         func() time.Time

@@ -66,7 +66,7 @@ export function RewindControl({
     pinToViewport(el, to.right - box.width, fits || above < 6 ? to.bottom + GAP : above);
   }, []);
 
-  useFollow(open, place, stage);
+  useFollow(open, place, stage, { anchor: btn, container: menu });
 
   const work = async (prepare: () => Promise<RewindPlan>, commitNow: boolean) => {
     if (request.current.busy) return;

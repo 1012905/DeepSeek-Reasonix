@@ -144,6 +144,15 @@ jobs:
           node perf/jump-ends.mjs
           node perf/modelrows.mjs
           node perf/explorersize.mjs
+          node perf/git-panel.mjs
+          node perf/session-move-to.mjs
+          node perf/shell-refused.mjs
+          node perf/rail-search-hold.mjs
+          node perf/rail-toggle-panes.mjs
+          node perf/session-move.mjs
+          node perf/session-ref.mjs
+          node perf/browser-full.mjs
+          node perf/mod-ui.mjs
           node perf/codeeditor-size.mjs
           node perf/action-icons.mjs
           node perf/rowhit.mjs
@@ -168,6 +177,11 @@ jobs:
           node perf/mcp-actions.mjs
           node perf/web-access.mjs
           node perf/peers-settings.mjs
+          node perf/output-cap.mjs
+          node perf/progress-tail.mjs
+          node perf/trust-wait.mjs
+          node perf/nest-nodes.mjs
+          node perf/provider-ports.mjs
           node perf/peer-threads.mjs
           node perf/text-size.mjs
           node perf/fs-scale.mjs
@@ -357,7 +371,7 @@ jobs:
             arm64=false
             platform=$(git diff -z --name-only --no-renames "$BASE_SHA" HEAD | bash scripts/ci-platform-scope.sh)
             if git diff --name-only --no-renames "$BASE_SHA" HEAD |
-              grep -qE '^(desktop/electron/|desktop/packaging/|desktop/cmd/update-helper/|desktop/cmd/studio-manifest/|desktop/go\.(mod|sum)$|cmd/reasonix-studio-host/|internal/platform/(update|appupdate)/|go\.(mod|sum)$|scripts/(linux-install-smoke|verify-linux-package|verify-studio-artifacts)\.sh$|scripts/(windows-signing-lib|verify-windows-package|verify-windows-authenticode|install-smoke)\.ps1$|\.github/workflows/(studio|release-studio)\.yml$)'; then
+              grep -qE '^(desktop/electron/|desktop/packaging/|desktop/cmd/update-helper/|desktop/cmd/studio-manifest/|desktop/go\.(mod|sum)$|cmd/reasonix-studio-host/|internal/platform/(update|appupdate)/|go\.(mod|sum)$|scripts/(linux-install-smoke|verify-linux-package|verify-linux-appimage|verify-studio-artifacts)\.sh$|scripts/(windows-signing-lib|verify-windows-package|verify-windows-authenticode|install-smoke)\.ps1$|\.github/workflows/(studio|release-studio)\.yml$)'; then
               arm64=true
             fi
           fi
@@ -600,6 +614,10 @@ jobs:
       - name: The Linux package installs, runs, reinstalls and uninstalls
         if: runner.os == 'Linux'
         run: bash scripts/linux-install-smoke.sh "dist/ReasonixStudio-linux-${{ matrix.arch }}.deb" "${{ matrix.arch }}" 0.0.0-ci
+
+      - name: The AppImage carries its architecture, the kernel and the page
+        if: runner.os == 'Linux'
+        run: bash scripts/verify-linux-appimage.sh "dist/ReasonixStudio-linux-${{ matrix.arch }}.AppImage" "${{ matrix.arch }}"
 
       # Recorded, not asserted: the real bundle layout, so later work argues
       # from what electron-builder produced rather than from its documentation.

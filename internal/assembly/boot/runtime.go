@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/command"
@@ -15,6 +16,7 @@ import (
 	"reasonix/internal/ext/extension/sidecar"
 	"reasonix/internal/ext/extension/uihub"
 	"reasonix/internal/ext/hook"
+	"reasonix/internal/ext/modhost"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/platform/computer"
@@ -164,11 +166,21 @@ var startExtensionPackages = sidecar.StartPackagesWithPlan
 // preflightExtensionRuntimes starts enabled runtime packages before model
 // resolution. Required failures are fatal; optional failures warn. With
 // prev+plan, only Added/Reloaded start and Unchanged are adopted.
-func preflightExtensionRuntimes(ctx context.Context, home string, ext extensionBoot, prev *sidecar.Manager, plan *extension.RuntimePlan) (*sidecar.Manager, error) {
+func preflightExtensionRuntimes(ctx context.Context, home string, ext extensionBoot, prev *sidecar.Manager, plan *extension.RuntimePlan, bindings ...*agentcomposition.Binding) (*sidecar.Manager, error) {
 	if strings.TrimSpace(home) == "" {
 		return nil, nil
 	}
-	packages, loadWarnings := sidecar.LoadRuntimePackages(home)
+	ensureModHost()
+	packages, loadWarnings := sidecar.LoadRuntimePackagesFor(home, ext.session.WorkspaceRoot)
+	var binding *agentcomposition.Binding
+	if len(bindings) > 0 {
+		binding = bindings[0]
+	}
+	var selectErr error
+	packages, selectErr = compositionPackages(home, packages, binding)
+	if selectErr != nil {
+		return nil, selectErr
+	}
 	if len(packages) == 0 {
 		// No v2 runtime packages: surface the installed-state warnings exactly
 		// as the in-assembly StartPackages call did, and take the untouched
@@ -185,10 +197,18 @@ func preflightExtensionRuntimes(ctx context.Context, home string, ext extensionB
 	if ext.ui != nil {
 		ui = ext.ui
 	}
-	mgr, warnings, err := startExtensionPackages(ctx, home, ext.session, ui, prev, plan)
+	var mgr *sidecar.Manager
+	var warnings []string
+	var err error
+	if binding != nil {
+		mgr, warnings, err = sidecar.StartResolvedPackages(ctx, packages, ext.session, ui)
+	} else {
+		mgr, warnings, err = startExtensionPackages(ctx, home, ext.session, ui, prev, plan)
+	}
 	for _, warning := range warnings {
 		ext.warn(warning)
 	}
+	reconcileMods(mgr)
 	if err != nil {
 		// A required runtime failed: the Manager already shut down whatever
 		// started. The call site treats *RequiredStartError as fatal.
@@ -309,7 +329,7 @@ func assembleLegacySnapshot(ctx context.Context, in legacyAssembly, generation u
 		}
 		required := requiredRuntimeSet(managed)
 		clients := sidecarClientResolver(managed)
-		dispatchOpts := dispatch.Options{Warn: ext.warn, SidecarDown: ext.onSidecarDown}
+		dispatchOpts := dispatch.Options{Warn: ext.warn, SidecarDown: ext.onSidecarDown, TightenOnly: tightenOnlyRuntimeSet(managed), Mods: modRuntimeSet(managed)}
 		// system_prompt.build strategy: the slot's owner rules on the
 		// composed prompt before the snapshot freezes. Skipped on no-op plans
 		// so CacheHash stays stable across rebuilds.
@@ -376,6 +396,28 @@ func resolveReplacementClaims(groups ...[]extension.Contribution) (map[extension
 
 // requiredRuntimeSet marks every started sidecar whose manifest declared the
 // runtime required:true, the dispatcher's required-class input.
+func tightenOnlyRuntimeSet(mgr *sidecar.Manager) map[string]bool {
+	out := map[string]bool{}
+	for _, client := range mgr.Clients() {
+		if client.TightenOnly() {
+			out[client.PluginID()] = true
+		}
+	}
+	return out
+}
+
+// modRuntimeSet names the live runtimes that are Claude Code mods, by the mod
+// registry's own record rather than by anything the runtime says.
+func modRuntimeSet(mgr *sidecar.Manager) map[string]bool {
+	out := map[string]bool{}
+	for _, client := range mgr.Clients() {
+		if modhost.Default.Known(client.PluginID()) {
+			out[client.PluginID()] = true
+		}
+	}
+	return out
+}
+
 func requiredRuntimeSet(mgr *sidecar.Manager) map[string]bool {
 	clients := mgr.Clients()
 	out := make(map[string]bool, len(clients))

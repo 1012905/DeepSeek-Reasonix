@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reasonix/internal/ext/modhost"
 	"strings"
 	"sync"
 	"syscall"
@@ -33,6 +34,7 @@ import (
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/frontend/remotehost"
+	"reasonix/internal/frontend/schedulerun"
 	"reasonix/internal/frontend/serve"
 	"reasonix/internal/frontend/traystate"
 	"reasonix/internal/platform/account"
@@ -48,6 +50,7 @@ import (
 	// Kinds register from init, so a binary builds only what it links. Without
 	// these every Anthropic model answers "unknown kind" at switch time.
 	_ "reasonix/internal/model/anthropic"
+	_ "reasonix/internal/model/gemini"
 	_ "reasonix/internal/model/openai"
 	_ "reasonix/internal/model/responses"
 )
@@ -121,6 +124,10 @@ func main() {
 	if handled, code := update.MaybeRunTreeHandoff(os.Args[1:]); handled {
 		os.Exit(code)
 	}
+	// A scheduled run is this same binary started by the in-kernel ticker.
+	if scheduleChildArgs(os.Args[1:]) {
+		os.Exit(schedulerun.Exec(os.Args[3:]))
+	}
 	page := flag.String("page", "", "directory holding the built Studio page")
 	identity := flag.Bool("instance-id", false, "print the Studio instance this data home belongs to, and exit")
 	// The shell around this process knows which build it is; this process does
@@ -140,6 +147,8 @@ func main() {
 	if *stripGrants {
 		os.Exit(stripPackageGrants(os.Stdout, os.Stderr, *studioApp))
 	}
+	// Studio's own binary runs a Claude Code mod's module as Node.
+	modhost.SetEmbedder(*studioApp, os.Environ())
 	// Which launches are the same Studio is Reasonix's question, not a shell's:
 	// the answer is the canonicalized data home, and a shell asks for it rather
 	// than working it out from an environment it does not resolve.
@@ -250,6 +259,7 @@ func run(lease io.Reader, handshakeTo, logs io.Writer, page string, shell shellI
 	// After the socket has drained, never before: a pane torn down under a live
 	// request answers it with a half-closed kernel.
 	defer hub.Shutdown()
+	startScheduleTicker(ctx, lease != nil, hub, logs)
 
 	bound, err := bind(hub.Handler())
 	phases.mark(startupBind)
@@ -376,7 +386,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// This window is the only client of its kernel, so a system notification
 	// reaches the person who asked for it. Every pane gets the same wrapper,
 	// not just the one the launch started with.
-	notifications, notifySet := hostNotifications(cfg)
+	notifications, notifySet, phoneLink := hostNotifications(cfg)
 	// One fold behind the status icon: every pane's events on the way through,
 	// so the tray surface answers from what the panes did rather than from a
 	// count the shell kept for itself.
@@ -464,7 +474,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		return nil, err
 	}
 	hub.StartRecoveryGC(ctx)
-	startCloudRemote(ctx, cfg, logs, hub)
+	startCloudRemote(ctx, cfg, logs, hub, phoneLink)
 	phases.mark(startupBackground)
 	return hub, nil
 }
@@ -490,7 +500,7 @@ func runtimeOptions(root string, sink event.Sink, logs io.Writer, phases *startu
 	}
 }
 
-func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, tasks remotecloud.TaskService) {
+func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, tasks remotecloud.TaskService, phones *notify.PhoneLink) {
 	httpClient, err := netclient.NewHTTPClient(cfg.NetworkProxySpec(), netclient.TransportOptions{})
 	if err != nil {
 		fmt.Fprintf(logs, "remote cloud: %v\n", err)
@@ -518,6 +528,12 @@ func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, t
 				DeviceID: status.DeviceID, Name: status.Name, Online: status.Online, Error: status.Error, Reason: string(status.Reason),
 			}
 		})
+	}
+	// Phone notifications leave through this connection, under this Studio's own
+	// device credential.
+	phones.Set(host)
+	if registrar, ok := tasks.(interface{ SetCloudPhones(serve.CloudPhones) }); ok {
+		registrar.SetCloudPhones(host)
 	}
 	go host.Run(ctx)
 }
@@ -563,13 +579,17 @@ func hostServeConfig(cfg config.ServeConfig) config.ServeConfig {
 // says today, because deciding here would make "notify me" mean "notify me
 // after a restart". The shared [notifications] config is the one setting this
 // window and the CLI both answer to.
-func hostNotifications(cfg *config.Config) (func(event.Sink) event.Sink, *notify.Settings) {
+func hostNotifications(cfg *config.Config) (func(event.Sink) event.Sink, *notify.Settings, *notify.PhoneLink) {
 	set := notify.NewSettings(config.NotificationsConfig{})
 	if cfg != nil {
 		set.Store(cfg.Notifications)
 	}
 	sender := notify.NewPlatformSender()
-	return func(sink event.Sink) event.Sink { return notify.NewSink(sink, sender, i18n.M, set) }, set
+	// One reporter for every runtime, so a burst across panes folds into one
+	// report; its sender is the account connection, attached once that is up.
+	link := &notify.PhoneLink{}
+	phone := notify.NewPhone(link)
+	return func(sink event.Sink) event.Sink { return notify.NewSink(sink, sender, i18n.M, set).WithPhone(phone) }, set, link
 }
 
 // studioTray answers for a shell that can put an icon back whenever the setting

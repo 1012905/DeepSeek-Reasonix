@@ -144,10 +144,14 @@ type Spec struct {
 	// agent command sandbox.
 	Sandbox         sandbox.Spec
 	StateDir        string
+	ProcessStateDir string
 	OAuthHTTPClient *http.Client
 	// OAuthAllowMissingPKCEMetadata accepts an authorization server that does
 	// not list code_challenge_methods_supported; see ErrOAuthPKCEUnadvertised.
 	OAuthAllowMissingPKCEMetadata bool
+	// OAuthScopeUpgrade makes AuthorizeHTTPMCP ask for the scopes the server
+	// challenged for, on top of what was granted, instead of starting afresh.
+	OAuthScopeUpgrade bool
 	// StripRawPrefix, when non-empty, removes this prefix from each MCP tool's
 	// raw name before namespacing. For example, StripRawPrefix="server_" turns
 	// "server_search" into "search", yielding "mcp__search__search" instead of
@@ -177,11 +181,12 @@ type Host struct {
 	// mu guards the slices below: StartAll builds the Host single-threaded, but
 	// after that a /mcp hot-add or -remove (one goroutine) can run concurrently
 	// with reads from a running turn's @ref resolution or the status UI.
-	mu        sync.RWMutex
-	clients   []*Client
-	prompts   []Prompt
-	resources []Resource
-	failures  []Failure
+	mu                sync.RWMutex
+	clients           []*Client
+	prompts           []Prompt
+	resources         []Resource
+	failures          []Failure
+	compositionGuards map[string]*compositionToolGuard
 
 	// statusMu guards statusSink alone: it is written once at assembly and read
 	// from whichever goroutine a background connection finished on.
@@ -600,6 +605,10 @@ type Client struct {
 	instructions string
 
 	transport string // declared transport type, for /mcp status ("stdio"/"http")
+	// owner is the host that published this client, which announces on its behalf.
+	owner atomic.Pointer[Host]
+	// scopeAnnounced is the scope request the user was last told about.
+	scopeAnnounced atomic.Value
 
 	// Prompts and resources discovered during StartAll, stored here so the
 	// parallel startup can collect them per-client before merging into Host.
@@ -878,6 +887,7 @@ type mcpRuntimeSpecIdentity struct {
 	ProcessMode             MCPProcessMode
 	Sandbox                 sandbox.Spec
 	StateDir                string
+	ProcessStateDir         string
 	StripRawPrefix          string
 	LowPriority             bool
 }
@@ -915,6 +925,7 @@ func mcpRuntimeSpecIdentityOf(s Spec) mcpRuntimeSpecIdentity {
 		ProcessMode:             s.ResolvedProcessMode(),
 		Sandbox:                 canonicalMCPRuntimeSandbox(s.Sandbox),
 		StateDir:                s.StateDir,
+		ProcessStateDir:         s.ProcessStateDir,
 		StripRawPrefix:          s.StripRawPrefix,
 		LowPriority:             s.LowPriority,
 	}
@@ -1063,6 +1074,7 @@ func (h *Host) addConnectedWithLifecycle(lifeCtx, callCtx context.Context, s Spe
 	if err != nil {
 		return nil, err
 	}
+	h.attachCompositionGuard(c)
 	ts, err := c.listTools(callCtx)
 	if err != nil {
 		c.close()
@@ -1601,6 +1613,9 @@ func (t *remoteTool) Execute(ctx context.Context, args json.RawMessage) (string,
 // content items, which callers with a structural image channel (the agent)
 // forward to vision models instead of relying on the text placeholders alone.
 func (t *remoteTool) ExecuteWithImages(ctx context.Context, args json.RawMessage) (string, []string, error) {
+	if err := t.client.compositionContractError(); err != nil {
+		return "", nil, err
+	}
 	var argMap map[string]any
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &argMap); err != nil {
@@ -1632,7 +1647,7 @@ func (t *remoteTool) ExecuteWithImages(ctx context.Context, args json.RawMessage
 		"arguments": argMap,
 	})
 	if err != nil {
-		return "", nil, err
+		return "", nil, t.client.scopeRefusal(err)
 	}
 	return parseToolResult(res)
 }

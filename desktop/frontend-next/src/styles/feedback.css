@@ -288,3 +288,22 @@
 .fbk-filter-chip:hover, .fbk-filter-chip[aria-pressed="true"] { color: var(--text); background: var(--overlay); }
 .fbk-filter-chip[data-live] small { color: var(--accent-ink); font-weight: 600; }
 .fbk-filter-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.fbk-withdraw-acts { display: flex; gap: 8px; margin-top: 6px; }
+.fbk-withdraw .btn.danger { border-color: color-mix(in srgb, var(--err) 42%, transparent); color: var(--err-ink); }
+.fbk-withdraw .btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 10%, transparent); }
+
+.fbk-board { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--raised); }
+.fbk-board-pick { display: flex; align-items: center; gap: 8px; }
+.fbk-board-pick select { min-width: 140px; }
+.fbk-board-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.fbk-board-list li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 0; border-top: 1px solid var(--hair); }
+.fbk-board-list li:first-child { border-top: 0; }
+.fbk-board-rank { flex: none; width: 22px; text-align: right; font: var(--w-semi) var(--fs-ui) var(--mono); color: var(--muted); }
+.fbk-board-list[data-ranked] li:nth-child(-n+3) .fbk-board-rank { color: var(--brand); }
+.fbk-board-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text); }
+.fbk-board-credits { flex: none; color: var(--muted); font-size: var(--fs-meta); }
+.fbk-board-where { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.fbk-board-me { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hair); }
+.fbk-board-name-field { flex: 1 1 180px; min-width: 0; }
+.fbk-board .fbk-hint[data-tone="error"] { color: var(--err-ink); }

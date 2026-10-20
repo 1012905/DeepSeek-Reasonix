@@ -7,14 +7,16 @@ export interface PriceText {
   out: string;
   hit: string;
   cur: string;
+  src: string;
+  chk: string;
 }
 
 const CURRENCIES = ["CNY", "USD"] as const;
-const blank = (cur = "CNY"): PriceText => ({ inp: "", out: "", hit: "", cur });
+const blank = (cur = "CNY"): PriceText => ({ inp: "", out: "", hit: "", cur, src: "", chk: "" });
 const typed = (n: number) => String(n);
 
 export function priceTextOf(own: ModelRate | undefined): PriceText {
-  return own ? { inp: typed(own.input), out: typed(own.output), hit: own.cacheHit === own.input ? "" : typed(own.cacheHit), cur: own.currency || "CNY" } : blank();
+  return own ? { inp: typed(own.input), out: typed(own.output), hit: own.cacheHit === own.input ? "" : typed(own.cacheHit), cur: own.currency || "CNY", src: own.sourceUrl ?? "", chk: own.checked ?? "" } : blank();
 }
 
 // Digits and at most one point: a price is not an integer, and a sign or an
@@ -30,6 +32,40 @@ const parsed = (s: string) => (s === "" || s === "." ? null : Number(s));
 // A row is a price once input and output are both typed; one of them alone is a
 // half-finished row, which is neither a price nor an empty one.
 export const incomplete = (row: PriceText | undefined) => !!row && (row.inp === "") !== (row.out === "");
+
+const MAX_SOURCE = 500;
+const utcToday = () => new Date().toISOString().slice(0, 10);
+
+// A source is a link to read: http or https, a host, no credentials, no blanks or
+// control characters. Nothing here opens or fetches it.
+export function sourceProblem(src: string): boolean {
+  if (src === "") return false;
+  if (src.length > MAX_SOURCE || /[\s\u0000-\u001f\u007f]/.test(src)) return true;
+  try {
+    const u = new URL(src);
+    return !((u.protocol === "http:" || u.protocol === "https:") && u.hostname !== "" && u.username === "" && u.password === "");
+  } catch {
+    return true;
+  }
+}
+
+// A check date is a calendar date, no later than today in UTC.
+export function checkedProblem(chk: string): boolean {
+  if (chk === "") return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(chk)) return true;
+  const d = new Date(`${chk}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== chk || chk > utcToday();
+}
+
+export const sourceBad = (row: PriceText | undefined) => !!row && (sourceProblem(row.src) || checkedProblem(row.chk));
+
+// What a row sends: the source and date ride with the price they describe.
+const provenance = (row: PriceText): Pick<ModelRate, "sourceUrl" | "checked"> => ({
+  ...(row.src !== "" ? { sourceUrl: row.src } : {}),
+  ...(row.chk !== "" ? { checked: row.chk } : {}),
+});
+
+const hostOf = (src: string) => { try { return new URL(src).host; } catch { return ""; } };
 
 // An empty row clears the model's own price; an incomplete one changes nothing.
 // A blank cached-input price is the input price: no discount is assumed.
@@ -47,19 +83,20 @@ export function pricesToSend(picked: string[], text: Record<string, PriceText>, 
       if (stored[model]) out[model] = null;
       continue;
     }
-    out[model] = { input, output, cacheHit: parsed(row.hit) ?? input, currency: row.cur };
+    out[model] = { input, output, cacheHit: parsed(row.hit) ?? input, currency: row.cur, ...provenance(row) };
   }
   return out;
 }
 
 export function ModelPrices({
-  models, value, onChange, official = false, stored = {},
+  models, value, onChange, official = false, stored = {}, onOpenSource,
 }: {
   models: string[];
   value: Record<string, PriceText>;
   onChange: (next: Record<string, PriceText>) => void;
   official?: boolean;
   stored?: Record<string, ModelRate>;
+  onOpenSource?: (url: string) => void;
 }) {
   const set = (model: string, patch: Partial<PriceText>) =>
     onChange({ ...value, [model]: { ...(value[model] ?? blank()), ...patch } });
@@ -97,6 +134,35 @@ export function ModelPrices({
                 onChange={(e) => set(model, { cur: e.target.value })}>
                 {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
+              {own && (
+                <details className="mp-source" data-model={model}>
+                  <summary>{t("来源与核对日期")}</summary>
+                  <span className="mp-source-fields">
+                    <span className="unit-field mp-src">
+                      <input type="text" data-action="provider.draft" data-value="model-price-source" aria-label={t("{model} 的价格来源", { model })}
+                        aria-invalid={sourceProblem(cur.src) ? true : undefined} inputMode="url" autoComplete="off" spellCheck={false} value={cur.src}
+                        placeholder="https://" onChange={(e) => set(model, { src: e.target.value.trim() })} /><i>{t("来源")}</i>
+                    </span>
+                    <span className="unit-field mp-chk">
+                      <input type="text" data-action="provider.draft" data-value="model-price-checked" aria-label={t("{model} 的核对日期", { model })}
+                        aria-invalid={checkedProblem(cur.chk) ? true : undefined} inputMode="numeric" autoComplete="off" value={cur.chk}
+                        placeholder="YYYY-MM-DD" onChange={(e) => set(model, { chk: e.target.value.trim() })} /><i>{t("核对日期")}</i>
+                    </span>
+                  </span>
+                  {sourceProblem(cur.src) && <span className="why">{t("来源必须是 http 或 https 链接，不能带用户名密码。")}</span>}
+                  {checkedProblem(cur.chk) && <span className="why">{t("核对日期不能晚于今天（按 UTC）。")}</span>}
+                </details>
+              )}
+              {own && cur.src !== "" && !sourceProblem(cur.src) && (
+                <span className="mp-source-line">
+                  <span className="mp-host" title={cur.src}>{hostOf(cur.src)}</span>
+                  {cur.chk !== "" && !checkedProblem(cur.chk) && <span className="mp-checked">{t("核对于 {date}（UTC）", { date: cur.chk })}</span>}
+                  {onOpenSource && (
+                    <button type="button" className="act" data-action="provider.price-source" data-target={model} aria-label={t("{model} 打开价格来源", { model })}
+                      onClick={() => onOpenSource(cur.src)}>{t("打开")}</button>
+                  )}
+                </span>
+              )}
               {incomplete(cur) && <span className="why">{t("输入价和输出价需要都填写，才会保存这一行。")}</span>}
               {foreign && (
                 <span className="why mp-foreign">

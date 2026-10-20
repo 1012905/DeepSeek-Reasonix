@@ -396,7 +396,7 @@ func (r *ReadOnlyTaskTool) Execute(ctx context.Context, args json.RawMessage) (s
 	return r.task.RunProfileSpec(ctx, spec)
 }
 
-func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+func (t *TaskTool) executeTask(ctx context.Context, args json.RawMessage) (string, error) {
 	var p struct {
 		Prompt          string   `json:"prompt"`
 		Description     string   `json:"description"`
@@ -556,7 +556,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	if err := t.settleSpecPrompts(&spec); err != nil {
 		return "", err
 	}
-
+	ctx = agent.BindTaskImages(ctx, spec.Task.Objective)
 	maxSteps := t.childMaxStepsForContext(ctx, spec.Sched.MaxSteps)
 	childDepth, err := t.nextSubagentDepth(ctx)
 	if err != nil {
@@ -567,12 +567,12 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// it and widen it with the user's answer; the audit at the end reads the
 	// same object, so a path the user granted is not reported as an escape.
 	writeGrant := writeclaim.NewWriteGrant(spec.Grant.WritePaths)
-	modelRef, effortRef := agent.VisionRefFor(ctx, spec.Worker.Model), agent.VisionEffortFor(ctx, spec.Worker.Model, spec.Worker.Effort)
+	modelRef, effortRef := t.childRuntimeRef(ctx, spec.Worker.Model, spec.Worker.Effort)
 	subReg, err := t.childRegistry(&spec, childDepth, writeGrant, modelRef)
 	if err != nil {
 		return "", err
 	}
-	usageModelRef := t.usageModelRef(modelRef, effortRef)
+	usageModelRef := t.identifyChild(trk, modelRef, effortRef)
 	parentID, _, _, _ := agent.CallContext(ctx)
 	prov, pricing, ctxWin, err := t.resolveSubSessionRuntime(modelRef, effortRef)
 	if err != nil {
@@ -634,7 +634,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		if spec.Grant.ReadOnly {
 			return t.runReadOnlySubSession(withUpstream(runCtx, spec.Context.Upstream), spec.Task.Objective, subReg, sink, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, recoveryTaskID, usageModelRef, mutationObserver, "read_only_"+spec.Worker.Kind, grant)
 		}
-		return t.runSubSession(withUpstream(writeclaim.WithSubagentWriteGrant(runCtx, writeGrant), spec.Context.Upstream), spec.Task.Objective, subReg, sink, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, recoveryTaskID, usageModelRef, mutationObserver, spec.Worker.Kind, grant, t.observeRootFor(backgroundWriter, writeGrant))
+		return t.runSubSession(t.withChildEffort(withUpstream(writeclaim.WithSubagentWriteGrant(runCtx, writeGrant), spec.Context.Upstream), ctx, modelRef, effortRef), spec.Task.Objective, subReg, sink, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, recoveryTaskID, usageModelRef, mutationObserver, spec.Worker.Kind, grant, t.observeRootFor(backgroundWriter, writeGrant))
 	}
 
 	if spec.Sched.RunInBackground {
@@ -780,52 +780,6 @@ func (t *TaskTool) bashCanEnforceWriteRoots() bool {
 	return false
 }
 
-func (t *TaskTool) prepareTranscriptRunWithPrompt(ctx context.Context, subReg *tool.Registry, modelRef, effortRef, parentSession, execution, parentID, continueFrom, legacyForkFrom, systemPrompt, kind, name string) (*SubagentRun, error) {
-	continueFrom = strings.TrimSpace(continueFrom)
-	legacyForkFrom = strings.TrimSpace(legacyForkFrom)
-	parentSession = strings.TrimSpace(parentSession)
-	if continueFrom != "" && legacyForkFrom != "" {
-		return nil, fmt.Errorf("continue_from and fork_from are mutually exclusive; pass only continue_from")
-	}
-	if t.transcripts == nil {
-		return nil, fmt.Errorf("subagent transcript store is required")
-	}
-	if systemPrompt == "" {
-		systemPrompt = t.sysPrompt
-	}
-	kind = firstNonEmpty(kind, "task")
-	name = firstNonEmpty(name, "task")
-	if parentSession == "" {
-		if continueFrom != "" || legacyForkFrom != "" {
-			return nil, fmt.Errorf("subagent continuation requires a persisted session; none is active in this run")
-		}
-		return EphemeralSubagentRun(systemPrompt), nil
-	}
-	identityModel, identityEffort := t.effectiveIdentity(modelRef, effortRef)
-	spec := SubagentSpec{
-		Kind:             kind,
-		Name:             name,
-		WorkspaceRoot:    t.workspaceRoot,
-		ParentSession:    parentSession,
-		ExecutionID:      execution,
-		ParentToolCallID: parentID,
-		SystemPrompt:     systemPrompt,
-		Registry:         subReg,
-		ToolContext:      childToolIdentityContext(ctx),
-		Model:            identityModel,
-		Effort:           identityEffort,
-		ResumedFrom:      firstNonEmpty(continueFrom, legacyForkFrom),
-		UpstreamFrom:     upstreamSources(upstreamFromContext(ctx)),
-	}
-	if continueFrom != "" {
-		return t.transcripts.PrepareContinue(continueFrom, spec)
-	}
-	if legacyForkFrom != "" {
-		return t.transcripts.PrepareLegacyForkFrom(legacyForkFrom, spec)
-	}
-	return t.transcripts.PrepareFresh(spec)
-}
-
 func childToolIdentityContext(ctx context.Context) context.Context {
 	ctx = tool.WithoutGoalTurnRecorder(ctx)
 	ctx = memory.WithoutQueue(ctx)
@@ -905,8 +859,9 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 }
 
 func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *sessionstore.Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver, entrance string, grant agent.ReviewReportGrant, observeRoot string) (string, error) {
-	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
+	opts := t.steerable(t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver), sess)
 	opts.ModelRef = modelRef
+	opts.RequestEffort, _ = ctx.Value(childEffortKey{}).(string)
 	opts.ObserveRoot = observeRoot
 	opts.RequireReviewReportKind = grant.Delivery
 	// Capture the pristine task before host framing is prepended: delivery
@@ -921,7 +876,7 @@ func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *too
 }
 
 func (t *TaskTool) runReadOnlySubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *sessionstore.Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver, entrance string, grant agent.ReviewReportGrant) (string, error) {
-	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
+	opts := t.steerable(t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver), sess)
 	opts.RequireReviewReportKind = grant.Delivery
 	ctx, prompt, opts = t.prepareSubSession(ctx, prompt, opts, modelRef, entrance)
 	return agent.RunReadOnlySubAgentWithSession(ctx, prov, subReg, sess, prompt, opts, sink)

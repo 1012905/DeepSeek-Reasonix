@@ -18,6 +18,15 @@ import (
 	"strings"
 )
 
+// Steerer is how the host speaks to a running sub-agent. Both methods report
+// whether the child was inside a run to take it: on false nothing was queued.
+// Steer is the user's guidance; SteerHostNotice is the runtime's own, which the
+// child is told the user did not send.
+type Steerer interface {
+	Steer(text string) bool
+	SteerHostNotice(text string) bool
+}
+
 // Options configures an Agent.
 type Options struct {
 	MaxSteps int
@@ -57,6 +66,9 @@ type Options struct {
 	// provider instance. It is attached to emitted Usage events so downstream
 	// usage accounting can attribute tokens to the exact model.
 	ModelRef string
+	// RequestEffort is the depth this agent's requests carry over its provider's
+	// built one: a sub-agent sharing its parent's provider starts on the parent's.
+	RequestEffort string
 	// EventSource names the producer of this agent's settled frames — executor
 	// unless a caller says otherwise, so a two-model stream says which model
 	// wrote each one rather than leaving it to be inferred.
@@ -123,6 +135,10 @@ type Options struct {
 	WriteScheduler *writeclaim.SubagentScheduler
 	// WriteWorkspaceRoot normalizes parent write reservations.
 	WriteWorkspaceRoot string
+	// OnStart receives the agent a delegated run executes as, once, before it
+	// runs, so the host can reach it while it works. Nothing else about the run
+	// changes: the guidance it admits is read at the next tool boundary.
+	OnStart func(Steerer)
 	// ObserveRoot is where an unclassified call's effect is observed by walking
 	// the workspace before and after it. Set it only for an agent no other
 	// foreground writer runs beside; empty falls back to WriteWorkspaceRoot.

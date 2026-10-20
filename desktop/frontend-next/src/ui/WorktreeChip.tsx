@@ -60,7 +60,7 @@ export function WorktreeChip({ sources, canCreate, selection, branch, busy, chan
     const height = panel.current.offsetHeight * zoom();
     pinToViewport(panel.current, anchor.left, beside(anchor, height, innerHeight, "above", 10), 12);
   }, []);
-  useFollow(open, put, `${query}:${reading}:${sourceError}:${!!selection}:${locals.length}`);
+  useFollow(open, put, `${query}:${reading}:${sourceError}:${!!selection}:${locals.length}`, { anchor: trigger, container: panel });
   useEffect(() => {
     if (!open) return;
     search.current?.focus();

@@ -31,6 +31,7 @@
 - [@ 引用](#-引用)
 - [双模型协同](#双模型协同)
 - [让模型修改设置](#让模型修改设置)
+- [Google Gemini 原生接口（实验）](#google-gemini-原生接口实验)
 
 ## 配置
 
@@ -83,8 +84,12 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_side_sessions = 0              # 同时打开的辅助会话数；0 = 不限制（只认用户级配置）
 # max_provider_retries = 10          # 模型接口连接失败后的重试次数，用完这一轮就停；0 = 一直重试直到取消（只认用户级配置）
 # max_queued_inputs = 0              # 会话队列里等待发送的消息条数；0 = 不限制，队列的字节上限仍然生效（只认用户级配置）
+# max_subagent_steer_bytes = 16384    # 发给运行中子代理的单条指示的字节数，防止一条消息占满它的上下文；0 = 不限制（只认用户级配置）
+# max_subagent_steers_per_minute = 30  # 每分钟发给同一个运行中子代理的指示条数，用来刹住循环；0 = 不限制（只认用户级配置）
 # write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
+# write_lease_max_wait_minutes = 0    # 写入在另一个会话占着路径时最多等多少分钟，超时以 workspace.claim_timeout 失败；0（默认）= 一直等到本轮结束，建议值 120（只认用户级配置）
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
+# default_mode = "plan"              # 仅用户配置文件；新对话从计划模式开始（恢复的对话保持自己的模式；设置里有对应开关），默认 normal
 # subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict
 # host_verification = "off"          # 仅用户配置文件；改过文件的回合不再被要求先做检查、复核和签收；交付回执仍如实写明检查了什么，默认 on
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
@@ -106,6 +111,7 @@ web_search  = true
 
 [tools]
 enabled = []   # 省略/为空 = 全部内置工具
+# disabled = ["web_fetch", "ask"]   # 按名称从每个请求里移除（框架工具和 MCP 工具也算）；模型仍去调用时会被拒绝并说明原因；宿主自己要读的工具（todo_write、complete_step、await_user、conclude_blocked、update_goal、use_capability）会保留，并给出警告；项目配置只能追加名称，设置里会把这些标为“被项目关闭”；设置里每个工具有开关；对之后新开的对话生效
 bash_timeout_seconds = 120   # 前台安全上限；设为 0 表示不设工具层超时
 protect_changed_files = true   # 模型读过或写过的文件之后被改动时，拒绝整文件覆盖
 browser_tools = true   # 内置浏览器工具；浏览器在第一次使用时才启动
@@ -153,10 +159,14 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 
 [peers]
 # enabled = false              # 本机你的各个会话可以互发消息；每条消息都要对方会话的用户批准；设置里也有开关，下个回合起生效（只认用户级配置）
-# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled；打开就是你对这些会话的任务和回信的总同意，不再出审批卡（只认用户级配置）
+# dispatch = false             # 模型可用 dispatch_to_project 把任务交给你另一个项目里的会话；需要 enabled；打开就是你对这些会话的任务和回信的总同意，不再出审批卡；新开的会话沿用发起方的模型、预设、审批档位和计划模式，所以 YOLO 的发起方开出的也是 YOLO 会话，会连目标项目的“要问我”规则一起答掉（拒绝规则仍然生效）（只认用户级配置）
 # max_dispatch_depth = 1       # 派发最多能连着开几层会话；0 表示不限（只认用户级配置）
 # max_dispatched_sessions = 8  # 一个会话通过派发最多同时开着几个会话；0 表示不限（只认用户级配置）
-# release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧（只认用户级配置）
+# release_projects = []        # 这些项目收到你其它会话的消息时不弹批准卡；它们自己的审批与沙盒照旧；宿主自己设的暂停（切换会话、@ 引用读不了、重新打开）不拦它们，你主动按下的暂停会拦住，消息留在队列里（只认用户级配置）
+
+[mods]
+# enabled = false              # 运行已安装 Claude Code mod 的钩子模块；完全信任、不在沙盒内（只认用户级配置）
+# hook_budget_ms = 0           # 单个钩子自身的运行时限，毫秒；0 保持 10000（只认用户级配置）
 
 [serve]
 # auth_mode = "token"          # token(默认)|password|none；none 下修改与审批仍需启动令牌
@@ -166,6 +176,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 
 [desktop]
 # max_workspaces = 0           # 侧栏最多记住的项目数；0 = 不限制（只认用户级配置）
+# session_ref_tokens = 8000     # 引用一段历史会话（@session:<id>）时最多给一条消息添加多少 token；500..200000
 
 [[plugins]]
 name    = "example"
@@ -333,6 +344,10 @@ Goal、由 `todo_write` 工具驱动的实时 Todo 面板、扩展发布的 stat
 彼此独立的模型/工作/协作/审批控制轴、客户端文件与 terminal 能力、MCP server、权限请求，
 以及 Reasonix 的回合中引导扩展。
 
+## 在 DeepSeek Harness 中使用 Reasonix
+
+DeepSeek Harness（`dsh`）可以通过 ACP 把任务委派给 Reasonix 作为子智能体，只需要配置。[在 DeepSeek Harness 中使用 Reasonix](./DSH.md) 说明如何通过 DSH 的插件市场或手工安装、如何打开插件开关、权限策略和限制。
+
 ## 远程 SSH
 
 远程模块让 Reasonix 在远端主机上运行,并通过你自己的 SSH 连接访问它 —— 即 VS Code
@@ -346,6 +361,15 @@ Remote-SSH 式的体验。它在远端主机上引导一个常驻的 headless `r
 `reasonix.toml` 无法注入或覆盖远程主机 —— 克隆的仓库永远无法左右 Reasonix 向何处发起 SSH
 连接。凭据沿用 provider 惯例:主机只记录环境变量名(`passphrase_env`、`password_env`),其值
 存放在 Reasonix 全局 `.env` 中;私钥内容本身从不存储 —— `identity_file` 只是路径。
+
+Studio 的主机级读取与未指定目录的打开，共用该主机显式配置的 `workspace`。
+只有它未设置时，才回退到 `workspaces` 中第一个非空目录；两者均未设置时传入空目录。
+打开操作显式指定的路径优先。调整其他目录的顺序不会覆盖已声明的 `workspace`。
+这些值只来自用户级主机配置，禁用主机会在复用已有连接之前被拒绝。
+
+当前 SSH 项目的次级行显示实际连接目录，包括隔离工作树路径；项目菜单显示刷新所用的
+默认连接目录，两者可能不同。设置中的默认操作会明确选择新的默认目录。
+主机级读取不会借用其他会话的目录。
 
 ```toml
 [remote]
@@ -526,7 +550,8 @@ Kimi CN 和 Kimi Global 直连 API 预设也包含 `kimi-k3`，支持图像输�
 | Authorization: Bearer | 对 Anthropic-compatible provider，把已保存的 API key 用 `Authorization: Bearer <key>` 发送，而不是 `x-api-key`。 | MiniMax Global、Vercel AI Gateway 等网关文档明确要求 Bearer 认证时开启。 |
 | 模型能力模式 | 指定 Reasonix 对该 provider 使用哪种 reasoning 请求协议。 | 默认用“自动识别”。只有网关被误判，或模型文档要求特定 reasoning 格式时再切换。 |
 | Thinking 覆盖 | provider 专用的 `thinking.type` 覆盖项。 | 默认用 Auto。只有后端文档明确支持 `enabled`、`disabled` 或 `adaptive` 时再手动指定；不支持的值可能让中转站拒绝请求。 |
-| 余额查询 URL | 可选的钱包余额查询接口。 | 服务商提供余额接口，且希望桌面端状态栏显示余额时填写。 |
+| 余额查询 URL | 可选的钱包余额查询接口。 | 服务商提供余额接口，且希望桌面端状态栏显示余额时填写。密钥只会发给这个地址，不会跟随跳转。 |
+| 余额格式 | 该接口返回内容的格式：`deepseek`、`moonshot` 或 `openrouter`（`balance_format`）。 | 供应商自己的域名（`api.deepseek.com`、`api.moonshot.cn`/`.ai`、`openrouter.ai`）不用设置，按该供应商的格式读取。其他地址（例如中转站）必须填写格式，否则显示为未配置，也不会请求该接口。已有的这类条目升级时会写成 `deepseek`，这正是它们一直以来的读取方式。Reasonix 1.x 重写共用配置文件时会丢掉它不认识的键，所以被丢掉的格式会在下次启动时，按配置旁边的 `provider-keys.json` 补回，除非你在连接编辑页里主动清掉了它。 |
 | 上下文窗口 | Reasonix 用于自动清理上下文的 provider 级 token 预算。`0` 表示禁用自动 compaction。 | 按该 provider 的模型上下文上限填写；所选模型规格不同时使用下方的逐模型覆盖。 |
 
 每个已选模型还提供一个可选的 **上下文窗口** 输入框。留空时继承 provider
@@ -769,7 +794,8 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | --- | --- | --- |
 | `Enter` | 发送当前消息 | turn 运行中输入非空内容时，会排队作为后续反馈。输入框为空时，跳回最新输出并继续跟随。 |
 | `Shift+Enter`、`Alt+Enter` 或 `Ctrl+J` | 插入换行 | 普通 `Enter` 保留给发送/确认。 |
-| 普通 `Up` / `Down` | 回放更旧或更新的已提交提示词 | 只在光标位于输入框首行或末行时生效，多行编辑仍使用方向键；turn 运行中也一样。排队的后续消息用 `/queue` 命令管理。 |
+| 普通 `Up` / `Down` | 回放更旧或更新的已提交提示词 | 只在光标位于输入框首行或末行时生效，多行编辑仍使用方向键。回合运行中（或队列已暂停）且有排队消息时，`Up` 改为把最新的排队消息选入输入框，见下一行的队列键。 |
+| 选中排队消息后的队列键 | 编辑、调序、删除或重试排队消息 | `Up` / `Down` 移动选择（越过最新一条会放回你的草稿）；`Alt+Up` / `Alt+Down` 调整它在队列里的位置；`Enter` 原位保存编辑；连按两次 `d` 删除（第一次只是询问，不会被当作输入），`r` 让被挡住的消息再跑一次（两者只在输入框里仍是读到的完整原文、未改动时生效，vi 命令模式下它们先于 vi 按键被队列取走；改过之后这两个字母就是普通输入）；完整原文读到之前 `Enter` 和编辑键不生效，读不出来或这条消息已经开始执行时会结束选择并还原你的草稿；`Esc` 放开。输入框为空时按 `Space` 暂停或继续队列。工作行下方最多画出三条排队消息，其余用 `/queue`（见下）查看。 |
 | `PageUp` / `PageDown` | 滚动 transcript | 不受当前聊天状态影响。 |
 | `Ctrl+Home` / `Ctrl+End` | 跳到 transcript 顶部或底部 | 长工具输出后很有用。 |
 | `Ctrl+L` 或 `/cls` | 只清空可见 transcript | LLM 上下文、session 文件、工具、记忆和插件都保持加载；想丢弃对话上下文时用 `/clear`。 |
@@ -952,7 +978,8 @@ $tmpFile = Join-Path $env:TEMP "result.json"
 MCP 等独立沙盒继续使用自己的隔离规范，不继承父会话临时目录。获得批准后绕过沙盒的
 命令仍继承私有临时变量，但在 Linux 上其字面 `/tmp` 不再由 bwrap 映射。
 
-**Windows 说明：**Reasonix 不在 Windows 上提供 OS 级 Bash 沙箱，生效模式固定为
+**Windows 说明：**Windows 上的 OS 级 Bash 沙箱默认关闭，用户设置
+`[sandbox] windows_integrity = true` 才启用（见下面“在 Windows 上”）。关闭时生效模式为
 `off`。旧配置即使写了 `bash = "enforce"` 也会解析为 `off`，`reasonix doctor`
 会提示该设置被忽略，桌面设置中的选择器也为只读。Bash 命令会在不受 OS 沙箱限制的
 环境中运行；专用文件工具仍会在进程内执行 `workspace_root`、`allow_write` 和
@@ -960,7 +987,57 @@ MCP 等独立沙盒继续使用自己的隔离规范，不继承父会话临时�
 以当前用户身份运行，不能作为保护其他用户可读文件的安全边界。
 
 没有可用 OS 沙盒时，`bash = "enforce"` 会拒绝 bash 执行，不会无沙盒运行。
-Windows 上兼容的值始终为 `off`。
+Windows 上默认关闭，需要设置 `[sandbox] windows_integrity = true`（设置 > 沙箱；只认用户文件）才会启用。
+
+### 在 Windows 上
+
+打开 `windows_integrity` 后，bash 命令运行在写入受限的令牌下。
+
+- 首个会话会给一个合成的 Windows 身份授予对工作区、你的 `allow_write` 文件夹和工具链数据缓存的写权限。
+- 缓存指 Go 构建与模块缓存、npm、pip、cargo registry、NuGet 包。放着你会运行的程序的文件夹（`~/go/bin`、`.cargo/bin`）永远不授权。
+- 授权是加在这些文件夹上的一条权限项，记录在 Reasonix 状态目录里；它不给其他任何人权限，沙箱以后关闭它也不起作用。
+- `reasonix sandbox list` 显示已授权的内容，`reasonix sandbox revoke` 收回。
+
+它限制什么（在 Windows 11 上实测，对所有子进程）：
+
+- 在授权文件夹之外创建、追加、覆盖文件。
+- `mkdir`、写你用户下的注册表（HKCU）、改全局 git 配置。
+- 穿过指向授权文件夹之外的目录联接或符号链接写入。
+- 备份语义写入（`robocopy /B`）：令牌不带任何特权。
+- 创建计划任务、创建服务、写 HKLM：实测都被拒绝。
+
+它不限制什么：
+
+- **删除或重命名走**授权文件夹之外的已有文件（Windows 不对这两种操作应用该限制）。删除仍由删除守卫和审批层把关。
+- **读取**文件和**网络**。
+- **宿主权限端点**：ssh-agent 和 docker 的命名管道，以及任务计划程序之类的 COM、RPC 服务，命令都够得着。
+- Everyone 或你的登录会话本来就能写的位置：两者都在受限 SID 集合里，对它们开放的文件夹对命令也开放。
+- 被授权的工具链缓存命令可写，缓存被投毒会影响你之后不受沙箱的构建。macOS 和 Linux 的缓存有同样的暴露。
+
+其他事实：
+
+- 命令运行时只保留跨目录遍历检查，其余特权全部去掉，并在一个无法触及你会话里其他窗口、剪贴板和显示设置的作业里。
+- 只有三个标准句柄传入命令。
+- 命令不能自己再起启动器：启动器在受限令牌下拒绝运行，且只给宿主建的会话临时文件夹授权。
+- 需要交互式桌面会话。SSH 或服务会话里 `enforce` 会拒绝执行命令（`sandbox.win_no_logon_sid`），而不是无沙箱运行。
+- 未测：标准（非管理员）账户、其他 Windows 版本、ReFS 与网络盘。Linux 和 macOS 不变，且限制所有种类的写入。
+
+### 在开发容器或 Docker 里
+
+bubblewrap 需要创建用户命名空间和挂载命名空间（关闭网络时还要网络命名空间），默认容器会拦下这些。在
+Docker Desktop（Linux 虚拟机、Debian 12、bubblewrap 0.8.0）上，用每种配置各启动一条受限命令（`enforce`）实测：
+
+| 容器配置 | 沙盒 | 报告的原因 |
+|---|---|---|
+| 没装 bubblewrap | 不可用 | `sandbox.no_bubblewrap` |
+| 默认 `docker run`；只解除 seccomp；只加 `SYS_ADMIN`；解除 seccomp 和 AppArmor 但没有 `SYS_ADMIN` | 不可用 | `sandbox.bwrap_namespace_denied` |
+| `SYS_ADMIN` 加解除 seccomp 和 AppArmor | 网络开放时可用；关闭网络时不可用 | 关闭网络时为 `sandbox.bwrap_network_denied` |
+| 再加 `NET_ADMIN`，或 `--privileged` | 可用，网络开放或关闭都行 | 无 |
+
+- `CAP_SYS_ADMIN` 和解除 seccomp 两样都要，缺一不可。
+- Reasonix 不去判断是不是在容器里。提示来自 bubblewrap 实际能做什么、不能做什么：给了这些权限的容器能用上沙盒，没给的会被告知缺哪一项。
+- 给这些权限会放宽容器本身。另一条路是 `[sandbox] bash = "off"`；那时容器就是唯一的边界，你挂载成可写的东西（包括绑定挂载的工作区里的凭据文件）每条命令都能写。
+- 只测了 Linux 沙盒；没有跑真正的 Dev Containers / Codespaces、rootless Docker 和 SELinux 主机。
 
 反馈编码质量问题时，可运行 `reasonix doctor quality <branch-id-or-path>`（加
 `--json` 输出结构化结果）。命令会读取指定 session，但只输出不含内容的计数与
@@ -1173,6 +1250,14 @@ Context Engine v2 把上下文分成两个用途不同的层：
 - **常驻指令**来自分层加载的 `REASONIX.md`、`AGENTS.md` 和 `CLAUDE.md`。必须在每个
   相关回合都存在的规则应放在这里。用户全局文件先加载，再加载 workspace 和更深目标目录，
   同一目录内 `.local.md` 变体优先。
+- **规则**是放在 `.reasonix/rules/`、`.claude/rules/`（项目）和 `<Reasonix 主目录>/rules/`（用户）下的
+  Markdown 文件，含子目录。
+  - 没有 `paths:` 前置字段的规则，按常驻指令的方式送达。
+  - 带 `paths: ["src/**/*.ts"]`（列表或逗号分隔的字符串）的规则，在会话读写过匹配文件后的下一个回合送达，
+    不再适用时会被撤回。
+  - 加载顺序是先用户后项目，后出现的更具体。
+  - 单个文件上限 32 KB，两层各自上限 64 KB；超出的会被跳过并在能力诊断里显示；不跟随符号链接。
+  - 两层都不碰缓存前缀。
 - **背景记忆**每个 Markdown 文件只保存一条持久事实。每条事实都有不变 ID、单调 revision、
   时间戳、相互独立的 `type`（`user`、`feedback`、`project`、`reference`）与
   `scope`（`project`、`global`），以及 freshness。事实可能过时，因此永远不能覆盖
@@ -1512,6 +1597,14 @@ destructive MCP 目标、来自未授权 server 的 reader，以及一切会改�
 会话 lineage 与工作区约束。没有持久化父会话的 headless 运行仍保持 ephemeral，只返回公平
 分配的有界预览，不能生成持久引用。
 
+仍在运行的子代理可以收到补充指示：
+
+- 模型调用 `task` 时把 `task_id` 设为该子代理的 `sa_...` 引用、指示写在 `prompt` 里；你则在设置或子代理的界面里发送。
+- 子代理在下一次调用工具时读到它，标明来自委派它的会话（或来自你）；它自己的批准照常生效。
+- 子代理若已结束，`task_id` 的效果与 `continue_from` 相同，接着它的对话继续。
+- 单条大小和每分钟条数由 `max_subagent_steer_bytes`、`max_subagent_steers_per_minute` 限制（只认用户级配置，设置 → 工具 → 给运行中子代理的指示；填 `0` 表示不设上限）。
+- 配对设备不能发送这种指示。
+
 交互式双模型 Planner 使用专用构造路径（`NewPlannerAgent`）：仍阻止 bash、文件写入与普通
 writer，但可通过固定的 `use_capability` 代理调用已授权、非 destructive 的 MCP，不再要求
 `readOnlyHint`。直接 `mcp__*` schema 永不进入 Planner 工具列表，因此 MCP 安装/连接变动
@@ -1605,6 +1698,19 @@ searxng_url = "http://localhost:8888"
 每次发生时 Reasonix 会弹出通知，写明后端和原因，再尝试下一个；全部没有回答时，模型收到 `search.all_backends_failed`。
 
 - SearXNG 内部某些引擎被限流，只要还有一个引擎能回答，搜索就不算失败。
+
+设置里的「联网：搜索与抓取」在地址旁有「测试连接」按钮：它向已保存的地址发一次搜索（先保存框里的内容），不跟随重定向、不走代理，并说明这个实例为什么没有应答。
+
+它不会连链路本地、云元数据和未指定地址；本机和局域网地址可以。真实搜索失败时，模型收到的是同一个码。
+
+| 码 | 含义 | 怎么办 |
+|---|---|---|
+| `search.searxng_json_disabled` | 实例回了 403。SearXNG 在 `settings.yml` 的 `search.formats` 没有 `json` 时就这样回；它前面的反向代理也可能回 403。 | 在 `search.formats` 里加上 `json` 并重启；已有的话检查代理。 |
+| `search.searxng_unreachable` | 这个地址没有任何应答。 | 确认它在运行，主机和端口写对。 |
+| `search.searxng_not_searxng` | 回了 200，但不是 SearXNG 的 JSON 结果。 | 地址要指向 SearXNG 本身，不是登录页或别的服务。 |
+| `search.searxng_redirected` | 这个地址会重定向。 | 直接填最终地址，例如 `https` 的那个。 |
+| `search.searxng_address_refused` | 测试不连这个地址（链路本地、云元数据或未指定地址）。 | 自托管实例用本机或局域网地址。 |
+| `search.searxng_status` | 其他 HTTP 状态，比如 429、500。 | 稍后重试，或查看实例的日志。 |
 - 搜索结果是第三方内容，会向模型标注为外部内容。
 
 ### 付费回退：DeepSeek 搜索接口
@@ -1681,3 +1787,61 @@ video_protocol = "inline_data_url"   # 或 "moonshot_file"
 - 卡片显示完整的新值；长到显示不下的值会被拒绝，而不是截断。改动写入你的用户级文件，项目文件不能授予，取值按设置页同一套规则校验。
 - 每回合最多向你提出三次；计划模式下不提出（模型仍可查看设置、把你带到某一项）。
 - 想去掉这个工具：在用户文件里设 `[tools] setting_tool = false`，或在显式的 `[tools] enabled` 列表里不写 `setting`。
+## Google Gemini 原生接口（实验）
+
+`gemini` 提供方类型直接使用 Google 的 Interactions API。它是实验性的：按 Google 官方文档（2026-10-17 读取）编写，尚未用真实端点验证，可能有粗糙之处，欢迎反馈。
+
+安装预设「Google Gemini, native (experimental)」，或自己写一项：
+
+```toml
+[[providers]]
+name = "gemini-native"
+kind = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+models = ["gemini-3.8-flash"]
+```
+
+- 每次请求都带上完整对话，且 `store` 为 false：对话记录归你自己，Google 那边不留存。
+- 思考强度按条目设置（`/effort`），预设里是每个模型文档列出的档位。思考摘要作为推理内容流出，思考步骤会按收到的原样、原顺序随下一次请求发回。
+- 永远不发送 `temperature` 和 `top_p`：Google 的参考页没有为这个接口列出它们。
+- 预设只列读过各自模型页的模型：`gemini-3.8-flash`、`gemini-4-argon`、`gemini-3.6-flash`、`gemini-3.5-flash-lite`、`gemini-3.1-pro-preview`，都是 1,048,576 token 窗口、支持图像和视频输入。其他模型自己列出并声明能读什么即可。
+- 原有的「Google Gemini」预设走 Google 的 OpenAI 兼容端点，该端点文档里没有视频输入。
+
+### 看视频
+
+像其他提供方一样，声明模型和文件的送达方式（见「让模型原生看视频文件」）：
+
+```toml
+video_models = ["gemini-3.8-flash"]
+video_protocol = "gemini_files"   # 或 "gemini_inline"
+```
+
+- `gemini_inline` 把文件以 base64 放进请求。Google 页面正文写“请求总大小 20MB 以内”，表格却写 100 MB；这里取更窄的读法，文件上限 15,000,000 字节（编码后请求会大三分之一），只能用 `[tools] video_native_max_bytes` 调低。
+- `gemini_files` 用 Files API 的可恢复上传协议上传，等 Google 报告 `ACTIVE`，用 uri 引用，请求结束后立即删除。Google 允许单文件 2 GB、每项目 20 GB，文件 48 小时后自动清除。
+- 两种协议都原生发送 MP4、WebM、MOV；其他容器会抽帧。Google 报告 `FAILED` 或本版本不认识的状态时不发送，并告诉模型 `video.upload_failed`。
+- 公开的 YouTube 地址不能通过 `read_video` 交给模型：宿主不抓取地址，把地址交给厂商是单独的一项设置。
+
+### 费用
+
+Reasonix 按 Google 公布的标价计费，每百万 token（https://ai.google.dev/gemini-api/docs/pricing，2026-10-17 读取）：
+
+| 模型 | 输入 | 缓存命中 | 输出（含思考） |
+|---|---|---|---|
+| `gemini-3.8-flash`、`gemini-3.6-flash` | $0.75 | $0.075 | $3.75 |
+| 这两个模型自 2027-01-01 起 | $1.50 | $0.15 | $7.50 |
+| `gemini-3.5-flash-lite` | $0.30 | $0.03 | $2.50 |
+| `gemini-3.1-pro-preview`（提示词不超过 200k token） | $2.00 | $0.20 | $12.00 |
+
+`gemini-3.1-pro-preview` 在提示词超过 200k token 后更贵（$4.00 / $0.40 / $18.00），一张费率卡表达不了，所以超长提示词会读低。`gemini-4-argon` 页面上没有价格，不计价。显式上下文缓存的存储费不计入。
+
+### 把视频地址交给模型厂商
+
+有的厂商从公开地址读取视频，而不是读文件。`read_video` 可以用 `url` 代替 `path`，但必须先在设置里打开（「联网」→「视频地址」，或用户文件里的 `[tools] video_url_passthrough = true`；项目文件无法设置它）。打开本身就是一次确认：模型也可以提议打开，每次都由你点卡片同意。
+
+- 地址由厂商自己去访问，本机不下载任何东西。只有接受“厂商的服务器会打开这个地址”才应打开。
+- 只交出你在对话里亲手写的地址。模型从网页、文件、工具结果里看到的或自己编的地址都会被拒绝（`video.url_not_from_user`），所以网页作者无法让厂商去访问他选的地址。
+- 地址必须是 `https` 且有公开主机名：不能带账号密码，不能是 IP、`localhost`、单段主机名或局域网名，长度不超过 2048 字符（`video.url_invalid`）。
+- 智谱 GLM 在 `video_url` 里接收公开 https 地址，不接收文件（[docs.bigmodel.cn](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v)，2026-10-17 读取）。在条目上写 `video_models = ["glm-4.6v"]` 和 `video_protocol = "zhipu_url"`；本地文件此时按帧读取。
+- Gemini 在 `gemini_inline` 和 `gemini_files` 下把公开的 YouTube 地址作为视频 `uri`；其他地址不会交给它（`video.url_unsupported_model`）。
+- 从存档或导入的会话里恢复出来的引用永远不会被发送：只发送在本进程里检查过的地址。

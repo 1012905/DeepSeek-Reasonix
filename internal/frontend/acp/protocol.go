@@ -30,6 +30,8 @@ const (
 	ErrMethodNotFound = -32601
 	ErrInvalidParams  = -32602
 	ErrInternal       = -32603
+	// ErrAuthRequired is the ACP schema's "Authentication required" code.
+	ErrAuthRequired = -32000
 )
 
 // TurnFailed is the TurnErrorData code of a session/prompt that failed after it
@@ -60,7 +62,10 @@ type InitializeParams struct {
 type ClientCapabilities struct {
 	FS       FSCapabilities `json:"fs,omitempty"`
 	Terminal bool           `json:"terminal,omitempty"`
-	Meta     map[string]any `json:"_meta,omitempty"`
+	// Elicitation names the interaction modes the client can show; a mode is
+	// supported only when its key is present and not null.
+	Elicitation *ElicitationCapabilities `json:"elicitation,omitempty"`
+	Meta        map[string]any           `json:"_meta,omitempty"`
 }
 
 // FSCapabilities reports which client filesystem methods are available.
@@ -150,6 +155,8 @@ type SessionCapabilities struct {
 	Resume *EmptyCapability `json:"resume,omitempty"`
 	Close  *EmptyCapability `json:"close,omitempty"`
 	Delete *EmptyCapability `json:"delete,omitempty"`
+	// AdditionalDirectories says session/new, load and resume take extra workspace roots.
+	AdditionalDirectories *EmptyCapability `json:"additionalDirectories,omitempty"`
 }
 
 // PromptCapabilities reports which content-block kinds prompts may carry.
@@ -190,8 +197,9 @@ type AuthenticateResult struct{}
 // SessionNewParams opens a session rooted at cwd, optionally with MCP servers
 // the agent should connect for the session's lifetime.
 type SessionNewParams struct {
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // MCPServerSpec describes one MCP server the client asks the agent to connect.
@@ -321,9 +329,10 @@ type SessionModelState struct {
 // The agent replays the stored conversation as session/update notifications
 // before the request returns.
 type SessionLoadParams struct {
-	SessionID  string          `json:"sessionId"`
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	SessionID             string          `json:"sessionId"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // SessionLoadResult is the empty ack; the conversation has already arrived as a
@@ -338,9 +347,10 @@ type SessionLoadResult struct {
 
 // SessionResumeParams resumes a session without replaying its transcript.
 type SessionResumeParams struct {
-	SessionID  string          `json:"sessionId"`
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	SessionID             string          `json:"sessionId"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // SessionResumeResult is the empty ack returned once the session is ready.
@@ -554,12 +564,11 @@ const (
 	StopCancelled StopReason = "cancelled"
 )
 
-// SessionPromptResult ends a session/prompt. TranscriptPath is reserved for a
-// future on-disk transcript pointer; omitted (null) for now.
+// SessionPromptResult ends a session/prompt. Vendor members, such as the
+// on-disk transcript path, ride Meta under "reasonix.io".
 type SessionPromptResult struct {
-	StopReason     StopReason     `json:"stopReason"`
-	TranscriptPath *string        `json:"transcriptPath,omitempty"`
-	Meta           map[string]any `json:"_meta,omitempty"`
+	StopReason StopReason     `json:"stopReason"`
+	Meta       map[string]any `json:"_meta,omitempty"`
 }
 
 // session/update (agent → client notifications)
@@ -579,6 +588,7 @@ type SessionUpdateParams struct {
 // messageChunk is agent_message_chunk / agent_thought_chunk.
 type messageChunk struct {
 	SessionUpdate string       `json:"sessionUpdate"`
+	MessageID     string       `json:"messageId,omitempty"`
 	Content       ContentBlock `json:"content"`
 	Metadata      *updateMeta  `json:"metadata,omitempty"`
 }
@@ -761,6 +771,7 @@ type PermissionRequestParams struct {
 // PermissionToolCall describes the call awaiting approval.
 type PermissionToolCall struct {
 	ToolCallID string             `json:"toolCallId"`
+	Name       string             `json:"name,omitempty"`
 	Title      string             `json:"title,omitempty"`
 	Kind       string             `json:"kind,omitempty"`
 	Status     string             `json:"status,omitempty"`

@@ -60,6 +60,10 @@ reasonix setup --local            # 管理 ./reasonix.toml
 reasonix setup /path/to/config.toml
 ```
 
+本地命令优先使用根目录的 `./reasonix.toml`；仅当它不存在时，使用已有的
+`.reasonix/reasonix.toml`。新建项目配置仍写入根目录。此规则适用于 `setup --local`、
+`config compact-ratio --local` 和 `config reasoning-language --local`。
+
 在交互式终端中，`reasonix setup` 是一个暂存式供应商管理器。它会列出已配置的
 provider，并支持：
 

@@ -199,7 +199,9 @@ func (a *Agent) emitTurnShadows(input string, blocked bool) {
 	event.RecordContractShadow(a.svc.sink, contractShadowAudit(c))
 	rep := completion.Build(c, a.task.ledger, a.pathInWorkspace)
 	a.turn.completion = &rep
-	event.RecordCompletionReport(a.svc.sink, completionReportAudit(rep))
+	audit := completionReportAudit(rep)
+	audit.OriginRecorded, audit.OriginMatched = a.task.origins.take()
+	event.RecordCompletionReport(a.svc.sink, audit)
 	a.sealShadowBundle(input, c, rep, a.task.ledger.Receipts(), blocked)
 	a.emitCompletionSummary(c, rep, blocked)
 }
@@ -208,10 +210,32 @@ func (a *Agent) emitTurnShadows(input string, blocked bool) {
 // deliver, or nil when the turn had nothing to judge. The host renders it; the
 // agent never writes the user-facing text, which is the whole point.
 func (a *Agent) CompletionReceipt() *event.CompletionReceipt {
-	if a == nil || a.turn.completion == nil {
+	if a == nil {
 		return nil
 	}
+	gaps := a.takeClaimYieldGaps()
+	if a.svc.extensions.HasMod() {
+		gaps = append(gaps, completion.Gap{Kind: completion.GapModEffectsUnobserved})
+	}
+	if a.turn.completion == nil {
+		if len(gaps) == 0 {
+			return nil
+		}
+		return unjudgedReceipt(gaps)
+	}
 	rep := *a.turn.completion
-	rep.Gaps = a.planCriterionGaps(rep.Gaps)
+	rep.Gaps = append(a.planCriterionGaps(rep.Gaps), gaps...)
+	if len(gaps) > 0 && rep.Verdict == completion.VerdictUnknown {
+		return unjudgedReceipt(gaps)
+	}
 	return completionReceipt(rep)
+}
+
+// unjudgedReceipt carries only host-observed gaps for a turn with nothing to judge.
+func unjudgedReceipt(gaps []completion.Gap) *event.CompletionReceipt {
+	out := &event.CompletionReceipt{Verdict: completion.VerdictUnknown.String()}
+	for _, g := range gaps {
+		out.Gaps = append(out.Gaps, event.ReceiptGap{Kind: g.Kind.String(), Detail: g.Detail})
+	}
+	return out
 }

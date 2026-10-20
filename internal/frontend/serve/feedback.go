@@ -17,24 +17,31 @@ import (
 const uploadCeiling = 16 << 20
 
 const (
-	codeFeedbackInvalid      = "feedback.invalid"
-	codeFeedbackTooLarge     = "feedback.too_large"
-	codeFeedbackRateLimited  = "feedback.rate_limited"
-	codeFeedbackDisabled     = "feedback.disabled"
-	codeFeedbackDuplicate    = "feedback.duplicate"
-	codeFeedbackBadToken     = "feedback.bad_token"
-	codeFeedbackOffline      = "feedback.offline"
-	codeFeedbackUnavailable  = "feedback.unavailable"
-	codeFeedbackInternal     = "feedback.internal"
-	codeFeedbackBusy         = "feedback.busy"
-	codeFeedbackImageMeta    = "feedback.image_metadata"
-	codeFeedbackReplyLimit   = "feedback.reply_limit"
-	codeFeedbackNotReplyable = "feedback.not_replyable"
-	codeFeedbackChallenge    = "feedback.challenge_required"
-	codeFeedbackAccount      = "feedback.account_required"
-	codeFeedbackLinkConflict = "feedback.link_conflict"
-	codeFeedbackLinkLimit    = "feedback.link_limit"
-	codeFeedbackNoInstall    = "feedback.no_install"
+	codeFeedbackInvalid         = "feedback.invalid"
+	codeFeedbackTooLarge        = "feedback.too_large"
+	codeFeedbackRateLimited     = "feedback.rate_limited"
+	codeFeedbackDisabled        = "feedback.disabled"
+	codeFeedbackDuplicate       = "feedback.duplicate"
+	codeFeedbackBadToken        = "feedback.bad_token"
+	codeFeedbackOffline         = "feedback.offline"
+	codeFeedbackUnavailable     = "feedback.unavailable"
+	codeFeedbackInternal        = "feedback.internal"
+	codeFeedbackBusy            = "feedback.busy"
+	codeFeedbackImageMeta       = "feedback.image_metadata"
+	codeFeedbackReplyLimit      = "feedback.reply_limit"
+	codeFeedbackNotReplyable    = "feedback.not_replyable"
+	codeFeedbackNotWithdrawable = "feedback.not_withdrawable"
+	codeFeedbackNotFound        = "feedback.not_found"
+	codeFeedbackChallenge       = "feedback.challenge_required"
+	codeFeedbackAccount         = "feedback.account_required"
+	codeFeedbackLinkConflict    = "feedback.link_conflict"
+	codeFeedbackLinkLimit       = "feedback.link_limit"
+	codeFeedbackNoInstall       = "feedback.no_install"
+	codeBoardNameInvalid        = "feedback.board_name_invalid"
+	codeBoardNameReserved       = "feedback.board_name_reserved"
+	codeBoardNameTaken          = "feedback.board_name_taken"
+	codeBoardDelisted           = "feedback.board_delisted"
+	codeBoardNoLink             = "feedback.board_no_link"
 )
 
 // feedbackSurface names where a report from a hub or pane of surface from
@@ -57,10 +64,16 @@ func (s *Server) registerFeedbackRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /feedback/name", s.feedbackName)
 	mux.HandleFunc("POST /feedback/{receipt}/reply", s.feedbackReply)
 	mux.HandleFunc("POST /feedback/{receipt}/seen", s.feedbackSeen)
+	mux.HandleFunc("POST /feedback/promotion/ack", s.feedbackPromotionAck)
+	mux.HandleFunc("POST /feedback/{receipt}/withdraw", s.feedbackWithdraw)
 	mux.HandleFunc("GET /feedback/links", s.feedbackLinks)
 	mux.HandleFunc("POST /feedback/link", s.feedbackLink)
 	mux.HandleFunc("DELETE /feedback/link", s.feedbackUnlink)
 	mux.HandleFunc("DELETE /feedback/links/{id}", s.feedbackUnlinkInstall)
+	mux.HandleFunc("GET /feedback/board", s.feedbackBoard)
+	mux.HandleFunc("GET /feedback/board/me", s.feedbackBoardMe)
+	mux.HandleFunc("POST /feedback/board/join", s.feedbackBoardJoin)
+	mux.HandleFunc("POST /feedback/board/leave", s.feedbackBoardLeave)
 }
 
 func (s *Server) feedbackEnv(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +105,9 @@ type feedbackSubmitBody struct {
 	Locale         string              `json:"locale"`
 	TurnstileToken string              `json:"turnstileToken,omitempty"`
 	Images         []feedbackImageBody `json:"images"`
+	// Memory is what the window's shell says about its own processes; the
+	// feedback package keeps only the fixed types and fills the kernel row itself.
+	Memory []feedback.ProcessMemory `json:"memory,omitempty"`
 }
 
 func (s *Server) feedbackSubmit(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +125,7 @@ func (s *Server) feedbackSubmit(w http.ResponseWriter, r *http.Request) {
 	d := feedback.Draft{
 		IdempotencyKey: req.IdempotencyKey, Category: req.Category, Body: req.Body,
 		DisplayName: req.DisplayName, Contact: req.Contact, TurnstileToken: req.TurnstileToken,
-		Env: feedback.EnvContext{Surface: feedback.SurfaceStudio, Locale: req.Locale},
+		Env: feedback.EnvContext{Surface: feedback.SurfaceStudio, Locale: req.Locale, Shell: req.Memory},
 	}
 	images, ok := decodeFeedbackImages(w, req.Images)
 	if !ok {
@@ -160,6 +176,14 @@ func (s *Server) feedbackReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, got)
+}
+
+func (s *Server) feedbackWithdraw(w http.ResponseWriter, r *http.Request) {
+	if err := s.ctl().WithdrawFeedback(r.Context(), r.PathValue("receipt")); err != nil {
+		refuseFeedback(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type feedbackSeenBody struct {
@@ -217,6 +241,10 @@ func refuseFeedback(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusServiceUnavailable, codeFeedbackBusy, err.Error(), limitParams(err))
 	case errors.Is(err, feedback.ErrReplyLimit):
 		refuse(w, http.StatusTooManyRequests, codeFeedbackReplyLimit, err.Error(), limitParams(err))
+	case errors.Is(err, feedback.ErrNotWithdrawable):
+		refuse(w, http.StatusConflict, codeFeedbackNotWithdrawable, err.Error(), nil)
+	case errors.Is(err, feedback.ErrNotFound):
+		refuse(w, http.StatusNotFound, codeFeedbackNotFound, err.Error(), nil)
 	case errors.Is(err, feedback.ErrNotReplyable):
 		refuse(w, http.StatusConflict, codeFeedbackNotReplyable, err.Error(), nil)
 	case errors.Is(err, feedback.ErrChallengeRequired):
@@ -229,6 +257,16 @@ func refuseFeedback(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusConflict, codeFeedbackLinkLimit, err.Error(), nil)
 	case errors.Is(err, feedback.ErrNoInstall):
 		refuse(w, http.StatusConflict, codeFeedbackNoInstall, err.Error(), nil)
+	case errors.Is(err, feedback.ErrBoardNameInvalid):
+		refuse(w, http.StatusBadRequest, codeBoardNameInvalid, err.Error(), nil)
+	case errors.Is(err, feedback.ErrBoardNameReserved):
+		refuse(w, http.StatusBadRequest, codeBoardNameReserved, err.Error(), nil)
+	case errors.Is(err, feedback.ErrBoardNameTaken):
+		refuse(w, http.StatusConflict, codeBoardNameTaken, err.Error(), nil)
+	case errors.Is(err, feedback.ErrBoardDelisted):
+		refuse(w, http.StatusForbidden, codeBoardDelisted, err.Error(), nil)
+	case errors.Is(err, feedback.ErrBoardNoLink):
+		refuse(w, http.StatusConflict, codeBoardNoLink, err.Error(), nil)
 	case errors.Is(err, feedback.ErrImageMetadata):
 		refuse(w, http.StatusBadRequest, codeFeedbackImageMeta, err.Error(), nil)
 	case errors.Is(err, feedback.ErrOffline):

@@ -50,10 +50,11 @@ import { App } from "../src/ui/App";
 import { MockHub } from "../src/port/mock_hub";
 import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
-import type { AgentPort, Appearance, HistoryMessage, McpEntry } from "../src/port/port";
+import { HttpError } from "../src/port/port";
+import type { AgentPort, Appearance, ChipCall, HistoryMessage, McpEntry } from "../src/port/port";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
-import type { RuntimeView, TreeWorkspace } from "../src/port/hub";
+import type { RuntimeView, TreeWindow, TreeWorkspace } from "../src/port/hub";
 import type { WireEvent } from "../src/port/wire";
 
 // Saves are coalesced (src/ui/trailing.ts), and a fixture answers too fast for
@@ -98,6 +99,34 @@ class BenchPort extends MockPort {
   // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
   constructor() {
     super();
+    // ?peerset=1 starts with session messages on and two projects already allowed through.
+    if (query.has("peerset")) {
+      this.peerSettings = {
+        enabled: true, dispatch: true, max_dispatch_depth: 1, max_dispatched_sessions: 8, applies: "next_turn", pending: query.has("pending"), available: true,
+        path: "/Users/you/.reasonix/config.toml",
+        release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
+      };
+    }
+    // ?git=multi is a folder of projects: three repositories, each with changes of its own.
+    if (query.get("git") === "multi") {
+      this.repoRows = [
+        { dir: "api", name: "api", branch: "main", detached: false },
+        { dir: "web", name: "web", branch: "feature/login", detached: false },
+        { dir: "tools/release", name: "release", branch: "main", detached: false },
+      ];
+      this.repoChanges = {
+        api: [
+          { path: "internal/server/routes.go", status: "M", unstaged: true, insertions: 12, deletions: 3 },
+          { path: "internal/server/routes_test.go", status: "M", staged: true, insertions: 20, deletions: 0 },
+          { path: "README.md", status: "??", unstaged: true },
+        ],
+        web: [
+          { path: "src/login/Form.tsx", status: "M", unstaged: true, insertions: 31, deletions: 9 },
+          { path: "src/login/api.ts", status: "M", staged: true, unstaged: true, insertions: 4, deletions: 1 },
+        ],
+        "tools/release": [],
+      };
+    }
     if (!query.has("mcpactions")) return;
     (this as unknown as { servers: McpEntry[] }).servers.push(
       { name: "notes", state: "ready", enabled: true, transport: "stdio", tools: 2, description: "Notes the agent can search and add to.",
@@ -106,16 +135,31 @@ class BenchPort extends MockPort {
     );
   }
 
+  // ?netshell=1 is a connection over HTTP: a `!` line is refused as the kernel refuses it.
+  async submit(text: string, chips?: ChipCall) {
+    (window.__sent ??= []).push(text);
+    if (query.has("netshell") && text.trimStart().startsWith("!")) throw new HttpError(403, "shell commands are unavailable over HTTP", { code: "shell.unavailable_over_http" });
+    return super.submit(text, chips);
+  }
+
   // ?checkfail=<name> makes a plain test of that source answer 401.
   protected async answerCheck(name: string) {
     if (query.get("checkfail") !== name) return super.answerCheck(name);
     return { ok: false, code: "provider.probe.unauthorized", httpStatus: 401, detail: "Invalid Authentication" };
   }
 
+  // ?twoports=1: two local servers on one host, told apart by port, sharing a key slot.
   // ?badprice=1: DeepSeek's flash price is a card the vendor's table does not have,
   // under a pinned display currency.
   async providers() {
     const all = await super.providers();
+    if (query.has("twoports")) {
+      const local = (name: string, port: number) => ({
+        ...all[0], name, baseUrl: `http://127.0.0.1:${port}/v1`, keyEnv: "LOCAL_API_KEY", inUse: false, preset: false,
+        models: [`${name}-chat`], default: `${name}-chat`,
+      });
+      return [...all, local("local", 8756), local("local-2", 8788)];
+    }
     if (!query.has("badprice")) return all;
     return all.map((p) => p.name === "deepseek"
       ? { ...p, officialPricing: true, modelPrices: { "deepseek-flash": { input: 0.3, output: 1.2, cacheHit: 0, currency: "USD", official: false } } }
@@ -216,17 +260,14 @@ class BenchPort extends MockPort {
       search_backends: ["searxng", "deepseek_api"], searxng_url: "http://127.0.0.1:8080", search_paid_allowed: [],
       fetch_backends: ["local", "deepseek_api"], fetch_paid_allowed: [],
       known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"], paid_backends: ["deepseek_api"],
-      deepseek_api_ready: query.get("webaccess") !== "noready", path: "/Users/you/.reasonix/config.toml",
+      deepseek_api_ready: query.get("webaccess") !== "noready", video_url_passthrough: query.has("videourl"), path: "/Users/you/.reasonix/config.toml",
     };
   }
 
-  async peersSettings() {
-    if (!query.has("peerset")) return super.peersSettings();
-    return {
-      enabled: true, dispatch: true, max_dispatch_depth: 1, max_dispatched_sessions: 8, applies: "next_turn" as const, pending: query.has("pending"), available: true,
-      path: "/Users/you/.reasonix/config.toml",
-      release_projects: [{ path: "/Users/you/work/site", name: "site" }, { path: "/Users/you/work/api-gateway", name: "api-gateway" }],
-    };
+  async probeSearxng() {
+    const answer = query.get("probe");
+    if (!answer || answer === "ok") return super.probeSearxng();
+    return { ok: false, code: `search.searxng_${answer}`, status: answer === "status" ? 429 : answer === "json_disabled" ? 403 : undefined };
   }
 
   async foldWorkSettings() {
@@ -318,7 +359,7 @@ class BenchPort extends MockPort {
     const goalRuntime = usage
       ? { turnsUsed: 4, tokensUsed: 128_400, requestsUsed: 9, workDurationMs: 12 * 60_000, noProgressTurns: usage === "blocked" ? 2 : 0, ...(usage === "blocked" ? { stopCause: "goal_stuck", lastReason: "测试一直没有通过，改动没有让失败的数量减少" } : {}) }
       : undefined;
-    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}), ...(usage ? { goalStatus: usage, goalRuntime } : {}) };
+    const st = { ...(await super.status()), ...(query.has("running") ? { running: true } : {}), ...(query.has("goal") ? { goal: query.get("goal") ?? "" } : {}), ...(usage ? { goalStatus: usage, goalRuntime } : {}), ...(query.has("trustpending") ? { toolApprovalMode: "ask" as const, approvalDefault: { defaulted: true, writesConfined: true, trust: "" as const, trustable: true } } : {}) };
     if (STATUS_MS > 0) await new Promise((r) => setTimeout(r, STATUS_MS));
     if (!JOBS) return st;
     const jobs = Array.from({ length: JOBS }, (_, i) => ({
@@ -389,6 +430,7 @@ const WORKSPACES = Number(query.get("ws") ?? 0);
 const PREF = query.get("pref");
 const ONBOARDING = query.has("onboarding");
 const SESSIONS = Number(query.get("sess") ?? 0);
+const ROW_TITLES = ["rx home目录里有没有 obsidian 的笔记仓库，帮我整理一下", "obsidian 插件同步方案怎么选", "查一下 studio 最近一次发布改了什么", "阅读一下最近的提交记录并总结"];
 // ?turns= is how long the conversation being opened already is.
 const TURNS = Number(query.get("turns") ?? 0);
 const STATUS_MS = Number(query.get("statusms") ?? 0);
@@ -444,21 +486,48 @@ class BenchHub extends MockHub {
     );
   }
 
-  tree(): Promise<TreeWorkspace[]> {
+  async moveSessionTo(path: string, target: string) {
+    (window.__moves ??= []).push({ path, target });
+    return super.moveSessionTo(path, target);
+  }
+
+  // ?slowarchive=<ms>: one project with 27 active and 2127 archived conversations,
+  // whose archived read answers after that many milliseconds.
+  tree(window?: TreeWindow): Promise<TreeWorkspace[]> {
+    const slow = Number(query.get("slowarchive") ?? "");
+    if (slow > 0) {
+      const archived = window?.scope === "archived";
+      const rows = Array.from({ length: archived ? 8 : 6 }, (_, i) => ({
+        path: `/sessions/${archived ? "old" : "new"}-${i}.jsonl`, name: `${archived ? "old" : "new"}-${i}`,
+        title: `${archived ? "归档的" : "活跃的"}会话 ${i + 1}`, turns: i + 1, archived,
+      }));
+      const answer = [{ root: "~/projects/workspace-0", name: "workspace-0", remembered: true, open: true, total: 2154, archived: 2127, remaining: archived ? 2119 : 21, sessions: rows }];
+      return new Promise((resolve) => setTimeout(() => resolve(answer), archived ? slow : 0));
+    }
     const wait = TREE_AT - performance.now();
     if (wait > 0) return new Promise((resolve) => setTimeout(() => resolve(this.tree()), wait));
+    if (!WORKSPACES && query.has("trustpending") && PANES > 1) {
+      return super.tree().then((all) => all.map((ws, i) => i > 0 ? ws : { ...ws, sessions: Array.from({ length: PANES }, (_, k) => ({
+        path: `/sessions/pane-${k + 1}.jsonl`, name: `pane-${k + 1}`, title: `并行会话 ${k + 1}`, turns: 3, runtimeId: `r${k + 1}`,
+      })) }));
+    }
     if (!WORKSPACES) return super.tree();
     return Promise.resolve(
       Array.from({ length: WORKSPACES }, (_, w) => ({
         root: `~/projects/workspace-${w}`,
         name: `workspace-${w}`,
+        remembered: true,
         open: w === 0,
-        sessions: Array.from({ length: SESSIONS }, (_, s) => ({
+        sessions: this.placed(`~/projects/workspace-${w}`, Array.from({ length: SESSIONS }, (_, s) => ({
           path: `/sessions/w${w}-s${s}.jsonl`,
           name: `w${w}-s${s}`,
-          title: `第 ${s} 次会话，标题是内核起的一句话`,
+          title: query.has("rows") ? ROW_TITLES[s % ROW_TITLES.length] : `第 ${s} 次会话，标题是内核起的一句话`,
           turns: (s % 40) + 1,
-        })),
+          ...(query.has("rows") ? {
+            lastActiveAt: Date.now() - (9 + s) * 86_400_000,
+            versions: s % 2 === 1 ? [{ path: `/sessions/w${w}-s${s}-v1.jsonl`, name: `w${w}-s${s}-v1`, title: ROW_TITLES[s % ROW_TITLES.length], turns: 1 }] : undefined,
+          } : {}),
+        }))),
       })),
     );
   }
@@ -477,6 +546,8 @@ createRoot(document.getElementById("root")!).render(<App hub={hub} />);
 
 declare global {
   interface Window {
+    __moves?: { path: string; target: string }[];
+    __sent?: string[];
     // Feeds every open pane, so a split-view measurement costs what two live
     // conversations really cost.
     __feed: (ev: WireEvent) => void;

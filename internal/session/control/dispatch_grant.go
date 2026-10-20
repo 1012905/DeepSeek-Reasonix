@@ -22,7 +22,8 @@ func (c *Controller) DispatchGrant() SessionGrant {
 // AdoptSessionGrant sets this session's posture to the grant's. A field the grant
 // leaves empty is left as it is; the approval posture is always the grant's when
 // it names one, whether that is stricter or looser than this session's default,
-// because the grant is the sender's own and the session must not outrank it.
+// and planning is the sender's whether on or off, because the grant is the
+// sender's own and the session must not outrank it.
 func (c *Controller) AdoptSessionGrant(g SessionGrant) {
 	if mode, ok := ParseToolApprovalMode(g.Approval); ok {
 		c.SetToolApprovalMode(mode)
@@ -30,7 +31,5 @@ func (c *Controller) AdoptSessionGrant(g SessionGrant) {
 	if strings.TrimSpace(g.Preset) != "" {
 		c.SetAgentPreset(g.Preset)
 	}
-	if g.Plan {
-		c.SetPlanMode(true)
-	}
+	c.SetPlanMode(g.Plan)
 }

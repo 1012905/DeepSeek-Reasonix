@@ -21,7 +21,7 @@ afterEach(() => {
 const settings = (over: Partial<WebAccessSettings> = {}): WebAccessSettings => ({
   search_backends: [], searxng_url: "", search_paid_allowed: [], fetch_backends: [], fetch_paid_allowed: [],
   known_search_backends: ["searxng", "deepseek_api"], known_fetch_backends: ["local", "deepseek_api"], paid_backends: ["deepseek_api"],
-  deepseek_api_ready: true, path: "/home/me/.reasonix/config.toml", ...over,
+  deepseek_api_ready: true, video_url_passthrough: false, path: "/home/me/.reasonix/config.toml", ...over,
 });
 
 function portWith(initial: WebAccessSettings) {
@@ -180,5 +180,75 @@ describe("when the settings apply", () => {
     await screen.findByRole("group", { name: "网页搜索" });
     expect(screen.getByText(/之后新开的窗格/)).toBeTruthy();
     expect(screen.getByText("/home/me/.reasonix/config.toml")).toBeTruthy();
+  });
+
+  it("saves the address in the field and tests the saved one, and names why it fails", async () => {
+    const { port, save } = portWith(settings({ search_backends: ["searxng"], searxng_url: "http://127.0.0.1:8080" }));
+    const probe = vi.spyOn(port, "probeSearxng").mockResolvedValue({ ok: false, code: "search.searxng_json_disabled", status: 403 });
+    render(<WebAccess port={port} />);
+    const field = await screen.findByRole("textbox", { name: "SearXNG 地址" });
+    await userEvent.clear(field);
+    await userEvent.type(field, "http://127.0.0.1:9999");
+    await userEvent.click(screen.getByRole("button", { name: "测试连接" }));
+    expect(probe).toHaveBeenCalledExactlyOnceWith();
+    expect((await screen.findByRole("status")).textContent).toMatch(/search\.formats/);
+    expect(save.mock.calls.length).toBeGreaterThan(0);
+    for (const [patch] of save.mock.calls) expect(patch).toEqual({ searxng_url: "http://127.0.0.1:9999" });
+  });
+
+  it("says why the test will not connect to a metadata address, and that a local one is fine", async () => {
+    const { port } = portWith(settings({ search_backends: ["searxng"], searxng_url: "http://169.254.169.254" }));
+    vi.spyOn(port, "probeSearxng").mockResolvedValue({ ok: false, code: "search.searxng_address_refused" });
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("button", { name: "测试连接" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/链路本地.*局域网/);
+  });
+
+  it("says plainly when the instance answers", async () => {
+    const { port } = portWith(settings({ search_backends: ["searxng"], searxng_url: "http://127.0.0.1:8080" }));
+    vi.spyOn(port, "probeSearxng").mockResolvedValue({ ok: true });
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("button", { name: "测试连接" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/连通/);
+  });
+
+  it("cannot test an empty address, and a refused test locks the section as read-only", async () => {
+    const { port } = portWith(settings({ search_backends: ["searxng"] }));
+    vi.spyOn(port, "probeSearxng").mockRejectedValue(new HttpError(403, "x", { code: "web_access.editing_disabled", error: "editing is not enabled" }));
+    render(<WebAccess port={port} />);
+    const button = await screen.findByRole("button", { name: "测试连接" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(screen.getByRole("textbox", { name: "SearXNG 地址" }), "http://x");
+    await userEvent.click(button);
+    expect(await screen.findByText(/只读/)).toBeTruthy();
+  });
+});
+
+describe("handing a video address to the vendor", () => {
+  it("is off by default, says the vendor will visit the address, and saves only that field when turned on", async () => {
+    const { port, save } = portWith(settings());
+    render(<WebAccess port={port} />);
+    const sw = await screen.findByRole("switch", { name: "把视频地址交给模型厂商" });
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(/该网址会被厂商直接访问/)).toBeTruthy();
+    await userEvent.click(sw);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ video_url_passthrough: true });
+  });
+
+  it("shows it on when the user file has it on, and turning it off saves false", async () => {
+    const { port, save } = portWith(settings({ video_url_passthrough: true }));
+    render(<WebAccess port={port} />);
+    const sw = await screen.findByRole("switch", { name: "把视频地址交给模型厂商" });
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    await userEvent.click(sw);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ video_url_passthrough: false });
+  });
+
+  it("cannot be changed while the section is read-only", async () => {
+    const { port } = portWith(settings());
+    vi.spyOn(port, "saveWebAccessSettings").mockRejectedValue(new HttpError(403, "x", { code: "web_access.editing_disabled", error: "editing is not enabled" }));
+    render(<WebAccess port={port} />);
+    await userEvent.click(await screen.findByRole("switch", { name: "把视频地址交给模型厂商" }));
+    expect(await screen.findByText(/只读/)).toBeTruthy();
   });
 });

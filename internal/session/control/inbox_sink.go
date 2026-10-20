@@ -40,9 +40,13 @@ func (s *inboxEventSink) Emit(e event.Event) {
 	case event.CompactionDone:
 		// The listing rode a user turn the fold may have just summarised away.
 		// Standing state that is delivered once has to be re-owed when the turn
-		// carrying it stops being verbatim.
+		// carrying it stops being verbatim; a fold that folded nothing kept it.
+		if e.Compaction.Messages == 0 {
+			return
+		}
 		s.c.date.debt.forget()
 		s.c.skills.forgetDeliveredCatalog()
 		s.c.memory.forgetDeliveredInstructions()
+		s.c.rules.forget()
 	}
 }

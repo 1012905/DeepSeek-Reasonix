@@ -26,10 +26,16 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /browser-tools", s.saveBrowserToolsSettings)
 	mux.HandleFunc("GET /subagent-claims", s.subagentClaimsSettings)
 	mux.HandleFunc("POST /subagent-claims", s.saveSubagentClaimsSettings)
+	mux.HandleFunc("GET /subagent-steer-limits", s.subagentSteerSettings)
+	mux.HandleFunc("POST /subagent-steer-limits", s.saveSubagentSteerSettings)
 	mux.HandleFunc("GET /write-lease", s.writeLeaseSettings)
 	mux.HandleFunc("POST /write-lease", s.saveWriteLeaseSettings)
 	mux.HandleFunc("GET /plan-approval", s.planApprovalSettings)
 	mux.HandleFunc("POST /plan-approval", s.savePlanApprovalSettings)
+	mux.HandleFunc("GET /default-mode", s.defaultModeSettings)
+	mux.HandleFunc("POST /default-mode", s.saveDefaultModeSettings)
+	mux.HandleFunc("GET /tools", s.toolSettings)
+	mux.HandleFunc("POST /tools/disabled", s.saveToolDisabled)
 	// The file every one of these is written to, for when it is the thing that
 	// is wrong: each save above refuses with the same code, and this is where a
 	// surface reads it before trying, and repairs it after.
@@ -243,19 +249,57 @@ func (s *Server) saveWriteLeaseSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var body struct {
-		Optimistic *bool `json:"optimistic"`
+		Optimistic     *bool `json:"optimistic"`
+		MaxWaitMinutes *int  `json:"maxWaitMinutes"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
 		badBody(w)
 		return
 	}
-	if body.Optimistic == nil {
-		refuse(w, http.StatusBadRequest, "write_lease.no_choice", "optimistic is required", nil)
+	if body.Optimistic == nil && body.MaxWaitMinutes == nil {
+		refuse(w, http.StatusBadRequest, "write_lease.no_choice", "optimistic or maxWaitMinutes is required", nil)
 		return
 	}
-	if err := s.ctl().SaveWriteLeaseSettings(*body.Optimistic); err != nil {
+	if body.MaxWaitMinutes != nil && *body.MaxWaitMinutes < 0 {
+		refuse(w, http.StatusBadRequest, "write_lease.bad_wait", "maxWaitMinutes cannot be negative", nil)
+		return
+	}
+	if err := s.ctl().SaveWriteLeaseSettings(body.Optimistic, body.MaxWaitMinutes); err != nil {
 		saveFailed(w, http.StatusInternalServerError, "write_lease.save_failed", err)
 		return
 	}
 	writeJSON(w, s.ctl().WriteLeaseSettings())
+}
+
+func (s *Server) subagentSteerSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, s.ctl().SubagentSteerSettings())
+}
+
+// saveSubagentSteerSettings rides the provider-edit grant: raising or lifting a
+// limit on what can be said to a running sub-agent is the machine owner's call,
+// not a networked client's.
+func (s *Server) saveSubagentSteerSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "subagent_steer.editing_disabled", "sub-agent guidance limit editing is not enabled on this server", nil)
+		return
+	}
+	var body struct {
+		MaxBytes  *int `json:"maxBytes"`
+		PerMinute *int `json:"perMinute"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
+		badBody(w)
+		return
+	}
+	for field, v := range map[string]*int{"maxBytes": body.MaxBytes, "perMinute": body.PerMinute} {
+		if v == nil || *v < 0 {
+			missingField(w, field)
+			return
+		}
+	}
+	if err := s.ctl().SaveSubagentSteerSettings(*body.MaxBytes, *body.PerMinute); err != nil {
+		saveFailed(w, http.StatusInternalServerError, "subagent_steer.save_failed", err)
+		return
+	}
+	writeJSON(w, s.ctl().SubagentSteerSettings())
 }

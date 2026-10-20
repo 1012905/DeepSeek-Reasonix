@@ -26,16 +26,16 @@ import { useTabClose } from "./useTabClose";
 import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
 import { WorkbenchSelectionMenu, type SelectionMenu } from "./WorkbenchSelectionMenu";
-import { WorkbenchChanges } from "./WorkbenchChanges";
-import { WorkbenchHistory } from "./WorkbenchHistory";
+import { WorkbenchGit } from "./WorkbenchGit";
+import { useGitRepos } from "./useGitRepos";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
 import { OpenWithMenu } from "./OpenWithMenu";
 import type { HubPort } from "../port/hub";
 import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
-import { useCommitCard } from "./CommitCard";
 import { BrowserWideToggle } from "./BrowserWideToggle";
+import { BrowserFullToggle } from "./BrowserFullToggle";
 import { WorkspaceImage, isWorkspaceImage } from "./WorkspaceImage";
 
 // The editor and its grammars load with the first file opened, not with Studio.
@@ -125,6 +125,7 @@ export function WorkbenchPanel({
   onAddToChat,
   onQuoteSelection,
   wideMode,
+  fullMode,
   fileRequest,
 }: {
   port: AgentPort;
@@ -156,6 +157,7 @@ export function WorkbenchPanel({
   // Text selected in an open file, with the file it came from, on its way to the composer.
   onQuoteSelection?: (text: string, path: string) => void;
   wideMode?: { wide: boolean; onToggle: () => void };
+  fullMode?: { full: boolean; onToggle: () => void };
   fileRequest?: { path: string };
 }) {
   const preview = useHtmlPreview(port, allTabs, remote);
@@ -164,11 +166,13 @@ export function WorkbenchPanel({
     [directories, setDirectories] = useState<string[]>([]),
     [openFiles, setOpenFiles] = useState<string[]>([]);
   const [showFiles, setShowFiles] = useState(false);
+  // The file picked out of the explorer, if that is how it was opened: closing
+  // it comes back to the list it was stepped aside from.
+  const fromExplorer = useRef("");
   const [launcher, setLauncher] = useState(false);
   const newTab = useRef<HTMLButtonElement>(null);
   const toggleLauncher = () => { supersede(); setLauncher((open) => !open); };
   const chooseFiles = () => { supersede(); setLauncher(false); setShowFiles(true); };
-  const commit = useCommitCard(port, () => onTreeChanged?.());
   const toggleExplorer = () => { supersede(); setLauncher(false); setShowFiles((on) => launcher || !on); };
   useOnBump(revealChanges, chooseFiles);
   useOnBump(toggleFiles, toggleExplorer);
@@ -230,6 +234,7 @@ export function WorkbenchPanel({
   // only as stale as the last time it asked. A delete in another application
   // tells nobody here; looking back at the window is when it can have happened.
   const glance = useGlance();
+  const gitRepos = useGitRepos(port, glance);
   useEffect(() => {
     if (!shown) return;
     folderRequests.clear();
@@ -357,7 +362,7 @@ export function WorkbenchPanel({
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
   const { file, draft, diff, busy, error: fileFailed, missing, setDraft, save } = useWorkbenchFiles({
-    port, workspaceRoot, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
+    port, workspaceRoot, repos: gitRepos.repos, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
     poll: (readable && mode === "read") || (previewable && mode === "preview"),
   });
   const revision = file?.revision;
@@ -396,8 +401,11 @@ export function WorkbenchPanel({
       n.delete(`file:${path}`);
       return n;
     });
+    // A file picked while the explorer is shown leaves that list stepped aside
+    // rather than closed, so closing this file comes back to the list.
+    fromExplorer.current = showFiles ? path : "";
     pick(`file:${path}`);
-  }, [pick]);
+  }, [pick, showFiles]);
   useEffect(() => { if (fileRequest) openFile(fileRequest.path); }, [fileRequest, openFile]);
   // A rendered document's own links open beside it and its images load from the
   // tree. Held stable per document, so typing re-renders the text alone.
@@ -450,7 +458,7 @@ export function WorkbenchPanel({
       if (openingBrowser.current === page) openingBrowser.current = null;
     }
   };
-  const { close: closeTabs, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles: showFiles || launcher, setBrowsers, setOpenFiles, setDismissed, setSelected, onCloseManual, onCloseSelected: () => setFailed("") });
+  const { close: closeTabs, closing, closeFailure } = useTabClose({ port, surfaces, selected, showFiles: showFiles || launcher, fromExplorer, setBrowsers, setOpenFiles, setDismissed, setSelected, setShowFiles, setLauncher, onCloseManual, onCloseSelected: () => setFailed("") });
   const close = (targets: Surface[]) => { supersede(); return closeTabs(targets); };
   const dismissTabMenu = useCallback(() => setTabMenu(null), []);
   const [tabMenu, setTabMenu] = useState<{ surface: Surface; x: number; y: number; anchor: HTMLElement } | null>(null);
@@ -557,6 +565,7 @@ export function WorkbenchPanel({
         ))}
         </div>
         {wideMode && <BrowserWideToggle {...wideMode} />}
+        {fullMode && <BrowserFullToggle {...fullMode} />}
         <button
           className="workbench-files"
           data-action="workbench.files"
@@ -703,20 +712,21 @@ export function WorkbenchPanel({
           {/* What differs, without opening anything. The tree marks a changed
               file only once its folder is expanded, so a change three levels
               down was invisible until someone went looking for it. */}
-          {changes.length > 0 && (
-            <WorkbenchChanges
-              port={port}
-              changes={changes}
-              current={active?.kind === "file" && mode === "diff" ? active.path : ""}
-              onOpen={(path) => {
-                openFile(path);
-                setMode("diff");
-              }}
-              onChanged={onTreeChanged}
-              commit={commit}
-            />
-          )}
-          {!remote && <WorkbenchHistory port={port} />}
+          <WorkbenchGit
+            port={port}
+            changes={changes}
+            repos={gitRepos.repos}
+            failure={gitRepos.failure}
+            onRetry={gitRepos.retry}
+            wrote={wrote}
+            current={active?.kind === "file" && mode === "diff" ? active.path : ""}
+            onOpen={(path) => {
+              openFile(path);
+              setMode("diff");
+            }}
+            onChanged={onTreeChanged}
+            remote={remote}
+          />
           <div className="workbench-filelist">
             {rows.map((row) =>
               row.kind === "folder" ? (

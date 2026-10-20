@@ -52,7 +52,7 @@ func TestReconnectNeverStartsAProjectServerTheUserHasNotApproved(t *testing.T) {
 	factory := &controlFactory{}
 	client, stop := startServer(t, factory)
 	defer stop()
-	client.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+	client.call(t, "initialize", InitializeParams{ProtocolVersion: 1, ClientCapabilities: statusUpdatesCaps})
 	id := openStatusSession(t, client, projectWithServer(t))
 	waitMCPStatusUpdate(t, client)
 
@@ -82,7 +82,7 @@ func TestDisconnectIsSessionOnlyAndAnnounced(t *testing.T) {
 	factory := &controlFactory{}
 	client, stop := startServer(t, factory)
 	defer stop()
-	client.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+	client.call(t, "initialize", InitializeParams{ProtocolVersion: 1, ClientCapabilities: statusUpdatesCaps})
 	id := openStatusSession(t, client, projectWithServer(t))
 	waitMCPStatusUpdate(t, client)
 

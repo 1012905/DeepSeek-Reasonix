@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"reasonix/internal/state/sessionstore"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessioninbox"
@@ -31,6 +33,17 @@ func sessionLeaseBindError(method string, err error) *RPCError {
 		}
 	}
 	return &RPCError{Code: ErrInternal, Message: method + ": session lease: " + err.Error()}
+}
+
+// sessionOpenError answers a session that could not open: a model with no
+// credentials is the ACP "authentication required" error, which a client keys
+// on to offer the advertised setup method; anything else is internal.
+func sessionOpenError(method string, err error) *RPCError {
+	code := ErrInternal
+	if errors.Is(err, provider.ErrKeyMissing) || errors.Is(err, provider.ErrNoProvider) {
+		code = ErrAuthRequired
+	}
+	return &RPCError{Code: code, Message: method + ": " + err.Error()}
 }
 
 // sessionNew opens a session: it mints an id, builds the session's sink bound to
@@ -52,60 +65,70 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/new: " + err.Error()}
 	}
+	additionalDirs, rpcErr := vetAdditionalDirs(cwd, p.AdditionalDirectories)
+	if rpcErr != nil {
+		rpcErr.Message = "session/new: " + rpcErr.Message
+		return nil, rpcErr
+	}
 	cfgState, err := s.sessionConfigState(ctx, SessionConfigStateParams{Cwd: cwd})
 	if err != nil {
-		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
+		return nil, sessionOpenError("session/new", err)
 	}
-	cfgState = withToolApprovalConfig(cfgState, control.ToolApprovalAsk)
+	startPosture := s.startingPosture()
+	cfgState = s.withToolApprovalConfig(cfgState, startPosture)
 	runtimeState, err := s.sessionRuntimeState(ctx, SessionRuntimeStateParams{
 		Cwd: cwd, Model: cfgState.Model, RuntimeProfile: cfgState.RuntimeProfile,
 	})
 	if err != nil {
-		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
+		return nil, sessionOpenError("session/new", err)
 	}
-
 	id, err := newSessionID()
 	if err != nil {
-		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
+		return nil, sessionOpenError("session/new", err)
 	}
-
 	sink := newUpdateSink(s.conn, id)
 	sink.bindCwd(cwd)
 	sink.bindExtensionSurface(s.extensionSurfaceSupported())
+	sink.bindElicitation(s.clientCapabilities())
 	sessionParams := SessionParams{
 		Cwd:                cwd,
 		MCPServers:         mcpServers,
+		AdditionalDirs:     additionalDirs,
 		Sink:               sink,
 		Model:              cfgState.Model,
 		EffortOverride:     cloneStringPtr(cfgState.EffortOverride),
 		RuntimeProfile:     cfgState.RuntimeProfile,
 		OnSessionRecovered: s.sessionRecoveredHandler(id),
+		NewConversation:    true,
 	}
 	s.bindClientIO(&sessionParams, id)
 	ctrl, err := s.factory.NewSession(ctx, sessionParams)
 	if err != nil {
-		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
+		return nil, newSessionError("session/new", err)
 	}
 	ctrl.EnableInteractiveApproval()
+	ctrl.SetToolApprovalMode(startPosture)
 	sink.bindApprove(ctrl.Approve)
 	sink.bindAnswer(ctrl.AnswerQuestion)
 
+	startMode := startingModeID(ctrl)
 	now := time.Now().UTC()
 	sess := &acpSession{
-		id:               id,
-		ctrl:             ctrl,
-		sink:             sink,
-		cwd:              cwd,
-		mcpServers:       clonePluginSpecs(mcpServers),
-		model:            cfgState.Model,
-		effortOverride:   cloneStringPtr(cfgState.EffortOverride),
-		runtimeProfile:   cfgState.RuntimeProfile,
-		toolApprovalMode: control.ToolApprovalAsk,
-		runtimeState:     runtimeState,
-		status:           newStatusTelemetry(),
-		modeID:           sessionModeNormal,
-		createdAt:        now,
-		updatedAt:        now,
+		id:             id,
+		ctrl:           ctrl,
+		sink:           sink,
+		cwd:            cwd,
+		mcpServers:     clonePluginSpecs(mcpServers),
+		additionalDirs: additionalDirs,
+		model:          cfgState.Model,
+		effortOverride: cloneStringPtr(cfgState.EffortOverride),
+		runtimeProfile: cfgState.RuntimeProfile,
+		posture:        approvalPosture{mode: startPosture},
+		runtimeState:   runtimeState,
+		status:         newStatusTelemetry(),
+		modeID:         startMode,
+		createdAt:      now,
+		updatedAt:      now,
 	}
 	s.bindSessionHealthEvents(sess)
 	// Pin a transcript file keyed by session id when the controller has a session
@@ -134,12 +157,12 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 
 	// Fold in the live controller's extension catalog so plugin/... models
 	// are discoverable from the very first session/new result.
-	cfgState = enrichStateWithExtensionModels(cfgState, ctrl.ProviderCatalog())
+	cfgState = withCompositionConfig(enrichStateWithExtensionModels(cfgState, ctrl.ProviderCatalog()), ctrl)
 	return afterResponse{
 		result: SessionNewResult{
 			SessionID:     id,
 			Models:        cfgState.Models,
-			Modes:         sessionModesState(sessionModeNormal),
+			Modes:         sessionModesState(startMode),
 			ConfigOptions: cfgState.ConfigOptions,
 		},
 		after: func() {
@@ -147,6 +170,15 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 			s.publishMCPStatus(sess)
 		},
 	}, nil
+}
+
+// startingModeID is the mode a session just built starts in: plan when the
+// controller started there (the user's default mode), normal otherwise.
+func startingModeID(ctrl *control.Controller) string {
+	if ctrl.PlanMode() {
+		return sessionModePlan
+	}
+	return sessionModeNormal
 }
 
 func sessionModesState(current string) *SessionModeState {
@@ -186,11 +218,17 @@ func (s *service) sessionSetMode(ctx context.Context, raw json.RawMessage) (any,
 	case sessionModeGoal:
 		ctrl.SetPlanMode(false)
 	case sessionModeLegacyDefault:
+		if ceiling := s.postureCeiling(); !withinCeiling(control.ToolApprovalAsk, ceiling) {
+			return nil, aboveCeilingError("session/set_mode", control.ToolApprovalAsk, ceiling)
+		}
 		nextMode = sessionModeNormal
 		legacyApproval = control.ToolApprovalAsk
 		ctrl.SetPlanMode(false)
 		ctrl.ClearGoal()
 	case sessionModeLegacyAuto:
+		if ceiling := s.postureCeiling(); !withinCeiling(control.ToolApprovalYolo, ceiling) {
+			return nil, aboveCeilingError("session/set_mode", control.ToolApprovalYolo, ceiling)
+		}
 		nextMode = sessionModeNormal
 		legacyApproval = control.ToolApprovalYolo
 		ctrl.SetPlanMode(false)
@@ -223,7 +261,7 @@ func (s *service) sessionLoad(ctx context.Context, raw json.RawMessage) (any, er
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/load: " + err.Error()}
 	}
-	cfgState, err := s.openExistingSession(ctx, "session/load", p.SessionID, p.Cwd, p.MCPServers, true)
+	cfgState, err := s.openExistingSession(ctx, "session/load", p.SessionID, p.Cwd, p.AdditionalDirectories, p.MCPServers, true)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +293,7 @@ func (s *service) sessionResume(ctx context.Context, raw json.RawMessage) (any, 
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/resume: " + err.Error()}
 	}
-	cfgState, err := s.openExistingSession(ctx, "session/resume", p.SessionID, p.Cwd, p.MCPServers, false)
+	cfgState, err := s.openExistingSession(ctx, "session/resume", p.SessionID, p.Cwd, p.AdditionalDirectories, p.MCPServers, false)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +365,7 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 	sess.persistAfterTurn(text)
 
 	stop := StopEndTurn
-	var meta map[string]any
+	vendor := map[string]any{}
 	if runErr != nil {
 		var readinessErr *agent.FinalReadinessError
 		switch {
@@ -336,7 +374,7 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 		case errors.As(runErr, &readinessErr):
 			outcome := ReasonixTurnOutcome{Kind: "paused", Reason: clipStatusText(readinessErr.Error(), 2_048)}
 			sess.sink.send(readinessReceipt(outcome.Reason, readinessErr.Missing))
-			meta = map[string]any{"reasonix.io": map[string]any{"turnOutcome": outcome}}
+			vendor["turnOutcome"] = outcome
 		default:
 			return nil, &RPCError{
 				Code:    ErrInternal,
@@ -345,9 +383,12 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 			}
 		}
 	}
-	res := SessionPromptResult{StopReason: stop, Meta: meta}
 	if sess.transcript != "" {
-		res.TranscriptPath = &sess.transcript
+		vendor["transcriptPath"] = sess.transcript
+	}
+	res := SessionPromptResult{StopReason: stop}
+	if len(vendor) > 0 {
+		res.Meta = map[string]any{"reasonix.io": vendor}
 	}
 	return res, nil
 }
@@ -437,12 +478,22 @@ func (s *service) sessionSetConfigOption(ctx context.Context, raw json.RawMessag
 	if !ok {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/set_config_option: unknown config option " + p.ConfigID}
 	}
+	if configOptionCategory(option) == "tool_approval" && slices.Contains(toolApprovalOrder, p.Value) {
+		if ceiling := s.postureCeiling(); !withinCeiling(p.Value, ceiling) {
+			return nil, aboveCeilingError("session/set_config_option", p.Value, ceiling)
+		}
+	}
 	if !configOptionHasValue(option, p.Value) {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/set_config_option: invalid value " + p.Value + " for " + option.ID}
 	}
 
 	var next SessionConfigState
 	switch configOptionCategory(option) {
+	case "agent_composition":
+		err = sess.currentCtrl().SelectAgentComposition(ctx, p.Value)
+		if err == nil {
+			next, err = s.configStateForSession(ctx, sess)
+		}
 	case "model":
 		next, err = s.switchSessionModel(ctx, sess, p.Value)
 	case "thought_level":

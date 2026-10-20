@@ -9,10 +9,10 @@ export const FEEDBACK_CATEGORIES: readonly FeedbackCategory[] = ["bug", "idea", 
 // What a person may see. A report waiting for triage reads as received; one
 // the maintainers declined reads as closed, with no reason.
 export type FeedbackStatus =
-  | "received" | "needs_info" | "answered" | "recorded" | "in_progress" | "fixed" | "wontfix" | "duplicate" | "closed";
+  | "received" | "needs_info" | "answered" | "recorded" | "in_progress" | "fixed" | "wontfix" | "duplicate" | "closed" | "withdrawn";
 
 export const FEEDBACK_STATUSES: readonly FeedbackStatus[] = [
-  "received", "needs_info", "answered", "recorded", "in_progress", "fixed", "wontfix", "duplicate", "closed",
+  "received", "needs_info", "answered", "recorded", "in_progress", "fixed", "wontfix", "duplicate", "closed", "withdrawn",
 ];
 
 export const isUnderReview = (item: Pick<FeedbackItem, "status" | "underReview" | "statusUnavailable">): boolean =>
@@ -27,6 +27,22 @@ export const FEEDBACK_REPLYABLE: readonly FeedbackStatus[] = ["needs_info", "ans
 export const canReplyTo = (item: Pick<FeedbackItem, "status" | "underReview" | "statusUnavailable">): boolean =>
   !item.statusUnavailable && (FEEDBACK_REPLYABLE.includes(item.status) || (item.status === "received" && !isUnderReview(item)));
 
+// A report can be taken back until it has an outcome; the service has the last word.
+export const FEEDBACK_WITHDRAWABLE: readonly FeedbackStatus[] = ["received", "needs_info", "answered", "recorded", "in_progress"];
+
+export const canWithdraw = (item: Pick<FeedbackItem, "status" | "statusUnavailable">): boolean =>
+  !item.statusUnavailable && FEEDBACK_WITHDRAWABLE.includes(item.status);
+
+// One process's memory as a report carries it: a type from a fixed list and two
+// sizes in kilobytes. Nothing in it names a path, a process id or a user.
+export type FeedbackProcessType = "browser" | "renderer" | "gpu" | "utility" | "kernel";
+
+export interface FeedbackProcessMemory {
+  process: FeedbackProcessType;
+  workingSetKB: number;
+  privateKB: number;
+}
+
 export interface FeedbackEnvInfo {
   version: string;
   commit: string;
@@ -37,6 +53,8 @@ export interface FeedbackEnvInfo {
   locale: string;
   channel: string;
   providerKind: string;
+  // The kernel's own row; the window's shell adds the rest when a report is sent.
+  memory?: FeedbackProcessMemory[];
 }
 
 // uploadBytes bounds one raw file the page may hand over; the kernel shrinks
@@ -71,6 +89,8 @@ export interface FeedbackRequest {
   // The UI language tag, so the issue can be triaged in the reporter's language.
   locale?: string;
   images: FeedbackImage[];
+  // The shell's process rows; the kernel keeps the fixed types and adds its own.
+  memory?: FeedbackProcessMemory[];
   // Answer to a feedback.challenge_required refusal.
   turnstileToken?: string;
 }
@@ -100,6 +120,8 @@ export interface FeedbackReply {
 }
 
 export interface FeedbackItem {
+  // A report another device of the same account filed; read marks stay on this computer.
+  otherInstall?: boolean;
   receipt: string;
   category: FeedbackCategory;
   titleSnippet: string;
@@ -162,6 +184,13 @@ export interface FeedbackMine {
   unread: number;
   hasNew: boolean;
   profile?: FeedbackProfile | null;
+  // A level the service now states that this machine has not told the person about.
+  promotion?: FeedbackPromotion | null;
+}
+
+export interface FeedbackPromotion {
+  from: number;
+  to: number;
 }
 
 // One install an account holds, as the service lists it: the short id, when it
@@ -185,6 +214,37 @@ export const FEEDBACK_LIMIT = {
   globalBurst: "global_burst",
 } as const;
 
+// One person on the contribution board: the name they chose, how many of their
+// suggestions shipped, where, and (in a release view only) their place.
+export interface FeedbackBoardEntry {
+  displayName: string;
+  credits: number;
+  rank: number | null;
+  releases: FeedbackBoardRelease[];
+}
+
+export interface FeedbackBoardRelease {
+  version: string;
+  count: number;
+}
+
+// The public board. available is false where the service does not serve one, which
+// hides the section rather than failing it.
+export interface FeedbackBoard {
+  available: boolean;
+  view: "all" | "release";
+  release: string | null;
+  entries: FeedbackBoardEntry[];
+}
+
+// What the signed-in person has chosen about being on the board.
+export interface FeedbackBoardMe {
+  listed: boolean;
+  displayName: string | null;
+  // A maintainer removed this account; it cannot list itself again until restored.
+  delisted: boolean;
+}
+
 export const FEEDBACK_REPO_ISSUES = "https://github.com/esengine/DeepSeek-Reasonix/issues/";
 
 export const FEEDBACK_NEXT_VERSION = "next";
@@ -200,6 +260,8 @@ export const FEEDBACK_CODE = {
   badToken: "feedback.bad_token",
   replyLimit: "feedback.reply_limit",
   notReplyable: "feedback.not_replyable",
+  notWithdrawable: "feedback.not_withdrawable",
+  notFound: "feedback.not_found",
   challengeRequired: "feedback.challenge_required",
   accountRequired: "feedback.account_required",
   linkConflict: "feedback.link_conflict",

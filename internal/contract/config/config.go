@@ -1,5 +1,6 @@
 // Package config loads Reasonix's runtime configuration from TOML. Resolution order:
-// flag > project ./reasonix.toml > user config.toml (in the OS user-config dir) > built-in defaults.
+// flag > project config > user config.toml (in the OS user-config dir) > built-in defaults.
+// Project config is ./reasonix.toml, falling back to .reasonix/reasonix.toml.
 // Secrets come from the environment via api_key_env and are never stored in config files.
 package config
 
@@ -53,6 +54,10 @@ type Config struct {
 	AutoSubmit bool `toml:"auto_submit"`
 	// Peers governs messages between sessions; see PeersConfig.
 	Peers PeersConfig `toml:"peers"`
+	// Observability governs the opt-in trace export. User/global only.
+	Observability ObservabilityConfig `toml:"observability"`
+	// Mods governs Claude Code mods; see ModsConfig.
+	Mods ModsConfig `toml:"mods"`
 	// Storage relocates the movable roots, keyed by RootID. User/global only.
 	Storage map[string]string `toml:"storage"`
 
@@ -264,6 +269,20 @@ type NotificationsConfig struct {
 	// Sound plays a short system chime for the events switched on above, whether
 	// or not system notifications are; off unless asked for.
 	Sound bool `toml:"sound"`
+	// Phone says what this desktop tells its enrolled phones about. Off unless
+	// asked for, because it tells the account service that something is waiting.
+	Phone PhoneNotificationsConfig `toml:"phone"`
+}
+
+// PhoneNotificationsConfig is the desktop's half of phone notifications: the
+// master switch and which of the three occasions it reports. What a phone does
+// with a report is that phone's own choice. Only the type of occasion and a
+// count are ever sent.
+type PhoneNotificationsConfig struct {
+	Enabled  bool `toml:"enabled"`
+	Approval bool `toml:"approval"`
+	Input    bool `toml:"input"`
+	Error    bool `toml:"error"`
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the
@@ -890,6 +909,11 @@ type SandboxConfig struct {
 	// command when an OS sandbox is available and refuses bash otherwise; "off"
 	// runs it unconfined. Empty uses the platform default.
 	Bash string `toml:"bash"`
+	// WindowsIntegrity turns the bash sandbox on for Windows: commands run under a
+	// write-restricted, Low-integrity token, and the workspace and cache roots are
+	// granted to it once (ACL entries on your disk, listed by `reasonix sandbox`).
+	// Off by default and user file only; it bounds writes, not reads or the network.
+	WindowsIntegrity bool `toml:"windows_integrity"`
 	// Network allows network egress from inside the bash sandbox. Defaults true
 	// so module/package downloads keep working; the boundary is then writes.
 	Network bool `toml:"network"`
@@ -996,11 +1020,14 @@ func (c *Config) BashMode() string {
 }
 
 // BashModeForGOOS normalises the bash-sandbox mode for tests and cross-platform
-// rendering. Windows has no OS-level Bash sandbox and forces the effective mode
-// off, even when older configs explicitly requested "enforce". macOS/Linux keep
-// the existing explicit-mode behavior.
+// rendering. Windows enforces only when the user turned on windows_integrity;
+// an older config's explicit "enforce" there stays off. macOS/Linux keep the
+// existing explicit-mode behavior.
 func (c *Config) BashModeForGOOS(goos string) string {
 	if goos == "windows" {
+		if c.Sandbox.WindowsIntegrity {
+			return "enforce"
+		}
 		return "off"
 	}
 	switch strings.TrimSpace(c.Sandbox.Bash) {
@@ -1013,6 +1040,17 @@ func (c *Config) BashModeForGOOS(goos string) string {
 	default:
 		return "enforce"
 	}
+}
+
+// BashModeUnderOverride is the mode a caller's request for override wins. On
+// Windows a request to enforce is honoured only when the user turned on
+// windows_integrity: enforcing there edits permissions on the user's folders,
+// which a caller must not do on its own account.
+func (c *Config) BashModeUnderOverride(override string) string {
+	if override == "enforce" && runtimeGOOS == "windows" && !c.Sandbox.WindowsIntegrity {
+		return c.BashMode()
+	}
+	return override
 }
 
 // AgentConfig configures the harness loop. PlannerModel is optional: when set
@@ -1076,6 +1114,11 @@ type AgentConfig struct {
 	MaxSideSessions    int               `toml:"max_side_sessions"`    // 0 (default) opens as many side conversations as asked; the user file only
 	MaxQueuedInputs    int               `toml:"max_queued_inputs"`    // 0 (default) queues as many prompts as asked; the user file only
 	MaxProviderRetries int               `toml:"max_provider_retries"` // default 10; 0 retries until cancelled; the user file only
+	// Guidance sent to a running sub-agent: the bytes in one message (default 16384,
+	// which keeps one message from filling the child's context) and the messages
+	// per minute to one sub-agent (default 30, a stop for a loop); 0 lifts either.
+	SubagentSteerBytes     int `toml:"max_subagent_steer_bytes"`       // the user file only
+	SubagentSteerPerMinute int `toml:"max_subagent_steers_per_minute"` // the user file only
 	// TaskCostBudget lands a task on one summary once it spends this much.
 	TaskCostBudget float64 `toml:"task_cost_budget"`
 	// TaskTimeBudgetMinutes is the same gate on wall clock. All three ship off.
@@ -1096,12 +1139,17 @@ type AgentConfig struct {
 	SubagentClaims     string `toml:"subagent_claims"`   // "strict" (default) or "optimistic"; the user file only
 	WriteLease         string `toml:"write_lease"`       // "strict" (default) or "optimistic"; the user file only
 	PlanApproval       string `toml:"plan_approval"`     // "ask" (default) or "auto": the plan card answers itself; the user file only
+	DefaultMode        string `toml:"default_mode"`      // "normal" (default) or "plan": how a new conversation starts; the user file only
 	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
-	// OutputStyle selects a persona/tone block folded into the system prompt at
-	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
-	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
-	OutputStyle string `toml:"output_style"`
+
+	// WriteLeaseMaxWaitMinutes bounds one wait behind another session's write
+	// claim; 0, the default, waits for as long as the turn lasts. The user file only.
+	WriteLeaseMaxWaitMinutes int `toml:"write_lease_max_wait_minutes"`
+	// OutputStyle selects built-in tone guidance or .reasonix/output-styles/<name>.md.
+	// Empty leaves the prompt unmodified.
+	OutputStyle string        `toml:"output_style"`
+	Persona     PersonaConfig `toml:"persona"`
 	// Deprecated compatibility field. Automatic plan mode was retired in config
 	// version 5; old TOML remains readable, but loading normalizes it to "off"
 	// and rendering omits it. Plan mode remains available as an explicit user
@@ -1152,7 +1200,9 @@ type AgentConfig struct {
 
 // ToolsConfig selects which built-in tools are enabled. Empty means all of them.
 type ToolsConfig struct {
-	Enabled                  []string             `toml:"enabled"`
+	Enabled []string `toml:"enabled"`
+	// Disabled removes tools by name from every surface; a project file can only add to it.
+	Disabled                 []string             `toml:"disabled"`
 	BashTimeoutSeconds       *int                 `toml:"bash_timeout_seconds"`
 	MCPStartupTimeoutSeconds *int                 `toml:"mcp_startup_timeout_seconds"`
 	MCPCallTimeoutSeconds    *int                 `toml:"mcp_call_timeout_seconds"`
@@ -1168,6 +1218,8 @@ type ToolsConfig struct {
 	WebAccessSettings
 	// VideoNativeMaxBytes lowers the size read_video sends natively below the endpoint's limit; 0 keeps it. User file only.
 	VideoNativeMaxBytes int64 `toml:"video_native_max_bytes"`
+	// VideoURLPassthrough lets the model hand a public video address the user gave to the vendor, which then visits it. User file only; off by default.
+	VideoURLPassthrough bool `toml:"video_url_passthrough"`
 	// MCPLoad maps a server name to "always" or "deferred", overriding what
 	// the server's own declaration says.
 	MCPLoad map[string]string `toml:"mcp_load"`
@@ -1310,7 +1362,7 @@ func Default() *Config {
 	return &Config{
 		ConfigVersion:    freshConfigVersion,
 		DefaultModel:     "deepseek-flash",
-		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(),
+		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(), Mods: defaultMods(),
 		UI:      UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
 		Desktop: DesktopConfig{ConversationWidth: "standard"},
 		Billing: BillingConfig{},
@@ -1339,11 +1391,14 @@ func Default() *Config {
 			ContextEditing:         "",
 			MaxSubagentDepth:       8,
 			MaxProviderRetries:     10,
+			SubagentSteerBytes:     16384,
+			SubagentSteerPerMinute: 30,
 			MaxSubagentConcurrency: 0,
 			MaxParallelWriters:     0,
 			SubagentClaims:         "strict",
 			WriteLease:             "strict",
 			PlanApproval:           "ask",
+			DefaultMode:            "normal",
 			HostVerification:       "on",
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask

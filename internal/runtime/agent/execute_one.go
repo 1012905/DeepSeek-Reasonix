@@ -138,8 +138,8 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 		return blocked
 	}
 	// tool.before: extensions rule on the parsed call before any policy or
-	// permission check. A valid replacement is re-parsed so every later stage
-	// sees the call that will actually execute.
+	// permission check; a valid replacement is re-parsed for every later stage.
+	a.noteOriginMatch(plan)
 	if blocked, early := a.interceptToolBefore(ctx, plan); early {
 		return blocked
 	}
@@ -180,7 +180,7 @@ func (a *Agent) parseToolCall(ctx context.Context, plan *toolCallPlan) (toolOutc
 				output: fmt.Sprintf("MCP server %q is connected; its real tools are now available", server),
 			}, true
 		}
-		if refusal, ok := a.svc.tools.MCPRefusal(plan.call.Name); ok {
+		if refusal, ok := a.svc.tools.CallRefusal(plan.call.Name); ok {
 			msg := refusal.String()
 			return toolOutcome{output: msg, blocked: true, errMsg: firstLine(msg), refusalCode: refusal.Code}, true
 		}
@@ -412,9 +412,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 			}
 			body, bound, truncMsg := a.boundToolOutput(result, plan.call.Name, plan.call.ID, plan.call.Arguments, false)
 			out := toolOutcome{output: body, bound: bound, truncMsg: truncMsg}
-			if truncMsg != "" {
-				out.rawOutput = result
-			}
+			out.keepFull(result)
 			return out, true
 		}
 	} else if outcome, blocked := a.readOnlyExecutionBlock(t, nil); blocked {
@@ -523,7 +521,7 @@ func (a *Agent) applyRecoveryAndPermission(ctx context.Context, plan *toolCallPl
 				errMsg:  "blocked: MCP server identity is not authorized",
 			}, true
 		}
-		if outcome, blocked := mcpFastPathBlock(ctx, a.svc.gate, plan.permName, gateArgs, plan.readOnly); blocked {
+		if outcome, blocked := a.mcpFastPathRuling(ctx, plan, gateArgs); blocked {
 			return outcome, true
 		}
 	} else if a.svc.gate != nil {
@@ -565,20 +563,14 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Resolve the concrete execution target before hooks. A proxy may carry a
 	// different target/name/argument set than the provider-visible call.
 	plan.runTool, plan.runArgs = plan.executionTarget()
+	if outcome, missing := rootMissingOutcome(plan.runTool, plan.runArgs); missing {
+		return outcome, true
+	}
 	// Hooks can write beyond a tool's paths, so permission precedes lease
 	// acquisition and hooks follow it under a conservative workspace claim.
-	if plan.mutates && a.svc.workspaceLease != nil {
-		end, err := a.svc.workspaceLease.HoldPaths(ctx, a.workspaceWritePaths(plan))
-		if err != nil {
-			return toolOutcome{
-				output:         fmt.Sprintf("blocked: %v", err),
-				blocked:        true,
-				errMsg:         "blocked: workspace write lease unavailable",
-				refusalCode:    workspaceLeaseRefusalCode(err),
-				workspaceLease: workspaceLeaseConflictScope(err),
-			}, true
-		}
-		plan.releaseLeaseHold = end
+	ctx, blocked, refused := a.holdWorkspaceLease(ctx, plan)
+	if refused {
+		return blocked, true
 	}
 	// Hold the parent claim before PreToolUse: hooks are user shell code and may
 	// mutate the same workspace. The reservation remains live through hooks,
@@ -732,9 +724,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 			output: body, images: media.images, videos: media.videos, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
 			execution: execution, provenance: origin, refusalCode: refusalCodeOf(err), checkpointErr: checkpointErr,
 		}
-		if truncMsg != "" {
-			out.rawOutput = rawErr
-		}
+		out.keepFull(rawErr)
 		return out
 	}
 	a.observeTouchedPaths(runTool, runArgs)
@@ -744,9 +734,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		output: body, images: media.images, videos: media.videos, bound: bound, truncMsg: truncMsg,
 		execution: execution, provenance: origin, checkpointErr: checkpointErr,
 	}
-	if truncMsg != "" {
-		out.rawOutput = result
-	}
+	out.keepFull(result)
 	return out
 }
 

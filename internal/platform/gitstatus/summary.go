@@ -59,6 +59,23 @@ func Summary(ctx context.Context, repo gitcmd.Repo) (Info, bool) {
 	return info, true
 }
 
+// Identity is the part of Info that costs one process: where the work tree is
+// and which branch it is on, with no counts. A caller that only names a
+// repository (a heading, a list of them) reads this and leaves the diff to the
+// repository that is open.
+func Identity(ctx context.Context, repo gitcmd.Repo) (Info, bool) {
+	if !repo.Valid() {
+		return Info{}, false
+	}
+	top := repo.Top()
+	info := Info{Name: filepath.Base(top.WorkTree)}
+	info.Branch, info.Detached = branchOf(ctx, top)
+	if ctx.Err() != nil {
+		return Info{}, false
+	}
+	return info, true
+}
+
 func branchOf(ctx context.Context, top gitcmd.Repo) (name string, detached bool) {
 	if out, err := top.Command(ctx, "symbolic-ref", "--quiet", "HEAD").Output(); err == nil {
 		if name = strings.TrimSpace(string(out)); name != "" {

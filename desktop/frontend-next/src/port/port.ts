@@ -1,4 +1,6 @@
 import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
+import type { AgentComposition, AgentPresetVersion, AgentPresetCatalog, CompositionSummary } from "./composition";
+export type * from "./composition";
 import { DeliveryError, HttpError } from "./http_error";
 import type { DeliveryFault } from "./http_error";
 
@@ -24,12 +26,12 @@ export type { MemoryEdit } from "./memory";
 export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
 import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
-import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
+import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, ToolOutputPage, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
 import type { SubagentRun, SubagentTranscript } from "./subagent";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
-import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
+import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
 
 // The port is one contract; its subjects each keep their own file, the way the
 // wire and the layers below already do. This is where a reader still finds
@@ -41,17 +43,18 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus, SessionUsage, SourceUsage,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan, UpdateProgress, VersionEntry,
-  StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
+  StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, WebAccessPatch, WebAccessSettings, BrowserToolsSettings, SubagentClaimsSettings, WriteLeaseSettings, PlanApprovalSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, ToolSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, SandboxSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
-import type { FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { FeedbackBoard, FeedbackBoardMe, FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
+import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 export type * from "./plugin";
 export type * from "./market";
@@ -158,6 +161,17 @@ export interface NotifyPrefs {
   feedbackReply: boolean;
   diskLow: boolean;
   sound: boolean;
+  // What this desktop tells its enrolled phones about.
+  phone: PhoneNotifyPrefs;
+}
+
+/** Only the kind of occasion and a count are ever sent to a phone: the master
+ *  switch and which occasions it reports are the desktop's to decide. */
+export interface PhoneNotifyPrefs {
+  enabled: boolean;
+  approval: boolean;
+  input: boolean;
+  error: boolean;
 }
 
 export interface TrayPrefs {
@@ -190,6 +204,10 @@ export interface AgentPort {
   setSkillEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   planSkillUpdate(name: string): Promise<SkillUpdatePlan>;
   applySkillUpdate(name: string, planId: string, overwriteLocal: boolean): Promise<void>;
+  // Deletes the skill the person was shown, named by the scope and path the list
+  // drew. A built-in or a package's skill is refused (skill.not_removable), and
+  // one that changed since the list was read is too (skill.changed).
+  removeSkill(name: string, scope: string, path: string, root?: string): Promise<void>;
   // Drops this project's exception so the skill inherits again.
   clearSkillOverride(name: string, root?: string): Promise<void>;
   plugins(): Promise<PluginPackage[]>;
@@ -283,34 +301,62 @@ export interface AgentPort {
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
   subagentClaims(): Promise<SubagentClaimsSettings>;
   saveSubagentClaims(optimistic: boolean): Promise<SubagentClaimsSettings>;
+  subagentSteerSettings(): Promise<SubagentSteerSettings>;
+  saveSubagentSteerSettings(maxBytes: number, perMinute: number): Promise<SubagentSteerSettings>;
   planApproval(): Promise<PlanApprovalSettings>;
   savePlanApproval(auto: boolean): Promise<PlanApprovalSettings>;
+  defaultMode(): Promise<DefaultModeSettings>;
+  saveDefaultMode(plan: boolean): Promise<DefaultModeSettings>;
+  toolSettings(): Promise<ToolSettings>;
+  saveToolDisabled(name: string, disabled: boolean): Promise<ToolSettings>;
   writeLease(): Promise<WriteLeaseSettings>;
-  saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings>;
+  saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }): Promise<WriteLeaseSettings>;
   peers(): Promise<PeersState>;
   sendPeerMessage(to: string, text: string): Promise<PeerReceipt>;
   resolvePeerMessage(id: string, approve: boolean, remember?: PeerRemember): Promise<void>;
   peersSettings(): Promise<PeersSettings>;
   savePeersSettings(edit: PeersSettingsEdit): Promise<PeersSettings>;
+  mods(): Promise<ModStatus[]>;
+  modsSettings(): Promise<ModsSettings>;
+  saveModsSettings(edit: ModsSettingsEdit): Promise<ModsSettings>;
   displayCurrency(): Promise<DisplayCurrencySettings>;
   // Applies live: the kernel announces it and every ledger rebinds; no rebuild.
   saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
   changedFilesSettings(): Promise<ChangedFilesSettings>;
   saveChangedFilesSettings(show: boolean): Promise<ChangedFilesSettings>;
+  feedbackLevelNotices(): Promise<FeedbackLevelNotices>;
+  saveFeedbackLevelNotices(enabled: boolean): Promise<FeedbackLevelNotices>;
   foldWorkSettings(): Promise<FoldWorkSettings>;
   saveFoldWorkSettings(fold: boolean): Promise<FoldWorkSettings>;
   turnNarrationSettings(): Promise<TurnNarrationSettings>;
   saveTurnNarrationSettings(level: TurnNarrationSettings["level"]): Promise<TurnNarrationSettings>;
+  observabilitySettings(): Promise<ObservabilitySettings>;
+  saveObservabilitySettings(patch: ObservabilityPatch): Promise<ObservabilitySettings>;
   webAccessSettings(): Promise<WebAccessSettings>;
   saveWebAccessSettings(patch: WebAccessPatch): Promise<WebAccessSettings>;
+  probeSearxng(): Promise<SearxngProbe>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
   askTimeout(): Promise<AskTimeoutSettings>;
   saveAskTimeout(seconds: number): Promise<AskTimeoutSettings>;
+  sessionRefSettings(): Promise<SessionRefSettings>;
+  saveSessionRefSettings(tokens: number): Promise<SessionRefSettings>;
   autoArchive(): Promise<AutoArchiveSettings>;
   // Read by the kernel's background sweep on each pass; no rebuild.
   saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings>;
+  persona(): Promise<PersonaSettings>;
+  agentPresets(): Promise<AgentPresetCatalog>;
+  saveAgentPreset(definition: AgentComposition, expectedRevision: string): Promise<AgentPresetVersion>;
+  deleteAgentPreset(id: string, revision: string): Promise<void>;
+  setDefaultAgentPreset(id: string, workspace: boolean): Promise<void>;
+  exportAgentPreset(id: string): Promise<AgentComposition>;
+  importAgentPreset(content: AgentComposition): Promise<{definition:AgentComposition;diagnostics:AgentPresetCatalog["diagnostics"]}>;
+  agentComposition(): Promise<CompositionSummary | null>;
+  selectAgentComposition(id: string): Promise<CompositionSummary | null>;
+  // The persona is part of the cache-stable prefix, composed once at boot:
+  // saving is written now and read by the next session, not this one's runtime.
+  savePersonaSettings(s: PersonaDraft): Promise<PersonaSettings>;
   receiptSettings(): Promise<ReceiptSettings>;
   saveReceiptSettings(show: boolean): Promise<ReceiptSettings>;
   // null in a browser tab: there is no window to keep running.
@@ -332,6 +378,8 @@ export interface AgentPort {
   trustMcp(name: string, digest: string): Promise<{ state: string; tools?: number; error?: string }>;
   // Blocks until the browser sign-in ends (up to five minutes); a refusal is a thrown coded error.
   signinMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
+  // Like signinMcp, for the access a server asked for; the kernel asks the person every time.
+  upgradeMcp(name: string): Promise<{ name: string; state: string; host?: string; tools?: number }>;
   followMcp(name: string, follow: boolean): Promise<{ name: string; follow: boolean; tools?: number }>;
   setMcpEnabled(name: string, enabled: boolean, scope?: ScopeLayer, root?: string): Promise<void>;
   clearMcpOverride(name: string, root?: string): Promise<void>;
@@ -447,12 +495,22 @@ export interface AgentPort {
   replyFeedback(receipt: string, body: string, images?: FeedbackImage[]): Promise<FeedbackReplyReceipt>;
   // Records that the thread was shown up to reply upTo, so those replies stop counting as new.
   feedbackSeen(receipt: string, upTo: number): Promise<void>;
+  // Records that the person was told about this level; only a dismissal calls it.
+  ackFeedbackPromotion(level: number): Promise<void>;
+  // Takes one of this install's reports back; refused with feedback.not_withdrawable once it has an outcome.
+  withdrawFeedback(receipt: string): Promise<void>;
   // Tying this install to the signed-in account is always the person's own
   // request. Linking changes no quota; unlinking only removes the join.
   feedbackLinks(): Promise<FeedbackLinkedInstall[]>;
   linkFeedbackAccount(): Promise<void>;
   unlinkFeedbackAccount(): Promise<void>;
   unlinkFeedbackInstall(id: string): Promise<void>;
+  // The public contribution board, all releases or one; a person is on it only by
+  // their own choice, under a name they pick, and can leave at any time.
+  feedbackBoard(release?: string): Promise<FeedbackBoard>;
+  feedbackBoardMe(): Promise<FeedbackBoardMe>;
+  joinFeedbackBoard(displayName: string): Promise<FeedbackBoardMe>;
+  leaveFeedbackBoard(): Promise<FeedbackBoardMe>;
   // Asks the window to raise the neutral "new reply" notification; the kernel
   // answers for the switches. Rejects where there is no window to raise it.
   announceFeedbackReply(): Promise<void>;
@@ -534,13 +592,20 @@ export interface AgentPort {
   // What the working tree actually differs by. Tool events cannot answer it: a
   // file created and then removed by a shell command leaves both events behind
   // and nothing on disk.
-  changes(): Promise<WorkspaceChanges>;
+  // repo names a repository below the workspace as gitRepos lists it; absent is
+  // the workspace's own.
+  changes(repo?: string): Promise<WorkspaceChanges>;
+  // The workspace's repositories: itself when it is one, otherwise those found below it.
+  gitRepos(): Promise<GitRepos>;
   // The work tree's identity as git itself reports it: which branch, or which
   // commit when HEAD is detached. This is the composer's branch reading — the
   // capability scope's file-derived answer is for the picker's project name.
-  workspaceGit(): Promise<WorkspaceGit>;
+  workspaceGit(repo?: string): Promise<WorkspaceGit>;
   // The commit graph's newest page, read-only. `limit` bounds it (default 100).
-  workspaceGitLog(limit?: number): Promise<import("./workspace").GitHistory>;
+  workspaceGitLog(limit?: number, repo?: string): Promise<import("./workspace").GitHistory>;
+  // What one commit changed, and one path's diff within it. Read-only.
+  commitFiles(id: string, repo?: string): Promise<GitCommitFiles>;
+  commitDiff(id: string, path: string, repo?: string): Promise<ChangeDiff>;
   // The repository's local branches, the current one marked, for the composer's
   // branch menu. Re-read on open: a terminal or another window may have moved
   // HEAD since this pane last looked.
@@ -552,10 +617,16 @@ export interface AgentPort {
   // What one of those paths actually differs by. The list says a file moved;
   // only this says how, and asking per path is what keeps a session that
   // touched two hundred files from shipping two hundred diffs nobody opened.
-  changeDiff(path: string): Promise<ChangeDiff>;
+  changeDiff(path: string, repo?: string): Promise<ChangeDiff>;
+  // Puts one modified or deleted file back as the last commit has it. Nothing keeps a copy.
+  discardChange(req: DiscardRequest): Promise<void>;
   // Drafts a message for what is staged. Nothing is committed: the person edits
   // the text, and commitStaged records it locally once they confirm.
-  proposeCommit(signal?: AbortSignal): Promise<CommitProposal>;
+  proposeCommit(signal?: AbortSignal, repo?: string): Promise<CommitProposal>;
+  // Where the repository's current branch would be pushed and what it would send,
+  // read without reaching the remote; push sends exactly that plan and never forces.
+  pushPreview(repo?: string): Promise<PushPlan>;
+  push(req: PushRequest): Promise<PushResult>;
   commitStaged(req: CommitRequest): Promise<CommitResult>;
   // Moves changes the workspace lists into or out of the index, so a commit has
   // something to record without a terminal.
@@ -635,10 +706,18 @@ export interface AgentPort {
   // live. A run of another conversation is refused (subagent.not_owned).
   subagents(): Promise<SubagentRun[]>;
   subagentTranscript(ref: string, after?: number, limit?: number): Promise<SubagentTranscript>;
+  // The person's guidance to a sub-agent that is still running, read at its next
+  // tool call. Refused with a code when it is not running (subagent.not_running),
+  // is empty, over the size or rate limit, or is another conversation's.
+  steerSubagent(ref: string, text: string): Promise<void>;
   // The end of a running job's output, for the person looking at it. It does
   // not take output from the model's own reader; a job that ended is refused
   // (job.not_running).
   jobOutput(jobId: string): Promise<JobOutput>;
+  // A window onto one tool call's output as the history carries it, for a page
+  // that kept only the ends. Refused with tool.output_unknown for a call this
+  // session has no record of and tool.output_range for a window it cannot cut.
+  toolOutput(callId: string, offset?: number, limit?: number): Promise<ToolOutputPage>;
   // Re-freezes the files an entry references. A line that waited through the
   // work that changed them would otherwise arrive quoting what is no longer.
   refreshQueued(itemId: string): Promise<void>;

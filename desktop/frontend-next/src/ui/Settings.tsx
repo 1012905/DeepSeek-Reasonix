@@ -1,20 +1,24 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useModalFocus } from "./useModalFocus";
+import { SettingsLeaveContext, useSettingsLeave } from "./SettingsLeave";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
 import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
-import { arrowTabs } from "./tablist";
 import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV, SECTION_NAME } from "./prefsnav";
-import { UpdateDot } from "./UpdateDot";
+import { SECTION_NAME } from "./prefsnav";
+import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
-import { PlanApproval } from "./PlanApproval";
+import { PlanApproval, DefaultMode } from "./PlanApproval";
+import { PeersSection } from "./PeersSection";
 import { SessionCoordination } from "./SessionCoordination";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
 import { PhoneAccess } from "./PhoneAccess";
+import { PhoneReminders } from "./PhoneReminders";
+import { remoteDeviceId } from "../port/cloud_remote";
+import { PhoneNotifications } from "./PhoneNotifications";
 import { Remotes } from "./Remotes";
 import type { HubPort } from "../port/hub";
 import type { RemoteHost } from "../port/remote";
@@ -28,16 +32,20 @@ import { SkillGroups } from "./SkillRow";
 import { Hooks } from "./Hooks";
 import { Network } from "./Network";
 import { Shell as ShellPicker } from "./Shell";
-import { Rules } from "./Rules";
+import { Rules, ToolList } from "./Rules";
 import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { AskTimeout } from "./AskTimeout";
+import { SessionRef } from "./SessionRef";
+import { TraceExport } from "./TraceExport";
+import { ModHost } from "./ModHost";
 import { WebAccess } from "./WebAccess";
 import { ProgressWatch } from "./ProgressWatch";
 import { DisplaySettings } from "./DisplaySettings";
 import { AutoArchive } from "./AutoArchive";
+import { AgentPresets } from "./AgentPresets";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
 import { BackupFile } from "./BackupFile";
@@ -100,6 +108,8 @@ interface Props {
   workspaceRoot?: string;
 }
 export function Settings({ hub, onError, port, networkPort, localWorkspacePort, networkHost, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, onSessionsRecovered, reloadThemes, at: opened, account: acct, accountUnread, reloadAccount, workspaceRoot }: Props) {
+  const navigation = useSettingsLeave();
+  const close = useCallback(() => navigation.leave(onClose), [navigation.leave, onClose]);
   const homePort = networkPort ?? port;
   const localPort = localWorkspacePort ?? homePort;
   const [openedSection, openedAnchor = ""] = (opened ?? "").split(":", 2);
@@ -219,9 +229,9 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   }, []);
 
   useEffect(() => {
-    const onKey = (e: Event) => (e as KeyboardEvent).key === "Escape" && !updatingPkg.applying && onClose();
+    const onKey = (e: Event) => (e as KeyboardEvent).key === "Escape" && !updatingPkg.applying && close();
     return listenAction(window, "keydown", { action: "settings.close", listener: onKey });
-  }, [onClose, updatingPkg.applying]);
+  }, [close, updatingPkg.applying]);
 
   useEffect(() => {
     loadModels();
@@ -294,9 +304,11 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   // each section rides on its own row, so the risky one is legible from here.
   const nav: Record<Section, string> = {
     session: status?.plan ? t("计划模式") : preset,
+    persona: "",
     model: status?.modelRef?.split("/").pop() ?? "—",
     providers: models.length ? t("{n} 个服务", { n: groupVendors(models).length }) : "",
     tools: ruleCount ? `${approval} · ${ruleCount}` : approval,
+    peers: "",
     hooks: hookCount ? t("{n} 条", { n: hookCount }) : t("关"),
     ext: broken ? t("{n} 个异常", { n: broken }) : packages.length ? t("{n} 个包", { n: packages.length }) : `${looseMcp.length + looseOn}`,
     network: netMode,
@@ -321,10 +333,12 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   const found = useSettingsSearch(query, shown, remoteBook);
   // 落点：跳过去之后短暂标一下「就是这里」。这是导航反馈，不是状态变化。
   const go = (section: Section, anchor: string) => {
-    setAt(section);
-    setQuery("");
-    setLanded(anchor);
-    if (section === "ext") setExtTab(anchor === "market" ? "market" : "installed");
+    navigation.leave(() => {
+      setAt(section);
+      setQuery("");
+      setLanded(anchor);
+      if (section === "ext") setExtTab(anchor === "market" ? "market" : "installed");
+    });
   };
   useEffect(() => {
     if (!landed) return;
@@ -354,14 +368,14 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
   }, [landed, at]);
 
   return (
-    <div
+    <SettingsLeaveContext.Provider value={navigation.register}><div
       className="prefs"
       ref={root}
       tabIndex={-1}
       onMouseDown={(e) => { veiled.current = e.target === e.currentTarget; }}
       // Both ends of the press have to land on the veil. A drag that started
       // inside the sheet and let go outside is a selection, not a dismissal.
-      onMouseUp={(e) => { if (veiled.current && e.target === e.currentTarget && !updatingPkg.applying) onClose(); }}
+      onMouseUp={(e) => { if (veiled.current && e.target === e.currentTarget && !updatingPkg.applying) close(); }}
       data-action-mouseup="settings.close"
     >
       <div className="prefs-sheet" role="dialog" aria-modal="true" aria-labelledby="prefs-title">
@@ -389,7 +403,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
             }
           }}
         />
-        <button className="btn sm" data-action="settings.close" disabled={updatingPkg.applying} onClick={onClose}>
+        <button className="btn sm" data-action="settings.close" disabled={updatingPkg.applying} onClick={close}>
           {t("关闭")} <span className="esc">Esc</span>
         </button>
         {found !== null && (
@@ -416,7 +430,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   <span className="cost">
                     {[
                       t(SCOPE_SAID[e.scope]),
-                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : e.apply === "next-turn" ? t("下个回合起生效") : "",
+                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : e.apply === "on-open" ? t("新开的会话生效") : e.apply === "next-turn" ? t("下个回合起生效") : e.apply === "next-rebuild" ? t("下次会话构建时生效") : "",
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </button>
@@ -427,34 +441,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
       </div>
       <ConfigTrouble port={port} onRepaired={onChanged} />
       <div className="prefs-body">
-        <nav className="prefs-nav" role="tablist" aria-label={t("设置分类")} onKeyDown={arrowTabs}>
-          {NAV.map(([group, items]) => {
-            const rows = items.filter(([id]) => shown(id));
-            // A heading over nothing is worse than no heading: remote is absent
-            // on a kernel without it, advanced until something moves in.
-            if (rows.length === 0) return null;
-            return (
-              <Fragment key={group}>
-                <div className="navsec">{t(group)}</div>
-                {/* One tab stop for the list, arrows move inside it: twelve
-                    stops made Tab the wrong way through this screen. */}
-                {rows.map(([id, name]) => (
-                  <button key={id} id={`prefs-${id}`} role="tab" title={t(name)}
-                    data-action="settings.section" data-value={id}
-                    tabIndex={at === id ? 0 : -1}
-                    aria-selected={at === id} disabled={updatingPkg.applying} onClick={() => setAt(id)}>
-                    <svg viewBox="0 0 16 16" aria-hidden="true">{ICON[id]}</svg>
-                    {id === "versions" && <UpdateDot />}
-                    <span className="nm">{t(name)}</span>
-                    <span className="nv" title={nav[id] || undefined} data-danger={danger(id) ? "" : undefined}>
-                      {nav[id]}
-                    </span>
-                  </button>
-                ))}
-              </Fragment>
-            );
-          })}
-        </nav>
+        <SettingsNav at={at} values={nav} shown={shown} danger={danger} disabled={updatingPkg.applying} onSelect={(section) => { if (section !== at) navigation.leave(() => setAt(section)); }} />
 
         <div className="prefs-main" role="tabpanel" aria-labelledby={`prefs-${at}`} data-sec={at}>
           <Boundary
@@ -503,9 +490,10 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                     onClick={() => run("plan", () => port.setPlanMode(!status?.plan))}
                   />
                 </div>
-              </Group>
+              </Group><DefaultMode port={port} />
               <DisplaySettings port={port} />
               <AskTimeout port={port} />
+              <SessionRef port={port} />
               <ProgressWatch port={port} />
               <AutoArchive port={port} />
               <Group id="session-dir" title={t("会话写入位置")}>
@@ -531,6 +519,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               </Group>
             </>
           )}
+
+          {at === "persona" && <AgentPresets port={port} focusPersona={landed === "persona"} />}
 
           {at === "providers" && (
             <Group id="providers" title={t("模型服务")}
@@ -595,7 +585,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 hint={t("上一项决定是否请求确认，此处决定哪些操作始终禁止、哪些无需确认。修改会重建运行时，任务运行期间无法变更。")}
               >
                 <Rules port={port} onChanged={onChanged} />
-              </Group>
+              </Group><ToolList port={port} />
               <Group id="sandbox"
                 title={t("沙箱")}
                 hint={t("批准之后可以操作的范围。该限制不依赖 agent 自觉：写入范围由工具实施，命令隔离由操作系统实施。")}
@@ -618,6 +608,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <SessionCoordination port={port} onChanged={onChanged} />
             </>
           )}
+
+          {at === "peers" && <PeersSection port={port} hub={hub} />}
 
           {at === "hooks" && (
             <Group id="hooks"
@@ -644,6 +636,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                 >
                   {reload.note}
                 </Group>
+                <ModHost port={port} />
                 <Group id="plugins"
                   title={t("插件包")}
                   now={packages.length ? t("{n} 个", { n: packages.length }) : undefined}
@@ -731,6 +724,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <Network port={networkPort ?? port} host={networkHost ?? ""} />
             </Group>
           )}
+          {at === "network" && <TraceExport port={port} />}
 
           {at === "remote" && (
             <Group id="remote"
@@ -741,6 +735,8 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
             </Group>
           )}
           {at === "remote" && <PhoneAccess hub={hub} onError={onError} />}
+          {at === "remote" && <PhoneNotifications hub={hub} port={port} onError={onError} />}
+          {at === "remote" && remoteDeviceId() && <PhoneReminders host={remoteDeviceId()!} />}
 
           {at === "account" && (
             <Group id="account"
@@ -756,9 +752,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               <Backup port={port} />
             </Group>
           )}
-
           {at === "versions" && <About port={homePort} />}
-
           {at === "memory" && (
             <Group id="memory"
               title={t("记忆")}
@@ -793,6 +787,6 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
         </div>
       </div>
       </div>
-    </div>
+    </div></SettingsLeaveContext.Provider>
   );
 }

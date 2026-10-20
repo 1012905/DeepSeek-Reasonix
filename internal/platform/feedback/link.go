@@ -29,7 +29,10 @@ func (s *Service) Link(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return s.linkCall(ctx, http.MethodPost, "/v1/feedback/link", assertion, &st, nil)
+	if err := s.linkCall(ctx, http.MethodPost, "/v1/feedback/link", assertion, &st, nil); err != nil {
+		return err
+	}
+	return s.store.update(func(st *state) error { st.Linked = true; return nil })
 }
 
 // Unlink removes this install's link. Unlinking changes nothing else: the
@@ -43,7 +46,10 @@ func (s *Service) Unlink(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return s.linkCall(ctx, http.MethodDelete, "/v1/feedback/link", assertion, &st, nil)
+	if err := s.linkCall(ctx, http.MethodDelete, "/v1/feedback/link", assertion, &st, nil); err != nil {
+		return err
+	}
+	return s.store.update(func(st *state) error { st.Linked = false; return nil })
 }
 
 // UnlinkInstall removes one of the account's links by its short id, from any

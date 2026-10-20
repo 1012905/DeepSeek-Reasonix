@@ -67,7 +67,7 @@ func (r Report) Ready() bool {
 // Probe reads everything a first connect depends on, and changes nothing over
 // there.
 func Probe(ctx context.Context, conn Conn, opts Options) (Report, error) {
-	fs, err := conn.SFTP()
+	fs, err := conn.Files()
 	if err != nil {
 		return Report{}, err
 	}

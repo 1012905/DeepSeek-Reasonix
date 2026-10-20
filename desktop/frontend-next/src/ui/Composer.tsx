@@ -31,6 +31,7 @@ import { usePromptRefine } from "./PromptRefine";
 import { useProviderOrder } from "../state/providerorder";
 import { useModelFilter, writeModelFilter } from "../state/modelfilter";
 import { useDraft } from "./useDraft";
+import type { Submitted } from "./usesubmit";
 import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
 import { SideAskButton } from "./SideAskButton";
@@ -52,13 +53,13 @@ interface Props {
   restore?: { n: number; text: string };
   // Text another surface hands the composer, such as a file reference; it goes
   // in at the caret with a space on either side.
-  inject?: { n: number; text: string };
+  inject?: { n: number; text: string; session?: { id: string; title: string } };
   // Resolves false when the line never left, so what was typed comes back
   // rather than being lost to a refusal the user could not have prevented.
   // Bumped when something outside asks for the cursor — answering a plan card
   // with "revise" is a request to say what to change, and the saying happens here.
   focus?: number;
-  onSubmit: (text: string, chips?: ChipCall) => Promise<boolean>;
+  onSubmit: (text: string, chips?: ChipCall) => Promise<Submitted>;
   onChanged: () => void;
   onError: (e: unknown) => void;
   onSettings?: (section?: string) => void;
@@ -121,7 +122,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   const attachTipId = useId();
   // Set only when a completion moved the caret: the browser puts it at the end
   // of a programmatic value, which is wrong for anything accepted mid-line.
-  const pending = useRef<number | null>(null);
+  const pending = useRef<number | [number, number] | null>(null);
 
   const loadModels = useCallback(() => {
     port.models().then(setModels).catch(() => setModels([]));
@@ -166,6 +167,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   useEffect(() => {
     if (!inject?.n || inject.n === injectedAt.current) return;
     injectedAt.current = inject.n;
+    if (inject.session) {
+      addSession(inject.session);
+      queueMicrotask(() => box.current?.focus());
+      return;
+    }
     const where = caret;
     setText((prev) => {
       const at = Math.min(where, prev.length);
@@ -182,10 +188,11 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     type(next, at);
   }, []);
   const chips = useSkillChips(box, text, moveTo);
+  const addSession = useCallback((s: { id: string; title: string }) => setShots((prev) => prev.some((c) => c.k === "session" && c.session === s.id) ? prev : [...prev, { k: "session", id: chipId(), session: s.id, title: s.title }]), []);
   const menu = useCompletion(port, text, caret, (next, at) => {
     moveTo(next, at);
     box.current?.focus();
-  }, chips);
+  }, chips, addSession);
   const ime = useIme();
   const sendShortcut = useSendShortcut();
 
@@ -205,7 +212,8 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
 
   const placeCaret = useCallback((el: HTMLTextAreaElement) => {
     if (pending.current === null) return;
-    el.setSelectionRange(pending.current, pending.current);
+    const [from, to] = typeof pending.current === "number" ? [pending.current, pending.current] : pending.current;
+    el.setSelectionRange(from, to);
     pending.current = null;
   }, []);
   useFitHeight(box, text, placeCaret);
@@ -221,7 +229,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     if (submittingRef.current || shots.some((c) => c.k === "attachment" && c.state !== "ready")) return;
     const v = text.trim();
     if (!v && shots.length === 0) return;
-    const refs = shots.flatMap((c) => (c.k === "attachment" && c.a ? [c.a.ref] : []));
+    const refs = shots.flatMap((c) => (c.k === "attachment" && c.a ? [c.a.ref] : c.k === "session" ? ["@session:" + c.session] : []));
     const pastes = shots.flatMap((c) => (c.k === "paste" ? [c.saved ? c.saved.pointer.trim() : c.body] : []));
     // A quote is what the question is about, so it leads; a held-back paste is
     // the material the answer needs and follows what was typed.
@@ -231,9 +239,9 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     const call = chips.call(compose);
     const draft = { text, shots, caret: caretRef.current, chips: chips.held() };
     if (worktree.selection || worktree.stage) setSetupDraft({ text: v, files: shots.map(chipName) });
-    const restoreDraft = () => {
+    const restoreDraft = (select = false) => {
       finishSubmit(false);
-      pending.current = draft.caret;
+      pending.current = select ? [0, draft.text.length] : draft.caret;
       type(draft.text, draft.caret);
       chips.restore(draft.chips);
       setShots((current) => [...draft.shots, ...current]);
@@ -251,13 +259,15 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
           if (!prepared) { restoreDraft(); return; }
         }
         const sent = await (call ? onSubmit(line, call) : onSubmit(line));
-        if (sent) {
+        if (sent === true) {
           finishSubmit(true);
           worktree.dismiss();
           draft.shots.forEach(releaseChip);
         }
         else {
-          restoreDraft();
+          // A command this connection will never run is left selected, so the
+          // next thing typed replaces it instead of joining it.
+          restoreDraft(sent === "shell_unavailable");
           worktree.dismiss();
         }
       } catch (e) {
@@ -471,6 +481,14 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
                         {t("添加失败 · 重试")}
                       </button>
                     )}
+                  </span>
+                </>
+              ) : c.k === "session" ? (
+                <>
+                  <span className="glyph" aria-hidden="true">{"#"}</span>
+                  <span className="meta">
+                    <span className="nm" title={c.title}>{c.title}</span>
+                    <span className="sz">{t("历史会话 · 只读资料")}</span>
                   </span>
                 </>
               ) : (

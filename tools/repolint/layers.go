@@ -14,6 +14,8 @@ var frontends = []string{
 	"internal/frontend/acp",
 	"internal/assembly/boot",
 	"internal/frontend/cli",
+	"internal/frontend/clisession",
+	"internal/frontend/schedulerun",
 	"internal/frontend/serve",
 	"internal/frontend/tui",
 }
@@ -28,6 +30,7 @@ var leaves = []string{
 	"internal/contract/agentpreset",
 	"internal/contract/chartspec",
 	"internal/contract/surfacespec",
+	"internal/contract/walletformat",
 	"internal/model/billing",
 	"internal/platform/browser",
 	"internal/platform/computer",

@@ -190,6 +190,8 @@ type CompletionReport struct {
 	GapKinds                  []string `json:"gap_kinds,omitempty"`
 	ClaimsVerified            int      `json:"claims_verified,omitempty"`
 	ClaimsUnbacked            int      `json:"claims_unbacked,omitempty"`
+	OriginRecorded            int      `json:"origin_recorded,omitempty"`
+	OriginMatched             int      `json:"origin_matched,omitempty"`
 }
 
 // EvidenceBundle mirrors event.EvidenceBundleAudit with stable keys.
@@ -487,6 +489,8 @@ func (r *Recorder) RecordCompletionReport(a event.CompletionReportAudit) {
 		GapKinds:                  a.GapKinds,
 		ClaimsVerified:            a.ClaimsVerified,
 		ClaimsUnbacked:            a.ClaimsUnbacked,
+		OriginRecorded:            a.OriginRecorded,
+		OriginMatched:             a.OriginMatched,
 	}})
 	event.RecordCompletionReport(r.inner, a)
 }

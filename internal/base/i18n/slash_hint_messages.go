@@ -12,6 +12,37 @@ type SlashHintMessages struct {
 	ArgFeedbackList       string
 	ArgFeedbackShow       string
 	ArgFeedbackReply      string
+	CmdBtw                string
+	McpEmptyHelp          string
+	McpEmptyHint          string
+	McpAddPrompt          string
+	McpReviewTitleFmt     string
+	McpReviewRunsFmt      string
+	McpReviewConnectsFmt  string
+	McpReviewEnvFmt       string
+	McpReviewRisksHead    string
+	McpReviewKeys         string
+	McpReviewTooLong      string
+	McpAddEchoNote        string
+	McpAddInstalledFmt    string
+	McpAddNeedsFmt        string
+	McpAddFailedFmt       string
+	McpParseFailedFmt     string
+	McpRemoveAskFmt       string
+	McpRemovedFmt         string
+	McpRemovedStillFmt    string
+	BtwUsage              string
+	BtwSavedNote          string
+	BtwNoAnswer           string
+	BtwUnavailable        string
+	BtwLimit              string
+	BtwBusy               string
+	BtwFailedFmt          string
+	ArgFeedbackWithdraw   string
+	ArgFeedbackLink       string
+	ArgFeedbackUnlink     string
+	ArgFeedbackLinks      string
+	ArgFeedbackBoard      string
 	ArgFeedbackName       string
 	ArgMemoryRecall       string
 	ArgMemoryRevisions    string

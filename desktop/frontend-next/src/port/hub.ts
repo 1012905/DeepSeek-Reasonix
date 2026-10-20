@@ -1,7 +1,7 @@
 import { watchTree } from "./tree_events";
 import { HttpError, type AgentPort } from "./port";
-import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe } from "./remote";
-import type { CloudShareOffer, DeviceSelf, ShareOffer, SharePort, ShareStatus } from "./share";
+import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe, WSLDistros } from "./remote";
+import type { CloudShareOffer, DeviceSelf, PhoneAction, PhoneList, ShareOffer, SharePort, ShareStatus } from "./share";
 import { SsePort } from "./sse";
 import { host } from "./host";
 
@@ -19,6 +19,7 @@ function operationHeaders(operationId?: string): Record<string, string> {
 // RuntimeView is one open pane. Base is the prefix every request of that pane
 // carries, which is also what tells the shell's bus which channel to listen on.
 export interface RuntimeView {
+  agentComposition?: import("./composition").CompositionSummary;
   id: string;
   base: string;
   root: string;
@@ -63,7 +64,7 @@ export interface TreeSession {
   versions?: TreeSession[];
 }
 
-export type LegacySkipReason = "too_large" | "unreadable_format" | "schema_unsupported" | "permission" | "corrupt" | "copy_failed";
+export type LegacySkipReason = "too_large" | "unreadable_format" | "schema_unsupported" | "permission" | "corrupt" | "copy_failed" | "no_project";
 
 // A 1.x session the import could not read. The entry at `path` was neither
 // moved nor deleted.
@@ -161,7 +162,7 @@ export interface HistoryHit {
 
 export interface HubPort extends SharePort {
   runtimes(): Promise<RuntimeView[]>;
-  open(req: { root?: string; sessionPath?: string }): Promise<RuntimeView>;
+  open(req: { root?: string; sessionPath?: string; agentComposition?: string }): Promise<RuntimeView>;
   close(id: string): Promise<void>;
   tree(window?: TreeWindow): Promise<TreeWorkspace[]>;
   /** Conversations, in every workspace, that say these words. */
@@ -177,12 +178,15 @@ export interface HubPort extends SharePort {
   /** Open a listed project in one of those programs. */
   openWith(path: string, target: string): Promise<void>;
   moveWorkspace(path: string, direction: -1 | 1): Promise<void>;
+  moveSession(path: string, direction: -1 | 1): Promise<void>;
   /** Drop a project before another remembered one, or at the end when `before` is empty. */
   placeWorkspace(path: string, before: string): Promise<void>;
   removeSession(path: string): Promise<void>;
-  archiveSession(path: string, archived: boolean): Promise<void>;
+  /** The conversation moves into the named project; originalRemoved is false when the copy arrived but the original could not be taken away. */
+  moveSessionTo(path: string, target: string): Promise<{ path: string; originalRemoved: boolean }>;
+  archiveSession(path: string, archived: boolean, host?: string): Promise<void>;
   // Tells the kernel which conversations automatic archiving must leave alone.
-  pinSession(path: string, pinned: boolean): Promise<void>;
+  pinSession(path: string, pinned: boolean, host?: string): Promise<void>;
   // Adds pins made before the kernel kept them. The first call also opens the
   // gate: until then the kernel archives nothing on its own.
   syncPins(paths: string[]): Promise<void>;
@@ -190,6 +194,7 @@ export interface HubPort extends SharePort {
   autoNameSession(path: string): Promise<{ title: string }>;
   exportSession(path: string): Promise<{ name: string; content: string }>;
   importLegacySessions(path: string, workspace: string): Promise<LegacyImport>;
+  importNativeSession(file: Blob, workspace: string): Promise<{ path: string }>;
   // The host book with each link's state, or null where this kernel refuses
   // remote panes outright — a page served to a browser, rather than the window.
   // Null is what lets the sidebar leave the whole section out instead of
@@ -197,7 +202,7 @@ export interface HubPort extends SharePort {
   remoteHosts(): Promise<RemoteHost[] | null>;
   // Opens a pane on another machine. Slow the first time — the kernel may be
   // installing itself over there — so the caller polls remoteHosts for the step.
-  openRemote(req: { host: string; workspace?: string; sessionPath?: string }): Promise<RuntimeView>;
+  openRemote(req: { host: string; workspace?: string; sessionPath?: string; agentComposition?:string }): Promise<RuntimeView>;
   // The far machine's own workspaces, or null while nothing is open on it:
   // there is no kernel over there to ask until a pane puts one there.
   remoteTree(host: string): Promise<TreeWorkspace[] | null>;
@@ -217,10 +222,14 @@ export interface HubPort extends SharePort {
   removeRemoteWorkspace(host: string, path: string): Promise<void>;
   saveRemoteHost(entry: RemoteHostEdit): Promise<void>;
   removeRemoteHost(name: string): Promise<void>;
+  // Puts a machine before another in the book, or last when before is empty.
+  placeRemoteHost(name: string, before: string): Promise<void>;
   // ssh_config aliases this machine can already reach and the book has not
   // taken yet. Filling it by hand when the addresses are written down next
   // door is the step people skip.
   remoteCandidates(): Promise<string[]>;
+  // The WSL distributions on this machine, for the choice of one as a host.
+  wslDistros(): Promise<WSLDistros>;
   // Questions a connect stopped for. Nothing arrives here in a browser: the
   // kernel that would ask is the one this build cannot reach.
   onRemoteAsk(cb: (ask: RemoteAsk) => void): () => void;
@@ -310,8 +319,8 @@ export class SseHub implements HubPort {
     return (await res.json()) as RuntimeView[];
   }
 
-  open(req: { root?: string; sessionPath?: string }) {
-    return this.post<RuntimeView>("/runtimes", { root: req.root ?? "", sessionPath: req.sessionPath ?? "" });
+  open(req: { root?: string; sessionPath?: string; agentComposition?: string }) {
+    return this.post<RuntimeView>("/runtimes", { root: req.root ?? "", sessionPath: req.sessionPath ?? "", agentComposition: req.agentComposition });
   }
 
   async close(id: string) {
@@ -367,20 +376,28 @@ export class SseHub implements HubPort {
     await this.post<void>("/tree/workspaces/move", { path, direction });
   }
 
+  async moveSession(path: string, direction: -1 | 1) {
+    await this.post<void>("/tree/sessions/move", { path, direction });
+  }
+
   async placeWorkspace(path: string, before: string) {
     await this.post<void>("/tree/workspaces/move", { path, before });
+  }
+
+  async moveSessionTo(path: string, target: string) {
+    return this.post<{ path: string; originalRemoved: boolean }>("/tree/sessions/move-to", { path, target });
   }
 
   async removeSession(path: string) {
     await this.post<void>("/tree/sessions/remove", { path });
   }
 
-  async archiveSession(path: string, archived: boolean) {
-    await this.post<void>("/tree/sessions/archive", { path, archived });
+  async archiveSession(path: string, archived: boolean, host?: string) {
+    await this.post<void>(host ? `/remotes/${encodeURIComponent(host)}/sessions/archive` : "/tree/sessions/archive", { path, archived });
   }
 
-  async pinSession(path: string, pinned: boolean) {
-    await this.post<void>("/tree/sessions/pin", { path, pinned });
+  async pinSession(path: string, pinned: boolean, host?: string) {
+    await this.post<void>(host ? `/remotes/${encodeURIComponent(host)}/sessions/pin` : "/tree/sessions/pin", { path, pinned });
   }
 
   async syncPins(paths: string[]) {
@@ -403,6 +420,16 @@ export class SseHub implements HubPort {
     return this.post<LegacyImport>("/tree/sessions/import-legacy", { path, workspace });
   }
 
+  async importNativeSession(file: Blob, workspace: string): Promise<{ path: string }> {
+    const path = `/tree/sessions/import-native?${new URLSearchParams({ workspace })}`;
+    const response = await fetch(path, {
+      method: "POST", credentials: "same-origin",
+      headers: { "content-type": "application/json" }, body: file,
+    });
+    if (!response.ok) await SseHub.fail(path, response);
+    return await response.json() as { path: string };
+  }
+
   async remoteHosts() {
     const res = await fetch("/remotes", { credentials: "same-origin" });
     // Not an error to report: this kernel does not do remote panes, or answers
@@ -412,11 +439,11 @@ export class SseHub implements HubPort {
     return (await res.json()) as RemoteHost[];
   }
 
-  openRemote(req: { host: string; workspace?: string; sessionPath?: string }) {
+  openRemote(req: { host: string; workspace?: string; sessionPath?: string; agentComposition?:string }) {
     return this.dial((operationId) =>
       this.post<RuntimeView>(
         "/remotes/open",
-        { host: req.host, workspace: req.workspace ?? "", sessionPath: req.sessionPath ?? "" },
+        { host: req.host, workspace: req.workspace ?? "", sessionPath: req.sessionPath ?? "", agentComposition: req.agentComposition },
         operationId,
       ),
     );
@@ -429,9 +456,6 @@ export class SseHub implements HubPort {
   async remoteTree(host: string) {
     const path = `/remotes/${encodeURIComponent(host)}/tree`;
     const res = await fetch(path, { credentials: "same-origin" });
-    // Nothing open on that machine yet, which is a step to take rather than a
-    // failure to report.
-    if (res.status === 409) return null;
     if (!res.ok) await SseHub.fail(path, res);
     return (await res.json()) as TreeWorkspace[];
   }
@@ -465,8 +489,16 @@ export class SseHub implements HubPort {
     await this.post<void>("/remotes/remove", { name });
   }
 
+  async placeRemoteHost(name: string, before: string) {
+    await this.post<void>(`/remotes/${encodeURIComponent(name)}/place`, { before });
+  }
+
   remoteCandidates() {
     return this.get<string[]>("/remotes/candidates");
+  }
+
+  wslDistros() {
+    return this.get<WSLDistros>("/remotes/wsl");
   }
 
   // The question is state the kernel holds, and this is how it is found. No
@@ -607,6 +639,21 @@ export class SseHub implements HubPort {
 
   revokeDevice(id: string) {
     return this.post<ShareStatus>("/share/revoke", { id });
+  }
+
+  async sharePhones() {
+    const res = await fetch("/share/phones", { credentials: "same-origin" });
+    if (res.status === 404) return null;
+    if (!res.ok) await SseHub.fail("/share/phones", res);
+    return (await res.json()) as PhoneList;
+  }
+
+  resolvePhone(id: string, action: PhoneAction, replaceId?: string) {
+    return this.post<PhoneList>("/share/phones/resolve", { id, action, ...(replaceId ? { replaceId } : {}) });
+  }
+
+  revokePhone(id: string) {
+    return this.post<PhoneList>("/share/phones/revoke", { id });
   }
 
   async device() {

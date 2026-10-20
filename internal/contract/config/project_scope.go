@@ -26,6 +26,8 @@ type heldScope struct {
 	autoSubmit     bool
 	writeLease     string
 	planApproval   string
+	defaultMode    string
+	toolsDisabled  []string
 	limits         agentLimits
 	goalAutoRetry  int
 	subagentClaims string
@@ -45,7 +47,10 @@ type heldScope struct {
 	// turnNarration is the user's [agent] turn_narration. It adds output tokens
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
+	persona       PersonaConfig
 	peers         PeersConfig
+	observability ObservabilityConfig
+	mods          ModsConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
 	// webSearchBackends and searxngURL decide where the user's queries go, so
@@ -59,6 +64,8 @@ type heldScope struct {
 	webFetchPaid  []string
 	// videoNativeMax lowers what is sent to a vendor, so only the user sets it.
 	videoNativeMax int64
+	// videoURLPass has a vendor visit an address, so only the user turns it on.
+	videoURLPass bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -79,6 +86,8 @@ func holdUserScope(c *Config) heldScope {
 		autoSubmit:      c.AutoSubmit,
 		writeLease:      c.Agent.WriteLease,
 		planApproval:    c.Agent.PlanApproval,
+		defaultMode:     c.Agent.DefaultMode,
+		toolsDisabled:   c.DisabledTools(),
 		limits:          holdAgentLimits(c),
 		goalAutoRetry:   c.Agent.GoalAutoRetry,
 		subagentClaims:  c.Agent.SubagentClaims,
@@ -93,7 +102,10 @@ func holdUserScope(c *Config) heldScope {
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
+		persona:         clonePersona(c.Agent.Persona),
 		peers:           clonePeers(c.Peers),
+		observability:   c.Observability,
+		mods:            c.Mods,
 		mcpResources:    c.Tools.MCPResources,
 
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
@@ -102,6 +114,7 @@ func holdUserScope(c *Config) heldScope {
 		webFetch:          slices.Clone(c.Tools.WebFetchBackends),
 		webFetchPaid:      slices.Clone(c.Tools.WebFetchPaidAllowed),
 		videoNativeMax:    c.Tools.VideoNativeMaxBytes,
+		videoURLPass:      c.Tools.VideoURLPassthrough,
 	}
 }
 
@@ -194,6 +207,8 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	// Messages between sessions put other sessions' text in front of this one's
 	// model, so enabling them is the user's alone.
 	h.narrowPeers(c)
+	h.narrowObservability(c)
+	h.narrowMods(c)
 	// Letting the model read what a server publishes widens what a third party
 	// can put in front of it, so a cloned repo must not turn it on.
 	if c.Tools.MCPResources != h.mcpResources {
@@ -201,6 +216,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.Tools.MCPResources = h.mcpResources
 	}
 	c.keepUserSearchBackends(h)
+	if c.Tools.VideoURLPassthrough != h.videoURLPass {
+		c.ignoreProject("tools.video_url_passthrough", fmt.Sprintf("%t", c.Tools.VideoURLPassthrough), ProjectUserOnly)
+		c.Tools.VideoURLPassthrough = h.videoURLPass
+	}
 	if c.Tools.VideoNativeMaxBytes != h.videoNativeMax {
 		c.ignoreProject("tools.video_native_max_bytes", fmt.Sprint(c.Tools.VideoNativeMaxBytes), ProjectUserOnly)
 		c.Tools.VideoNativeMaxBytes = h.videoNativeMax
@@ -212,9 +231,16 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.Agent.GoalAutoRetry = h.goalAutoRetry
 	}
 	h.narrowAgentLimits(c)
+	// A project can remove tools for its own sessions and never take one back.
+	c.Tools.Disabled = append(slices.Clone(h.toolsDisabled), c.Tools.Disabled...)
+	c.Tools.Disabled = c.DisabledTools()
 	if c.Agent.PlanApproval != h.planApproval {
 		c.ignoreProject("agent.plan_approval", c.Agent.PlanApproval, ProjectUserOnly)
 		c.Agent.PlanApproval = h.planApproval
+	}
+	if c.Agent.DefaultMode != h.defaultMode {
+		c.ignoreProject("agent.default_mode", c.Agent.DefaultMode, ProjectUserOnly)
+		c.Agent.DefaultMode = h.defaultMode
 	}
 	if c.Agent.WriteLease != h.writeLease {
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLease, ProjectUserOnly)
@@ -242,6 +268,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.turn_narration", c.TurnNarration(), ProjectUserOnly)
 	}
 	c.Agent.TurnNarration = h.turnNarration
+	if !reflect.DeepEqual(c.Agent.Persona, h.persona) {
+		c.ignoreProject("agent.persona", "", ProjectUserOnly)
+	}
+	c.Agent.Persona = clonePersona(h.persona)
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
 	if !maps.Equal(c.Agent.RoleEfforts, h.endpoints.agent.RoleEfforts) {
@@ -312,6 +342,11 @@ func (h heldScope) narrowSandbox(c *Config, ws string) {
 	if s.Network && !u.Network {
 		c.ignoreProject("sandbox.network", "true", ProjectWidensUser)
 		s.Network = false
+	}
+	// Turning it on edits ACLs on the user's disk, which a cloned repo must not cause.
+	if s.WindowsIntegrity != u.WindowsIntegrity {
+		c.ignoreProject("sandbox.windows_integrity", fmt.Sprint(s.WindowsIntegrity), ProjectUserOnly)
+		s.WindowsIntegrity = u.WindowsIntegrity
 	}
 	s.ForbidRead = appendMissing(u.ForbidRead, s.ForbidRead...)
 	allow := slices.Clone(u.AllowWrite)

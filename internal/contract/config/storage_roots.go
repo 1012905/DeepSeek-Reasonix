@@ -173,7 +173,8 @@ func RootIDs() []RootID {
 // state-root guard test fails on a joined path this list does not name.
 var StateRootEntries = []string{
 	"sessions", "archive", "stats", "projects", "appearance", "themes", "repair",
-	"serve-workspaces.json", "memory", "schedules", "peers", "trusted", "machine-id.key", "mcp-global-migration-v1", "commands",
+	"serve-workspaces.json", "memory", "schedules", "peers", "trusted", "machine-id.key", "mcp-global-migration-v1", "commands", "rules",
+	"agent-presets", "sandbox",
 	"REASONIX.md", "AGENTS.md", "CLAUDE.md", "REASONIX.local.md", "AGENTS.local.md", "CLAUDE.local.md",
 }
 

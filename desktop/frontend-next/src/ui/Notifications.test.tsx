@@ -7,7 +7,7 @@ import type { AgentPort, NotifyPrefs } from "../port/port";
 
 afterEach(cleanup);
 
-const OWED: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, diskLow: true, sound: false };
+const OWED: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, diskLow: true, sound: false, phone: { enabled: false, approval: false, input: false, error: false } };
 
 function fakePort(answer: NotifyPrefs | null) {
   let held = answer;

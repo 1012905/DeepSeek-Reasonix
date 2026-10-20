@@ -30,6 +30,8 @@ type recordingKernel struct {
 	refuseText bool
 	// partialCoverage makes a prepared rewind plan ask for confirmation.
 	partialCoverage bool
+	// mcpRows replaces the canned /mcp list when set.
+	mcpRows []map[string]any
 }
 
 func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +111,10 @@ func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			{"ref": "beta/solo", "provider": "beta", "model": "solo"},
 		}})
 	case "/mcp":
+		if k.mcpRows != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{"servers": k.mcpRows})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"servers": []map[string]any{
 			{"name": "docs", "state": "ready", "enabled": true, "transport": "http", "source": "user", "tools": 2,
 				"toolList": []map[string]any{{"name": "search", "readOnly": true}, {"name": "purge", "destructive": true}}},
@@ -128,6 +134,13 @@ func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"planId": "p-1", "canFiles": true, "canConversation": true})
 	case "/rewind/commit":
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "conversationOk": true})
+	case "/delete-session":
+		if strings.Contains(string(body), `"a"`) {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": "session.active", "message": "this session is the one open here"})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -194,6 +207,7 @@ func press(m *model, k string) tea.Cmd {
 		"enter":        {Code: tea.KeyEnter},
 		"esc":          {Code: tea.KeyEscape},
 		"ctrl+s":       {Code: 's', Mod: tea.ModCtrl},
+		"ctrl+d":       {Code: 'd', Mod: tea.ModCtrl},
 		"ctrl+c":       {Code: 'c', Mod: tea.ModCtrl},
 		"ctrl+o":       {Code: 'o', Mod: tea.ModCtrl},
 		"ctrl+g":       {Code: 'g', Mod: tea.ModCtrl},
