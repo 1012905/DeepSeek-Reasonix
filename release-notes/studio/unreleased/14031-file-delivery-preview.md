@@ -1,0 +1,6 @@
+- 新增：AI 交付卡片可在工作台直接打开 Markdown、图片、PDF、CSV/TSV 和静态 HTML。关联 #14031。
+- 改进：交付卡片适配宽窄布局，提供文件类型图标、当前预览标记和“更多”操作；聊天及工作台图标增加统一提示。关联 #14031。
+- 修复：文档删除或撤销访问后不再保留过期的已保存正文；未保存编辑仍会保留，元数据检查不再随每次按键重复触发。关联 #14031。
+- Added: AI file-delivery cards open Markdown, images, PDF, CSV/TSV and static HTML in the workbench. Refs #14031.
+- Improved: responsive delivery cards have type icons, current-file markers and More actions; chat and workbench icons share accessible tooltips. Refs #14031.
+- Fixed: deleted or revoked documents no longer retain stale saved text; unsaved drafts remain intact, and metadata checks no longer restart on every keystroke. Refs #14031.
