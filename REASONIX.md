@@ -413,8 +413,13 @@ moving a number here must not move the promise.
 - Symlinks are recorded by `Lstat`, so a write through one lands outside what
   the walk compares. Confining the resolved target is the sandbox's job.
 - `internal/safety/sandbox` confines writes to the workspace, configured extras, temp
-  and toolchain caches — on macOS and Linux. Windows has no OS-level bash
-  sandbox, so there nothing the host enforces bounds `Writable`.
+  and toolchain caches on macOS and Linux.
+- On Windows a user-enabled write-restricted token bounds the *creation* of files
+  (create, append, overwrite, `mkdir`, HKCU writes, global git config, writes through links).
+- There, deleting or renaming away an existing file is not bounded, and with the
+  setting off nothing the host enforces bounds `Writable`.
+- The caches a command may write can be poisoned for the user's later unsandboxed
+  builds, on every platform.
 - The governed host authorities are a *named* set — ssh-agent, docker, podman.
   DBus, Wayland, X11, gpg-agent, keyrings and arbitrary sockets stay reachable,
   so the claim is "these endpoints are governed", never "host IPC is isolated".
@@ -460,9 +465,13 @@ stop a connect. Possession is not authority: the key can be unreadable while an
 agent still signs with it.
 
 A protection claim exists only where a backend has a demonstrated enforcement
-primitive for that dimension. Unsupported dimensions stay explicitly unsupported
-— Windows currently enforces none of the three — because a claim that outruns
-its enforcement is worse than an absent one: it is believed.
+primitive for that dimension. Unsupported dimensions stay explicitly unsupported,
+because a claim that outruns its enforcement is worse than an absent one: it is
+believed.
+
+Windows enforces Integrity on file creation only, when the user turns it on.
+Deletion and rename, Confidentiality and Authority (the named pipes of ssh-agent
+and docker, COM and RPC services) are not enforced there.
 
 **Known unmeasured surface — macOS host-mediated delegation:** Apple Events and
 Mach-service lookup are not denied by the current allow-default profile. Prior

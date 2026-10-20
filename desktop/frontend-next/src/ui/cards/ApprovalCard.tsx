@@ -18,6 +18,8 @@ const FENCE_TOOL = "extend_write_paths";
 // the kernel; the elevated one offers no session grant, which `allowsSession` already says.
 const SETTING_TOOL = "setting_change";
 const SETTING_ELEVATED_TOOL = "setting_change_elevated";
+// A call that repeats text from outside; the card says so instead of showing the tool id.
+const ORIGIN_TOOL = "origin_check";
 
 // Why no posture answers for this call. The kernel names the class and writes
 // the sentence it gave the model; a reader gets that class in their own
@@ -27,6 +29,7 @@ const EXPLICIT_APPROVAL: Record<string, string> = {
   browser_credential: "这一步会把密码、一次性验证码或银行卡信息输入网站。自动放行、该站点已有的授权和宽泛规则都不能代你回答；要么批准，要么切到全部放行。",
   computer_use: "这会读取或操作电脑上的另一个应用，拿到的是那个应用本身的权限。自动放行和宽泛规则都不能代你回答；要么为这个应用批准，要么切到全部放行。",
   computer_front: "这会操作电脑上的另一个应用，拿到的是那个应用本身的权限。Windows 只把按键送给最前面的窗口，所以输入文字、按键和粘贴会先把这个应用切到前台。自动放行和宽泛规则都不能代你回答；要么为这个应用批准，要么切到全部放行。",
+  origin_text: "这条调用里的文字，和本次任务从外部读到的内容（网页或工具结果）逐字相同。自动放行、全部放行和记住的答案都不能代你回答；请只批准这一次调用，或拒绝。",
   computer_pointer: "这一步会接管你正在用的鼠标指针——移动它、用它点击，并把那个应用切到前台，而不是让界面元素自己动作。自动放行、该应用已有的授权和宽泛规则都不能代你回答；要么批准，要么切到全部放行。用完指针会回到原处。",
 };
 
@@ -93,7 +96,8 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
   const [confirmFullAccess, setConfirmFullAccess] = useState(false);
   const [switchingFullAccess, setSwitchingFullAccess] = useState(false);
   const remembering: Remembered[] = [...(item.a.allowsSession ? ["session" as const] : []), ...(item.a.allowsPersist ? ["always" as const] : [])];
-  const explicit = !!item.a.reasonCode || item.a.reason?.toLowerCase().includes("nested or indirect shell execution");
+  // Full access cannot answer the origin question, so the card does not offer it.
+  const explicit = item.a.tool !== ORIGIN_TOOL && (!!item.a.reasonCode || item.a.reason?.toLowerCase().includes("nested or indirect shell execution"));
   const isSetting = item.a.tool === SETTING_TOOL || item.a.tool === SETTING_ELEVATED_TOOL;
   const decide = async (verdict: ApprovalVerdict) => {
     if (submitting) return;
@@ -128,8 +132,8 @@ export function ApprovalCard({ item, onApprove, onFullAccess, onPlan }: Props) {
         </div>
         <div className="out">
           <div className="apv" data-sealed={sealed ? item.verdict : undefined} aria-busy={!!submitting}>
-            <div className="apv-hd">
-              <span className="tool">{item.a.tool === FENCE_TOOL ? t("这个子任务声明之外的文件") : isSetting ? t("设置") : item.a.tool}</span>
+            <div className="apv-hd" data-whole={item.a.tool === ORIGIN_TOOL ? "" : undefined}>
+              <span className="tool">{item.a.tool === FENCE_TOOL ? t("这个子任务声明之外的文件") : isSetting ? t("设置") : item.a.tool === ORIGIN_TOOL ? t("来自外部的文字") : item.a.tool}</span>
               <span className="sub" title={item.a.subject}>{item.a.subject}</span>
             </div>
             {item.a.scope && <ApprovalScope scope={item.a.scope} input={item.a.input} />}

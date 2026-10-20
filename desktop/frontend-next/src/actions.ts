@@ -449,6 +449,7 @@ export const ACTIONS: UIAction[] = [
   // state — which is why it is one id and why it is not a mutation.
   { id: "external.open", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "remote-host.remove", kind: "destructive", target: "none", proof: "authority-effect" },
+  { id: "remote-host.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "workspace.reveal", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workspace.open-with", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "workbench.open-with-menu", kind: "view", target: "none", proof: "interaction" },
@@ -737,6 +738,7 @@ export const ACTIONS: UIAction[] = [
   { id: "push.preview", kind: "view", target: "none", proof: "interaction" },
   { id: "push.confirm", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "push.close", kind: "view", target: "none", proof: "interaction" },
+  { id: "permissions.ask-on-external-origin", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "plan-approval.auto", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "default-mode.plan", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "tool-list.toggle", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

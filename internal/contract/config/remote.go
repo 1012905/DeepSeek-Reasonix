@@ -381,6 +381,32 @@ func (c *Config) RemoveRemoteWorkspace(name, dir string) bool {
 	return c.UpsertRemoteHost(entry.withWorkspaceList(kept)) == nil
 }
 
+// PlaceRemoteHost puts the named host immediately before the host named before,
+// or last when before is empty: the order the sidebar lists machines in. Naming
+// the neighbour rather than a step keeps the move right when the sidebar hides
+// some machines between the two. Reports whether the book changed.
+func (c *Config) PlaceRemoteHost(name, before string) bool {
+	hosts := c.Remote.Hosts
+	from := slices.IndexFunc(hosts, func(h RemoteHostEntry) bool { return h.Name == name })
+	if from < 0 || name == before {
+		return false
+	}
+	moved := hosts[from]
+	rest := slices.Delete(slices.Clone(hosts), from, from+1)
+	at := len(rest)
+	if before != "" {
+		if at = slices.IndexFunc(rest, func(h RemoteHostEntry) bool { return h.Name == before }); at < 0 {
+			return false
+		}
+	}
+	placed := slices.Insert(rest, at, moved)
+	if slices.EqualFunc(placed, hosts, func(a, b RemoteHostEntry) bool { return a.Name == b.Name }) {
+		return false
+	}
+	c.Remote.Hosts = placed
+	return true
+}
+
 // RemoveRemoteHost deletes the named host, reporting whether it was present.
 func (c *Config) RemoveRemoteHost(name string) bool {
 	for i := range c.Remote.Hosts {

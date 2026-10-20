@@ -144,6 +144,7 @@ const (
 	computerUseApproval      = "computer_use"
 	computerPointerApproval  = "computer_pointer"
 	computerFrontApproval    = "computer_front"
+	originTextApproval       = "origin_text"
 )
 
 // computerActTakesFront is whether operating an application can take the
@@ -156,6 +157,7 @@ var explicitApprovalTexts = map[string]string{
 	browserScriptApproval:    "This browser step runs arbitrary JavaScript with the page's authority. Auto, the site's grant and broad allow rules do not answer it; approve it or use YOLO.",
 	computerPointerApproval:  "This takes the pointer the person is holding — it moves their cursor, clicks with it, and brings the application forward — rather than asking an element to act. Auto, the application's own grant and broad allow rules do not answer it; approve it or use YOLO.",
 	computerUseApproval:      "This reads or operates another application on the computer, with whatever access that application has. Auto and broad allow rules do not answer it; approve it for this application or use YOLO.",
+	originTextApproval:       "This call repeats text that came from outside, such as a web page or a tool result. Auto, YOLO and remembered answers do not answer it; approve this one call or decline.",
 	computerFrontApproval:    "This operates another application on the computer, with whatever access that application has. Windows sends keys only to the window in front, so typing, key presses and pastes bring that application forward first. Auto and broad allow rules do not answer it; approve it for this application or use YOLO.",
 }
 
@@ -164,6 +166,8 @@ var explicitApprovalTexts = map[string]string{
 // renders the prompt asks rather than being told.
 func ExplicitApprovalCode(tool, subject string) string {
 	switch {
+	case tool == permission.OriginConfirmTool:
+		return originTextApproval
 	case strings.EqualFold(tool, "bash") && permission.BashSubjectRequiresExplicitApproval(subject):
 		return dynamicBashApproval
 	case permission.IsBrowserTool(tool) && strings.HasPrefix(subject, permission.BrowserScriptPrefix):

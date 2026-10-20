@@ -129,6 +129,10 @@ rules are written in.
 
 ## Pickers and menus
 
+- The preset editor's drop-downs draw their own arrow, 14px in from the border.
+  The native arrow's inset belongs to the platform, and on Windows it sat close
+  enough to the border to read as clipped; the text keeps room for the arrow.
+
 - A menu drawn outside its anchor's box cannot be dismissed by the pointer
   leaving that box: the offset between them belongs to neither, and crossing it
   is how the menu is reached, so it closes exactly when it is being aimed at.
@@ -225,6 +229,9 @@ rules are written in.
   follow that radius and a short mark cannot. It is one mark in three colours —
   accent, warn, ok — so the row says which state it is in without the row
   itself becoming the signal.
+- The tick is the only state mark in the rail, running included. The row's
+  status dot is not drawn there: it sat on top of the tick and pushed the title
+  one step right. `perf/session-row-marker.mjs` holds it.
 - Finishing is the one rail state that is an event rather than a state, so it
   alone is animated, and only for the run this window watched cross into
   `done`. A session that was already done when the rail mounted, or that comes
@@ -286,6 +293,13 @@ rules are written in.
   on the pane that reads it.
 - A tweened inherited property on `.app` restyles every node under it on every
   frame, which made opening the workbench stutter with a long transcript.
+- The rail, nav and side widths are tweened inherited properties on `.app` too.
+  Nothing under the transcript reads them, so `.flow` resets them.
+- Without the reset, a fold at 300 turns cost about 430 ms of style
+  recalculation against 3 ms of layout; with it the median frame fell from 128 ms
+  to 46 ms (4x CPU throttle, the perf fixture).
+- `perf/rail-toggle-panes.mjs` holds it by reading the widths inside `.flow`
+  while the rail folds. `.srail-peek` is outside `.flow` and still reads `--rail-w`.
 - The gutter writes the width on the pane for the same reason (`DOCK.owner`).
 - The side track is closed unless a panel mounts in it. It was written open and
   closed by `[data-side="off"]`, and the attribute stayed wired to the built-in
@@ -1547,6 +1561,10 @@ A sub-agent row, by the list's own width:
 - Taking the room only while shown means the title shortens when the buttons appear, never before. Pinning stays an overlay at the left, so the pin never moves the title.
 - An unread dot is an overlay 11px from the right edge: an unread row keeps 22px after its age (or after its badge, 26px) for it, and the dot hides while the buttons are shown.
 - A legacy `margin-right: 44px` on the age made room for a delete button the rail has long since hidden; the rail's rule sets it to zero.
+- The current session reads as current in its fill and a 1px neutral outline, never in a state colour. The fill is a 13% text tint against hover's 4%.
+- The outline is drawn inside the border box (`outline-offset: -1px`): the row's transparent 2px left border would push an inset shadow off the edge.
+- Hovering the selected row changes neither the fill nor the outline; keyboard focus swaps the outline for the focus ring.
+- `perf/session-selected-row.mjs` holds the contrast floors in a real browser, light and dark: 1.2 over a plain row, 1.12 over a hovered one.
 - `perf/sessionrows.mjs` measures this in a real browser: with no button showing, a row with an age leaves at most 2px (8px with a badge) of its right side unused, and the buttons take no width at rest.
 
 ## Session rename dialog

@@ -1,0 +1,2 @@
+- 修复：写入落在「额外可写入范围」等工作区之外的文件时，不再占住整个工作区，别的会话写项目文件不会被卡住；只有同一路径的写入互相等待。关联 #13965。
+- Fixed: writing a file outside the workspace, such as in an extra writable folder, no longer claims the whole workspace; only writes to the same path wait on each other. Refs #13965.

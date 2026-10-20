@@ -556,6 +556,7 @@ func (h *Hub) Handler() http.Handler {
 	hostMux.HandleFunc("GET /remotes/{host}/probe", h.remoteProbe)
 	hostMux.HandleFunc("POST /remotes/{host}/workspaces", h.addRemoteWorkspace)
 	hostMux.HandleFunc("POST /remotes/{host}/workspaces/remove", h.removeRemoteWorkspace)
+	hostMux.HandleFunc("POST /remotes/{host}/place", h.placeRemoteHost)
 	hostMux.HandleFunc("POST /remotes/remove", h.removeRemoteHost)
 	hostMux.HandleFunc("POST /remotes/open", h.openRemoteRuntime)
 	h.registerTrayRoutes(hostMux)

@@ -525,7 +525,7 @@ func (a *Agent) applyRecoveryAndPermission(ctx context.Context, plan *toolCallPl
 			return outcome, true
 		}
 	} else if a.svc.gate != nil {
-		v, err := permission.VerdictOf(ctx, a.svc.gate, plan.permName, gateArgs, plan.readOnly)
+		v, err := permission.VerdictOf(a.originCtx(ctx, plan), a.svc.gate, plan.permName, gateArgs, plan.readOnly)
 		if err != nil {
 			return toolOutcome{
 				output:    fmt.Sprintf("blocked: %s (%v)", v.Reason, err),

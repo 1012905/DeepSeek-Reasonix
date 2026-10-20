@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/state/sessionstore"
 )
 
 const desktopRegistryPath = "desktop/workspace-state-v1.json"
@@ -60,21 +61,23 @@ func readDesktopRegistry(tree fs.FS, home string) (map[string]string, map[string
 	return owners, archived, nil
 }
 
-// routeToOwner sends a session to its former workspace's session directory
-// while that workspace still exists, and otherwise declines.
-func routeToOwner(owners map[string]string, note func(root string)) func(string) string {
-	if len(owners) == 0 {
-		return nil
-	}
-	return func(id string) string {
-		root := strings.TrimSpace(owners[id])
+// routeV4 places each conversation of a 1.x Desktop store: by the registry's workspace
+// root, else by the working folder its own header records. A root that is known but
+// gone is orphaned and falls back to the chosen folder; none at all is not placed.
+// The store always gets a route, so an unreadable registry cannot make it unscoped.
+func routeV4(owners map[string]string, note func(root string)) func(sessionstore.V4Origin) sessionstore.V4Placement {
+	return func(o sessionstore.V4Origin) sessionstore.V4Placement {
+		root := strings.TrimSpace(owners[o.ID])
 		if root == "" {
-			return ""
+			root = o.Cwd
+		}
+		if root == "" {
+			return sessionstore.V4Placement{}
 		}
 		if info, err := os.Stat(root); err != nil || !info.IsDir() {
-			return ""
+			return sessionstore.V4Placement{Known: true}
 		}
 		note(root)
-		return config.ProjectSessionDir(root)
+		return sessionstore.V4Placement{Dir: config.ProjectSessionDir(root), Known: true}
 	}
 }

@@ -45,6 +45,7 @@ func TestCompositionSwitchAndFirstTurnShareAdmission(t *testing.T) {
 	if err := c.SelectAgentComposition(t.Context(), "builtin:general"); !errors.Is(err, agentcomposition.ErrLocked) {
 		t.Fatalf("started switch=%v", err)
 	}
+	waitIdle(t, c)
 	if err := c.ClearSession(); err != nil {
 		t.Fatal(err)
 	}

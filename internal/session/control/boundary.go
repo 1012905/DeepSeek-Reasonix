@@ -23,6 +23,9 @@ type PermissionLists struct {
 	Allow []string `json:"allow"`
 	Ask   []string `json:"ask"`
 	Deny  []string `json:"deny"`
+	// AskOnExternalOrigin is the user's switch for asking before a call that copies
+	// text an external result gave the task. On a save, nil leaves it as it is.
+	AskOnExternalOrigin *bool `json:"askOnExternalOrigin,omitempty"`
 }
 
 func (l PermissionLists) of(name string) []string {
@@ -181,6 +184,9 @@ func (c *Controller) SavePermissionRules(in PermissionLists) error {
 			}
 		}
 	}
+	if in.AskOnExternalOrigin != nil {
+		cfg.Permissions.AskOnExternalOrigin = *in.AskOnExternalOrigin
+	}
 	return cfg.SaveTo(path)
 }
 
@@ -193,8 +199,12 @@ var ErrSandboxUnavailable = errors.New("bash sandbox requested but unavailable o
 func (c *Controller) SandboxSettings() SandboxSettings {
 	path := config.UserConfigPath()
 	cfg := config.LoadForEdit(path)
+	bash := strings.TrimSpace(cfg.Sandbox.Bash)
+	if runtime.GOOS == "windows" {
+		bash = cfg.BashMode() // Windows takes windows_integrity, which the mode already reflects
+	}
 	out := SandboxSettings{
-		Bash:                strings.TrimSpace(cfg.Sandbox.Bash),
+		Bash:                bash,
 		Network:             cfg.Sandbox.Network,
 		WorkspaceRoot:       strings.TrimSpace(cfg.Sandbox.WorkspaceRoot),
 		AllowWrite:          append([]string{}, cfg.Sandbox.AllowWrite...),
@@ -237,6 +247,9 @@ func (c *Controller) SaveSandboxSettings(in SandboxSettings) error {
 		return fmt.Errorf("%w: %s", ErrSandboxUnavailable, sandbox.UnavailableRemediation())
 	}
 	cfg.Sandbox.Bash = bash
+	if runtime.GOOS == "windows" {
+		cfg.Sandbox.WindowsIntegrity = bash == "enforce"
+	}
 	cfg.Sandbox.Network = in.Network
 	cfg.Sandbox.WorkspaceRoot = strings.TrimSpace(in.WorkspaceRoot)
 	allow := trimmedList(in.AllowWrite)
@@ -261,11 +274,14 @@ func listsFrom(cfg *config.Config) PermissionLists {
 	if mode == "" {
 		mode = "ask"
 	}
+	on := cfg.Permissions.AskOnExternalOrigin
 	return PermissionLists{
 		Mode:  mode,
 		Allow: append([]string{}, cfg.Permissions.Allow...),
 		Ask:   append([]string{}, cfg.Permissions.Ask...),
 		Deny:  append([]string{}, cfg.Permissions.Deny...),
+
+		AskOnExternalOrigin: &on,
 	}
 }
 

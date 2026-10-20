@@ -105,3 +105,14 @@ func TestCountsAreTakenOnceAndStartOver(t *testing.T) {
 		t.Fatal("a nil ledger matched")
 	}
 }
+
+func TestEveryOriginTheCallRepeatsIsNamedAtMostThreeThenCounted(t *testing.T) {
+	mcp := func(n string) tool.Provenance { return tool.Provenance{Kind: tool.ProvenanceMCP, Source: n} }
+	if got := originLabels([]tool.Provenance{web, mcp("docs"), web}); got != "web:example.com, mcp:docs" {
+		t.Fatalf("two origins, one repeated = %q", got)
+	}
+	got := originLabels([]tool.Provenance{web, mcp("a"), mcp("b"), mcp("c"), mcp("d")})
+	if got != "web:example.com, mcp:a, mcp:b and 2 more" {
+		t.Fatalf("five origins = %q", got)
+	}
+}

@@ -64,7 +64,7 @@ export interface TreeSession {
   versions?: TreeSession[];
 }
 
-export type LegacySkipReason = "too_large" | "unreadable_format" | "schema_unsupported" | "permission" | "corrupt" | "copy_failed";
+export type LegacySkipReason = "too_large" | "unreadable_format" | "schema_unsupported" | "permission" | "corrupt" | "copy_failed" | "no_project";
 
 // A 1.x session the import could not read. The entry at `path` was neither
 // moved nor deleted.
@@ -222,6 +222,8 @@ export interface HubPort extends SharePort {
   removeRemoteWorkspace(host: string, path: string): Promise<void>;
   saveRemoteHost(entry: RemoteHostEdit): Promise<void>;
   removeRemoteHost(name: string): Promise<void>;
+  // Puts a machine before another in the book, or last when before is empty.
+  placeRemoteHost(name: string, before: string): Promise<void>;
   // ssh_config aliases this machine can already reach and the book has not
   // taken yet. Filling it by hand when the addresses are written down next
   // door is the step people skip.
@@ -485,6 +487,10 @@ export class SseHub implements HubPort {
 
   async removeRemoteHost(name: string) {
     await this.post<void>("/remotes/remove", { name });
+  }
+
+  async placeRemoteHost(name: string, before: string) {
+    await this.post<void>(`/remotes/${encodeURIComponent(name)}/place`, { before });
   }
 
   remoteCandidates() {

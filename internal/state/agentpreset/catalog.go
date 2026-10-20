@@ -11,11 +11,18 @@ import (
 	"reasonix/internal/contract/agentcomposition"
 )
 
+// Choice is one module a preset may select, with what its own source says it is
+// for. The description is for the person choosing; a preset stores only the id.
+type Choice struct {
+	ID          string `json:"id"`
+	Description string `json:"description,omitempty"`
+}
+
 type Catalog struct {
-	Presets     []agentcomposition.Version           `json:"presets"`
-	Default     string                               `json:"default"`
-	Diagnostics []agentcomposition.Diagnostic        `json:"diagnostics"`
-	Modules     map[string][]agentcomposition.Module `json:"modules,omitempty"`
+	Presets     []agentcomposition.Version    `json:"presets"`
+	Default     string                        `json:"default"`
+	Diagnostics []agentcomposition.Diagnostic `json:"diagnostics"`
+	Modules     map[string][]Choice           `json:"modules,omitempty"`
 }
 
 type preferences struct {

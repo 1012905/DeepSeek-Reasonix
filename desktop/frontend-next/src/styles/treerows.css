@@ -47,7 +47,6 @@
 .rail .kids { margin: 0 15px 0 22px; padding-left: 10px; border-left: 0; }
 .rail .sessrow { min-height: 34px; margin: 1px 0 1px 3px; }
 .rail .sessrow > .pip { display: none; }
-.rail .sessrow[data-run="running"] > .pip { display: block; }
 .rail .rmtws-node .sessdel { opacity: 0; }
 .rail .rmtws-node .sessrow:is(:hover, :focus-within) .sessdel { opacity: 1; }
 .rail .sessage { margin-left: auto; margin-right: 0; font-size: var(--fs-micro); }
@@ -55,7 +54,8 @@
 .rail .sessrow[data-unread]:not(:has(> .sesscopies)) > .sessage { margin-inline-end: 22px; }
 .rail .sessmore { width: calc(100% - 12px); margin: 2px 0 5px 3px; padding-left: 9px; text-align: left; }
 .rail .sessrow:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
-.rail .sessrow[aria-selected="true"] { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font-weight: var(--w-reg); box-shadow: none; }
+.rail .sessrow[aria-selected="true"] { background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text); font-weight: var(--w-reg); box-shadow: none; }
+.rail .sessrow[aria-selected="true"]:not(:focus-visible) { outline: 1px solid color-mix(in srgb, var(--text) 22%, transparent); outline-offset: -1px; }
 .rail .sessrow:not([data-unread]) .sesstitle { font-weight: var(--w-reg); }
 .project-connection { display: flex; align-items: center; gap: 5px; margin: 0 22px 4px 48px; color: var(--warn-ink); font: var(--w-reg) var(--fs-micro)/1.5 var(--ui); }
 .project-connection .studio-icon { width: 12px; height: 12px; flex: none; }

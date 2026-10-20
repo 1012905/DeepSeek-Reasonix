@@ -35,9 +35,10 @@ interface Inputs {
   reload: () => Promise<unknown>;
 }
 
-// Viewing is the window's decision and the kernel never infers it: a session
-// becoming the pane in front, or a turn ending in the pane already there while
-// the window has focus. A refused call puts the mark back rather than saying so.
+// Viewing is the window's decision and the kernel never infers it. The pane in
+// front is seen when it becomes the one in front, when a turn ends in it, and
+// whenever it is unread while the window has focus, whichever of the pane, its
+// list or its path arrived last. A refused call puts the mark back.
 export function useViewed({ runtimes, ports, active, tree, remote, reload }: Inputs) {
   const [cleared, setCleared] = useState<Set<string>>(() => new Set());
   const now = useRef({ runtimes, ports, tree, remote, reload, active });
@@ -102,6 +103,14 @@ export function useViewed({ runtimes, ports, active, tree, remote, reload }: Inp
     front.current = active;
     if (active) view(active);
   }, [active, ports, view]);
+
+  const frontUnread = useMemo(() => {
+    const rt = runtimes.find((r) => r.id === active);
+    return !!rt && isUnread(rt, tree, remote);
+  }, [runtimes, active, tree, remote]);
+  useEffect(() => {
+    if (active && frontUnread && ports.has(active) && document.hasFocus()) view(active);
+  }, [active, frontUnread, ports, view]);
 
   useEffect(() => {
     if (held.current.size === 0) return;

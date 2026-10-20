@@ -874,6 +874,16 @@ Reasonix 管理的普通 worktree 会话统一列在原项目下，不再为隔�
 其中 Bash 默认按具体命令记，也可按安全推导出的命令前缀记（如 `Bash(go test:*)`）；文件编辑类工具的本会话授权按编辑能力记，持久授权则写入 `Edit(<path>)` 文件路径规则；
 参数/算术展开、赋值、不含嵌套执行的 heredoc、文件重定向和 glob 不能复用裸 `Bash`、前缀或 glob Allow；用户保存时写入整条 `Bash=<literal>`，但它们仍按普通 fallback 执行，因此 Auto 不会额外询问。命令/进程替换、动态命令名、`eval`、`source`、Shell `-c`、运行时内联代码和无法解析的结构默认强制人工；无头 Ask/Auto/DontAsk 会拒绝这类未精确授权的命令，YOLO 可以绕过。高级用户可设置 `[permissions] allow_dynamic_bash = true`，让 Allow fallback（包括 Auto）覆盖这类动态命令；显式 `ask` 与 `deny` 规则仍然优先。由于无头运行没有审批界面，默认 Ask 对普通 writer fallback 和显式 ask 规则也会 fail closed；无人值守自动化需要放行普通 writer 时，使用 `reasonix run --auto ...`、`-y` 或 `--permission-mode auto`。配置的 `ask` 与 `deny` 始终优先。
 
+外部文本是另一个问题。`[permissions] ask_on_external_origin = true`（只认用户文件，默认关）让 Auto 和 YOLO 在同时满足下面三点时先问你：
+
+- 调用不是读取；
+- 它的某个字符串参数（至少 12 字节）与本任务读到的网页、MCP 工具结果等外部结果里的文字逐字节相同；
+- 这段字符串不是你自己写的。
+
+这个询问每次都是新的：Auto、YOLO 和记住的答案都不能代答；没人可问时（例如无头的 YOLO 运行）调用不会被执行，而是被拒绝，并说明来源。
+
+不会询问的：你自己的 `allow` 规则覆盖的调用、已安装的 MCP 服务器，以及不是逐字复制的调用（改了编码、改写过、由模型先写脚本再生成）。续会话从零开始记录。
+
 Ask 不是只读模式：writer 获得批准后仍会执行。Permissions 决定放行或询问，Sandbox 才是强制能力边界。
 Sandbox 是授权之后的第二层边界，不能替代命令解析，也不能把无法证明静态安全的命令变成可自动授权命令。
 
@@ -978,7 +988,8 @@ $tmpFile = Join-Path $env:TEMP "result.json"
 MCP 等独立沙盒继续使用自己的隔离规范，不继承父会话临时目录。获得批准后绕过沙盒的
 命令仍继承私有临时变量，但在 Linux 上其字面 `/tmp` 不再由 bwrap 映射。
 
-**Windows 说明：**Reasonix 不在 Windows 上提供 OS 级 Bash 沙箱，生效模式固定为
+**Windows 说明：**Windows 上的 OS 级 Bash 沙箱默认关闭，用户设置
+`[sandbox] windows_integrity = true` 才启用（见下面“在 Windows 上”）。关闭时生效模式为
 `off`。旧配置即使写了 `bash = "enforce"` 也会解析为 `off`，`reasonix doctor`
 会提示该设置被忽略，桌面设置中的选择器也为只读。Bash 命令会在不受 OS 沙箱限制的
 环境中运行；专用文件工具仍会在进程内执行 `workspace_root`、`allow_write` 和
@@ -986,7 +997,40 @@ MCP 等独立沙盒继续使用自己的隔离规范，不继承父会话临时�
 以当前用户身份运行，不能作为保护其他用户可读文件的安全边界。
 
 没有可用 OS 沙盒时，`bash = "enforce"` 会拒绝 bash 执行，不会无沙盒运行。
-Windows 上兼容的值始终为 `off`。
+Windows 上默认关闭，需要设置 `[sandbox] windows_integrity = true`（设置 > 沙箱；只认用户文件）才会启用。
+
+### 在 Windows 上
+
+打开 `windows_integrity` 后，bash 命令运行在写入受限的令牌下。
+
+- 首个会话会给一个合成的 Windows 身份授予对工作区、你的 `allow_write` 文件夹和工具链数据缓存的写权限。
+- 缓存指 Go 构建与模块缓存、npm、pip、cargo registry、NuGet 包。放着你会运行的程序的文件夹（`~/go/bin`、`.cargo/bin`）永远不授权。
+- 授权是加在这些文件夹上的一条权限项，记录在 Reasonix 状态目录里；它不给其他任何人权限，沙箱以后关闭它也不起作用。
+- `reasonix sandbox list` 显示已授权的内容，`reasonix sandbox revoke` 收回。
+
+它限制什么（在 Windows 11 上实测，对所有子进程）：
+
+- 在授权文件夹之外创建、追加、覆盖文件。
+- `mkdir`、写你用户下的注册表（HKCU）、改全局 git 配置。
+- 穿过指向授权文件夹之外的目录联接或符号链接写入。
+- 备份语义写入（`robocopy /B`）：令牌不带任何特权。
+- 创建计划任务、创建服务、写 HKLM：实测都被拒绝。
+
+它不限制什么：
+
+- **删除或重命名走**授权文件夹之外的已有文件（Windows 不对这两种操作应用该限制）。删除仍由删除守卫和审批层把关。
+- **读取**文件和**网络**。
+- **宿主权限端点**：ssh-agent 和 docker 的命名管道，以及任务计划程序之类的 COM、RPC 服务，命令都够得着。
+- Everyone 或你的登录会话本来就能写的位置：两者都在受限 SID 集合里，对它们开放的文件夹对命令也开放。
+- 被授权的工具链缓存命令可写，缓存被投毒会影响你之后不受沙箱的构建。macOS 和 Linux 的缓存有同样的暴露。
+
+其他事实：
+
+- 命令运行时只保留跨目录遍历检查，其余特权全部去掉，并在一个无法触及你会话里其他窗口、剪贴板和显示设置的作业里。
+- 只有三个标准句柄传入命令。
+- 命令不能自己再起启动器：启动器在受限令牌下拒绝运行，且只给宿主建的会话临时文件夹授权。
+- 需要交互式桌面会话。SSH 或服务会话里 `enforce` 会拒绝执行命令（`sandbox.win_no_logon_sid`），而不是无沙箱运行。
+- 未测：标准（非管理员）账户、其他 Windows 版本、ReFS 与网络盘。Linux 和 macOS 不变，且限制所有种类的写入。
 
 ### 在开发容器或 Docker 里
 

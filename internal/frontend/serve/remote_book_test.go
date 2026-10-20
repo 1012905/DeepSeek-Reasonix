@@ -835,3 +835,59 @@ func TestTheWSLChoiceListsTheDistributionsOrSaysThereIsNone(t *testing.T) {
 		t.Fatalf("an unreadable listing = %d %q", resp.StatusCode, refusal.Code)
 	}
 }
+
+func hostNames(t *testing.T, front *httptest.Server) []string {
+	t.Helper()
+	resp, err := http.Get(front.URL + "/remotes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var listed []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(listed))
+	for _, h := range listed {
+		names = append(names, h.Name)
+	}
+	return names
+}
+
+// The rail lists machines in the book's order, so placing one is placing it in
+// the book: it survives a restart and every window sees the same order.
+func TestAMachineIsPlacedBeforeAnotherOrLast(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	for _, name := range []string{"one", "two", "three"} {
+		bookPost(t, front, "/remotes", `{"name":"`+name+`","host":"10.0.0.4"}`)
+	}
+	for _, step := range []struct{ host, before, want string }{
+		{"three", "two", "one,three,two"},
+		{"one", "", "three,two,one"},
+		{"one", "one", "three,two,one"},
+		{"three", "", "two,one,three"},
+	} {
+		body := `{"before":"` + step.before + `"}`
+		if resp := bookPost(t, front, "/remotes/"+step.host+"/place", body); resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("place %s before %q = %d, want 204", step.host, step.before, resp.StatusCode)
+		}
+		if got := strings.Join(hostNames(t, front), ","); got != step.want {
+			t.Fatalf("after placing %s before %q: %s, want %s", step.host, step.before, got, step.want)
+		}
+	}
+}
+
+func TestPlacingAMachineRefusesAnUnknownName(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	bookPost(t, front, "/remotes", `{"name":"one","host":"10.0.0.4"}`)
+	for _, c := range []struct{ host, body string }{
+		{"nowhere", `{"before":"one"}`},
+		{"one", `{"before":"nowhere"}`},
+	} {
+		if resp := bookPost(t, front, "/remotes/"+c.host+"/place", c.body); resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("place %s with %s = %d, want 404", c.host, c.body, resp.StatusCode)
+		}
+	}
+}

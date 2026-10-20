@@ -87,3 +87,38 @@ func TestSavePermissionRulesKeepsARuleThatWasAlreadyInTheFile(t *testing.T) {
 		t.Fatal("a new unknown rule was accepted next to the existing one")
 	}
 }
+
+// The origin switch rides the rules save: absent leaves it as it is, present sets it
+// either way, and the reader always reports the saved value.
+func TestSavePermissionRulesCarriesTheOriginSwitchAndLeavesItWhenAbsent(t *testing.T) {
+	c := permissionRulesController(t)
+	read := func() bool {
+		v := c.PermissionRules().AskOnExternalOrigin
+		return v != nil && *v
+	}
+	if read() {
+		t.Fatal("the switch is on in a fresh file")
+	}
+	on, off := true, false
+	if err := c.SavePermissionRules(PermissionLists{Mode: "ask", AskOnExternalOrigin: &on}); err != nil || !read() {
+		t.Fatalf("turning it on: err %v, now %v", err, read())
+	}
+	if !strings.Contains(mustRead(t, config.UserConfigPath()), "ask_on_external_origin = true") {
+		t.Fatal("the user file does not hold the key after it was turned on")
+	}
+	if err := c.SavePermissionRules(PermissionLists{Mode: "ask", Allow: []string{"read_file"}}); err != nil || !read() {
+		t.Fatalf("a save without the field must leave it on: err %v, now %v", err, read())
+	}
+	if err := c.SavePermissionRules(PermissionLists{Mode: "ask", AskOnExternalOrigin: &off}); err != nil || read() {
+		t.Fatalf("turning it off: err %v, now %v", err, read())
+	}
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

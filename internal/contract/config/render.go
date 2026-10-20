@@ -262,11 +262,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		mode = "ask"
 	}
 	fmt.Fprintf(&b, "mode  = %q\n", mode)
-	if c.Permissions.AllowDynamicBash {
-		b.WriteString("allow_dynamic_bash = true   # advanced: let mode=allow cover command substitution and interpreter -c/-e\n")
-	} else {
-		b.WriteString("# allow_dynamic_bash = false   # advanced opt-in; deny/ask and exact rules still take precedence\n")
-	}
+	renderPermissionFlags(&b, c, true)
 	b.WriteString(renderRuleList("deny", c.Permissions.Deny, `["Bash(rm -rf*)", "Bash(git push*)"]   # hard-blocked in every mode`))
 	b.WriteString(renderRuleList("allow", c.Permissions.Allow, `["Bash(go test:*)", "Bash(git status:*)"]   # never prompted`))
 	b.WriteString(renderRuleList("ask", c.Permissions.Ask, `["Edit(src/**)"]   # force a prompt even if otherwise allowed`))
@@ -294,8 +290,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# forbid_read = []                  # dirs the agent cannot read or list\n")
 	}
-	fmt.Fprintf(&b, "bash    = %q\n", c.BashMode())
-	fmt.Fprintf(&b, "network = %v\n", c.Sandbox.Network)
+	renderBashAndNetwork(&b, c)
 	fmt.Fprintf(&b, "host_authorities = %s   # host services bash may call; user-global\n", renderStringArray(c.Sandbox.HostAuthorities))
 	renderAllowDevices(&b, c.Sandbox.AllowDevices)
 	if len(c.Sandbox.AllowedDomains) > 0 {
@@ -598,9 +593,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 		if mode != "ask" {
 			fmt.Fprintf(&b, "mode = %q\n", mode)
 		}
-		if c.Permissions.AllowDynamicBash {
-			b.WriteString("allow_dynamic_bash = true\n")
-		}
+		renderPermissionFlags(&b, c, false)
 		if len(c.Permissions.Deny) > 0 {
 			fmt.Fprintf(&b, "deny = %s\n", renderStringArray(c.Permissions.Deny))
 		}

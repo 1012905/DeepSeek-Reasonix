@@ -6,7 +6,7 @@ import { pinToViewport } from "./place";
 import { StudioIcon } from "./StudioIcon";
 import { workspaceMenuKeys } from "./WorkspaceOrder";
 
-export function RemoteProjectMenu({ name, root, host, defaultRoot, busy, onRefresh, onRemove }: {
+export function RemoteProjectMenu({ name, root, host, defaultRoot, busy, onRefresh, onRemove, onMove }: {
   name: string;
   root: string;
   host: string;
@@ -14,6 +14,8 @@ export function RemoteProjectMenu({ name, root, host, defaultRoot, busy, onRefre
   busy: boolean;
   onRefresh: () => void;
   onRemove?: () => void;
+  // Steps this row's machine up or down the book; a direction with no neighbour is absent.
+  onMove?: Partial<Record<-1 | 1, () => void>>;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -39,6 +41,13 @@ export function RemoteProjectMenu({ name, root, host, defaultRoot, busy, onRefre
         <button role="menuitem" data-action="remote.read" data-target={host} disabled={busy} onClick={() => { close(); onRefresh(); }}>
           <StudioIcon name="refresh" /><span>{t("刷新 {name} 上的会话", { name: host })}</span>
         </button>
+        {onMove && ([-1, 1] as const).map((direction) => (
+          <button key={direction} role="menuitem" data-action="remote-host.move" data-target={host} data-value={direction}
+            disabled={busy || !onMove[direction]} onClick={() => { close(); onMove[direction]?.(); }}>
+            <StudioIcon name="arrow" data-flip={direction === 1 ? "" : undefined} />
+            <span>{t(direction === -1 ? "上移 {name}" : "下移 {name}", { name: host })}</span>
+          </button>
+        ))}
         {onRemove && <button role="menuitem" data-action="remote-host.remove" disabled={busy}
           onClick={() => { close(); onRemove(); }}><StudioIcon name="close" /><span>{t("从列表移除")}</span><small>{t("不删除文件")}</small></button>}
       </div>

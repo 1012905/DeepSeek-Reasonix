@@ -51,11 +51,7 @@ func (o *Owner) normalizePaths(paths []string) []string {
 		if err != nil {
 			return nil
 		}
-		path = canonical
-		if !pathWithin(o.scope.root, path) {
-			return nil
-		}
-		out = append(out, path)
+		out = append(out, canonical)
 	}
 	return out
 }
@@ -219,7 +215,7 @@ func (o *Owner) tryPaths(paths []string, held bool) (func(), *ConflictError, err
 			return nil, o.conflict("", "", nil, paths), errHeld
 		}
 		for _, extent := range record.Paths {
-			if !filepath.IsAbs(extent) || !pathWithin(o.scope.root, extent) {
+			if !filepath.IsAbs(extent) {
 				record.Paths = nil
 				break
 			}
