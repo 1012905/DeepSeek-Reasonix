@@ -261,7 +261,9 @@ jobs:
           WINDOWS_SANDBOX_WAIT_MS: "20000"
         shell: bash
         run: |
-          go test -count=1 -p 4 -timeout=18m -json ./... | tee "$RUNNER_TEMP/full.jsonl" |
+          # internal/assembly/boot alone takes 14-15 minutes on a Windows runner;
+          # the package limit leaves headroom inside the step limit above.
+          go test -count=1 -p 4 -timeout=28m -json ./... | tee "$RUNNER_TEMP/full.jsonl" |
             jq -rj --unbuffered 'select(.Action == "output" and .Test == null) | .Output'
 
       - name: test (full) failure detail
