@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -123,4 +125,37 @@ func (s shortWrite) Script(ctx context.Context, stdin io.Reader, body string, ar
 	}
 	data, _ := io.ReadAll(stdin)
 	return s.local.Script(ctx, bytes.NewReader(data[:len(data)/2]), body, args...)
+}
+
+func TestAWriteWillNotFollowALinkPlantedAtTheTempName(t *testing.T) {
+	needGNUStat(t)
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := tempNonce
+	tempNonce = func() string { return "fixed" }
+	defer func() { tempNonce = old }()
+	target := filepath.Join(dir, "out")
+	for name, link := range map[string]string{"existing": victim, "dangling": filepath.Join(dir, "nowhere")} {
+		tmp := filepath.Join(dir, ".out.reasonix-tmp-fixed")
+		if err := os.Symlink(link, tmp); err != nil {
+			t.Fatal(err)
+		}
+		err := New(local{}).WriteFileAtomic(context.Background(), target, []byte("evil"), 0o600)
+		if err == nil {
+			t.Fatalf("%s: write through a planted link succeeded", name)
+		}
+		if b, _ := os.ReadFile(victim); string(b) != "keep" {
+			t.Fatalf("%s: the link's target was written: %q", name, b)
+		}
+		if _, err := os.Lstat(link); name == "dangling" && err == nil {
+			t.Fatalf("dangling target was created")
+		}
+		if _, err := os.Stat(target); err == nil {
+			t.Fatalf("%s: target was published", name)
+		}
+		os.Remove(tmp)
+	}
 }

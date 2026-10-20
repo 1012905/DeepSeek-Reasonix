@@ -3,6 +3,8 @@ package execfs
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -73,8 +75,12 @@ exec head -c "$2" -- "$1"`)
 [ "$(stat -L -c %s -- "$1")" -le "$2" ] || exit 47
 exec head -c "$2" -- "$1"`)
 
-	writeScript = needs("cat chmod mv rm wc dirname basename", `t="$(dirname -- "$1")/.$(basename -- "$1").reasonix-tmp-$$"
-{ cat > "$t" && chmod "$2" "$t" && [ "$(wc -c < "$t")" -eq "$3" ] && mv -f -- "$t" "$1"; } || { rm -f -- "$t"; exit 1; }`)
+	writeScript = needs("cat chmod mv rm wc dirname basename", `t="$(dirname -- "$1")/.$(basename -- "$1").reasonix-tmp-$4"
+umask 077
+set -C
+exec 3> "$t" || exit 1
+set +C
+{ cat >&3 && exec 3>&- && chmod "$2" "$t" && [ "$(wc -c < "$t")" -eq "$3" ] && mv -f -- "$t" "$1"; } || { rm -f -- "$t"; exit 1; }`)
 
 	mkdirAllScript = needs("mkdir", `exec mkdir -p -- "$1"`)
 	mkdirScript    = needs("mkdir", `exec mkdir -- "$1"`)
@@ -216,12 +222,20 @@ func (f *FS) Download(ctx context.Context, p string, w io.Writer) (int64, error)
 	return int64(n), err
 }
 
+// tempNonce names the temporary file; it is unguessable so nobody can plant a
+// link at it ahead of time, and the script opens it exclusively regardless.
+var tempNonce = func() string {
+	var b [12]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
 func (f *FS) WriteFileAtomic(ctx context.Context, p string, data []byte, perm fs.FileMode) error {
 	if int64(len(data)) > transferCap {
 		return fmt.Errorf("write %s: %w", p, ErrTooLarge)
 	}
 	_, err := f.run(ctx, "write "+p, bytes.NewReader(data), writeScript, p,
-		strconv.FormatUint(uint64(perm.Perm()), 8), strconv.Itoa(len(data)))
+		strconv.FormatUint(uint64(perm.Perm()), 8), strconv.Itoa(len(data)), tempNonce())
 	return err
 }
 

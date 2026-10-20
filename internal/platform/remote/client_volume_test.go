@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 
@@ -89,6 +90,9 @@ func TestADeadLinkIsNotMistakenForARefusal(t *testing.T) {
 }
 
 func TestTheScriptLayerThroughARealShellOverSSH(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the test server runs exec requests under /bin/sh")
+	}
 	if err := exec.Command("stat", "-c", "%s", "/").Run(); err != nil {
 		t.Skip("needs a GNU userland")
 	}
