@@ -635,7 +635,12 @@ class MainActivity : AppCompatActivity() {
                 // computer's Studio, so its own links belong in here rather than
                 // in a browser with no way back.
                 val kernelOrigin = (application as App).kernel.origin
-                if (kernelOrigin != null && url.toString().startsWith(kernelOrigin)) return false
+                // Exact origins, not a string prefix: `http://127.0.0.1:50001/`
+                // starts with `http://127.0.0.1:5000` and would be read as the
+                // kernel's own page, which is how a host on a nearby port gets
+                // treated as this app's. `originOf` keeps the port, so the two
+                // are compared as the origins they are.
+                if (kernelOrigin != null && originOf(url) == kernelOrigin) return false
                 if (inAppOrigin != null && originOf(url) == inAppOrigin) return false
                 // Anything else belongs in the real browser: a documentation
                 // link, a provider's console, a sign-in page. Loading one inside
