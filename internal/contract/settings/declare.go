@@ -198,6 +198,8 @@ var table = []Entry{
 	{ID: "sandbox.denied_domains", Class: Guarded, Effect: OnOpen},
 	{ID: "sandbox.egress_unlisted", Class: Guarded, Effect: OnOpen},
 	{ID: "network.proxy_mode", Class: Guarded, Effect: OnOpen},
+	{ID: "network.dns", Class: Guarded, Effect: OnOpen},
+	{ID: "network.doh", Class: Guarded, Effect: OnOpen},
 	{ID: "network.proxy_url", Class: Guarded, Effect: OnOpen, Secret: true},
 	{ID: "network.no_proxy", Class: Guarded, Effect: OnOpen},
 	{ID: "network.proxy.type", Class: Guarded, Effect: OnOpen},
