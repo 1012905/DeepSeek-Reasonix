@@ -48,7 +48,7 @@ func TestEffectACommandCopiedFromAFetchedPageIsPutToThePersonUnderYolo(t *testin
 			if tc.setting {
 				setting = "\n[permissions]\nask_on_external_origin = true\n"
 			}
-			writeUserConfig(t, userModel+setting)
+			writeUserConfig(t, userModel+"\n[sandbox]\nbash = \"off\"\n"+setting)
 			registerBootTokenProfileTestProvider()
 			setBootTokenProfileTestProvider(t, testutil.NewMock("origin",
 				testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "f", Name: "web_fetch", Arguments: fmt.Sprintf(`{"url":%q}`, page.URL)}}},
