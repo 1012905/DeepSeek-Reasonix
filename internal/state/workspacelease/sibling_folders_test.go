@@ -73,7 +73,7 @@ func TestADeclaredPathOutsideTheFolderIsClaimedAsDeclared(t *testing.T) {
 
 func TestAnUnresolvablePathStillClaimsTheWholeRepository(t *testing.T) {
 	a, b, _ := siblingOwners(t, WithFolderClaim())
-	if err := a.AcquirePaths(context.Background(), []string{"../../outside-the-repository"}); err != nil {
+	if err := a.AcquirePaths(context.Background(), []string{"  "}); err != nil {
 		t.Fatal(err)
 	}
 	if err := within(t, b, nil, 200*time.Millisecond); err == nil {
