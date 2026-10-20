@@ -5,6 +5,7 @@ import (
 
 	"reasonix/internal/base/retrieval"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/state/sessionstore"
 )
 
 type indexedDocument struct {
@@ -29,7 +30,7 @@ func documents(messages []provider.Message) []indexedDocument {
 	for i, msg := range messages {
 		switch msg.Role {
 		case provider.RoleUser:
-			appendDoc(i, 0, string(msg.Role), "user_text", "", msg.Content)
+			appendDoc(i, 0, string(msg.Role), "user_text", "", sessionstore.UserSaidText(msg.Content))
 		case provider.RoleAssistant:
 			appendDoc(i, 0, string(msg.Role), "assistant_text", "", msg.Content)
 			for part, call := range msg.ToolCalls {
