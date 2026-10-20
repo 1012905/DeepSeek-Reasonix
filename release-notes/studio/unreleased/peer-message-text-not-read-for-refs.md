@@ -1,2 +1,0 @@
-- 修复：别的会话发来的消息正文里的 @ 不再被当成本地文件引用去读取，读不了的引用也不会再把发送队列暂停。关联 #13775。
-- Fixed: An @token in the text of a message from another session is no longer read as a local file reference, and an unreadable one no longer pauses the send queue. Refs #13775.

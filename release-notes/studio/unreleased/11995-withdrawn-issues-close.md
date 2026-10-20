@@ -1,2 +1,0 @@
-- 修复：撤回反馈后，它对应的 GitHub 议题会被自动关闭（标记为不计划处理）。关联 #11995。
-- Fixed: When a report is withdrawn, its mirror GitHub issue is now closed automatically as not planned. Refs #11995.

@@ -21,9 +21,11 @@ export function accountKey(host: string, keyEnv?: string): string {
   return `${host}\u0000${(keyEnv ?? "").trim()}`;
 }
 
+// The endpoint's identity: host plus a port that is not the scheme's default.
+// Two ports on one host are two servers, not two doors onto one account.
 export function hostOf(baseUrl: string): string {
   try {
-    return new URL(baseUrl).hostname.toLowerCase();
+    return new URL(baseUrl).host.toLowerCase();
   } catch {
     return baseUrl.trim().toLowerCase();
   }
@@ -31,7 +33,7 @@ export function hostOf(baseUrl: string): string {
 
 // The name a person would use for the account. "api.deepseek.com" is deepseek.
 export function vendorLabel(host: string): string {
-  const bare = host.replace(/^(www|api|open|gateway)\./, "");
+  const bare = host.replace(/:\d+$/, "").replace(/^(www|api|open|gateway)\./, "");
   const first = bare.split(".")[0];
   return first || host;
 }

@@ -1,2 +1,0 @@
-- 新增：关联账号的电脑上，“我的反馈”会列出其他已关联设备的反馈和回复；终端新增 /feedback link、unlink、links。关联 #12073。
-- Added: On a linked device, My feedback also lists reports and replies from your other linked devices; the terminal gains /feedback link, unlink, links. Refs #12073.

@@ -12,6 +12,7 @@ import { chartOfTool } from "./chart/spec";
 import { GuardianCard } from "./cards/GuardianCard";
 import { ApprovalCard, type PlanAction } from "./cards/ApprovalCard";
 import { AskCard } from "./cards/AskCard";
+import { revealNested } from "./cards/nestreveal";
 import { SurfaceCard, surfaceTool } from "./surface/SurfaceCard";
 import { ElicitCard } from "./cards/ElicitCard";
 import { SayCard, type ReplyActions } from "./cards/SayCard";
@@ -38,7 +39,7 @@ import { chunkText, heldBlocks, type Held } from "./chunk_text";
 
 interface Props {
   items: Item[];
-  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion" | "stopToolCall">>;
+  port?: Pick<AgentPort, "workspaceImageURL"> & Partial<Pick<AgentPort, "surfaceAction" | "surfaceActionState" | "cancelQueued" | "engageQuestion" | "stopToolCall" | "refinePrompt" | "toolOutput">>;
   // Changes only when the transcript's composition does — see state/session.
   revision: number;
   waiting: Waiting;
@@ -326,7 +327,7 @@ export function Transcript({ items, port, entering, onEntered, brought, revision
       const chunk = inner.querySelectorAll<HTMLElement>(".chunk")[block];
       if (chunk) root.scrollTop = topOf(chunk) + into * chunk.offsetHeight - clear;
       const settle = (tries: number, last = NaN) => {
-        if (mine !== landing.current) return;
+        if (mine !== landing.current || !inner.isConnected) return;
         const found = inner.querySelector<HTMLElement>(selector);
         if (found) {
           const el = landingBox(found);
@@ -435,6 +436,7 @@ export function Transcript({ items, port, entering, onEntered, brought, revision
     if (hidden || !focus || landed.current === focus.n) return;
     landed.current = focus.n;
     const where = callBlock.get(focus.call);
+    revealNested(focus.call);
     if (where) land(where.block, where.into, `[data-call="${CSS.escape(focus.call)}"]`);
   }, [hidden, focus, callBlock, land]);
 
@@ -743,6 +745,8 @@ const Row = memo(function Row({
             running={it.running}
             activity={activity}
             children={it.children}
+            readOutput={port?.toolOutput?.bind(port)}
+            omitted={it.omitted}
             takeover={it.tool.id ? takeovers[`tool:${it.tool.id}`] : undefined}
             onExtInvoke={onExtInvoke}
             onPrepareFileRevert={onPrepareFileRevert}
@@ -765,7 +769,7 @@ const Row = memo(function Row({
     case "approval":
       return <ApprovalCard item={it} onApprove={onApprove} onFullAccess={onFullAccess} onPlan={onPlan} />;
     case "ask":
-      return it.ask.questions.some(q => q.surface) ? <SurfaceCard item={it} onAnswer={onAnswer} port={port} /> : it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} onEngage={port?.engageQuestion?.bind(port)} />;
+      return it.ask.questions.some(q => q.surface) ? <SurfaceCard item={it} onAnswer={onAnswer} port={port} /> : it.ask.origin ? <ElicitCard item={it} onAnswer={onAnswer} /> : <AskCard item={it} onAnswer={onAnswer} onEngage={port?.engageQuestion?.bind(port)} refine={port?.refinePrompt?.bind(port)} />;
     case "compaction":
       return <CompactionCard c={it.c} done={it.done} />;
 

@@ -16,7 +16,7 @@ import { parse } from "@babel/parser";
 // about a quarter of the product's inputs, including ones that write kernel
 // state. A ceiling measured against that set could only ever fall for the
 // wrong reason.
-const SOURCES = import.meta.glob(["./**/*.{ts,tsx}", "!./**/*.test.*", "!./actions.ts"], {
+const SOURCES = import.meta.glob(["./**/*.{ts,tsx}", "!./**/*.test.*", "!./actions.ts", "!./actions_schedule.ts"], {
   query: "?raw",
   import: "default",
   eager: true,

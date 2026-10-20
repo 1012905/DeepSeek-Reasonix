@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -41,6 +42,7 @@ func acpCommand(args []string, version string) int {
 	plannerFlag := fs.String("planner", "auto", "planner policy: auto | off")
 	networkFlag := fs.String("sandbox-network", "auto", "sandbox network policy: auto | on | off")
 	bashFlag := fs.String("sandbox-bash", "auto", "bash sandbox policy: auto | enforce")
+	permissionFlag := fs.String("permission-mode", "", "tool approval posture the session starts in and clients cannot raise: read-only | dontAsk | manual | ask | auto | acceptEdits | bypassPermissions (default: unset, clients choose)")
 	workspaceOnly := fs.Bool("workspace-only", false, "ignore configured extra write roots and confine writes to the session cwd")
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -75,10 +77,23 @@ func acpCommand(args []string, version string) int {
 		return 2
 	}
 
+	var posture cliPermissionMode
+	if strings.TrimSpace(*permissionFlag) != "" {
+		posture, err = parsePermissionMode(*permissionFlag)
+		if err == nil && posture.plan {
+			err = errors.New("--permission-mode plan requires an interactive session")
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+			return 2
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	factory := &acpFactory{
+		postureCeiling: posture.approval, permissionAllow: posture.allow,
 		model: *model, profile: profile, plannerOff: plannerMode == "off",
 		networkOverride: networkOverride, workspaceOnly: *workspaceOnly,
 		bashOverride: bashMode, requireSandbox: bashMode == "enforce",
@@ -96,6 +111,8 @@ func acpCommand(args []string, version string) int {
 // desktop, and serve assembly while still adding the host-supplied MCP servers
 // for this session only.
 type acpFactory struct {
+	postureCeiling   string
+	permissionAllow  []string
 	model            string
 	profile          string
 	plannerOff       bool
@@ -105,6 +122,9 @@ type acpFactory struct {
 	requireSandbox   bool
 	sandboxAvailable func() bool
 }
+
+// PostureCeiling implements acp.PostureCeiling.
+func (f *acpFactory) PostureCeiling() string { return f.postureCeiling }
 
 func (f *acpFactory) SessionDir() string {
 	return config.SessionDir()
@@ -169,6 +189,7 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 		bashOverride = "enforce"
 	}
 	return boot.Options{
+		AgentComposition: p.AgentComposition, Composition: p.Composition,
 		Model:                    firstNonEmpty(p.Model, f.model),
 		TokenMode:                firstNonEmpty(p.RuntimeProfile, f.profile),
 		AgentPreset:              boot.NormalizeAgentPreset(firstNonEmpty(p.RuntimeProfile, f.profile)),
@@ -189,6 +210,7 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 		SandboxBashOverride:      bashOverride,
 		WorkspaceOnly:            f.workspaceOnly,
 		NewConversation:          p.NewConversation,
+		PermissionAllow:          f.permissionAllow,
 	}, nil
 }
 

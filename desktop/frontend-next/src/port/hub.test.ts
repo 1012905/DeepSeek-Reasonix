@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import { SseHub } from "./hub";
 import { HttpError } from "./port";
 
+it("uploads native archives as opaque bodies to the owning host route", async () => {
+  const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ path: "imported" }) });
+  vi.stubGlobal("fetch", fetch);
+  try {
+    const file = new File(["{ not parsed here"], "session.json");
+    await new SseHub().importNativeSession(file, "/folder with space");
+    expect(fetch).toHaveBeenCalledWith("/tree/sessions/import-native?workspace=%2Ffolder+with+space",
+      expect.objectContaining({ method: "POST", body: file,
+        headers: { "content-type": "application/json" }, credentials: "same-origin" }));
+  } finally { vi.unstubAllGlobals(); }
+});
+
 function answer(status: number, body: string) {
   vi.stubGlobal("fetch", async () => ({
     ok: false,
@@ -83,6 +95,20 @@ function jsonAnswer(status: number, body: unknown) {
     headers: new Map([["content-type", "application/json"]]),
   };
 }
+
+it("serializes the remote composition choice at the HTTP request boundary", async () => {
+  const fetch = vi.fn(async () => jsonAnswer(200, { id: "remote", root: "/project", host: "gpu", base: "/runtime/remote", name: "Remote" }));
+  vi.stubGlobal("fetch", fetch);
+  try {
+    const hub = new SseHub();
+    for (const agentComposition of ["builtin:minimal", "builtin:general", undefined]) {
+      await hub.openRemote({ host: "gpu", workspace: "/project", agentComposition });
+      const [url, init] = fetch.mock.lastCall as unknown as [string, RequestInit];
+      expect(url).toBe("/remotes/open");
+      expect(JSON.parse(init.body as string)).toEqual({ host: "gpu", workspace: "/project", sessionPath: "", ...(agentComposition ? { agentComposition } : {}) });
+    }
+  } finally { vi.unstubAllGlobals(); }
+});
 
 describe("host capabilities", () => {
   it("does not ask a kernel picker the capability probe says is absent", async () => {

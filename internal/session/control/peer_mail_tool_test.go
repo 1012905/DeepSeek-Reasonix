@@ -15,7 +15,8 @@ func TestPeerErrorsKeepTheirIdentityAcrossTheToolBoundary(t *testing.T) {
 	for code, sentinel := range map[string]error{
 		"peer.disabled": ErrPeersDisabled, "peer.not_found": ErrPeerNotFound, "peer.ambiguous": ErrPeerAmbiguous,
 		"peer.self": ErrPeerSelf, "peer.refused": ErrPeerRefused, "peer.rate_limited": ErrPeerRateLimited,
-		"peer.empty": ErrPeerEmpty,
+		"peer.empty": ErrPeerEmpty, "dispatch.untrusted": ErrDispatchUntrusted,
+		"dispatch.awaiting_trust": ErrDispatchAwaitingTrust, "dispatch.same_project": ErrDispatchSameProject,
 	} {
 		if got := peerErrorCode(sentinel); got != code {
 			t.Errorf("%v is %q, want %q", sentinel, got, code)

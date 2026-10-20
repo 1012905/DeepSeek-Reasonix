@@ -248,7 +248,6 @@ func (c *Controller) CreateSchedule(ctx context.Context, d ScheduleDraft, confir
 	if confirm == "" || confirm != confirmToken(req, scheduler.FactsFor(req, policy, time.Now()), policy.ExpiryDays) {
 		return ScheduleView{}, ErrScheduleConfirmMismatch
 	}
-	req.ConfirmedVia = schedule.ConfirmedViaStudio
 	sc, err := store.Create(ctx, policy, req)
 	if err != nil {
 		return ScheduleView{}, err

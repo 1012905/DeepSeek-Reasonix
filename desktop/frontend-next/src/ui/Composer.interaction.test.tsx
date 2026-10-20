@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { Composer } from "./Composer";
 import { MockPort } from "../port/mock";
@@ -57,7 +58,7 @@ function touchPointer() {
 }
 
 function draw(
-  over: { running?: boolean; onSubmit?: (text: string) => Promise<boolean>; port?: MockPort; st?: SessionStatus; changeCount?: number; host?: string; git?: WorkspaceGit | null; onTreeChanged?: () => void } = {},
+  over: { running?: boolean; onSubmit?: (text: string) => Promise<boolean | "shell_unavailable">; port?: MockPort; st?: SessionStatus; changeCount?: number; host?: string; git?: WorkspaceGit | null; onTreeChanged?: () => void } = {},
 ) {
   const port = over.port ?? new MockPort();
   const onSubmit = over.onSubmit ?? vi.fn(async () => true);
@@ -140,6 +141,22 @@ describe("composer submission", () => {
     await waitFor(() => expect(box.value).toBe("保留这份草稿"));
     expect(box.selectionStart).toBe(3);
     expect(document.activeElement).toBe(box);
+  });
+
+  it("leaves a command this connection will never run selected, so the next message replaces it and goes", async () => {
+    const onSubmit = vi.fn(async (text: string): Promise<boolean | "shell_unavailable"> => (text.startsWith("!") ? "shell_unavailable" : true));
+    const { box } = draw({ onSubmit });
+    fireEvent.change(box, { target: { value: "!ls -la" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("!ls -la"));
+    await waitFor(() => expect(box.value).toBe("!ls -la"));
+    await waitFor(() => expect([box.selectionStart, box.selectionEnd]).toEqual([0, 7]));
+    const user = userEvent.setup();
+    await user.keyboard("你好");
+    expect(box.value).toBe("你好");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith("你好"));
+    await waitFor(() => expect(box.value).toBe(""));
   });
 
   it("restores a folded long paste as a chip instead of flattening it", async () => {

@@ -36,6 +36,7 @@ type RemoteEndpoint struct {
 	// fresh session has none until its first turn, and asking the far kernel
 	// costs a round trip the pane list cannot wait on.
 	SessionPath string
+	Composition *compositionSummary
 }
 
 func (ep RemoteEndpoint) validate() error {
@@ -206,9 +207,10 @@ func (h *Hub) listRemoteHosts(w http.ResponseWriter, _ *http.Request) {
 // OpenRemoteRequest asks for a pane on another machine. An empty Workspace
 // takes the same user-configured default as a host-level read.
 type OpenRemoteRequest struct {
-	Host        string `json:"host"`
-	Workspace   string `json:"workspace"`
-	SessionPath string `json:"sessionPath"`
+	Host             string `json:"host"`
+	Workspace        string `json:"workspace"`
+	SessionPath      string `json:"sessionPath"`
+	AgentComposition string `json:"agentComposition,omitempty"`
 }
 
 // farCall reaches the hub surface above a pane — opening the runtime a pane
@@ -320,14 +322,16 @@ func (h *Hub) openRemoteRuntime(w http.ResponseWriter, r *http.Request) {
 	// started with belongs to whoever opens that port in a browser.
 	var far RuntimeView
 	if err := farCall(r.Context(), ep, "/runtimes", OpenRequest{
-		Root:        ep.Workspace,
-		SessionPath: strings.TrimSpace(req.SessionPath),
+		Root:             ep.Workspace,
+		SessionPath:      strings.TrimSpace(req.SessionPath),
+		AgentComposition: req.AgentComposition,
 	}, &far); err != nil {
 		release()
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
 	ep.Base, ep.RemoteID, ep.SessionPath = far.Base, far.ID, far.SessionPath
+	ep.Composition = far.AgentComposition
 	rt, err := h.OpenRemote(ep, release)
 	if err != nil {
 		release()
@@ -386,12 +390,13 @@ func (rt *Runtime) closeFarRuntime() {
 func (rt *Runtime) remoteView() RuntimeView {
 	ep := rt.remote.ep
 	return RuntimeView{
-		ID:          rt.ID,
-		Base:        runtimePrefix + rt.ID,
-		Root:        ep.Workspace,
-		Name:        remoteBaseName(ep.Workspace),
-		Host:        ep.Host,
-		SessionPath: ep.SessionPath,
+		ID:               rt.ID,
+		Base:             runtimePrefix + rt.ID,
+		Root:             ep.Workspace,
+		Name:             remoteBaseName(ep.Workspace),
+		Host:             ep.Host,
+		SessionPath:      ep.SessionPath,
+		AgentComposition: ep.Composition,
 	}
 }
 
@@ -409,7 +414,7 @@ func remoteBaseName(p string) string {
 // remoteProxy forwards a pane's requests to the remote kernel.
 func remoteProxy(ep RemoteEndpoint) http.Handler {
 	target := &url.URL{Scheme: "http", Host: ep.Addr, Path: ep.Base}
-	return &httputil.ReverseProxy{
+	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// SetURL appends the inbound path to the target's, so the pane's
 			// own runtime prefix on the far side rides here.
@@ -432,4 +437,11 @@ func remoteProxy(ep RemoteEndpoint) http.Handler {
 				"the remote kernel is not answering", map[string]any{"host": ep.Host})
 		},
 	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !hostReach(r) && agentPresetMutation(r) {
+			refuseAgentPresetEdit(w)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	})
 }

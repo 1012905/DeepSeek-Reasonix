@@ -19,7 +19,7 @@ import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
 import { Workspaces } from "./Workspaces";
 import { OpenProject } from "./OpenProject";
-import type { TreePaging } from "./treewindow";
+import type { TreePaging, TreeView } from "./treewindow";
 import { MASK, useHidesAmounts } from "./wallet";
 import { useFileDrop } from "./filedrop";
 import type { PaneView } from "../state/paneview";
@@ -32,6 +32,7 @@ interface Props {
   navShown: boolean;
   tree: TreeWorkspace[];
   treeRead: boolean;
+  answered?: TreeView | null;
   runtimes: RuntimeView[];
   runs: Record<string, { run: string; live: boolean }>;
   active: string;
@@ -88,6 +89,7 @@ export function Sidebar({
   navShown,
   tree,
   treeRead,
+  answered,
   runtimes,
   runs,
   active,
@@ -283,6 +285,7 @@ export function Sidebar({
         hub={hub}
         tree={tree}
         treeRead={treeRead}
+        answered={answered}
         runtimes={runtimes}
         active={active}
         folded={folded}
@@ -338,9 +341,11 @@ export function Sidebar({
       </Workspaces>
       </RailSearch>
       </div>
-      <button className="projects-manage" data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}>
-        <StudioIcon name="server" /><span>{t("连接与机器")}</span><StudioIcon name="chevron" />
-      </button>
+      {!navShown && (
+        <button className="projects-manage" data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}>
+          <StudioIcon name="server" /><span>{t("连接与机器")}</span><StudioIcon name="chevron" />
+        </button>
+      )}
       {!navShown && <div className="railfoot">
         <button className="studio-wallet" data-action="settings.section" data-value="usage" onClick={() => onSettings("usage")}><span aria-hidden="true"><StudioIcon name="wallet" /></span><b>{t("钱包与用量")}</b>{wallet && <small>{hideAmounts ? MASK : wallet}</small>}</button>
         <button className="studio-wallet studio-feedback" data-action="feedback.open" onClick={() => onFeedback(feedbackEntryTab(feedbackUnread))}>

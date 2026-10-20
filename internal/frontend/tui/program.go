@@ -99,6 +99,7 @@ type model struct {
 
 	width, height int
 	composer      textarea.Model
+	queue         queueView
 	shell         bool
 	history       []string
 	histAt        int
@@ -208,7 +209,7 @@ func newModel(ctx context.Context, opts Options) *model {
 
 func (m *model) Init() tea.Cmd {
 	m.updates = m.client.Subscribe(m.ctx)
-	cmds := []tea.Cmd{m.waitUpdate(), m.fetchStatus(), tickStatus(), m.fetchMeters(), m.checkSetup()}
+	cmds := []tea.Cmd{m.waitUpdate(), m.fetchStatus(), tickStatus(), m.fetchMeters(), m.checkSetup(), m.fetchQueue()}
 	if m.opts.Restore {
 		cmds = append(cmds, m.fetchHistory(true))
 	}
@@ -349,10 +350,7 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.noteTurnEnd()
 			cmds = append(cmds, m.commit(), m.fetchMeters(), m.viewedOnTurnEnd())
 		}
-		if m.tr.TodosMoved {
-			m.tr.TodosMoved = false
-			cmds = append(cmds, m.fetchTodos())
-		}
+		cmds = append(cmds, m.refetchMoved()...)
 		return m, tea.Batch(cmds...)
 	case historyMsg:
 		return m, m.restore(msg)
@@ -412,10 +410,28 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// refetchMoved reads again what the kernel said changed: the task list and the
+// queue.
+func (m *model) refetchMoved() []tea.Cmd {
+	var cmds []tea.Cmd
+	if m.tr.TodosMoved {
+		m.tr.TodosMoved = false
+		cmds = append(cmds, m.fetchTodos())
+	}
+	if m.tr.QueueMoved {
+		m.tr.QueueMoved = false
+		cmds = append(cmds, m.fetchQueue())
+	}
+	return cmds
+}
+
 // onScreenMsg takes the answers to what this screen asked for itself: the
 // clipboard, the session list, the mouse and its timers.
 func (m *model) onScreenMsg(msg tea.Msg) (tea.Cmd, bool) {
 	if cmd, ok := m.onMCPMsg(msg); ok {
+		return cmd, true
+	}
+	if cmd, ok := m.onQueueRowsMsg(msg); ok {
 		return cmd, true
 	}
 	switch msg := msg.(type) {

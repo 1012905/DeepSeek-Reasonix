@@ -59,9 +59,6 @@ const ConfirmedByHuman = "human-frontend"
 // ConfirmedViaTerminal records that the confirmation was typed at a terminal.
 const ConfirmedViaTerminal = "terminal"
 
-// ConfirmedViaStudio records a confirmation given on the Studio screen.
-const ConfirmedViaStudio = "studio"
-
 type Trigger struct {
 	Kind     TriggerKind `json:"kind"`
 	At       time.Time   `json:"at,omitzero"`

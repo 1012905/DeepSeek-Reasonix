@@ -25,6 +25,15 @@ type EvidenceSeal struct {
 	// leaves the bundle without workspace observation.
 	Root     string
 	Observer *observation.Observer
+	// takeHook replaces Observer.Take in tests that need a snapshot of a chosen speed.
+	takeHook func(ctx context.Context, root string) observation.Snapshot
+}
+
+func (s *EvidenceSeal) take(ctx context.Context, root string) observation.Snapshot {
+	if s.takeHook != nil {
+		return s.takeHook(ctx, root)
+	}
+	return s.Observer.Take(ctx, root)
 }
 
 // shadowBundleKind names the record kind. The bundle observes and gates

@@ -4,8 +4,10 @@ import (
 	"context"
 	"reasonix/internal/state/sessionstore"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/command"
 	"reasonix/internal/ext/hook"
@@ -13,10 +15,14 @@ import (
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/gitcmd"
+	"reasonix/internal/platform/gitpush"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/platform/gitstatus"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/delegation"
 	"reasonix/internal/safety/evidence"
+	"reasonix/internal/state/agentpreset"
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
 	"reasonix/internal/tools/jobs"
@@ -297,11 +303,13 @@ type RuntimeSettings interface {
 	SubagentSteerSettings() SubagentSteerSettings
 	SaveSubagentSteerSettings(maxBytes, perMinute int) error
 	WriteLeaseSettings() WriteLeaseSettings
-	SaveWriteLeaseSettings(optimistic bool) error
+	SaveWriteLeaseSettings(optimistic *bool, maxWaitMinutes *int) error
 	PlanApprovalSettings() PlanApprovalSettings
 	SavePlanApprovalSettings(auto bool) error
 	DefaultModeSettings() DefaultModeSettings
 	SaveDefaultModeSettings(plan bool) error
+	ToolSettings() ToolSettings
+	SaveToolDisabled(name string, disabled bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
@@ -380,6 +388,7 @@ type Status interface {
 	ContextMaintenanceSnapshot() agent.ContextMaintenanceSnapshot
 	LastUsage() *provider.Usage
 	Balance(ctx context.Context) billing.Reading
+	Tariff() (pricing.Tariff, bool)
 	Jobs() []jobs.View
 	Todos() []evidence.TodoItem
 	BrowserTabs() []browser.TabInfo
@@ -511,12 +520,18 @@ type LocalShell interface {
 
 // Commits proposes a commit message for the staged changes and records a local
 // commit once the person has confirmed the text. It stages or unstages only what
-// the person names, and never pushes or rewrites history. It also moves the workspace between local git branches —
+// the person names, and pushes only the confirmed branch to the upstream it already
+// has, from a trusted workspace; it never forces or rewrites history. It also moves the workspace between local git branches —
 // a workspace write like a commit, refused typed while a turn runs.
 type Commits interface {
-	ProposeCommit(ctx context.Context) (CommitProposal, error)
+	ProposeCommit(ctx context.Context, repo string) (CommitProposal, error)
+	GitRepos(ctx context.Context) (gitrepos.Result, error)
+	RepoFor(ctx context.Context, dir string) (gitcmd.Repo, error)
 	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
 	StageChanges(ctx context.Context, req StageRequest) error
+	DiscardChange(ctx context.Context, req DiscardRequest) error
+	GitPushPreview(ctx context.Context, repo string) (gitpush.Plan, error)
+	GitPush(ctx context.Context, req PushRequest) (gitpush.Result, error)
 	SwitchWorkspaceBranch(ctx context.Context, name string) (gitstatus.Info, bool, error)
 }
 
@@ -538,6 +553,8 @@ type SurfaceHistory interface {
 }
 
 type SessionAPI interface {
+	AgentCompositions
+	AgentPresetManagement
 	SurfaceActions
 	SurfaceHistory
 	Lifecycle
@@ -560,8 +577,8 @@ type SessionAPI interface {
 	ToolCallStopper
 	SubagentView
 	PeerMail
-	Schedules
 	Mods
+	Schedules
 	MCPSignIn
 	LocalShell
 	DiffRendering
@@ -576,6 +593,7 @@ type SessionAPI interface {
 // point — an editor authors no skill, edits no hook, saves no sandbox rule, and files no
 // feedback: the report form belongs to the surfaces that own a screen for it.
 type EditorAPI interface {
+	AgentCompositions
 	Lifecycle
 	TurnControl
 	Approvals
@@ -585,6 +603,18 @@ type EditorAPI interface {
 	Extensions
 	Goals
 	SessionPersistence
+}
+
+type AgentCompositions interface {
+	AgentPresets() (agentpreset.Catalog, error)
+	SelectAgentComposition(context.Context, string) error
+	CompositionBinding() *agentcomposition.Binding
+}
+
+type AgentPresetManagement interface {
+	SaveAgentPreset(agentcomposition.Definition, string) (agentcomposition.Version, error)
+	DeleteAgentPreset(string, string) error
+	SetDefaultAgentPreset(string, bool) error
 }
 
 // Compile-time proof that the concrete controller satisfies each sub-port and
@@ -601,8 +631,8 @@ var (
 	_ ToolCallStopper    = (*Controller)(nil)
 	_ SubagentView       = (*Controller)(nil)
 	_ PeerMail           = (*Controller)(nil)
-	_ Schedules          = (*Controller)(nil)
 	_ Mods               = (*Controller)(nil)
+	_ Schedules          = (*Controller)(nil)
 	_ MCPSignIn          = (*Controller)(nil)
 	_ SessionHistory     = (*Controller)(nil)
 	_ MemoryControl      = (*Controller)(nil)

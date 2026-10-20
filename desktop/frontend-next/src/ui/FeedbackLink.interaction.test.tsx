@@ -54,6 +54,9 @@ describe("FeedbackLink", () => {
     const link = await screen.findByRole("button", { name: "把这台电脑关联到我的账号" });
     expect(port.linkFeedbackAccount).not.toHaveBeenCalled();
     await userEvent.click(link);
+    expect(port.linkFeedbackAccount).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole("checkbox", { name: "加入贡献榜" }));
+    await userEvent.click(screen.getByRole("button", { name: "确认" }));
     await screen.findByText(/这台电脑已关联/);
     expect(port.linkFeedbackAccount).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole("button", { name: "解除关联" }));
@@ -79,6 +82,8 @@ describe("FeedbackLink", () => {
     });
     render(<FeedbackLink port={port} hasReport />);
     await userEvent.click(await screen.findByRole("button", { name: "把这台电脑关联到我的账号" }));
+    await userEvent.click(await screen.findByRole("checkbox", { name: "加入贡献榜" }));
+    await userEvent.click(screen.getByRole("button", { name: "确认" }));
     expect((await screen.findByRole("alert")).textContent).toContain("已经关联到另一个账号");
   });
 });

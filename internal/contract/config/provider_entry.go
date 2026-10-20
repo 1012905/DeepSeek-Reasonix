@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/walletformat"
 )
 
 // The in-memory stand-in for a config that lists no provider: never written
@@ -52,8 +53,12 @@ type ProviderEntry struct {
 	resolvedAPIKey    string
 	resolvedSource    CredentialSource
 	roots             Roots
-	BalanceURL        string `toml:"balance_url"` // optional; a provider-specific wallet-balance endpoint (DeepSeek: https://api.deepseek.com/user/balance). Empty = no balance readout.
-	ContextWindow     int    `toml:"context_window"`
+	// BalanceFormat names the shape of the balance_url answer (billing.Formats).
+	// Empty is what the host implies, which only a vendor's own hostname does; any
+	// other host must declare one or its wallet is not read.
+	BalanceFormat string `toml:"balance_format"`
+	BalanceURL    string `toml:"balance_url"` // optional; a provider-specific wallet-balance endpoint (DeepSeek: https://api.deepseek.com/user/balance). Empty = no balance readout.
+	ContextWindow int    `toml:"context_window"`
 	// MaxOutputTokens is a protocol-neutral total output budget for one turn.
 	// Zero means automatic (ordinary 16K, reasoning 32K, high/max 64K); 32768
 	// suits cost control and 65536 heavy reasoning. Negative omits wire limits.
@@ -176,6 +181,8 @@ func validateProvider(e ProviderEntry) error {
 		return fmt.Errorf("provider %q: model is required", e.Name)
 	case strings.TrimSpace(e.APIKeyEnv) != "" && !IsValidCredentialKey(e.APIKeyEnv):
 		return fmt.Errorf("provider %q: api_key_env %q is not a valid environment variable name", e.Name, e.APIKeyEnv)
+	case e.BalanceFormat != "" && !walletformat.Format(e.BalanceFormat).Valid():
+		return fmt.Errorf("provider %q: balance_format %q is not one of %s", e.Name, e.BalanceFormat, walletformat.List())
 	case e.IdleTimeoutSeconds != 0 && (e.IdleTimeoutSeconds < provider.MinIdleTimeoutSeconds || e.IdleTimeoutSeconds > provider.MaxIdleTimeoutSeconds):
 		return fmt.Errorf("provider %q: idle_timeout_seconds must be 0 (use the default) or between %d and %d", e.Name, provider.MinIdleTimeoutSeconds, provider.MaxIdleTimeoutSeconds)
 	}

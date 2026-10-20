@@ -396,6 +396,74 @@ describe("WorkbenchPanel", () => {
     expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
   });
 
+  // A file opened from the explorer steps the list aside rather than closing it,
+  // so closing that file comes back to the list. Folding the column instead
+  // leaves someone who opened one file with no workbench at all. With no tabs
+  // the launcher draws a "文件" card as well as the toolbar toggle, so the
+  // toolbar button is named by its action rather than its label.
+  it("returns to the explorer when a file opened from it is closed", async () => {
+    const user = userEvent.setup();
+    const onCloseManual = vi.fn();
+    const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={[]} manual={false} shown scheme="light" changes={[]} onCloseManual={onCloseManual} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+
+    await user.click(container.querySelector<HTMLElement>('[data-action="workbench.files"]')!);
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+    expect(screen.getByRole("tab", { name: "README.md" })).toBeTruthy();
+    // The list stepped aside for the file.
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "关闭 README.md" }));
+    expect(onCloseManual).not.toHaveBeenCalled();
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(true);
+  });
+
+  // The list was stepped aside for that file, not closed on behalf of the one
+  // behind it: closing the file leaves the other tab selected and alone, so the
+  // list must stay out of its way and the column must not fold.
+  it("does not bring the explorer back over a tab that is still open", async () => {
+    const user = userEvent.setup();
+    const onCloseManual = vi.fn();
+    const page = { id: "b1", target: "t1", url: "https://example.com", title: "My page", active: false };
+    const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={[page]} manual={false} shown scheme="light" changes={[]} onCloseManual={onCloseManual} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+
+    await user.click(container.querySelector<HTMLElement>('[data-action="workbench.files"]')!);
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "关闭 README.md" }));
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
+    expect(onCloseManual).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: "My page" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  // Closing every browser tab at once while a file from the explorer is still
+  // open leaves that file behind, so the column stays and the list stays away.
+  // The batch goes through the same rule as a single close, which is the point.
+  it("keeps the column when every browser tab is closed at once beside an explorer file", async () => {
+    const user = userEvent.setup();
+    const onCloseManual = vi.fn();
+    const pages = [
+      { id: "b1", target: "t1", url: "https://top.baidu.com", title: "Agent page", active: false },
+      { id: "b2", target: "t2", url: "https://example.com", title: "My page", active: false },
+    ];
+    const { container } = render(<WorkbenchPanel port={new MockPort()} tabs={pages} manual={false} shown scheme="light" changes={[]} onCloseManual={onCloseManual} onSurfaces={vi.fn()} onExternal={vi.fn()} />);
+
+    await user.click(container.querySelector<HTMLElement>('[data-action="workbench.files"]')!);
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+    expect(screen.getByRole("tab", { name: "README.md" })).toBeTruthy();
+
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("tab", { name: "My page" }) });
+    await user.click(await screen.findByRole("menuitem", { name: "关闭全部浏览器标签" }));
+
+    expect(screen.queryByRole("tab", { name: "My page" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Agent page" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "README.md" })).toBeTruthy();
+    expect(onCloseManual).not.toHaveBeenCalled();
+    expect(container.querySelector(".workbench-body")?.hasAttribute("data-files")).toBe(false);
+  });
+
   it("shows a page the person opened beside the agent's, while the agent's tab stays active", () => {
     const props = { port: new MockPort(), manual: true, shown: false, scheme: "dark" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
     const agent = { id: "b1", target: "t1", url: "https://top.baidu.com", title: "百度热搜", active: true };

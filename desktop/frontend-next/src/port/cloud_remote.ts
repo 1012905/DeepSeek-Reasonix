@@ -6,6 +6,9 @@ import { classifyHandshakeFailure, failureView, retryAfterSeconds } from "./clou
 import { linkCodec, RemoteLink, RemoteLinkError, type RemoteConnection, type RemoteEnd } from "./cloud_link";
 
 const ACCOUNT = (import.meta.env.VITE_ACCOUNTS_API || "https://id.reasonix.io").replace(/\/$/, "");
+export const accountOrigin = ACCOUNT;
+// The computer this page is controlling; null on the desktop's own window.
+export const remoteDeviceId = () => new URLSearchParams(location.search).get("device")?.trim() || null;
 const RELAY = (import.meta.env.VITE_REMOTE_GATEWAY || "wss://remote.reasonix.io").replace(/\/$/, "");
 const REMOTE_HOME = import.meta.env.VITE_REMOTE_HOME || "https://reasonix.io/remote/";
 const HANDSHAKE_TIMEOUT_MS = 30_000;

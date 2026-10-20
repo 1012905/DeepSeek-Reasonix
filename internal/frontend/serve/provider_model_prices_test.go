@@ -97,7 +97,7 @@ func TestEditProviderPriceChangeReachesTheRunningConversation(t *testing.T) {
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("POST /providers/edit = %d", resp.StatusCode)
 	}
-	if shape := assemblyShape(mustEntry(t, "rich")); !strings.Contains(shape, `"Input":3`) {
+	if shape := assemblyShape(mustEntry(t, "rich")); !strings.Contains(shape, `[3,15,0.3`) {
 		t.Fatalf("the assembly shape ignores prices, so a price edit would not rebuild: %s", shape)
 	}
 }

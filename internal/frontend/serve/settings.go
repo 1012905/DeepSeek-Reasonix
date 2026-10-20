@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"reasonix/internal/contract/agentpreset"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/planmode"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/session/control"
@@ -193,7 +195,8 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	used, window := s.ctl().ContextSnapshot()
 	hit, miss := s.ctl().SessionCache()
 	sess := map[string]any{
-		"label": s.ctl().Label(),
+		"agentCompositionLocked": compositionLocked(s.ctl()),
+		"label":                  s.ctl().Label(),
 		// running is what a window shows; busy is what refuses a new turn, which
 		// also holds through the delivery of the previous turn's TurnDone.
 		"running":          s.ctl().TurnInFlight(),
@@ -213,6 +216,9 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		"window":           window,
 		"cacheHit":         hit,
 		"cacheMiss":        miss,
+	}
+	if binding := compositionControllerView(s.ctl()); binding != nil {
+		sess["agentComposition"] = binding
 	}
 	if view := s.goalRuntime(); view != nil {
 		sess["goalRuntime"] = view
@@ -254,6 +260,11 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	sess["sessionUsage"] = s.bc.SessionUsage()
 	if j := s.ctl().Jobs(); len(j) > 0 {
 		sess["jobs"] = j
+	}
+	// Additive: present only where the vendor's own schedule bills the model's
+	// rate, so a custom price or a relay shows no window it does not charge.
+	if tariff, ok := s.ctl().Tariff(); ok {
+		sess["tariff"] = tariffBody(tariff)
 	}
 	writeJSON(w, sess)
 }
@@ -369,4 +380,14 @@ func (s *Server) goalRuntime() *control.GoalRuntimeView {
 	}
 	view := s.ctl().GoalRuntime()
 	return &view
+}
+
+// tariffBody is the vendor's billing window as a client draws it. ChangesAt is
+// absent when the schedule has no flip ahead, so a client says nothing about one.
+func tariffBody(t pricing.Tariff) map[string]any {
+	body := map[string]any{"peak": t.Peak}
+	if t.Changes {
+		body["changesAt"] = t.ChangesAt.UTC().Format(time.RFC3339)
+	}
+	return body
 }

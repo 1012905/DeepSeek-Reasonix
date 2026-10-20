@@ -51,6 +51,7 @@ type DeviceShare struct {
 	live            *shareListener
 	cloudDisconnect func(string) error
 	cloudStatus     func() CloudRemoteStatus
+	cloudPhones     CloudPhones
 	port            int
 	persistPort     func(int) error
 	// persistState records whether the share is open and on what address, so the

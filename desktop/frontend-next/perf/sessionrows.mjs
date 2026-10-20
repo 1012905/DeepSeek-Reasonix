@@ -24,6 +24,18 @@ try {
           <div class="sessrow sessrow-remote">
             <span class="sesstitle" title="${title}"><span>${title}</span></span><span class="sessmeta">3 轮</span>
           </div>
+          <div class="sessrow sessrow-context" data-aged>
+            <button class="sesspin-action" data-action="session.pin">置顶</button>
+            <span class="sesstitle" title="${title}"><span>${title}</span></span>
+            <time class="sessmeta sessage">9 天前</time><button class="sesscopies">+1</button>
+            <span class="sessquick"><button data-action="session.archive">归档</button></span>
+          </div>
+          <div class="sessrow sessrow-context" data-aged-only>
+            <button class="sesspin-action" data-action="session.pin">置顶</button>
+            <span class="sesstitle" title="${title}"><span>${title}</span></span>
+            <time class="sessmeta sessage">9 天前</time>
+            <span class="sessquick"><button data-action="session.archive">归档</button></span>
+          </div>
           <div class="sessrow sesscopy">
             <span class="sesstitle" title="早先版本 · 4 轮"><span>早先版本 · 4 轮</span></span>
           </div>
@@ -55,10 +67,28 @@ try {
         }
         assert.equal(rows[1].top - rows[0].bottom, 1, "only the compact row margin separates sessions");
         assert.equal(rows[2].top - rows[1].bottom, 1, "the remote row has the same compact spacing");
-        assert.equal(rows[3].top - rows[2].bottom, 1, "the earlier version has the same compact spacing");
+        assert.equal(rows[3].top - rows[2].bottom, 1, "the aged row has the same compact spacing");
+        assert.equal(rows[4].top - rows[3].bottom, 1, "the age-only row has the same compact spacing");
+        assert.equal(rows[5].top - rows[4].bottom, 1, "the earlier version has the same compact spacing");
         assert.ok(rows[0].truncated && rows[2].truncated, "long local and remote titles truncate");
+        if (state === "idle") {
+          for (const [selector, allowed] of [[".sessrow[data-aged]", 8], [".sessrow[data-aged-only]", 2]]) {
+            const gap = await page.evaluate((sel) => {
+              const row = document.querySelector(sel);
+              const box = row.getBoundingClientRect();
+              const inner = box.right - parseFloat(getComputedStyle(row).paddingRight);
+              const shown = [...row.children].filter((el) => {
+                const cs = getComputedStyle(el);
+                return cs.position !== "absolute" && cs.visibility !== "hidden" && el.getBoundingClientRect().width > 0 && !el.matches(".sessquick");
+              });
+              return { free: inner - Math.max(...shown.map((el) => el.getBoundingClientRect().right)), quick: row.querySelector(".sessquick").getBoundingClientRect().width };
+            }, selector);
+            assert.ok(gap.free <= allowed, `${scheme}/${width} ${selector}: ${gap.free}px of the row's right side is held back while no button is showing; the title should have it`);
+            assert.equal(gap.quick, 0, `${scheme}/${width}: the hover buttons take no room until the row is hovered or focused`);
+          }
+        }
         if (state !== "idle") {
-          const contained = await page.locator(".sessquick > button, .sesspin-action").evaluateAll((buttons) => buttons.every((button) => {
+          const contained = await page.locator(".sessquick > button, .sesspin-action").evaluateAll((buttons) => buttons.filter((button) => (button.parentElement.matches(".sessquick") ? button.parentElement.getBoundingClientRect().width > 0 : getComputedStyle(button).opacity !== "0")).every((button) => {
             const rect = button.getBoundingClientRect();
             const row = button.closest(".sessrow").getBoundingClientRect();
             return rect.top >= row.top && rect.bottom <= row.bottom && rect.left >= row.left && rect.right <= row.right;

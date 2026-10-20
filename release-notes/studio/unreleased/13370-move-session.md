@@ -1,2 +1,0 @@
-- 新增：会话菜单里可以把会话移到另一个项目，只带走对话和标题、置顶、归档；权限设置、检查点、后台任务日志和排队消息不随移动，原件会被移除。关联 #13370。
-- Added: Move a conversation to another project from its menu; permissions, checkpoints, task logs and queued messages stay behind and are removed. Refs #13370.

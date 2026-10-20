@@ -1573,6 +1573,26 @@ test("a host that exits before its handshake is logged and shown, not swallowed"
   }
 });
 
+test("the launch credential cookie is put back when something removes it, and only then", async () => {
+  const { keepCredential } = require("../src/credential.js");
+  const { EventEmitter } = require("node:events");
+  const jar = new EventEmitter();
+  const sets = [];
+  const ses = { cookies: Object.assign(jar, { set: async (c) => void sets.push(c) }) };
+  const cookie = { url: "http://127.0.0.1:5000/", name: "reasonix_token", value: "t" };
+  const lines = [];
+  keepCredential(ses, cookie, (l) => lines.push(l));
+  const gone = { name: "reasonix_token", domain: "127.0.0.1" };
+  jar.emit("changed", {}, { ...gone, name: "other" }, "explicit", true);
+  jar.emit("changed", {}, { ...gone, domain: "example.com" }, "explicit", true);
+  jar.emit("changed", {}, gone, "overwrite", true);
+  jar.emit("changed", {}, gone, "explicit", false);
+  assert.equal(sets.length, 0, "an unrelated change must not touch the jar");
+  jar.emit("changed", {}, gone, "evicted", true);
+  assert.deepEqual(sets, [cookie]);
+  assert.match(lines[0], /evicted/);
+});
+
 test("the tray has a file for every Windows scale, at exactly 16 * scale pixels", () => {
   const { trayAsset, SCALES } = require("../src/trayimage.js");
   const dim = (f) => {
@@ -1588,6 +1608,25 @@ test("the tray has a file for every Windows scale, at exactly 16 * scale pixels"
   assert.equal(trayAsset(1.8).pixels, 32);
   assert.equal(trayAsset(5).pixels, 48);
   assert.equal(trayAsset(NaN).pixels, 16);
+});
+
+test("the macOS tray is a black-on-transparent Template pair, not the colour badge", () => {
+  const { trayImage } = require("../src/trayimage.js");
+  const asked = [];
+  const nativeImage = { createFromPath: (f) => (asked.push(f), { isEmpty: () => false }) };
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    trayImage(nativeImage, 2);
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+  }
+  assert.match(path.basename(asked[0]), /^trayTemplate\.png$/);
+  for (const [file, px] of [["trayTemplate.png", 18], ["trayTemplate@2x.png", 36]]) {
+    const b = fs.readFileSync(path.join(path.dirname(asked[0]), file));
+    assert.deepEqual([b.readUInt32BE(16), b.readUInt32BE(20)], [px, px], file);
+    assert.equal(b[25], 6, `${file} must carry an alpha channel`);
+  }
 });
 
 function pe(machine) {
@@ -2281,6 +2320,115 @@ test("a parked page is attached again when it is shown, and a page already on sc
   assert.deepEqual(calls, ["remove", "add", "bounds 10"], "a page put away and shown again is attached again");
 });
 
+test("a page laid out wider than the pane is scaled to fit it, and keeps the viewport the agent asked for", async () => {
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: class {}, session: { fromPartition: () => ({}) } };
+    return load.call(this, request, ...rest);
+  };
+  let BrowserViews;
+  try {
+    ({ BrowserViews } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const win = {
+    on() {},
+    isDestroyed: () => false,
+    isFocused: () => false,
+    webContents: Object.assign(new EventEmitter(), { isFocused: () => false }),
+    getContentBounds: () => ({ width: 1200, height: 800 }),
+    contentView: { addChildView() {}, removeChildView() {} },
+  };
+  const sent = [];
+  const view = {
+    setBounds() {},
+    webContents: { isDestroyed: () => false, debugger: { sendCommand: async (method, params) => sent.push([method, params]) } },
+  };
+  const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1" });
+  const entry = { view, at: null, attached: true };
+  views.entries.set("t1", entry);
+  views.keepKeyboard = () => {};
+  entry.override = { width: 1440, height: 1000, deviceScaleFactor: 0, mobile: false };
+  views.show("t1", { x: 0, y: 0, width: 720, height: 800 });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][1].scale, 0.5, "a 1440 wide layout in a 720 wide pane is halved");
+  assert.equal(sent[0][1].width, 1440, "the layout viewport is still the one the agent asked for");
+
+  views.show("t1", { x: 0, y: 0, width: 720, height: 800 });
+  assert.equal(sent.length, 1, "the same pane sends nothing again");
+
+  views.show("t1", { x: 0, y: 0, width: 360, height: 800 });
+  assert.equal(sent.at(-1)[1].scale, 0.25, "a narrower pane scales further");
+
+  views.show("t1", { x: 0, y: 0, width: 2000, height: 1200 });
+  assert.equal(sent.at(-1)[1].scale, 1, "a pane larger than the layout never enlarges it");
+
+  const settled = sent.length;
+  views.fit(entry);
+  assert.equal(sent.length, settled, "an unchanged scale is not sent again");
+  views.fit(entry, true);
+  assert.equal(sent.length, settled + 1, "a capture that dropped the scale gets it back");
+  assert.equal(sent.at(-1)[1].scale, 1);
+  entry.override = undefined;
+  const before = sent.length;
+  views.show("t1", { x: 0, y: 0, width: 500, height: 800 });
+  assert.equal(sent.length, before, "with no override there is nothing to fit");
+});
+
+test("a page given its own viewport is fitted whole into its panel, centred, and never enlarged", () => {
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: class {}, session: { fromPartition: () => ({}) } };
+    return load.call(this, request, ...rest);
+  };
+  let placement;
+  try {
+    ({ placement } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const panel = { x: 380, y: 60, width: 560, height: 620 };
+  assert.deepEqual(placement(panel, null), { at: panel, scale: 1 }, "a page without a viewport of its own fills the panel");
+  for (const none of [{ width: 0, height: 0 }, { width: 0, height: 600 }, { width: 390, height: 0 }, { width: NaN, height: 600 }, { width: 390, height: Infinity }, { width: -1, height: 600 }]) {
+    assert.deepEqual(placement(panel, none), { at: panel, scale: 1 }, `${JSON.stringify(none)} is no viewport at all`);
+  }
+  const wide = placement(panel, { width: 1280, height: 900 });
+  assert.equal(wide.scale, 0.4375);
+  assert.deepEqual(wide.at, { x: 380, y: 173, width: 560, height: 394 });
+  const phone = placement(panel, { width: 390, height: 844 });
+  assert.ok(phone.scale < 1 && phone.at.height <= panel.height && phone.at.width <= panel.width);
+  assert.deepEqual(placement({ x: 20, y: 20, width: 1400, height: 1000 }, { width: 1280, height: 900 }), { at: { x: 80, y: 70, width: 1280, height: 900 }, scale: 1 });
+});
+
+test("input that carries a point is scaled with the page or refused, never sent to the wrong place", () => {
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: class {}, session: { fromPartition: () => ({}) } };
+    return load.call(this, request, ...rest);
+  };
+  let scaleInput;
+  try {
+    ({ scaleInput } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const mouse = { type: "mousePressed", x: 1200, y: 800, button: "left" };
+  assert.equal(scaleInput("Input.dispatchMouseEvent", mouse, 1), mouse, "an unscaled page gets the point as it is");
+  assert.deepEqual(scaleInput("Input.dispatchMouseEvent", mouse, 0.5), { type: "mousePressed", x: 600, y: 400, button: "left" });
+  for (const method of ["Input.dispatchTouchEvent", "Input.dispatchDragEvent", "Input.emulateTouchFromMouseEvent", "Input.synthesizeTapGesture", "Input.synthesizeScrollGesture", "Input.synthesizePinchGesture"]) {
+    const params = { x: 10, y: 20, touchPoints: [{ x: 10, y: 20 }] };
+    assert.equal(scaleInput(method, params, 1), params, `${method} passes on an unscaled page`);
+    assert.throws(() => scaleInput(method, params, 0.5), { code: "input_unscaled" }, `${method} must not reach a scaled page unscaled`);
+  }
+  const key = { type: "keyDown", key: "a" };
+  assert.equal(scaleInput("Input.dispatchKeyEvent", key, 0.5), key, "keys carry no point");
+  assert.equal(scaleInput("Input.insertText", { text: "x" }, 0.5).text, "x");
+});
+
 test("rewind notice dismissal survives the desktop preference disk round trip", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rewind-notice-prefs-"));
   const file = path.join(dir, "prefs.json");
@@ -2758,4 +2906,40 @@ test("a window that fails to raise is given its opacity and mouse back", async (
   win.showInactive = () => { throw new Error("no window"); };
   await assert.rejects(wakeOf(win).run(async () => {}), /no window/);
   assert.deepEqual(calls.slice(-3), ["ignore false", "opacity 1", "minimize"]);
+});
+
+const { processMemoryRows, processMemoryHandler } = require("../src/procmem.js");
+
+test("the shell's process memory is only a fixed type and two whole numbers per process", () => {
+  const metrics = [
+    { pid: 4740, type: "Tab", name: "C:\\Users\\someone\\x", cmd: "--user-data-dir=/home/someone", memory: { workingSetSize: 3992908, privateBytes: 3900000, peakWorkingSetSize: 9 } },
+    { pid: 11, type: "Browser", memory: { workingSetSize: 120000, privateBytes: 90000 } },
+    { pid: 12, type: "GPU", memory: { workingSetSize: 76000 } },
+    { pid: 13, type: "Utility", memory: { workingSetSize: 6000, privateBytes: 5000 } },
+    { pid: 14, type: "Zygote", memory: { workingSetSize: 1000, privateBytes: 900 } },
+    { pid: 15, type: "Tab", memory: { workingSetSize: Number.NaN, privateBytes: -4 } },
+  ];
+  const rows = processMemoryRows(metrics);
+  assert.deepEqual(rows, [
+    { process: "renderer", workingSetKB: 3992908, privateKB: 3900000 },
+    { process: "browser", workingSetKB: 120000, privateKB: 90000 },
+    { process: "gpu", workingSetKB: 76000, privateKB: 0 },
+    { process: "utility", workingSetKB: 6000, privateKB: 5000 },
+    { process: "utility", workingSetKB: 1000, privateKB: 900 },
+    { process: "renderer", workingSetKB: 0, privateKB: 0 },
+  ]);
+  assert.ok(rows.every((r) => Object.keys(r).sort().join() === "privateKB,process,workingSetKB"));
+  assert.doesNotMatch(JSON.stringify(rows), /Users|pid|user-data|cmd/i);
+});
+
+test("the shell reports at most eleven processes, since the kernel adds its own row to a dozen", () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ pid: i, type: "Utility", memory: { workingSetSize: 1, privateBytes: 1 } }));
+  assert.equal(processMemoryRows(many).length, 11);
+});
+
+test("only the app's own window is answered, and nothing is read from the asker", () => {
+  const app = { getAppMetrics: () => [{ type: "Tab", memory: { workingSetSize: 5, privateBytes: 4 } }] };
+  assert.deepEqual(processMemoryHandler(app, () => true)({}), [{ process: "renderer", workingSetKB: 5, privateKB: 4 }]);
+  assert.deepEqual(processMemoryHandler(app, () => null)({}), []);
+  assert.deepEqual(processMemoryHandler({ getAppMetrics: () => { throw new Error("x"); } }, () => true)({}), []);
 });

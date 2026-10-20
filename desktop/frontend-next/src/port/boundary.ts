@@ -123,6 +123,7 @@ export interface SubagentSteerSettings {
 // opened after it.
 export interface WriteLeaseSettings {
   optimistic: boolean;
+  maxWaitMinutes: number;
   path: string;
 }
 
@@ -137,6 +138,23 @@ export interface PlanApprovalSettings {
 // A project file cannot set it.
 export interface DefaultModeSettings {
   plan: boolean;
+  path: string;
+}
+
+// One tool on the settings page: whether the user removed it, and which host
+// feature needs it when it cannot be removed.
+export interface ToolSetting {
+  name: string;
+  description: string;
+  disabled: boolean;
+  requiredBy?: string;
+  byProject?: boolean;
+}
+
+// The tools a request carries plus the ones the user removed, as the user file
+// records them.
+export interface ToolSettings {
+  tools: ToolSetting[];
   path: string;
 }
 

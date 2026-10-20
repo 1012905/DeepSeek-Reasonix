@@ -749,6 +749,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 	a.SetResponseLanguage(opts.ResponseLanguage)
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
 	a.SetProgressWatch(opts.ProgressWatch)
+	a.SetRequestEffort(opts.RequestEffort)
 	return a
 }
 
@@ -841,6 +842,7 @@ func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, read
 // in hours or tokens rather than a round count, and every such budget ships off.
 // Turn policy lives in beginRunTurn / runToolLoop / handleFinalResponse.
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
+	ctx = a.compositionContext(ctx)
 	ctx, report := takeRunTimeSink(ctx)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey

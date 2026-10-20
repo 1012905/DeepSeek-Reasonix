@@ -452,7 +452,10 @@ func (a *contextWindow) persistCompactionStateLocked() error {
 	if a.sess.path == "" {
 		return nil
 	}
-	return sessionstore.SaveCompactionState(a.sess.path, a.sess.win.compactionState)
+	// The sidecar is the durable record of a fold, so it is published under the
+	// session's write authority: a controller whose transcript save would be
+	// refused must not install a fold either.
+	return a.sess.conversation.SaveCompactionState(a.sess.path, a.sess.win.compactionState)
 }
 
 // promptCacheKey builds a stable lineage key for session + model identity.

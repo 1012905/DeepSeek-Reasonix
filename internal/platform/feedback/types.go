@@ -82,10 +82,15 @@ type Env struct {
 	Locale       string `json:"locale"`
 	Channel      string `json:"channel"`
 	ProviderKind string `json:"providerKind"`
+	// Memory is one row per process type the report may name.
+	Memory []ProcessMemory `json:"memory,omitempty"`
 }
 
 // EnvContext is what only the caller knows about itself.
 type EnvContext struct {
+	// Shell is what the window's shell reported about its own processes. Only
+	// the fixed process types are kept and the numbers are clamped.
+	Shell        []ProcessMemory
 	Surface      Surface
 	Locale       string
 	ProviderKind string

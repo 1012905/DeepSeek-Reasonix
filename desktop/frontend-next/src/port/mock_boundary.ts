@@ -1,9 +1,11 @@
-import type { ScheduleBoard, ScheduleDraft, SchedulePreview, ScheduleResultView, ScheduleView } from "./schedule";
-import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
+import type { Adjudications, BrowserToolsSettings, SubagentClaimsSettings, SubagentSteerSettings, WriteLeaseSettings, PlanApprovalSettings, DefaultModeSettings, ToolSettings, PeerReceipt, PeersState, PeersSettings, PeersSettingsEdit, PeerRemember, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings, UpdateMode } from "./port";
 import type { AskTimeoutSettings, ModStatus, ModsSettings, ModsSettingsEdit, SessionRefSettings, AutoArchiveSettings, ChangedFilesSettings, FeedbackLevelNotices, FoldWorkSettings, TurnNarrationSettings, ObservabilityPatch, ObservabilitySettings, WebAccessPatch, WebAccessSettings, SearxngProbe, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
 import { mockMods } from "./mock_mods";
+import type { ScheduleBoard, ScheduleDraft, SchedulePreview, ScheduleResultView, ScheduleView } from "./schedule";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
+import { MockCompositions } from "./mock_composition";
+import type { AgentComposition } from "./composition";
 import type { PersonaDraft, PersonaSettings } from "./boundary";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
@@ -22,6 +24,16 @@ function effectiveBash(s: SandboxSettings): string {
 let levelNotices: FeedbackLevelNotices = { enabled: false, path: "/Users/you/.reasonix/config.toml" };
 
 export class MockBoundary extends MockShell {
+  protected compositions = new MockCompositions();
+  shareAgentPresetsFrom(other: MockBoundary, workspace:string) { this.compositions=other.compositions.fork(workspace); }
+  agentPresets() { return this.compositions.agentPresets(); }
+  saveAgentPreset(d: AgentComposition, expected: string) { return this.compositions.saveAgentPreset(d, expected); }
+  deleteAgentPreset(id: string, revision: string) { return this.compositions.deleteAgentPreset(id, revision); }
+  setDefaultAgentPreset(id: string, workspace: boolean) { return this.compositions.setDefaultAgentPreset(id, workspace); }
+  exportAgentPreset(id: string) { return this.compositions.exportAgentPreset(id); }
+  importAgentPreset(d: AgentComposition) { return this.compositions.importAgentPreset(d); }
+  agentComposition() { return this.compositions.agentComposition(); }
+  selectAgentComposition(id: string) { return this.compositions.selectAgentComposition(id); }
   async decideWorkspaceTrust(_trust: "trusted" | "declined") {}
   // One interrupted barrier and one that a later turn took over, so the card
   // and the reason it disappears are both reachable without a crash.
@@ -187,20 +199,43 @@ export class MockBoundary extends MockShell {
     return { ...this.modes };
   }
 
-  private lease: WriteLeaseSettings = { optimistic: false, path: "/Users/you/.reasonix/config.toml" };
+  private toolList: ToolSettings = {
+    tools: [
+      { name: "bash", description: "Run a shell command in the workspace.", disabled: false },
+      { name: "read_file", description: "Read a file, or a line range of it.", disabled: false },
+      { name: "recall", description: "Search what earlier turns folded away.", disabled: false },
+      { name: "todo_write", description: "Keep a checklist for a multi-step task.", disabled: false, requiredBy: "plan_steps" },
+      { name: "web_search", description: "Search the web.", disabled: true, byProject: true },
+      { name: "update_goal", description: "Report a goal as complete, blocked or stopped.", disabled: false, requiredBy: "goal_mode" },
+      { name: "use_capability", description: "Reach a deferred MCP tool.", disabled: false, requiredBy: "deferred_mcp_tools" },
+      { name: "web_fetch", description: "Fetch a web page.", disabled: false },
+    ],
+    path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async toolSettings(): Promise<ToolSettings> {
+    return structuredClone(this.toolList);
+  }
+
+  async saveToolDisabled(name: string, disabled: boolean): Promise<ToolSettings> {
+    this.toolList = { ...this.toolList, tools: this.toolList.tools.map((x) => (x.name === name ? { ...x, disabled } : x)) };
+    return structuredClone(this.toolList);
+  }
+
+  private lease: WriteLeaseSettings = { optimistic: false, maxWaitMinutes: 0, path: "/Users/you/.reasonix/config.toml" };
 
   async writeLease(): Promise<WriteLeaseSettings> {
     return { ...this.lease };
   }
 
-  async saveWriteLease(optimistic: boolean): Promise<WriteLeaseSettings> {
-    this.lease = { ...this.lease, optimistic };
+  async saveWriteLease(edit: { optimistic?: boolean; maxWaitMinutes?: number }): Promise<WriteLeaseSettings> {
+    this.lease = { ...this.lease, ...edit };
     return { ...this.lease };
   }
 
   protected peerState: PeersState = { enabled: false, peers: [], held: [] };
 
-  private board: ScheduleBoard = {
+  private scheduled: ScheduleBoard = {
     pausedAll: false,
     policy: { minIntervalMinutes: 60, maxSchedules: 8, globalTokensDay: 1_200_000, expiryDays: 30 },
     folders: [{ path: "/Users/you/src/app", name: "app" }, { path: "/Users/you/src/docs", name: "docs" }],
@@ -220,7 +255,7 @@ export class MockBoundary extends MockShell {
   };
 
   async schedules(): Promise<ScheduleBoard> {
-    return structuredClone(this.board);
+    return structuredClone(this.scheduled);
   }
 
   async previewSchedule(d: ScheduleDraft): Promise<SchedulePreview> {
@@ -234,26 +269,26 @@ export class MockBoundary extends MockShell {
     if (confirm !== "mock-confirm") throw new HttpError(409, "x", { code: "schedule.digest_mismatch", error: "what is being created is not what was previewed" });
     const sc: ScheduleView = { id: "sch_" + Math.random().toString(16).slice(2, 10), label: d.label, status: "active", everySec: d.everySec, atUnix: d.atUnix, workspace: d.workspace,
       model: d.model || "deepseek/deepseek-v4-pro", prompt: d.prompt, perRunTokens: 250_000, lifetimeTokens: 3_000_000, spentLifetimeTokens: 0, expiresAtUnix: 1_792_700_000 };
-    this.board.schedules = [...this.board.schedules, sc];
+    this.scheduled.schedules = [...this.scheduled.schedules, sc];
     return sc;
   }
 
   async scheduleAction(id: string, verb: "pause" | "resume" | "renew" | "delete"): Promise<ScheduleBoard> {
-    const sc = this.board.schedules.find((s) => s.id === id);
+    const sc = this.scheduled.schedules.find((s) => s.id === id);
     if (!sc) throw new HttpError(404, "x", { code: "schedule.not_found", error: "no such schedule" });
-    if (verb === "delete") this.board.schedules = this.board.schedules.filter((s) => s.id !== id);
+    if (verb === "delete") this.scheduled.schedules = this.scheduled.schedules.filter((s) => s.id !== id);
     else if (verb === "pause") { sc.status = "paused"; sc.pausedReason = "user"; }
     else if (verb === "resume") { sc.status = "active"; sc.pausedReason = undefined; sc.consecutiveFailures = undefined; }
-    return structuredClone(this.board);
+    return structuredClone(this.scheduled);
   }
 
   async setSchedulesPaused(paused: boolean): Promise<ScheduleBoard> {
-    this.board.pausedAll = paused;
-    return structuredClone(this.board);
+    this.scheduled.pausedAll = paused;
+    return structuredClone(this.scheduled);
   }
 
   async scheduleResult(triggerId: string): Promise<ScheduleResultView> {
-    if (!this.board.runs.some((r) => r.triggerId === triggerId)) throw new HttpError(404, "x", { code: "schedule.not_found", error: "no such result" });
+    if (!this.scheduled.runs.some((r) => r.triggerId === triggerId)) throw new HttpError(404, "x", { code: "schedule.not_found", error: "no such result" });
     return { triggerId, report: "Three files changed since yesterday. Two TODOs were added in `internal/store`.", pending: [{ kind: "approval", summary: "Wanted to run a shell command", detail: "git log --stat" }], enforcement: "tool-filter", recordedUnix: 1_790_000_260 };
   }
 
@@ -301,7 +336,7 @@ export class MockBoundary extends MockShell {
       dispatch: edit.dispatch ?? this.peerSettings.dispatch,
       max_dispatch_depth: edit.max_dispatch_depth ?? this.peerSettings.max_dispatch_depth,
       max_dispatched_sessions: edit.max_dispatched_sessions ?? this.peerSettings.max_dispatched_sessions,
-      release_projects: keep ? this.peerSettings.release_projects.filter((p) => keep.includes(p.path)) : this.peerSettings.release_projects,
+      release_projects: keep ? keep.map((path) => this.peerSettings.release_projects.find((p) => p.path === path) ?? { path, name: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path }) : this.peerSettings.release_projects,
       pending: true,
     };
     return this.peersSettings();
@@ -480,17 +515,7 @@ export class MockBoundary extends MockShell {
     return { ...this.watch };
   }
 
-  // The fixture carries the broken file, because a banner nobody can reach is
-  // a banner nobody designs. Repairing it here clears it, so the whole
-  // interaction is reachable without a Go build.
-  private broken: ConfigProblem | null = {
-    path: "C:\\Users\\you\\AppData\\Roaming\\reasonix\\config.toml",
-    line: 263,
-    key: "plugins.command",
-    excerpt: 'command = "C:\\Scripts\\mcp.exe"',
-    repair: 'command = "C:\\\\Scripts\\\\mcp.exe"',
-    recovered: "last-known-good",
-  };
+  private broken: ConfigProblem | null = null;
 
   async configProblem(): Promise<ConfigProblem | null> {
     return this.broken && { ...this.broken };

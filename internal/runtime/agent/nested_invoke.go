@@ -26,7 +26,7 @@ func (n *nestedInvoker) Invoke(ctx context.Context, name string, args json.RawMe
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
-	call := provider.ToolCall{ID: fmt.Sprintf("%s.%d", n.parent.call.ID, n.seq.Add(1)), Name: name, Arguments: string(args)}
+	call := provider.ToolCall{ID: tool.NestedCallID(n.parent.call.ID, int(n.seq.Add(1))), Name: name, Arguments: string(args)}
 	n.a.emitFullToolDispatch(ctx, call, false)
 	started := time.Now()
 	out := n.a.executeOne(tool.MarkNested(ctx), n.turn, call)
@@ -38,12 +38,18 @@ func (n *nestedInvoker) Invoke(ctx context.Context, name string, args json.RawMe
 		StartedAt:      started.UnixMilli(), EndedAt: started.UnixMilli() + elapsed, Issuer: event.IssuedByModel,
 		Executed: out.executed,
 	}})
+	// The bound fits a result to the model's context; the calling tool reads
+	// the result itself, and a window or spill pointer in its place is not it.
+	result := out.output
+	if out.bound.Kind != event.BoundWhole {
+		result = out.unbounded
+	}
 	if out.errMsg != "" || out.blocked || out.refusalCode != "" {
 		reason := out.errMsg
 		if reason == "" {
 			reason = firstLine(out.output)
 		}
-		return out.output, fmt.Errorf("%w: %s: %s", tool.ErrNestedCallFailed, name, reason)
+		return result, fmt.Errorf("%w: %s: %s", tool.ErrNestedCallFailed, name, reason)
 	}
-	return out.output, nil
+	return result, nil
 }

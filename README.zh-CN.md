@@ -149,7 +149,7 @@ Reasonix 分为两条版本线，调整的原因见[版本路线公告](https://
 | --- | --- | --- |
 | macOS | `.dmg` 或 `.zip` | Apple Silicon（`arm64`）/ Intel（`amd64`） |
 | Windows | 安装器 `-installer.exe` 或便携 `.zip` | x64 |
-| Linux | `.deb` 或 `.rpm` | x64（`amd64`）/ ARM64（`arm64`，aarch64） |
+| Linux | `.deb`、`.rpm` 或 `.AppImage`（只提供下载） | x64（`amd64`）/ ARM64（`arm64`，aarch64） |
 
 每个安装包都附带 `.minisig` 签名，发布页另有 `SHA256SUMS`。安装后 Studio 会在
 应用内自行更新。
@@ -237,6 +237,7 @@ CLI 进阶用法和详细配置见 **[CLI 命令参考](./docs/CLI.zh-CN.md)**�
   [能力诊断](./docs/CAPABILITY_DIAGNOSTICS.md) ·
   [恢复与安全模式](./docs/RECOVERY.md) ·
   [Checkpoints 与 rewind](./docs/CHECKPOINTS.md)
+- **Agent 预设：** [会话级组合](./docs/AGENT_COMPOSITIONS.zh.md)
 - **工程与迁移：** [规格](./docs/SPEC.md) ·
   [任务合约与暂停策略](./docs/TASK_CONTRACT.md) ·
   [工具合约](./docs/TOOL_CONTRACT.md) ·
@@ -269,10 +270,10 @@ CLI 进阶用法和详细配置见 **[CLI 命令参考](./docs/CLI.zh-CN.md)**�
 | Contributor | Contributor | Contributor | Contributor |
 | --- | --- | --- | --- |
 | [**SivanCola**](https://github.com/SivanCola) | [**KHG420**](https://github.com/KHG420) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
-| [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**Harbor404**](https://github.com/Harbor404) | [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) |
-| [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) | [**XTLine**](https://github.com/XTLine) | [**eghrhegpe**](https://github.com/eghrhegpe) |
-| [**noreply**](https://github.com/noreply) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**xxoingr**](https://github.com/xxoingr) | [**Bernardxu123**](https://github.com/Bernardxu123) |
-| [**HaoyueQin**](https://github.com/HaoyueQin) | [**BuGlessRB**](https://github.com/BuGlessRB) | [**CVEngineer66**](https://github.com/CVEngineer66) | [**JesonChou**](https://github.com/JesonChou) |
+| [**XTLine**](https://github.com/XTLine) | [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**Harbor404**](https://github.com/Harbor404) |
+| [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) | [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) |
+| [**xxoingr**](https://github.com/xxoingr) | [**eghrhegpe**](https://github.com/eghrhegpe) | [**noreply**](https://github.com/noreply) | [**par73e**](https://github.com/par73e) |
+| [**Bernardxu123**](https://github.com/Bernardxu123) | [**Guan0923**](https://github.com/Guan0923) | [**HaoyueQin**](https://github.com/HaoyueQin) | [**BuGlessRB**](https://github.com/BuGlessRB) |
 <!-- reasonix-top-contributors:end -->
 
 特别感谢 [**Bernardxu123**](https://github.com/Bernardxu123) 设计的项目 logo和开场视频。

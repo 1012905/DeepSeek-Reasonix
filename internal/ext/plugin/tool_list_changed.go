@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"reasonix/internal/contract/tool"
@@ -32,21 +33,20 @@ const (
 // toolRefreshWait is the debounce, replaced in tests to keep them off the clock.
 type toolRefreshWait func(context.Context, time.Duration) error
 
-// toolRefresh is one connection's catalog freshness: whether the server said it
-// would announce changes, how many announcements have arrived, and whether a
-// refresh cycle is draining them. mu is a leaf lock: a caller that needs both
-// takes toolsMu first, never the reverse.
+// toolRefresh owns the connection's catalog freshness and pinned contract.
+// mu is a leaf lock: a caller that needs both takes toolsMu first.
 type toolRefresh struct {
-	mu        sync.Mutex
-	declared  bool
-	running   bool
-	closed    bool
-	revision  uint64
-	ctx       context.Context
-	onChanged func([]tool.Tool)
-	stop      func()
-	wait      toolRefreshWait
-	ttl       ttlRefresh
+	compositionGuard atomic.Pointer[compositionToolGuard]
+	mu               sync.Mutex
+	declared         bool
+	running          bool
+	closed           bool
+	revision         uint64
+	ctx              context.Context
+	onChanged        func([]tool.Tool)
+	stop             func()
+	wait             toolRefreshWait
+	ttl              ttlRefresh
 }
 
 // declareToolListChanged records what the server advertised at initialize.
@@ -221,6 +221,10 @@ func (c *Client) refreshToolCatalog(ctx context.Context) ([]tool.Tool, bool, err
 		return nil, false, err
 	}
 	c.toolsMu.Lock()
+	if err := c.checkCompositionContract(cat.fingerprint); err != nil {
+		c.toolsMu.Unlock()
+		return nil, false, err
+	}
 	changed := !c.toolsListed || cat.fingerprint != c.toolsFingerprint
 	if changed {
 		c.publishToolCatalogLocked(cat)

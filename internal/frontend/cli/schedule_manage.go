@@ -57,7 +57,7 @@ type scheduleIO struct {
 
 func scheduleOS() scheduleIO {
 	human := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
-	return scheduleIO{in: os.Stdin, out: os.Stdout, err: os.Stderr, human: human, agentChild: os.Getenv(secrets.AgentChildEnv) == "1", now: time.Now}
+	return scheduleIO{in: os.Stdin, out: os.Stdout, err: os.Stderr, human: human, agentChild: inAgentChild(), now: time.Now}
 }
 
 func scheduleManage(args []string, sio scheduleIO) int {
@@ -292,7 +292,6 @@ func (f addFlags) request() (schedule.CreateRequest, error) {
 		d.At = at
 	}
 	req, err := d.Request(scheduler.Folders(wd))
-	req.ConfirmedVia = schedule.ConfirmedViaTerminal
 	switch {
 	case errors.Is(err, scheduler.ErrDraftFolderUnknown):
 		return req, fmt.Errorf("%q is not a trusted project: open it in Studio or the terminal UI and trust it first, then run this again", d.Workspace)
@@ -301,6 +300,7 @@ func (f addFlags) request() (schedule.CreateRequest, error) {
 	case errors.Is(err, scheduler.ErrDraftModel):
 		return req, fmt.Errorf("%w; give one with --model", err)
 	}
+	req.ConfirmedVia = schedule.ConfirmedViaTerminal
 	return req, err
 }
 
@@ -314,8 +314,6 @@ func parseAt(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("--at %q is not a time (RFC 3339, or 2006-01-02 15:04 in local time)", s)
 }
 
-// preview is what a person confirms: when it first runs, what it may do, and the
-// most it can spend, in the policy's own numbers.
 // planCode is the short id a person types back: it names the exact plan shown,
 // so a confirmation typed for one plan cannot be replayed for another.
 func planCode(plan string) string {
@@ -323,6 +321,8 @@ func planCode(plan string) string {
 	return hex.EncodeToString(sum[:3])
 }
 
+// preview is what a person confirms: when it first runs, what it may do, and the
+// most it can spend, in the policy's own numbers.
 func preview(req schedule.CreateRequest, p schedule.Policy, now time.Time) string {
 	f := scheduler.FactsFor(req, p, now)
 	var sb strings.Builder

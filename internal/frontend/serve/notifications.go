@@ -20,6 +20,18 @@ type NotifyPrefs struct {
 	FeedbackReply bool `json:"feedbackReply"`
 	DiskLow       bool `json:"diskLow"`
 	Sound         bool `json:"sound"`
+	// Phone is what this desktop tells its enrolled phones about.
+	Phone PhoneNotifyPrefs `json:"phone"`
+}
+
+// PhoneNotifyPrefs is the desktop's half of phone notifications: the master
+// switch and which occasions it reports. Only the kind of occasion and a count
+// are ever sent.
+type PhoneNotifyPrefs struct {
+	Enabled  bool `json:"enabled"`
+	Approval bool `json:"approval"`
+	Input    bool `json:"input"`
+	Error    bool `json:"error"`
 }
 
 const codeNotifyRejected = "notifications.rejected"
@@ -50,7 +62,8 @@ func (h *Hub) NotifyPrefs() NotifyPrefs {
 		return NotifyPrefs{}
 	}
 	cfg := config.LoadForEdit(config.UserConfigPath()).Notifications
-	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest, FeedbackReply: cfg.FeedbackReply, DiskLow: cfg.DiskLow, Sound: cfg.Sound}
+	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest, FeedbackReply: cfg.FeedbackReply, DiskLow: cfg.DiskLow, Sound: cfg.Sound,
+		Phone: PhoneNotifyPrefs{Enabled: cfg.Phone.Enabled, Approval: cfg.Phone.Approval, Input: cfg.Phone.Input, Error: cfg.Phone.Error}}
 }
 
 // SetNotifyPrefs persists the switches and hands the holder the same answer, so
@@ -65,6 +78,7 @@ func (h *Hub) SetNotifyPrefs(next NotifyPrefs) (NotifyPrefs, error) {
 		FeedbackReply:   next.FeedbackReply,
 		DiskLow:         next.DiskLow,
 		Sound:           next.Sound,
+		Phone:           config.PhoneNotificationsConfig{Enabled: next.Phone.Enabled, Approval: next.Phone.Approval, Input: next.Phone.Input, Error: next.Phone.Error},
 	}
 	path := config.UserConfigPath()
 	edit := config.LoadForEdit(path)
@@ -79,12 +93,23 @@ func (h *Hub) SetNotifyPrefs(next NotifyPrefs) (NotifyPrefs, error) {
 }
 
 func (h *Hub) writeNotifyPrefs(w http.ResponseWriter, r *http.Request) {
-	var body NotifyPrefs
+	// A page written before phone notifications existed does not send the phone
+	// switches; they are kept as they were rather than read as all off.
+	var body struct {
+		NotifyPrefs
+		Phone *PhoneNotifyPrefs `json:"phone"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		missingField(w, "enabled")
 		return
 	}
-	got, err := h.SetNotifyPrefs(body)
+	next := body.NotifyPrefs
+	if body.Phone != nil {
+		next.Phone = *body.Phone
+	} else {
+		next.Phone = h.NotifyPrefs().Phone
+	}
+	got, err := h.SetNotifyPrefs(next)
 	if err != nil {
 		refuse(w, http.StatusInternalServerError, codeNotifyRejected, err.Error(), nil)
 		return

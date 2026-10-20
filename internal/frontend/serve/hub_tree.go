@@ -102,6 +102,7 @@ func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tree/sessions/auto-name", h.autoNameSession)
 	mux.HandleFunc("POST /tree/sessions/export", h.exportSession)
 	mux.HandleFunc("POST /tree/sessions/import-legacy", h.importLegacySessions)
+	mux.HandleFunc("POST /tree/sessions/import-native", h.importNativeSession)
 }
 
 // tree answers the whole sidebar in one request: every remembered workspace
@@ -599,15 +600,41 @@ func (h *Hub) exportSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path, err := filepath.Abs(strings.TrimSpace(body.Path))
-	if err != nil || !store.IsSessionTranscriptName(filepath.Base(path)) {
+	name := filepath.Base(path)
+	if err != nil || !filepath.IsLocal(name) || !store.IsSessionTranscriptName(name) {
 		refuse(w, http.StatusBadRequest, codeSessionBadPath, "the session path could not be resolved", nil)
 		return
 	}
-	if !h.ownsSessionDir(filepath.Dir(path)) {
+	dir := h.knownSessionDir(filepath.Dir(path))
+	if dir == "" {
 		refuse(w, http.StatusForbidden, "session.outside_workspace", "path outside a known workspace", nil)
 		return
 	}
-	content, err := os.ReadFile(path)
+	path = filepath.Join(dir, name)
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer root.Close()
+	info, err := root.Lstat(name)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !info.Mode().IsRegular() {
+		refuse(w, http.StatusForbidden, "session.outside_workspace", "session export requires a regular transcript", nil)
+		return
+	}
+	loaded, err := sessionstore.LoadSession(path)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	content, err := root.ReadFile(name)
+	if loaded.Composition() != nil {
+		content, err = sessionstore.ExportNativeArchive(path)
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -621,12 +648,16 @@ func (h *Hub) exportSession(w http.ResponseWriter, r *http.Request) {
 // ownsSessionDir reports whether dir is the session directory of a workspace
 // this hub lists, which is the boundary a delete may not reach past.
 func (h *Hub) ownsSessionDir(dir string) bool {
+	return h.knownSessionDir(dir) != ""
+}
+
+func (h *Hub) knownSessionDir(dir string) string {
 	for _, ref := range h.sessionRoots() {
 		if known, err := filepath.Abs(SessionDirFor(ref.dir)); err == nil && known == dir {
-			return true
+			return known
 		}
 	}
-	return false
+	return ""
 }
 
 // rootRef is one sidebar folder and whether the user ever chose it.

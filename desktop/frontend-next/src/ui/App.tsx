@@ -1,4 +1,5 @@
 import { useBranchSession } from "./useBranchSession";
+import { CompositionNewContext } from "./CompositionNewContext";
 import { keepSame } from "./stable";
 import { usePaneCallbacks } from "./usePaneCallbacks";
 import { watchTreeWake } from "./treewake";
@@ -106,7 +107,7 @@ export function App({ hub }: { hub: HubPort }) {
   const [panesRead, setPanesRead] = useState(false);
   const [active, setActive] = useState(savedActivePane);
   const treeWindow = useTreeWindow();
-  const { tree, treeRead, readTree, reloadTree, retryTree } = useTreeRead(hub, treeWindow);
+  const { tree, treeRead, answered, readTree, reloadTree, retryTree } = useTreeRead(hub, treeWindow);
   // Null until asked, and null again where this kernel refuses remote panes —
   // which is what keeps the section out of a browser rather than drawing a
   // heading over a feature that cannot work there.
@@ -542,6 +543,7 @@ export function App({ hub }: { hub: HubPort }) {
   }
 
   return (
+    <CompositionNewContext.Provider value={(id) => {const rt=runtimes.find((v)=>v.id===active);void (rt?.host?openRemotePane(rt.host,rt.root,undefined,id):openPane({root:newSessionRoot,agentComposition:id})).catch(fail);}}>
     <PeerThreadsProvider port={activePort} hub={hub} onOpen={openPeerSession}>
     <div
       className="app"
@@ -598,6 +600,7 @@ export function App({ hub }: { hub: HubPort }) {
           navShown={navRail.shown}
           tree={viewed.tree}
           treeRead={treeRead}
+          answered={answered}
           runtimes={runtimes}
           runs={runs}
           active={active}
@@ -783,5 +786,6 @@ export function App({ hub }: { hub: HubPort }) {
       <StopHint armed={stopArmed} />
     </div>
     </PeerThreadsProvider>
+    </CompositionNewContext.Provider>
   );
 }

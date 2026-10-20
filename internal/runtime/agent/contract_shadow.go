@@ -213,20 +213,29 @@ func (a *Agent) CompletionReceipt() *event.CompletionReceipt {
 	if a == nil {
 		return nil
 	}
-	mod := a.svc.extensions.HasMod()
+	gaps := a.takeClaimYieldGaps()
+	if a.svc.extensions.HasMod() {
+		gaps = append(gaps, completion.Gap{Kind: completion.GapModEffectsUnobserved})
+	}
 	if a.turn.completion == nil {
-		if !mod {
+		if len(gaps) == 0 {
 			return nil
 		}
-		return &event.CompletionReceipt{Verdict: completion.VerdictUnknown.String(), Gaps: []event.ReceiptGap{{Kind: completion.GapModEffectsUnobserved.String()}}}
+		return unjudgedReceipt(gaps)
 	}
 	rep := *a.turn.completion
-	rep.Gaps = a.planCriterionGaps(rep.Gaps)
-	if mod {
-		rep.Gaps = append(rep.Gaps, completion.Gap{Kind: completion.GapModEffectsUnobserved})
-		if rep.Verdict == completion.VerdictUnknown {
-			return &event.CompletionReceipt{Verdict: rep.Verdict.String(), Gaps: []event.ReceiptGap{{Kind: completion.GapModEffectsUnobserved.String()}}}
-		}
+	rep.Gaps = append(a.planCriterionGaps(rep.Gaps), gaps...)
+	if len(gaps) > 0 && rep.Verdict == completion.VerdictUnknown {
+		return unjudgedReceipt(gaps)
 	}
 	return completionReceipt(rep)
+}
+
+// unjudgedReceipt carries only host-observed gaps for a turn with nothing to judge.
+func unjudgedReceipt(gaps []completion.Gap) *event.CompletionReceipt {
+	out := &event.CompletionReceipt{Verdict: completion.VerdictUnknown.String()}
+	for _, g := range gaps {
+		out.Gaps = append(out.Gaps, event.ReceiptGap{Kind: g.Kind.String(), Detail: g.Detail})
+	}
+	return out
 }
