@@ -153,9 +153,9 @@ func RunLegacySessionImportFrom(sourceRoot string, sink event.Sink) Result {
 }
 
 // RunLegacySessionImportInto is the desktop recovery form. Sessions whose
-// historical workspace still exists keep that workspace; orphaned ones and
-// sources with no workspace at all land in fallbackDest, where the sidebar can list
-// them. A Desktop conversation that records no workspace is left in the source.
+// historical workspace still exists keep that workspace; ones whose workspace is
+// gone, and stores that carry no workspace concept, land in fallbackDest, where the
+// sidebar can list them. A Desktop conversation that records no workspace is left in the source.
 func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink) Result {
 	sink = event.Sync(sink)
 	emit := func(level event.Level, text string) {
