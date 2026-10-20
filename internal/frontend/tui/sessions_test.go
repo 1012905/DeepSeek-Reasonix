@@ -74,7 +74,7 @@ func TestPickerConfirmationKeepsItsInstructionOnANarrowTerminal(t *testing.T) {
 	m.picker.sel = 1
 	run(m, press(m, "ctrl+d"))
 	var line string
-	for _, l := range strings.Split(m.View().Content, "\n") {
+	for l := range strings.SplitSeq(m.View().Content, "\n") {
 		if strings.Contains(l, "Delete") {
 			line = l
 		}
