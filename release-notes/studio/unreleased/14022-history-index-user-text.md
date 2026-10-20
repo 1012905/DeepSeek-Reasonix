@@ -1,0 +1,4 @@
+- 修复：会话历史搜索只索引「用户说过的话」，不再把宿主前置的语言、日期、项目说明等块写进索引，因此这些块里的词不会再出现「命中却看不到出处」。关联 #14022。
+- 兼容性：升级后首次启动会重建一次历史索引。关联 #14022。
+- Fixed: session history search indexes what the user said, not the host-prepended language, date and project blocks, so a hit can no longer come from words its snippet cannot show. Refs #14022.
+- Compatibility: the history index is rebuilt once on the first launch after upgrading. Refs #14022.
