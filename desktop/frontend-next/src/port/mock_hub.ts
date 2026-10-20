@@ -153,6 +153,10 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
+  placeRemoteHost() {
+    return Promise.resolve();
+  }
+
   remoteCandidates() {
     return Promise.resolve(["attic", "old-laptop"]);
   }
