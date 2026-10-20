@@ -29,7 +29,7 @@ func (c *Controller) runSynchronousTurn(
 		}
 	}()
 	ctx, cancel := context.WithCancel(extension.ContextWithRuntimeOwner(ctx, c.RuntimeOwner()))
-	binding := c.CompositionBinding()
+	binding := c.CompositionSummary()
 	c.mu.Lock()
 	// Finishing is part of the gate: TurnDone is still fanning out. Closed
 	// seals a torn-down controller. Blocking callers get an error rather than

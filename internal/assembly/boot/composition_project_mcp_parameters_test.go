@@ -55,6 +55,11 @@ func TestProjectCompositionCannotChangeAnAuthorizedMCPLaunch(t *testing.T) {
 				}
 				built, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, AgentComposition: d.ID, ExtraPlugins: []plugin.Spec{spec}, resolvedShell: pinnedEffectShell()})
 				if built != nil {
+					proxy, ok := built.Assembly.Registry.Get("use_capability")
+					if !ok {
+						t.Fatal("capability proxy missing")
+					}
+					_, err = proxy.Execute(t.Context(), json.RawMessage(`{"action":"call","capability_id":"mcp-server:authorized"}`))
 					built.Controller.Close()
 				}
 				_, markerErr := os.Stat(marker)

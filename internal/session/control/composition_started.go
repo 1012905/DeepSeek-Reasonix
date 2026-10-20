@@ -13,8 +13,16 @@ type compositionHistory interface {
 }
 
 func CompositionStarted(c compositionHistory) bool {
-	if binding := c.CompositionBinding(); binding != nil && binding.Started {
-		return true
+	if lightweight, ok := c.(interface {
+		CompositionSummary() *agentcomposition.Summary
+	}); ok {
+		if summary := lightweight.CompositionSummary(); summary != nil && summary.Started {
+			return true
+		}
+	} else {
+		if binding := c.CompositionBinding(); binding != nil && binding.Started {
+			return true
+		}
 	}
 	if c.Turn() != 0 {
 		return true

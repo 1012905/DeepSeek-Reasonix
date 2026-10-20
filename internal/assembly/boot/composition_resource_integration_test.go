@@ -67,20 +67,20 @@ func TestCompositionLinkedExtensionResources(t *testing.T) {
 			if err != nil || !info.IsDir() {
 				t.Fatalf("linked install did not register real root: %v", err)
 			}
-			ordinary, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, resolvedShell: pinnedEffectShell()})
+			ordinary, err := buildSnapshotRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, resolvedShell: pinnedEffectShell()})
 			if err != nil {
 				t.Fatal(err)
 			}
 			ordinary.Controller.Close()
 			opts := resourcePreset(t, home, root)
-			bound, err := BuildRuntime(t.Context(), opts)
+			bound, err := buildSnapshotRuntime(t.Context(), opts)
 			if err != nil {
 				t.Fatalf("linked extension was rejected: %v", err)
 			}
 			defer bound.Controller.Close()
 			writeFile(t, source, "notes.txt", "CHANGED")
 			opts.AgentComposition, opts.Composition = "", bound.Controller.CompositionBinding()
-			restored, err := BuildRuntime(t.Context(), opts)
+			restored, err := buildSnapshotRuntime(t.Context(), opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -114,7 +114,7 @@ func TestCompositionLinkedHookResources(t *testing.T) {
 	settings := hook.Settings{Hooks: map[hook.Event][]hook.HookConfig{hook.SessionStart: {{Command: "cat '" + filepath.Join(link, "entry.sh") + "'"}}}}
 	raw, _ := json.Marshal(settings)
 	writeFile(t, home, hook.SettingsFilename, string(raw))
-	ordinary, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, resolvedShell: pinnedEffectShell()})
+	ordinary, err := buildSnapshotRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, resolvedShell: pinnedEffectShell()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestCompositionLinkedHookResources(t *testing.T) {
 		t.Fatalf("ordinary hook failed: %v", got)
 	}
 	opts := resourcePreset(t, home, root)
-	bound, err := BuildRuntime(t.Context(), opts)
+	bound, err := buildSnapshotRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestCompositionLinkedHookResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts.AgentComposition, opts.Composition = "", bound.Controller.CompositionBinding()
-	restored, err := BuildRuntime(t.Context(), opts)
+	restored, err := buildSnapshotRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,13 +152,13 @@ func TestCompositionUnavailableMCPNamesDependency(t *testing.T) {
 	opts := Options{Home: home, WorkspaceRoot: root, resolvedShell: pinnedEffectShell(), ExtraPlugins: []plugin.Spec{{
 		Name: "audit", Type: "http", URL: server.URL, Authorized: true,
 	}}}
-	ordinary, err := BuildRuntime(t.Context(), opts)
+	ordinary, err := buildSnapshotRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ordinary.Controller.Close()
 	opts.AgentComposition = resourcePreset(t, home, root).AgentComposition
-	bound, err := BuildRuntime(t.Context(), opts)
+	bound, err := buildSnapshotRuntime(t.Context(), opts)
 	if bound != nil {
 		bound.Controller.Close()
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) newSession(w http.ResponseWriter, r *http.Request) {
-	if s.ctl().CompositionBinding() == nil {
+	if compositionControllerView(s.ctl()) == nil {
 		s.newLegacySession(w, r)
 		return
 	}

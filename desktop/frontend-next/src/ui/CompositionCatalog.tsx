@@ -19,7 +19,7 @@ export function CompositionCatalog({ catalog, onSelect, onCreate, onCopy }: {
     <header className="composition-list-heading">
       <h2>{t("Agent 预设")}</h2>
       <button className="btn" data-primary="" data-action="agent-preset.create" onClick={onCreate}><StudioIcon name="plus" />{t("新建预设")}</button>
-      <p>{t("为不同会话组合人设、工具、技能与扩展。模型保持独立；已开始的会话保留原版本。")}</p>
+      <p>{t("预设决定允许使用哪些能力，实际使用时按需加载当前资源。已开始会话的人设和权限规则保持不变。")}</p>
     </header>
     <CompositionPickerSetting />
     <p className="composition-default-note">{t("点击卡片，设置本机新任务的默认模式；已有会话保持当前配置。")}</p>

@@ -185,11 +185,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          go test -count=1 -timeout=3m -json -run '^Test(CaptureDirectoryMaterializesContainedLinks|CaptureDirectoryRefusesUnsafeLinks|CaptureHookFileFlattensContainedLink|MaterializeStillRejectsLinkedRetainedFilesAndRoot|WindowsCompositionJunctions|CompositionRetainsLinkedSkillAcrossRestart|CompositionLinkedSkillRejectsLinkedResources|CompositionLinkedExtensionResources|CompositionLinkedHookResources)$' ./internal/state/agentpreset ./internal/assembly/boot | tee "$RUNNER_TEMP/composition-links.jsonl"
+          go test -count=1 -timeout=3m -json -run '^Test(CaptureDirectoryMaterializesContainedLinks|CaptureDirectoryRefusesUnsafeLinks|CaptureHookFileFlattensContainedLink|MaterializeStillRejectsLinkedRetainedFilesAndRoot|WindowsCompositionJunctions|WindowsLiveSkillJunctions|CompositionRetainsLinkedSkillAcrossRestart|CompositionLinkedSkillRejectsLinkedResources|CompositionLinkedExtensionResources|CompositionLinkedHookResources)$' ./internal/state/agentpreset ./internal/ext/skill ./internal/assembly/boot | tee "$RUNNER_TEMP/composition-links.jsonl"
           jq -se '
             ["TestCaptureDirectoryMaterializesContainedLinks", "TestCaptureDirectoryRefusesUnsafeLinks",
              "TestCaptureHookFileFlattensContainedLink", "TestMaterializeStillRejectsLinkedRetainedFilesAndRoot",
-             "TestWindowsCompositionJunctions", "TestCompositionRetainsLinkedSkillAcrossRestart",
+             "TestWindowsCompositionJunctions", "TestWindowsLiveSkillJunctions", "TestCompositionRetainsLinkedSkillAcrossRestart",
              "TestCompositionLinkedSkillRejectsLinkedResources", "TestCompositionLinkedExtensionResources",
              "TestCompositionLinkedHookResources"] as $required |
             [.[] | select(.Action == "pass") | .Test] as $passed |

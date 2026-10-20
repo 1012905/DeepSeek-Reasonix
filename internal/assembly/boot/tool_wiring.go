@@ -45,7 +45,13 @@ func loadHooks(opts Options, roots config.Roots, root string, shell sandbox.Shel
 			sink.Emit(projectHooksHeldEvent(held))
 		}
 	}
-	return resolved, hook.NewRunner(resolved, root, hook.NewDefaultSpawner(hookRuntime(shell)), func(n hook.Notice) { sink.Emit(hookNoticeEvent(n)) }), nil
+	runner := hook.NewRunner(resolved, root, hook.NewDefaultSpawner(hookRuntime(shell)), func(n hook.Notice) { sink.Emit(hookNoticeEvent(n)) })
+	if opts.Composition.Live() && opts.Observe == nil {
+		runner.ConfigureSource(func() []hook.ResolvedHook {
+			return hook.CompositionHooks(hook.Load(hook.LoadOptions{ProjectRoot: root, ReasonixHomeDir: roots.Home()}), opts.Composition.Resolved)
+		})
+	}
+	return resolved, runner, nil
 }
 
 // NewUserHookRunner resolves only the hooks the user configured under the
@@ -95,14 +101,23 @@ func registerSessionTools(reg *tool.Registry, set ablation.Set, roots config.Roo
 }
 
 func loadCommands(opts Options, root string) []command.Command {
-	if opts.Composition != nil {
+	if opts.Composition != nil && !opts.Composition.Live() {
 		cmds, _ := resource[command.Command](opts.Composition, "command")
 		return cmds
 	}
 	if opts.ReuseAssembly != nil && shouldReuseDiscovery(opts.PreviousPlan) {
 		return opts.ReuseAssembly.Commands
 	}
-	cmds, _ := command.LoadRoots(config.CommandRootsForRoot(root)...)
+	cmds, _ := command.LoadRoots(opts.roots().CommandRootsForRoot(root)...)
+	if opts.Composition.Live() {
+		filtered := []command.Command{}
+		for _, cmd := range cmds {
+			if opts.Composition.Resolved.Commands.Allows(cmd.Name) && (cmd.Plugin == "" || opts.Composition.Resolved.Extensions.Allows(cmd.Plugin)) {
+				filtered = append(filtered, cmd)
+			}
+		}
+		return filtered
+	}
 	return cmds
 }
 
@@ -117,14 +132,30 @@ type skillRunners struct {
 // tools and their slash entries share one switch, since implicit invocation
 // decides whether the model sees skills at all; the slash tool goes last so
 // it carries every entry.
-func registerSkillTools(reg *tool.Registry, set ablation.Set, store *skill.Store, implicit bool, runners skillRunners, cmds []command.Command) {
-	var entries []command.SlashEntry
+func registerSkillTools(reg *tool.Registry, set ablation.Set, store *skill.Store, implicit bool, runners skillRunners, cmds []command.Command, live func() []command.Command) {
 	if implicit {
 		reg.Add(skill.NewReadOnlySkillTool(store, gateSubagentArm(set, runners.readOnly), runners.profile))
 		reg.Add(skill.NewRunSkillTool(store, gateSubagentArm(set, runners.run), runners.profile))
 		reg.Add(skill.NewReadSkillTool(store))
 		reg.Add(skill.NewInstallSkillTool(store, nil))
 		addTools(reg, builtinSubagentTools(set, store, runners.run, runners.profile))
+	}
+	var gate func() func(string) error
+	if implicit {
+		gate = store.ModelGate()
+	}
+	if live != nil {
+		reg.Add(command.NewLiveSlashCommandTool(func() ([]command.SlashEntry, error) {
+			return compositionSlashEntries(store, implicit, live()), nil
+		}, gate))
+	} else {
+		reg.Add(command.NewSlashCommandTool(compositionSlashEntries(store, implicit, cmds), gate))
+	}
+}
+
+func compositionSlashEntries(store *skill.Store, implicit bool, cmds []command.Command) []command.SlashEntry {
+	var entries []command.SlashEntry
+	if implicit {
 		for _, sk := range skill.ModelInvocable(store.SlashList()) {
 			name := sk.SlashName()
 			entries = append(entries, command.SlashEntry{
@@ -154,17 +185,14 @@ func registerSkillTools(reg *tool.Registry, set ablation.Set, store *skill.Store
 			Render:      func(args []string) string { return cmd.Render(args) },
 		})
 	}
-	var gate func() func(string) error
-	if implicit {
-		gate = store.ModelGate()
-	}
-	reg.Add(command.NewSlashCommandTool(entries, gate))
+	return entries
 }
 
 // capabilitySurface is the session-shared MCP runtime behind use_capability:
 // one host and spec set, with a frontend per agent so each keeps its own
 // ledger and audit while reusing the processes.
 type capabilitySurface struct {
+	refresh func()
 	specs   []plugin.Spec
 	runtime *usecap.MCPCapabilityRuntime
 	ledger  *capability.Ledger
@@ -187,6 +215,9 @@ func newCapabilitySurface(ctx context.Context, cfg *config.Config, root string, 
 	})
 	// AllContractEntries: use_capability also dispatches tools the provider never sees.
 	c.catalog = func() capability.Catalog {
+		if c.refresh != nil {
+			c.refresh()
+		}
 		conn := map[string]bool{}
 		failedNow := map[string]string{}
 		if host != nil {

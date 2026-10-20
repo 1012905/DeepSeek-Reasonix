@@ -5,6 +5,20 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
+func (s *Session) CompositionSummary() *agentcomposition.Summary {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, m := range s.Messages {
+		if m.Role == provider.RoleSystem && m.AgentComposition != nil {
+			return m.AgentComposition.Summary()
+		}
+	}
+	return nil
+}
+
 func (s *Session) Composition() *agentcomposition.Binding {
 	if s == nil {
 		return nil

@@ -391,6 +391,7 @@ type Registry struct {
 	// admit, when non-nil, is the ceiling on what this registry may ever hold:
 	// Add refuses every tool it rejects, so no later registration path can widen it.
 	admit     func(Tool) bool
+	bindMCP   func(Tool) Tool
 	schemaRev atomic.Uint64
 }
 
@@ -482,10 +483,13 @@ func (r *Registry) isProviderVisibleLocked(name string) bool {
 // (called every turn) reuses the result instead of re-marshaling.
 func (r *Registry) Add(t Tool) {
 	r.mu.RLock()
-	admit := r.admit
+	admit, bindMCP := r.admit, r.bindMCP
 	r.mu.RUnlock()
 	if admit != nil && !admit(t) {
 		return
+	}
+	if _, mcp := t.(MCPMetadata); mcp && bindMCP != nil {
+		t = bindMCP(t)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

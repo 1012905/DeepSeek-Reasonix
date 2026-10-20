@@ -1,0 +1,4 @@
+- 修复：新建自定义预设会话按需加载技能和扩展、连接 MCP，不再生成全量快照。继承模式跟随当前已授权配置。Refs #13988.
+- Fixed: new custom presets load skills/extensions and connect MCP on demand. Inherited permissions follow current authorized configuration. Refs #13988.
+- 兼容性：已有快照会话保持原行为。新会话使用事件 schema 5、归档 version 3，旧客户端不能继续执行；升级后仍可读取旧会话。Refs #13988.
+- Compatibility: existing snapshots remain supported. Live sessions use event schema 5 and archive version 3; older clients cannot execute them. Refs #13988.

@@ -191,7 +191,7 @@ function ModuleEditor({
           onChange({ mode: e.target.value as "inherit" | "select", members: [] });
         }}
       >
-        <option value="inherit">{t("创建会话时继承当前配置")}</option>
+        <option value="inherit">{t("跟随当前配置，包含之后启用的资源")}</option>
         <option value="select">{t("仅使用所选项（空列表表示禁用）")}</option>
       </select>
       {value.mode === "select" && (

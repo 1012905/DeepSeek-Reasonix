@@ -40,8 +40,11 @@ func (c *Controller) SaveHooks(scope hook.Scope, settings hook.Settings) error {
 			return err
 		}
 	}
-	if c.CompositionBinding() == nil {
+	binding := c.CompositionBinding()
+	if binding == nil {
 		c.hooks.Replace(hook.Load(opts))
+	} else if binding.Live() {
+		c.hooks.Replace(hook.CompositionHooks(hook.Load(opts), binding.Resolved))
 	} else {
 		c.hooks.ReplacePolicyGuards(hook.Load(opts))
 	}

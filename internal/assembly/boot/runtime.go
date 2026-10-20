@@ -18,6 +18,7 @@ import (
 	"reasonix/internal/ext/hook"
 	"reasonix/internal/ext/modhost"
 	"reasonix/internal/ext/plugin"
+	"reasonix/internal/ext/pluginpkg"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/platform/computer"
 	"reasonix/internal/session/control"
@@ -181,7 +182,7 @@ func preflightExtensionRuntimes(ctx context.Context, home string, ext extensionB
 	if selectErr != nil {
 		return nil, selectErr
 	}
-	if len(packages) == 0 {
+	if len(packages) == 0 && !binding.Live() {
 		// No v2 runtime packages: surface the installed-state warnings exactly
 		// as the in-assembly StartPackages call did, and take the untouched
 		// pre-sidecar path (no processes, no Manager).
@@ -200,7 +201,11 @@ func preflightExtensionRuntimes(ctx context.Context, home string, ext extensionB
 	var mgr *sidecar.Manager
 	var warnings []string
 	var err error
-	if binding != nil {
+	if binding.Live() {
+		mgr, warnings, err = sidecar.StartLivePackages(ctx, home, packages, ext.session, ui, func(current []pluginpkg.InstalledPackage) ([]pluginpkg.InstalledPackage, error) {
+			return liveCompositionPackages(current, binding)
+		})
+	} else if binding != nil {
 		mgr, warnings, err = sidecar.StartResolvedPackages(ctx, packages, ext.session, ui)
 	} else {
 		mgr, warnings, err = startExtensionPackages(ctx, home, ext.session, ui, prev, plan)
@@ -214,7 +219,7 @@ func preflightExtensionRuntimes(ctx context.Context, home string, ext extensionB
 		// started. The call site treats *RequiredStartError as fatal.
 		return nil, err
 	}
-	if len(mgr.Clients()) == 0 {
+	if len(mgr.Clients()) == 0 && len(mgr.DeferredPackages()) == 0 && !binding.Live() {
 		// Every package was optional and failed: retire the empty Manager and
 		// take the pre-sidecar path with warnings already surfaced.
 		_ = mgr.Close()
@@ -272,7 +277,7 @@ func assembleLegacySnapshot(ctx context.Context, in legacyAssembly, generation u
 	// and replacements, then broadcasts system_prompt.build with the final
 	// prompt so observers see exactly what froze.
 	var postFreeze func(snap *extension.RuntimeSnapshot)
-	if mgr != nil && len(mgr.Clients()) > 0 {
+	if mgr != nil && (len(mgr.Clients()) > 0 || mgr.OnDemand()) {
 		managed := mgr
 		bindExtensionUI(ext.ui, managed, ext.warn)
 		sidecarContribs := managed.Contributions()

@@ -12,7 +12,7 @@ import (
 )
 
 func (b *builder) isolateCompositionMCPPackages() error {
-	if b.opts.Composition == nil {
+	if b.opts.Composition == nil || b.opts.Composition.Live() {
 		return nil
 	}
 	packages, err := resource[retainedExtension](b.opts.Composition, "extension")

@@ -11,6 +11,17 @@ import {RunLine} from "./RunLine";
 beforeEach(() => { localStorage.setItem("rx-show-agent-composition", "on"); });
 afterEach(() => { cleanup(); localStorage.removeItem("rx-show-agent-composition"); });
 
+it.each([false, true])("labels saved snapshots without labeling live bindings: live=%s", async (live) => {
+  const port = new MockPort();
+  vi.spyOn(port, "agentComposition").mockResolvedValue({
+    id: "builtin:minimal", name: "轻装搭档", revision: "fixture", digest: "fixture", started: true,
+    ...(live ? {formatVersion: 2, resourceMode: "live" as const} : {}),
+  });
+  render(<AgentCompositionPicker port={port} locked running={false} onChanged={()=>{}} onSettings={()=>{}} onError={()=>{}}/>);
+  await userEvent.click(await screen.findByRole("button", {name: /^Agent 组合.*轻装搭档/}));
+  expect(screen.queryByText("已固定资源快照") !== null).toBe(!live);
+});
+
 it.each([null, "off", "unexpected"])("hides the picker and avoids catalog reads for visibility %s", async (stored) => {
   if (stored === null) localStorage.removeItem("rx-show-agent-composition");
   else localStorage.setItem("rx-show-agent-composition", stored);

@@ -42,7 +42,7 @@ func (s *Server) switchComposition(ctx context.Context, cur *control.Controller,
 	if err != nil {
 		return err
 	}
-	if b := cur.CompositionBinding(); b != nil && b.Version.Revision == v.Revision {
+	if b := cur.CompositionSummary(); b != nil && b.Revision == v.Revision {
 		return nil
 	}
 	opts := s.rebuildOptions(cur, currentModelRef(cur))

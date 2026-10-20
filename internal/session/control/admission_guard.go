@@ -79,7 +79,7 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 			releaseWorkspace.release()
 		}
 	}()
-	binding := c.CompositionBinding()
+	binding := c.CompositionSummary()
 	c.mu.Lock()
 	if c.gate.closed {
 		c.mu.Unlock()

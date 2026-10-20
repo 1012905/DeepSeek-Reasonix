@@ -27,6 +27,6 @@ export interface AgentPresetCatalog {
   modules?: Partial<Record<CompositionKind,CompositionChoice[]>>;
 }
 export interface AgentPresetImport {definition:AgentComposition;diagnostics:AgentPresetCatalog["diagnostics"]}
-export interface CompositionSummary { id: string; name: string; revision: string; digest: string; started: boolean; unavailable?: string }
+export interface CompositionSummary { id: string; name: string; revision: string; digest: string; started: boolean; unavailable?: string; formatVersion?: number; resourceMode?: "live" }
 export const COMPOSITION_KINDS: CompositionKind[] = ["tools", "skills", "mcp", "extensions", "hooks", "commands"];
 export const builtinCompositions = (): AgentComposition[] => structuredClone(definitions) as AgentComposition[];

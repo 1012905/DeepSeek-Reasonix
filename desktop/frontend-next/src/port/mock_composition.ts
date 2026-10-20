@@ -30,10 +30,10 @@ export class MockCompositions {
   private get catalog():AgentPresetCatalog {
     return {presets:[...builtinCompositions().map((definition)=>({definition,revision:revisions[definition.id as keyof typeof revisions]})),...this.library.user,...(this.library.projects.get(this.workspace) ?? [])],default:this.library.workspaceDefaults.get(this.workspace) ?? this.library.personalDefault,diagnostics:[],modules:MOCK_MODULES};
   }
-  private summary(v:AgentPresetVersion):CompositionSummary { return {id:v.definition.id,name:v.definition.name,revision:v.revision,digest:`mock-${v.revision}`,started:false}; }
+  private summary(v:AgentPresetVersion):CompositionSummary { return {id:v.definition.id,name:v.definition.name,revision:v.revision,digest:`mock-${v.revision}`,started:false,formatVersion:2,resourceMode:"live"}; }
   private fail(status:number,code:string):never { throw new HttpError(status,"",{code:`agent_composition.${code}`}); }
   private requireModules(definition:AgentComposition) {
-    for (const kind of ["tools","skills","mcp","extensions","hooks","commands"] as const) for (const member of definition[kind]?.members ?? []) {
+    for (const kind of ["tools"] as const) for (const member of definition[kind]?.members ?? []) {
       if (definition[kind]?.mode==="select" && !(MOCK_MODULES?.[kind] ?? []).some((m)=>m.id===member.id)) {
         throw new HttpError(409,"",{code:"agent_composition.unavailable",params:{module:`${kind}:${member.id}`,detail:"Required module is unavailable or was revoked."}});
       }
