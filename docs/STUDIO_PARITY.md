@@ -90,7 +90,8 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | Worktree merge dialog | Unverified | Worktree handling exists in `ui/Workspaces.tsx`; the merge flow was not checked |
 | Scheduled tasks (heartbeat) | Missing | #11384 |
 | Keyboard shortcuts cheat sheet | Unverified | Key handling is in `ui/keys.ts`, `ui/windowkeys.ts`; no cheat sheet found by name; no issue yet |
-| CSV and media preview in the workspace panel | Unverified | `ui/WorkbenchPanel.tsx` and `ui/CodeEditor.tsx` exist; file kinds not checked |
+| CSV and media preview in the workspace panel | Have differently | `ui/document`: CSV/TSV, PDF and still images render in the workbench; audio/video remain unsupported. CSV/TSV、PDF 和图片可直接阅读，音视频仍不支持内联预览。 |
+| File delivery cards / 文件交付卡片 | Have | `present_files` and `ui/document/DeliveryCard.tsx`: validated file references reopen in the shared workbench; auxiliary actions live in More. 已验证文件引用复用工作台标签，辅助操作位于“更多”。 |
 | IM gateway (WeChat, Feishu, QQ) | Removed on purpose | Commit `f352dfbec` "remove the IM bot gateway"; `docs/MIGRATING.md` keeps the `[bot]` section untouched; #11952 asks for it back |
 
 ## Rows added by Studio

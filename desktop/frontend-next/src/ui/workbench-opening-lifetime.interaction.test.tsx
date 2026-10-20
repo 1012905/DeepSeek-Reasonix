@@ -23,6 +23,7 @@ it.each(['event-first', 'reply-first'])('preserves newer Files when preview work
   const open = vi.spyOn(port,'browserOpen').mockReturnValue(new Promise((_,reject)=>{fail=reject;}));
   const {rerender} = render(<WorkbenchPanel {...props} port={port} tabs={[agent]} />);
   fireEvent.click(await screen.findByRole('button',{name:'index.html'}));
+  fireEvent.click(await screen.findByRole('button',{name:'交互运行'}));
   await waitFor(()=>expect(workspaces).toHaveBeenCalled());
   expect(open).not.toHaveBeenCalled();
   fireEvent.click(document.querySelector('[data-action="workbench.files"]')!);
@@ -57,6 +58,7 @@ it('does not start a preview after its file read finishes behind a newer Files s
   const open = vi.spyOn(port, 'browserOpen').mockResolvedValue(page);
   render(<WorkbenchPanel {...props} port={port} tabs={[agent]} />);
   fireEvent.click(await screen.findByRole('button',{name:'index.html'}));
+  fireEvent.click(await screen.findByRole('button',{name:'交互运行'}));
   await waitFor(()=>expect(reading).toHaveBeenCalled());
   fireEvent.click(document.querySelector('[data-action="workbench.files"]')!);
   await act(async()=>read({path:'index.html',content:'hello',revision:'r1'}));
@@ -76,6 +78,7 @@ it('follows a genuine agent tab while an older preview is still preparing its wo
   const open = vi.spyOn(port, 'browserOpen').mockResolvedValue(page);
   const {rerender} = render(<WorkbenchPanel {...props} port={port} tabs={[agent]} />);
   fireEvent.click(await screen.findByRole('button',{name:'index.html'}));
+  fireEvent.click(await screen.findByRole('button',{name:'交互运行'}));
   await waitFor(()=>expect(lookup).toHaveBeenCalled());
   fireEvent.click(document.querySelector('[data-action="workbench.files"]')!);
   const fresh = {...agent,id:'fresh',target:'tf',title:'Fresh',active:false};

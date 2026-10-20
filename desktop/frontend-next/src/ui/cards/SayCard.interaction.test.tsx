@@ -197,7 +197,8 @@ it.each([
     onRegenerate: vi.fn(), canBranch: () => true, onBranch };
   render(<SayCard item={{ t: "say", id: "final", text: "answer", done: true }} reply={reply} />);
   const button = screen.getByRole("button", { name: label });
-  expect(button.title).toBe(label);
+  fireEvent.focus(button);
+  expect(screen.getByRole("tooltip").textContent).toBe(label);
   await userEvent.click(button);
   expect(onBranch).toHaveBeenCalledExactlyOnceWith("final");
 });

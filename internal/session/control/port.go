@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"reasonix/internal/base/workspacefile"
 	"reasonix/internal/state/sessionstore"
 
 	"reasonix/internal/contract/agentcomposition"
@@ -292,6 +293,8 @@ type RuntimeSettings interface {
 	RevokeRememberedProjectRule(rule string) error
 	WorkspaceRoots() (WorkspaceRoots, error)
 	ReadableExtraRoots() ([]string, error)
+	WorkspacePreviewInfo(context.Context, workspacefile.Ref) (workspacefile.Info, error)
+	WorkspacePreviewContent(context.Context, workspacefile.Ref) ([]byte, workspacefile.Info, error)
 	AddWorkspaceRoot(dir string) (string, error)
 	RemoveWorkspaceRoot(dir string) error
 	SandboxSettings() SandboxSettings

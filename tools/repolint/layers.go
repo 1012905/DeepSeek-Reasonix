@@ -25,6 +25,8 @@ var frontends = []string{
 // One may reach another: the layer is closed, so that drags nothing in, and
 // refusing it is what leaves the same judgement copied into several of them.
 var leaves = []string{
+	"internal/base/workspacefile",
+	"internal/contract/delivery",
 	"internal/contract/ablation",
 	"internal/contract/agentgraph",
 	"internal/contract/agentpreset",

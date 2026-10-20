@@ -121,8 +121,6 @@ function sealTurn(items: Item[], err?: string): Item[] {
   // the flag is the identity, and its err only repeats the sentinel.
   return [...sealed, { t: "notice" as const, id: nextId(), level: "error", text: err }];
 }
-
-
 // The card reads the call's own arguments: they carry what was saved and how it
 // will be recalled, which the tool's textual receipt does not.
 function parseRemembered(tool: Tool): RememberedFact | null {
@@ -782,6 +780,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
           tool: capToolOutput({
             ...prev.tool,
             output: m.content,
+            deliveries: m.deliveries,
             ...(m.outputDiff ? { outputDiff: true } : {}),
             ...(m.toolFailed ? { err: m.content, refusalCode: m.toolRefusalCode } : {}),
           }),

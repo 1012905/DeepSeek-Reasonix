@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { pdfAssets } from "./tools/pdf-assets.ts";
 
 interface ProxyEvents {
   on(event: "proxyReq", cb: (req: { setHeader(k: string, v: string): void }) => void): void;
@@ -36,7 +37,7 @@ export default defineConfig(({ mode }) => {
   const serve = loadEnv(mode, ".", "REASONIX").REASONIX_SERVE;
   return {
     base: "./",
-    plugins: [react()],
+    plugins: [react(), pdfAssets()],
     // Stylesheets are stubbed for tests by default, `?raw` included, so a
     // guard that reads app.css to check a rule gets an empty string and passes
     // on nothing. Processing it is what makes that guard able to fail.

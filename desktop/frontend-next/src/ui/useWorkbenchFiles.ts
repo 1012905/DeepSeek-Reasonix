@@ -5,12 +5,14 @@ import { locate } from "../state/gittree";
 import { WORKSPACE_FILE_MISSING, reason } from "../i18n/kernel";
 import { HttpError } from "../port/port";
 import { parseGrantedFile } from "./grantedfiles";
+import { t } from "../i18n";
 
 type Entry = {
   file: WorkspaceFile | null; draft: string; diff: string; error: string; missing: boolean;
+  errorCode: string;
   pending: "" | "read" | "save"; issued: number;
 };
-const blank = (): Entry => ({ file: null, draft: "", diff: "", error: "", missing: false, pending: "", issued: 0 });
+const blank = (): Entry => ({ file: null, draft: "", diff: "", error: "", errorCode: "", missing: false, pending: "", issued: 0 });
 const dirty = (entry: Entry) => !!entry.file && entry.draft !== entry.file.content;
 
 export function useWorkbenchFiles({ port, workspaceRoot, repos = [], path, openPaths, shown, refresh, poll }: {
@@ -59,12 +61,19 @@ export function useWorkbenchFiles({ port, workspaceRoot, repos = [], path, openP
         entry.file = file;
         entry.draft = file.content;
         entry.error = "";
+        entry.errorCode = "";
         entry.missing = false;
         if (!quiet) entry.diff = patch?.diff ?? "";
       } catch (e) {
-        if (valid() && !quiet) {
+        const code = e instanceof HttpError ? e.reason?.code ?? "" : "";
+        const unavailable = [WORKSPACE_FILE_MISSING, "workspace.root_not_granted", "workspace.preview_denied", "workspace.file_unreadable"].includes(code);
+        if (valid() && !dirty(entry) && (!quiet || unavailable)) {
+          changed = true;
           entry.error = reason(e);
+          entry.errorCode = code;
           entry.missing = e instanceof HttpError && e.reason?.code === WORKSPACE_FILE_MISSING;
+          entry.file = null;
+          entry.draft = "";
         }
       } finally {
         if (valid()) { entry.pending = ""; if (changed) notify(); }
@@ -82,6 +91,32 @@ export function useWorkbenchFiles({ port, workspaceRoot, repos = [], path, openP
     const timer = window.setInterval(() => { cancel = read(true) ?? cancel; }, 3000);
     return () => { cancel?.(); window.clearInterval(timer); };
   }, [read, poll, shown]);
+  const isDirty = dirty(entry), observedVersion = entry.file?.observedVersion, saving = entry.pending === "save";
+  useEffect(() => {
+    if (!shown || !isDirty || !observedVersion || saving) return;
+    const controller = new AbortController();
+    let busy = false;
+    const inspect = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const held = parseGrantedFile(path);
+        const info = await port.workspacePreviewInfo({ path: held?.rel ?? path, root: held?.root }, controller.signal);
+        if (!controller.signal.aborted && info.version !== entry.file?.observedVersion) {
+          const error = t("磁盘内容已变化，未保存的编辑已保留");
+          if (entry.error !== error) { entry.error = error; notify(); }
+        }
+      } catch (e) {
+        if (!controller.signal.aborted) {
+          const error = reason(e);
+          if (entry.error !== error) { entry.error = error; notify(); }
+        }
+      } finally { busy = false; }
+    };
+    void inspect();
+    const timer = window.setInterval(() => void inspect(), 3000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [port, entry, path, shown, refresh, isDirty, observedVersion, saving, notify]);
 
   const setDraft = (draft: string) => {
     if (current.current !== entries || !entry.file || entry.file.readOnly) return;

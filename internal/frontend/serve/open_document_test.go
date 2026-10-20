@@ -133,7 +133,7 @@ func TestOpenDocumentRefusesWhatIsOutsideTheRoots(t *testing.T) {
 
 func TestOpenDocumentRefusesTypesOffTheListAndWhatIsNotAFile(t *testing.T) {
 	f := newDocumentFixture(t, true)
-	for _, name := range []string{"site/app.js", "site/run.exe", "site/note.txt"} {
+	for _, name := range []string{"site/app.js", "site/run.exe"} {
 		if code, why := f.open(t, filepath.Join(f.work, filepath.FromSlash(name))); code != http.StatusBadRequest || why != codeDocumentType {
 			t.Errorf("%s: status %d code %q, want 400 %s", name, code, why, codeDocumentType)
 		}

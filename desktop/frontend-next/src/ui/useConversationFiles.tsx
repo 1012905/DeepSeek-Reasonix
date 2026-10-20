@@ -3,7 +3,7 @@ import type { AgentPort } from "../port/port";
 import { host } from "../port/host";
 import type { LocalRefs } from "./Markdown";
 import { GRANTED, conversationFile, isLocalPathShape } from "./filelinks";
-import { GRANTED_FILE, grantedFileKey } from "./grantedfiles";
+import { GRANTED_FILE, grantedFileKey, grantedFilePath } from "./grantedfiles";
 import { WorkbenchFileMenu, absoluteWorkspacePath, type FileMenu } from "./WorkbenchFileMenu";
 
 export function useConversationFiles(port: AgentPort, root: string, remote: boolean, shown: boolean, reveal: () => void, fail: (e: unknown) => void) {
@@ -65,6 +65,7 @@ export function useConversationFiles(port: AgentPort, root: string, remote: bool
     // A path in text may become a link when it is in the workspace or in a granted folder.
     const linkable = (href: string) => path(href) ?? (isLocalPathShape(href) ? grantedFileKey(granted, href) : null);
     return {
+      file: (ref) => () => ask(ref.root ? grantedFilePath(ref.root, ref.path) : ref.path),
       path,
       linkable,
       title: (href) => { const file = path(href); return file ? absoluteWorkspacePath(root, file) : ""; },

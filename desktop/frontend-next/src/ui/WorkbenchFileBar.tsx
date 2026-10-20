@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { t } from "../i18n";
 import { StudioIcon } from "./StudioIcon";
 
-export type FileMode = "file" | "diff" | "read" | "preview";
+export type FileMode = "file" | "diff" | "read" | "preview" | "document";
 
 /** The open file's path, the views it can be seen in, and save. A document that
  *  renders (Markdown, a page) leads with that view and calls the editor
@@ -18,6 +18,8 @@ export function WorkbenchFileBar({
   onSave,
   openWith,
   onReveal,
+  document = false,
+  source = true,
 }: {
   path: string;
   mode: FileMode;
@@ -31,6 +33,8 @@ export function WorkbenchFileBar({
   openWith?: ReactNode;
   // Present only where the kernel's own machine can show the file.
   onReveal?: () => void;
+  document?: boolean;
+  source?: boolean;
 }) {
   const view = (value: FileMode, label: string) => (
     <button data-action="workbench.mode" data-value={value} aria-pressed={mode === value} onClick={() => onMode(value)}>
@@ -47,19 +51,20 @@ export function WorkbenchFileBar({
       )}
       <div role="group">
         {readable && view("read", t("阅读"))}
-        {previewable && view("preview", t("预览"))}
-        {view("file", !readOnlyIn && (readable || previewable) ? t("编辑") : t("文件"))}
-        {!readOnlyIn && view("diff", "Diff")}
+        {document && view("document", t("预览"))}
+        {previewable && view("preview", t("交互运行"))}
+        {source && view("file", !readOnlyIn && (readable || previewable || document) ? t("编辑") : t("文件"))}
+        {source && !readOnlyIn && view("diff", "Diff")}
       </div>
       {openWith}
       {readOnlyIn ? (
         <span className="workbench-readonly" title={readOnlyIn}>{t("只读 · 来自你授权的文件夹")}</span>
-      ) : (
+      ) : source ? (
         <button className="workbench-save" data-action="workbench.save" data-target={path} disabled={!canSave} onClick={onSave}>
           <StudioIcon name="check" />
           {t("保存")}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

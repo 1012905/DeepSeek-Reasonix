@@ -1,5 +1,6 @@
 import { EN_SURFACES } from "./en_surfaces";
 import { EN_COMPOSITION } from "./en_composition";
+import { EN_DOCUMENT } from "./en_document";
 // English catalogue, keyed by the Chinese source text. A key that is missing
 // here renders as Chinese rather than as a blank, so an incomplete translation
 // degrades instead of breaking — and i18n.test.ts is what stops it from
@@ -25,6 +26,7 @@ import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
 	...EN_COMPOSITION,
+  ...EN_DOCUMENT,
   "此检查点不包含文件快照": "This checkpoint contains no file snapshots",
   ...EN_SURFACES,
   "重命名聊天": "Rename chat",

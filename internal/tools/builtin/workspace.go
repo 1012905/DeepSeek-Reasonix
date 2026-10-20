@@ -81,6 +81,7 @@ func (w Workspace) Tools(enabled ...string) []tool.Tool {
 	}
 
 	overrides := map[string]tool.Tool{
+		"present_files":    presentFiles{workDir: w.Dir, roots: writeRoots, readRoots: readRoots, forbidRoots: forbidRoots},
 		"read_file":        readFile{workDir: w.Dir, netRoots: netRoots, readRoots: readRoots, paths: w.ReadPaths, forbidRoots: forbidRoots, overlay: w.FileOverlay},
 		"write_file":       writeFile{workDir: w.Dir, roots: roots, readRoots: readRoots, forbidRoots: forbidRoots, guard: w.SessionGuard, managed: w.ManagedConfig, sessionTemp: w.SessionTemp, overlay: w.FileOverlay, receipt: w.FileWriteReceipt},
 		"edit_file":        editFile{readPolicy: editReadPolicy{readRoots: readRoots, forbidRoots: forbidRoots}, workDir: w.Dir, roots: roots, guard: w.SessionGuard, managed: w.ManagedConfig, sessionTemp: w.SessionTemp, overlay: w.FileOverlay},

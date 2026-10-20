@@ -16,6 +16,8 @@ import { revealNested } from "./cards/nestreveal";
 import { SurfaceCard, surfaceTool } from "./surface/SurfaceCard";
 import { ElicitCard } from "./cards/ElicitCard";
 import { SayCard, type ReplyActions } from "./cards/SayCard";
+import { DeliveryCard } from "./document/DeliveryCard";
+import { deliveriesByReply } from "./document/deliveries";
 import { CompactionCard } from "./cards/CompactionCard";
 import { WorkedLine } from "./cards/WorkedLine";
 import { ReadsCard } from "./cards/ReadsCard";
@@ -564,6 +566,8 @@ const Block = memo(function Block({
   // messages; transcriptRows folds it and keeps each sentence above its own.
   const rows = transcriptRows(items, foldWork ? { running: tail } : undefined);
   const newAnswerAt = useNewAnswerAnchor();
+  const deliveries = useMemo(() => deliveriesByReply(items), [items]);
+  const delivery = (id: string) => deliveries.has(id) ? <DeliveryCard files={deliveries.get(id)!} reply={rowProps.reply} /> : null;
   // Which runs of work are open, held here so re-hosting one under its sentence
   // does not close it.
   const [opened, setOpened] = useState<Record<string, boolean>>({});
@@ -586,11 +590,14 @@ const Block = memo(function Block({
           {...rowProps}
           cp={checkpoints.get(row.item.id)}
           settled={!row.activity?.some((item) => item.t === "tool" && item.running)}
-          afterAnswer={row.activity ? <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} /> : undefined}
+          afterAnswer={row.activity || deliveries.has(row.item.id) ? <>{delivery(row.item.id)}{row.activity && <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} />}</> : undefined}
         />
       </Fragment>
     ) : (
-      <ActivityGroup key={`activity:${row.activity[0].id}`} items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} />
+      <Fragment key={`activity:${row.activity[0].id}`}>
+        {row.activity.map((item) => <Fragment key={item.id}>{delivery(item.id)}</Fragment>)}
+        <ActivityGroup items={row.activity} checkpoints={checkpoints} opened={opened} onOpened={setOpened} {...rowProps} />
+      </Fragment>
     );
   });
 

@@ -4,6 +4,7 @@ package eventwire
 import (
 	"reasonix/internal/base/externalurl"
 	"reasonix/internal/contract/agentgraph"
+	"reasonix/internal/contract/delivery"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
@@ -456,7 +457,8 @@ func toWireTool(t event.Tool) *Tool {
 	wt := &Tool{
 		ID: t.ID, Name: t.Name, Args: SurfaceArgs(t.Name, t.ResolvedName, t.Args),
 		ResolvedName: t.ResolvedName, CapabilityID: t.CapabilityID,
-		Output: t.Output, Images: t.Images, Videos: toWireVideos(t.Videos), Err: t.Err, RefusalCode: t.RefusalCode,
+		Deliveries: t.Deliveries,
+		Output:     t.Output, Images: t.Images, Videos: toWireVideos(t.Videos), Err: t.Err, RefusalCode: t.RefusalCode,
 		WorkspaceLease: toWireWorkspaceLease(t.WorkspaceLease),
 		OutputDiff:     t.OutputDiff,
 		ReadOnly:       t.ReadOnly, Truncated: t.Bound.Lossy(),
@@ -500,12 +502,13 @@ func toWireWorkspace(ws *event.WorkspaceChangedPayload) *WorkspaceChanged {
 
 // Tool is the JSON form of an event.Tool.
 type Tool struct {
-	ID           string `json:"id,omitempty"`
-	Name         string `json:"name"`
-	Args         string `json:"args,omitempty" externalizable:"true"`
-	ResolvedName string `json:"resolvedName,omitempty"`
-	CapabilityID string `json:"capabilityId,omitempty"`
-	Output       string `json:"output,omitempty" externalizable:"true"`
+	Deliveries   []delivery.File `json:"deliveries,omitempty"`
+	ID           string          `json:"id,omitempty"`
+	Name         string          `json:"name"`
+	Args         string          `json:"args,omitempty" externalizable:"true"`
+	ResolvedName string          `json:"resolvedName,omitempty"`
+	CapabilityID string          `json:"capabilityId,omitempty"`
+	Output       string          `json:"output,omitempty" externalizable:"true"`
 	// Images the call showed the model, as data URLs.
 	Images []string `json:"images,omitempty"`
 	// Videos the call handed to the model to watch natively; the file's name and

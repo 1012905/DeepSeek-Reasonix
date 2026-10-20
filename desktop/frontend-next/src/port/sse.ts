@@ -408,6 +408,20 @@ export class SsePort extends SseWorkspace implements AgentPort {
     return this.get<WorkspaceFile>(`/workspace/file?path=${encodeURIComponent(path)}${root ? `&root=${encodeURIComponent(root)}` : ""}`);
   }
 
+  async workspacePreviewInfo(ref: import("./workspace").FileRef, signal?: AbortSignal) {
+    const query = new URLSearchParams({ path: ref.path, ...(ref.root ? { root: ref.root } : {}) });
+    const res = await fetch(`${this.base}/workspace/preview/info?${query}`, { credentials: "same-origin", signal });
+    if (!res.ok) await SsePort.fail("/workspace/preview/info", res);
+    return await res.json() as import("./workspace").PreviewInfo;
+  }
+
+  async workspacePreviewContent(ref: import("./workspace").FileRef, signal?: AbortSignal) {
+    const query = new URLSearchParams({ path: ref.path, ...(ref.root ? { root: ref.root } : {}) });
+    const res = await fetch(`${this.base}/workspace/preview/content?${query}`, { credentials: "same-origin", signal });
+    if (!res.ok) await SsePort.fail("/workspace/preview/content", res);
+    return { data: await res.arrayBuffer(), version: res.headers.get("X-Preview-Version") ?? "" };
+  }
+
   workspaceImageURL(path: string, root?: string) {
     return `${this.base}/workspace/image?path=${encodeURIComponent(path)}${root ? `&root=${encodeURIComponent(root)}` : ""}`;
   }

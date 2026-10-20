@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"reasonix/internal/base/diff"
+	"reasonix/internal/contract/delivery"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/eventwire"
 	"reasonix/internal/contract/provider"
@@ -26,9 +27,10 @@ type historyToolCall struct {
 }
 
 type historyMessage struct {
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	Reasoning string `json:"reasoning,omitempty"`
+	Deliveries []delivery.File `json:"deliveries,omitempty"`
+	Role       string          `json:"role"`
+	Content    string          `json:"content"`
+	Reasoning  string          `json:"reasoning,omitempty"`
 	// Images is how many attachments the turn carried, not the attachments
 	// themselves: a turn that was only an image has no text to rebuild from,
 	// and a reader that sees zero of both drops it as host chrome.
@@ -87,6 +89,7 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 		return eventwire.ToWireAttachments(attachments(text))
 	}
 	out := make([]historyMessage, 0, len(msgs))
+	calls := make(map[string]provider.ToolCall)
 	worked := sessionstore.TurnWorkMs(msgs)
 	for i, m := range msgs {
 		if m.LocalOnly && m.Name == surfacespec.ActionMessageName {
@@ -130,6 +133,7 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 			if len(m.ToolCalls) > 0 {
 				hm.ToolCalls = make([]historyToolCall, len(m.ToolCalls))
 				for i, tc := range m.ToolCalls {
+					calls[tc.ID] = tc
 					hm.ToolCalls[i] = historyToolCall{
 						ID: tc.ID, Name: tc.Name, Arguments: eventwire.SurfaceArgs(tc.Name, tc.ResolvedName, tc.Arguments),
 						ResolvedName: tc.ResolvedName, CapabilityID: tc.CapabilityID,
@@ -138,6 +142,12 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 			}
 		}
 		if m.Role == provider.RoleTool {
+			call := calls[m.ToolCallID]
+			manifest := m.Content
+			if m.RawContent != "" {
+				manifest = m.RawContent
+			}
+			hm.Deliveries = delivery.Decode(call.ResolvedName, call.CapabilityID, m.ToolFailure != nil, manifest)
 			hm.ToolCallID = m.ToolCallID
 			hm.ToolName = m.Name
 			if m.ToolFailure != nil {

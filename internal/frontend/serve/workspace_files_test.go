@@ -86,22 +86,25 @@ func TestWorkspaceFileSaysMissingOnlyForAFileThatIsNotThere(t *testing.T) {
 	ctrl := control.New(control.Options{Runner: fakeRunner{}, Sink: bc, WorkspaceRoot: dir})
 	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
-	code := func(path string) string {
+	code := func(path string, status int) string {
 		resp, err := http.Get(srv.URL + "/workspace/file?path=" + path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != status {
+			t.Fatalf("%s: status %d, want %d", path, resp.StatusCode, status)
+		}
 		var body struct {
 			Code string `json:"code"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&body)
 		return body.Code
 	}
-	if got := code("absent.txt"); got != "workspace.file_missing" {
+	if got := code("absent.txt", http.StatusNotFound); got != "workspace.file_missing" {
 		t.Fatalf("absent file: code %q, want workspace.file_missing", got)
 	}
-	if got := code("link/secret.txt"); got != "workspace.file_failed" {
-		t.Fatalf("file behind a link the root refuses: code %q, want workspace.file_failed", got)
+	if got := code("link/secret.txt", http.StatusForbidden); got != "workspace.preview_denied" {
+		t.Fatalf("file behind a link the root refuses: code %q, want workspace.preview_denied", got)
 	}
 }

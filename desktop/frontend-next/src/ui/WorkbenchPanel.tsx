@@ -36,73 +36,15 @@ import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
 import { BrowserWideToggle } from "./BrowserWideToggle";
 import { BrowserFullToggle } from "./BrowserFullToggle";
-import { WorkspaceImage, isWorkspaceImage } from "./WorkspaceImage";
+import { documentView, sourceView } from "./document/registry";
+import { TooltipButton } from "./TooltipButton";
+import { documentState, type DocumentViewState } from "./document/viewState";
+const DocumentPreview = lazy(() => import("./document/DocumentPreview"));
 
 // The editor and its grammars load with the first file opened, not with Studio.
 const CodeEditor = lazy(() => import("./CodeEditor"));
 
-type TreeRow = {
-  kind: "folder" | "file";
-  path: string;
-  name: string;
-  depth: number;
-};
-
-/** Folders first at every level, with the tree still reading as a tree. Sorting
- *  flat paths as text interleaves `bin/` with `boot.test.exe`, because text is
- *  the only thing it compares. Segment by segment, whichever row is a directory
- *  where the two paths part wins there, and its children stay under it. */
-function before(a: TreeRow, b: TreeRow): number {
-  const x = a.path.split("/"), y = b.path.split("/");
-  for (let i = 0; i < Math.min(x.length, y.length); i++) {
-    if (x[i] === y[i]) continue;
-    const dirs = [i < x.length - 1 || a.kind === "folder", i < y.length - 1 || b.kind === "folder"];
-    return dirs[0] === dirs[1] ? x[i].localeCompare(y[i]) : dirs[0] ? -1 : 1;
-  }
-  return x.length - y.length;
-}
-
-function treeRows(
-  files: string[],
-  directories: string[],
-  query: string,
-  closed: Set<string>,
-): TreeRow[] {
-  const matches = query
-    ? files.filter((path) =>
-        path.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
-      )
-    : files;
-  const folders = new Set<string>(directories);
-  for (const path of matches)
-    for (let i = 1, bits = path.split("/"); i < bits.length; i++)
-      folders.add(bits.slice(0, i).join("/"));
-  const hidden = (path: string) =>
-    [...closed].some(
-      (folder) => path === folder || path.startsWith(`${folder}/`),
-    );
-  const rows: TreeRow[] = [...folders]
-    .filter(
-      (path) => ![...closed].some((parent) => path.startsWith(`${parent}/`)),
-    )
-    .map((path) => ({
-      kind: "folder",
-      path,
-      name: path.split("/").at(-1)!,
-      depth: path.split("/").length - 1,
-    }));
-  rows.push(
-    ...matches
-      .filter((path) => !hidden(path.split("/").slice(0, -1).join("/")))
-      .map((path) => ({
-        kind: "file" as const,
-        path,
-        name: path.split("/").at(-1)!,
-        depth: path.split("/").length - 1,
-      })),
-  );
-  return rows.sort(before);
-}
+import { treeRows } from "./workbench_tree";
 
 export function WorkbenchPanel({
   port,
@@ -121,6 +63,7 @@ export function WorkbenchPanel({
   toggleFiles = 0,
   onCloseManual,
   onSurfaces,
+  onActiveFile,
   onExternal,
   onAddToChat,
   onQuoteSelection,
@@ -152,6 +95,7 @@ export function WorkbenchPanel({
   onCloseManual: () => void;
   // How many surfaces the strip holds, for the pane's own tab to count.
   onSurfaces: (n: number) => void;
+  onActiveFile?: (path: string | undefined) => void;
   onExternal: (url: string) => void;
   onAddToChat?: (reference: string) => void;
   // Text selected in an open file, with the file it came from, on its way to the composer.
@@ -206,6 +150,10 @@ export function WorkbenchPanel({
   const [platform, setPlatform] = useState("");
   useEffect(() => void host().describe().then((h) => setPlatform(h.platform)), []);
   const scope = useMemo(() => ({ port, workspaceRoot }), [port, workspaceRoot]);
+  const documentStates = useMemo(() => new Map<string, DocumentViewState>(), [scope]);
+  useEffect(() => {
+    for (const path of documentStates.keys()) if (!openFiles.includes(path)) documentStates.delete(path);
+  }, [documentStates, openFiles]);
   const listedScope = useRef(scope);
   const currentScope = useRef(scope);
   currentScope.current = scope;
@@ -339,6 +287,10 @@ export function WorkbenchPanel({
   // A document opens rendered: it is read far more often than edited, and the
   // source view is one click away.
   const filePath = active?.kind === "file" ? active.path : "";
+  useEffect(() => {
+    onActiveFile?.(shown && !launcher && !showFiles && filePath ? filePath : undefined);
+    return () => onActiveFile?.(undefined);
+  }, [filePath, shown, launcher, showFiles, onActiveFile]);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenu | null>(null);
   // A right-click over text selected in an open file offers to bring that passage into the
   // conversation; anywhere else, or with nothing selected, the browser's own menu stays.
@@ -352,19 +304,21 @@ export function WorkbenchPanel({
   };
   const grantedFile = parseGrantedFile(filePath);
   const readable = /\.(md|markdown|mdx)$/i.test(grantedFile?.rel ?? filePath);
+  const hasDocument = documentView(grantedFile?.rel ?? filePath);
+  const source = sourceView(grantedFile?.rel ?? filePath);
   const previewable = !!filePath && !grantedFile && preview.can(filePath);
   useEffect(() => {
     setMode((m) => {
-      const kept = (m === "read" && !readable) || (m === "preview" && !previewable) ? "file" : m;
-      return kept === "file" ? (readable ? "read" : previewable ? "preview" : "file") : kept;
+      return m === "diff" && source ? m : hasDocument ? "document" : readable ? "read" : "file";
     });
-  }, [filePath, readable, previewable]);
+  }, [filePath, readable, hasDocument, source]);
   const previewTab = previewable ? preview.tabFor(filePath) : undefined;
   const { open: openPreview, sync: syncPreview } = preview;
-  const { file, draft, diff, busy, error: fileFailed, missing, setDraft, save } = useWorkbenchFiles({
-    port, workspaceRoot, repos: gitRepos.repos, path: isWorkspaceImage(filePath) ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
+  const { file, draft, diff, busy, error: fileFailed, errorCode, missing, setDraft, save } = useWorkbenchFiles({
+    port, workspaceRoot, repos: gitRepos.repos, path: !source || (hasDocument && mode === "document") ? "" : filePath, openPaths: openFiles, shown, refresh: JSON.stringify([changeKey, glance, running, wrote]),
     poll: (readable && mode === "read") || (previewable && mode === "preview"),
   });
+  const unpreviewableText = !hasDocument && errorCode === "workspace.file_unreadable";
   const revision = file?.revision;
   useEffect(() => {
     if (mode !== "preview" || !previewable || !shown || showFiles || launcher || previewTab || (!revision && !fileFailed && !failed)) return;
@@ -566,17 +520,17 @@ export function WorkbenchPanel({
         </div>
         {wideMode && <BrowserWideToggle {...wideMode} />}
         {fullMode && <BrowserFullToggle {...fullMode} />}
-        <button
+        <TooltipButton
           className="workbench-files"
           data-action="workbench.files"
           aria-pressed={showFiles && !launcher}
           aria-label={t("文件")}
-          title={t("文件")}
+          title={showFiles && !launcher ? t("收起文件树") : t("展开文件树")}
           onClick={toggleExplorer}
         >
           <StudioIcon name="folder" />
-        </button>
-        <button
+        </TooltipButton>
+        <TooltipButton
           className="workbench-new"
           data-action="workbench.new"
           ref={newTab}
@@ -586,7 +540,7 @@ export function WorkbenchPanel({
           onClick={toggleLauncher}
         >
           <StudioIcon name="plus" />
-        </button>
+        </TooltipButton>
       </header>
       {closeFailure && <div className="workbench-error workbench-close-error" role="alert">{closeFailure}</div>}
       <div className="workbench-body" data-files={showFiles && !launcher ? "" : undefined}>
@@ -624,7 +578,7 @@ export function WorkbenchPanel({
               onOpenDocument={(path) => port.openDocument(path)}
             />
           )}
-          {active?.kind === "file" && (isWorkspaceImage(active.path) ? <WorkspaceImage key={active.path} port={port} path={active.path} /> : (
+          {active?.kind === "file" && (
             <>
               <WorkbenchFileBar
                 path={grantedFile ? `${grantedFile.root.replace(/[\\/]+$/, "")}/${grantedFile.rel}` : active.path}
@@ -632,18 +586,31 @@ export function WorkbenchPanel({
                 onMode={setMode}
                 readable={readable}
                 previewable={previewable}
+                document={hasDocument}
+                source={source}
                 canSave={!busy && !file?.readOnly && file?.path === (grantedFile?.rel ?? active.path) && draft !== file.content}
                 readOnlyIn={grantedFile?.root ?? file?.root}
                 onSave={() => void save()}
                 openWith={hub && !remote ? <OpenWithMenu hub={hub} root={workspaceRoot} onError={(e) => setFailed(reason(e))} /> : undefined}
                 onReveal={revealable && !grantedFile ? () => { setFailed(""); port.revealInFileManager(active.path).catch((e) => setFailed(reason(e))); } : undefined}
               />
-              {(fileFailed || failed) && !(mode === "preview" && previewTab) && (
+              {(fileFailed || failed) && mode !== "document" && !unpreviewableText && !(mode === "preview" && previewTab) && (
                 <div className="workbench-error" role="alert">
                   {fileFailed || failed}
                 </div>
               )}
-              {mode === "preview" ? (
+              {mode === "document" || unpreviewableText ? (
+                <Suspense fallback={<div className="workbench-empty">{t("正在读取…")}</div>}>
+                  <DocumentPreview key={filePath} port={port} path={filePath} shown={shown && !showFiles && !launcher}
+                    view={documentState(documentStates, filePath)}
+                    refresh={JSON.stringify([changeKey, glance, running, wrote])}
+                    onOpenExternal={!remote && port.opensFiles() && /\.(pdf|html?|svg|docx?|xlsx?|pptx?)$/i.test(filePath) ? () => {
+                      const path = grantedFile ? `${grantedFile.root}/${grantedFile.rel}` : filePath;
+                      void port.openDocument(path).catch((e) => setFailed(reason(e)));
+                    } : undefined} />
+                  {failed && <div className="workbench-error" role="alert">{failed}</div>}
+                </Suspense>
+              ) : mode === "preview" ? (
                 previewTab ? (
                   <AgentBrowserPanel tabs={[previewTab]} shown={shown && !launcher} showTabs={false} onOpenDocument={(path) => port.openDocument(path)} />
                 ) : (
@@ -673,7 +640,7 @@ export function WorkbenchPanel({
                 </Suspense>
               ) : null}
             </>
-          ))}
+          )}
           </div>
         </main>
         <aside className="workbench-explorer">

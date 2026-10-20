@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MockPort } from "../port/mock";
 import { WorkbenchPanel } from "./WorkbenchPanel";
@@ -40,7 +40,7 @@ it("does not open a preview page for an HTML file that cannot be read", async ()
   expect(open).not.toHaveBeenCalled();
 });
 
-it("still previews an HTML file the editor cannot read, such as one over the size limit", async () => {
+it("allows explicit interactive opening when static HTML exceeds its limit", async () => {
   const port = new MockPort();
   vi.spyOn(port, "workspaceFiles").mockResolvedValue({ files: ["big.html"], directories: [] });
   vi.spyOn(port, "workspaceFile").mockRejectedValue(new HttpError(400, "unreadable", { code: "workspace.file_unreadable" }));
@@ -51,5 +51,21 @@ it("still previews an HTML file the editor cannot read, such as one over the siz
   const open = vi.spyOn(port, "browserOpen").mockResolvedValue({ id: "p", target: "t", url: "file:///one/big.html", title: "", active: false });
   const view = render(<WorkbenchPanel {...props(port)} />);
   view.rerender(<WorkbenchPanel {...props(port)} fileRequest={{ path: "big.html" }} />);
+  fireEvent.click(await screen.findByRole("button", { name: "交互运行" }));
   await waitFor(() => expect(open).toHaveBeenCalled());
+});
+
+it("shows metadata and a typed error for an unknown binary instead of an editor", async () => {
+  const port = new MockPort();
+  vi.spyOn(port, "workspaceFiles").mockResolvedValue({ files: ["opaque.data"], directories: [] });
+  vi.spyOn(port, "workspaceFile").mockRejectedValue(new HttpError(400, "unreadable", { code: "workspace.file_unreadable" }));
+  vi.spyOn(port, "workspacePreviewInfo").mockResolvedValue({
+    ref: { path: "opaque.data" }, kind: "text", size: 128, limit: 2 << 20, version: "v1", readOnly: false,
+  });
+  vi.spyOn(port, "workspacePreviewContent").mockRejectedValue(new HttpError(415, "binary", { code: "workspace.preview_not_text" }));
+  const view = render(<WorkbenchPanel {...props(port)} />);
+  view.rerender(<WorkbenchPanel {...props(port)} fileRequest={{ path: "opaque.data" }} />);
+  await waitFor(() => expect(document.querySelector(".document-preview [role=alert]")?.textContent).toContain("文本"));
+  expect(screen.getByText("128 B")).toBeTruthy();
+  expect(document.querySelector(".cm-content")).toBeNull();
 });

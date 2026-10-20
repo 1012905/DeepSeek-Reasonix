@@ -40,16 +40,16 @@ describe("browser wide mode", () => {
     const { container, width } = open();
     const frame = await screen.findByLabelText("网页地址");
     const composer = container.querySelector(".compose");
-    const button = screen.getByRole("button", { name: "加宽浏览器" });
+    const button = screen.getByRole("button", { name: "加宽工作台" });
     expect(button.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(button);
     expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("wide");
-    expect(screen.getByRole("button", { name: "恢复浏览器分栏" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "恢复分栏" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByLabelText("网页地址")).toBe(frame);
     expect(container.querySelector(".compose")).toBe(composer);
     expect(composer?.hasAttribute("hidden")).toBe(false);
     expect(container.querySelector(".pbody")?.hasAttribute("data-full")).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "恢复浏览器分栏" }));
+    fireEvent.click(screen.getByRole("button", { name: "恢复分栏" }));
     expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("split");
     expect(screen.getByLabelText("网页地址")).toBe(frame);
     expect(width).not.toHaveBeenCalled();
@@ -90,17 +90,17 @@ describe("browser wide mode", () => {
   it("resets to split after closing the dock without replacing the page", async () => {
     open();
     const frame = await screen.findByLabelText("网页地址");
-    fireEvent.click(screen.getByRole("button", { name: "加宽浏览器" }));
+    fireEvent.click(screen.getByRole("button", { name: "加宽工作台" }));
     fireEvent.click(screen.getByRole("button", { name: "工作台" }));
     fireEvent.click(screen.getByRole("button", { name: "工作台" }));
-    expect(screen.getByRole("button", { name: "加宽浏览器" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "加宽工作台" }).getAttribute("aria-pressed")).toBe("false");
     expect(screen.getByLabelText("网页地址")).toBe(frame);
   });
 
   it("gives a transient layer first use of Escape", async () => {
     const { container, close } = open();
     await screen.findByLabelText("网页地址");
-    fireEvent.click(screen.getByRole("button", { name: "加宽浏览器" }));
+    fireEvent.click(screen.getByRole("button", { name: "加宽工作台" }));
     const dismiss = (e: KeyboardEvent) => e.stopPropagation();
     window.addEventListener("keydown", dismiss, true);
     try {
@@ -124,9 +124,9 @@ describe("browser wide mode", () => {
     const { container, close } = open();
     const frame = await screen.findByLabelText("网页地址");
     const composer = container.querySelector(".compose");
-    fireEvent.click(screen.getByRole("button", { name: "全屏浏览器" }));
+    fireEvent.click(screen.getByRole("button", { name: "全屏工作台" }));
     expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("full");
-    expect(screen.getByRole("button", { name: "退出全屏" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "退出工作台全屏" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByLabelText("网页地址")).toBe(frame);
     expect(container.querySelector(".compose")).toBe(composer);
     fireEvent.keyDown(document.body, { key: "Escape" });
@@ -155,7 +155,7 @@ describe("browser wide mode", () => {
       vi.spyOn(port, "subscribe").mockImplementation((onEvent) => { deliver = onEvent; return () => true; });
     });
     await screen.findByLabelText("网页地址");
-    fireEvent.click(screen.getByRole("button", { name: "全屏浏览器" }));
+    fireEvent.click(screen.getByRole("button", { name: "全屏工作台" }));
     expect(container.querySelector(".pane")?.getAttribute("data-browser-size")).toBe("full");
     waiting = true;
     await act(async () => { deliver?.({ kind: "ask_request" } as WireEvent); });
