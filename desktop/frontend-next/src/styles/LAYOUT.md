@@ -1526,6 +1526,9 @@ A sub-agent row, by the list's own width:
 - A disabled host dims its glyph (`> .studio-icon`), never itself: opacity
   multiplies down the tree, so a dimmed button would fade the tooltip that
   explains why it is disabled.
+- A tip opens towards the middle when its button closes a row. `left: 0` suits
+  the composer; `.other-field` ends its row at the card's edge, where the same
+  anchor runs the tip past the column that clips it.
 - `perf/tooltip.mjs` measures both in Chromium; `controltip.test.ts` pins the
   rules statically.
 
