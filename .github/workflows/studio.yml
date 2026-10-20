@@ -165,6 +165,7 @@ jobs:
           node perf/session-selected-row.mjs
           node perf/wheel.mjs
           node perf/branch-tooltip.mjs
+          node perf/branch-alignment.mjs
           node perf/branch-menu.mjs
           node perf/image-preview.mjs
           node perf/user-images.mjs
