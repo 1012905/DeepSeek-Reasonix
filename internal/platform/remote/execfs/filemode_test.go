@@ -1,4 +1,4 @@
-package wslconn
+package execfs
 
 import (
 	"io/fs"
@@ -13,8 +13,8 @@ func TestFileModeReadsTheRawBits(t *testing.T) {
 		0o104755: fs.ModeSetuid | 0o755,
 		0o041777: fs.ModeDir | fs.ModeSticky | 0o777,
 	} {
-		if got := fileMode(raw); got != want {
-			t.Errorf("fileMode(%o) = %v, want %v", raw, got, want)
+		if got := FileMode(raw); got != want {
+			t.Errorf("FileMode(%o) = %v, want %v", raw, got, want)
 		}
 	}
 }
