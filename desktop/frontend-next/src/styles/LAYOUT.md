@@ -1561,6 +1561,10 @@ A sub-agent row, by the list's own width:
 - Taking the room only while shown means the title shortens when the buttons appear, never before. Pinning stays an overlay at the left, so the pin never moves the title.
 - An unread dot is an overlay 11px from the right edge: an unread row keeps 22px after its age (or after its badge, 26px) for it, and the dot hides while the buttons are shown.
 - A legacy `margin-right: 44px` on the age made room for a delete button the rail has long since hidden; the rail's rule sets it to zero.
+- The current session reads as current in its fill and a 1px neutral outline, never in a state colour. The fill is a 13% text tint against hover's 4%.
+- The outline is drawn inside the border box (`outline-offset: -1px`): the row's transparent 2px left border would push an inset shadow off the edge.
+- Hovering the selected row changes neither the fill nor the outline; keyboard focus swaps the outline for the focus ring.
+- `perf/session-selected-row.mjs` holds the contrast floors in a real browser, light and dark: 1.2 over a plain row, 1.12 over a hovered one.
 - `perf/sessionrows.mjs` measures this in a real browser: with no button showing, a row with an age leaves at most 2px (8px with a badge) of its right side unused, and the buttons take no width at rest.
 
 ## Session rename dialog

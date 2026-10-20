@@ -1,0 +1,2 @@
+- 修复：侧栏里当前会话的行与悬停行、普通行几乎分不出来，现在选中行有更深的底色和一圈细轮廓，悬停不会盖掉它。关联 #13972。
+- Fixed: the current session's sidebar row was hard to tell from a hovered or plain row; it now has a stronger fill and a thin outline that hovering does not override. Refs #13972.

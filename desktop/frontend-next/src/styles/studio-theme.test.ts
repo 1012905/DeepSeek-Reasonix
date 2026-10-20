@@ -44,7 +44,8 @@ describe("the Studio shell closes over the active theme", () => {
 
   it("gives selection a stronger neutral fill than hover and no extra bar", () => {
     const rows = Object.values(ROWS)[0];
-    expect(rows).toMatch(/\.sessrow\[aria-selected="true"\][^{]*\{[^}]*var\(--text\) 8%/);
+    expect(rows).toMatch(/\.sessrow\[aria-selected="true"\][^{]*\{[^}]*var\(--text\) 13%/);
+    expect(rows).toMatch(/\.sessrow\[aria-selected="true"\]:not\(:focus-visible\)[^{]*\{[^}]*outline: 1px solid/);
     expect(rows).toMatch(/\.sessrow:hover[^{]*\{[^}]*var\(--text\) 4%/);
     expect(rows).not.toContain("inset 2px");
     expect(Object.values(CSS)[0]).not.toMatch(/\.sessrow\[aria-selected="true"\]::before/);
