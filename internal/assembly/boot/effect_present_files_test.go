@@ -1,7 +1,10 @@
 package boot
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -11,6 +14,7 @@ import (
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/runtime/agent/testutil"
 	"reasonix/internal/session/control"
+	"reasonix/internal/tools/builtin"
 )
 
 func TestEffectPresentFilesSurvivesTheRealToolPipeline(t *testing.T) {
@@ -19,13 +23,29 @@ func TestEffectPresentFilesSurvivesTheRealToolPipeline(t *testing.T) {
 		if proxy {
 			name = "capability"
 		}
-		t.Run(name, func(t *testing.T) { presentFilesEffect(t, proxy) })
+		for _, mode := range []string{"off", "on", "forbidden", "disabled", "excluded"} {
+			t.Run(name+"/"+mode, func(t *testing.T) { presentFilesEffect(t, proxy, mode) })
+		}
 	}
 }
 
-func presentFilesEffect(t *testing.T, proxy bool) {
+func presentFilesEffect(t *testing.T, proxy bool, mode string) {
 	t.Helper()
-	isolateConfigHome(t)
+	home := filepath.Join(isolateConfigHome(t), ".reasonix")
+	t.Setenv("REASONIX_HOME", home)
+	settings := "[tools]\npresent_files = true\n"
+	switch mode {
+	case "off":
+		settings = ""
+	case "forbidden":
+		settings += "[sandbox]\nforbid_read = [\"report.md\"]\n"
+	case "disabled":
+		settings += "disabled = [\"present_files\"]\n"
+	case "excluded":
+		settings += "enabled = [\"read_file\"]\n"
+	}
+	writeFile(t, home, "config.toml", settings)
+	enabled := mode == "on" || mode == "forbidden"
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 	registerBootTokenProfileTestProvider()
@@ -48,6 +68,16 @@ func presentFilesEffect(t *testing.T, proxy bool) {
 		t.Fatal(err)
 	}
 	t.Cleanup(ctrl.Close)
+	want := builtin.Workspace{}.PresentFiles()
+	count := 0
+	for _, entry := range ctrl.AllToolContractEntries() {
+		if entry.Name == want.Name() {
+			count++
+		}
+	}
+	if (count == 1) != enabled || count > 1 {
+		t.Fatalf("registry contribution = %d, enabled = %v", count, enabled)
+	}
 	if err := ctrl.NewSession(); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +92,14 @@ func presentFilesEffect(t *testing.T, proxy bool) {
 		e := <-events
 		if e.Kind == event.ToolResult && e.Tool.ID == "present" {
 			wire := eventwire.ToWire(e)
-			if wire.Tool == nil || len(wire.Tool.Deliveries) != 1 {
+			if wire.Tool == nil {
+				t.Fatal("tool result missing wire payload")
+			}
+			if mode != "on" {
+				if e.Tool.Err == "" || len(wire.Tool.Deliveries) != 0 {
+					t.Fatalf("unavailable/forbidden call produced delivery: %+v", e.Tool)
+				}
+			} else if len(wire.Tool.Deliveries) != 1 {
 				t.Fatalf("delivery did not reach UI: %+v, output %q", e.Tool, e.Tool.Output)
 			}
 			found = true
@@ -79,11 +116,40 @@ func presentFilesEffect(t *testing.T, proxy bool) {
 			}
 		}
 	}
-	if !found {
+	if mode == "on" && !found {
 		t.Fatal("host-confirmed identity was not persisted")
 	}
 	requests := prov.Requests()
 	if len(requests) < 2 || !reflect.DeepEqual(requests[0].Tools, requests[1].Tools) {
 		t.Fatal("delivery changed the tool schema within the turn")
+	}
+	if !enabled {
+		first, err := json.Marshal(requests[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(first, []byte(want.Name())) {
+			t.Fatal("disabled presenter leaked into the first provider request")
+		}
+	}
+	count = 0
+	for _, schema := range requests[0].Tools {
+		if schema.Name != want.Name() {
+			continue
+		}
+		count++
+		var gotSchema, wantSchema any
+		if err := json.Unmarshal(schema.Parameters, &gotSchema); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(provider.CanonicalizeSchema(want.Schema()), &wantSchema); err != nil {
+			t.Fatal(err)
+		}
+		if schema.Description != want.Description() || !reflect.DeepEqual(gotSchema, wantSchema) {
+			t.Fatalf("unexpected provider contribution: %+v", schema)
+		}
+	}
+	if (count == 1) != enabled || count > 1 {
+		t.Fatalf("provider contribution = %d, enabled = %v", count, enabled)
 	}
 }

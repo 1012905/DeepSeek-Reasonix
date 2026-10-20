@@ -21,12 +21,18 @@ It does not certify task completion and is not admitted by the Observe posture.
 实时与恢复后的卡片使用宿主确认的能力身份和完整结果，不依赖模型上下文是否被压缩。
 点击卡片读取源文件当前内容，不保存版本快照，不构成任务完成证明，也不进入 Observe 模式。
 
-The complete builtin schema inventory grows from 7,185 to 7,328 measured tokens
-for this new capability. Boot effect tests cover direct and capability-proxy calls
-and verify that tool schemas remain unchanged within a turn.
+This tool is conditional: user-only `tools.present_files = true` enables it on
+session open. Off by default, it contributes nothing to the registry or provider
+request. The unconditional builtin budget remains 7,185 tokens.
 
-新增能力使完整内置工具 schema 的实测预算从 7,185 增至 7,328 tokens；
-Boot 效果测试覆盖直接调用和能力代理调用，并验证同一轮内工具 schema 不变。
+Boot effect tests
+verify absence while off, the exact enabled schema, denied reads, direct and
+capability-proxy calls, and stable schemas within a turn. Viewers remain available.
+
+该工具按条件注册：仅用户配置 `tools.present_files = true` 在打开会话时启用。
+默认关闭，不进入注册表或模型请求；无条件内置工具预算保持 7,185 tokens。
+Boot 效果测试覆盖关闭时缺席、启用时精确的 schema、读取拒绝、直接调用、能力代理及轮内稳定性。
+文件预览不受此开关影响。
 
 | Tool | Read-only | Description |
 | --- | --- | --- |
@@ -52,7 +58,6 @@ Boot 效果测试覆盖直接调用和能力代理调用，并验证同一轮内
 | `move_file` | false | Move or rename a file from source_path to destination_path. Creates the destination parent directory as needed. Use instead of shell mv, Move-Item, or ren for file moves so workspace confinement and file-edit permissions apply. |
 | `multi_edit` | false | Apply a list of edits to a single file atomically: each edit runs against the result of the previous one, all in memory; the file is rewritten only if every edit succeeds. Cheaper and safer than chaining edit_file calls — a failure in step 3 leaves the file untouched instead of half-edited. |
 | `notebook_edit` | false | Edit one cell of a Jupyter notebook (.ipynb). Target a cell by 0-based cell_number (or cell_id). edit_mode: "replace" (default) swaps the cell's source; "insert" adds a new cell after cell_number (use -1 to prepend at the top), taking cell_type and new_source; "delete" removes the cell. cell_type is "code" or "markdown" (required for insert). Editing a code cell clears its outputs. Prefer this over edit_file for notebooks — it keeps the JSON valid. |
-| `present_files` | true | Present existing final files as clickable cards, including shell-created documents. Paths must be in the workspace or authorized folders. Opens current files, not snapshots; does not certify correctness. |
 | `read_file` | true | Read a text file with optional line offset/limit. Output prefixes each line with its 1-based number (e.g. `   42→...`) so subsequent edit_file calls can target exact lines. Use `offset` and `limit` to page through large files; the tool reports total length and pagination hints in a trailer. |
 | `read_video` | true | Look at a video: native if the model watches video, else ffmpeg frames. |
 | `recall` | true | Bring folded conversation back: read the #n positions listed under "Folded work index" in a compaction summary, or search the whole folded region by query when no index line names what you need. Prefer re-reading a file over recalling it — a current copy beats a folded one. One budget per compaction covers both, and a request past it is refused whole, not truncated. |

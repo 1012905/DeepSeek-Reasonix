@@ -8,6 +8,7 @@ import (
 // mcpResourcesLine is the documented line in a full render of [tools].
 func mcpResourcesLine(t ToolsConfig) string {
 	line := fmt.Sprintf("mcp_resources = %v   # a tool that reads resources a connected MCP server declares; user file only\n", t.MCPResources)
+	line += fmt.Sprintf("present_files = %v   # let the model declare clickable file-delivery cards; user file only, reopen session to apply\n", t.PresentFiles)
 	if len(t.WebSearchBackends) > 0 {
 		line += fmt.Sprintf("web_search_backends = %s   # ordered chain web_search tries, free first; user file only\n", renderStringArray(t.WebSearchBackends))
 	}
@@ -40,6 +41,9 @@ func renderToolsSwitches(b *strings.Builder, t ToolsConfig) {
 	}
 	if t.MCPResources {
 		b.WriteString("mcp_resources = true\n")
+	}
+	if t.PresentFiles {
+		b.WriteString("present_files = true\n")
 	}
 	if len(t.WebSearchBackends) > 0 {
 		fmt.Fprintf(b, "web_search_backends = %s\n", renderStringArray(t.WebSearchBackends))

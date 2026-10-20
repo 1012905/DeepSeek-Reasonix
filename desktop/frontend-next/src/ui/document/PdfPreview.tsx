@@ -27,8 +27,11 @@ export default function PdfPreview({ data, view }: { data: ArrayBuffer; view: Do
     let live = true;
     setDoc(undefined); setError(false);
     const assets = new URL("./pdfjs/", document.baseURI).href;
+    // PDF.js 6 removed eval and isEvalSupported (mozilla/pdf.js@f6bac014).
+    // This reader renders only canvas/text; it never creates a scripting manager.
     const task = getDocument({
       data: data.slice(0),
+      enableXfa: false,
       cMapUrl: assets + "cmaps/", cMapPacked: true,
       standardFontDataUrl: assets + "standard_fonts/", wasmUrl: assets + "wasm/",
     });

@@ -11,7 +11,16 @@ import (
 	"reasonix/internal/contract/tool"
 )
 
-func init() { tool.RegisterBuiltin(presentFiles{}) }
+func init() { tool.RegisterConditional(presentFiles{}) }
+
+// PresentFiles binds the opt-in declaration tool to the same file policy as reads.
+func (w Workspace) PresentFiles() tool.Tool {
+	readRoots := realRoots(w.ReadRoots)
+	if len(w.ReadRoots) > 0 && len(readRoots) == 0 {
+		readRoots = []string{filepath.Join(string(filepath.Separator), "\x00unresolved")}
+	}
+	return presentFiles{workDir: w.Dir, roots: w.WriteRoots, readRoots: readRoots, forbidRoots: realRoots(w.ForbidReadRoots)}
+}
 
 type presentFiles struct {
 	workDir     string

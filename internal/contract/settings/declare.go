@@ -179,6 +179,7 @@ var table = []Entry{
 	{ID: "tools.protect_changed_files", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.browser_tools", Class: Elevated, Effect: OnOpen},
 	{ID: "tools.mcp_resources", Class: Elevated, Effect: OnOpen},
+	{ID: "tools.present_files", Class: Elevated, Effect: OnOpen},
 	{ID: "tools.video_native_max_bytes", Class: Guarded, Effect: OnOpen},
 	{ID: "tools.mcp_load", Class: Guarded, Effect: OnOpen},
 	{ID: "permissions.mode", Class: Guarded, Effect: OnOpen},

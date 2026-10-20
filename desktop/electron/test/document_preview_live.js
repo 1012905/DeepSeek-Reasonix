@@ -29,7 +29,7 @@ async function main() {
   process.env.REASONIX_HOME = home;
   seedHome(home, model.url, workspace);
   const configPath = path.join(home, "config.toml");
-  fs.writeFileSync(configPath, fs.readFileSync(configPath, "utf8").replace("[desktop]", '[desktop]\nlanguage = "zh"'));
+  fs.writeFileSync(configPath, fs.readFileSync(configPath, "utf8").replace("[desktop]", '[desktop]\nlanguage = "zh"') + "\n[tools]\npresent_files = true\n");
   const { current } = require("../src/main.js");
   const win = await settledWindow();
   win.webContents.session.webRequest.onBeforeRequest((details, callback) => {
