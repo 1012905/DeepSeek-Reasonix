@@ -15,16 +15,6 @@ import (
 	"reasonix/internal/base/secrets"
 )
 
-var shellPATH = cachedShellPATH
-
-// UseShellPATHProbe replaces the login-shell PATH probe and returns what puts it
-// back; it exists so a test does not spawn the real shell.
-func UseShellPATHProbe(probe func(context.Context) string) (restore func()) {
-	prev := shellPATH
-	shellPATH = probe
-	return func() { shellPATH = prev }
-}
-
 // cachedShellPATH memoizes the login-shell PATH probe per login shell so a
 // shell isn't spawned on every bash tool call (the probe runs up to three
 // interactive-login shells with a 2s timeout each). Empty results are cached too,
@@ -60,7 +50,7 @@ func CommandEnv(ctx context.Context) []string {
 		return env
 	}
 	currentPath, _ := envValue(env, "PATH")
-	if shellPath := strings.TrimSpace(shellPATH(ctx)); shellPath != "" {
+	if shellPath := strings.TrimSpace(cachedShellPATH(ctx)); shellPath != "" {
 		if merged := mergePathLists(shellPath, currentPath); merged != currentPath {
 			env = SetEnvValue(env, "PATH", merged)
 		}
@@ -92,7 +82,7 @@ func defaultShellPATH(ctx context.Context) string {
 }
 
 func loginShell() string {
-	if shell := strings.TrimSpace(os.Getenv("SHELL")); shell != "" {
+	if shell := strings.TrimSpace(loginShellName()); shell != "" {
 		if hasPathSeparator(shell) {
 			if isExecutableFile(shell) {
 				return shell
@@ -198,4 +188,9 @@ func envKeyEqual(a, b string) bool {
 		return strings.EqualFold(a, b)
 	}
 	return a == b
+}
+
+func loginShellName() string {
+	name, _ := envValue(secrets.ProcessEnv(), "SHELL")
+	return name
 }

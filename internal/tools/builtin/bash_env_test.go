@@ -11,7 +11,6 @@ import (
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/safety/sandbox"
-	"reasonix/internal/tools/shellrun"
 )
 
 func TestBashMergesLoginShellPath(t *testing.T) {
@@ -36,7 +35,7 @@ func TestBashMergesLoginShellPath(t *testing.T) {
 	// with command-not-found only in the full suite, never in isolation. This
 	// test covers merging the probed PATH into the exec environment; the probe's
 	// own parsing/merging is covered by TestParseShellPATH and TestMergePathLists.
-	t.Cleanup(shellrun.UseShellPATHProbe(func(context.Context) string { return bin + ":/usr/bin:/bin" }))
+	testenv.FakeLoginShell(t, bin+":/usr/bin:/bin")
 
 	t.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
 

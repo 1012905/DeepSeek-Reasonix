@@ -15,7 +15,6 @@ import (
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/safety/sandbox"
-	"reasonix/internal/tools/shellrun"
 )
 
 // collectSink returns a Sink that collects events, a channel carrying TurnDone
@@ -412,7 +411,7 @@ func TestRunShellUsesTheLoginShellPath(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "reasonix-bang-probe"), []byte("#!/bin/sh\nprintf 'bang-path-ok\\n'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(shellrun.UseShellPATHProbe(func(context.Context) string { return bin + ":/usr/bin:/bin" }))
+	testenv.FakeLoginShell(t, bin+":/usr/bin:/bin")
 	t.Setenv("PATH", "/usr/bin:/bin")
 
 	sink, done, events := collectSink()
