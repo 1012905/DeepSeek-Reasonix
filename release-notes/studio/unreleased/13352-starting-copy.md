@@ -1,0 +1,2 @@
+- 修复：启动较慢时，等待窗口说明正在等待本地服务就绪，不再让普通重启看起来像首次安装。启动和关闭到托盘的行为不变。关联 #13352。
+- Fixed: a slow launch says it is waiting for the local service, rather than making an ordinary relaunch look like a first installation. Startup and close-to-tray behaviour are unchanged. Refs #13352.
