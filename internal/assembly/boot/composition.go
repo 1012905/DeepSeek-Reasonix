@@ -137,7 +137,7 @@ func (b *builder) bindCompositionSkills() error {
 			var err error
 			sk, err = b.retainSkill(sk)
 			if err != nil {
-				return err
+				return compositionResourceError("skill", sk.SlashName(), err)
 			}
 			if err := keepResource(binding, "skill", sk.SlashName(), sk); err != nil {
 				return err

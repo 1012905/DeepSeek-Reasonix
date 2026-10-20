@@ -29,6 +29,7 @@ export const savedNotApplied = (e: unknown): boolean => e instanceof HttpError &
 const SAID: Record<string, string> = {
   "agent_composition.invalid": "预设内容无效，请检查标识、模块和参数",
   "agent_composition.unavailable": "组合所需模块 {module} 当前不可用：{detail}",
+  "agent_composition.mcp_unavailable": "MCP 服务 {module} 不可用：{detail}。请在 MCP 设置中检查连接或认证，或在预设中取消选择该服务后重试。",
   "agent_composition.locked": "会话已开始或正在工作，不能切换组合",
   "agent_composition.workspace_bound": "此会话的组合已绑定原项目，请在目标项目新建会话",
   "agent_composition.conflict": "预设已被其他操作修改，草稿已保留，请重新加载后再保存",
