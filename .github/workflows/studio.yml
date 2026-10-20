@@ -161,6 +161,8 @@ jobs:
           node perf/context-card-hover.mjs
           node perf/sessquick.mjs
           node perf/sessionrows.mjs
+          node perf/session-row-marker.mjs
+          node perf/session-selected-row.mjs
           node perf/wheel.mjs
           node perf/branch-tooltip.mjs
           node perf/branch-menu.mjs
