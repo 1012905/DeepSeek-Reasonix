@@ -294,8 +294,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# forbid_read = []                  # dirs the agent cannot read or list\n")
 	}
-	fmt.Fprintf(&b, "bash    = %q\n", c.BashMode())
-	fmt.Fprintf(&b, "network = %v\n", c.Sandbox.Network)
+	renderBashAndNetwork(&b, c)
 	fmt.Fprintf(&b, "host_authorities = %s   # host services bash may call; user-global\n", renderStringArray(c.Sandbox.HostAuthorities))
 	renderAllowDevices(&b, c.Sandbox.AllowDevices)
 	if len(c.Sandbox.AllowedDomains) > 0 {

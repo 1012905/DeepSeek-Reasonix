@@ -343,6 +343,11 @@ func (h heldScope) narrowSandbox(c *Config, ws string) {
 		c.ignoreProject("sandbox.network", "true", ProjectWidensUser)
 		s.Network = false
 	}
+	// Turning it on edits ACLs on the user's disk, which a cloned repo must not cause.
+	if s.WindowsIntegrity != u.WindowsIntegrity {
+		c.ignoreProject("sandbox.windows_integrity", fmt.Sprint(s.WindowsIntegrity), ProjectUserOnly)
+		s.WindowsIntegrity = u.WindowsIntegrity
+	}
 	s.ForbidRead = appendMissing(u.ForbidRead, s.ForbidRead...)
 	allow := slices.Clone(u.AllowWrite)
 	for _, entry := range s.AllowWrite {

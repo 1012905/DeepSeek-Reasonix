@@ -146,7 +146,7 @@ func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root 
 	checkTargetAccess := (builtin.Workspace{
 		WriteRoots: writeRoots, ForbidReadRoots: forbidReadRoots, SessionGuard: guard,
 	}).TargetAccessCheck()
-	bashSpec := sandbox.Spec{
+	bashSpec := sandbox.GrantSpec(sandbox.Spec{
 		Mode:            cfg.BashMode(),
 		WriteRoots:      writeRoots,
 		Pins:            sandbox.PinWriteRoots(writeRoots),
@@ -154,7 +154,7 @@ func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root 
 		Network:         cfg.Sandbox.Network,
 		HostAuthorities: sandbox.ParseAuthorities(cfg.Sandbox.HostAuthorities),
 		AllowDevices:    cfg.Sandbox.AllowDevices,
-	}
+	}, cfg.Roots().SandboxDir())
 	searchSpec := builtin.ResolveSearch(cfg.Tools.Search.Engine, cfg.Tools.Search.RgPath, os.Stderr)
 	confined := append(builtin.ConfineReaders(forbidReadRoots),
 		builtin.ConfineBash(bashSpec, guard),

@@ -313,6 +313,16 @@ func (r Roots) ScheduleDir() string {
 	return filepath.Join(dir, "schedules")
 }
 
+// SandboxDir holds the Windows sandbox's record of the folders it has granted. It
+// is the user's, under the state root, and never inside a project.
+func (r Roots) SandboxDir() string {
+	dir := r.userSupportDir()
+	if strings.TrimSpace(dir) == "" {
+		return ""
+	}
+	return filepath.Join(dir, "sandbox")
+}
+
 // PeersDir is where sessions on this machine leave messages for one another:
 // machine-wide, under the state root beside the sessions, and never inside a
 // project. Runtime sandboxes deny reading it, because its files are other

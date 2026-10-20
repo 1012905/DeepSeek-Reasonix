@@ -473,7 +473,7 @@ func acpRuntimeProfile(value string) string {
 }
 
 func acpBuiltinTools(cfg *config.Config, cwd string, writeRoots []string) []tool.Tool {
-	bashSpec := sandbox.Spec{Mode: cfg.BashMode(), WriteRoots: writeRoots, Pins: sandbox.PinWriteRoots(writeRoots), Network: cfg.Sandbox.Network}
+	bashSpec := sandbox.GrantSpec(sandbox.Spec{Mode: cfg.BashMode(), WriteRoots: writeRoots, Pins: sandbox.PinWriteRoots(writeRoots), Network: cfg.Sandbox.Network}, cfg.Roots().SandboxDir())
 	ws := builtin.Workspace{
 		Dir:          cwd,
 		WriteRoots:   writeRoots,

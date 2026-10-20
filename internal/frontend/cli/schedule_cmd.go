@@ -21,6 +21,9 @@ func unknownCommand(cmd string, rest []string) int {
 	if cmd == "schedule" {
 		return scheduleCommand(rest)
 	}
+	if cmd == "sandbox" {
+		return sandboxCommand(rest)
+	}
 	fmt.Fprintf(os.Stderr, i18n.M.UnknownCommandFmt+"\n\n", cmd)
 	usage()
 	return 2

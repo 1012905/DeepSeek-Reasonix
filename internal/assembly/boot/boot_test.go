@@ -4161,7 +4161,7 @@ func TestRuntimeForbidReadRootsAddsOnlyGlobalCredentialFile(t *testing.T) {
 	cfg := config.Default()
 	cfg.Sandbox.ForbidRead = []string{configured}
 	withoutCredentials := RuntimeForbidReadRoots(cfg, ".")
-	hostSecrets := append(secrets.HostSecretPaths(), cfg.Roots().RemoteStateDir(), cfg.Roots().ScheduleDir(), cfg.Roots().PeersDir())
+	hostSecrets := append(secrets.HostSecretPaths(), cfg.Roots().RemoteStateDir(), cfg.Roots().ScheduleDir(), cfg.Roots().PeersDir(), cfg.Roots().SandboxDir())
 	if !reflect.DeepEqual(withoutCredentials, appendUniquePaths([]string{configured}, hostSecrets...)) {
 		t.Fatalf("roots without global credentials = %v", withoutCredentials)
 	}

@@ -193,8 +193,12 @@ var ErrSandboxUnavailable = errors.New("bash sandbox requested but unavailable o
 func (c *Controller) SandboxSettings() SandboxSettings {
 	path := config.UserConfigPath()
 	cfg := config.LoadForEdit(path)
+	bash := strings.TrimSpace(cfg.Sandbox.Bash)
+	if runtime.GOOS == "windows" {
+		bash = cfg.BashMode() // Windows takes windows_integrity, which the mode already reflects
+	}
 	out := SandboxSettings{
-		Bash:                strings.TrimSpace(cfg.Sandbox.Bash),
+		Bash:                bash,
 		Network:             cfg.Sandbox.Network,
 		WorkspaceRoot:       strings.TrimSpace(cfg.Sandbox.WorkspaceRoot),
 		AllowWrite:          append([]string{}, cfg.Sandbox.AllowWrite...),
@@ -237,6 +241,9 @@ func (c *Controller) SaveSandboxSettings(in SandboxSettings) error {
 		return fmt.Errorf("%w: %s", ErrSandboxUnavailable, sandbox.UnavailableRemediation())
 	}
 	cfg.Sandbox.Bash = bash
+	if runtime.GOOS == "windows" {
+		cfg.Sandbox.WindowsIntegrity = bash == "enforce"
+	}
 	cfg.Sandbox.Network = in.Network
 	cfg.Sandbox.WorkspaceRoot = strings.TrimSpace(in.WorkspaceRoot)
 	allow := trimmedList(in.AllowWrite)
