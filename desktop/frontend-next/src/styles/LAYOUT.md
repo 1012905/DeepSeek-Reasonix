@@ -13,6 +13,12 @@ gate or a component enforces it, that is named.
 `TOKENS.md` holds the vocabulary — colour, type, motion and space — that these
 rules are written in.
 
+## Session row spacing
+
+Session rows reserve an 8px inline-end inset inside their highlight. The shared
+row owns this space so timestamps and trailing actions retain it in both hover
+and selected states, while long titles truncate within the remaining width.
+
 ## Reset and the window
 
 - Scrollbars are styled once, on `*`. Declaring them per container means the one
