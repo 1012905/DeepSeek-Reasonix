@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -132,6 +133,11 @@ func New(cl *ssh.Client) (*FS, error) {
 	return &FS{client: c, session: s}, nil
 }
 
+// ErrNotListable: the path is a directory the machine will not list, a
+// permission or a transport quirk. It wraps the listing's own error and travels
+// with the resolved path, so a caller can still offer the directory itself.
+var ErrNotListable = errors.New("sftp: the directory exists but cannot be listed")
+
 // Dirs resolves dir (empty or ~ meaning the login home) on v and lists what is
 // inside it. The machine resolves the path: ~ belongs to the account that
 // logged in, and a symlinked project is listed under the path it really has, or
@@ -145,6 +151,11 @@ func Dirs(ctx context.Context, v Volume, dir string) (string, []Entry, error) {
 		return "", nil, err
 	}
 	entries, err := v.List(ctx, at)
+	if err != nil {
+		if st, serr := v.Stat(ctx, at); serr == nil && st.IsDir {
+			return at, nil, fmt.Errorf("%w: %w", ErrNotListable, err)
+		}
+	}
 	return at, entries, err
 }
 

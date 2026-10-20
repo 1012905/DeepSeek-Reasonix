@@ -49,6 +49,7 @@ const (
 	exitIsDir       = 45
 	exitToolMissing = 46
 	exitTooLarge    = 47
+	exitDenied      = 48
 )
 
 // needs prefixes a script with a check that every program it execs exists, so
@@ -96,7 +97,8 @@ exec readlink -f -- "$p"`)
 	// Each entry is a kind byte (d: directory, symlinks to one included; f:
 	// anything else) and the name, closed by a NUL so no name can end it early.
 	listScript = `[ -d "$1" ] || { [ -e "$1" ] && exit 45; exit 44; }
-cd -- "$1" 2>/dev/null || exit 44
+[ -r "$1" ] && [ -x "$1" ] || exit 48
+cd -- "$1" || exit 1
 for f in ./* ./.[!.]* ./..?*; do
   [ -e "$f" ] || [ -L "$f" ] || continue
   if [ -d "$f" ]; then printf 'd%s\0' "${f#./}"; else printf 'f%s\0' "${f#./}"; fi
@@ -136,6 +138,8 @@ func failure(op string, res Result) error {
 		return fmt.Errorf("%s: is a directory", op)
 	case exitToolMissing:
 		return fmt.Errorf("%s: %w: %s", op, ErrToolMissing, strings.TrimSpace(string(res.Stdout)))
+	case exitDenied:
+		return fmt.Errorf("%s: %w", op, fs.ErrPermission)
 	case exitTooLarge:
 		return fmt.Errorf("%s: %w", op, ErrTooLarge)
 	}

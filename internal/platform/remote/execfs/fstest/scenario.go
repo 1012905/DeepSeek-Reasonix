@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"path"
 	"strings"
 	"testing"
@@ -201,6 +202,23 @@ func transfers(t *testing.T, fsys sftpfs.Volume, dir string) {
 	}
 	if _, err := fsys.List(ctx, dir+"/xfer/it's.bin"); err == nil || errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("List of a file = %v, want a failure that is not 'missing'", err)
+	}
+	if os.Geteuid() != 0 {
+		if err := fsys.MkdirAll(ctx, dir+"/xfer/shut"); err != nil {
+			t.Fatal(err)
+		}
+		if err := fsys.Chmod(ctx, dir+"/xfer/shut", 0); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fsys.List(ctx, dir+"/xfer/shut"); !errors.Is(err, fs.ErrPermission) {
+			t.Errorf("List of a directory this account cannot read = %v, want fs.ErrPermission", err)
+		}
+		if at, _, err := sftpfs.Dirs(ctx, fsys, dir+"/xfer/shut"); !errors.Is(err, sftpfs.ErrNotListable) || !strings.HasSuffix(at, "/shut") {
+			t.Errorf("Dirs of it = %q, %v, want the directory itself and ErrNotListable", at, err)
+		}
+		if err := fsys.Remove(ctx, dir+"/xfer/shut", false); err != nil {
+			t.Fatal(err)
+		}
 	}
 	entries, err := fsys.List(ctx, dir+"/xfer")
 	if err != nil || len(entries) != 2 {
