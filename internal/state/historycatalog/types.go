@@ -13,8 +13,8 @@ import (
 
 const (
 	SchemaVersion = 1
-	// 3: user turns are indexed without the host's injected blocks.
-	TokenizerVersion = 3
+	// 4: user turns are indexed without the host's prepended or appended blocks.
+	TokenizerVersion = 4
 	DefaultLimit     = 50
 	MaxLimit         = 200
 )
