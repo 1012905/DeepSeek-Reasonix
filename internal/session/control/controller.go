@@ -1049,7 +1049,7 @@ func (c *Controller) ToolResult(toolID string) *ToolResultData {
 			}
 			for _, tc := range msgs[j].ToolCalls {
 				if tc.ID == toolID {
-					out.Args = tc.Arguments
+					out.Args = tc.ExecutionArguments()
 					return out
 				}
 			}

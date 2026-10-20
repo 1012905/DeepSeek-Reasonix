@@ -174,9 +174,10 @@ type MemoryCitation struct {
 
 // ToolCall is a tool invocation requested by the model. Arguments is raw JSON.
 type ToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	ID                    string                 `json:"id"`
+	Name                  string                 `json:"name"`
+	Arguments             string                 `json:"arguments"`
+	ArgumentNormalization *ArgumentNormalization `json:"argument_normalization,omitempty"`
 	// ThoughtSignature is an opaque Gemini-issued proof attached to a function
 	// call. OpenAI-compatible Gemini endpoints require it on message replay.
 	ThoughtSignature string `json:"thought_signature,omitempty"`

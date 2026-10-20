@@ -1034,7 +1034,7 @@ func (a *Agent) rebuildTodoState(msgs []provider.Message) {
 			if tc.Name != "todo_write" || !successful[tc.ID] {
 				continue
 			}
-			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, evidence.ToolFacts{ReadOnly: true})
+			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.ExecutionArguments()), true, evidence.ToolFacts{ReadOnly: true})
 			// A successful empty todo_write is an explicit clear. Preserve it as the
 			// latest base so history reloads do not resurrect an older non-empty list.
 			todos = evidence.NormalizeSerialTodos(rec.Todos)
@@ -1050,7 +1050,7 @@ func (a *Agent) rebuildTodoState(msgs []provider.Message) {
 			if tc.Name != "complete_step" || !successful[tc.ID] {
 				continue
 			}
-			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, evidence.ToolFacts{ReadOnly: true})
+			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.ExecutionArguments()), true, evidence.ToolFacts{ReadOnly: true})
 			if m, ok := evidence.MatchStep(rec.Step, todos); ok {
 				evidence.AdvanceSerialTodo(todos, m.Index-1)
 			}
@@ -1550,10 +1550,10 @@ func toProviderToolExecution(in *tool.ShellExecution) *provider.ToolExecution {
 func (a *Agent) emitFullToolDispatch(ctx context.Context, c provider.ToolCall, refreshed bool) {
 	t, _, ambiguous := a.svc.tools.ResolveCall(c.Name)
 	ok := t != nil && len(ambiguous) == 0
-	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed, Issuer: event.IssuedByModel}
+	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.ExecutionArguments(), ArgumentNormalization: c.ArgumentNormalization, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed, Issuer: event.IssuedByModel}
 	ev.FileDiff = event.FileDiff{Diff: c.Diff, Added: c.Added, Removed: c.Removed}
 	if ok {
-		ev.Profile = delegationProfile(t, json.RawMessage(c.Arguments))
+		ev.Profile = delegationProfile(t, json.RawMessage(c.ExecutionArguments()))
 	}
 	a.svc.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: ev})
 }
@@ -1838,7 +1838,7 @@ func (a *Agent) staleAnchorEditBlock(call provider.ToolCall) (string, bool) {
 	if a.task.ledger == nil || !anchorBasedEditTool(call.Name) {
 		return "", false
 	}
-	rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), true, a.toolFactsFor(call.Name))
+	rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.ExecutionArguments()), true, a.toolFactsFor(call.Name))
 	if len(rec.Paths) == 0 {
 		return "", false
 	}

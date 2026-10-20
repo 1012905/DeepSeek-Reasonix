@@ -256,10 +256,11 @@ type Profile struct {
 // Output/Err/Bound are filled in. Args is the raw JSON arguments — a sink
 // compacts it for display.
 type Tool struct {
-	Deliveries []delivery.File
-	ID         string
-	Name       string
-	Args       string
+	Deliveries            []delivery.File
+	ID                    string
+	Name                  string
+	Args                  string
+	ArgumentNormalization *provider.ArgumentNormalization
 	// ResolvedName/CapabilityID describe the real target behind a stable proxy
 	// while Name/Args remain the provider-visible call. They are optional local
 	// display metadata and never enter provider requests.

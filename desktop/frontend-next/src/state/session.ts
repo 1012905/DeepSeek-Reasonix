@@ -753,7 +753,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; executions
           tool: {
             id: c.id,
             name: c.name,
-            args: c.arguments,
+            args: c.arguments, argumentNormalization: c.argumentNormalization,
             readOnly: true,
             resolvedName: c.resolvedName,
             capabilityId: c.capabilityId,

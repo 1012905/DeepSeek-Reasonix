@@ -107,7 +107,7 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	plan := &toolCallPlan{call: call}
 	ctx = tool.WithInvoker(ctx, &nestedInvoker{a: a, turn: turn, parent: plan})
 	todosBefore := a.todoStateBefore(call)
-	defer func() { out.todoEcho = a.todoWriteEchoes(call, todosBefore, out.errMsg) }()
+	defer func() { out.todoEcho = a.todoWriteEchoes(plan.call, todosBefore, out.errMsg) }()
 	defer func() {
 		if plan.mutationObserved && !plan.mutationAfterDone {
 			out.checkpointErr = a.observeAfterMutation(plan)
@@ -148,7 +148,7 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 	// Read after tool.before: an extension may have substituted the call, and the
 	// batch scan judged the one the model wrote.
 	defer func() {
-		out.endsRound = out.endsRound || tool.IsDecisionBarrierCall(plan.tool, json.RawMessage(plan.call.Arguments)) || tool.IsDecisionBarrier(plan.execTool)
+		out.endsRound = out.endsRound || tool.IsDecisionBarrierCall(plan.tool, json.RawMessage(plan.call.ExecutionArguments())) || tool.IsDecisionBarrier(plan.execTool)
 	}()
 	if blocked, early := a.refuseNetworkToolPaths(plan); early {
 		return blocked
@@ -165,6 +165,7 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 // parseToolCall resolves the canonical tool, rejects ambiguity/unknown tools,
 // and applies repeat-success and stale-anchor guards.
 func (a *Agent) parseToolCall(ctx context.Context, plan *toolCallPlan) (toolOutcome, bool) {
+	plan.call = a.prepareCallArguments(plan.call)
 	t, canonicalName, ambiguous := a.svc.tools.ResolveCall(plan.call.Name)
 	if len(ambiguous) > 0 {
 		msg := fmt.Sprintf("ambiguous MCP tool reference %q; use one of: %s", plan.call.Name, strings.Join(ambiguous, ", "))
@@ -202,11 +203,11 @@ func (a *Agent) parseToolCall(ctx context.Context, plan *toolCallPlan) (toolOutc
 	plan.tool = t
 	plan.canonicalName = canonicalName
 	plan.permName = canonicalName
-	plan.permArgs = json.RawMessage(plan.call.Arguments)
+	plan.permArgs = json.RawMessage(plan.call.ExecutionArguments())
 	plan.execTool = t
-	plan.execArgs = json.RawMessage(plan.call.Arguments)
+	plan.execArgs = json.RawMessage(plan.call.ExecutionArguments())
 	plan.evidenceName = canonicalName
-	plan.evidenceArgs = json.RawMessage(plan.call.Arguments)
+	plan.evidenceArgs = json.RawMessage(plan.call.ExecutionArguments())
 	plan.readOnly = t.ReadOnly()
 	if canonicalName == "bash" && permission.BashCommandIsReadOnly(plan.execArgs) {
 		// Bash is schema-level writer-capable, but the host can resolve a
@@ -333,7 +334,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 				safety = planmode.PlanSafetyUnsafe
 			}
 		}
-		if decision := a.planModeDecision(t, plan.canonicalName, plan.readOnly, safety, json.RawMessage(call.Arguments)); decision.Blocked {
+		if decision := a.planModeDecision(t, plan.canonicalName, plan.readOnly, safety, json.RawMessage(call.ExecutionArguments())); decision.Blocked {
 			return toolOutcome{
 				output:  decision.Message,
 				blocked: true,
@@ -345,7 +346,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 	// Resolve proxy tools (use_capability) to the real MCP target before
 	// permission, hooks, and evidence. Provider transcript keeps call.Name.
 	if resolver, ok := t.(tool.CallResolver); ok {
-		rc, rerr := resolver.ResolveCall(ctx, json.RawMessage(call.Arguments))
+		rc, rerr := resolver.ResolveCall(ctx, json.RawMessage(call.ExecutionArguments()))
 		if rerr != nil {
 			return toolOutcome{
 				output: fmt.Sprintf("error: %v", rerr),
@@ -366,7 +367,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 		if rc.Target != nil {
 			plan.execTool = rc.Target
 		}
-		if outcome, blocked := a.typedUnavailableOutcome(rc, call.Name, json.RawMessage(call.Arguments)); blocked {
+		if outcome, blocked := a.typedUnavailableOutcome(rc, call.Name, json.RawMessage(call.ExecutionArguments())); blocked {
 			return outcome, true
 		}
 		if outcome, blocked := contextualToolGateOutcome(ctx, plan.execTool, plan.permName); blocked {
@@ -392,13 +393,13 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 			// A connected mcp-server call completes during resolution by listing
 			// its live tools, so account for that successful call here too.
 			if rc.ProxyAction == "call" && !rc.Unavailable {
-				a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), nil, nil)
+				a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.ExecutionArguments()), nil, nil)
 			}
 			result := rc.Result
 			if a.task.ledger != nil {
 				// inspect/decline are not mutations; unavailable call targets are not success.
 				success := !rc.Unavailable
-				rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), success, evidence.ToolFacts{ReadOnly: true})
+				rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.ExecutionArguments()), success, evidence.ToolFacts{ReadOnly: true})
 				a.task.ledger.Record(rec)
 			}
 			if rc.Unavailable {
@@ -409,7 +410,7 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 					refusalCode: rc.RefusalCode,
 				}, true
 			}
-			body, bound, truncMsg := a.boundToolOutput(result, plan.call.Name, plan.call.ID, plan.call.Arguments, false)
+			body, bound, truncMsg := a.boundToolOutput(result, plan.call.Name, plan.call.ID, plan.call.ExecutionArguments(), false)
 			out := toolOutcome{output: body, bound: bound, truncMsg: truncMsg}
 			out.keepFull(result)
 			return out, true
@@ -677,8 +678,8 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	if a.role.plannerMCPExecution && isMCPExecutionTarget(runTool, permName) && tool.IsMCPServerAuthorized(runTool) && !tool.HasMCPDestructiveHint(runTool) {
 		cctx = tool.WithNonDestructiveMCPExecutionIntent(cctx)
 	}
-	if a.svc.hooks != nil && call.Name == "task" && !isBackgroundTaskCall(call.Arguments) {
-		a.svc.hooks.SubagentStart(ctx, call.ID, json.RawMessage(call.Arguments))
+	if a.svc.hooks != nil && call.Name == "task" && !isBackgroundTaskCall(call.ExecutionArguments()) {
+		a.svc.hooks.SubagentStart(ctx, call.ID, json.RawMessage(call.ExecutionArguments()))
 		// Stop answers every exit after Start, including a cancelled turn, whose
 		// ctx would otherwise kill the hook before it runs.
 		defer func() { a.svc.hooks.SubagentStop(context.WithoutCancel(ctx), call.ID, result, err) }()
@@ -701,7 +702,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	a.recordToolReceipts(ctx, plan, result, execution, err)
 	result = a.withObligationNotice(result, owedBefore, execution, readOnly)
 	// Track skill/capability outcomes for Delivery gates.
-	a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.Arguments), runTool, err)
+	a.noteCapabilityInvocation(plan.canonicalName, json.RawMessage(call.ExecutionArguments()), runTool, err)
 	a.notifyToolHooks(ctx, permName, permArgs, result, err)
 	// Always re-read after post hooks — partial writes and hook side effects can
 	// change the previewed path even when the concrete tool returned an error.
@@ -720,7 +721,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 			detail = strings.TrimRight(detail, "\n") + "\n" + malformedArgumentsDetail(call.Arguments) + "\n" + string(t.Schema())
 		}
 		rawErr := fmt.Sprintf("error: %v\n%s", err, detail)
-		body, bound, truncMsg := a.boundToolOutput(rawErr, call.Name, call.ID, call.Arguments, true)
+		body, bound, truncMsg := a.boundToolOutput(rawErr, call.Name, call.ID, call.ExecutionArguments(), true)
 		// A failed call's screenshot is often the only record of why it failed.
 		out := toolOutcome{
 			output: body, images: media.images, videos: media.videos, errMsg: firstLine(err.Error()), bound: bound, truncMsg: truncMsg,
@@ -731,7 +732,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	}
 	a.observeTouchedPaths(runTool, runArgs)
 	result = silentSuccessDetail(evidenceName, evidenceArgs, result)
-	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
+	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.ExecutionArguments(), false)
 	out := toolOutcome{
 		output: body, images: media.images, videos: media.videos, bound: bound, truncMsg: truncMsg,
 		execution: execution, provenance: origin, checkpointErr: checkpointErr,

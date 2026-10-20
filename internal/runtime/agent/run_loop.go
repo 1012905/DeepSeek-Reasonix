@@ -317,7 +317,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// cut in half must reach neither history nor execution, and why it did
 		// not is the host's to state, not the model's to infer.
 		boundary := classifyResponseBoundary(usage, calls)
-		calls = boundary.committed
+		calls = a.prepareCallBatch(boundary.committed)
 		if msg, ok := finishReasonMessage(usage); ok {
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: msg, Detail: boundary.noticeDetail()})
 		}
