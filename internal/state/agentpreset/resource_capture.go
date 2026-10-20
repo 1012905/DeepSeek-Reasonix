@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"reasonix/internal/base/fileutil"
 	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/agentcomposition"
 )
@@ -25,7 +26,7 @@ type resourceCapture struct {
 // CaptureDirectory flattens links confined to the source tree into ordinary files.
 // Retained directories use a separate strict reader so links cannot mask tampering.
 func CaptureDirectory(root string) (DirectorySnapshot, error) {
-	path, err := filepath.EvalSymlinks(root)
+	path, err := fileutil.ResolveExistingPath(root)
 	if err != nil {
 		return DirectorySnapshot{}, resourceReadError(filepath.Base(root), err)
 	}
@@ -74,9 +75,9 @@ func resourceReadError(path string, err error) error {
 }
 
 func (c *resourceCapture) resolve(path string) (string, error) {
-	resolved, err := filepath.EvalSymlinks(filepath.Join(c.path, path))
+	resolved, err := fileutil.ResolveExistingPath(filepath.Join(c.path, path))
 	if err != nil {
-		return "", resourceCaptureError(path, "link is broken or cyclic")
+		return "", resourceReadError(path, err)
 	}
 	rel, err := filepath.Rel(c.path, resolved)
 	if err != nil || !filepath.IsLocal(rel) {

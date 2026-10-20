@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"reasonix/internal/base/fileutil"
 	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/agentcomposition"
 )
@@ -29,7 +30,7 @@ func CaptureFiles(paths []string) (DirectorySnapshot, map[string]string, error) 
 }
 
 func readAssetFile(path string) (os.FileInfo, []byte, error) {
-	parent, err := filepath.EvalSymlinks(filepath.Dir(path))
+	parent, err := fileutil.ResolveExistingPath(filepath.Dir(path))
 	if err != nil {
 		return nil, nil, resourceReadError(filepath.Base(path), err)
 	}
