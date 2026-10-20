@@ -191,6 +191,8 @@ func withV4Sessions(dir string, out []SessionInfo) []SessionInfo {
 		return out
 	}
 	added := false
+	remembered := loadV4Listings(dir)
+	defer remembered.save(dir)
 	for _, s := range sessionv4.List(root) {
 		id := s.Manifest.SessionID
 		path := v4ImportPath(dir, id)
@@ -199,12 +201,16 @@ func withV4Sessions(dir string, out []SessionInfo) []SessionInfo {
 		}
 		listing, ok := s.CachedListing()
 		if !ok {
+			listing, ok = remembered.get(s)
+		}
+		if !ok {
 			t, err := s.Transcript()
 			if err != nil {
 				continue
 			}
 			listing.Title, listing.ModelRef = t.Title, t.ModelRef
 			listing.Preview, listing.Turns = SessionPreviewFromMessages(t.Messages)
+			remembered.put(s, listing)
 		}
 		if listing.Turns == 0 {
 			continue
