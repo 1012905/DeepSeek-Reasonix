@@ -476,6 +476,7 @@ func (o *turnOrchestrator) runTurnLoopWithPreparedTurn(ctx context.Context, turn
 	o.c.goalRetry.userSpoke(turn.synthetic)
 	o.c.awaitResume.cancel()
 	o.c.awaitResume.userSpoke(turn.synthetic)
+	o.c.extPrompts.userSpoke(turn.synthetic)
 	o.c.liftUserGatedGoal(turn.synthetic)
 	expectedContinuationEpoch := o.c.goals.continuationToken()
 	ctx = o.c.withVisionRouting(agent.WithSubagentImageCandidates(ctx, turn.images.candidates))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import type { AgentPort, WriteLeaseSettings } from "../port/port";
@@ -12,11 +12,15 @@ export function WriteLease({ port }: { port: AgentPort }) {
   const [state, setState] = useState<WriteLeaseSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [wait, setWait] = useState("");
 
   useEffect(() => {
     port
       .writeLease()
-      .then(setState)
+      .then((s) => {
+        setState(s);
+        setWait(String(s.maxWaitMinutes));
+      })
       .catch(() => setState(null));
   }, [port]);
 
@@ -26,13 +30,31 @@ export function WriteLease({ port }: { port: AgentPort }) {
     setBusy(true);
     setError("");
     try {
-      setState(await port.saveWriteLease(!state.optimistic));
+      setState(await port.saveWriteLease({ optimistic: !state.optimistic }));
     } catch (e) {
       setError(reason(e));
     } finally {
       setBusy(false);
     }
   };
+
+  const commitWait = async () => {
+    const minutes = Number(wait);
+    if (minutes === state.maxWaitMinutes) return;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await port.saveWriteLease({ maxWaitMinutes: minutes });
+      setState(next);
+      setWait(String(next.maxWaitMinutes));
+    } catch (e) {
+      setError(reason(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const enter = (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") e.currentTarget.blur(); };
+  const waitLabel = t("等待其他会话释放写入权的最长时间");
 
   return (
     <div className="box">
@@ -49,7 +71,19 @@ export function WriteLease({ port }: { port: AgentPort }) {
           onClick={() => void flip()}
         />
       </div>
-      {error && <div className="why">{error}</div>}
+      <div className="lrow threshold-row">
+        <span className="tx">
+          <span className="lb">{waitLabel}</span>
+          <span className="ds">{t("另一个会话占着要写的路径时，这里的写入会一直等；设了分钟数，超过就失败，并给模型一个 workspace.claim_timeout 的明确原因。默认 0，一直等到本轮结束；想设上限，建议 120。之后新开的会话才采用新值。")}</span>
+        </span>
+        <div className="threshold-control">
+          <span className="unit-field">
+            <input type="text" inputMode="numeric" aria-label={waitLabel} data-action-keydown="write-lease.max-wait" data-action-change="write-lease.max-wait" value={wait} disabled={busy} onChange={(e) => setWait(e.target.value.replace(/\D/g, ""))} onBlur={() => void commitWait()} onKeyDown={enter} />
+            <i>{t("分钟")}</i>
+          </span>
+        </div>
+      </div>
+      {error && <div className="why" role="alert">{error}</div>}
     </div>
   );
 }

@@ -1,2 +1,0 @@
-- 新增：会话菜单里可以把会话上移或下移，也可以在会话行上按 Alt+上下键；顺序保存在内核里，重启后不变。关联 #11420。
-- Added: A conversation can be moved up or down from its menu or with Alt+Arrow on its row; the order is kept by the kernel and survives restarts. Refs #11420.

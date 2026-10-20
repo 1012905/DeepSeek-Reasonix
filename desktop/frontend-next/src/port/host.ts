@@ -2,6 +2,8 @@
 // the app learns which shell it is running in. Electron exposes a preload
 // bridge; a browser tab has none, and answers for itself.
 
+import type { FeedbackProcessMemory } from "./feedback";
+
 export type Shell = "electron" | "browser";
 
 export interface HostInfo {
@@ -38,6 +40,9 @@ export interface HostPort {
   captureWindow(): Promise<Uint8Array | null>;
   /** How the shell draws this launch; null where it has no say, as in a tab. */
   graphics(): Promise<GraphicsInfo | null>;
+  /** The shell's own processes as a type and two sizes each, for the memory a
+   *  report may carry; empty where there is no shell to ask, as in a tab. */
+  processMemory(): Promise<FeedbackProcessMemory[]>;
   openExternal(url: string): void | Promise<void>;
   setUnreadBadge(unread: boolean): Promise<void>;
   /** Where dropped files live. Empty where the shell cannot say — a browser
@@ -162,6 +167,7 @@ interface ElectronBridge {
   closeWindow(): Promise<void>;
   captureWindow?(): Promise<Uint8Array | null>;
   graphics?(): Promise<GraphicsInfo | null>;
+  processMemory?(): Promise<unknown>;
   openExternal(url: string): Promise<void>;
   setUnreadBadge?(unread: boolean): Promise<void>;
   pathForFile(file: File): string;
@@ -225,6 +231,9 @@ class ElectronHost implements HostPort {
   }
   graphics() {
     return this.api.graphics?.().catch(() => null) ?? Promise.resolve(null);
+  }
+  processMemory() {
+    return this.api.processMemory?.().then((rows: unknown) => (Array.isArray(rows) ? (rows as FeedbackProcessMemory[]) : [])).catch(() => []) ?? Promise.resolve([]);
   }
   openExternal(url: string) {
     return this.api.openExternal(url);
@@ -327,6 +336,9 @@ class BrowserHost implements HostPort {
   }
   graphics() {
     return Promise.resolve(null);
+  }
+  processMemory() {
+    return Promise.resolve([]);
   }
   openExternal(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");

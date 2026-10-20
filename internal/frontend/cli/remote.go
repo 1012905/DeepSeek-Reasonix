@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reasonix/internal/base/secrets"
 	"runtime"
 	"strings"
 	"text/tabwriter"
@@ -20,6 +21,10 @@ func remoteCommand(args []string, version string) int {
 	if len(args) == 0 {
 		remoteUsage()
 		return 2
+	}
+	if inAgentChild() && !remoteReadOnly(args) {
+		fmt.Fprintf(os.Stderr, "reasonix remote %s is refused: this command was started by an agent tool (%s is set); it changes the machine book or opens a link, which a person does\n", args[0], secrets.AgentChildEnv)
+		return exitAgentChild
 	}
 	switch args[0] {
 	case "add":
@@ -58,6 +63,20 @@ func remoteCommand(args []string, version string) int {
 		remoteUsage()
 		return 2
 	}
+}
+
+// remoteReadOnly says the invocation neither writes the machine book nor opens a
+// link to a machine: listing, the usage text, and listing or probing WSL
+// distributions on this machine. Every other subcommand, including ones added
+// later, is a person's.
+func remoteReadOnly(args []string) bool {
+	switch args[0] {
+	case "list", "ls", "help", "-h", "--help":
+		return true
+	case "wsl":
+		return len(args) > 1 && (args[1] == "list" || args[1] == "test")
+	}
+	return false
 }
 
 // The Remote Workbench protocol and its hidden subcommands were removed. The
@@ -296,6 +315,9 @@ func remoteTestCLI(args []string, version string) int {
 		fmt.Fprintln(os.Stderr, "usage: reasonix remote test <name|user@host>")
 		return 2
 	}
+	if entry, ok := wslEntry(args[0]); ok {
+		return remoteWSLTest(args[0], entry, version)
+	}
 	client, cleanup, err := buildRemoteClient(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -397,6 +419,7 @@ Usage:
   reasonix remote import [alias...|--all]      # from ~/.ssh/config
   reasonix remote test <name|user@host>        # dial, auth, host key, and whether a kernel can run there
   reasonix remote wsl list | wsl test <distribution>   # WSL distributions on this Windows machine
+  reasonix remote wsl add <name> <distribution> [--workspace PATH] [--serve-install MODE]   # connect/test/open then work on it
   reasonix remote connect <name> [--workspace PATH] [--local-port N] [--no-serve] [--open] [--forward-only]
   reasonix remote open <name>                  # connect --open
   reasonix remote status [<name>]

@@ -1,5 +1,6 @@
 // Package config loads Reasonix's runtime configuration from TOML. Resolution order:
-// flag > project ./reasonix.toml > user config.toml (in the OS user-config dir) > built-in defaults.
+// flag > project config > user config.toml (in the OS user-config dir) > built-in defaults.
+// Project config is ./reasonix.toml, falling back to .reasonix/reasonix.toml.
 // Secrets come from the environment via api_key_env and are never stored in config files.
 package config
 
@@ -268,6 +269,20 @@ type NotificationsConfig struct {
 	// Sound plays a short system chime for the events switched on above, whether
 	// or not system notifications are; off unless asked for.
 	Sound bool `toml:"sound"`
+	// Phone says what this desktop tells its enrolled phones about. Off unless
+	// asked for, because it tells the account service that something is waiting.
+	Phone PhoneNotificationsConfig `toml:"phone"`
+}
+
+// PhoneNotificationsConfig is the desktop's half of phone notifications: the
+// master switch and which of the three occasions it reports. What a phone does
+// with a report is that phone's own choice. Only the type of occasion and a
+// count are ever sent.
+type PhoneNotificationsConfig struct {
+	Enabled  bool `toml:"enabled"`
+	Approval bool `toml:"approval"`
+	Input    bool `toml:"input"`
+	Error    bool `toml:"error"`
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the
@@ -1108,6 +1123,10 @@ type AgentConfig struct {
 	DefaultMode        string `toml:"default_mode"`      // "normal" (default) or "plan": how a new conversation starts; the user file only
 	GoalAutoRetry      int    `toml:"goal_auto_retry"`   // 0 (default) stops at an unavailable completion check; N retries it up to N times in a row; the user file only
 	HostVerification   string `toml:"host_verification"` // "on" (default) or "off"; the user file only
+
+	// WriteLeaseMaxWaitMinutes bounds one wait behind another session's write
+	// claim; 0, the default, waits for as long as the turn lasts. The user file only.
+	WriteLeaseMaxWaitMinutes int `toml:"write_lease_max_wait_minutes"`
 	// OutputStyle selects built-in tone guidance or .reasonix/output-styles/<name>.md.
 	// Empty leaves the prompt unmodified.
 	OutputStyle string        `toml:"output_style"`
@@ -1162,7 +1181,9 @@ type AgentConfig struct {
 
 // ToolsConfig selects which built-in tools are enabled. Empty means all of them.
 type ToolsConfig struct {
-	Enabled                  []string             `toml:"enabled"`
+	Enabled []string `toml:"enabled"`
+	// Disabled removes tools by name from every surface; a project file can only add to it.
+	Disabled                 []string             `toml:"disabled"`
 	BashTimeoutSeconds       *int                 `toml:"bash_timeout_seconds"`
 	MCPStartupTimeoutSeconds *int                 `toml:"mcp_startup_timeout_seconds"`
 	MCPCallTimeoutSeconds    *int                 `toml:"mcp_call_timeout_seconds"`
@@ -1325,7 +1346,7 @@ func Default() *Config {
 	return &Config{
 		ConfigVersion:    freshConfigVersion,
 		DefaultModel:     "deepseek-flash",
-		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(),
+		CredentialsStore: CredentialsStoreAuto, Peers: defaultPeers(), Mods: defaultMods(),
 		UI:      UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
 		Desktop: DesktopConfig{ConversationWidth: "standard"},
 		Billing: BillingConfig{},

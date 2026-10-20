@@ -68,6 +68,10 @@ type Preview struct {
 	Imports []Import `json:"imports"`
 	// Findings are the constructs that make parts of the module unlistable.
 	Findings []Finding `json:"findings"`
+	// Session names what the module takes from the session or puts into it, by
+	// the literal calls found: "messages" and "usage" read it, "submit" queues a
+	// prompt. Empty means no such literal call, not that the module cannot.
+	Session []string `json:"session"`
 	// Unserved are literal events this host never raises, named so the author is not surprised.
 	Unserved []string `json:"unserved"`
 }

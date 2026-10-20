@@ -13,6 +13,7 @@ import (
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/goaleval"
 	"reasonix/internal/runtime/guardian"
@@ -49,11 +50,15 @@ type controllerDeps struct {
 	committer CommitDrafter
 	// commitMu serialises commits so two confirmations cannot interleave.
 	commitMu sync.Mutex
+	// repos keeps the workspace's repositories until its structure changes.
+	repos gitrepos.Finder
 	// goalUsageTee accounts billable usage events into the active goal turn's
 	// observational token total. It wraps the public sink when the caller didn't provide one.
 	goalUsageTee *goalUsageTee
-	sink         event.Sink
-	policy       permission.Policy
+	// extPrompts counts the prompts extensions queued since the user last wrote.
+	extPrompts extensionPrompts
+	sink       event.Sink
+	policy     permission.Policy
 	// subagentGate is the shared gate every headless-only sub-agent surface
 	// reads from (see Options.SubagentGate). Nil when the caller didn't build
 	// one — sub-agents then keep whatever gate they were constructed with.
@@ -66,6 +71,7 @@ type controllerDeps struct {
 	modelRef            string
 	effort              string
 	providerFingerprint string
+	effortSel           effortSelection    // set by an in-place depth change; see effort_in_place.go
 	modelModes          []config.ModelMode // what SetModelMode accepts; see model_modes.go
 	modelFace           *ModelFace         // what the build resolved for the session's model; see model_face.go
 	sessionDir          string
@@ -96,6 +102,7 @@ type controllerDeps struct {
 	// when the provider declares none). Captured at build so a model/key switch —
 	// which rebuilds the controller — refreshes it.
 	balance *billing.Cache
+	tariff  TariffSource
 
 	feedback FeedbackOptions
 
@@ -186,6 +193,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		onRemember:             opts.OnRemember,
 		sessionRecoveryMeta:    opts.SessionRecoveryMeta,
 		balance:                opts.Balance,
+		tariff:                 opts.Tariff,
 		feedback:               opts.Feedback,
 		jobs:                   opts.Jobs,
 		subagents:              opts.Subagents,

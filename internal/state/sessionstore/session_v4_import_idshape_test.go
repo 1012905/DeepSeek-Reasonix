@@ -24,7 +24,7 @@ func v4StoreWith(t *testing.T, id string) (*v4fixture.Store, string) {
 func TestImportV4AcceptsADesktopSessionID(t *testing.T) {
 	const id = "727525f3e44fa790368ca635"
 	s, sessions := v4StoreWith(t, id)
-	n, skipped, err := ImportV4From(os.DirFS(s.Root), sessions, nil)
+	n, skipped, err := ImportV4From(os.DirFS(s.Root), sessions, nil, nil)
 	if err != nil || n != 1 || len(skipped) != 0 {
 		t.Fatalf("imported %d, skipped %+v, err %v; want the session imported", n, skipped, err)
 	}
@@ -36,7 +36,7 @@ func TestImportV4AcceptsADesktopSessionID(t *testing.T) {
 // A session whose id cannot name a file is reported, never dropped silently.
 func TestImportV4ReportsAnIDItCannotUse(t *testing.T) {
 	s, sessions := v4StoreWith(t, "not-a-hex-id")
-	n, skipped, err := ImportV4From(os.DirFS(s.Root), sessions, nil)
+	n, skipped, err := ImportV4From(os.DirFS(s.Root), sessions, nil, nil)
 	if err != nil || n != 0 || len(skipped) != 1 || skipped[0].Reason != SkipUnreadableFormat {
 		t.Fatalf("imported %d, skipped %+v, err %v; want one unreadable_format skip", n, skipped, err)
 	}

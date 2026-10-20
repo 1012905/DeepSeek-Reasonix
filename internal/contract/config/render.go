@@ -39,8 +39,9 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	var b strings.Builder
 
 	b.WriteString("# Reasonix configuration.\n")
-	fmt.Fprintf(&b, "# Resolution order: flag > ./reasonix.toml > %s > built-in defaults.\n", processRoots().userConfigDisplayPath())
-	b.WriteString("# Fields marked user/global only are not overridden by ./reasonix.toml.\n")
+	fmt.Fprintf(&b, "# Resolution order: flag > project config > %s > built-in defaults.\n", processRoots().userConfigDisplayPath())
+	b.WriteString("# Project config: ./reasonix.toml, otherwise .reasonix/reasonix.toml.\n")
+	b.WriteString("# Fields marked user/global only are not overridden by project config.\n")
 	b.WriteString("# Secrets are named via api_key_env and stored in Reasonix's global .env; never put keys here.\n\n")
 
 	fmt.Fprintf(&b, "config_version = %d   # schema marker for diagnostics; old versions may ignore it\n", configVersion(c))
@@ -84,15 +85,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		renderAutoArchiveSection(&b, c)
 		renderServeAndPeers(&b, c)
 		renderObservabilitySection(&b, c)
-		b.WriteString("[notifications]\n")
-		fmt.Fprintf(&b, "enabled = %v   # system notifications for CLI and desktop turns; default off\n", c.Notifications.Enabled)
-		fmt.Fprintf(&b, "turn_done = %v   # notify when a turn finishes\n", c.Notifications.TurnDone)
-		fmt.Fprintf(&b, "approval_request = %v   # notify when a tool approval is waiting\n", c.Notifications.ApprovalRequest)
-		fmt.Fprintf(&b, "ask_request = %v   # notify when a question is waiting\n", c.Notifications.AskRequest)
-		fmt.Fprintf(&b, "feedback_reply = %v   # notify when a feedback report gets a reply\n", c.Notifications.FeedbackReply)
-		fmt.Fprintf(&b, "disk_low = %v   # notify when the workspace or state volume is nearly full\n", c.Notifications.DiskLow)
-		fmt.Fprintf(&b, "sound = %v   # play a short chime for the events above, with or without system notifications; default off\n", c.Notifications.Sound)
-		b.WriteString("\n")
+		renderNotificationsSection(&b, c)
 	}
 
 	if shouldRenderNetwork(c, defaults, scope) {
@@ -215,6 +208,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	renderConcurrencyLimits(&b, c, defaults)
 	agentSetting(&b, "subagent_claims", c.Agent.SubagentClaims, defaults.Agent.SubagentClaims, "optimistic: a sub-agent that declared no write_paths holds only the path it is writing, not the whole workspace; user file only")
 	agentSetting(&b, "write_lease", c.Agent.WriteLease, defaults.Agent.WriteLease, "optimistic: a writer that declared no path does not hold the whole workspace against other sessions; user file only")
+	agentSetting(&b, "write_lease_max_wait_minutes", c.Agent.WriteLeaseMaxWaitMinutes, defaults.Agent.WriteLeaseMaxWaitMinutes, "minutes a write waits behind another session's claim before it fails with workspace.claim_timeout; 0 = wait as long as the turn lasts (default), 120 is a sensible limit; user file only")
 	agentSetting(&b, "plan_approval", c.Agent.PlanApproval, defaults.Agent.PlanApproval, "auto: the plan card answers itself and execution starts; user file only")
 	agentSetting(&b, "default_mode", c.Agent.DefaultMode, defaults.Agent.DefaultMode, "plan: a new conversation starts in plan mode (the mode picker still switches it); a resumed one keeps its own; user file only")
 	agentSetting(&b, "host_verification", c.Agent.HostVerification, defaults.Agent.HostVerification, "off: the host does not hold a turn open to ask for a check, a review or a sign-off on files it changed; the receipt still says what was and was not checked; user file only")
@@ -238,11 +232,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	}
 
 	b.WriteString("[tools]\n")
-	if len(c.Tools.Enabled) == 0 {
-		b.WriteString("enabled = []   # empty = all built-in tools\n")
-	} else {
-		fmt.Fprintf(&b, "enabled = %s\n", renderStringArray(c.Tools.Enabled))
-	}
+	renderToolLists(&b, c, true)
 	fmt.Fprintf(&b, "bash_timeout_seconds = %d   # foreground safety cap; set 0 for no tool-local cap\n", c.BashTimeoutSeconds())
 	fmt.Fprintf(&b, "mcp_startup_timeout_seconds = %d   # background initialize + tools/list safety cap; per-plugin overrides may raise it\n", c.MCPStartupTimeoutSeconds())
 	fmt.Fprintf(&b, "mcp_call_timeout_seconds = %d   # default MCP call safety cap; per-plugin/tool overrides may raise it\n", c.MCPCallTimeoutSeconds())
@@ -538,16 +528,14 @@ func RenderTOMLProjectDelta(c *Config) string {
 	}
 
 	// [tools]
-	if len(c.Tools.Enabled) > 0 ||
+	if c.Tools.listsSet() ||
 		(c.Tools.BashTimeoutSeconds != nil && *c.Tools.BashTimeoutSeconds != 0) ||
 		(c.Tools.MCPStartupTimeoutSeconds != nil && *c.Tools.MCPStartupTimeoutSeconds > 0) ||
 		(c.Tools.MCPCallTimeoutSeconds != nil && *c.Tools.MCPCallTimeoutSeconds > 0) ||
 		c.Tools.ProtectChangedFiles != nil ||
 		c.Tools.BrowserTools != nil || c.Tools.MCPResources || c.Tools.any() {
 		b.WriteString("[tools]\n")
-		if len(c.Tools.Enabled) > 0 {
-			fmt.Fprintf(&b, "enabled = %s\n", renderStringArray(c.Tools.Enabled))
-		}
+		renderToolLists(&b, c, false)
 		if c.Tools.BashTimeoutSeconds != nil && *c.Tools.BashTimeoutSeconds != 0 {
 			fmt.Fprintf(&b, "bash_timeout_seconds = %d\n", *c.Tools.BashTimeoutSeconds)
 		}
@@ -688,8 +676,14 @@ func renderPricingInline(p *provider.Pricing) string {
 	if p == nil {
 		return "{}"
 	}
-	return fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q }",
-		p.CacheHit, p.Input, p.Output, p.Symbol())
+	out := fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q", p.CacheHit, p.Input, p.Output, p.Symbol())
+	if p.SourceURL != "" {
+		out += fmt.Sprintf(", source_url = %q", p.SourceURL)
+	}
+	if p.Checked != "" {
+		out += fmt.Sprintf(", checked = %q", p.Checked)
+	}
+	return out + " }"
 }
 
 func renderPricingMap(prices map[string]*provider.Pricing) string {

@@ -14,6 +14,7 @@ const listed: ModPreview = {
   api: [{ namespace: "process", method: "run" }, { namespace: "ui", dynamic: true }],
   imports: [{ spec: "./lib.js", kind: "static" }, { spec: "left-pad", kind: "require" }],
   findings: [{ kind: "eval" }, { kind: "computed_member" }],
+  session: ["usage", "submit"],
   unserved: ["tool.rewrite"],
 };
 
@@ -35,8 +36,22 @@ describe("the mod install preview", () => {
     expect(screen.getByText("名字无法列出的事件")).toBeTruthy();
   });
 
+  it("lists reading the session and queueing prompts as two separate things", () => {
+    render(<ModPreviewBlock mod={listed} />);
+    expect(screen.getByText("读你的对话")).toBeTruthy();
+    expect(screen.getByText("usage")).toBeTruthy();
+    expect(screen.getByText("往模型面前排提示")).toBeTruthy();
+    cleanup();
+    render(<ModPreviewBlock mod={{ ...listed, session: ["usage"] }} />);
+    expect(screen.getByText("读你的对话")).toBeTruthy();
+    expect(screen.queryByText("往模型面前排提示")).toBeNull();
+    cleanup();
+    render(<ModPreviewBlock mod={{ ...listed, session: [] }} />);
+    expect(screen.queryByText("读你的对话")).toBeNull();
+  });
+
   it("calls a module it could not read not previewed, never clean", () => {
-    render(<ModPreviewBlock mod={{ ...listed, listed: false, reason: "too_large", events: [], api: [], imports: [], findings: [], unserved: [] }} />);
+    render(<ModPreviewBlock mod={{ ...listed, listed: false, reason: "too_large", events: [], api: [], imports: [], findings: [], session: [], unserved: [] }} />);
     expect(screen.getByText("未预览")).toBeTruthy();
     expect(screen.getByText("文件太大")).toBeTruthy();
     expect(screen.getByText(/这不等于没问题/)).toBeTruthy();

@@ -1,2 +1,0 @@
-- 新增（实验性，未经真实端点验证）：原生 Gemini 提供方（Interactions API），支持思考、工具调用与视频（含 Files API）。关联 #13615。
-- Added (experimental, not run against the real endpoint): a native Gemini provider on the Interactions API with thinking, tools and video. Refs #13615.

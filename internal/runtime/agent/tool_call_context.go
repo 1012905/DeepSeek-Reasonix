@@ -27,6 +27,7 @@ func (a *Agent) toolCallContext(ctx context.Context, plan *toolCallPlan) context
 	cctx = tool.WithContextBudgetReporter(cctx, a)
 	cctx = tool.WithTranscriptReader(cctx, a)
 	cctx = WithSubagentDepth(cctx, a.subagentDepth)
+	cctx = WithRequestEffort(cctx, a.sess.effort.get())
 	if a.task.ledger != nil {
 		cctx = evidence.WithLedger(cctx, a.task.ledger)
 		cctx = evidence.WithSessionMessages(cctx, a.sess.conversation.Snapshot)

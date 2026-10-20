@@ -141,7 +141,7 @@ one mode selector:
 | Model | Configured `provider/model` entries | `configOptions` with id `model` |
 | Reasoning effort | Provider-supported levels or `auto` | `configOptions` with id `effort` |
 | Execution setting | `light`, `balanced`, `delivery` | `configOptions` with id `agent_preset` (legacy id `work_mode` still accepted: `economy` → `light`) |
-| Tool approval | `ask`, `auto`, `yolo` | `configOptions` with id `tool_approval` |
+| Tool approval | `ask`, `auto`, `yolo`; also `readOnly`, `dontAsk` with `--permission-mode` | `configOptions` with id `tool_approval` |
 
 Use `session/set_config_option` for model, effort, execution setting, and tool approval.
 Its parameters are `sessionId`, `configId` and `value`, where `configId` is the
@@ -171,6 +171,34 @@ For older clients, `session/set_model` remains available. The legacy
 `session/set_mode` values `default` and `auto` are also accepted as Normal + Ask
 and Normal + Yolo respectively; new clients should use the independent
 selectors above.
+
+### Fixing the posture: `--permission-mode`
+
+`reasonix acp --permission-mode <mode>` starts every session in that tool
+approval posture and makes it the most permissive one a client can select.
+
+- The modes are those of `reasonix run`: `read-only`, `dontAsk`, `manual`/`ask`,
+  `auto`, `acceptEdits` (ask, with file edits allowed) and `bypassPermissions`.
+  `plan` needs an interactive session and is refused.
+- Without the flag nothing changes: sessions start in `ask` and the client may
+  pick any of `ask`, `auto`, `yolo`.
+- The order, lowest first, is `readOnly`, `dontAsk`, `ask`, `auto`, `yolo`. A client
+  may move down it but not up.
+- `session/set_config_option` and the legacy `session/set_mode` answer a raise with
+  `-32602`, `data.code` `acp.tool_approval.above_ceiling` and `data.ceiling`; the
+  posture stays as it was.
+- A saved session whose file holds a higher posture opens at the ceiling. The
+  file keeps the higher value until the client chooses a posture itself.
+- The flag is read from the command line only, so a project file cannot loosen it.
+- `bypassPermissions` as the ceiling is the same as no ceiling: nothing sits above `yolo`.
+- A posture is not an OS sandbox. The `auto` and `yolo` ceilings do not themselves
+  confine shell commands; macOS and Linux rely on the OS sandbox for that.
+- Windows has no OS-level shell sandbox, so a shell command the posture lets through
+  can write outside the workspace there. Do not rely on a posture for confinement on Windows.
+
+The ceiling limits the posture, not the answers to approval cards. Under `ask`
+the client can still approve a card; a host that must never approve (for example
+DeepSeek Harness with `permission: reject`) is what keeps `ask` from writing.
 
 ## Prompts, updates, and approvals
 

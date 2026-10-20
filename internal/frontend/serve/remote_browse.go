@@ -35,6 +35,10 @@ func (h *Hub) remoteDirs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	host := r.PathValue("host")
+	if _, err := h.remoteHostWorkspace(host); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	listing, err := h.opts.Remote.Browse(operationContext(r), host, strings.TrimSpace(r.URL.Query().Get("path")))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err)
@@ -52,7 +56,12 @@ func (h *Hub) remoteProbe(w http.ResponseWriter, r *http.Request) {
 		refuseNoRemote(w)
 		return
 	}
-	report, err := h.opts.Remote.Probe(operationContext(r), r.PathValue("host"))
+	host := r.PathValue("host")
+	if _, err := h.remoteHostWorkspace(host); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	report, err := h.opts.Remote.Probe(operationContext(r), host)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err)
 		return

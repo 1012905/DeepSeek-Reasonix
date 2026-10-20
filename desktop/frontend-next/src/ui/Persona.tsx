@@ -47,7 +47,7 @@ function presetAbout(id: string): string {
   }
 }
 
-export function Persona({ port }: { port: AgentPort }) {
+export function Persona({ port, onDirtyChange, onBusyChange, onSaved }: { port: AgentPort; onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; onSaved?: () => void }) {
   const [state, setState] = useState<PersonaSettings | null>(null);
   const [draft, setDraft] = useState<PersonaDraft>(BLANK);
   const [busy, setBusy] = useState(false);
@@ -79,6 +79,7 @@ export function Persona({ port }: { port: AgentPort }) {
     try {
       adopt(await port.savePersonaSettings(draft));
       setSaved(true);
+      onSaved?.();
     } catch (e) {
       setError(reason(e));
     } finally {
@@ -92,6 +93,8 @@ export function Persona({ port }: { port: AgentPort }) {
   // answer to "which of these am I looking at".
   const now = !state ? undefined : preset ? presetName(preset.id) : blank ? undefined : t("自定义");
   const changed = !!state && !sameDraft(draft, draftOf(state));
+  useEffect(() => { onDirtyChange?.(changed); }, [onDirtyChange, changed]);
+  useEffect(() => { onBusyChange?.(busy); }, [onBusyChange, busy]);
 
   return (
     <Group
@@ -153,15 +156,16 @@ export function Persona({ port }: { port: AgentPort }) {
           </div>
 
           <div className="pers-field">
-            <label className="lb" htmlFor={suffixId}>{t("第一方指令之后")}</label>
-            <span className="ds">{t("紧跟在内置指令之后、运行时上下文之前；留空表示不添加。")}</span>
+            <label className="lb" htmlFor={suffixId}>{t("补充要求")}</label>
+            <span className="ds" id={`${suffixId}-help`}>{t("放在内置系统指令之后，留空则不添加")}</span>
             <textarea
               id={suffixId}
               dir="auto"
               rows={5}
               maxLength={LIMIT}
               spellCheck={false}
-              aria-label={t("第一方指令之后")}
+              aria-label={t("补充要求")}
+              aria-describedby={`${suffixId}-help`}
               data-action-change="persona.suffix"
               value={draft.suffix}
               disabled={busy}
@@ -172,7 +176,7 @@ export function Persona({ port }: { port: AgentPort }) {
           <div className="lrow">
             <span className="tx">
               <span className="lb">{t("不注入可选运行时上下文")}</span>
-              <span className="ds">{t("关闭后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。")}</span>
+              <span className="ds">{t("开启后不注入探测到的运行环境与离线提示；指令、记忆与技能照常写入。")}</span>
             </span>
             <Switch
               data-action="persona.runtime-context"

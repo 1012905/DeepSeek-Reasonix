@@ -77,3 +77,13 @@ it("disables the row while a turn runs", () => {
   render(<ModelUsage models={models} roles={{ ...roles, web_search: "" }} main="chat/plain" busy="running" protocol={{}} onMain={() => {}} onRole={vi.fn()} />);
   expect((screen.getByRole("combobox", { name: "网页搜索" }) as HTMLSelectElement).disabled).toBe(true);
 });
+it("never offers a model whose connection the person has not added", () => {
+  draw("", [...models, { ref: "other/native", provider: "other", model: "elsewhere", webSearch: true, notAdded: true }]);
+  const select = screen.getByRole("combobox", { name: "网页搜索" });
+  expect(select.textContent).toContain("native");
+  expect(select.textContent).not.toContain("elsewhere");
+});
+it("keeps a saved choice listed even when its connection is no longer added", () => {
+  draw("other/native", [...models, { ref: "other/native", provider: "other", model: "elsewhere", webSearch: true, notAdded: true }]);
+  expect((screen.getByRole("combobox", { name: "网页搜索" }) as HTMLSelectElement).value).toBe("other/native");
+});

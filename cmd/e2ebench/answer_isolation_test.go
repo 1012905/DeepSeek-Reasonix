@@ -282,7 +282,7 @@ func TestAnswerTrajectoryAuditScansEarlierSegments(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read, err := auditAnswerTrajectories(dir, task{ID: "demo", answerRoot: root}, 2)
+	read, err := auditAnswerTrajectories(dir, "demo", task{ID: "demo", answerRoot: root}, 2)
 	if err != nil || !read {
 		t.Fatalf("earlier answer read was missed: read=%t err=%v", read, err)
 	}

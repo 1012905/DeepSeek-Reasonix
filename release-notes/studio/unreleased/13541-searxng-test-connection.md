@@ -1,2 +1,0 @@
-- 设置里的 SearXNG 地址旁新增「测试连接」，说明连不上的原因；只测已保存的地址，不连云元数据等地址；搜索失败时模型也收到同一原因码。关联 #13541。
-- A Test connection button beside the SearXNG address says why an instance does not answer; it tests only the saved one, never a metadata address. Refs #13541.

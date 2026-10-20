@@ -6,16 +6,20 @@ import (
 
 	"reasonix/internal/assembly/boot"
 	"reasonix/internal/contract/ablation"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/feedback"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessiontemp"
 )
 
 type cliBuildOverrides struct {
-	NativeSurfaces bool
+	AgentComposition string
+	Composition      *agentcomposition.Binding
+	NativeSurfaces   bool
 	// Version marks a top-level session of a real installation, which is what
 	// lets the assembly record a last-known-good config snapshot. Nested and
 	// rebuild paths leave it empty; the snapshot is recorded once per process.
@@ -44,12 +48,19 @@ type cliBuildOverrides struct {
 
 func setupProfileWithOverrides(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink, profile string, overrides cliBuildOverrides) (*control.Controller, error) {
 	migrateMCPConfigForCLIWorkspace()
-	return boot.Build(ctx, cliProfileBuildOptions(modelName, maxStepsOverride, requireKey, sink, profile, overrides))
+	opts := cliProfileBuildOptions(modelName, maxStepsOverride, requireKey, sink, profile, overrides)
+	ctrl, err := boot.Build(ctx, opts)
+	if err != nil && !requireKey && opts.Composition != nil && ctx.Err() == nil {
+		return boot.BuildCompositionHistory(opts, err).Controller, nil
+	}
+	return ctrl, err
 }
 
 func cliProfileBuildOptions(modelName string, maxStepsOverride int, requireKey bool, sink event.Sink, profile string, overrides cliBuildOverrides) boot.Options {
 	// profile is dual-write TokenMode; also set AgentPreset for the new path.
 	return boot.Options{
+		AgentComposition:     overrides.AgentComposition,
+		Composition:          overrides.Composition,
 		Version:              overrides.Version,
 		Model:                modelName,
 		MaxSteps:             maxStepsOverride,
@@ -67,6 +78,7 @@ func cliProfileBuildOptions(modelName string, maxStepsOverride int, requireKey b
 		HeadlessApprovalMode: overrides.HeadlessApprovalMode,
 		GoalTurnsUnreachable: overrides.GoalTurnsUnreachable,
 		StatsSource:          surface.CLI,
+		FeedbackSurface:      feedback.SurfaceTUI,
 		Stderr:               overrides.Stderr,
 		OnSessionRecovered:   overrides.OnSessionRecovered,
 		Ablation:             overrides.Ablation,

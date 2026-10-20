@@ -1,7 +1,7 @@
 import type { AgentPort } from "./port";
 import type { HistoryHit, HubPort, RuntimeView, TreeSession, TreeWindow, TreeWorkspace } from "./hub";
 import type { RemoteHost, RemoteListing, RemoteProbe } from "./remote";
-import type { ShareStatus } from "./share";
+import type { PhoneAction, PhoneList, PhoneView, ShareStatus } from "./share";
 import { MockPort } from "./mock";
 
 // MockHub is the fixture's answer to a window that drives several panes. Each
@@ -11,17 +11,24 @@ export class MockHub implements HubPort {
   private readonly ports = new Map<string, AgentPort>();
   private readonly machine = { configured: false };
   private readonly settings = new MockPort();
+  private readonly remoteSettings = new Map<string, MockPort>();
   private readonly views: RuntimeView[] = [
     { id: "r1", base: "", root: "~/projects/DeepSeek-Reasonix", name: "DeepSeek-Reasonix", sessionPath: "/sessions/mock.jsonl" },
   ];
   private readonly roots = ["~/projects/DeepSeek-Reasonix", "~/projects/my-website"];
   private seq = 1;
+  private readonly flags = new Map<string, Pick<TreeSession, "pinned" | "archived">>();
+
+  private decorate(tree: TreeWorkspace[], host = ""): TreeWorkspace[] {
+    return tree.map((ws) => ({ ...ws, sessions: ws.sessions.map((session) => ({ ...session,
+      ...this.flags.get(JSON.stringify([host, session.path])) })) }));
+  }
 
   runtimes() {
     return Promise.resolve([...this.views]);
   }
 
-  open(req: { root?: string; sessionPath?: string }) {
+  async open(req: { root?: string; sessionPath?: string; agentComposition?:string }) {
     const held = req.sessionPath ? this.views.find((v) => v.sessionPath === req.sessionPath) : undefined;
     if (held) return Promise.resolve(held);
     this.seq++;
@@ -33,6 +40,9 @@ export class MockHub implements HubPort {
       name: root.split("/").pop() ?? root,
       sessionPath: req.sessionPath,
     };
+    const port=this.portFor(view);
+    if (req.agentComposition) await port.selectAgentComposition(req.agentComposition);
+    view.agentComposition=await port.agentComposition() ?? undefined;
     this.views.push(view);
     return Promise.resolve(view);
   }
@@ -60,7 +70,7 @@ export class MockHub implements HubPort {
   // the tree under a connected host can be designed without one.
   remoteTree(host: string) {
     if (host !== "gpu-box") return Promise.resolve(null);
-    return Promise.resolve<TreeWorkspace[]>([
+    return Promise.resolve<TreeWorkspace[]>(this.decorate([
       {
         root: "/srv/training",
         name: "training",
@@ -70,10 +80,10 @@ export class MockHub implements HubPort {
         ],
       },
       { root: "/srv/scratch", name: "scratch", sessions: [] },
-    ]);
+    ], host));
   }
 
-  openRemote(req: { host: string; workspace?: string; sessionPath?: string }) {
+  async openRemote(req: { host: string; workspace?: string; sessionPath?: string; agentComposition?: string }) {
     this.seq++;
     const workspace = req.workspace || "/srv/training";
     const view: RuntimeView = {
@@ -84,6 +94,9 @@ export class MockHub implements HubPort {
       host: req.host,
       sessionPath: req.sessionPath,
     };
+    const port = this.portFor(view);
+    if (req.agentComposition) await port.selectAgentComposition(req.agentComposition);
+    view.agentComposition = await port.agentComposition() ?? undefined;
     this.views.push(view);
     return Promise.resolve(view);
   }
@@ -168,7 +181,7 @@ export class MockHub implements HubPort {
   tree(_window?: TreeWindow) {
     const open = new Map(this.views.filter((v) => v.sessionPath).map((v) => [v.sessionPath!, v.id]));
     return Promise.resolve(
-      this.roots.map<TreeWorkspace>((root, i) => ({
+      this.decorate(this.roots.map<TreeWorkspace>((root, i) => ({
         root,
         name: root.split("/").pop() ?? root,
         open: this.views.some((v) => v.root === root),
@@ -180,7 +193,7 @@ export class MockHub implements HubPort {
                 { path: "/sessions/older.jsonl", name: "older", title: "上一次的会话", turns: 12, runtimeId: open.get("/sessions/older.jsonl"), legacy: true },
               ]
             : [{ path: "/sessions/site.jsonl", name: "site", title: "站点改版", turns: 5, runtimeId: open.get("/sessions/site.jsonl") }]),
-      })),
+      }))),
     );
   }
 
@@ -259,11 +272,15 @@ export class MockHub implements HubPort {
     return Promise.resolve();
   }
 
-  archiveSession(_path: string, _archived: boolean) {
+  archiveSession(path: string, archived: boolean, host = "") {
+    const key = JSON.stringify([host, path]);
+    this.flags.set(key, { ...this.flags.get(key), archived, ...(archived ? { pinned: false } : {}) });
     return Promise.resolve();
   }
 
-  pinSession(_path: string, _pinned: boolean) {
+  pinSession(path: string, pinned: boolean, host = "") {
+    const key = JSON.stringify([host, path]);
+    this.flags.set(key, { ...this.flags.get(key), pinned });
     return Promise.resolve();
   }
 
@@ -288,6 +305,10 @@ export class MockHub implements HubPort {
     return Promise.resolve({ summary: "mock migration complete", imported: 0, warnings: 0, recognised: true, skipped: [] });
   }
 
+  importNativeSession(_file: Blob, _workspace: string) {
+    return Promise.resolve({ path: `/sessions/imported-${++this.seq}.jsonl` });
+  }
+
   hostCapabilities() {
     return Promise.resolve({ pickFolder: true, addWorkspace: true });
   }
@@ -307,6 +328,25 @@ export class MockHub implements HubPort {
     cloudDevices: [],
     cloudRemote: { online: false, reason: "signed_out" },
   };
+
+  private phones: PhoneView[] = [
+    { id: "rc_aaa", ordinal: 1, name: "iPhone Safari", state: "active", uaClass: "ios-safari", createdAt: "2026-10-12T08:00:00Z", lastSeenAt: "2026-10-18T09:30:00Z", keyThumbprint: "kP3x…f9a1" },
+    { id: "rc_bbb", name: "Android Chrome", state: "pending", uaClass: "android-chrome", createdAt: "2026-10-18T09:40:00Z", lastSeenAt: "2026-10-18T09:40:00Z", expiresAt: "2026-10-18T09:55:00Z", keyThumbprint: "Zq8m…02c7" },
+  ];
+
+  sharePhones() {
+    return Promise.resolve<PhoneList | null>({ phones: this.phones.map((p) => ({ ...p })) });
+  }
+
+  resolvePhone(id: string, action: PhoneAction) {
+    this.phones = this.phones.flatMap((p) => (p.id !== id ? [p] : action === "reject" ? [] : [{ ...p, state: "active" as const, expiresAt: undefined, ordinal: 2 }]));
+    return Promise.resolve<PhoneList>({ phones: this.phones.map((p) => ({ ...p })) });
+  }
+
+  revokePhone(id: string) {
+    this.phones = this.phones.filter((p) => p.id !== id);
+    return Promise.resolve<PhoneList>({ phones: this.phones.map((p) => ({ ...p })) });
+  }
 
   shareStatus() {
     return Promise.resolve<ShareStatus | null>({ ...this.share });
@@ -378,6 +418,12 @@ export class MockHub implements HubPort {
     const held = this.ports.get(rt.id);
     if (held) return held;
     const port = new MockPort();
+    let settings = this.settings;
+    if (rt.host) {
+      settings = this.remoteSettings.get(rt.host) ?? new MockPort();
+      this.remoteSettings.set(rt.host, settings);
+    }
+    port.shareAgentPresetsFrom(settings,rt.root);
     port.machine = this.machine;
     this.ports.set(rt.id, port);
     return port;

@@ -240,9 +240,11 @@ func (s *Service) ListMine(ctx context.Context) (Mine, error) {
 	}
 	profile := readProfile(resp.Profile)
 	siblings := s.siblingItems(ctx, st)
+	var promotion *Promotion
 	if err := s.store.update(func(st *state) error {
 		st.remember(append(resp.Items, siblings...)...)
 		st.Profile = profile
+		promotion = st.noteLevel(profile)
 		return nil
 	}); err != nil {
 		return Mine{}, err
@@ -251,7 +253,9 @@ func (s *Service) ListMine(ctx context.Context) (Mine, error) {
 	if err != nil {
 		return Mine{}, err
 	}
-	return st.mine(false), nil
+	out := st.mine(false)
+	out.Promotion = promotion
+	return out, nil
 }
 
 // readProfile is the standing the service stated, or nil when it stated none or

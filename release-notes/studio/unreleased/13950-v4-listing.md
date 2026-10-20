@@ -1,0 +1,2 @@
+- 修复：项目里有大量 1.x 旧会话时，每次展开项目都要把它们逐个重放，列表要等几分钟；现在重放一次后记住结果。关联 #13950。
+- Fixed: a project holding many 1.x conversations replayed each of them on every listing, so the list took minutes; the result is now remembered after the first replay. Refs #13950.

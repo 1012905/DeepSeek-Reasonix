@@ -153,8 +153,7 @@ func sftInputs(paths []string, suite, report string) (iter.Seq2[sftInput, error]
 }
 
 func sftInputFor(path, suite string, tasks map[string]task, verdicts map[string]map[string]result) (*sftInput, error) {
-	id := filepath.Base(path)
-	id = id[:len(id)-len(".trajectory.jsonl")]
+	id := trajectoryTaskID(path)
 	records, digest, err := readSFTSnapshot(path)
 	if err != nil {
 		return nil, err

@@ -24,6 +24,7 @@ import (
 	"reasonix/internal/contract/observe"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
+	"reasonix/internal/contract/tool"
 	"reasonix/internal/frontend/clisession"
 	"reasonix/internal/runtime/schedrun"
 	"reasonix/internal/session/control"
@@ -232,7 +233,7 @@ func (r *scheduleRun) execute(ctx context.Context, roots config.Roots, token str
 		effort = &e
 	}
 	if err := os.Chdir(ws); err != nil {
-		return failed(schedrun.CodeWorkspaceGone)
+		return failed(tool.CodeRootMissing)
 	}
 	ctrl, err := boot.Build(ctx, boot.Options{
 		Version:        "",
@@ -286,14 +287,14 @@ func (r *scheduleRun) workspace() (string, string) {
 	ws := filepath.Clean(r.sc.Target.Workspace)
 	info, err := os.Stat(ws)
 	if err != nil || !info.IsDir() {
-		return "", schedrun.CodeWorkspaceGone
+		return "", tool.CodeRootMissing
 	}
 	if r.sc.Grant.ReadOnlyBash {
 		return "", schedrun.CodeBuild
 	}
 	real, err := filepath.EvalSymlinks(ws)
 	if err != nil {
-		return "", schedrun.CodeWorkspaceGone
+		return "", tool.CodeRootMissing
 	}
 	for _, root := range r.sc.Grant.ReadRoots {
 		if rr, err := filepath.EvalSymlinks(root); err != nil || !sameDir(rr, real) {

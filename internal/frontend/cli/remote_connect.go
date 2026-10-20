@@ -153,6 +153,9 @@ func remoteConnectCLI(args []string, version string) int {
 		return 2
 	}
 	name := syntax.name
+	if entry, ok := wslEntry(name); ok {
+		return remoteWSLConnect(name, entry, syntax, version)
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

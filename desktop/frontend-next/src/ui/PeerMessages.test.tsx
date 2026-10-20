@@ -4,9 +4,14 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { PeerMessages } from "./PeerMessages";
+import { usePeersSettings } from "./usePeersSettings";
 import { PeerHeldBar } from "./PeerHeldBar";
 import { MockPort } from "../port/mock";
 import type { AgentPort, PeersState } from "../port/port";
+
+function Messages({ port }: { port: Parameters<typeof PeerMessages>[0]["port"] }) {
+  return <PeerMessages port={port} settings={usePeersSettings(port)} />;
+}
 
 afterEach(cleanup);
 
@@ -23,7 +28,7 @@ const port = (state: PeersState) => new PeerPort(state) as unknown as AgentPort;
 
 describe("messages between sessions", () => {
   it("offers the switch to turn it on, and no sending, when the kernel has it disabled", async () => {
-    render(<PeerMessages port={port({ enabled: false, peers: [], held: [] })} />);
+    render(<Messages port={port({ enabled: false, peers: [], held: [] })} />);
     expect(await screen.findByRole("switch", { name: "启用会话间消息" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
   });
@@ -31,7 +36,7 @@ describe("messages between sessions", () => {
   it("sends the text to the chosen session and says the other user still decides", async () => {
     const p = port({ enabled: true, peers: [peer], held: [] });
     const send = vi.spyOn(p, "sendPeerMessage");
-    render(<PeerMessages port={p} />);
+    render(<Messages port={p} />);
     const box = await screen.findByLabelText("要发的内容");
     const button = screen.getByRole("button", { name: "发送" });
     expect(button.hasAttribute("disabled")).toBe(true);
@@ -47,7 +52,7 @@ describe("messages between sessions", () => {
     p.sendPeerMessage = async () => {
       throw new Error("too many messages sent in a short time");
     };
-    render(<PeerMessages port={p} />);
+    render(<Messages port={p} />);
     const box = await screen.findByLabelText("要发的内容");
     await userEvent.type(box, "再来一条");
     await userEvent.click(screen.getByRole("button", { name: "发送" }));
@@ -58,7 +63,7 @@ describe("messages between sessions", () => {
   it("holds a received message as another session's words until it is approved or refused", async () => {
     const p = port({ enabled: true, peers: [], held: [held] });
     const resolve = vi.spyOn(p, "resolvePeerMessage");
-    render(<PeerMessages port={p} />);
+    render(<Messages port={p} />);
     expect(await screen.findByText(/不是你写的/)).toBeTruthy();
     expect(screen.getByText("请核对第三节")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "批准并交给模型" }));
@@ -69,7 +74,7 @@ describe("messages between sessions", () => {
   it("refuses without delivering", async () => {
     const p = port({ enabled: true, peers: [], held: [held] });
     const resolve = vi.spyOn(p, "resolvePeerMessage");
-    render(<PeerMessages port={p} />);
+    render(<Messages port={p} />);
     await userEvent.click(await screen.findByRole("button", { name: "拒绝" }));
     expect(resolve).toHaveBeenCalledWith("m-1", false, "none");
   });

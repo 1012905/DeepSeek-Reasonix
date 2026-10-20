@@ -78,6 +78,7 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_subagent_steer_bytes = 16384    # bytes in one message of guidance to a running sub-agent, which keeps one message from filling its context; 0 = no limit (user config only)
 # max_subagent_steers_per_minute = 30  # messages of guidance per minute to one running sub-agent, a stop for a loop; 0 = no limit (user config only)
 # write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
+# write_lease_max_wait_minutes = 0    # minutes a write waits behind another session's claim before it fails with workspace.claim_timeout; 0 (default) = wait as long as the turn lasts, 120 is a sensible limit (user config only)
 # subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
 # plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
 # default_mode = "plan"              # user file only; a new conversation starts in plan mode (a resumed one keeps its own; Settings has a switch); default normal
@@ -101,6 +102,7 @@ web_search  = true
 
 [tools]
 enabled = []   # omit/empty = all built-ins
+# disabled = ["web_fetch", "ask"]   # removed from every request by name, framework and MCP tools included; a call to one is refused with the reason; a tool the host itself reads (todo_write, complete_step, await_user, conclude_blocked, update_goal, use_capability) stays on and a warning says which; a project file can only add names, and Settings lists those as turned off by the project; Settings has a switch per tool; applies to conversations opened afterwards
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
 protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
 browser_tools = true   # built-in browser tools; the browser starts on first use
@@ -151,7 +153,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 # dispatch = false             # the model may hand a task to a session in another of your projects, via dispatch_to_project; needs enabled; turning it on is your consent for those sessions' tasks and replies, no card; the opened session keeps the sender's model, preset, approval mode and planning, so a YOLO sender opens a YOLO session that answers the target project's ask rules too (deny rules still hold) (user config only)
 # max_dispatch_depth = 1       # how many sessions deep a dispatch may chain; 0 removes the ceiling (user config only)
 # max_dispatched_sessions = 8  # sessions one session may keep open from its dispatches; 0 removes the ceiling (user config only)
-# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply (user config only)
+# release_projects = []        # projects that take messages from your other sessions without the card; their own approvals and sandbox still apply; they start over a pause the host set itself (session switch, unreadable @ reference, reopen) but never over one you pressed (user config only)
 
 [mods]
 # enabled = false              # run the hooks module of installed Claude Code mods; full trust, no sandbox (user config only)
@@ -418,6 +420,10 @@ startup, capability negotiation, session lifecycle, independent model/work/
 collaboration/approval controls, client filesystem and terminal capabilities,
 MCP servers, permission requests, and the Reasonix mid-turn steering extension.
 
+## Using Reasonix from DeepSeek Harness
+
+DeepSeek Harness (`dsh`) can delegate a task to Reasonix as a subagent over ACP, with configuration only. [Using Reasonix from DeepSeek Harness](./DSH.md) covers the install through DSH's plugin market or by hand, switching the plugin on, the permission policy and the limits.
+
 ## Remote SSH
 
 The remote module runs Reasonix on a remote host and reaches it over your own
@@ -436,6 +442,24 @@ a cloned repo can never steer where Reasonix opens SSH connections. Credentials
 follow the provider idiom: the host names an env var (`passphrase_env`,
 `password_env`) whose value lives in Reasonix's global `.env`; key material
 itself is never stored — `identity_file` is a path.
+
+Studio uses that host's explicit `workspace` as the default for host-level reads
+and opens that omit a workspace.
+
+Only when it is unset does the first nonempty
+`workspaces` entry supply the default; with neither set, the attach receives an
+empty workspace. An explicit open path takes precedence.
+
+Reordering other
+entries cannot override a declared `workspace`. These values come only from the
+user's host configuration, and disabled hosts are refused before any link reuse.
+
+The active SSH project's secondary line shows its actual connection directory,
+including isolated worktrees. Its project menu shows the default connection
+directory used by Refresh; these can differ. Settings' default action explicitly
+chooses a new default.
+
+A host-level read never borrows an unrelated pane's path.
 
 ```toml
 [remote]
@@ -470,8 +494,19 @@ A WSL distribution on a Windows machine is a host with `kind = "wsl"` and a `dis
 - Model credentials come from the distribution's own configuration (`provider = "remote"`): under WSL's default
   networking the distribution cannot reach this machine's loopback, so this machine's provider is not shared.
 - A folder chosen as a Windows path (`C:\work\app` or `\\wsl.localhost\<distro>\home\me\app`) is translated by
-  the distribution; a folder it cannot see is refused. The command-line `reasonix remote connect` still dials
-  SSH only: such an entry fails with `remote: host is not reached over ssh`.
+  the distribution; a folder it cannot see is refused.
+- From the command line, `reasonix remote wsl add <name> <distribution>` adds one, and `remote test` and
+  `remote connect` then work as they do for an SSH host.
+  - `connect` keeps the session open until you press Ctrl-C, and the kernel stops with it.
+  - `status`, `forward`, `serve` and `fs` stay SSH-only and refuse a WSL machine with
+    `remote: host is not reached over ssh`.
+
+For an agent's own shell commands, only `list`, `help` and `wsl list|test` run:
+
+- Every other `reasonix remote` subcommand refuses there (exit 77), because it changes the machine book or opens a
+  link, which a person does.
+- The host marks the commands it runs for the agent to tell them apart. It guards against an agent that does not
+  hide; it is not the sandbox.
 
 CLI:
 
@@ -689,7 +724,8 @@ For Anthropic-compatible services, such as some coding-plan endpoints, choose
 | Authorization: Bearer | For Anthropic-compatible providers, sends the saved API key as `Authorization: Bearer <key>` instead of `x-api-key`. | Enable it only when the gateway documents Bearer auth, such as MiniMax Global or Vercel AI Gateway. |
 | Model capability mode | Which reasoning request protocol Reasonix should use for this provider. | Keep **Auto-detect** unless the gateway is misdetected or the model docs require a specific reasoning format. |
 | Thinking override | Provider-specific override for `thinking.type`. | Keep **Auto** unless the backend documents `enabled`, `disabled`, or `adaptive`. Unsupported values can make some OpenAI-compatible gateways reject the request. |
-| Balance URL | Optional endpoint for wallet/balance lookup. | Set it when the provider exposes a balance endpoint and you want the desktop status bar to show it. |
+| Balance URL | Optional endpoint for wallet/balance lookup. | Set it when the provider exposes a balance endpoint and you want the desktop status bar to show it. The key is sent only to this address and never follows a redirect. |
+| Balance format | How that endpoint answers: `deepseek`, `moonshot` or `openrouter` (`balance_format`). | A vendor's own domain (`api.deepseek.com`, `api.moonshot.cn`/`.ai`, `openrouter.ai`) is read in that vendor's format with nothing set. Any other address, a relay for example, must name the format, or it is shown as not configured and the endpoint is not asked. Existing entries on such addresses are written as `deepseek` once, which is how they were always read. Reasonix 1.x rewrites the shared config file without keys it does not know, so a format it dropped is put back at the next start from `provider-keys.json` beside the config, unless you removed it in the connection editor. |
 | Context window | The provider-wide token budget Reasonix uses for automatic context cleanup. `0` disables automatic compaction. | Set it to the provider's model context limit; use a per-model override below when selected models differ. |
 
 Each selected model also has an optional **Context window** input. Leave it blank
@@ -1042,7 +1078,8 @@ Chat and transcript shortcuts:
 | `Enter` | Sends the current message | While a turn is running, non-empty input is durably queued as a follow-up before the composer clears. On an empty composer it jumps back to the newest output and keeps following it. |
 | `Ctrl+Enter` or `/steer <text>` | Adds guidance to the active turn | The guidance is persisted first; if the turn cannot accept it, it remains a normal follow-up. |
 | `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` | Inserts a newline | Plain `Enter` is reserved for send/confirm. |
-| Plain `Up` / `Down` | Recalls older or newer submitted prompts | Only from the composer's first or last line, so multi-line editing keeps the arrows; the same while a turn runs. Manage queued follow-ups with `/queue` (below). |
+| Plain `Up` / `Down` | Recalls older or newer submitted prompts | Only from the composer's first or last line, so multi-line editing keeps the arrows. While a turn runs (or the queue is paused) and messages are queued, `Up` selects the newest queued message into the composer instead; see the queue keys below. |
+| Queue keys, with a message selected | Edit, reorder, delete or retry a queued message | `Up` / `Down` move the selection (past the newest puts your draft back); `Alt+Up` / `Alt+Down` move the message in the queue; `Enter` saves your edit in place; `d` twice deletes it (the first press only asks, and is not typed) and `r` runs a blocked one again (both only while the composer still holds the full message unedited and, in vi command mode, before the vi keys: once you edit, those letters are typed); `Enter` and the edit keys wait until the full message has been read, and a message that cannot be read, or that has already started, ends the selection and brings your draft back; `Esc` lets go. `Space` on an empty composer pauses or resumes the queue. Up to three queued messages are drawn under the working line; `/queue` (below) shows the rest. |
 | `PageUp` / `PageDown` | Scrolls the transcript | Works regardless of the current chat state. |
 | `Ctrl+Home` / `Ctrl+End` | Jumps to the top or bottom of the transcript | Useful after long tool output. |
 | `Ctrl+L` or `/cls` | Clears only the visible transcript | The LLM context, session file, tools, memory, and plugins stay loaded. Use `/clear` when you want to discard the conversation context. |

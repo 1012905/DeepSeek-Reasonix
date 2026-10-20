@@ -63,6 +63,9 @@ export interface ProviderEntry {
   // Per model: the price per million tokens it declares for itself. A model
   // with none is absent, which means unknown, not zero.
   modelPrices?: Record<string, ModelRate>;
+  // payg, or subscription_equivalent where the figures are an API-priced estimate
+  // of a plan rather than what is billed.
+  billingMode?: string;
   // A vendor's own endpoint: its table can say whether a stored price is its own.
   officialPricing?: boolean;
   // How the latest plain test of this saved entry ended, in this kernel process.
@@ -82,6 +85,13 @@ export interface ProviderEntry {
   idleTimeoutSeconds?: number;
   // What a source without one waits; the kernel owns the number.
   idleTimeoutDefault?: number;
+  // The wallet endpoint and the format its answer is read in. impliedBalanceFormat
+  // is what the saved address's own host implies when none is declared, empty for
+  // a relay, which must declare one; balanceFormats is the closed set to offer.
+  balanceUrl?: string;
+  balanceFormat?: string;
+  impliedBalanceFormat?: string;
+  balanceFormats?: string[];
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
 }
@@ -249,6 +259,10 @@ export interface ProviderEdit {
   maxOutputTokens?: number;
   // 0 is the built-in default; omitted leaves the stored value alone.
   idleTimeoutSeconds?: number;
+  // The wallet endpoint and its format; omitted leaves them alone, an empty
+  // address removes the readout and its format.
+  balanceUrl?: string;
+  balanceFormat?: string;
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
   // Which request shape controls thinking here. "" is auto — no declaration,
@@ -278,6 +292,10 @@ export interface ModelRate {
   output: number;
   cacheHit: number;
   currency: string;
+  // Where the price was read and on what UTC date (YYYY-MM-DD). They describe the
+  // price and take no part in quoting it.
+  sourceUrl?: string;
+  checked?: string;
   // True when the card is one the vendor's table has; sent by the kernel, never back.
   official?: boolean;
 }

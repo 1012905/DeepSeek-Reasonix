@@ -1,2 +1,0 @@
-- 新增：在“我的反馈”里可以撤回自己的反馈（命令行用 /feedback withdraw）；已登记的议题会被关闭，已有结论的反馈不能撤回。关联 #11995。
-- Added: You can withdraw your own report from My feedback (or /feedback withdraw in the terminal); its issue is closed, and a report with an outcome can no longer be withdrawn. Refs #11995.

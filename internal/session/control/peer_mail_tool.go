@@ -59,7 +59,7 @@ func peerErrorCode(err error) string {
 		"peer.empty": ErrPeerEmpty, "peer.too_large": ErrPeerTooLarge,
 		"dispatch.disabled": ErrDispatchDisabled, "dispatch.unavailable": ErrDispatchUnavailable, "dispatch.not_local": ErrDispatchNotLocal, "dispatch.unknown_project": ErrDispatchUnknownProject,
 		"dispatch.ambiguous": ErrDispatchAmbiguous, "dispatch.nested": ErrDispatchNested,
-		"dispatch.untrusted": ErrDispatchUntrusted, "dispatch.failed": ErrDispatchFailed, "dispatch.limit": ErrDispatchLimit,
+		"dispatch.untrusted": ErrDispatchUntrusted, "dispatch.awaiting_trust": ErrDispatchAwaitingTrust, "dispatch.same_project": ErrDispatchSameProject, "dispatch.failed": ErrDispatchFailed, "dispatch.limit": ErrDispatchLimit,
 	} {
 		if errors.Is(err, sentinel) {
 			return code

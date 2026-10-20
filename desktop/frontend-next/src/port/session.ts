@@ -1,4 +1,5 @@
 import type { ModelMode } from "./model";
+import type { CompositionSummary } from "./composition";
 import type { StoredAttachment, Via } from "./wire";
 // A conversation and the states it passes through: what is running, what it
 // cost, and the points it can be wound back to.
@@ -222,7 +223,17 @@ export interface Decision {
   questions?: DecisionQuestion[];
 }
 
+// The vendor's billing window for the model's rate, sent only where the vendor's
+// own schedule applies. changesAt is absent when no flip is ahead.
+export interface Tariff {
+  peak: boolean;
+  changesAt?: string;
+}
+
 export interface SessionStatus {
+  agentComposition?:CompositionSummary|null;
+  agentCompositionLocked?:boolean;
+  tariff?: Tariff;
   // Whether the current model reads images at all, and whether that answer was
   // ever given: a relay forwards models nothing here has a label for, and an
   // undeclared one is not the same claim as a text-only one.
@@ -313,6 +324,16 @@ export interface JobOutput {
   text: string;
   status: string;
   bytes: number;
+  truncated: boolean;
+}
+
+// One window onto the output of one tool call as the history carries it: where
+// Text starts, the whole length, and whether more follows.
+export interface ToolOutputPage {
+  callId: string;
+  text: string;
+  bytes: number;
+  offset: number;
   truncated: boolean;
 }
 

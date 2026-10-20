@@ -76,28 +76,7 @@ func (t *TaskTool) ResolveProfile(args json.RawMessage) *event.Profile {
 	if name == "" {
 		name = "task"
 	}
-	return &event.Profile{Name: name, Count: 1, Model: model, Effort: effort, Label: taskLabel(p.Desc, p.Prompt)}
-}
-
-// maxTaskLabel bounds what a row has to carry; the frontend truncates to fit.
-const maxTaskLabel = 120
-
-// taskLabel names a sub-agent from its own task: the description the model wrote
-// to say what runs, else the first line of what it was asked.
-func taskLabel(description, prompt string) string {
-	for _, text := range []string{description, prompt} {
-		for line := range strings.SplitSeq(text, "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			if r := []rune(line); len(r) > maxTaskLabel {
-				return string(r[:maxTaskLabel-1]) + "…"
-			}
-			return line
-		}
-	}
-	return ""
+	return &event.Profile{Name: name, Count: 1, Model: model, Effort: effort, Label: event.TaskLabel(p.Desc, p.Prompt)}
 }
 
 func (r *ReadOnlyTaskTool) ResolveProfile(args json.RawMessage) *event.Profile {

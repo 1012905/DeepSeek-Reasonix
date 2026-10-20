@@ -1,0 +1,2 @@
+- 优化：会话很长时，折叠或展开左侧会话栏不再逐帧重算整段对话的样式，动画明显更顺。关联 #13936。
+- Improved: folding or opening the left rail with a long conversation no longer restyles the whole transcript on every frame, so the animation stays smooth. Refs #13936.

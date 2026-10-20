@@ -3,6 +3,8 @@ package serve
 import (
 	"net/http"
 	"reasonix/internal/state/sessionstore"
+	"strconv"
+	"unicode/utf8"
 
 	"reasonix/internal/base/diff"
 	"reasonix/internal/contract/event"
@@ -153,9 +155,101 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 // if the client sends If-None-Match with the current ETag, the server returns
 // 304 Not Modified with no body, saving bandwidth on reconnects.
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
+	writeJSONCached(w, r, s.projectedHistory())
+}
+
+// projectedHistory is the one reading of the message log a frontend is given:
+// everything that serves a part of it goes through here, so a part can never
+// carry more than the whole does.
+func (s *Server) projectedHistory() []historyMessage {
 	msgs := historyMessagesWith(s.ctl().History(), s.ctl().StoredAttachments)
 	markHistoryDiffs(msgs, s.ctl().EmbeddedDiffDetectionEnabled())
-	writeJSONCached(w, r, msgs)
+	return msgs
+}
+
+func (s *Server) registerHistoryRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /history", s.history)
+	mux.HandleFunc("GET /history/tool/{id}", s.historyToolOutput)
+}
+
+// ToolOutputPage is one window onto the output of one tool call as /history
+// carries it. Bytes is the whole length, Offset where Text starts, and
+// Truncated says there is more after it.
+type ToolOutputPage struct {
+	CallID    string `json:"callId"`
+	Text      string `json:"text"`
+	Bytes     int    `json:"bytes"`
+	Offset    int    `json:"offset"`
+	Truncated bool   `json:"truncated"`
+}
+
+const (
+	toolOutputDefault = 64 << 10
+	toolOutputMax     = 256 << 10
+)
+
+// historyToolOutput serves a call's output a window at a time, for a page that
+// kept only the ends of it. It reads the same projection /history does and the
+// id is only a lookup key into it: nothing from the request names a file.
+func (s *Server) historyToolOutput(w http.ResponseWriter, r *http.Request) {
+	offset, limit, ok := toolOutputWindow(r)
+	if !ok {
+		refuse(w, http.StatusBadRequest, "tool.output_range", "offset and limit must be whole numbers, limit above zero", nil)
+		return
+	}
+	id := r.PathValue("id")
+	var text string
+	found := false
+	for _, m := range s.projectedHistory() {
+		if m.Role == string(provider.RoleTool) && m.ToolCallID == id {
+			text, found = m.Content, true
+		}
+	}
+	if !found {
+		refuse(w, http.StatusNotFound, "tool.output_unknown", "no tool call with this id in this session", nil)
+		return
+	}
+	if offset > len(text) || (offset == len(text) && len(text) > 0) {
+		refuse(w, http.StatusBadRequest, "tool.output_range", "offset is past the end of the output", nil)
+		return
+	}
+	start := runeStartAtOrBefore(text, offset)
+	end := runeStartAtOrBefore(text, min(len(text), start+limit))
+	if end <= start && start < len(text) {
+		end = min(len(text), start+utf8.UTFMax)
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, ToolOutputPage{CallID: id, Text: text[start:end], Bytes: len(text), Offset: start, Truncated: end < len(text)})
+}
+
+// toolOutputWindow reads offset and limit: whole non-negative numbers, the
+// limit above zero and no larger than a response may carry.
+func toolOutputWindow(r *http.Request) (offset, limit int, ok bool) {
+	limit = toolOutputDefault
+	q := r.URL.Query()
+	if raw := q.Get("offset"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			return 0, 0, false
+		}
+		offset = n
+	}
+	if raw := q.Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n <= 0 {
+			return 0, 0, false
+		}
+		limit = min(n, toolOutputMax)
+	}
+	return offset, limit, true
+}
+
+// runeStartAtOrBefore moves i back to the first byte of the character it falls in.
+func runeStartAtOrBefore(s string, i int) int {
+	for i > 0 && i < len(s) && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return i
 }
 
 // markHistoryDiffs re-derives the whole-diff tag on a rebuilt transcript, since

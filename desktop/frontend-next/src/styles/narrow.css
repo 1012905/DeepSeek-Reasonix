@@ -24,3 +24,14 @@
   .studio-overview-anchor { position: static; }
   .studio-overview-anchor .studio-overview-popover { left: 0; right: 0; width: auto; }
 }
+.agents { container: agents / inline-size }
+@container agents (max-width: 460px) {
+  .ag { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; column-gap: 9px; row-gap: 2px }
+  .ag .pip, .ag .nm, .ag .rt, .ag .ag-open { grid-row: 1 }
+  .ag .pip { grid-column: 1 }
+  .ag .nm { grid-column: 2 }
+  .ag .rt { grid-column: 3; margin-left: auto }
+  .ag .ag-open { grid-column: 4 }
+  .ag .lbl { grid-row: 2; grid-column: 2 / -1 }
+  .ag .ran { grid-row: 3; grid-column: 2 / -1; max-width: none }
+}

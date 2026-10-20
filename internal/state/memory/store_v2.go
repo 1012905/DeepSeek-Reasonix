@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +33,9 @@ type SaveResult struct {
 
 type MigrationReport struct {
 	Migrated int
+	// Unreadable names each fact the pass could not read, by basename, sorted.
+	// Those facts were skipped, not deleted.
+	Unreadable []string
 }
 
 var memoryStoreMutationMu sync.Mutex
@@ -40,10 +44,12 @@ func (s Store) MigrateV2() (MigrationReport, error) {
 	return s.MigrateV2WithVersion("dev")
 }
 
-func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
+func (s Store) MigrateV2WithVersion(version string) (report MigrationReport, err error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
-	var report MigrationReport
+	// The caller receives this report even when a later directory fails, so the
+	// names stay sorted on every return path.
+	defer func() { slices.Sort(report.Unreadable) }()
 	for _, dir := range s.dirs() {
 		if strings.TrimSpace(dir) == "" {
 			continue
@@ -52,11 +58,13 @@ func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
 		if err != nil {
 			return report, err
 		}
-		// A migration rewrites facts and then the index. An unreadable index would
-		// leave those facts out of it permanently, because the next run skips facts
-		// that already carry an id.
+		// A migration rewrites facts and then the index. A deterministic read
+		// fault is republished from the facts instead; a transient one still
+		// returns, because the existing bytes may still be good.
 		if _, err := readIndexIn(dir); err != nil {
-			return report, err
+			if err := s.repairIndexIn(dir, entries, err); err != nil {
+				return report, err
+			}
 		}
 		for _, entry := range entries {
 			if entry.IsDir() || entry.Name() == indexFile || !strings.HasSuffix(entry.Name(), ".md") {
@@ -65,7 +73,10 @@ func (s Store) MigrateV2WithVersion(version string) (MigrationReport, error) {
 			path := filepath.Join(dir, entry.Name())
 			raw, err := os.ReadFile(path)
 			if err != nil {
-				return report, err
+				// A fact this pass cannot read is skipped, not fatal: the rest
+				// of the store still migrates, and the caller learns the name.
+				report.Unreadable = append(report.Unreadable, entry.Name())
+				continue
 			}
 			frontmatter, _ := splitFrontmatter(string(raw))
 			if strings.TrimSpace(frontmatter["id"]) != "" && parsePositiveInt(frontmatter["revision"]) > 0 {
@@ -448,6 +459,12 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
 
+	// A restore killed after it staged its entry leaves the entry hidden. The
+	// sweep resolves it by id before this call stages anything: an active id
+	// means the dead attempt published, an absent one means it never did.
+	if err := s.sweepRestoreStaging(); err != nil {
+		return SaveResult{}, err
+	}
 	archivePath = cleanMemoryPath(strings.TrimSpace(archivePath))
 	archived, base, ok, err := s.findArchivedByPath(archivePath)
 	if err != nil {
@@ -501,36 +518,14 @@ func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	if err := writeMemoryCreate(path, []byte(render(restored, restored.Name)), 0o644); err != nil {
-		if os.IsExist(err) {
-			return SaveResult{}, fmt.Errorf("memory name %q is already active", restored.Name)
-		}
+	// The archive entry is hidden before the active file exists, so a crash
+	// between the two can never leave the id listed as active and archived.
+	stagedPath, err := stageArchivedEntry(base, archivePath, archived.ID)
+	if err != nil {
 		return SaveResult{}, err
 	}
-	// A failed recovery must not leave one id active and archived at once. Both
-	// steps below run after the active file exists, so each undoes it; if the
-	// index write fails too, the retry below rewrites that line.
-	drop := func(cause error) (SaveResult, error) {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return SaveResult{}, fmt.Errorf("%w (and the restored %q could not be withdrawn: %w)", cause, restored.Name, err)
-		}
-		lines, _, err := indexLinesExceptIn(base, restored.Name)
-		if err != nil {
-			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
-		}
-		if err := flushIndexIn(base, lines); err != nil {
-			return SaveResult{}, fmt.Errorf("%w (and the index could not be cleaned: %w)", cause, err)
-		}
-		return SaveResult{}, cause
-	}
-	if err := reindexIn(base, restored.Name, restored); err != nil {
-		return drop(err)
-	}
-	if err := fault("remove", archivePath); err != nil {
-		return drop(err)
-	}
-	if err := os.Remove(archivePath); err != nil && !os.IsNotExist(err) {
-		return drop(err)
+	if err := publishRestored(base, archivePath, path, stagedPath, restored); err != nil {
+		return SaveResult{}, err
 	}
 	return SaveResult{Path: path, Memory: restored}, nil
 }

@@ -2,7 +2,6 @@ package boot
 
 import (
 	"context"
-	"errors"
 	"reasonix/internal/runtime/capability"
 	"runtime"
 	"strings"
@@ -105,12 +104,8 @@ func buildPromptAssembly(ctx context.Context, opts Options, cfg *config.Config, 
 	// so it costs nothing per turn. Mid-session changes ride the controller's
 	// transient turn-injection and fold in on the next session instead.
 	if !continuesGeneration(opts) {
-		if _, err := memory.StoreFor(opts.roots().MemoryUserDir(), root).MigrateV2WithVersion(opts.Version); err != nil {
-			ev := event.Event{Level: event.LevelWarn, Text: "Memory metadata migration did not complete.", Detail: err.Error()}
-			var backupErr *memory.MigrationBackupError
-			if errors.As(err, &backupErr) {
-				ev.Code = event.NoticeCodeMemoryMigrationBackup
-			}
+		migration, err := memory.StoreFor(opts.roots().MemoryUserDir(), root).MigrateV2WithVersion(opts.Version)
+		if ev, warn := memoryMigrationWarning(migration, err); warn {
 			report(sink, ev)
 		}
 	}

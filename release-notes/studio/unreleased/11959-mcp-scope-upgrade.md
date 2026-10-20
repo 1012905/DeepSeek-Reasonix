@@ -1,2 +1,0 @@
-- 新增：MCP 服务器因授权范围不够拒绝调用时，模型会停下，你可在该服务器那行点“授权更多权限”，每次都会先问你。关联 #11959。
-- Added: When an MCP server refuses a call for lack of access, the model stops and you can click "Grant more access" on its row; you are asked every time. Refs #11959.

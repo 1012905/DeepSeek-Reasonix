@@ -23,6 +23,8 @@ const feedbackUsage = `usage:
   /feedback link [--yes]                               show your reports on every device you link to your account
   /feedback unlink [--yes]                             stop linking this device
   /feedback links                                      list the devices linked to your account
+  /feedback board [release]                            show the contribution board (all releases, or one release ranked)
+  /feedback board join <name> [--yes] | leave | me    choose to be listed on it, or leave it
   /feedback name <nickname>                            set the nickname reports go out under`
 
 const feedbackPublicNotice = "Your text and nickname become PUBLIC on GitHub (esengine/DeepSeek-Reasonix) only if we file your report as an issue; otherwise they stay private. You will get a receipt and, if it is filed, the link; we may also reply or ask questions here (/feedback list). Do not include secrets or private code. Security problems belong in SECURITY.md, not here."
@@ -43,6 +45,7 @@ func feedbackArgItems(prior []string) []SlashItem {
 		{Label: "link", Insert: "link", Hint: i18n.M.ArgFeedbackLink},
 		{Label: "unlink", Insert: "unlink", Hint: i18n.M.ArgFeedbackUnlink},
 		{Label: "links", Insert: "links", Hint: i18n.M.ArgFeedbackLinks},
+		{Label: "board", Insert: "board", Hint: i18n.M.ArgFeedbackBoard},
 		{Label: "name", Insert: "name", Hint: i18n.M.ArgFeedbackName},
 	}
 }
@@ -75,6 +78,8 @@ func (c *Controller) feedbackCommand(args string) {
 		c.feedbackLinkCommand(rest, false)
 	case "links":
 		go c.feedbackLinks()
+	case "board":
+		c.feedbackBoardCommand(rest)
 	case "name":
 		if err := c.SetFeedbackDisplayName(rest); err != nil {
 			c.notice(feedbackFailure(err))
@@ -141,6 +146,12 @@ func (c *Controller) feedbackList() {
 	var b strings.Builder
 	if got.Offline {
 		b.WriteString("(offline - showing what this machine remembers; statuses may be out of date)\n")
+	}
+	if up := got.Promotion; up != nil {
+		fmt.Fprintf(&b, i18n.M.Feedback.LevelUpFmt+"\n", up.To, feedbackLevelName(up.To), up.From)
+		if err := c.AckFeedbackPromotion(up.To); err != nil {
+			b.WriteString("(could not remember that you were told: " + err.Error() + ")\n")
+		}
 	}
 	if standing := feedbackStanding(got.Profile, got.Offline); standing != "" {
 		b.WriteString(standing + "\n\n")

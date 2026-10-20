@@ -5,7 +5,7 @@ import { t } from "../i18n";
 /** The settings table of contents: which sections exist, what each is called,
  *  what mark it carries and which question it answers. Kept out of Settings
  *  itself because it is a table, not a screen — the screen reads it. */
-export type Section = "session" | "persona" | "model" | "providers" | "tools" | "hooks" | "ext" | "network" | "remote" | "memory" | "usage" | "storage" | "account" | "versions" | "appearance" | "advanced";
+export type Section = "session" | "persona" | "model" | "providers" | "tools" | "peers" | "hooks" | "ext" | "network" | "remote" | "memory" | "usage" | "storage" | "account" | "versions" | "appearance" | "advanced";
 
 // Drawn on the same 16-unit grid at 1.45 stroke as the rest of this screen's
 // marks. The rail in Nav.tsx draws a section's entry from this table, so one
@@ -31,6 +31,14 @@ export const ICON: Record<Section, ReactNode> = {
       <rect x="2.4" y="2.6" width="11.2" height="4.2" rx="1.2" />
       <rect x="2.4" y="9.2" width="11.2" height="4.2" rx="1.2" />
       <path d="M5 4.7h3.4M5 11.3h3.4M11 4.7h.01M11 11.3h.01" />
+    </>
+  ),
+  // Two conversations with a line between them.
+  peers: (
+    <>
+      <rect x="2.2" y="2.8" width="6" height="4.6" rx="1.2" />
+      <rect x="7.8" y="8.6" width="6" height="4.6" rx="1.2" />
+      <path d="M5.2 7.4v1.6a1 1 0 0 0 1 1h1.6" />
     </>
   ),
   tools: (
@@ -103,6 +111,7 @@ export const NAV: [string, [Section, string][]][] = [
       ["model", "模型偏好"],
       ["providers", "模型服务"],
       ["tools", "工具与权限"],
+      ["peers", "会话间消息"],
       ["hooks", "自动化"],
       ["ext", "扩展"],
     ],
@@ -218,12 +227,15 @@ export const SETTINGS: SettingEntry[] = [
   { section: "ext", anchor: "mods", title: "Claude Code mod", scope: "machine", apply: "on-open", hidden: !MODS_SHOWN, keywords: ["mod", "钩子", "hook", "Claude Code", "完全信任", "插件", "扩展"] },
   { section: "session", anchor: "progress-watch", title: "长时间无进展", scope: "machine", apply: "immediate", keywords: ["暂停", "无进展", "空转", "卡住", "循环", "轮次", "token"] },
   { section: "session", anchor: "changed-files", title: "文件改动", scope: "machine", apply: "immediate", keywords: ["改动", "变更", "文件", "已更改", "药丸", "输入框"] },
+  { section: "session", anchor: "feedback-level-notices", title: "等级提示", scope: "machine", apply: "immediate", keywords: ["等级", "晋级", "升级", "反馈", "提示"] },
   { section: "session", anchor: "turn-narration", title: "回合间叙述", scope: "machine", apply: "immediate", keywords: ["叙述", "总结", "小轮", "工具之间", "详细", "简短", "思路", "监控", "narration"] },
   { section: "session", anchor: "fold-work", title: "折叠中间过程", scope: "machine", apply: "immediate", keywords: ["折叠", "中间过程", "工具调用", "思考", "最后一句", "收起", "摘要"] },
   // Written to the user file only; the kernel's background sweep reads it on each pass.
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
-  // Saving does not rebuild; any later runtime build reads the user persona.
-  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "next-rebuild", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀", "预设"] },
+  { section: "persona", anchor: "composition-picker", title: "显示模式选择器", scope: "machine", apply: "immediate", keywords: ["预设", "模式", "picker", "Agent"] },
+  // Explicit selections bind immutable versions; catalog saves do not rebuild.
+  { section: "persona", anchor: "agent-presets", title: "Agent 预设", scope: "machine", apply: "on-open", keywords: ["预设", "组合", "Agent"] },
+  { section: "persona", anchor: "persona", title: "系统人设", scope: "machine", apply: "next-rebuild", keywords: ["人设", "persona", "身份", "提示词", "系统提示词", "前缀", "后缀"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
   { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "网页搜索", "web search", "system one", "typesafe", "laya", "自动命名", "思考强度", "推理", "reasoning", "档位"] },
@@ -243,6 +255,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "tools", anchor: "approval", title: "工具批准", scope: "machine", apply: "immediate", keywords: ["权限", "yolo", "询问", "放行"] },
   { section: "tools", anchor: "external-origin", title: "外部文字", scope: "machine", apply: "runtime-rebuild", keywords: ["外部", "网页", "来源", "注入", "提示注入", "origin", "yolo", "auto", "询问"] },
   { section: "tools", anchor: "plan-approval", title: "计划批准", scope: "machine", apply: "immediate", keywords: ["plan", "自动批准", "长任务", "无人值守", "plan_approval", "放行", "询问"] },
+  { section: "tools", anchor: "tool-list", title: "模型可用的工具", scope: "machine", apply: "on-open", keywords: ["禁用", "关闭工具", "tools.disabled", "省 token", "提示词开销", "web_fetch", "denylist"] },
   { section: "tools", anchor: "rules", title: "明确的规则", scope: "machine", apply: "runtime-rebuild", keywords: ["permissions", "允许", "拒绝", "配方"] },
   { section: "tools", anchor: "sandbox", title: "沙箱", scope: "machine", apply: "runtime-rebuild", keywords: ["隔离", "联网", "写权限", "ssh-agent"] },
   { section: "tools", anchor: "shell", title: "命令执行程序", scope: "machine", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
@@ -250,7 +263,8 @@ export const SETTINGS: SettingEntry[] = [
   // one. The shared [browser] enabled key belongs to the 1.x command line.
   // The lease is built with the session and a rebuild adopts the one it holds, so
   // the save reaches only sessions opened afterwards; the handler rebuilds nothing.
-  { section: "tools", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
+  { section: "peers", anchor: "peers", title: "会话间消息（实验）", scope: "machine", apply: "next-turn", keywords: ["peer", "会话间", "消息", "发送", "批准", "挂起", "另一个会话"] },
+  { section: "peers", anchor: "peer-projects", title: "放行的项目", scope: "machine", apply: "next-turn", keywords: ["放行", "项目", "不再询问", "长期", "撤销", "peer", "release", "会话间"] },
   { section: "tools", anchor: "write-lease", title: "多个会话同时写一个项目", scope: "machine", apply: "on-open", keywords: ["lease", "写锁", "并行", "多会话", "乐观", "optimistic", "write_lease", "等待"] },
   { section: "tools", anchor: "subagent-claims", title: "子代理的写入范围", scope: "machine", apply: "runtime-rebuild", keywords: ["subagent", "子代理", "并发", "write_paths", "乐观", "optimistic", "写锁"] },
   { section: "network", anchor: "trace-export", title: "追踪导出", scope: "machine", apply: "on-open", keywords: ["追踪", "opentelemetry", "otlp", "观测", "遥测", "trace", "collector", "收集器"] },
@@ -276,6 +290,8 @@ export const SETTINGS: SettingEntry[] = [
   // walks through it reaches every pane. Nothing is written, so nothing outlives
   // the window either.
   { section: "remote", anchor: "phone", title: "手机访问", scope: "machine", apply: "immediate", keywords: ["手机", "扫码", "二维码", "局域网", "配对", "phone", "mobile", "qr"] },
+  { section: "remote", anchor: "phone-notify", title: "手机通知", scope: "machine", apply: "immediate", keywords: ["推送", "提醒", "手机", "批准", "push", "notification", "phone"] },
+  { section: "remote", anchor: "phone-device", title: "这台手机的提醒", scope: "machine", apply: "immediate", keywords: ["推送", "提醒", "手机", "push", "notification"] },
   { section: "account", anchor: "account", title: "账号", scope: "account", apply: "immediate", keywords: ["登录", "社区"] },
   // Shown only while signed in; restoring writes through the ordinary config paths and reloads the runtime.
   { section: "account", anchor: "backup-file", title: "导出与导入配置", scope: "machine", apply: "immediate", keywords: ["备份", "导出", "导入", "换机", "迁移", "文件"] },

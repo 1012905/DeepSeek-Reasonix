@@ -115,6 +115,7 @@ func (m *model) workingLine() string {
 	if m.tr.TurnOut > 0 {
 		line += " · ↓" + shortTokens(m.tr.TurnOut)
 	}
+	line += m.queueTag()
 	before, after, _ := strings.Cut(line, mark)
 	frame := spinFrames[int(since/spinEvery)%len(spinFrames)]
 	return termrender.Dim(before) + termrender.Accent(frame) + termrender.Dim(after)

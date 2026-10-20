@@ -335,7 +335,7 @@ func (c *Controller) onInboxUnappliedSteer(itemID string) {
 		}
 	}
 	_ = st.SetStateCoded(itemID, sessioninbox.StateUncertain, sessioninbox.BlockSteerUnapplied, "steer accepted but unapplied before turn exit")
-	_ = st.SetPaused(true)
+	_ = st.Pause(sessioninbox.PauseTurnRecord)
 	c.inbox.mu.Lock()
 	c.inbox.untrackActive(itemID)
 	c.inbox.mu.Unlock()

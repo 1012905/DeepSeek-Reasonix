@@ -77,6 +77,9 @@ export interface ModPreview {
   api: ModPreviewCall[];
   imports: ModPreviewImport[];
   findings: ModPreviewFinding[];
+  // What the module takes from the session or queues into it, by literal call:
+  // "messages" and "usage" read it, "submit" queues a prompt.
+  session: string[];
   // Literal events this host never raises.
   unserved: string[];
 }

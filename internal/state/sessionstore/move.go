@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/state/store"
 )
@@ -104,6 +105,12 @@ func MoveSession(src, dstDir, dstRoot string) (string, error) {
 	if !intact {
 		guard.Release()
 		return "", ErrSessionDisplayReadModelDamaged
+	}
+	for _, message := range msgs {
+		if message.AgentComposition != nil {
+			guard.Release()
+			return "", agentcomposition.ErrWorkspaceBound
+		}
 	}
 	meta, _, _ := LoadBranchMeta(src)
 	dst, err := AdoptConversation(dstDir, AdoptInput{

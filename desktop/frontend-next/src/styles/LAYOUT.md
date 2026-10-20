@@ -286,6 +286,13 @@ rules are written in.
   on the pane that reads it.
 - A tweened inherited property on `.app` restyles every node under it on every
   frame, which made opening the workbench stutter with a long transcript.
+- The rail, nav and side widths are tweened inherited properties on `.app` too.
+  Nothing under the transcript reads them, so `.flow` resets them.
+- Without the reset, a fold at 300 turns cost about 430 ms of style
+  recalculation against 3 ms of layout; with it the median frame fell from 128 ms
+  to 46 ms (4x CPU throttle, the perf fixture).
+- `perf/rail-toggle-panes.mjs` holds it by reading the widths inside `.flow`
+  while the rail folds. `.srail-peek` is outside `.flow` and still reads `--rail-w`.
 - The gutter writes the width on the pane for the same reason (`DOCK.owner`).
 - The side track is closed unless a panel mounts in it. It was written open and
   closed by `[data-side="off"]`, and the attribute stayed wired to the built-in
@@ -1105,6 +1112,14 @@ what exists.
 - Sub-agents and background jobs are readings about this turn, so they sit with
   the turn's other readings at the right end of the run rail rather than in a
   panel of their own above it.
+A sub-agent row, by the list's own width:
+
+- Wide: one line holding the name, the task, the model chip and the status.
+- Below 460px: the name and status stay on the first line, the task has the
+  second to itself, and the model chip the third.
+- Why: the name, chip and status are content-sized and the task took what was
+  left, so it was the first thing to disappear at the widths where a person
+  most needs to tell two rows apart.
 - The detail is inside the same anchor as the reading, which is what lets hover
   and keyboard focus reach it. A click pins it: a panel that closes when the
   pointer leaves is one nobody can scroll.
@@ -1285,13 +1300,12 @@ what exists.
 - Children form their own block so they can carry the hierarchy guide line.
   Indentation alone does not say level: 18px between two tiers scans as "slightly
   out of line".
-- A selected session row cannot share hover's colour: both at `--overlay` makes
-  any row the mouse passes look selected. Its hue changed too — `--net` already
-  means "this session has a live runtime" (the dot is that), and reusing it for
-  "you are looking at this one" merges two meanings. The blue dot means a live
-  runtime, not that it is reasoning now: the heartbeat goes only to the one
-  actually running, with the global run state on `.app` and the current session
-  as `data-on`.
+- A selected session uses an 8% text-ink wash and hover uses 4%, with regular
+  title weight in both states. The neutral fill carries selection without a
+  coloured edge or a second short bar. Runtime marks describe execution state,
+  pin icons describe pinned sessions, and the keyboard focus outline remains
+  independent of selection. `treerows.css` owns the selected-row recipe for
+  both local and SSH sessions.
 - The rename and delete controls leave the layout but stay on the row: the width
   they held belonged to the title, and a control nobody can see is the other
   failure. They reserve their width whatever they look like, so hiding them until
@@ -1533,6 +1547,15 @@ what exists.
 - The row actions (`+`, `…`, refresh) are revealed on hover or focus, 22px, outlined, and share one hover, press, expanded and busy state, whichever row they sit on. Remote host actions are always drawn and outline only on those states.
 - Every row's last action ends on the same edge: the machine row keeps a 15px right margin like a project row, so a machine's `+` sits over a project's `…`.
 
+## Session rows
+
+- The title takes every pixel the row's visible content leaves it. The age sits against the row's right padding and the earlier-versions badge beside it; nothing is held back on the right for a control that is not showing.
+- The hover buttons (archive) take no width until the row is hovered or focused, then 24px plus 6px; on a device without hover they are always drawn.
+- Taking the room only while shown means the title shortens when the buttons appear, never before. Pinning stays an overlay at the left, so the pin never moves the title.
+- An unread dot is an overlay 11px from the right edge: an unread row keeps 22px after its age (or after its badge, 26px) for it, and the dot hides while the buttons are shown.
+- A legacy `margin-right: 44px` on the age made room for a delete button the rail has long since hidden; the rail's rule sets it to zero.
+- `perf/sessionrows.mjs` measures this in a real browser: with no button showing, a row with an age leaves at most 2px (8px with a badge) of its right side unused, and the buttons take no width at rest.
+
 ## Session rename dialog
 
 - Double-clicking a sidebar session title or a tab starts inline editing.
@@ -1579,11 +1602,50 @@ what exists.
 - A prompt that can answer "this and every later one of its kind" draws those choices through one component (`RememberChoice`), only for the kinds the kernel says it will honour, as the quieter buttons beside the primary one.
 - A note under the footer (`RememberWhere`) says where each is kept: for the session only and never on disk, or as a permission rule in the user config that Settings can undo.
 
+## Unified project list
+
+- The sidebar is one project list: local roots and SSH roots share alignment and keyboard levels. Machine names are secondary project metadata, never parent groups. Remote folds use the host and root together as identity.
+- Project headings have no separate chevron. Clicking a heading or using the tree arrow keys toggles its conversations; known empty projects do not advertise expansion. The heading toolbar switches all projects together, while search reveals matching conversations independently of saved folds.
+- The project toolbar keeps collapse/expand beside the label and open-project plus and overflow at the right. The plus opens the common local/SSH location picker; project-row chat icons create conversations. Empty lists retain a text entry.
+- Each project previews five recent sessions and keeps an older active/opening session visible. Search and explicit scopes show their matches. Show more reveals loaded rows and uses the existing bounded kernel paging path.
+- Time metadata comes only from canonical last-active timestamps. Loaded/total session counts remain available to assistive technology without visible badges.
+- The sidebar defaults to 316px, respects saved widths and retains its existing 232px floor. Folder glyphs, titles, action slots and conversation indents align across environments. Hover actions reserve their space.
+- The diagonal toolbar glyphs reuse Tabler's MIT-licensed [collapse][tabler-collapse] and [expand][tabler-expand] paths through the existing Studio icon component.
+
+## Session hover actions
+
+- Local and SSH transcript rows reveal Pin on the left and Archive on the
+  right on hover or focus. Pinned idle rows retain the pin. Execution marks
+  take the leading slot at rest; hover or focus reveals the pin action there.
+- The leading slot and trailing archive width are reserved. Titles do not
+  move when buttons appear, when a session is pinned, or when legacy metadata
+  is visually hidden. Batch checkboxes replace the leading pin slot.
+- Delete stays in each conversation's context menu. Running sessions refuse
+  archive; restoring uses the same action with the opposite flag. Row buttons
+  stop the open gesture, and SSH writes carry the host separately from the
+  transcript path so an identical local path cannot receive them.
+- Hover actions default to hidden unless this machine explicitly enabled them; saved on and off preferences survive.
+  Hidden actions remain available in the session menus. Touch surfaces show
+  idle-row actions without requiring hover.
+
+[tabler-collapse]: https://github.com/tabler/tabler-icons/blob/main/icons/outline/arrows-diagonal-minimize-2.svg
+[tabler-expand]: https://github.com/tabler/tabler-icons/blob/main/icons/outline/arrows-diagonal-2.svg
+
 ## Brand lockup
 
 - The mark at the top of the rail is one row: the wordmark and a compact outlined uppercase badge ("STUDIO" by CSS; the text and the aria label are unchanged), vertically centred on each other, gap 8px.
 - The badge has a transparent fill, a 1px `--hair` border and `--muted` text, so it reads as a label and not as a notice; its outer size is unchanged.
 - The badge is hidden at 760px and below. The wordmark box is cropped to its drawn width so the badge sits next to the letters, not next to the asset's padding.
+
+## Composer context
+
+- The Agent mode selector sits at the left of the top row; run status and token counts align at the right and wrap below on narrow panes. Controls remain outside the live status region; the input toolbar keeps task actions, model and execution settings.
+- The row and composition controls wrap independently when space is constrained. Long composition names truncate inside the selector; diagnostics wrap without widening the composer.
+- Preset editor and identifier controls share field tokens in `composition-presets.css`; the composer row remains in `app.css`. The row is mounted only after the person enables the mode picker; otherwise the original run status is rendered directly.
+- Composition selection and management share one menu: choices show source and capability notes; the separated footer opens management. Started conversations keep the same trigger with lock details inside the menu, and choices explicitly create another conversation.
+- The trigger shows only the mode name and arrow. Source and lock state remain in its accessible name, tooltip and menu; they do not widen the trigger.
+- Preset management separates two built-in mode cards from custom presets. Card selection inspects a definition; setting a default affects new conversations and never switches the active binding.
+- Open floating controls follow responsive fold changes and recheck their anchor after layout transitions finish; window resize alone precedes the body observer's fold publication.
 
 ## Side question
 

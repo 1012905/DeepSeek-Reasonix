@@ -1,7 +1,5 @@
-// The "+" that opens a project folder sits on the machine row where a person
-// looks for it, and is there before the row is hovered. It was drawn only on
-// hover once, and two people on 2.39.0 reported that they could not choose a
-// folder at all. Opacity and hit-testing need a real browser.
+// The Projects heading's add-folder button stays visible and hit-testable
+// before hover. Opacity and hit-testing need a real browser.
 import { chromium } from "playwright";
 
 const BASE = process.env.PERF_URL ?? "http://localhost:4399/perf.html?pref=zh";
@@ -18,11 +16,11 @@ try {
       const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
       page.on("pageerror", (e) => fails.push("page error: " + e.message));
       await page.goto(BASE, { waitUntil: "networkidle" });
-      await page.waitForSelector(".machrow[data-here]");
+      await page.waitForSelector(".projects-heading");
       await page.mouse.move(width - 2, 790);
       await page.waitForTimeout(300);
       const g = await page.evaluate(() => {
-        const row = document.querySelector(".machrow[data-here]");
+        const row = document.querySelector(".projects-heading");
         const add = row?.querySelector('[data-action="workspace.add"]');
         if (!add) return null;
         const r = add.getBoundingClientRect();
@@ -32,7 +30,7 @@ try {
         return { opacity: seen, width: r.width, height: r.height, hits: hit === add || add.contains(hit), shown: row.matches(":hover") };
       });
       const where = `${theme} ${width}`;
-      check(`${where}: the machine row has the add-folder button`, g !== null);
+      check(`${where}: the Projects heading has the add-folder button`, g !== null);
       if (!g) continue;
       check(`${where}: it is visible without hovering the row`, !g.shown && g.opacity === 1 && g.width > 0 && g.height > 0, JSON.stringify(g));
       check(`${where}: it takes the pointer`, g.hits);

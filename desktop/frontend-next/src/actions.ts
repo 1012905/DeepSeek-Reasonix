@@ -1,15 +1,5 @@
-// What Studio claims a person can do, as a set of stable identities.
-//
-// The oracle for the census, and deliberately not something production imports:
-// a button writes the id as a literal and this file writes it again, so the two
-// can disagree and be caught. Sharing one constant would make the check compare
-// a value with itself — the shape of false green this tree keeps removing.
-//
-// An id is <surface>.<intent>: the semantic class, never the instance and never
-// the wording. Which entry a click is about rides on data-target, and which of
-// several answers it gives rides on data-value, so a row rendered seventy times
-// is still one contract, and 「取消」 — seventeen buttons, eight destinations —
-// is never an identity.
+// The census oracle is independent of production literals so disagreements fail.
+// An id names the intent; data-target and data-value name its entity and choice.
 
 export type ActionKind =
   /** Changes only what is on screen. Must not reach the kernel. */
@@ -48,6 +38,39 @@ export interface UIAction {
 }
 
 export const ACTIONS: UIAction[] = [
+  {id:"agent-composition.select",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-composition.manage",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.show-picker",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-composition.unavailable",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-composition.new",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.reload",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.view",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.new-task-default",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.usage",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.create",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave-cancel",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.leave-discard",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.persona",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.copy",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.scope",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.id",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.name",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.description",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.module-mode",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-id",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-parameters",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-add",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-choose",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-remove",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.save",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.default",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.workspace-default",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.delete-preview",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.delete",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
+  {id:"agent-preset.delete-cancel",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.export",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.import",kind:"view",target:"none",proof:"interaction"},
   // ── The window's own switches, and the way into the turn's policy ────────
   // Completion verification is adaptive now, rather than a user-facing preset.
   // The legacy endpoint remains in the port for older clients and sessions,
@@ -55,6 +78,10 @@ export const ACTIONS: UIAction[] = [
   { id: "chart.scroll", kind: "view", target: "none", proof: "interaction" },
   { id: "chart.data", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.policy", kind: "view", target: "none", proof: "interaction" },
+  { id: "phone-device.enabled", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "phone-device.occasion", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "phone-device.retry", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "phone-device.restart", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "chrome.rail", kind: "view", target: "none", proof: "browser" },
   { id: "chrome.more", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.open-project", kind: "shell-native", target: "none", proof: "interaction" },
@@ -95,6 +122,8 @@ export const ACTIONS: UIAction[] = [
   // The way out of a window whose assets an update replaced underneath it.
   { id: "chrome.reload", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.changed-files", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "chrome.feedback-level-notices", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "level-up.notice-dismiss", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "chrome.fold-work", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "chrome.turn-narration", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "changes.open", kind: "navigation", target: "none", proof: "interaction" },
@@ -135,6 +164,7 @@ export const ACTIONS: UIAction[] = [
   { id: "image.close", kind: "view", target: "none", proof: "interaction" },
   { id: "image.focus-trap", kind: "navigation", target: "none", proof: "interaction" },
   { id: "tool.show-all", kind: "view", target: "none", proof: "interaction" },
+  { id: "tool.show-full", kind: "view", target: "none", proof: "interaction" },
   { id: "agent.open", kind: "view", target: "entity", proof: "interaction" },
   { id: "agent.focus-trap", kind: "navigation", target: "none", proof: "interaction" },
   { id: "agent.close", kind: "view", target: "none", proof: "interaction" },
@@ -271,9 +301,17 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.logs", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.refresh", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "feedback.filter", kind: "view", target: "none", proof: "interaction" },
-  { id: "feedback.account-link", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "feedback.account-link", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.account-link-confirm", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "feedback.account-link-cancel", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.board-join-choice", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.board-offer-dismiss", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.account-unlink", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "feedback.account-unlink-other", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  { id: "feedback.board-join", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "feedback.board-leave", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "feedback.board-release", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.board-name", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.retry-env", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "feedback.retry-mine", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "feedback.withdraw-open", kind: "view", target: "entity", proof: "interaction" },
@@ -430,9 +468,10 @@ export const ACTIONS: UIAction[] = [
   { id: "remote.hide", kind: "view", target: "entity", proof: "interaction" },
   { id: "remote.enable", kind: "view", target: "entity", proof: "interaction" },
   { id: "remote.read", kind: "repeatable", target: "entity", proof: "authority-effect" },
-  { id: "remote.group", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "workspace.fold-all", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },
+  { id: "root-missing.reselect", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "session.move", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "session.move-to-start", kind: "view", target: "entity", proof: "interaction" },
@@ -456,6 +495,7 @@ export const ACTIONS: UIAction[] = [
   { id: "extensions.submit", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "provider.probe", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "provider.draft", kind: "interaction", target: "none", proof: "interaction" },
+  { id: "provider.price-source", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "provider.discard-edits", kind: "destructive", target: "none", proof: "interaction" },
   { id: "provider.revert", kind: "interaction", target: "none", proof: "interaction" },
   { id: "provider.model-check-all", kind: "repeatable", target: "none", proof: "interaction" },
@@ -536,6 +576,15 @@ export const ACTIONS: UIAction[] = [
   { id: "notify.feedback-reply", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.disk-low", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.sound", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "phone-notify.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "phone-notify.approval", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "phone-notify.input", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "phone-notify.error", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "phone.add", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "phone.replace", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "phone.reject", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "phone.revoke", kind: "destructive", target: "entity", proof: "authority-effect" },
+  { id: "phone.revoke-ask", kind: "view", target: "entity", proof: "interaction" },
   { id: "workspace.editor", kind: "repeatable", target: "none", proof: "authority-effect" },
   { id: "wallpaper.remove", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "wallpaper.change", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
@@ -640,6 +689,7 @@ export const ACTIONS: UIAction[] = [
   { id: "posture-note.dismiss", kind: "view", target: "none", proof: "interaction" },
   { id: "storage.move", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "session.import-legacy", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "session.import-native", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "network.diagnose", kind: "repeatable", target: "none", proof: "interaction" },
 
   // ── Permissions, the sandbox, and the endpoints a session can reach.
@@ -674,9 +724,23 @@ export const ACTIONS: UIAction[] = [
   { id: "subagent-steer.max-bytes", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "subagent-steer.per-minute", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "write-lease.optimistic", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "write-lease.max-wait", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "workbench.stage-folder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "workbench.change-folder", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.discard", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.discard-confirm", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "workbench.discard-cancel", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.repo", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.repos-reload", kind: "view", target: "none", proof: "interaction" },
+  { id: "workbench.commit", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.commit-file", kind: "view", target: "entity", proof: "interaction" },
+  { id: "push.preview", kind: "view", target: "none", proof: "interaction" },
+  { id: "push.confirm", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "push.close", kind: "view", target: "none", proof: "interaction" },
   { id: "permissions.ask-on-external-origin", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "plan-approval.auto", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "default-mode.plan", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "tool-list.toggle", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.target", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.text", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.expand", kind: "view", target: "none", proof: "interaction" },
@@ -686,6 +750,8 @@ export const ACTIONS: UIAction[] = [
   { id: "peers.enable", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.dispatch", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "peers.release-revoke", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "peers.release-add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "peers.release-pick", kind: "view", target: "none", proof: "interaction" },
   { id: "peers.deny", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
@@ -697,8 +763,8 @@ export const ACTIONS: UIAction[] = [
   { id: "persona.prefix", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.suffix", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.preset", kind: "view", target: "optional", proof: "interaction" },
-  { id: "persona.runtime-context", kind: "view", target: "none", proof: "interaction" },
   { id: "persona.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "persona.runtime-context", kind: "view", target: "none", proof: "interaction" },
   // The kernel announces the change on the stream, so no rebuild stands between
   // the click and the canonical change.
   { id: "currency.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
