@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,11 +85,17 @@ func stageSeed(t *testing.T, taskDir string) string {
 	return work
 }
 
+// gradeSeed carries the grader's output in its error: a CI log that says only
+// "exit status 1" cannot tell a missing tool from a failed check.
 func gradeSeed(t *testing.T, work string) error {
 	t.Helper()
 	cmd := exec.Command("bash", "verify.sh")
 	cmd.Dir = work
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // forbiddenArtifact names, per task, a file whose mere existence is the

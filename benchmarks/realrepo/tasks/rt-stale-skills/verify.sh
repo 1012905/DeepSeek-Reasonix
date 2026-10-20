@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -e
 export PYTHONPYCACHEPREFIX="$(mktemp -d)"
-shasum -a 256 -c --quiet <<'MANIFEST' || { echo "a non-documentation file changed"; exit 1; }
+python3 -I - <<'PY'
+import hashlib, pathlib, re, sys
+
+root = pathlib.Path(".")
+MANIFEST = """
 bb32ebbcfd7c1602ececdce82fe38ec47f304c57b92b09e6d5c30fd2745436f0  Makefile
 50a91e2a965931ca9d3ebab65ab61669a941c5d6b953148aa594de9dfd0c15d3  REASONIX.md
 477935fb2b89905e0df115ac445f9208e37533d5c7764f5faac1048e253a91ec  cmd/benchctl/main.go
@@ -50,11 +54,12 @@ fd98c919fcc8888bb30d22355168524bd6aba2402cbb27efe040ac8b79e07aa7  internal/contr
 a267d5d465bdfab8694bfb357ceb4ed9867564cc3719d5d7d1aa6a9d1bca97cd  internal/contract/pricing/tariff_test.go
 8fa0a5b69331aca22ab06e21af9e3677db6e9251885cad39368b9f3960a00126  internal/contract/pricing/window.go
 f914a434c6b1d9c0aeb3f7405622ed5e77ce42d60cdcf3cf63ad809799a4c912  internal/contract/pricing/window_test.go
-MANIFEST
-python3 -I - <<'PY'
-import pathlib, re, sys
-
-root = pathlib.Path(".")
+"""
+changed = [path for digest, path in (line.split(None, 1) for line in MANIFEST.splitlines() if line.strip())
+           if not (root / path).is_file() or hashlib.sha256((root / path).read_bytes()).hexdigest() != digest]
+if changed:
+    print("a non-documentation file changed: " + ", ".join(changed))
+    sys.exit(1)
 go_files = [p for p in root.rglob("*.go") if ".reasonix" not in p.parts]
 code = {p: p.read_text(encoding="utf-8") for p in go_files}
 make_targets = set(re.findall(r"^([A-Za-z][\w-]*):", (root / "Makefile").read_text(encoding="utf-8"), re.M))
