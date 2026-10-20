@@ -95,6 +95,7 @@ func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tree/sessions/remove", h.removeSession)
 	mux.HandleFunc("POST /tree/sessions/archive", h.archiveSession)
 	mux.HandleFunc("POST /tree/sessions/pin", h.pinSession)
+	mux.HandleFunc("POST /tree/sessions/viewed", h.markSessionViewed)
 	mux.HandleFunc("POST /tree/sessions/move", h.moveSession)
 	mux.HandleFunc("POST /tree/sessions/move-to", h.moveSessionTo)
 	mux.HandleFunc("POST /tree/sessions/pins", h.syncPins)

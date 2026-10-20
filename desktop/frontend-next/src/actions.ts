@@ -143,6 +143,7 @@ export const ACTIONS: UIAction[] = [
   { id: "workspace.menu", kind: "view", target: "entity", proof: "interaction" },
   { id: "machine.menu", kind: "view", target: "none", proof: "interaction" },
   { id: "session.pin", kind: "view", target: "entity", proof: "interaction" },
+  { id: "session.mark-read", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "session.pause", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   // Closing a conversation's pane ends its runtime and keeps the transcript;
   // refused while a turn runs, so it never stops work.

@@ -1559,6 +1559,7 @@ export const EN: Record<string, string> = {
   "导出会话": "Export session",
   "取消置顶": "Unpin",
   "置顶会话": "Pin session",
+  "标为已读": "Mark as read",
   "删除会话": "Delete session",
   "会话范围": "Session scope",
   "运行统计": "Run metrics",
