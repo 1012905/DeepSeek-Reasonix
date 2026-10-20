@@ -69,7 +69,7 @@ export interface Quote {
 export interface ReplyActions {
   files?: LocalRefs;
   activeFile?: string;
-  onAddFile?: (path: string) => void;
+  onAddFile?: (reference: string) => void;
   openDeliveredFile?: (path: string) => Promise<void>;
   revealDeliveredFile?: (path: string) => Promise<void>;
   onQuote: (text: string, id: string) => void;

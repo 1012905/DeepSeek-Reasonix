@@ -10,6 +10,7 @@ import { TooltipButton } from "../TooltipButton";
 import { grantedFilePath } from "../grantedfiles";
 import { DeliveryMenu, type DeliveryAction } from "./DeliveryMenu";
 import { FileTypeIcon } from "./FileTypeIcon";
+import { fileReference } from "../fileReference";
 
 export function DeliveryCard({ files, reply }: { files: DeliveredFile[]; reply?: ReplyActions }) {
   const counts = new Map<string, number>();
@@ -30,6 +31,7 @@ function DeliveryEntry({ file, reply, showLocation }: { file: DeliveredFile; rep
   const href = path.split("/").map(encodeURIComponent).join("/");
   const open = reply?.files?.file?.(file) ?? reply?.files?.link(href);
   const absolute = file.root ? path : reply?.files?.title?.(href) || path;
+  const reference = fileReference(path);
   const name = file.path.split("/").at(-1)!;
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name, extension = dot > 0 ? name.slice(dot) : "";
@@ -58,7 +60,9 @@ function DeliveryEntry({ file, reply, showLocation }: { file: DeliveredFile; rep
     }
   };
   const actions: DeliveryAction[] = [];
-  if (reply?.onAddFile) actions.push({ label: t("添加到对话"), icon: "plus", run: () => void run(() => reply.onAddFile!(absolute), t("已添加到输入框")) });
+  if (reply?.onAddFile) actions.push({ label: t("添加到对话"), icon: "plus", disabled: !reference,
+    title: reference ? undefined : t("此名称不能表示为 @ 引用"),
+    run: () => void run(() => reply.onAddFile!(reference), t("已添加到输入框")) });
   if (reply?.openDeliveredFile && /\.(md|markdown|txt|csv|tsv|pdf|html?|svg|docx?|xlsx?|pptx?)$/i.test(path))
     actions.push({ label: t("用系统应用打开"), icon: "external", run: () => void run(() => reply.openDeliveredFile!(absolute), t("已请求系统应用打开")) });
   if (!file.root && reply?.revealDeliveredFile)

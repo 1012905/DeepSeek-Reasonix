@@ -159,10 +159,11 @@
   text-align: start;
   cursor: pointer;
 }
-.delivery-menu button:hover, .delivery-menu button:focus-visible {
+.delivery-menu button:hover:not(:disabled), .delivery-menu button:focus-visible {
   background: var(--float-hi);
   outline: none;
 }
+.delivery-menu button:disabled { color: var(--muted); cursor: default; }
 .delivery-menu svg {
   width: 16px;
   height: 16px;

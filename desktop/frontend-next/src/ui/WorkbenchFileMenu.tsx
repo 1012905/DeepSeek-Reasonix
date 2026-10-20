@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import { copyText } from "./CopyButton";
 import { pinToViewport } from "./place";
+import { fileReference } from "./fileReference";
 
 export type FileMenu = { path: string; folder: boolean; x: number; y: number; anchor: HTMLElement };
 
@@ -53,7 +54,7 @@ export function WorkbenchFileMenu({ menu, root, revealable, platform, onReveal, 
   // Keep the same token spelling as control.EscapeRefPath and RefDirItems.
   const path = menu.path + (menu.folder ? "/" : "");
   const ambiguous = path.includes(":");
-  const reference = ambiguous || path.endsWith("\\") || path.trimEnd() !== path || /[\r\n\f]|[.,;!?)}\]]$/.test(path) ? "" : "@" + path.replace(/[ \t]/g, "\\$&");
+  const reference = fileReference(path);
   return createPortal(
     <div
       className="tabmenu"

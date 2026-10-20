@@ -7,6 +7,19 @@ import type { ReplyActions } from "../cards/SayCard";
 
 afterEach(cleanup);
 
+it.each(["line\nbreak.md", "trailing\\", "github:report.md", "notes)"])("does not add an ambiguous file reference for %j", async (path) => {
+  const user = userEvent.setup(), reply = actions(), add = vi.fn();
+  reply.onAddFile = add;
+  render(<DeliveryCard files={[{ path }]} reply={reply} />);
+  await user.click(screen.getByRole("button", { name: /^更多操作/ }));
+  const item = screen.getByRole("menuitem", { name: "添加到对话" }) as HTMLButtonElement;
+  expect(item.disabled).toBe(true);
+  const copy = screen.getByRole("menuitem", { name: "复制路径" });
+  await waitFor(() => expect(document.activeElement).toBe(copy));
+  await user.click(item);
+  expect(add).not.toHaveBeenCalled();
+});
+
 it("opens the structured file identity without interpreting percent escapes or Windows separators", () => {
   const open = vi.fn();
   const file = { root: "D:\\Library", path: "方案 100%.md", description: "Report" };
@@ -37,7 +50,7 @@ it("keeps auxiliary actions in a menu and adds a file without opening its previe
   expect(screen.queryByRole("button", { name: "添加到对话" })).toBeNull();
   await user.click(screen.getByRole("button", { name: /更多.*report.pdf/ }));
   await user.click(screen.getByRole("menuitem", { name: "添加到对话" }));
-  expect(add).toHaveBeenCalledWith("report.pdf");
+  expect(add).toHaveBeenCalledWith("@report.pdf");
   expect(open).not.toHaveBeenCalled();
   expect(screen.queryByRole("menu")).toBeNull();
   await screen.findByText("已添加到输入框");

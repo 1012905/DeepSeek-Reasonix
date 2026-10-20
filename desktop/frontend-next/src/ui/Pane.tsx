@@ -439,7 +439,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit: (line) => submit(line).then((r) => r === true), reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
   const fileReply = useMemo(() => ({
     ...reply, files: conversationFiles.refs, activeFile,
-    onAddFile: (path: string) => setInserted((was) => ({ n: was.n + 1, text: "@" + path.replace(/[ \t]/g, "\\$&") })),
+    onAddFile: (reference: string) => setInserted((was) => ({ n: was.n + 1, text: reference })),
     openDeliveredFile: !rt.host && port.opensFiles() ? (path: string) => port.openDocument(path) : undefined,
     revealDeliveredFile: !rt.host && port.revealsFiles() ? (path: string) => port.revealInFileManager(path) : undefined,
   }), [reply, conversationFiles.refs, rt.host, port, activeFile]);

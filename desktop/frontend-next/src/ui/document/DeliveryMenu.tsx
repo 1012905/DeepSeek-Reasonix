@@ -7,6 +7,8 @@ import { StudioIcon, type StudioIconName } from "../StudioIcon";
 export interface DeliveryAction {
   label: string;
   icon: StudioIconName;
+  disabled?: boolean;
+  title?: string;
   run: () => void;
 }
 
@@ -31,13 +33,14 @@ export function DeliveryMenu({ anchor, label, actions, onClose }: {
       if (event.key === "Tab") { close(); return; }
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
       event.preventDefault();
-      const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+      const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
       const at = items.indexOf(document.activeElement as HTMLButtonElement);
       const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
         : (at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
       items[next]?.focus();
     }}>
-    {actions.map((action, index) => <button key={action.label} type="button" role="menuitem" autoFocus={index === 0}
+    {actions.map((action, index) => <button key={action.label} type="button" role="menuitem"
+      disabled={action.disabled} title={action.title} autoFocus={index === actions.findIndex((item) => !item.disabled)}
       onClick={() => { close(); action.run(); }}>
       <StudioIcon name={action.icon} /><span>{action.label}</span>
     </button>)}
