@@ -69,38 +69,7 @@ func RunScenario(t *testing.T, fsys sftpfs.Volume, dir string) {
 		t.Fatalf("mode after chmod = %v", en.Mode)
 	}
 
-	for name, call := range map[string]func() error{
-		"stat":   func() error { _, err := fsys.Stat(ctx, awkward+"/none"); return err },
-		"read":   func() error { _, _, _, err := fsys.ReadFile(ctx, awkward+"/none", 0); return err },
-		"chmod":  func() error { return fsys.Chmod(ctx, awkward+"/none", 0o600) },
-		"remove": func() error { return fsys.Remove(ctx, awkward+"/none", false) },
-	} {
-		if err := call(); !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("%s of a missing path = %v, want fs.ErrNotExist", name, err)
-		}
-	}
-
-	real, err := fsys.RealPath(ctx, awkward+"/deep/../-dash/state.json")
-	if err != nil || !strings.HasSuffix(real, "/-dash/state.json") || strings.Contains(real, "..") {
-		t.Fatalf("RealPath = %q, %v", real, err)
-	}
-	if home, err := fsys.RealPath(ctx, "~"); err != nil || !strings.HasPrefix(home, "/") {
-		t.Fatalf("RealPath(~) = %q, %v", home, err)
-	}
-
-	if err := fsys.Remove(ctx, awkward+"/deep", false); err == nil {
-		t.Fatal("a non-recursive remove of a non-empty directory succeeded")
-	}
-	if err := fsys.Remove(ctx, file, false); err != nil {
-		t.Fatalf("Remove file: %v", err)
-	}
-	if err := fsys.Remove(ctx, awkward, true); err != nil {
-		t.Fatalf("Remove tree: %v", err)
-	}
-	if _, err := fsys.Stat(ctx, awkward); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("the removed tree is still there: %v", err)
-	}
-
+	missingAndGone(t, fsys, awkward, file)
 	hostileNames(t, fsys, dir)
 	transfers(t, fsys, dir)
 }
@@ -228,5 +197,43 @@ func transfers(t *testing.T, fsys sftpfs.Volume, dir string) {
 		if e.IsDir != (e.Name == "sub dir") {
 			t.Errorf("%q: IsDir = %v", e.Name, e.IsDir)
 		}
+	}
+}
+
+// missingAndGone holds what a path that is not there answers, then tears the
+// scenario's tree down and checks it is gone.
+func missingAndGone(t *testing.T, fsys sftpfs.Volume, awkward, file string) {
+	t.Helper()
+	ctx := context.Background()
+	for name, call := range map[string]func() error{
+		"stat":   func() error { _, err := fsys.Stat(ctx, awkward+"/none"); return err },
+		"read":   func() error { _, _, _, err := fsys.ReadFile(ctx, awkward+"/none", 0); return err },
+		"chmod":  func() error { return fsys.Chmod(ctx, awkward+"/none", 0o600) },
+		"remove": func() error { return fsys.Remove(ctx, awkward+"/none", false) },
+	} {
+		if err := call(); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%s of a missing path = %v, want fs.ErrNotExist", name, err)
+		}
+	}
+
+	real, err := fsys.RealPath(ctx, awkward+"/deep/../-dash/state.json")
+	if err != nil || !strings.HasSuffix(real, "/-dash/state.json") || strings.Contains(real, "..") {
+		t.Fatalf("RealPath = %q, %v", real, err)
+	}
+	if home, err := fsys.RealPath(ctx, "~"); err != nil || !strings.HasPrefix(home, "/") {
+		t.Fatalf("RealPath(~) = %q, %v", home, err)
+	}
+
+	if err := fsys.Remove(ctx, awkward+"/deep", false); err == nil {
+		t.Fatal("a non-recursive remove of a non-empty directory succeeded")
+	}
+	if err := fsys.Remove(ctx, file, false); err != nil {
+		t.Fatalf("Remove file: %v", err)
+	}
+	if err := fsys.Remove(ctx, awkward, true); err != nil {
+		t.Fatalf("Remove tree: %v", err)
+	}
+	if _, err := fsys.Stat(ctx, awkward); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the removed tree is still there: %v", err)
 	}
 }

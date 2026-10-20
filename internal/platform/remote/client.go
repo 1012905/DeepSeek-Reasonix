@@ -175,11 +175,10 @@ func (c *Client) SSH() (*ssh.Client, error) {
 }
 
 // Volume returns the connection's file layer, created on first use. SFTP is
-// preferred; a server that answers the subsystem request with a refusal gets
-// the script-based layer instead, and the connection keeps that answer until
-// it is replaced. Any other failure to open SFTP (a dead link, a refused
-// channel) is returned as it is: the scripts would ride the same channel.
-// Handles obtained before a reconnect return ErrDisconnected on use; re-fetch.
+// preferred; only a server's refusal of the subsystem gets the script layer
+// instead, and the connection keeps that answer until it is replaced. Any other
+// failure to open SFTP is returned as it is: the scripts ride the same channel.
+// Handles obtained before a reconnect return ErrDisconnected; re-fetch.
 func (c *Client) Volume() (sftpfs.Volume, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
