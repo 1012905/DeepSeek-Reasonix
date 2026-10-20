@@ -69,7 +69,7 @@ func (b *builder) prepareCompositionMCP() error {
 			}
 			selected = append(selected, entry)
 		}
-		if err := verifySelected(binding.Resolved.MCP, selected, func(p config.PluginEntry) string { return p.Name }); err != nil {
+		if err := verifySelected("mcp", binding.Resolved.MCP, selected, func(p config.PluginEntry) string { return p.Name }); err != nil {
 			return err
 		}
 	}
