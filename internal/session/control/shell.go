@@ -267,6 +267,7 @@ func (c *Controller) RunShellWith(command string, opts ShellRun) {
 		res := shellrun.RunForeground(ctx, shellrun.Request{
 			Argv:           argv,
 			Dir:            c.workspaceRoot,
+			Env:            shellrun.CommandEnv(ctx),
 			Timeout:        shellTimeout,
 			WaitDelay:      shellWaitDelay,
 			CommandPreview: diagnosticPreview,

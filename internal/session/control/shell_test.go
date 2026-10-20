@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -395,4 +396,36 @@ func TestShellTurnInputCutsLongOutputAndSaysSo(t *testing.T) {
 	if len(got) > shellContextBytes+512 || !strings.Contains(got, "bytes of output cut from the middle") {
 		t.Fatalf("long output not bounded (%d bytes)", len(got))
 	}
+}
+
+// A host started from a launcher has a thinner PATH than the user's terminal; a
+// "!" command must find what the model's bash tool finds.
+func TestRunShellUsesTheLoginShellPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("login shell PATH probing is POSIX-only")
+	}
+	bin := filepath.Join(testenv.TempDir(t), "bin")
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "reasonix-bang-probe"), []byte("#!/bin/sh\nprintf 'bang-path-ok\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testenv.FakeLoginShell(t, bin+":/usr/bin:/bin")
+	t.Setenv("PATH", "/usr/bin:/bin")
+
+	sink, done, events := collectSink()
+	ctrl := &Controller{controllerDeps: controllerDeps{sink: sink}}
+	ctrl.RunShell("reasonix-bang-probe")
+	waitForDone(t, done)
+
+	for _, e := range events() {
+		if e.Kind == event.ToolResult {
+			if e.Tool.Err != "" || !strings.Contains(e.Tool.Output, "bang-path-ok") {
+				t.Fatalf("result = %q (err %q), want the command found through the login-shell PATH", e.Tool.Output, e.Tool.Err)
+			}
+			return
+		}
+	}
+	t.Fatal("no ToolResult")
 }
