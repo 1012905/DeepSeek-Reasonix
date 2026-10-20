@@ -874,6 +874,7 @@
     margin-top: auto; margin-inline: auto;
     width: calc(100% - var(--srail-w) * 2); max-width: var(--wide);
     padding: 12px var(--flow-pad) 16px;
+    --nav-w: initial; --rail-w: initial; --side-w: initial;
   }
 
   .chunk { display: flow-root }

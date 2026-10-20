@@ -1,7 +1,8 @@
 // Frame cost of folding the left rail with 1/3/6 panes that each hold a long transcript. The rail width is
 // animated per frame, so every mounted pane is laid out again unless a hidden pane is skipped. Guard: the
-// median frame with PERF_GUARD panes stays within FRAME_RATIO_MAX of the one-pane median, and a pane that
-// was hidden comes back at the scroll position it left.
+// median frame with PERF_GUARD panes stays within FRAME_RATIO_MAX of the one-pane median, a pane that
+// was hidden comes back at the scroll position it left, and the transcript does not inherit the animated
+// column widths: with a long transcript the fold costs style recalculation of every element under it.
 import { chromium } from "playwright";
 
 const CPU = Number(process.env.PERF_CPU ?? 4);
@@ -71,6 +72,27 @@ for (const n of COUNTS) {
   }
   await ctx.close();
 }
+const inherited = await (async () => {
+  const ctx = await browser.newContext({ locale: "zh-CN", viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${URL}?panes=1`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".flow");
+  const seen = await page.evaluate(async () => {
+    const read = () => ["--rail-w", "--nav-w", "--side-w"].map((v) => getComputedStyle(document.querySelector(".flow")).getPropertyValue(v)).join(" ");
+    const app = () => getComputedStyle(document.querySelector(".app")).getPropertyValue("--rail-w");
+    const out = { flow: [read()], app: [app()] };
+    const mac = /Mac/.test(navigator.platform);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "\\", ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true }));
+    for (const wait of [90, 400]) {
+      await new Promise((r) => setTimeout(r, wait));
+      out.flow.push(read());
+      out.app.push(app());
+    }
+    return out;
+  });
+  await ctx.close();
+  return seen;
+})();
 await browser.close();
 console.table(rows);
 const one = rows.find((r) => r.panes === 1), many = rows.find((r) => r.panes === GUARD);
@@ -78,6 +100,8 @@ const fails = [];
 if (one && many && Number(many.p50) > Number(one.p50) * FRAME_RATIO_MAX) {
   fails.push(`median frame with ${GUARD} panes is ${many.p50} ms against ${one.p50} ms with one (limit x${FRAME_RATIO_MAX})`);
 }
+if (new Set(inherited.app).size < 2) fails.push(`the rail width did not change during the fold (${inherited.app.join(" -> ")}), so the guard measured nothing`);
+else if (new Set(inherited.flow).size > 1) fails.push(`the transcript inherits the animated column widths (${inherited.flow.join(" -> ")}); every element under it is restyled on each frame of the fold`);
 if (kept !== null && Math.abs(kept - 400) > 2) fails.push(`a pane hidden at scrollTop 400 came back at ${kept}`);
 if (fails.length) {
   console.error(fails.join("\n"));
