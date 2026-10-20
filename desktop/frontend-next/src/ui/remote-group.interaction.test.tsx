@@ -19,15 +19,15 @@ const trees: Record<string, TreeWorkspace[]> = {
   build: [{ root: "/work/project", name: "project", sessions: [{ path: "/s/a", name: "Build task", archived: true }] }],
 };
 
-function draw(scope: "all" | "live" | "archived" | "pinned" = "all", runtimes: RuntimeView[] = [], books = trees) {
+function draw(scope: "all" | "live" | "archived" | "pinned" = "all", runtimes: RuntimeView[] = [], books = trees, shown: RemoteHost[] = hosts, place = vi.fn().mockResolvedValue(undefined)) {
   const onOpen = vi.fn().mockResolvedValue(undefined);
   const readTree = vi.fn().mockResolvedValue(undefined);
   const reload = vi.fn().mockResolvedValue(undefined);
-  render(<RailSearch><RemoteHosts hub={{} as never} hosts={hosts} runtimes={runtimes} active=""
+  render(<RailSearch><RemoteHosts hub={{ placeRemoteHost: place } as never} hosts={shown} runtimes={runtimes} active=""
     onOpen={onOpen} onFocus={() => {}} reload={reload} trees={books}
     reloadTrees={async () => {}} onClose={async () => {}} liveIds={(ids) => ids}
     readTree={readTree} onError={() => {}} scope={scope} /></RailSearch>);
-  return { onOpen, readTree, reload };
+  return { onOpen, readTree, reload, place };
 }
 
 it("renders remote projects directly at level one, with host names only as metadata", () => {
@@ -104,4 +104,28 @@ it("counts older remote history before applying the archive filter", () => {
     { path: "/s/one", name: "One" }, { path: "/s/old", name: "Archived", archived: true },
   ] }], build: [] });
   expect(screen.queryByText(/较早的会话/)).toBeNull();
+});
+
+const three: RemoteHost[] = [...hosts, { name: "eval", target: "ci@10.0.0.7", status: "connected", workspaces: ["/work/eval"] }];
+
+it("moves a machine up or down the book by naming its neighbour, and reloads the list", async () => {
+  const { place, reload } = draw("all", [], trees, three);
+  await userEvent.click(screen.getByRole("button", { name: "项目操作：project · build" }));
+  await userEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "上移 build" }));
+  expect(place).toHaveBeenCalledWith("build", "gpu");
+  expect(reload).toHaveBeenCalledOnce();
+
+  await userEvent.click(screen.getByRole("button", { name: "项目操作：project · gpu" }));
+  await userEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "下移 gpu" }));
+  expect(place).toHaveBeenLastCalledWith("gpu", "eval");
+
+  await userEvent.click(screen.getByRole("button", { name: "项目操作：project · build" }));
+  await userEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "下移 build" }));
+  expect(place).toHaveBeenLastCalledWith("build", "");
+});
+
+it("offers no step past either end of the book", async () => {
+  draw("all", [], trees, three);
+  await userEvent.click(screen.getByRole("button", { name: "项目操作：project · gpu" }));
+  expect((within(screen.getByRole("menu")).getByRole("menuitem", { name: "上移 gpu" }) as HTMLButtonElement).disabled).toBe(true);
 });

@@ -144,6 +144,38 @@ func (h *Hub) removeRemoteHost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// placeRemoteHost puts a machine before another in the book, or last. The
+// sidebar lists machines in the book's order, so this is the one place that
+// order is set; naming the neighbour keeps it right when the sidebar hides some.
+func (h *Hub) placeRemoteHost(w http.ResponseWriter, r *http.Request) {
+	if h.opts.Remote == nil {
+		refuseNoRemote(w)
+		return
+	}
+	var body struct {
+		Before string `json:"before"`
+	}
+	if !decodeRemoteBody(w, r, &body) {
+		return
+	}
+	host, before := r.PathValue("host"), strings.TrimSpace(body.Before)
+	err := config.EditUserConfigWithCredentials(func(c *config.Config) ([]config.CredentialChange, error) {
+		if _, ok := c.RemoteHost(host); !ok {
+			return nil, unknownRemoteHost(host)
+		}
+		if _, ok := c.RemoteHost(before); before != "" && !ok {
+			return nil, unknownRemoteHost(before)
+		}
+		c.PlaceRemoteHost(host, before)
+		return nil, nil
+	})
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // The folder list has endpoints of its own because the sidebar writes one field
 // of a row where the settings page replaces all of it: a control that knows
 // only a folder would blank every field it never displayed.

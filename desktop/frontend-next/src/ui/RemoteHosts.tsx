@@ -129,6 +129,20 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
     }
   };
 
+  // The rail lists machines in the book's order, so a step is a placement in the
+  // book relative to the machines shown here, which may skip some that are hidden.
+  const place = async (host: RemoteHost, before: string) => {
+    setBusy("move:" + host.name);
+    try {
+      await hub.placeRemoteHost(host.name, before);
+      await reload();
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy("");
+    }
+  };
+
   const readBook = async (host: string) => {
     setBusy("read:" + host);
     try {
@@ -150,7 +164,11 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
 
   return (
     <>
-      {hosts.flatMap((host) => {
+      {hosts.flatMap((host, position) => {
+        const moves = {
+          ...(position > 0 ? { [-1]: () => void place(host, hosts[position - 1].name) } : {}),
+          ...(position < hosts.length - 1 ? { 1: () => void place(host, hosts[position + 2]?.name ?? "") } : {}),
+        };
         const panes = runtimes.filter((rt) => rt.host === host.name);
         const tree = trees[host.name];
         const spaces = remoteProjects(host, tree, panes, scope, needle, listedIds, hideLegacy);
@@ -187,7 +205,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                     </button>
                     <RemoteProjectMenu name={ws.name} root={ws.root} host={host.name} defaultRoot={host.workspace} busy={!!busy}
                       onRefresh={() => void readBook(host.name)}
-                      onRemove={ws.booked ? () => void drop(host, ws) : undefined} />
+                      onRemove={ws.booked ? () => void drop(host, ws) : undefined} onMove={moves} />
                   </span>
                 </span>
               </div>
