@@ -1285,6 +1285,9 @@ type PermissionsConfig struct {
 	Ask              []string `toml:"ask"`
 	Deny             []string `toml:"deny"`
 	AllowDynamicBash bool     `toml:"allow_dynamic_bash"`
+	// AskOnExternalOrigin asks you before a call that repeats text an external
+	// result gave the task runs on the strength of the mode alone. User file only.
+	AskOnExternalOrigin bool `toml:"ask_on_external_origin"`
 }
 
 // MCPConfigSource records where a merged MCP entry came from. It is runtime

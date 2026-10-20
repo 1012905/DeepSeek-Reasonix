@@ -738,6 +738,7 @@ export const ACTIONS: UIAction[] = [
   { id: "push.preview", kind: "view", target: "none", proof: "interaction" },
   { id: "push.confirm", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "push.close", kind: "view", target: "none", proof: "interaction" },
+  { id: "permissions.ask-on-external-origin", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "plan-approval.auto", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "default-mode.plan", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "tool-list.toggle", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

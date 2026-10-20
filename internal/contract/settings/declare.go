@@ -186,6 +186,7 @@ var table = []Entry{
 	{ID: "permissions.ask", Class: Guarded, Effect: OnOpen},
 	{ID: "permissions.deny", Class: Guarded, Effect: OnOpen},
 	{ID: "permissions.allow_dynamic_bash", Class: Guarded, Effect: OnOpen},
+	{ID: "permissions.ask_on_external_origin", Class: Guarded, Effect: OnOpen},
 	{ID: "sandbox.workspace_root", Class: Guarded, Effect: OnOpen},
 	{ID: "sandbox.allow_write", Class: Guarded, Effect: OnOpen},
 	{ID: "sandbox.forbid_read", Class: Guarded, Effect: OnOpen},

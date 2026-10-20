@@ -32,6 +32,7 @@ import { SkillGroups } from "./SkillRow";
 import { Hooks } from "./Hooks";
 import { Network } from "./Network";
 import { Shell as ShellPicker } from "./Shell";
+import { ExternalOrigin } from "./ExternalOrigin";
 import { Rules, ToolList } from "./Rules";
 import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
@@ -573,6 +574,12 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
                   ))}
                 </div>
                 <p className="note">{approvalNote(status?.toolApprovalMode)}</p>
+              </Group>
+              <Group id="external-origin"
+                title={t("外部文字")}
+                hint={t("网页和工具结果里的文字可能是别人写给 agent 的指令。开启后，照抄这些文字的调用先问你。")}
+              >
+                <ExternalOrigin port={port} onChanged={onChanged} />
               </Group>
               <Group id="plan-approval"
                 title={t("计划批准")}

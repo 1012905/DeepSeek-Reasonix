@@ -23,6 +23,9 @@ type PermissionLists struct {
 	Allow []string `json:"allow"`
 	Ask   []string `json:"ask"`
 	Deny  []string `json:"deny"`
+	// AskOnExternalOrigin is the user's switch for asking before a call that copies
+	// text an external result gave the task. On a save, nil leaves it as it is.
+	AskOnExternalOrigin *bool `json:"askOnExternalOrigin,omitempty"`
 }
 
 func (l PermissionLists) of(name string) []string {
@@ -181,6 +184,9 @@ func (c *Controller) SavePermissionRules(in PermissionLists) error {
 			}
 		}
 	}
+	if in.AskOnExternalOrigin != nil {
+		cfg.Permissions.AskOnExternalOrigin = *in.AskOnExternalOrigin
+	}
 	return cfg.SaveTo(path)
 }
 
@@ -268,11 +274,14 @@ func listsFrom(cfg *config.Config) PermissionLists {
 	if mode == "" {
 		mode = "ask"
 	}
+	on := cfg.Permissions.AskOnExternalOrigin
 	return PermissionLists{
 		Mode:  mode,
 		Allow: append([]string{}, cfg.Permissions.Allow...),
 		Ask:   append([]string{}, cfg.Permissions.Ask...),
 		Deny:  append([]string{}, cfg.Permissions.Deny...),
+
+		AskOnExternalOrigin: &on,
 	}
 }
 

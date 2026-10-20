@@ -1167,6 +1167,22 @@ closed on ordinary writer fallback and explicit ask rules. Use
 automation should allow ordinary writer fallback; configured `ask` and `deny`
 rules always remain authoritative.
 
+Text from outside is a separate question. `[permissions] ask_on_external_origin
+= true` (user file only, off by default) makes Auto and YOLO ask first when:
+
+- the call is not a read;
+- one of its string arguments, at least 12 bytes, is copied byte for byte from a
+  web page, MCP tool result or other external result the task read;
+- you did not write that string yourself.
+
+The question is fresh. Auto, YOLO and a remembered answer do not settle it. With
+nobody to ask, such as a headless YOLO run, the call is refused with the origin
+named instead of being executed.
+
+Not asked about: a call your own `allow` rule covers, an installed MCP server,
+and any call that is not a verbatim copy (re-encoded, paraphrased, built by a
+script the model wrote first). A resumed session starts with nothing recorded.
+
 Ask is not read-only: after approval, a writer can still run. Permissions decide
 whether to allow or prompt; the Sandbox is the enforced capability boundary.
 The sandbox remains a second boundary after authorization; confinement cannot

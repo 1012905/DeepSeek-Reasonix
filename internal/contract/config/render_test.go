@@ -260,10 +260,11 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	orig.Tools.Shell.Path = "/usr/local/bin/bash"
 	orig.Tools.Shell.Env = map[string]string{"CI": "1", "GIT_SSH_COMMAND": "ssh -i ~/.ssh/deploy"}
 	orig.Permissions = PermissionsConfig{
-		Mode:             "deny",
-		Deny:             []string{"Bash(rm -rf*)"},
-		Allow:            []string{"Bash(go test:*)", "read_file"},
-		AllowDynamicBash: true,
+		Mode:                "deny",
+		Deny:                []string{"Bash(rm -rf*)"},
+		Allow:               []string{"Bash(go test:*)", "read_file"},
+		AllowDynamicBash:    true,
+		AskOnExternalOrigin: true,
 	}
 	orig.Network = NetworkConfig{
 		ProxyMode: "custom",

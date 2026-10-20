@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -32,10 +35,38 @@ const (
 
 func init() { tool.RegisterBuiltin(bash{}) }
 
+var bashShellPATH = cachedBashShellPATH
+
 var (
 	bashSandboxCommand             = sandbox.Command
 	bashSandboxEscapePromptEnabled = func() bool { return runtime.GOOS == "windows" }
 )
+
+// cachedBashShellPATH memoizes the login-shell PATH probe per login shell so a
+// shell isn't spawned on every bash tool call (the probe runs up to three
+// interactive-login shells with a 2s timeout each). Empty results are cached too,
+// so a host without a usable login shell doesn't re-probe each command.
+var (
+	bashPathMu    sync.Mutex
+	bashPathCache = map[string]string{}
+)
+
+func cachedBashShellPATH(ctx context.Context) string {
+	key := loginShell()
+	bashPathMu.Lock()
+	if v, ok := bashPathCache[key]; ok {
+		bashPathMu.Unlock()
+		return v
+	}
+	bashPathMu.Unlock()
+
+	v := defaultBashShellPATH(ctx)
+
+	bashPathMu.Lock()
+	bashPathCache[key] = v
+	bashPathMu.Unlock()
+	return v
+}
 
 // bash runs a shell command. sb, when it enforces, wraps the command in an OS
 // sandbox; the zero value registered at init runs unconfined and is overridden
@@ -216,7 +247,7 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 	}
 
 	argv, wrapped := prepared.Argv, prepared.Wrapped
-	cmdEnv := applyEnvOverrides(shellrun.CommandEnv(ctx), append(shellEnvOverrides(b.sb.ShellEnv), prepared.EnvOverrides...))
+	cmdEnv := applyEnvOverrides(bashCommandEnv(ctx), append(shellEnvOverrides(b.sb.ShellEnv), prepared.EnvOverrides...))
 	if err := checkCommandLine(argv); err != nil {
 		return refusedBeforeLaunch(ex, start, tool.ShellPhasePreflight, err)
 	}
@@ -410,7 +441,7 @@ func applyEnvOverrides(env, overrides []string) []string {
 		if !ok || key == "" {
 			continue
 		}
-		env = shellrun.SetEnvValue(env, key, value)
+		env = setEnvValue(env, key, value)
 	}
 	return env
 }
@@ -620,9 +651,147 @@ func commandPreview(cmd string) string {
 	return cmd
 }
 
+func bashCommandEnv(ctx context.Context) []string {
+	env := secrets.ProcessEnv()
+	if runtime.GOOS == "windows" {
+		return env
+	}
+	currentPath, _ := envValue(env, "PATH")
+	if shellPath := strings.TrimSpace(bashShellPATH(ctx)); shellPath != "" {
+		if merged := mergePathLists(shellPath, currentPath); merged != currentPath {
+			env = setEnvValue(env, "PATH", merged)
+		}
+	}
+	return env
+}
+
+func defaultBashShellPATH(ctx context.Context) string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	shell := loginShell()
+	if shell == "" {
+		return ""
+	}
+	const marker = "__REASONIX_BASH_PATH__="
+	script := "printf '\\n" + marker + "%s\\n' \"$PATH\""
+	for _, args := range [][]string{
+		{"-l", "-i", "-c", script},
+		{"-l", "-c", script},
+		{"-c", script},
+	} {
+		out := runShellPATHCommand(ctx, shell, args)
+		if path := parseShellPATH(out, marker); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+func loginShell() string {
+	if shell := strings.TrimSpace(os.Getenv("SHELL")); shell != "" {
+		if hasPathSeparator(shell) {
+			if isExecutableFile(shell) {
+				return shell
+			}
+		} else if p, err := exec.LookPath(shell); err == nil {
+			return p
+		}
+	}
+	for _, shell := range []string{"/bin/zsh", "/bin/bash", "/bin/sh"} {
+		if isExecutableFile(shell) {
+			return shell
+		}
+	}
+	return ""
+}
+
+func runShellPATHCommand(parent context.Context, shell string, args []string) []byte {
+	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, shell, args...)
+	// Explicit env so the login-shell probe honors [secrets]
+	// filter_subprocess_env instead of inheriting the full environment.
+	cmd.Env = secrets.ProcessEnv()
+	proc.PrepareShellPATHProbe(cmd)
+	cmd.Stdin = strings.NewReader("")
+	out, _ := cmd.CombinedOutput()
+	return out
+}
+
+func parseShellPATH(out []byte, marker string) string {
+	lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
+	for _, line := range slices.Backward(lines) {
+		if rest, ok := strings.CutPrefix(line, marker); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
+}
+
+func hasPathSeparator(s string) bool {
+	return strings.ContainsAny(s, `/\`)
+}
+
+func isExecutableFile(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return false
+	}
+	return info.Mode().Perm()&0o111 != 0
+}
+
+func setEnvValue(env []string, key, value string) []string {
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, kv := range env {
+		k, _, ok := strings.Cut(kv, "=")
+		if ok && envKeyEqual(k, key) {
+			if !replaced {
+				out = append(out, key+"="+value)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, kv)
+	}
+	if !replaced {
+		out = append(out, key+"="+value)
+	}
+	return out
+}
+
+func envValue(env []string, key string) (string, bool) {
+	for _, entry := range slices.Backward(env) {
+		k, v, ok := strings.Cut(entry, "=")
+		if ok && envKeyEqual(k, key) {
+			return v, true
+		}
+	}
+	return "", false
+}
+
 func envKeyEqual(a, b string) bool {
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(a, b)
 	}
 	return a == b
+}
+
+func mergePathLists(primary, secondary string) string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(path string) {
+		for _, part := range filepath.SplitList(path) {
+			part = strings.TrimSpace(part)
+			if part == "" || seen[part] {
+				continue
+			}
+			seen[part] = true
+			out = append(out, part)
+		}
+	}
+	add(primary)
+	add(secondary)
+	return strings.Join(out, string(os.PathListSeparator))
 }

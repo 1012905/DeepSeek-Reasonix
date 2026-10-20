@@ -874,6 +874,16 @@ Reasonix 管理的普通 worktree 会话统一列在原项目下，不再为隔�
 其中 Bash 默认按具体命令记，也可按安全推导出的命令前缀记（如 `Bash(go test:*)`）；文件编辑类工具的本会话授权按编辑能力记，持久授权则写入 `Edit(<path>)` 文件路径规则；
 参数/算术展开、赋值、不含嵌套执行的 heredoc、文件重定向和 glob 不能复用裸 `Bash`、前缀或 glob Allow；用户保存时写入整条 `Bash=<literal>`，但它们仍按普通 fallback 执行，因此 Auto 不会额外询问。命令/进程替换、动态命令名、`eval`、`source`、Shell `-c`、运行时内联代码和无法解析的结构默认强制人工；无头 Ask/Auto/DontAsk 会拒绝这类未精确授权的命令，YOLO 可以绕过。高级用户可设置 `[permissions] allow_dynamic_bash = true`，让 Allow fallback（包括 Auto）覆盖这类动态命令；显式 `ask` 与 `deny` 规则仍然优先。由于无头运行没有审批界面，默认 Ask 对普通 writer fallback 和显式 ask 规则也会 fail closed；无人值守自动化需要放行普通 writer 时，使用 `reasonix run --auto ...`、`-y` 或 `--permission-mode auto`。配置的 `ask` 与 `deny` 始终优先。
 
+外部文本是另一个问题。`[permissions] ask_on_external_origin = true`（只认用户文件，默认关）让 Auto 和 YOLO 在同时满足下面三点时先问你：
+
+- 调用不是读取；
+- 它的某个字符串参数（至少 12 字节）与本任务读到的网页、MCP 工具结果等外部结果里的文字逐字节相同；
+- 这段字符串不是你自己写的。
+
+这个询问每次都是新的：Auto、YOLO 和记住的答案都不能代答；没人可问时（例如无头的 YOLO 运行）调用不会被执行，而是被拒绝，并说明来源。
+
+不会询问的：你自己的 `allow` 规则覆盖的调用、已安装的 MCP 服务器，以及不是逐字复制的调用（改了编码、改写过、由模型先写脚本再生成）。续会话从零开始记录。
+
 Ask 不是只读模式：writer 获得批准后仍会执行。Permissions 决定放行或询问，Sandbox 才是强制能力边界。
 Sandbox 是授权之后的第二层边界，不能替代命令解析，也不能把无法证明静态安全的命令变成可自动授权命令。
 
