@@ -270,7 +270,7 @@ func (a *Agent) appendDeliveryGaps(out *finalReadinessCheck, missing []string, w
 	// the review, not the verification. Reporting both sends the model to
 	// re-run and re-cite a check it already ran, cited, and watched pass.
 	if !signedOff && !a.task.ledger.HasSuccessfulDeliverySignoffAfter(writer) && !blockedWithCheck &&
-		!a.task.ledger.HasCitedVerificationAfter(writer) {
+		!a.task.ledger.HasCitedVerificationAfter(writer) && !a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) {
 		out.missingVerification++
 		missing = append(missing, "run relevant verification after the latest mutation and cite that successful command in complete_step")
 	}
@@ -406,6 +406,7 @@ func (a *Agent) mutationEpoch() uint64 {
 func (a *Agent) checkContract() evidence.CheckContract {
 	return evidence.CaptureCheckContract(a.task.checkpoint.BaselineChecks, a.declaredChecks()).
 		WithCapturedTests(len(a.task.baselineCriteria)).WithDelivery(a.deliveryProfile).WithObserveRoot(a.observeRoot).
+		WithUnversionedWorkspace(a.workspaceUnversioned).
 		WithUnseenWriter(a.unseenToolWriter() || a.runningJobWriter())
 }
 
@@ -484,7 +485,7 @@ func (a *Agent) appendUnprovenMutationGap(out *finalReadinessCheck, missing []st
 	if !a.deliveryProfile {
 		return missing
 	}
-	if a.task.unprovenExplained == owed.ID {
+	if slices.Contains(a.task.explained, owed.ID) {
 		return append(missing, unprovenMutationAgain)
 	}
 	return append(missing, unprovenMutationAsk)
@@ -495,18 +496,30 @@ const unprovenMutationAsk = "a change ran whose extent the host could not establ
 
 const unprovenMutationAgain = "the unproven change was already explained and still stands: call conclude_blocked saying what could not be established, or leave it to the user"
 
-// noteUnprovenMutationExplained records that the turn ending now carried the
-// full explanation, so a continuation of the same task repeats it once, short.
-func (a *Agent) noteUnprovenMutationExplained() {
-	if !a.deliveryProfile {
-		return
-	}
+// noteObligationsExplained records that the turn ending now carried the full
+// explanation of what it owes, so a continuation of the same task repeats each
+// debt once, short. An unproven change is explained only under Delivery, the one
+// profile that may not finish owing it; a verification debt only outside it,
+// where its full text is the one the gap prints.
+func (a *Agent) noteObligationsExplained() {
 	for _, o := range a.obligations() {
-		if o.Kind == evidence.ObligationUnprovenMutation {
-			a.task.unprovenExplained = o.ID
-			return
+		explained := (o.Kind == evidence.ObligationUnprovenMutation && a.deliveryProfile) ||
+			(o.Kind == evidence.ObligationStaleVerification && !a.deliveryProfile)
+		if explained && !slices.Contains(a.task.explained, o.ID) {
+			a.task.explained = append(a.task.explained, o.ID)
 		}
 	}
+}
+
+// verificationExplained reports that the verification this turn still owes was
+// already explained in full by an ended turn of the same task.
+func (a *Agent) verificationExplained() bool {
+	for _, o := range a.obligations() {
+		if o.Kind == evidence.ObligationStaleVerification && slices.Contains(a.task.explained, o.ID) {
+			return true
+		}
+	}
+	return false
 }
 
 // appendUnseenRenderGap owes a look at each page or image the turn wrote and no
@@ -583,8 +596,13 @@ func (a *Agent) verificationGap(writer int) (string, bool) {
 		!a.task.ledger.HasUnrecognizedMutationAfter(writer) {
 		return "", false
 	}
+	if a.verificationExplained() {
+		return verificationOwedAgain, true
+	}
 	return ask, true
 }
+
+const verificationOwedAgain = "the verification owed after the latest write is still owed, as already explained: run a relevant verification command after it"
 
 // verificationCause names what keeps the check owed. A turn whose every change
 // is prose, in a project declaring no checks, owes none; the paths that are not
