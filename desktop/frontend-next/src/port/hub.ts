@@ -56,6 +56,9 @@ export interface TreeSession {
   autoArchivedAt?: number;
   // A turn finished since the person last looked. Absent means seen.
   unread?: boolean;
+  // Unix ms of the last time the person looked, sent only while the row is
+  // unread; absent from a kernel that predates it.
+  viewedAt?: number;
   // Conflict-recovery copies of this same conversation. A save that keeps
   // conflicting writes one per turn, all under one title.
   copies?: TreeSession[];

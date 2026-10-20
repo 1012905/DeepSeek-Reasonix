@@ -72,6 +72,9 @@ type treeSession struct {
 	// Unread is a turn that finished since the person last looked. The kernel
 	// derives it from two stored timestamps; absence reads as seen.
 	Unread bool `json:"unread,omitempty"`
+	// ViewedAt is unix milliseconds of the last time the person looked, sent
+	// only while the row is unread: it is where the new answers begin.
+	ViewedAt int64 `json:"viewedAt,omitempty"`
 	// Legacy marks a conversation kept in the 1.x store: this build reads that
 	// log and never writes it, so the row says so rather than looking native.
 	Legacy bool `json:"legacy,omitempty"`
