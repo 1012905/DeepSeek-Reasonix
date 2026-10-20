@@ -47,7 +47,6 @@
 .rail .kids { margin: 0 15px 0 22px; padding-left: 10px; border-left: 0; }
 .rail .sessrow { min-height: 34px; margin: 1px 0 1px 3px; }
 .rail .sessrow > .pip { display: none; }
-.rail .sessrow[data-run="running"] > .pip { display: block; }
 .rail .rmtws-node .sessdel { opacity: 0; }
 .rail .rmtws-node .sessrow:is(:hover, :focus-within) .sessdel { opacity: 1; }
 .rail .sessage { margin-left: auto; margin-right: 0; font-size: var(--fs-micro); }
