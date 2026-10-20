@@ -109,6 +109,7 @@ func OnCrash(f func(pluginID string, err error)) {
 // alone. It implements io.Closer so the kernel's RuntimeSet can retire it
 // with its controller generation.
 type Manager struct {
+	lazy         *lazyPackages
 	mu           sync.Mutex
 	clients      map[string]*Client
 	closed       bool
@@ -232,9 +233,22 @@ func (m *Manager) Close() error {
 		return nil
 	}
 	m.closed = true
+	var pending []<-chan struct{}
+	if m.lazy != nil {
+		m.lazy.cancel()
+		for _, start := range m.lazy.pending {
+			pending = append(pending, start.done)
+		}
+	}
 	clients := make([]*Client, 0, len(m.clients))
 	for _, client := range m.clients {
 		clients = append(clients, client)
+	}
+	if m.lazy != nil {
+		for client := range m.lazy.retired {
+			clients = append(clients, client)
+		}
+		m.lazy.retired = nil
 	}
 	m.clients = nil
 	m.planAdopted = nil
@@ -242,6 +256,9 @@ func (m *Manager) Close() error {
 	m.privateRoots = nil
 	m.mu.Unlock()
 
+	for _, done := range pending {
+		<-done
+	}
 	var wg sync.WaitGroup
 	for _, client := range clients {
 		wg.Add(1)

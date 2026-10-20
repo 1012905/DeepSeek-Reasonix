@@ -20,6 +20,7 @@ type NativeArchive struct {
 
 const NativeArchiveFormat = "reasonix-native-session"
 const NativeArchiveVersion = 2
+const NativeArchiveLiveVersion = 3
 const MaxNativeArchiveBytes = 192 << 20
 
 var ErrNativeArchiveInvalid = errors.New("invalid native session archive")
@@ -31,6 +32,15 @@ func ExportNativeArchive(path string) ([]byte, error) {
 		return nil, err
 	}
 	archive := NativeArchive{Format: NativeArchiveFormat, Version: NativeArchiveVersion, Records: s.Snapshot()}
+	if summary := s.CompositionSummary(); summary != nil && summary.FormatVersion != 0 {
+		if summary.FormatVersion != agentcomposition.LiveBindingVersion {
+			return nil, ErrNativeArchiveUnsupported
+		}
+		if err := s.Composition().Validate(); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrNativeArchiveInvalid, err)
+		}
+		archive.Version = NativeArchiveLiveVersion
+	}
 	data, err := json.Marshal(archive)
 	if len(data) > MaxNativeArchiveBytes {
 		return nil, ErrSessionReplayLimitExceeded
@@ -51,7 +61,7 @@ func DecodeNativeArchive(data []byte) (*Session, error) {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return nil, fmt.Errorf("%w: trailing data", ErrNativeArchiveInvalid)
 	}
-	if archive.Format != NativeArchiveFormat || archive.Version != NativeArchiveVersion {
+	if archive.Format != NativeArchiveFormat || (archive.Version != NativeArchiveVersion && archive.Version != NativeArchiveLiveVersion) {
 		return nil, fmt.Errorf("%w: %d", ErrNativeArchiveUnsupported, archive.Version)
 	}
 	if len(archive.Records) > sessionEventReplayMaxMessages {
@@ -66,6 +76,9 @@ func DecodeNativeArchive(data []byte) (*Session, error) {
 			return nil, agentcomposition.ErrInvalid
 		}
 		binding = m.AgentComposition
+		if binding.Live() && archive.Version != NativeArchiveLiveVersion {
+			return nil, ErrNativeArchiveUnsupported
+		}
 		if err := binding.Validate(); err != nil {
 			return nil, err
 		}

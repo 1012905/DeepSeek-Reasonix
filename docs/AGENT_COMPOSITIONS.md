@@ -2,7 +2,7 @@
 owner: "@SivanCola"
 backup: "@esengine"
 status: active
-reviewed: 2026-10-18
+reviewed: 2026-10-20
 ---
 
 # Session Agent compositions
@@ -92,9 +92,11 @@ Code review and Research are no longer built-in catalog entries. Their existing
 conversations retain the original binding. An old default pointing to a retired
 entry reports a diagnostic until an available default is explicitly chosen.
 
-Copy a built-in to customize it. Each module group either inherits configuration
-when a conversation binds, or uses only the selected IDs. An empty explicit
-selection disables the group. The editor lists locally available modules;
+Copy a built-in to customize it. Each module group either follows current authorized
+configuration, including resources enabled later, or uses only the selected IDs. An empty explicit
+selection disables the group.
+
+The editor lists locally available modules;
 imports preview missing dependencies without installing or launching them.
 
 Settings lists the page as Persona. The editor shows name, purpose and both
@@ -110,7 +112,10 @@ Everyday partner's user-config persona has a separate editor, accessible from Ev
 details or Settings search.
 
 Saving creates a definition revision. Existing conversations retain their
-resolved persona, parameters and resources. The page displays the definition
+resolved persona, parameters and permission rules. New conversations load current resources
+on demand; existing snapshot conversations keep their saved resources.
+
+The page displays the definition
 revision beside the conversation's bound revision and reports stale-save
 conflicts while preserving the draft. Models remain independently selectable.
 
@@ -205,12 +210,42 @@ readable as history but cannot execute, even with an old local authorization
 record. It is not silently rewritten. Valid timeout-only project bindings
 retain their original version.
 
-Inherited choices resolve once at binding. Retained skill and non-blocking hook files and
-extension code do not follow subsequent source edits.
+### On-demand conversations and existing snapshots
+
+New bindings use `formatVersion: 2` and `resourceMode: "live"`. Selecting a preset
+records permission rules, not resource file contents.
+
+Skill discovery does not
+capture template directories or complete every skill. Reading or invoking one
+skill loads its body and the same references as an ordinary conversation.
+Commands and non-blocking hooks use current authorized sources when invoked.
+
+MCP directory reads do not connect an uncached server. An explicit capability
+call connects after authorization; configured automatic connections remain
+independent of selection. MCP and extension tools use the stable
+`use_capability` entry, without changing the provider-visible schema.
+
+Tool-only extension runtimes start on demand from their installed source, without
+making a private package copy.
+
+Providers, required runtimes and interceptors
+initialize at the lifecycle stage that needs them. Changes to those startup
+contracts require a new session or an explicit runtime reload; an existing
+conversation never silently changes its system prompt.
+
+Binding the preset does not approve a resource. Missing optional skills, MCP
+servers and tool-only extensions do not prevent ordinary conversation; use of
+that capability reports its failure. Revocation blocks subsequent calls.
+Safety guards remain mandatory.
+
+Bindings without the new fields retain snapshot behavior. Their inherited choices
+resolved once at binding, and retained skill, non-blocking hook and extension
+files do not follow subsequent source edits. They are not automatically converted.
 
 Hooks retain referenced files and sibling bundles for common script formats.
 Bundles must fit the resource limit and cannot contain credential files or
-symbolic links.
+escaping or cyclic symbolic links. Contained source links are captured as regular
+files; saved snapshot files must remain regular files.
 
 Keep hook code in a dedicated directory; retain credentials
 through environment references. External interpreters and services keep their
@@ -221,7 +256,7 @@ file paths while rejecting literal credential arguments and unparseable shell la
 
 Credential lookups remain
 with the existing credential/configuration owner. Sessions use separate MCP
-connections and process state, and extensions run from private copies. Existing
+connections and process state. Existing snapshot extensions run from private copies. Existing
 trust, revocation, authorization and sandbox checks still apply.
 
 ### Safety policy stays outside the composition
@@ -247,26 +282,41 @@ An authorized policy edit may change a guard; selecting a composition cannot.
 Project program approval and package activation still control which guards load.
 
 A binding is local transcript metadata and never enters provider messages.
-Only explicitly bound composition transcripts use native event-log schema 4; older readers refuse
-them instead of continuing with another tool set. Legacy transcripts keep
+Snapshot compositions use native event-log schema 4; live compositions use schema 5.
+Older readers refuse unsupported schemas instead of continuing with another tool set,
+falling back to a stale checkpoint or rewriting the newer log.
+
+Legacy transcripts keep
 their compatibility path and are not assigned today's default on restore.
 
 Untrusted or unavailable bindings can be opened for history without launching
 modules; continuation is blocked. Deleting a definition does not remove its
 conversation's retained binding.
 
-Native JSON exports use the `reasonix-native-session` version 2 envelope and
-include the authoritative event-log binding and retained resources. Import
+Snapshot JSON exports use the `reasonix-native-session` version 2 envelope and
+include the authoritative event-log binding and retained resources.
+
+Live exports
+use version 3 and contain history and permission rules, without local resource
+files or credentials.
+
+The current reader accepts both formats. Older clients
+cannot continue a live-format conversation. Import
 them under Settings → Storage. Import never creates local authorization records
 or starts programs.
 
 Configuration backup version 3 also includes personal
 preset definitions and their default selection.
 
-MCP tool contracts are pinned at binding. A changed tool catalog after refresh
-or reconnect blocks execution instead of silently replacing schemas. Package
+For snapshot conversations, MCP tool contracts are pinned at binding. A changed tool catalog after refresh
+or reconnect blocks execution instead of silently replacing schemas.
+
+Package
 MCP processes and extension sidecars use private package copies; shutdown and
 failed assembly release their private directories.
+
+Live conversations instead
+validate current authorization and server identity at dispatch.
 
 ACP composition changes preserve the session's vetted additional directories.
 

@@ -34,7 +34,7 @@ func TestCompositionRetainsLinkedSkillAcrossRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			opts := Options{Home: home, WorkspaceRoot: root, AgentComposition: d.ID, resolvedShell: pinnedEffectShell()}
-			first, err := BuildRuntime(t.Context(), opts)
+			first, err := buildSnapshotRuntime(t.Context(), opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -47,7 +47,7 @@ func TestCompositionRetainsLinkedSkillAcrossRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			opts.AgentComposition, opts.Composition = "", binding
-			restored, err := BuildRuntime(t.Context(), opts)
+			restored, err := buildSnapshotRuntime(t.Context(), opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +101,7 @@ func TestCompositionLinkedSkillRejectsLinkedResources(t *testing.T) {
 	if _, err := agentpreset.New(home, root).Save(d, ""); err != nil {
 		t.Fatal(err)
 	}
-	result, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, AgentComposition: d.ID, resolvedShell: pinnedEffectShell()})
+	result, err := buildSnapshotRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, AgentComposition: d.ID, resolvedShell: pinnedEffectShell()})
 	if result != nil {
 		result.Controller.Close()
 	}

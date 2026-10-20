@@ -2,6 +2,19 @@ package tool
 
 import "maps"
 
+// BindMCPRuntime applies execution authority to existing and future adapters.
+func (r *Registry) BindMCPRuntime(bind func(Tool) Tool) {
+	r.mu.Lock()
+	r.bindMCP = bind
+	held := maps.Clone(r.tools)
+	r.mu.Unlock()
+	for _, t := range held {
+		if _, ok := t.(MCPMetadata); ok {
+			r.Add(t)
+		}
+	}
+}
+
 // Restrict fixes the ceiling on what the registry may hold. Tools already
 // registered that admit rejects are removed, and every later Add is checked
 // against it. admit runs outside the registry lock: a lazy tool's own methods

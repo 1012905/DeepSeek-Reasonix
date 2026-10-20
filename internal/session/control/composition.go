@@ -63,11 +63,11 @@ func (c *Controller) SetDefaultAgentPreset(id string, workspace bool) error {
 }
 
 func (c *Controller) SelectAgentComposition(ctx context.Context, id string) error {
-	if id == "builtin:general" && c.CompositionBinding() == nil {
+	if id == "builtin:general" && c.CompositionSummary() == nil {
 		return nil
 	}
-	if current := c.CompositionBinding(); current != nil && current.Version.Definition.ID == id {
-		if v, err := c.PresetStore().Get(id); err == nil && v.Revision == current.Version.Revision {
+	if current := c.CompositionSummary(); current != nil && current.ID == id {
+		if v, err := c.PresetStore().Get(id); err == nil && v.Revision == current.Revision {
 			return nil
 		}
 	}
@@ -93,6 +93,13 @@ func (c *Controller) CompositionBinding() *agentcomposition.Binding {
 		return nil
 	}
 	return c.executor.Session().Composition()
+}
+
+func (c *Controller) CompositionSummary() *agentcomposition.Summary {
+	if c.executor == nil {
+		return nil
+	}
+	return c.executor.Session().CompositionSummary()
 }
 
 func (c *Controller) BindComposition(binding *agentcomposition.Binding) {
@@ -166,6 +173,9 @@ func (c *Controller) compositionEnqueueReady() error {
 }
 
 func (c *Controller) persistCompositionAdmission() error {
+	if summary := c.CompositionSummary(); summary == nil || summary.Started {
+		return nil
+	}
 	old := c.CompositionBinding()
 	if old == nil || old.Started {
 		return nil
@@ -185,11 +195,11 @@ func (c *Controller) persistCompositionAdmission() error {
 }
 
 func (c *Controller) beginCompositionEnqueue() (func() error, error) {
-	old := c.CompositionBinding()
 	noop := func() error { return nil }
-	if old == nil || old.Started {
+	if summary := c.CompositionSummary(); summary == nil || summary.Started {
 		return noop, nil
 	}
+	old := c.CompositionBinding()
 	binding := agentcomposition.Clone(old)
 	binding.Started = true
 	if err := c.persistCompositionAdmission(); err != nil {
@@ -209,7 +219,7 @@ func (c *Controller) beginCompositionEnqueue() (func() error, error) {
 }
 
 func (c *Controller) compositionNeedsSnapshot(explicit bool) bool {
-	b := c.CompositionBinding()
+	b := c.CompositionSummary()
 	if b != nil {
 		return explicit || b.Started
 	}

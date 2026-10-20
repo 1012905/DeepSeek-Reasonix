@@ -76,7 +76,7 @@ export function AgentCompositionPicker({ port, binding, locked: statusLocked, ru
       pending={busy}
       label={<><span className="nm">{label}</span><StudioIcon name="down" /></>}
       menuTitle={<><b>{t("Agent 预设")}</b><small>{t(locked ? "已锁定" : "首次提交前可切换")}</small></>}
-      head={locked && <p className="composition-menu-note">{t("该会话已开始，模式已锁定。请用其他模式新建会话。")}</p>}
+      head={<>{locked && <p className="composition-menu-note">{t("该会话已开始，模式已锁定。请用其他模式新建会话。")}</p>}{current && current.resourceMode !== "live" && <p className="composition-menu-note">{t("已固定资源快照")}</p>}</>}
       items={items}
       current={locked ? undefined : current?.id ?? "builtin:general"}
       onPick={choose}

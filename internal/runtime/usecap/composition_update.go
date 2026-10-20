@@ -19,6 +19,13 @@ func (r *MCPCapabilityRuntime) UpsertServer(entry config.PluginEntry, raw plugin
 		return
 	}
 	spec := cloneMCPSpec(raw)
+	if !r.compositionAllows(spec) {
+		r.mu.Lock()
+		delete(r.servers, spec.Name)
+		r.mu.Unlock()
+		r.state.clearServer(spec.Name)
+		return
+	}
 	name := strings.TrimSpace(spec.Name)
 	if name == "" {
 		return

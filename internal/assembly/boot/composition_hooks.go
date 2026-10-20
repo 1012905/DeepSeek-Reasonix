@@ -103,6 +103,9 @@ func (b *builder) compositionHookPackage(h hook.ResolvedHook, name string) (agen
 func compositionHookSet(opts Options, home, workspace string) ([]hook.ResolvedHook, error) {
 	store := agentpreset.New(home, workspace)
 	live := hook.Load(hook.LoadOptions{ProjectRoot: workspace, ReasonixHomeDir: home})
+	if opts.Composition.Live() {
+		return hook.CompositionHooks(live, opts.Composition.Resolved), nil
+	}
 	byID := map[string]hook.ResolvedHook{}
 	for i, h := range live {
 		byID[fmt.Sprintf("%s:%s:%d", h.Scope, h.Event, i)] = h

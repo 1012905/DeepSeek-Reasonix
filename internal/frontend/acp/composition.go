@@ -70,9 +70,17 @@ func withCompositionConfig(state SessionConfigState, ctrl acpController) Session
 	current := "builtin:general"
 	locked := control.CompositionStarted(ctrl) || ctrl.PendingPrompt() || ctrl.RuntimeStatus().BackgroundJobs > 0
 	currentName := "Standard"
-	if b := ctrl.CompositionBinding(); b != nil {
-		current = b.Version.Definition.ID
-		currentName = b.Version.Definition.Name
+	var summary *agentcomposition.Summary
+	if lightweight, ok := ctrl.(interface {
+		CompositionSummary() *agentcomposition.Summary
+	}); ok {
+		summary = lightweight.CompositionSummary()
+	} else {
+		summary = ctrl.CompositionBinding().Summary()
+	}
+	if b := summary; b != nil {
+		current = b.ID
+		currentName = b.Name
 		locked = locked || b.Started
 	}
 	options := []SessionConfigSelectOption{}

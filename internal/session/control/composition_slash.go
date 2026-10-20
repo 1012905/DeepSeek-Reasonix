@@ -23,8 +23,8 @@ func (c *Controller) compositionNotice(fields []string) {
 		}
 		return
 	}
-	if b := c.CompositionBinding(); b != nil && b.Started {
-		c.notice(fmt.Sprintf("%s — %s (%s). This conversation is locked; start a new session to choose another composition.", b.Version.Definition.ID, b.Version.Definition.Name, b.Version.Revision[:min(12, len(b.Version.Revision))]))
+	if b := c.CompositionSummary(); b != nil && b.Started {
+		c.notice(fmt.Sprintf("%s — %s (%s). This conversation is locked; start a new session to choose another composition.", b.ID, b.Name, b.Revision[:min(12, len(b.Revision))]))
 		return
 	}
 	catalog, err := c.AgentPresets()
@@ -40,8 +40,8 @@ func (c *Controller) compositionNotice(fields []string) {
 }
 
 func (c *Controller) compositionArgItems() []SlashItem {
-	if b := c.CompositionBinding(); b != nil && b.Started {
-		return []SlashItem{{Label: b.Version.Definition.ID, Insert: b.Version.Definition.ID, Hint: b.Version.Definition.Name}}
+	if b := c.CompositionSummary(); b != nil && b.Started {
+		return []SlashItem{{Label: b.ID, Insert: b.ID, Hint: b.Name}}
 	}
 	catalog, err := c.PresetStore().List()
 	if err != nil {

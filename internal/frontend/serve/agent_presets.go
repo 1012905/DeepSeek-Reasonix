@@ -77,16 +77,25 @@ func agentPresetMutation(r *http.Request) bool {
 }
 
 type compositionSummary struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Revision    string `json:"revision"`
-	Digest      string `json:"digest"`
-	Started     bool   `json:"started"`
-	Unavailable string `json:"unavailable,omitempty"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Revision      string `json:"revision"`
+	Digest        string `json:"digest"`
+	Started       bool   `json:"started"`
+	Unavailable   string `json:"unavailable,omitempty"`
+	FormatVersion int    `json:"formatVersion,omitempty"`
+	ResourceMode  string `json:"resourceMode,omitempty"`
 }
 
 func compositionControllerView(ctrl control.SessionAPI) *compositionSummary {
-	view := compositionView(ctrl.CompositionBinding())
+	var view *compositionSummary
+	if lightweight, ok := ctrl.(interface {
+		CompositionSummary() *agentcomposition.Summary
+	}); ok {
+		view = compositionSummaryView(lightweight.CompositionSummary())
+	} else {
+		view = compositionView(ctrl.CompositionBinding())
+	}
 	if c, ok := ctrl.(*control.Controller); ok && view != nil {
 		if err := c.CompositionExecutionError(); err != nil {
 			view.Unavailable = err.Error()
@@ -100,10 +109,14 @@ func compositionLocked(ctrl control.SessionAPI) bool {
 }
 
 func compositionView(b *agentcomposition.Binding) *compositionSummary {
+	return compositionSummaryView(b.Summary())
+}
+
+func compositionSummaryView(b *agentcomposition.Summary) *compositionSummary {
 	if b == nil {
 		return nil
 	}
-	return &compositionSummary{ID: b.Version.Definition.ID, Name: b.Version.Definition.Name, Revision: b.Version.Revision, Digest: b.Digest, Started: b.Started}
+	return &compositionSummary{ID: b.ID, Name: b.Name, Revision: b.Revision, Digest: b.Digest, Started: b.Started, FormatVersion: b.FormatVersion, ResourceMode: b.ResourceMode}
 }
 
 func (s *Server) saveAgentPreset(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +164,7 @@ func (s *Server) selectAgentPreset(w http.ResponseWriter, r *http.Request) {
 		compositionError(w, err)
 		return
 	}
-	writeJSON(w, compositionView(s.ctl().CompositionBinding()))
+	writeJSON(w, compositionControllerView(s.ctl()))
 }
 
 func (s *Server) exportAgentPreset(w http.ResponseWriter, r *http.Request) {

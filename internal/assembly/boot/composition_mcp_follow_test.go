@@ -41,7 +41,7 @@ load = "always"
 		t.Fatal(err)
 	}
 	opts := Options{Home: home, WorkspaceRoot: root, AgentComposition: "user:followed", resolvedShell: pinnedEffectShell()}
-	first, err := BuildRuntime(t.Context(), opts)
+	first, err := buildSnapshotRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ load = "always"
 	if len(rec.requests()) != 0 || server.called("extra") || first.Controller.CompositionBinding().Digest != binding.Digest {
 		t.Fatal("a followed change reached the provider or rewrote the binding")
 	}
-	fresh, err := BuildRuntime(t.Context(), opts)
+	fresh, err := buildSnapshotRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}

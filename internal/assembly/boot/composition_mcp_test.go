@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,6 +23,14 @@ func (compositionLateMCPTool) MCPServerName() string  { return "docs" }
 func (compositionLateMCPTool) MCPRawToolName() string { return "unbound" }
 
 func TestCompositionSessionsKeepIndependentMCPParametersAndConnections(t *testing.T) {
+	testCompositionSessionParameters(t, buildSnapshotRuntime, true)
+}
+
+func TestLiveCompositionSessionsKeepIndependentMCPParametersAndConnections(t *testing.T) {
+	testCompositionSessionParameters(t, BuildRuntime, false)
+}
+
+func testCompositionSessionParameters(t *testing.T, build func(context.Context, Options) (*BuildResult, error), snapshot bool) {
 	var mu sync.Mutex
 	nextID := 0
 	calls := map[string]int{}
@@ -72,7 +81,7 @@ func TestCompositionSessionsKeepIndependentMCPParametersAndConnections(t *testin
 		if _, err := store.Save(d, ""); err != nil {
 			t.Fatal(err)
 		}
-		built, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: d.ID, resolvedShell: pinnedEffectShell(), ExtraPlugins: []plugin.Spec{{Name: "docs", Type: "http", URL: server.URL, Authorized: true}}})
+		built, err := build(t.Context(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: d.ID, resolvedShell: pinnedEffectShell(), ExtraPlugins: []plugin.Spec{{Name: "docs", Type: "http", URL: server.URL, Authorized: true}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,9 +90,11 @@ func TestCompositionSessionsKeepIndependentMCPParametersAndConnections(t *testin
 		if !ok {
 			t.Fatal("reader missing")
 		}
-		built.Assembly.Registry.Add(compositionLateMCPTool{Tool: reader})
-		if _, ok := built.Assembly.Registry.Get("mcp__docs__unbound"); ok {
-			t.Fatal("late tool widened a selected MCP server's bound surface")
+		if snapshot {
+			built.Assembly.Registry.Add(compositionLateMCPTool{Tool: reader})
+			if _, ok := built.Assembly.Registry.Get("mcp__docs__unbound"); ok {
+				t.Fatal("late tool widened a selected MCP server's bound surface")
+			}
 		}
 		results = append(results, built)
 	}

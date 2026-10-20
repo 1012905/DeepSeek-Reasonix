@@ -14,6 +14,19 @@ func (c *Controller) pinnedMCPEntry(live config.PluginEntry) (config.PluginEntry
 	if binding == nil {
 		return live, nil
 	}
+	if binding.Live() {
+		if !binding.Resolved.MCP.Allows(live.Name) {
+			return live, fmt.Errorf("%w: MCP %s is outside this composition", agentcomposition.ErrLocked, live.Name)
+		}
+		cfg, err := config.RootsForHome(c.PresetStore().Home).LoadForRootReadOnly(c.WorkspaceRoot())
+		if err != nil {
+			return live, err
+		}
+		if owner, owned := cfg.PluginPackageOwner(live.Name); owned && !binding.Resolved.Extensions.Allows(owner) {
+			return live, fmt.Errorf("%w: MCP extension %s is outside this composition", agentcomposition.ErrLocked, owner)
+		}
+		return applyLiveMCPParameters(live, binding.Resolved.MCP)
+	}
 	for _, r := range binding.Resources {
 		if r.Kind != "mcp" || r.ID != live.Name {
 			continue
@@ -44,4 +57,13 @@ func (c *Controller) pinnedMCPEntry(live config.PluginEntry) (config.PluginEntry
 		return saved, nil
 	}
 	return live, fmt.Errorf("%w: MCP %s is outside this composition", agentcomposition.ErrLocked, live.Name)
+}
+
+func applyLiveMCPParameters(entry config.PluginEntry, selection agentcomposition.Selection) (config.PluginEntry, error) {
+	for _, m := range selection.Members {
+		if m.ID == entry.Name {
+			return agentpreset.ApplyMCPParameters(entry, m.Parameters)
+		}
+	}
+	return entry, nil
 }

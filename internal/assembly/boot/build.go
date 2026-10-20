@@ -2,7 +2,6 @@ package boot
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"reasonix/internal/base/netclient"
 	"reasonix/internal/base/netdns"
 	"reasonix/internal/base/secrets"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/pricing"
@@ -24,7 +24,6 @@ import (
 	"reasonix/internal/ext/extension"
 	"reasonix/internal/ext/extension/sidecar"
 	"reasonix/internal/ext/hook"
-	"reasonix/internal/ext/mcplaunch"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/pluginspec"
 	"reasonix/internal/model/billing"
@@ -44,33 +43,34 @@ import (
 // builder carries one build's state from stage to stage. Each stage reads
 // what the earlier ones settled and adds its own; none reaches back.
 type builder struct {
-	ctx              context.Context
-	closeLifetime    context.CancelFunc
-	opts             Options
-	timer            *phaseTimer
-	owner            *extension.RuntimeOwner
-	fileWriteReceipt func(path string, hadPrior bool, prior []byte)
-	stderr           io.Writer
-	trace            *otlp.Exporter
-	root             string
-	repo             gitcmd.Repo // root's git identity, settled in load
-	roots            config.Roots
-	cfg              *config.Config
-	sink             event.Sink
-	quoteContext     *event.QuoteContext
-	proxy            netclient.ProxySpec
-	ext              *extensionStage
-	pendingMgr       *sidecar.Manager // sidecars no RuntimeSet owns yet
-	providers        providerStage
-	model            modelSelection
-	keep             agent.KeepPolicy
-	session          sessionRuntime
-	balanceClient    *http.Client
-	keyedClient      *http.Client // carries provider keys; refuses cross-origin redirects
-	execProv         provider.Provider
-	shell            sandbox.Shell
-	prompt           promptAssembly
-	additionalDirs   []string
+	compositionBinding func(agentcomposition.Version, string) *agentcomposition.Binding
+	ctx                context.Context
+	closeLifetime      context.CancelFunc
+	opts               Options
+	timer              *phaseTimer
+	owner              *extension.RuntimeOwner
+	fileWriteReceipt   func(path string, hadPrior bool, prior []byte)
+	stderr             io.Writer
+	trace              *otlp.Exporter
+	root               string
+	repo               gitcmd.Repo // root's git identity, settled in load
+	roots              config.Roots
+	cfg                *config.Config
+	sink               event.Sink
+	quoteContext       *event.QuoteContext
+	proxy              netclient.ProxySpec
+	ext                *extensionStage
+	pendingMgr         *sidecar.Manager // sidecars no RuntimeSet owns yet
+	providers          providerStage
+	model              modelSelection
+	keep               agent.KeepPolicy
+	session            sessionRuntime
+	balanceClient      *http.Client
+	keyedClient        *http.Client // carries provider keys; refuses cross-origin redirects
+	execProv           provider.Provider
+	shell              sandbox.Shell
+	prompt             promptAssembly
+	additionalDirs     []string
 
 	tools   toolStage
 	cleanup func()
@@ -115,7 +115,11 @@ type toolStage struct {
 // objects it just assembled. The controller owns plugin subprocesses until
 // Controller.Close releases them.
 func build(ctx context.Context, opts Options) (*BuildResult, error) {
-	b := &builder{timer: newPhaseTimer()}
+	b := &builder{timer: newPhaseTimer(), compositionBinding: newLiveCompositionBinding}
+	return b.build(ctx, opts)
+}
+
+func (b *builder) build(ctx context.Context, opts Options) (*BuildResult, error) {
 	opts = observeOverrides(opts)
 	b.timer.observe = opts.OnPhase
 	// The runtime outlives the request that built it (Studio opens a pane with
@@ -431,65 +435,28 @@ func (b *builder) wireTools() error {
 	t.runners = skillRunners{readOnly: t.skillRun.runReadOnly, run: t.skillRun.run, profile: skillProfile(cfg, t.sub.inheritedFor)}
 	t.cmds = loadCommands(opts, root)
 	addInstallSourceTool(b.ctx, t.reg, t.host, root, b.balanceClient, t.specOptions, opts.Stderr)
-	registerSkillTools(t.reg, opts.Ablation, b.prompt.skillStore, b.prompt.implicitSkills, t.runners, t.cmds)
+	var liveCommands func() []command.Command
+	if opts.Composition.Live() {
+		liveCommands = func() []command.Command { return loadCommands(opts, root) }
+	}
+	registerSkillTools(t.reg, opts.Ablation, b.prompt.skillStore, b.prompt.implicitSkills, t.runners, t.cmds, liveCommands)
 
 	t.caps = newCapabilitySurface(b.ctx, cfg, root, t.specOptions, t.host, t.reg, b.prompt.skillStore, b.model.profile, t.mcp.enabled, t.mcp.extra...)
+	if opts.Composition.Live() {
+		t.caps.runtime.ConfigureComposition(opts.Composition.Resolved)
+		t.caps.runtime.ConfigureInventorySource(b.liveMCPInventory())
+		t.reg.BindMCPRuntime(t.caps.runtime.BindRegisteredTool)
+		if _, ok := t.reg.Get(plugin.ResourceReadToolName); ok {
+			t.reg.Add(t.caps.runtime.ResourceReadTool())
+		}
+	}
 	t.skillRun.capRuntime = t.caps.runtime
 	addExtensionTools(t.reg, b.ext.mgr, b.ext.warn)
+	if opts.Composition.Live() {
+		t.caps.refresh = func() { addExtensionTools(t.reg, b.ext.mgr, b.ext.warn) }
+	}
 	t.reg.Add(t.caps.proxy)
 	gateSkillsOnCatalog(b.prompt.skillStore, t.caps.catalog)
-	return nil
-}
-
-// wireMCP registers the MCP servers and LSP tools and chains their shutdown
-// into the controller's cleanup. A caller-supplied shared host lets
-// controllers for one workspace reuse running MCP processes; its owner closes it.
-func (b *builder) wireMCP() error {
-	opts, cfg, root, t := b.opts, b.cfg, b.root, &b.tools
-	t.host = opts.SharedHost
-	if t.host == nil {
-		t.host = plugin.NewHost()
-	}
-	// A lazy server connects in the background; without a status sink every
-	// status view keeps showing what it saw at boot.
-	t.host.SetStatusSink(opts.Sink)
-	t.specOptions = pluginspec.Options{
-		DefaultStartupTimeout: time.Duration(cfg.MCPStartupTimeoutSeconds()) * time.Second,
-		DefaultCallTimeout:    time.Duration(cfg.MCPCallTimeoutSeconds()) * time.Second,
-		LaunchManager:         mcplaunch.ForWorkspace(b.roots.Home(), root),
-		ConfigSource:          "workspace_config",
-		StateHome:             b.roots.Home(),
-		WriterRoots:           t.env.writeRoots,
-		WritableRoots:         t.env.writeRoots,
-		ForbidReadRoots:       t.env.forbidReadRoots,
-		Network:               t.env.network,
-		PackageOwners:         pluginspec.PackageOwners(cfg),
-		OAuthHTTPClient:       b.balanceClient,
-	}
-	if opts.Composition != nil {
-		t.specOptions.ProcessScope = rand.Text()
-	}
-	t.mcp = resolveMCPSpecs(opts, cfg, root, t.specOptions)
-	b.cleanup = t.host.Close
-	if opts.SharedHost != nil {
-		b.cleanup = func() {}
-	}
-	if err := b.isolateCompositionMCPPackages(); err != nil {
-		return err
-	}
-	reportProjectMCPAwaitingApproval(b.sink, cfg, root)
-	t.configSpecs, t.mcpSchemaKnown = registerMCPTools(b.ctx, t.host, t.reg, t.mcp, b.sink)
-	registerResourceTool(t.host, t.reg, cfg, t.mcp)
-	// The LSP manager is session-scoped: its servers stop with the controller.
-	if t.lsp = registerLSP(t.reg, cfg, root); t.lsp != nil {
-		prev, mgr := b.cleanup, t.lsp
-		b.cleanup = func() { prev(); mgr.Close() }
-	}
-	if proxy := t.env.egress; proxy != nil {
-		prev := b.cleanup
-		b.cleanup = func() { prev(); _ = proxy.Close() }
-	}
-	b.cleanup = closeAfter(b.cleanup, b.trace)
 	return nil
 }
 
@@ -529,12 +496,16 @@ func (b *builder) controller() (*control.Controller, error) {
 	// Every role setting sees one provider-visible surface, fixed before the
 	// snapshot freezes registry schemas for cache diagnostics.
 	if b.opts.Observe == nil {
-		applyUnifiedProviderToolSurface(t.reg, b.opts.GoalTurnsUnreachable, b.opts.Ablation, pinnedMCPServers(t.mcp.alwaysLoad, t.mcpSchemaKnown))
+		pinned := pinnedMCPServers(t.mcp.alwaysLoad, t.mcpSchemaKnown)
+		if b.opts.Composition.Live() {
+			pinned = nil
+		}
+		applyUnifiedProviderToolSurface(t.reg, b.opts.GoalTurnsUnreachable, b.opts.Ablation, pinned)
 	}
 	if binding := b.opts.Composition; binding != nil {
 		if binding.Digest != "" {
 			t.reg.SetProviderVisibleTools(binding.ToolSurface)
-		} else if binding.Version.Definition.Tools.Mode == "select" {
+		} else if !binding.Live() && binding.Version.Definition.Tools.Mode == "select" {
 			t.reg.SetProviderVisibleTools(nil)
 		}
 	}
@@ -774,22 +745,4 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		ProjectChecks:           b.prompt.projectChecks, ProjectSensitivePaths: b.prompt.sensitivePaths,
 	}
 	return finalizeBuildResult(b.roots, &BuildResult{ComputerDriver: b.opts.ComputerDriver, Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
-}
-
-// clock is the one place the system clock enters the assembly: a host supplies
-// none, a test supplies its own.
-func (b *builder) clock() func() time.Time {
-	if b.opts.clock != nil {
-		return b.opts.clock
-	}
-	return time.Now
-}
-
-// subagentReader hands the controller the store's read side, or nothing when the
-// session has no store, so a nil store never travels as a non-nil interface.
-func subagentReader(s *delegation.SubagentStore) control.SubagentReader {
-	if s == nil {
-		return nil
-	}
-	return s
 }

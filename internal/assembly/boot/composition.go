@@ -41,7 +41,7 @@ func (b *builder) prepareComposition() error {
 		if err != nil {
 			return err
 		}
-		b.opts.Composition = &agentcomposition.Binding{Version: v, Resolved: agentcomposition.Clone(v.Definition), Workspace: b.root, Resources: []agentcomposition.Resource{}}
+		b.opts.Composition = b.compositionBinding(v, b.root)
 	}
 	binding := b.opts.Composition
 	if binding.Workspace != "" && binding.Workspace != b.root {
@@ -51,6 +51,9 @@ func (b *builder) prepareComposition() error {
 	b.cfg.Agent.Persona = config.PersonaConfig{Prefix: p.Prefix, Suffix: p.Suffix, IncludeRuntimeContext: &p.IncludeRuntimeContext}
 	// Independent MCP connections keep mutable server state out of sibling sessions.
 	b.opts.SharedHost = nil
+	if binding.Live() {
+		return b.prepareLiveComposition()
+	}
 	return b.prepareCompositionMCP()
 }
 
@@ -113,6 +116,17 @@ func keepResource(binding *agentcomposition.Binding, kind, id string, v any) err
 func (b *builder) bindCompositionSkills() error {
 	binding := b.opts.Composition
 	if binding == nil {
+		return nil
+	}
+	if binding.Live() {
+		b.prompt.skillStore.ConfigureDiscoverySource(b.liveSkillSource())
+		b.prompt.skillStore.Restrict(func(sk skill.Skill) bool {
+			return binding.Resolved.Skills.Allows(sk.SlashName()) && (sk.Plugin == "" || binding.Resolved.Extensions.Allows(sk.Plugin))
+		})
+		b.prompt.skills = b.prompt.skillStore.List()
+		if binding.SystemPrompt != "" {
+			b.prompt.prompt = binding.SystemPrompt
+		}
 		return nil
 	}
 	var skills []skill.Skill
@@ -185,7 +199,7 @@ func (b *builder) finishComposition(ctrl *control.Controller, snap *extension.Ru
 	if snap == nil {
 		return fmt.Errorf("%w: runtime snapshot missing", agentcomposition.ErrUnavailable)
 	}
-	if diagnostics := snap.Diagnostics(); len(diagnostics) > 0 {
+	if diagnostics := snap.Diagnostics(); len(diagnostics) > 0 && !binding.Live() {
 		return agentcomposition.Unavailable("assembly", strings.Join(diagnostics, "; "))
 	}
 	if binding.Digest != "" {
@@ -196,7 +210,9 @@ func (b *builder) finishComposition(ctrl *control.Controller, snap *extension.Ru
 		if err := verifySelected("tools", binding.Resolved.Tools, b.tools.reg.AllNames(), func(v string) string { return v }); err != nil {
 			return err
 		}
-		binding.Resolved.Tools = selectionOf(b.tools.reg.AllNames(), func(v string) string { return v })
+		if !binding.Live() {
+			binding.Resolved.Tools = selectionOf(b.tools.reg.AllNames(), func(v string) string { return v })
+		}
 		binding.SystemPrompt = snap.SystemPrompt()
 		binding.ToolSchemaDigest = agentcomposition.Digest(b.tools.reg.Schemas())
 		binding.ToolSurface = []string{}
@@ -209,9 +225,13 @@ func (b *builder) finishComposition(ctrl *control.Controller, snap *extension.Ru
 		}
 	}
 	ctrl.BindComposition(binding)
-	ctrl.ConfigureCompositionValidation(func() error { return b.validateCompositionAvailability() })
+	if !binding.Live() {
+		ctrl.ConfigureCompositionValidation(func() error { return b.validateCompositionAvailability() })
+	} else {
+		ctrl.ConfigureCompositionValidation(func() error { return b.ext.mgr.ValidateLiveStartup() })
+	}
 	b.tools.reg.Restrict(func(t tool.Tool) bool {
-		if tool.ReachOf(t) != tool.ReachHostControl && !member(binding.Resolved.Tools, t.Name()) {
+		if !binding.Live() && tool.ReachOf(t) != tool.ReachHostControl && !member(binding.Resolved.Tools, t.Name()) {
 			return false
 		}
 		if !compositionAdmits(binding.Resolved)(t) {
@@ -219,7 +239,7 @@ func (b *builder) finishComposition(ctrl *control.Controller, snap *extension.Ru
 		}
 		return b.opts.Observe == nil || observeAdmits(b.opts.Observe.Tools)(t)
 	})
-	if b.tools.caps != nil && b.tools.caps.runtime != nil {
+	if !binding.Live() && b.tools.caps != nil && b.tools.caps.runtime != nil {
 		b.tools.caps.runtime.FreezeComposition()
 	}
 	return nil

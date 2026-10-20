@@ -72,6 +72,8 @@ type Resource struct {
 }
 
 type Binding struct {
+	FormatVersion    int        `json:"formatVersion,omitempty"`
+	ResourceMode     string     `json:"resourceMode,omitempty"`
 	Resolved         Definition `json:"resolved"`
 	Started          bool       `json:"started,omitempty"`
 	Version          Version    `json:"version"`
@@ -94,6 +96,9 @@ func (b *Binding) Seal() {
 func (b *Binding) Validate() error {
 	if b == nil {
 		return ErrInvalid
+	}
+	if err := b.validateResourceFormat(); err != nil {
+		return err
 	}
 	if err := b.Version.Definition.Validate(); err != nil {
 		return err

@@ -207,7 +207,7 @@ func replaySessionEventLog(path string) (sessionEventReplay, error) {
 // nativeSessionEventSchema reports whether this build writes and replays records
 // of schema v; 2 is 1.x's DAG log, read by its own replay.
 func nativeSessionEventSchema(v int) bool {
-	return v == sessionEventSchemaVersion || v == sessionEventImageBlobsSchemaVersion || v == sessionEventCompositionSchemaVersion
+	return v == sessionEventSchemaVersion || v == sessionEventImageBlobsSchemaVersion || v == sessionEventCompositionSchemaVersion || v == sessionEventLiveCompositionSchemaVersion
 }
 
 // replaySessionEventLogWithLimits replays the log, then restores any image

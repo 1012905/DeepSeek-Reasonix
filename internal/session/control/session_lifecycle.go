@@ -57,7 +57,7 @@ func (c *Controller) maybeSessionStart(ctx context.Context) {
 // resets the executor to a clean session carrying the same system prompt. It
 // ends the old session and starts the new one for lifecycle hooks.
 func (c *Controller) NewSession() error {
-	if c.CompositionBinding() != nil {
+	if c.CompositionSummary() != nil {
 		return c.newCompositionSession()
 	}
 	if c.executor == nil {

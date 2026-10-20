@@ -74,6 +74,8 @@ type Skill struct {
 	// supplementsDeferred marks a discovered directory-layout skill whose
 	// references/ and scripts/ are not yet in Body.
 	supplementsDeferred bool
+	confinedSupplements bool
+	completionError     error
 	// SlashPrefix overrides Plugin only for the user-facing invocation name.
 	// Imported Claude agents use <plugin>:agent so an agent and skill may safely
 	// share the same upstream name.
@@ -166,6 +168,8 @@ type Options struct {
 
 // Store resolves skills across the configured roots.
 type Store struct {
+	discoverySource  func() *Store
+	admits           func(Skill) bool
 	snapshot         *[]Skill
 	homeDir          string
 	reasonixHomeDir  string
@@ -372,11 +376,17 @@ func bindAllowedTools(refs []string, bindings []tool.MCPBinding) []string {
 // Skill profiles frontmatter is diagnostic-only: it never blocks invocation.
 // Required capabilities still gate execution.
 func (s *Store) ValidateInvocation(sk Skill) error {
+	if sk.completionError != nil {
+		return sk.completionError
+	}
 	if err := sk.modelCallError(); err != nil {
 		return err
 	}
 	if s == nil {
 		return nil
+	}
+	if s.admits != nil && (!s.admits(sk) || s.disabledSet()[config.SkillNameKey(sk.Name)]) {
+		return fmt.Errorf("%w: skill %q is outside the current grant", ErrInvocationUnavailable, sk.SlashName())
 	}
 	if len(sk.Requires) > 0 && s.requiresReady != nil {
 		if missing := s.requiresReady(sk.Requires); len(missing) > 0 {
@@ -660,7 +670,8 @@ func (s *Store) Read(name string) (Skill, bool) {
 // bare identifiers accepted by Read/run_skill.
 func (s *Store) ReadSlash(name string) (Skill, bool) {
 	sk, ok := ResolveSlashSkill(s.discoveredSkills(), name)
-	return sk.Complete(), ok
+	sk = sk.Complete()
+	return sk, ok && sk.completionError == nil
 }
 
 func (s *Store) discoverRoot(r discoveryRoot) []Skill {
@@ -1111,104 +1122,6 @@ func (s *Store) globalSkillsRoot() string {
 		return filepath.Join(s.reasonixHomeDir, SkillsDirname)
 	}
 	return filepath.Join(s.homeDir, ".reasonix", SkillsDirname)
-}
-
-// Complete returns the skill with its references and scripts folded into Body.
-// Discovery leaves them out because a listing needs only the metadata, and
-// reading every skill's sibling files per catalog build is what made opening a
-// pane scale with the size of the skill library.
-func (s Skill) Complete() Skill {
-	if !s.supplementsDeferred {
-		return s
-	}
-	s.Body = loadBodyWithScripts(s.Path, loadBodyWithReferences(s.Path, s.Body))
-	s.supplementsDeferred = false
-	return s
-}
-
-// loadBodyWithReferences appends a directory-layout skill's sibling
-// references/*.md files to its body (Anthropic Skills compatibility), so depth
-// material is available without on-demand resolution. Flat skills have no
-// references dir and are returned unchanged.
-func loadBodyWithReferences(skillPath, body string) string {
-	if filepath.Base(skillPath) != SkillFile {
-		return body
-	}
-	refsDir := filepath.Join(filepath.Dir(skillPath), "references")
-	entries, err := os.ReadDir(refsDir)
-	if err != nil {
-		return body
-	}
-	var names []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".md") {
-			names = append(names, e.Name())
-		}
-	}
-	if len(names) == 0 {
-		return body
-	}
-	slices.Sort(names)
-	var b strings.Builder
-	b.WriteString(body)
-	for _, n := range names {
-		content, err := fileencoding.ReadFileUTF8(filepath.Join(refsDir, n))
-		if err != nil {
-			continue
-		}
-		trimmed := strings.TrimSpace(string(content))
-		if trimmed == "" {
-			continue
-		}
-		slug := strings.TrimSuffix(n, filepath.Ext(n))
-		b.WriteString("\n\n## Reference: " + slug + "\n\n" + trimmed)
-	}
-	return b.String()
-}
-
-// loadBodyWithScripts appends a directory-layout skill's sibling scripts/
-// directory listing to the body, so the model knows what scripts are
-// available and can run them via bash (inheriting sandbox, gate, hooks).
-func loadBodyWithScripts(skillPath, body string) string {
-	if filepath.Base(skillPath) != SkillFile {
-		return body
-	}
-	scriptsDir := filepath.Join(filepath.Dir(skillPath), "scripts")
-	entries, err := os.ReadDir(scriptsDir)
-	if err != nil {
-		return body
-	}
-	var names []string
-	for _, e := range entries {
-		// Filter hidden files — bash should not see config dotfiles in scripts/.
-		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		if !isScriptExt(filepath.Ext(e.Name())) {
-			continue
-		}
-		names = append(names, e.Name())
-	}
-	if len(names) == 0 {
-		return body
-	}
-	slices.Sort(names)
-	var b strings.Builder
-	b.WriteString(body)
-	b.WriteString("\n\n## Scripts\n\nRun a listed script with bash using the exact path shown below; quote the path if it contains spaces.\n\n")
-	for _, n := range names {
-		b.WriteString("- `" + filepath.Join(scriptsDir, n) + "`\n")
-	}
-	return b.String()
-}
-
-func isScriptExt(ext string) bool {
-	switch strings.ToLower(ext) {
-	case "", ".sh", ".py", ".js", ".ts", ".rb", ".pl", ".php", ".ps1":
-		return true
-	default:
-		return false
-	}
 }
 
 // parseCSVFrontmatter splits simple comma-separated frontmatter values. Full

@@ -40,7 +40,7 @@ func TestCompositionRetainsPersonaSkillsCommandsAndHooksAcrossSourceDeletion(t *
 		t.Fatal(err)
 	}
 	opts := Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: d.ID, resolvedShell: pinnedEffectShell()}
-	first, err := BuildRuntime(t.Context(), opts)
+	first, err := buildSnapshotRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestCompositionRetainsPersonaSkillsCommandsAndHooksAcrossSourceDeletion(t *
 		t.Fatal("reload followed command source")
 	}
 	opts.AgentComposition, opts.Composition = "", first.Controller.CompositionBinding()
-	restored, err := BuildRuntime(t.Context(), opts)
+	restored, err := buildSnapshotRuntime(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestCompositionRetainsPersonaSkillsCommandsAndHooksAcrossSourceDeletion(t *
 	if got := restored.Controller.HookRunner().SessionStart(t.Context()); len(got) != 1 || got[0] != "ORIGINAL HOOK" {
 		t.Fatalf("restored hook=%q", got)
 	}
-	if _, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: d.ID, resolvedShell: pinnedEffectShell()}); !errors.Is(err, agentpreset.ErrNotFound) {
+	if _, err := buildSnapshotRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, Model: "test-model", AgentComposition: d.ID, resolvedShell: pinnedEffectShell()}); !errors.Is(err, agentpreset.ErrNotFound) {
 		t.Fatalf("deleted definition remained selectable: %v", err)
 	}
 	if err := config.DefaultActivationStore().SetSkillEnabled("frozen", root, config.ActivationProject, false); err != nil {

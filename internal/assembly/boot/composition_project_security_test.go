@@ -2,7 +2,6 @@ package boot
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 
 	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/hook"
 	"reasonix/internal/state/agentpreset"
 )
@@ -74,16 +74,22 @@ func TestProjectCompositionCannotActivateUnauthorizedProgramsOrChooseDefault(t *
 				t.Fatal("unbound session never reached its provider")
 			}
 			ctrl.Close()
-			ctrl, err = Build(t.Context(), Options{Home: home, WorkspaceRoot: root, AgentComposition: d.ID, resolvedShell: pinnedEffectShell()})
-			if ctrl != nil {
-				ctrl.Close()
+			built, err := BuildRuntime(t.Context(), Options{Home: home, WorkspaceRoot: root, AgentComposition: d.ID, resolvedShell: pinnedEffectShell()})
+			if err != nil {
+				t.Fatal(err)
 			}
-			if !errors.Is(err, agentcomposition.ErrUnavailable) {
-				t.Fatalf("unauthorized %s selection was not refused: %v", kind, err)
+			defer built.Controller.Close()
+			built.Controller.HookRunner().SessionStart(t.Context())
+			proxy, ok := built.Assembly.Registry.Get("use_capability")
+			if !ok {
+				t.Fatal("capability proxy missing")
 			}
-			var diagnostic *agentcomposition.DiagnosticError
-			if !errors.As(err, &diagnostic) || len(diagnostic.Diagnostics) != 1 || diagnostic.Diagnostics[0].Module != kind+":"+id {
-				t.Fatalf("wrong missing authority: %v", err)
+			resolved, err := proxy.(tool.CallResolver).ResolveCall(t.Context(), json.RawMessage(`{"action":"call","capability_id":"mcp-server:unapproved"}`))
+			if err == nil && !resolved.Unavailable {
+				t.Fatal("unapproved server accepted a call")
+			}
+			if built.Extensions != nil && built.Extensions.Client("unapproved") != nil {
+				t.Fatal("unapproved extension was activated")
 			}
 			if _, err := os.Stat(marker); !os.IsNotExist(err) {
 				t.Fatalf("unauthorized %s started a program: %v", kind, err)
