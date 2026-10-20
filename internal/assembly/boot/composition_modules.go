@@ -25,7 +25,7 @@ func (b *builder) prepareCompositionModules() error {
 	if binding.Digest == "" {
 		for _, p := range selected {
 			if err := b.retainExtension(p); err != nil {
-				return err
+				return compositionResourceError("extension", p.Installed.Name, err)
 			}
 		}
 		if binding.Resolved.Extensions.Mode == agentcomposition.Inherit {
@@ -96,7 +96,7 @@ func (b *builder) prepareCompositionHooks(selected []pluginpkg.InstalledPackage)
 		}
 		if binding.Digest == "" {
 			if err := b.retainHook(id, h); err != nil {
-				return err
+				return compositionResourceError("hook", id, err)
 			}
 			available = append(available, id)
 		}

@@ -146,7 +146,7 @@ func compositionPackages(home string, packages []pluginpkg.InstalledPackage, bin
 		var err error
 		p, err = restoreExtension(home, p, binding)
 		if err != nil {
-			return nil, err
+			return nil, compositionResourceError("extension", p.Installed.Name, err)
 		}
 		for _, m := range binding.Resolved.Extensions.Members {
 			if m.ID != p.Installed.Name {

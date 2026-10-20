@@ -24,6 +24,18 @@ const coded = (message: string, code: string, params?: Record<string, string | n
 // upstream of this — dotted codes, sentinels, typed families — buys nothing if
 // the last hop prints the English that rode along for the log.
 describe("what a reader is told a refusal was", () => {
+  it("names unavailable composition dependencies and offers a recovery path", () => {
+    const error = coded("fallback", "agent_composition.mcp_unavailable", { module: "docs", detail: "http 401" });
+    expect(reason(error)).toContain("MCP 服务 docs");
+    expect(reason(error)).toContain("http 401");
+    expect(reason(error)).toContain("认证");
+    localStorage.setItem(STORAGE, "en"); boot();
+    expect(reason(error)).toContain("MCP server docs");
+    expect(reason(error)).toContain("authentication");
+    const resource = coded("fallback", "agent_composition.unavailable", { module: "extension:tools", detail: "link leaves source directory" });
+    expect(reason(resource)).toContain("extension:tools");
+    expect(reason(resource)).toContain("link leaves source directory");
+  });
   it("explains unreadable memory directories in both languages", () => {
     const refusal = coded("fixture fallback", "memory.directory_unreadable");
     expect(reason(refusal)).toBe("无法读取记忆目录，请检查权限或存储状态后重试");
