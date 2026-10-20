@@ -24,6 +24,11 @@ func TestCaptureDirectoryMaterializesContainedLinks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "data", "script.sh"), []byte("original"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	info, err := os.Stat(filepath.Join(source, "data", "script.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMode := uint32(info.Mode().Perm() & 0o700)
 	linkAsset(t, "data/script.sh", filepath.Join(source, "relative.sh"))
 	linkAsset(t, filepath.Join(source, "data", "script.sh"), filepath.Join(source, "absolute.sh"))
 	linkAsset(t, "data", filepath.Join(source, "alias"))
@@ -37,7 +42,7 @@ func TestCaptureDirectoryMaterializesContainedLinks(t *testing.T) {
 		t.Fatalf("snapshot lost aliases: %+v", snapshot)
 	}
 	for _, f := range snapshot.Files {
-		if f.Link != "" || string(f.Data) != "original" || f.Mode != 0o700 {
+		if f.Link != "" || string(f.Data) != "original" || f.Mode != wantMode {
 			t.Fatalf("invalid retained file: %+v", f)
 		}
 	}
