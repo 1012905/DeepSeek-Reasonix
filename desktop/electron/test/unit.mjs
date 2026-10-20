@@ -2516,6 +2516,109 @@ test("CUA embedded control stops the old service before admitting a fresh one", 
   assert.equal(fs.existsSync(owned.abortSocket), false);
 });
 
+test("CUA waits for socket permissions on initial launch and abort restart", { skip: process.platform === "win32" }, async (t) => {
+  const { spawn } = require("node:child_process");
+  const net = require("node:net");
+  const promises = require("node:fs/promises");
+  const { startEmbedded, metadata, stopProcess } = require("../src/cua");
+  const fake = path.join(path.dirname(require("node:url").fileURLToPath(import.meta.url)), "cua-service-fixture.js");
+  const children = [];
+  const observed = new Set();
+  const ready = new Set();
+  let owned;
+  t.after(async () => {
+    await owned?.stop();
+    for (const child of children) await stopProcess(child);
+  });
+  const lstat = promises.lstat;
+  t.mock.method(promises, "lstat", async (...args) => {
+    const current = await lstat(...args);
+    if (path.basename(args[0]) === "driver.sock" && (current.mode & 0o777) !== 0o600) {
+      const child = children.at(-1);
+      if (!observed.has(child.pid)) {
+        observed.add(child.pid);
+        child.send("secure");
+      }
+    } else if (path.basename(args[0]) === "driver.sock") {
+      ready.add(children.at(-1).pid);
+    }
+    return current;
+  });
+  const connect = net.createConnection;
+  t.mock.method(net, "createConnection", (...args) => {
+    if (path.basename(args[0]) === "driver.sock") assert.ok(ready.has(children.at(-1).pid), "metadata was requested before private permissions were observed");
+    return connect(...args);
+  });
+  owned = await startEmbedded(process.execPath, cuaContract, () => {}, (_exe, args, options) => {
+    const child = spawn(process.execPath, [fake, ...args, "--defer-permissions"], { ...options, stdio: [...options.stdio, "ipc"] });
+    children.push(child);
+    return child;
+  });
+  const before = await metadata(owned.socket);
+  const reply = await new Promise((resolve, reject) => {
+    const peer = net.createConnection(owned.abortSocket);
+    let text = "";
+    peer.once("error", reject);
+    peer.on("connect", () => peer.write('{"op":"abort"}\n'));
+    peer.on("data", bytes => { text += bytes; if (text.includes("\n")) { peer.destroy(); resolve(JSON.parse(text)); } });
+  });
+  assert.equal(reply.ok, true);
+  const after = await metadata(owned.socket);
+  assert.notEqual(after.result.pid, before.result.pid);
+  assert.deepEqual([...observed], [before.result.pid, after.result.pid]);
+  assert.equal((await lstat(owned.socket)).mode & 0o777, 0o600);
+  assert.throws(() => process.kill(before.result.pid, 0));
+});
+
+test("CUA permission readiness remains bounded without connecting to a non-private socket", { skip: process.platform === "win32" }, async (t) => {
+  const { spawn } = require("node:child_process");
+  const promises = require("node:fs/promises");
+  const { startEmbedded, stopProcess } = require("../src/cua");
+  const fake = path.join(path.dirname(require("node:url").fileURLToPath(import.meta.url)), "cua-service-fixture.js");
+  let child;
+  t.after(async () => { if (child) await stopProcess(child); });
+  const now = Date.now();
+  let expired = false;
+  t.mock.method(Date, "now", () => now + (expired ? 10001 : 0));
+  const lstat = promises.lstat;
+  t.mock.method(promises, "lstat", async (...args) => {
+    const current = await lstat(...args);
+    if (path.basename(args[0]) === "driver.sock" && (current.mode & 0o777) !== 0o600) expired = true;
+    return current;
+  });
+  await assert.rejects(startEmbedded(process.execPath, cuaContract, () => {}, (_exe, args, options) => {
+    child = spawn(process.execPath, [fake, ...args, "--defer-permissions"], options);
+    return child;
+  }), /Embedded CUA failed readiness/);
+  assert.equal(expired, true);
+  assert.equal(child.exitCode, 0);
+});
+
+for (const kind of ["file", "symlink"]) {
+  test(`CUA readiness rejects a ${kind} instead of waiting for permissions`, { skip: process.platform === "win32" }, async (t) => {
+    const { spawn } = require("node:child_process");
+    const { startEmbedded, stopProcess } = require("../src/cua");
+    let child, socket;
+    t.after(async () => {
+      if (child) await stopProcess(child);
+      if (socket) fs.rmSync(path.dirname(socket), { recursive: true, force: true });
+    });
+    const script = `
+      const fs = require("node:fs");
+      const socket = process.argv[1];
+      if (process.argv[2] === "symlink") fs.symlinkSync("missing-target", socket);
+      else fs.writeFileSync(socket, "", { mode: 0o600 });
+      process.stdin.resume();
+      process.stdin.on("end", () => process.exit(0));`;
+    await assert.rejects(startEmbedded(process.execPath, cuaContract, () => {}, (_exe, args, options) => {
+      socket = args[args.indexOf("--socket") + 1];
+      child = spawn(process.execPath, ["-e", script, socket, kind], options);
+      return child;
+    }), /Invalid private CUA socket/);
+    assert.equal(child.exitCode, 0);
+  });
+}
+
 
 test("CUA repeated quit waits for owned driver cleanup", async () => {
   const { createQuitGate } = require("../src/cua");
