@@ -30,7 +30,7 @@ export default function DelimitedPreview({ text, path, view }: { text: string; p
   const columns = rows.reduce((n, row) => Math.max(n, row.length), 0);
   const firstColumn = Math.min(Math.max(0, columns - 1), Math.max(0, Math.floor(left / 160) - 2));
   const count = Math.min(20, columns - firstColumn);
-  return <div className="document-table" ref={scroll} onScroll={(e) => {
+  return <div className="document-table" ref={scroll} data-action="document.scroll" data-target={path} onScroll={(e) => {
     view.top = e.currentTarget.scrollTop; view.left = e.currentTarget.scrollLeft;
     setTop(view.top); setLeft(view.left);
   }}>

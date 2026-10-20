@@ -44,6 +44,7 @@ export interface Primitive {
 }
 
 export const PRIMITIVES: Primitive[] = [
+  { file: "ui/TooltipButton.tsx", callbacks: { onClick: "click", onPointerDown: "pointerdown" } },
   { file: "ui/Switch.tsx", callbacks: { onClick: "click" } },
   { file: "ui/Menu.tsx", callbacks: { onPick: "click" } },
 ];

@@ -23,9 +23,9 @@ function Picture({ data, path, view }: { data: ArrayBuffer; path: string; view: 
   }, [data, path]);
   return <>
     <div className="document-controls">
-      <button onClick={() => setZoom(Math.max(0.25, zoom - 0.25))} aria-label={t("缩小")}>−</button>
-      <button onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
-      <button onClick={() => setZoom(Math.min(4, zoom + 0.25))} aria-label={t("放大")}>+</button>
+      <button data-action="document.zoom" data-target={path} onClick={() => setZoom(Math.max(0.25, zoom - 0.25))} aria-label={t("缩小")}>−</button>
+      <button data-action="document.zoom" data-target={path} onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+      <button data-action="document.zoom" data-target={path} onClick={() => setZoom(Math.min(4, zoom + 0.25))} aria-label={t("放大")}>+</button>
     </div>
     {failed ? <p role="alert">{t("图片不可用")}</p> : <div className="document-picture">
       {url && <img src={url} alt={path} style={{ width: `${zoom * 100}%`, maxWidth: "none" }} onError={() => setFailed(true)} />}
@@ -57,8 +57,8 @@ export default function DocumentPreview({ port, path, shown, refresh, onOpenExte
   return <div className="document-preview">
     <div className="document-controls">
       {info && <span>{info.size.toLocaleString()} B</span>}
-      <button onClick={reload}>{t("刷新")}</button>
-      {onOpenExternal && <button onClick={onOpenExternal}>{t("用系统应用打开")}</button>}
+      <button data-action="document.refresh" data-target={path} onClick={reload}>{t("刷新")}</button>
+      {onOpenExternal && <button data-action="workbench.open-file" data-target={path} onClick={onOpenExternal}>{t("用系统应用打开")}</button>}
     </div>
     <Boundary fallback={fallback} retryKey={info?.version}>
       <Suspense fallback={<p role="status">{t("正在读取…")}</p>}>{body}</Suspense>

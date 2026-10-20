@@ -34,7 +34,7 @@ describe("the controls below a message", () => {
     const copy = screen.getByRole("button", { name: "复制" });
     await user.click(copy);
     expect(write).toHaveBeenCalledExactlyOnceWith(text);
-    expect(copy.getAttribute("title")).toBe("已复制");
+    expect(copy.querySelector('[aria-live="polite"]')?.textContent).toBe("已复制");
     write.mockRestore();
   });
 

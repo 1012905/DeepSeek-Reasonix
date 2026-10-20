@@ -71,10 +71,10 @@ export default function PdfPreview({ data, view }: { data: ArrayBuffer; view: Do
   }, [doc, page, zoom, width]);
   return <div className="document-pdf">
     <div className="document-controls">
-      <button disabled={page <= 1 || !doc} onClick={() => setPage((n) => n - 1)}>{t("上一页")}</button>
+      <button data-action="document.page" disabled={page <= 1 || !doc} onClick={() => setPage((n) => n - 1)}>{t("上一页")}</button>
       <span>{page} / {doc?.numPages ?? "—"}</span>
-      <button disabled={!doc || page >= doc.numPages} onClick={() => setPage((n) => n + 1)}>{t("下一页")}</button>
-      <select aria-label={t("缩放")} value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>
+      <button data-action="document.page" disabled={!doc || page >= doc.numPages} onClick={() => setPage((n) => n + 1)}>{t("下一页")}</button>
+      <select data-action="document.zoom" aria-label={t("缩放")} value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>
         <option value={0}>{t("适应宽度")}</option>
         {[0.5, 1, 1.5, 2].map((n) => <option key={n} value={n}>{n * 100}%</option>)}
       </select>

@@ -60,16 +60,16 @@ function DeliveryEntry({ file, reply, showLocation }: { file: DeliveredFile; rep
     }
   };
   const actions: DeliveryAction[] = [];
-  if (reply?.onAddFile) actions.push({ label: t("添加到对话"), icon: "plus", disabled: !reference,
+  if (reply?.onAddFile) actions.push({ kind: "add", label: t("添加到对话"), icon: "plus", disabled: !reference,
     title: reference ? undefined : t("此名称不能表示为 @ 引用"),
     run: () => void run(() => reply.onAddFile!(reference), t("已添加到输入框")) });
   if (reply?.openDeliveredFile && /\.(md|markdown|txt|csv|tsv|pdf|html?|svg|docx?|xlsx?|pptx?)$/i.test(path))
-    actions.push({ label: t("用系统应用打开"), icon: "external", run: () => void run(() => reply.openDeliveredFile!(absolute), t("已请求系统应用打开")) });
+    actions.push({ kind: "open", label: t("用系统应用打开"), icon: "external", run: () => void run(() => reply.openDeliveredFile!(absolute), t("已请求系统应用打开")) });
   if (!file.root && reply?.revealDeliveredFile)
-    actions.push({ label: t("在文件夹中显示"), icon: "folder", run: () => void run(() => reply.revealDeliveredFile!(file.path), t("已请求显示文件位置")) });
-  actions.push({ label: t("复制路径"), icon: "copy", run: () => void run(() => copyText(absolute), t("已复制路径")) });
+    actions.push({ kind: "reveal", label: t("在文件夹中显示"), icon: "folder", run: () => void run(() => reply.revealDeliveredFile!(file.path), t("已请求显示文件位置")) });
+  actions.push({ kind: "copy", label: t("复制路径"), icon: "copy", run: () => void run(() => copyText(absolute), t("已复制路径")) });
   return <div className="delivery-file" data-current={current ? "" : undefined}>
-    <button type="button" className="delivery-open" disabled={!open} title={`${absolute}\n${description}`}
+    <button type="button" className="delivery-open" data-action="delivery.preview" data-target={path} disabled={!open} title={`${absolute}\n${description}`}
       aria-label={t("预览 {name}", { name })} aria-describedby={detailID} aria-current={current ? "true" : undefined} onClick={() => open?.()}>
       <FileTypeIcon path={file.path} />
       <span className="delivery-details">
@@ -81,11 +81,11 @@ function DeliveryEntry({ file, reply, showLocation }: { file: DeliveredFile; rep
         <small id={detailID} className="delivery-description">{description}</small>
       </span>
     </button>
-    <TooltipButton ref={trigger} className="delivery-more" title={t("更多操作")} aria-label={t("更多操作：{name}", { name })}
+    <TooltipButton ref={trigger} className="delivery-more" data-action="delivery.more" data-target={path} title={t("更多操作")} aria-label={t("更多操作：{name}", { name })}
       aria-haspopup="menu" aria-expanded={menu} disabled={feedback?.kind === "busy"} onClick={() => setMenu((value) => !value)}>
       <span>{t("更多")}</span><StudioIcon name="down" />
     </TooltipButton>
-    {menu && <DeliveryMenu anchor={trigger} label={t("文件操作：{name}", { name })} actions={actions} onClose={close} />}
+    {menu && <DeliveryMenu anchor={trigger} label={t("文件操作：{name}", { name })} target={path} actions={actions} onClose={close} />}
     {feedback && <div className="delivery-feedback" role={feedback.kind === "error" ? "alert" : "status"} data-kind={feedback.kind}>{feedback.text}</div>}
   </div>;
 }

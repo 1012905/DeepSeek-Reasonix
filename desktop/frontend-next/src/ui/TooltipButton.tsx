@@ -2,13 +2,14 @@ import { useCallback, useEffect, useId, useImperativeHandle, useRef, useState, t
 import { createPortal } from "react-dom";
 import { beside, pinToViewport, useFollow } from "./place";
 import "./tooltip.css";
+import { listenAction } from "./listen";
 
-type Props = ComponentPropsWithRef<"button"> & { shortcut?: string };
+type Props = Omit<ComponentPropsWithRef<"button">, "onBlur"> & { shortcut?: string };
 let dismissActive: (() => void) | undefined;
 
 export function TooltipButton({
   title, shortcut, ref, children, onPointerEnter, onPointerLeave, onPointerDown,
-  onFocus, onBlur, onClick, "aria-describedby": describedBy, ...props
+  onFocus, onClick, "aria-describedby": describedBy, ...props
 }: Props) {
   const anchor = useRef<HTMLButtonElement>(null);
   const tip = useRef<HTMLDivElement>(null);
@@ -39,9 +40,9 @@ export function TooltipButton({
       event.stopPropagation();
       close();
     };
-    addEventListener("keydown", key, true);
+    const offKey = listenAction(window, "keydown", { action: "layer.dismiss", listener: key as EventListener }, true);
     addEventListener("blur", close);
-    return () => { removeEventListener("keydown", key, true); removeEventListener("blur", close); };
+    return () => { offKey(); removeEventListener("blur", close); };
   }, [open, close]);
   const place = useCallback(() => {
     if (!anchor.current || !tip.current) return;
@@ -60,7 +61,7 @@ export function TooltipButton({
       onPointerLeave={(event) => { close(); onPointerLeave?.(event); }}
       onPointerDown={(event) => { close(); onPointerDown?.(event); }}
       onFocus={(event) => { show(); onFocus?.(event); }}
-      onBlur={(event) => { close(); onBlur?.(event); }}
+      onBlur={close}
       onClick={(event) => { close(); onClick?.(event); }}>
       {children}
     </button>
