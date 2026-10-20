@@ -360,11 +360,11 @@ func TestPlaceRemoteHostOrdersTheBook(t *testing.T) {
 		}
 	}
 	order := func() string {
-		var out string
+		var out strings.Builder
 		for _, h := range c.Remote.Hosts {
-			out += h.Name
+			out.WriteString(h.Name)
 		}
-		return out
+		return out.String()
 	}
 	for _, step := range []struct {
 		name, before string
