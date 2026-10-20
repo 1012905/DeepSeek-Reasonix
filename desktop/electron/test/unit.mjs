@@ -1573,6 +1573,135 @@ test("a host that exits before its handshake is logged and shown, not swallowed"
   }
 });
 
+test("a development shell leaves once the process that launched it is gone", () => {
+  const { watchLauncher } = require("../src/launcher.js");
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    // POSIX hands an orphan to another parent; Windows leaves the dead pid in place.
+    for (const [why, end] of [["reparented", (s) => { s.ppid = 1; }], ["died in place", (s) => { s.alive = false; }]]) {
+      const state = { ppid: 4242, alive: true };
+      let lost = 0;
+      watchLauncher({ packaged: false, env: {}, onLost: () => lost++, parent: () => state.ppid, alive: () => state.alive });
+      mock.timers.tick(5000);
+      assert.equal(lost, 0, `${why}: left while the launcher was still there`);
+      end(state);
+      mock.timers.tick(1000);
+      assert.equal(lost, 1, `${why}: stayed after its launcher was gone`);
+      mock.timers.tick(5000);
+      assert.equal(lost, 1, `${why}: told more than once`);
+    }
+
+    const state = { ppid: 4242 };
+    let lost = 0;
+    const watch = watchLauncher({ packaged: false, env: {}, onLost: () => lost++, parent: () => state.ppid, alive: () => true });
+    watch.dispose();
+    state.ppid = 1;
+    mock.timers.tick(5000);
+    assert.equal(lost, 0, "a disposed watch still acted");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a packaged, handed-over or parentless shell belongs to no launcher", () => {
+  const { watchLauncher, handOver } = require("../src/launcher.js");
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    const handed = {};
+    handOver(handed);
+    for (const [why, options] of [
+      ["packaged", { packaged: true, env: {}, parent: () => 4242 }],
+      ["handed over by a relaunch", { packaged: false, env: handed, parent: () => 4242 }],
+      ["started by init", { packaged: false, env: {}, parent: () => 1 }],
+    ]) {
+      let lost = 0;
+      let ppid = options.parent();
+      watchLauncher({ ...options, onLost: () => lost++, parent: () => ppid, alive: () => false });
+      ppid = 7;
+      mock.timers.tick(5000);
+      assert.equal(lost, 0, why);
+    }
+    assert.deepEqual(handed, {}, "the hand-over mark reached this shell's own children");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a relaunch hands the shell over before it asks for the restart", () => {
+  const { actHandler } = require("../src/acts.js");
+  const { relaunchForOzonePlatform } = require("../src/ozone.js");
+  const key = "REASONIX_STUDIO_HANDED_OVER";
+  const saved = process.env[key];
+  delete process.env[key];
+  try {
+    const seen = [];
+    actHandler({ app: { relaunch: () => seen.push(process.env[key]) }, showWindow: () => {} })("relaunch");
+    assert.deepEqual(seen, ["1"]);
+  } finally {
+    if (saved === undefined) delete process.env[key];
+    else process.env[key] = saved;
+  }
+  const env = { XDG_SESSION_TYPE: "wayland", DISPLAY: ":0" };
+  const seen = [];
+  relaunchForOzonePlatform({ relaunch: () => seen.push(env[key]), exit: () => {} }, { platform: "linux", env, argv: ["x"] });
+  assert.deepEqual(seen, ["1"]);
+});
+
+test("output for a console the launcher closed is dropped, never thrown", () => {
+  const { EventEmitter } = require("node:events");
+  const { consoleEcho } = require("../src/launcher.js");
+  const stream = Object.assign(new EventEmitter(), { written: [], full: false, broken: false });
+  stream.write = (chunk) => {
+    if (stream.broken) throw Object.assign(new Error("write EIO"), { code: "EIO" });
+    stream.written.push(chunk);
+    return !stream.full;
+  };
+  const echo = consoleEcho(stream);
+  echo("a");
+  stream.full = true;
+  echo("b");
+  echo("c");
+  assert.deepEqual(stream.written, ["a", "b"], "a backed-up console kept queueing");
+  stream.emit("drain");
+  stream.full = false;
+  echo("d");
+  stream.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+  echo("e");
+  assert.deepEqual(stream.written, ["a", "b", "d"], "a failed console was written to again");
+
+  const sync = Object.assign(new EventEmitter(), { broken: true, calls: 0 });
+  sync.write = () => {
+    sync.calls++;
+    throw Object.assign(new Error("write EIO"), { code: "EIO" });
+  };
+  const echoSync = consoleEcho(sync);
+  assert.doesNotThrow(() => echoSync("x"));
+  echoSync("y");
+  assert.equal(sync.calls, 1);
+});
+
+test("a shell whose console pipe was closed keeps running", async () => {
+  const { spawn } = require("node:child_process");
+  const script = `
+    const { consoleEcho } = require(${JSON.stringify(require.resolve("../src/launcher.js"))});
+    const echo = consoleEcho(process.stderr);
+    process.stdin.once("data", () => {
+      let n = 0;
+      const timer = setInterval(() => {
+        echo("x".repeat(512) + "\\n");
+        if (++n === 50) { clearInterval(timer); process.stdout.write("survived\\n"); }
+      }, 2);
+    });`;
+  const child = spawn(process.execPath, ["-e", script], { stdio: ["pipe", "pipe", "pipe"] });
+  child.stderr.destroy();
+  let out = "";
+  child.stdout.on("data", (chunk) => { out += chunk; });
+  child.stdin.end("go\n");
+  const code = await new Promise((resolve) => child.on("exit", resolve));
+  assert.equal(code, 0);
+  assert.equal(out, "survived\n");
+});
+
 test("the launch credential cookie is put back when something removes it, and only then", async () => {
   const { keepCredential } = require("../src/credential.js");
   const { EventEmitter } = require("node:events");
