@@ -225,6 +225,9 @@ rules are written in.
   follow that radius and a short mark cannot. It is one mark in three colours —
   accent, warn, ok — so the row says which state it is in without the row
   itself becoming the signal.
+- The tick is the only state mark in the rail, running included. The row's
+  status dot is not drawn there: it sat on top of the tick and pushed the title
+  one step right. `perf/session-row-marker.mjs` holds it.
 - Finishing is the one rail state that is an event rather than a state, so it
   alone is animated, and only for the run this window watched cross into
   `done`. A session that was already done when the rail mounted, or that comes
