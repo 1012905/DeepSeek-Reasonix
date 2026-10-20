@@ -53,6 +53,7 @@ type heldScope struct {
 	mods          ModsConfig
 	// mcpResources decides whether a server's resources are readable by the model.
 	mcpResources bool
+	presentFiles bool
 	// webSearchBackends and searxngURL decide where the user's queries go, so
 	// only the user file names them.
 	webSearchBackends []string
@@ -107,6 +108,7 @@ func holdUserScope(c *Config) heldScope {
 		observability:   c.Observability,
 		mods:            c.Mods,
 		mcpResources:    c.Tools.MCPResources,
+		presentFiles:    c.Tools.PresentFiles,
 
 		webSearchBackends: slices.Clone(c.Tools.WebSearchBackends),
 		searxngURL:        c.Tools.SearxngURL,
@@ -214,6 +216,10 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 	if c.Tools.MCPResources != h.mcpResources {
 		c.ignoreProject("tools.mcp_resources", fmt.Sprintf("%t", c.Tools.MCPResources), ProjectUserOnly)
 		c.Tools.MCPResources = h.mcpResources
+	}
+	if c.Tools.PresentFiles != h.presentFiles {
+		c.ignoreProject("tools.present_files", fmt.Sprintf("%t", c.Tools.PresentFiles), ProjectUserOnly)
+		c.Tools.PresentFiles = h.presentFiles
 	}
 	c.keepUserSearchBackends(h)
 	if c.Tools.VideoURLPassthrough != h.videoURLPass {

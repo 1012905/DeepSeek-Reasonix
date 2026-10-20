@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"reasonix/internal/contract/delivery"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
@@ -328,6 +329,11 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 			Execution:  toEventShellExecution(o.execution, durations[i]),
 			Issuer:     event.IssuedByModel, Executed: o.executed,
 		}
+		manifest := o.output
+		if o.rawOutput != "" {
+			manifest = o.rawOutput
+		}
+		tr.Deliveries = delivery.Decode(c.ResolvedName, c.CapabilityID, o.errMsg != "" || !o.executed || o.blocked, manifest)
 		if startedAt[i] > 0 {
 			tr.StartedAt = startedAt[i]
 			tr.EndedAt = startedAt[i] + durations[i]

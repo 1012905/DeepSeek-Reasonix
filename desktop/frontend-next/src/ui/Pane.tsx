@@ -429,8 +429,20 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   const find = useFind(s.items, findPulse, active, useCallback(() => showView("flow"), [showView]), receiptPref, findTogglePulse);
 
   const onRunDetail = useCallback(() => showView("analysis"), [showView]);
+  const previewScope = JSON.stringify([rt.id, rt.root, status?.sessionPath ?? rt.sessionPath]);
+  const [previewFile, setPreviewFile] = useState<{ port: typeof port; scope: string; path?: string }>();
+  const onActiveFile = useCallback((path: string | undefined) => {
+    setPreviewFile((old) => old?.port === port && old.scope === previewScope && old.path === path
+      ? old : { port, scope: previewScope, path });
+  }, [port, previewScope]);
+  const activeFile = visible && workbench && previewFile?.port === port && previewFile.scope === previewScope ? previewFile.path : undefined;
   const { quote, reply, onResend } = useReplyActions({ port, items: s.items, checkpoints, running, model: status?.label, submit: (line) => submit(line).then((r) => r === true), reloadSession, onSettings, onRunDetail, onError: fail, branchName: `${title} · ${t("分支")}`, onBranched: onOpenSession });
-  const fileReply = useMemo(() => ({ ...reply, files: conversationFiles.refs }), [reply, conversationFiles.refs]);
+  const fileReply = useMemo(() => ({
+    ...reply, files: conversationFiles.refs, activeFile,
+    onAddFile: (reference: string) => setInserted((was) => ({ n: was.n + 1, text: reference })),
+    openDeliveredFile: !rt.host && port.opensFiles() ? (path: string) => port.openDocument(path) : undefined,
+    revealDeliveredFile: !rt.host && port.revealsFiles() ? (path: string) => port.revealInFileManager(path) : undefined,
+  }), [reply, conversationFiles.refs, rt.host, port, activeFile]);
 
   // Where the bottom is moves as blocks mount under it, so this only asks the
   // transcript to follow again and lets it scroll itself into place.
@@ -563,6 +575,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
             manual={manualBrowser}
             shown={visible && workbench}
             onSurfaces={setSurfaces}
+            onActiveFile={onActiveFile}
             scheme={theme === "light" ? "light" : "dark"}
             changes={tree?.changes ?? []} onTreeChanged={refreshTree} revealChanges={revealChanges} toggleFiles={toggleFiles}
             running={running}

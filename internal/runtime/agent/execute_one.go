@@ -15,7 +15,6 @@ import (
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/safety/permission"
-	"reasonix/internal/tools/shellrun"
 )
 
 // CodeMCPToolDisabled identifies a call refused by an explicit disabled_tools
@@ -648,6 +647,9 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	a.announceDelegation(plan)
 	cctx := plan.cctx
 	runTool := plan.runTool
+	if _, ok := runTool.(tool.FilePresenter); ok {
+		plan.resolvedMeta = &tool.ResolvedCall{TargetName: runTool.Name(), CapabilityID: "tool:present_files", ReadOnly: true, Target: runTool, Args: plan.runArgs}
+	}
 	runArgs := plan.runArgs
 	call := plan.call
 	t := plan.tool
@@ -736,21 +738,6 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	}
 	out.keepFull(result)
 	return out
-}
-
-// annotateShellSubject records the part of the command that names what it runs,
-// when an assignment prefix stands in front of it.
-func annotateShellSubject(execution *tool.ShellExecution, args json.RawMessage) {
-	if execution == nil || execution.Subject != "" {
-		return
-	}
-	cmd := bashCommandFromArgs(args)
-	if cmd == "" {
-		return
-	}
-	if subject, cut := shellrun.OperativeCommand(cmd); cut {
-		execution.Subject = subject
-	}
 }
 
 // executeStoppable runs the call under a context CancelToolCall can end alone.

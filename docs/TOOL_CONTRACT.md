@@ -9,6 +9,31 @@ reviewed: 2026-09-29
 
 This document records the provider-visible contract for Reasonix compile-time built-in tools. It is generated from the same canonical schema path used by the runtime registry.
 
+`present_files` declares up to four existing files in the workspace or authorized folders.
+Its versioned result remains in the canonical tool history; live and restored cards use
+the host-confirmed capability identity and the complete result, even when model context
+is shortened.
+
+Opening a card reads the current source file, not an immutable snapshot.
+It does not certify task completion and is not admitted by the Observe posture.
+
+`present_files` 每次声明最多四个工作区或已授权目录中的现有文件。有版本的结果保存在原始工具历史中；
+实时与恢复后的卡片使用宿主确认的能力身份和完整结果，不依赖模型上下文是否被压缩。
+点击卡片读取源文件当前内容，不保存版本快照，不构成任务完成证明，也不进入 Observe 模式。
+
+This tool is conditional: user-only `tools.present_files = true` enables it on
+session open. Off by default, it contributes nothing to the registry or provider
+request. The unconditional builtin budget remains 7,185 tokens.
+
+Boot effect tests
+verify absence while off, the exact enabled schema, denied reads, direct and
+capability-proxy calls, and stable schemas within a turn. Viewers remain available.
+
+该工具按条件注册：仅用户配置 `tools.present_files = true` 在打开会话时启用。
+默认关闭，不进入注册表或模型请求；无条件内置工具预算保持 7,185 tokens。
+Boot 效果测试覆盖关闭时缺席、启用时精确的 schema、读取拒绝、直接调用、能力代理及轮内稳定性。
+文件预览不受此开关影响。
+
 | Tool | Read-only | Description |
 | --- | --- | --- |
 | `bash` | false | Execute a command in the shell and return combined stdout/stderr. Use for builds, tests, git, package managers, etc. To read or modify a file use read_file / edit_file / write_file — never Get-Content, cat, sed, head/tail or a shell redirect. read_file returns up to 2000 lines per call, each prefixed with its line number, and those numbers are what edit_file targets; paging a file through the shell instead costs one round trip per chunk and yields no line anchors. |

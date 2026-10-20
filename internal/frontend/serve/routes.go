@@ -116,6 +116,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /todos", s.todos)
 	mux.HandleFunc("GET /workspace/files", s.workspaceFiles)
 	mux.HandleFunc("GET /workspace/file", s.workspaceFileRead)
+	s.workspacePreviewRoutes(mux)
 	mux.HandleFunc("GET /workspace/image", s.workspaceImage)
 	mux.HandleFunc("PUT /workspace/file", s.workspaceFileWrite)
 	mux.HandleFunc("POST /workspace/editor", s.openInEditor)

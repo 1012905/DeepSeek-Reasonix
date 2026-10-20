@@ -1,14 +1,13 @@
 package serve
 
 import (
-	"io"
+	"errors"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
-)
 
-const maxWorkspaceImage = 10 << 20
+	"reasonix/internal/base/workspacefile"
+)
 
 // imageTypes are what a document in the workspace may show inline. The type is
 // decided by extension here, never sniffed, so a file cannot choose to be HTML.
@@ -42,28 +41,20 @@ func (s *Server) workspaceImage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	root, err := os.OpenRoot(base)
+	data, _, err := (workspacefile.Service{Primary: base}).Content(r.Context(), workspacefile.Ref{Path: filepath.ToSlash(path)})
 	if err != nil {
-		refuse(w, http.StatusInternalServerError, "workspace.file_failed", err.Error(), nil)
-		return
-	}
-	defer root.Close()
-	file, err := root.Open(path)
-	if err != nil {
-		refuseOpen(w, err)
-		return
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil || info.IsDir() || info.Size() > maxWorkspaceImage {
-		refuse(w, http.StatusBadRequest, "workspace.file_unreadable", "not a file, or larger than 10 MiB", nil)
+		if errors.Is(err, workspacefile.ErrTooLarge) || errors.Is(err, workspacefile.ErrNotFile) {
+			refuse(w, http.StatusBadRequest, "workspace.file_unreadable", err.Error(), nil)
+		} else {
+			refuseOpen(w, err)
+		}
 		return
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = io.Copy(w, io.LimitReader(file, maxWorkspaceImage))
+	_, _ = w.Write(data)
 }
 
 // readRoot is the folder a read comes from: the workspace, or a folder the user

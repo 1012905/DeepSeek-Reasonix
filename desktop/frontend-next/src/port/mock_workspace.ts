@@ -20,6 +20,17 @@ export function mockWorktreeSources(root: string, branch: string): import("./wor
 }
 
 export class MockWorkspace extends MockToolOutput {
+  async workspaceFile(path: string, _root?: string): Promise<import("./workspace").WorkspaceFile> { return { path, content: `// ${path}\n`, revision: "fixture" }; }
+  async workspacePreviewInfo(ref: import("./workspace").FileRef): Promise<import("./workspace").PreviewInfo> {
+    const file = await this.workspaceFile(ref.path, ref.root);
+    const { previewKind } = await import("../ui/document/registry");
+    return { ref, kind: previewKind(ref.path), size: new TextEncoder().encode(file.content).length, version: file.revision, readOnly: !!ref.root, limit: 2 << 20 };
+  }
+  async workspacePreviewContent(ref: import("./workspace").FileRef) {
+    const file = await this.workspaceFile(ref.path, ref.root);
+    return { data: new TextEncoder().encode(file.content).buffer, version: file.revision };
+  }
+  workspaceImageURL(path: string) { return `/fixture/${path}`; }
   opensFiles() { return false; }
   async openFile() {}
 

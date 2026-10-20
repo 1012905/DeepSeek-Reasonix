@@ -89,12 +89,12 @@ it("previews images without attempting to edit their binary content", async () =
   const { read } = await mount();
   fireEvent.click(screen.getByText("Image"));
   const image = await screen.findByAltText("images/chart.png");
-  expect(image.getAttribute("src")).toBe("/fixture/images/chart.png");
+  expect(image.getAttribute("src")).toMatch(/^blob:/);
   expect(read).not.toHaveBeenCalledWith("images/chart.png");
   fireEvent.load(image);
   expect(image.hasAttribute("hidden")).toBe(false);
   fireEvent.error(image);
-  expect(screen.getByRole("alert").textContent).toContain("图片加载失败");
+  expect(screen.getByRole("alert").textContent).toContain("图片不可用");
 });
 
 it("keeps a conversation file selected when the column already has an agent browser", async () => {

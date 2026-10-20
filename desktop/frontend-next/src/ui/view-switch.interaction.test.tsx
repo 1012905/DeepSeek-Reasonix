@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { App } from "./App";
@@ -53,7 +53,10 @@ describe("the window bar's view switch", () => {
   it("names its buttons by label and shortcut, not by icon alone", async () => {
     render(<App hub={readyHub()} />);
     const button = await screen.findByRole("button", { name: "工作台" });
-    expect(button.getAttribute("title")).toMatch(/工作台\s+(Ctrl 3|⌘3)/);
+    fireEvent.focus(button);
+    const tip = document.querySelector(".icon-tooltip");
+    expect(tip?.textContent).toContain("工作台");
+    expect(tip?.querySelector("kbd")?.textContent).toMatch(/Ctrl 3|⌘3/);
     expect(button.getAttribute("aria-keyshortcuts")).toBeTruthy();
   });
 });

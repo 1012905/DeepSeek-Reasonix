@@ -56,6 +56,8 @@ import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWindow, TreeWorkspace } from "../src/port/hub";
 import type { WireEvent } from "../src/port/wire";
+import type { PreviewInfo } from "../src/port/workspace";
+import { deliveryContents, deliveryHistory } from "./delivery-data";
 
 // Saves are coalesced (src/ui/trailing.ts), and a fixture answers too fast for
 // that to show: coalesced and not look identical at zero latency. Counting the
@@ -96,6 +98,8 @@ function benchPack(): ThemePack | null {
 }
 
 class BenchPort extends MockPort {
+  opensFiles() { return query.has("deliveries") || super.opensFiles(); }
+  revealsFiles() { return query.has("deliveries") || super.revealsFiles(); }
   // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
   constructor() {
     super();
@@ -184,6 +188,7 @@ class BenchPort extends MockPort {
   }
 
   async workspaceFile(path: string, root?: string) {
+    if (query.has("deliveries") && path in deliveryContents) return { path, content: deliveryContents[path], revision: "delivery-fixture" };
     if (root) {
       const content = "# Release plan\n\nThe plan lives in the library folder you granted this project.\n\n- freeze on Friday\n- tag after the checks are green\n- announce the next morning\n";
       return { path, content, revision: "r1", root, readOnly: true };
@@ -309,7 +314,7 @@ class BenchPort extends MockPort {
   // that read from a file already on disk, so the size of the answer — not the
   // stream — is what a switch costs.
   async history(): Promise<HistoryMessage[]> {
-    return storedHistory();
+    return query.has("deliveries") ? deliveryHistory() : storedHistory();
   }
 
   // ?queue= fills the pending queue to the count under measurement. Seeded
@@ -552,6 +557,7 @@ declare global {
     // conversations really cost.
     __feed: (ev: WireEvent) => void;
     __panes: () => number;
+    __previewFiles: (files: Record<string, { kind: PreviewInfo["kind"]; text: string }>) => void;
     // What folding a stored transcript into cards costs on its own, with no
     // frame in it: the step between the read answering and the first paint.
     __foldCost: () => number;
@@ -568,6 +574,15 @@ declare global {
 window.__toast = pushToast;
 window.__feed = (ev) => hub.feeds.forEach((p) => p.feed(ev));
 window.__panes = () => hub.feeds.size;
+window.__previewFiles = (files) => hub.feeds.forEach((port) => {
+  port.workspacePreviewInfo = async (ref) => ({
+    ref, kind: files[ref.path].kind, size: new TextEncoder().encode(files[ref.path].text).length,
+    version: "fixture", limit: 32 << 20, readOnly: false,
+  });
+  port.workspacePreviewContent = async (ref) => ({
+    data: new TextEncoder().encode(files[ref.path].text).buffer, version: "fixture",
+  });
+});
 window.__refuse = (method, message) => {
   (hub as unknown as Record<string, unknown>)[method] = () => Promise.reject(new Error(message));
 };

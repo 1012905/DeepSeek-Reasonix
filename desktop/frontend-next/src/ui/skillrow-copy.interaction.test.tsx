@@ -37,7 +37,7 @@ it.each(["zh", "en"])("copies the canonical namespaced invocation with keyboard 
   await user.keyboard("{Enter}");
   expect(write).toHaveBeenCalledWith("/review-kit:review");
   expect(await screen.findByText(t("已复制"))).toBeTruthy();
-  expect(copy().getAttribute("title")).toBe(t("已复制"));
+  expect(copy().querySelector('[aria-live="polite"]')?.textContent).toBe(t("已复制"));
   expect(setSkillEnabled).not.toHaveBeenCalled();
   expect(props.onDone).not.toHaveBeenCalled();
   expect(props.onFailed).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ it("does not carry a previous invocation's pending copy feedback into refreshed 
   view.rerender(<SkillRow {...props} sk={{ ...props.sk, slashName: "review-kit:audit" }} />);
   await act(async () => finish());
   expect(screen.queryByText(t("已复制"))).toBeNull();
-  expect(copy("/review-kit:audit").getAttribute("title")).toBe(t("复制调用命令 {command}", { command: "/review-kit:audit" }));
+  expect(copy("/review-kit:audit").querySelector('[aria-live="polite"]')?.textContent).toBe(t("复制调用命令 {command}", { command: "/review-kit:audit" }));
   await user.click(copy("/review-kit:audit"));
   expect(write).toHaveBeenLastCalledWith("/review-kit:audit");
 });

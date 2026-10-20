@@ -13,6 +13,7 @@ package event
 
 import (
 	"encoding/json"
+	"reasonix/internal/contract/delivery"
 	"reasonix/internal/contract/hostaudit"
 	"reasonix/internal/contract/pricing"
 
@@ -255,9 +256,10 @@ type Profile struct {
 // Output/Err/Bound are filled in. Args is the raw JSON arguments — a sink
 // compacts it for display.
 type Tool struct {
-	ID   string
-	Name string
-	Args string
+	Deliveries []delivery.File
+	ID         string
+	Name       string
+	Args       string
 	// ResolvedName/CapabilityID describe the real target behind a stable proxy
 	// while Name/Args remain the provider-visible call. They are optional local
 	// display metadata and never enter provider requests.

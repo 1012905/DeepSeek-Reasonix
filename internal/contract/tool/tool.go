@@ -34,6 +34,11 @@ type Tool interface {
 	ReadOnly() bool
 }
 
+// FilePresenter marks the host implementation that validates file declarations.
+type FilePresenter interface {
+	FilePresentation()
+}
+
 // ContextualTool is an execution-time availability contract for tools whose
 // ownership depends on the active workflow context. Provider schemas remain
 // static for cache stability; the host must still consult this contract before

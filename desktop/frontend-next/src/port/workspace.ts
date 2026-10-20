@@ -92,10 +92,34 @@ export interface WorkspaceFile {
   path: string;
   content: string;
   revision: string;
+  observedVersion?: string;
   // The granted folder the file was read from; absent for the workspace itself.
   root?: string;
   // True for a file read from a granted folder: it can be read here, never saved.
   readOnly?: boolean;
+}
+
+export interface FileRef {
+  path: string;
+  root?: string;
+}
+
+export interface PreviewInfo {
+  ref: FileRef;
+  kind: "markdown" | "text" | "image" | "pdf" | "table" | "html" | "unsupported";
+  size: number;
+  version: string;
+  limit: number;
+  readOnly: boolean;
+}
+
+export interface DeliveredFile extends FileRef {
+  description?: string;
+}
+
+export interface WorkspacePreviewPort {
+  workspacePreviewInfo(ref: FileRef, signal?: AbortSignal): Promise<PreviewInfo>;
+  workspacePreviewContent(ref: FileRef, signal?: AbortSignal): Promise<{ data: ArrayBuffer; version: string }>;
 }
 
 export interface WorkspaceEntry {

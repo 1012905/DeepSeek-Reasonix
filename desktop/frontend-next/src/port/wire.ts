@@ -106,6 +106,7 @@ export interface Bound {
 export type ToolIssuer = "model" | "host" | "user" | "provider";
 
 export interface Tool {
+  deliveries?: import("./workspace").DeliveredFile[];
   id?: string;
   name: string;
   args?: string;

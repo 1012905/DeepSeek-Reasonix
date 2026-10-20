@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { Packages } from "./Packages";
@@ -64,8 +64,9 @@ describe("installed package invocation copy", () => {
     button.focus();
     await user.keyboard("{Enter}");
     expect(copy).toHaveBeenCalledExactlyOnceWith(command);
-    expect(button.getAttribute("title")).toBe(t("已复制"));
     expect(button.querySelector('[aria-live="polite"]')?.textContent).toBe(t("已复制"));
+    fireEvent.focus(button);
+    expect(screen.getByRole("tooltip").textContent).toBe(t("已复制"));
     expect(details.open).toBe(true);
     expect(toggle).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
@@ -101,11 +102,12 @@ describe("installed package invocation copy", () => {
     copy.mockRejectedValueOnce(new Error("clipboard denied"));
     const button = row.getByRole("button", { name: label(entries[0][1]) });
     await user.click(button);
-    expect(button.getAttribute("title")).toBe(t("复制失败，请重试"));
     expect(button.querySelector('[aria-live="polite"]')?.textContent).toBe(t("复制失败，请重试"));
+    fireEvent.focus(button);
+    expect(screen.getByRole("tooltip").textContent).toBe(t("复制失败，请重试"));
     expect(row.getByRole<HTMLButtonElement>("switch", { name: t("关闭") + " review-kit" }).disabled).toBe(false);
     await user.click(button);
-    expect(button.getAttribute("title")).toBe(t("已复制"));
+    expect(button.querySelector('[aria-live="polite"]')?.textContent).toBe(t("已复制"));
     expect(copy).toHaveBeenCalledTimes(2);
     expect(details.open).toBe(true);
   });
@@ -123,10 +125,10 @@ describe("installed package invocation copy", () => {
     const current = row.getByRole("button", { name: label(command) });
     await act(async () => outcome === "success" ? finish() : fail(new Error("previous clipboard denied")));
     expect(current.getAttribute("data-state")).toBe("idle");
-    expect(current.getAttribute("title")).toBe(label(command));
+    expect(current.querySelector('[aria-live="polite"]')?.textContent).toBe(label(command));
     await user.click(current);
     expect(copy).toHaveBeenLastCalledWith(command);
-    expect(current.getAttribute("title")).toBe(t("已复制"));
+    expect(current.querySelector('[aria-live="polite"]')?.textContent).toBe(t("已复制"));
   });
 
   it("keeps copy feedback local while package management remains available", async () => {
@@ -160,6 +162,6 @@ describe("installed package invocation copy", () => {
     expect(props.onChanged).not.toHaveBeenCalled();
     await user.click(current);
     expect(copy).toHaveBeenCalledTimes(2);
-    expect(current.getAttribute("title")).toBe(t("已复制"));
+    expect(current.querySelector('[aria-live="polite"]')?.textContent).toBe(t("已复制"));
   });
 });

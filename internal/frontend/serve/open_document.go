@@ -25,7 +25,11 @@ var launchDocument = opendoc.Open
 
 // openableDocument lists the types the system opener may be handed. Each is a
 // document its default program renders, never something that runs as a program.
-var openableDocument = map[string]bool{".html": true, ".htm": true, ".xhtml": true, ".svg": true, ".pdf": true}
+var openableDocument = map[string]bool{
+	".html": true, ".htm": true, ".xhtml": true, ".svg": true, ".pdf": true,
+	".doc": true, ".docx": true, ".xls": true, ".xlsx": true, ".ppt": true, ".pptx": true,
+	".md": true, ".markdown": true, ".txt": true, ".csv": true, ".tsv": true,
+}
 
 // openDocument hands one file to the machine's default program. The file must
 // lie in the workspace or a granted folder and, once links are followed, be a

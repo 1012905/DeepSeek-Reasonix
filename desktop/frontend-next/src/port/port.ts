@@ -31,7 +31,7 @@ import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan } from "./skill";
 import type { SubagentRun, SubagentTranscript } from "./subagent";
 import type { StudioCrash, StudioLogs, UpdateMode, UpdateProgress, VersionEntry, VersionHub, VersionNotes } from "./version";
-import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo } from "./workspace";
+import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo, WorkspacePreviewPort } from "./workspace";
 
 // The port is one contract; its subjects each keep their own file, the way the
 // wire and the layers below already do. This is where a reader still finds
@@ -43,7 +43,7 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindUndo, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus, SessionUsage, SourceUsage,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, SkillUpdateChange, SkillUpdatePlan, UpdateProgress, VersionEntry,
-  StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo };
+  StudioCrash, StudioLogs, UpdateMode, VersionHub, VersionNotes, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, DiscardRequest, GitCommitFiles, GitRepos, PushRequest, PushResult, PushPlan, StageRequest, WorkspaceBranch, WorkspaceBranches, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceGit, WorkspaceInfo, WorkspacePreviewPort };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
@@ -185,7 +185,7 @@ export interface TrayPrefs {
   closeToTray: boolean;
 }
 
-export interface AgentPort {
+export interface AgentPort extends WorkspacePreviewPort {
   providerSetup(): Promise<ProviderSetup | null>;
   saveProviderKey(apiKey: string): Promise<void>;
   // The models that answer the job asked about; "chat" when none is named.
