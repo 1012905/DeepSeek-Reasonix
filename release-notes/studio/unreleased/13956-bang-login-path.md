@@ -1,2 +1,0 @@
-- 修复：用 `!` 直接运行命令时，现在和模型的 bash 工具一样能找到终端里装的工具（读取登录 shell 的 PATH），不再报“command not found”。关联 #13956。
-- Fixed: Commands run with `!` now find the tools your terminal finds (the login shell's PATH), like the model's bash tool, instead of "command not found". Refs #13956.

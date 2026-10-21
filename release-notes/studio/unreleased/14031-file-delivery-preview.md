@@ -1,8 +1,0 @@
-- 新增：用户配置 tools.present_files 主动启用 AI 交付卡片；工作台直接预览 Markdown、图片、PDF、CSV/TSV 和静态 HTML。关联 #14031。
-- 改进：交付卡片适配宽窄布局，提供文件类型图标、当前预览标记和“更多”操作；聊天及工作台图标增加统一提示。关联 #14031。
-- 变更：工作台打开 HTML 默认使用不执行脚本的静态预览；本地桌面需点击“交互运行”才能运行页面。关联 #14031。
-- 修复：文档删除或撤销访问后不再保留过期的已保存正文；未保存编辑仍会保留，元数据检查不再随每次按键重复触发。关联 #14031。
-- Added: user-only tools.present_files opts into AI delivery cards; the workbench previews Markdown, images, PDF, CSV/TSV and static HTML. Refs #14031.
-- Improved: responsive delivery cards have type icons, current-file markers and More actions; chat and workbench icons share accessible tooltips. Refs #14031.
-- Changed: HTML opens as a script-free static preview by default; on desktop, select Interactive run to execute the page. Refs #14031.
-- Fixed: deleted or revoked documents no longer retain stale saved text; unsaved drafts remain intact, and metadata checks no longer restart on every keystroke. Refs #14031.

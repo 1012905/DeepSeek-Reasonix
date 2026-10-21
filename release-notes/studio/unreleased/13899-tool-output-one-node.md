@@ -1,2 +1,0 @@
-- 修复：已完成的工具调用的输出不再被拆成逐行页面节点，调用多的长会话里窗口内存不再因此上涨，外观不变。关联 #13899。
-- Fixed: a finished tool call's output is no longer split into one page node per line, which inflated window memory in long sessions with many calls; it looks the same. Refs #13899.

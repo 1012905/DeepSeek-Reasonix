@@ -1,2 +1,0 @@
-- 新增：配置项 permissions.ask_on_external_origin（默认关）：调用逐字复制了网页或工具结果里的文字时，Auto 和 YOLO 也先问你。见 #13111。
-- Added: permissions.ask_on_external_origin (off by default): Auto and YOLO ask first when a call copies text verbatim from a web page or tool result. See #13111.

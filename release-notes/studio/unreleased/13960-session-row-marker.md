@@ -1,2 +1,0 @@
-- 修复：侧栏里运行中的会话行，行首不再出现“圆点叠在竖线上”的两个重叠形状，标题也不再比其他行多缩进一格。关联 #13960。
-- Fixed: a running session row in the sidebar no longer draws a status dot on top of its state bar, and its title no longer sits one step further right than the other rows. Refs #13960.

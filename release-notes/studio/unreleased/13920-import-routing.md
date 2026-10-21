@@ -1,2 +1,0 @@
-- 修复：恢复旧会话时，1.x 桌面端的会话按各自记录的工作目录归到各自项目，不再整库倒进所选项目；没有记录归属的留在原处并列为未导入。见 #13920。
-- Fixed: recovering older sessions files each 1.x Desktop conversation under the project its own header records, not all under the one picked; one with none is left and listed. See #13920.

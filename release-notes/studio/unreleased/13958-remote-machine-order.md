@@ -1,2 +1,0 @@
-- 新增：远程机器现在可以在侧栏里上移、下移（远程项目菜单里的“上移/下移 机器名”），整台机器连同它的项目一起移动。关联 #13958。
-- Added: Remote machines can now be moved up and down in the sidebar (the remote project menu's "Move <machine> up/down"), taking their projects with them. Refs #13958.
