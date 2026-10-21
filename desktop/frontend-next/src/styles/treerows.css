@@ -4,7 +4,7 @@
 .projects-heading-title { display: flex; align-items: center; gap: 6px; }
 .projects-add { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 6px; padding: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .projects-add .studio-icon { width: 16px; height: 16px; }
-.projects-add:hover:not(:disabled) { background: var(--overlay); color: var(--text); }
+.projects-add:hover:not(:disabled), .projects-heading .wsmore:is(:hover, [aria-expanded="true"]) { background: var(--overlay); color: var(--text); }
 .projects-add:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
 .projects-add:disabled { opacity: .4; cursor: default; }
 .projects-toggle { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 6px; padding: 0; background: transparent; color: var(--faint); cursor: pointer; }
@@ -38,7 +38,7 @@
 .rowbtns { display: flex; align-items: center; flex: none; gap: 2px; opacity: 0; }
 .wsrow:is(:hover, :focus-within) .rowbtns, .rowbtns:has([aria-expanded="true"], [data-busy]) { opacity: 1; }
 .rowbtns :is(.wsadd, .wsmore), .projects-heading .wsmore { width: 26px; height: 26px; border-radius: 6px; color: var(--muted); box-shadow: none; }
-.rowbtns :is(.wsadd, .wsmore):is(:hover, [aria-expanded="true"]):not(:disabled), .projects-heading .wsmore:hover { background: var(--raised); color: var(--text); }
+.rowbtns :is(.wsadd, .wsmore):is(:hover, [aria-expanded="true"]):not(:disabled) { background: var(--raised); color: var(--text); }
 .rowbtns .studio-icon { width: 15px; height: 15px; }
 .rowbtns .wsmore { opacity: 1; }
 .rail .rmtwsrow { grid-template-columns: 16px minmax(0, 1fr) auto auto; }

@@ -19,6 +19,14 @@ Session rows reserve an 8px inline-end inset inside their highlight. The shared
 row owns this space so timestamps and trailing actions retain it in both hover
 and selected states, while long titles truncate within the remaining width.
 
+## Project header actions
+
+- The open-project and more-actions buttons share `--overlay` hover fill and
+  `--text` ink. The more-actions button retains both while its menu is open.
+  Project-row actions keep their `--raised` fill.
+- `perf/project-header.mjs` checks hover parity, menu dismissal, keyboard focus
+  and the folder picker in both schemes.
+
 ## Reset and the window
 
 - Scrollbars are styled once, on `*`. Declaring them per container means the one
