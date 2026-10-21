@@ -481,6 +481,9 @@ func New(opts Options) *Controller {
 		providerResolver:   opts.ProviderResolver,
 		runtimeGeneration:  opts.RuntimeGeneration,
 	}
+	if c.executor != nil {
+		c.bindProjectionSeer(c.executor.NewestStandingBlock, c.executor.SeesProjection)
+	}
 	c.adoptSessionResources(opts)
 	c.publishPerProjectContext(opts)
 	if opts.Extensions != nil {

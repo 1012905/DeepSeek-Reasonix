@@ -202,7 +202,6 @@ func ApplyRuntimeMigration(ctrl, old *control.Controller, m RuntimeMigration) er
 			ctrl.CarryRecoveryFrom(old)
 		}
 		ctrl.InheritLifecycleFrom(old)
-		ctrl.InheritScratchFrom(old)
 	}
 	ctrl.RestoreSessionAuthorizations(m.authorizations)
 	// A mode survives only onto a model that declares it: switching to one
