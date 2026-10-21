@@ -195,6 +195,11 @@ func (s Store) Save(m Memory) (string, error) {
 func (s Store) Archive(name string) (string, error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
+	release, err := s.lockMutations()
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	return s.archiveLocked(name)
 }
 
