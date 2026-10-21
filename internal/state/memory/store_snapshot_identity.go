@@ -2,7 +2,6 @@ package memory
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,7 +11,7 @@ import (
 // parseMemory turns one fact file's UTF-8 bytes into a Memory, tolerating the
 // minimal frontmatter render writes; a file without frontmatter still loads
 // with its body and a name derived from the filename.
-func parseMemory(path string, b []byte) Memory {
+func parseMemory(name string, b []byte) Memory {
 	fm, body := splitFrontmatter(string(b))
 	m := Memory{
 		ID:             fm["id"],
@@ -33,21 +32,13 @@ func parseMemory(path string, b []byte) Memory {
 		Body:           strings.TrimSpace(body),
 	}
 	if m.Name == "" {
-		m.Name = strings.TrimSuffix(filepath.Base(path), ".md")
+		m.Name = strings.TrimSuffix(filepath.Base(name), ".md")
 	}
 	if m.ID == "" {
 		m.ID = legacyMemoryID(m.Name, legacyIdentityScope(m))
 	}
 	if m.Revision <= 0 {
 		m.Revision = 1
-	}
-	if info, err := os.Stat(path); err == nil {
-		if m.CreatedAt.IsZero() {
-			m.CreatedAt = info.ModTime().UTC()
-		}
-		if m.UpdatedAt.IsZero() {
-			m.UpdatedAt = info.ModTime().UTC()
-		}
 	}
 	return m
 }
@@ -62,7 +53,7 @@ func memoryRevisionConflict(expected, found int) error {
 // id and revision memory names: another process may have published a newer
 // revision over it, or archived the fact and created another under the name.
 func snapshotRevisionConflict(path string, raw []byte, memory Memory) error {
-	found := parseMemory(path, fileencoding.DecodeToUTF8(raw))
+	found := parseMemory(filepath.Base(path), fileencoding.DecodeToUTF8(raw))
 	if found.ID == memory.ID && found.Revision == memory.Revision {
 		return nil
 	}

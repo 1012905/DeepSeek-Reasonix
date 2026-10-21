@@ -663,7 +663,18 @@ func loadMemory(path string) (Memory, bool) {
 	if err != nil {
 		return Memory{}, false
 	}
-	return parseMemory(path, b), true
+	m := parseMemory(filepath.Base(path), b)
+	if m.CreatedAt.IsZero() || m.UpdatedAt.IsZero() {
+		if info, err := os.Stat(path); err == nil {
+			if m.CreatedAt.IsZero() {
+				m.CreatedAt = info.ModTime().UTC()
+			}
+			if m.UpdatedAt.IsZero() {
+				m.UpdatedAt = info.ModTime().UTC()
+			}
+		}
+	}
+	return m, true
 }
 
 func legacyIdentityScope(m Memory) FactScope {
