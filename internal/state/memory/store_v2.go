@@ -208,7 +208,7 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 			actual = existing.Revision
 		}
 		if actual != opts.ExpectedRevision {
-			return SaveResult{}, fmt.Errorf("memory revision conflict: expected %d, found %d", opts.ExpectedRevision, actual)
+			return SaveResult{}, memoryRevisionConflict(opts.ExpectedRevision, actual)
 		}
 	}
 	if opts.RequireCreate && exists {
@@ -538,8 +538,16 @@ func snapshotMemoryRevisionInDir(base, path string, memory Memory) error {
 	if memory.ID == "" || memory.Revision < 1 {
 		return nil
 	}
+	if err := fault("read-file", path); err != nil {
+		return err
+	}
 	b, err := os.ReadFile(path)
 	if err != nil {
+		return err
+	}
+	// The bytes must still be this id at this revision — another process may
+	// have published over them since the caller read the fact.
+	if err := snapshotRevisionConflict(path, b, memory); err != nil {
 		return err
 	}
 	dir := filepath.Join(base, ".revisions", memory.ID)

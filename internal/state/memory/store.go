@@ -656,48 +656,22 @@ func archiveTimeFromName(name string) time.Time {
 	return when
 }
 
-// loadMemory parses one fact file back into a Memory. It tolerates the minimal
-// frontmatter render writes; a file without frontmatter still loads with its
-// body and a name derived from the filename.
+// loadMemory parses one fact file back into a Memory, deriving its body and a
+// name from the filename when the frontmatter is minimal or absent.
 func loadMemory(path string) (Memory, bool) {
 	b, err := fileencoding.ReadFileUTF8(path)
 	if err != nil {
 		return Memory{}, false
 	}
-	fm, body := splitFrontmatter(string(b))
-	m := Memory{
-		ID:             fm["id"],
-		Revision:       parsePositiveInt(fm["revision"]),
-		CreatedAt:      parseMemoryTime(fm["created_at"]),
-		UpdatedAt:      parseMemoryTime(fm["updated_at"]),
-		Name:           fm["name"],
-		Title:          fm["title"],
-		Description:    fm["description"],
-		Keywords:       fm["keywords"],
-		Activation:     NormalizeActivation(fm["activation"]),
-		Volatility:     NormalizeVolatility(fm["volatility"]),
-		SubjectKey:     NormalizeSubjectKey(fm["subject_key"]),
-		ExpiresAt:      parseMemoryTime(fm["expires_at"]),
-		LastVerifiedAt: parseMemoryTime(fm["last_verified_at"]),
-		Type:           persistedFactType(fm),
-		Scope:          factScopeFromFrontmatter(fm["scope"]),
-		Body:           strings.TrimSpace(body),
-	}
-	if m.Name == "" {
-		m.Name = strings.TrimSuffix(filepath.Base(path), ".md")
-	}
-	if m.ID == "" {
-		m.ID = legacyMemoryID(m.Name, legacyIdentityScope(m))
-	}
-	if m.Revision <= 0 {
-		m.Revision = 1
-	}
-	if info, err := os.Stat(path); err == nil {
-		if m.CreatedAt.IsZero() {
-			m.CreatedAt = info.ModTime().UTC()
-		}
-		if m.UpdatedAt.IsZero() {
-			m.UpdatedAt = info.ModTime().UTC()
+	m := parseMemory(filepath.Base(path), b)
+	if m.CreatedAt.IsZero() || m.UpdatedAt.IsZero() {
+		if info, err := os.Stat(path); err == nil {
+			if m.CreatedAt.IsZero() {
+				m.CreatedAt = info.ModTime().UTC()
+			}
+			if m.UpdatedAt.IsZero() {
+				m.UpdatedAt = info.ModTime().UTC()
+			}
 		}
 	}
 	return m, true
