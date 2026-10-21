@@ -1,2 +1,0 @@
-- 修复：会话列表比窗格晚加载时，正在前台的会话仍显示未读圆点，现在窗口有焦点时会自动标为已看。关联 #13962。
-- Fixed: a session already in front kept its unread dot when the session list arrived after the pane; it is now marked seen as soon as the window has focus. Refs #13962.

@@ -1,2 +1,0 @@
-- 改进：Agent 预设编辑器的“添加模块”下拉在名称旁显示工具、技能或命令自己的一行说明，下拉箭头和“添加模块”按钮的间距也调开了。关联 #13964。
-- Improved: the preset editor's add-module menu shows each tool, skill or command's own one-line description, and the arrow and button spacing are less cramped. Refs #13964.
