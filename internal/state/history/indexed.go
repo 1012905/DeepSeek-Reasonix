@@ -339,6 +339,10 @@ func (c *candidateTexts) of(candidate historycatalog.Candidate) (string, bool) {
 		messages, err = loadMessages(candidate.SessionPath)
 		if err != nil {
 			c.failed[candidate.SessionPath] = true
+			// A read failure is not evidence that nothing matched: record the
+			// source as corrupt and reconcile it, same as the digest mismatch,
+			// so the projection cannot certify itself complete.
+			c.catalog.RecordReadFailure(context.Background(), candidate.SessionPath, err)
 			return "", false
 		}
 		c.loaded[candidate.SessionPath] = messages
