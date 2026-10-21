@@ -3,6 +3,7 @@ package serve
 import "net/http"
 
 func (s *Server) registerMachineSettingsRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /account", s.account)
 	mux.HandleFunc("GET /usage", s.usage)
 	s.registerThemeRoutes(mux)
 	s.registerAppearanceRoutes(mux)
