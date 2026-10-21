@@ -55,8 +55,7 @@ import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, Provid
 export type { ModelEffort, ModelLimit, ModelRate, Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { FeedbackBoard, FeedbackBoardMe, FeedbackEnv, FeedbackImage, FeedbackLinkedInstall, FeedbackMine, FeedbackReceipt, FeedbackReplyReceipt, FeedbackRequest } from "./feedback";
-import type { PersonaDraft, PersonaSettings } from "./boundary";
-
+import type { PersonaDraft, PersonaSettings, PresentFilesSettings } from "./boundary";
 export type * from "./plugin";
 export type * from "./schedule";
 export type * from "./market";
@@ -301,6 +300,8 @@ export interface AgentPort extends WorkspacePreviewPort {
   browserTools(): Promise<BrowserToolsSettings>;
   // Writes the user file, then rebuilds: the tools are bound while assembling.
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
+  presentFiles(): Promise<PresentFilesSettings>;
+  savePresentFiles(enabled: boolean): Promise<PresentFilesSettings>;
   subagentClaims(): Promise<SubagentClaimsSettings>;
   saveSubagentClaims(optimistic: boolean): Promise<SubagentClaimsSettings>;
   subagentSteerSettings(): Promise<SubagentSteerSettings>;

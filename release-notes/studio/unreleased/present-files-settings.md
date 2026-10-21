@@ -1,0 +1,2 @@
+- 新增：设置 → 工具与权限第二项提供「AI 文件交付卡片」开关；默认开启，保留已有的关闭选择，重新打开会话生效。关联 #14031。
+- Added: AI file delivery is the second switch in Tools & permissions. Enabled by default; explicit off choices stay off. Reopen the session to apply. Refs #14031.
