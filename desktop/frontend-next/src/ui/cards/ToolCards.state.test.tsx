@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ReadsCard } from "./ReadsCard";
 import { ToolCard } from "./ToolCard";
+import { openCards } from "./openCards";
 
 afterEach(cleanup);
 
@@ -35,6 +36,7 @@ describe("tool outcome cards", () => {
     render(
       <ToolCard tool={{ id: "shot", name: "computer_read", output: "Notes: front window\n[image: screenshot]", images: [shot], readOnly: false }} running={false} />,
     );
+    openCards();
     const thumb = screen.getByRole("button", { name: "查看图片 工具截图 1" });
     expect(thumb?.querySelector("img")?.getAttribute("src")).toBe(shot);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -52,6 +54,7 @@ describe("tool outcome cards", () => {
       <ToolCard tool={{ id: "vid", name: "read_video", output: "video clip.mp4: 4096 bytes", readOnly: true,
         videos: [{ name: "clip.mp4", size: 4_194_304, durationMs: 12_000, model: "qwen-vl" }] }} running={false} />,
     );
+    openCards(container);
     const note = container.querySelector(".tvideo");
     expect(note?.textContent).toContain("clip.mp4");
     expect(note?.textContent).toContain("qwen-vl");
@@ -109,7 +112,7 @@ describe("tool outcome cards", () => {
         running={false}
       />,
     );
-    fireEvent.click(container.querySelector("details.tool-disclosure summary")!);
+    openCards(container);
     const rows = container.querySelectorAll(".dl");
     expect(rows.length).toBeGreaterThan(0);
     expect([...rows].some((r) => r.getAttribute("data-d") === "+" && r.textContent?.includes("new"))).toBe(true);
@@ -127,7 +130,7 @@ describe("tool outcome cards", () => {
     );
     expect(screen.getByText("read_file")).toBeTruthy();
     const disclosure = container.querySelector("details.tool-disclosure") as HTMLDetailsElement;
-    fireEvent.click(disclosure.querySelector("summary")!);
+    openCards(container);
     expect(disclosure.open).toBe(true);
     expect(screen.getByText("调用 ample123")).toBeTruthy();
     expect(screen.getByText("输入")).toBeTruthy();
@@ -188,11 +191,13 @@ describe("a command that redraws its own line", () => {
 
   it("keeps what a shorter frame does not cover, as a terminal would", () => {
     const { container } = render(<ToolCard tool={{ id: "dl", name: "bash", output: "downloading 100%\rdone\n", readOnly: false }} running={false} />);
+    openCards(container);
     expect(terms(container)).toEqual(["doneloading 100%\n"]);
   });
 
   it("treats a CRLF line ending as a line ending", () => {
     const { container } = render(<ToolCard tool={{ id: "win", name: "bash", output: "one\r\ntwo\r\n", readOnly: false }} running={false} />);
+    openCards(container);
     expect(terms(container)).toEqual(["one\ntwo\n"]);
   });
 

@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { renderToStaticMarkup } from "react-dom/server";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render } from "@testing-library/react";
 import { fromHistory } from "../state/session";
 import { ToolCard } from "./cards/ToolCard";
+import { openCards } from "./cards/openCards";
+
+afterEach(cleanup);
 
 describe("normalized tool arguments", () => {
   it("restores the effective input and original input without a failure", () => {
@@ -22,7 +26,9 @@ describe("normalized tool arguments", () => {
     expect(item.tool.args).toBe(normalization.effective);
     expect(item.tool.argumentNormalization).toEqual(normalization);
     expect(item.tool.err).toBeFalsy();
-    const html = renderToStaticMarkup(<ToolCard tool={item.tool} running={false} activity />);
+    const { container } = render(<ToolCard tool={item.tool} running={false} activity />);
+    openCards(container);
+    const html = container.innerHTML;
     expect(html).toContain("参数格式已自动兼容");
     expect(html).toContain("兼容前的原始输入");
     expect(html).toContain("arguments");
@@ -30,9 +36,10 @@ describe("normalized tool arguments", () => {
   });
 
   it("leaves legacy calls without a normalization notice", () => {
-    const html = renderToStaticMarkup(<ToolCard tool={{
+    const { container } = render(<ToolCard tool={{
       name: "read_file", args: '{"path":"a"}', readOnly: true, output: "contents",
     }} running={false} activity />);
-    expect(html).not.toContain("参数格式已自动兼容");
+    openCards(container);
+    expect(container.innerHTML).not.toContain("参数格式已自动兼容");
   });
 });

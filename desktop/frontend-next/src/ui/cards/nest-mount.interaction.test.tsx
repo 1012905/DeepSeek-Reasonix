@@ -25,12 +25,14 @@ const kids = () => document.querySelectorAll('[data-call="k1"], [data-call="k2"]
 const open = () => { act(() => { card().open = true; card().dispatchEvent(new Event("toggle")); }); };
 
 describe("the child calls of a sub-agent card", () => {
-  it("are not mounted while a finished card is closed, and the header still says what is inside", () => {
+  it("are not mounted while a finished card is closed, and the header says what is inside once it opens", () => {
     render(view([agent(false)]));
     expect(card().open).toBe(false);
     expect(kids()).toBe(0);
-    expect(document.querySelector(".nest-hd .who")?.textContent).toContain("2");
+    expect(document.querySelector(".nest-hd")).toBeNull();
     expect(document.querySelector(".nest-ret")).toBeNull();
+    open();
+    expect(document.querySelector(".nest-hd .who")?.textContent).toContain("2");
   });
 
   it("appear, whole, when the card is opened", () => {
