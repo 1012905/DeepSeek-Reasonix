@@ -1,0 +1,2 @@
+- 改进：旧会话先显示列表，再在后台补全摘要与轮数；未完成或失败的读取会明确提示，后台索引会为打开和读取会话让出资源。关联 #14086。
+- Improved: legacy chats appear before summaries finish, with pending/failed status. Background indexing yields to interactive reads. Refs #14086.
