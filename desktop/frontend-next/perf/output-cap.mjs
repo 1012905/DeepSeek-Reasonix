@@ -34,19 +34,17 @@ for (const scheme of ["light", "dark"]) {
   await cdp.send("HeapProfiler.collectGarbage");
   const heap = (await cdp.send("Performance.getMetrics")).metrics.find((m) => m.name === "JSHeapUsedSize").value / 1048576;
   check(`${scheme}: ${RESULTS} results of about 30 KB leave the page's heap under ${HEAP_MAX_MB} MB`, heap < HEAP_MAX_MB, `${heap.toFixed(1)} MB`);
+  await page.evaluate(() => {
+    const grp = [...document.querySelectorAll("details")].filter((d) => d.querySelector('[data-call="r599"]')).pop();
+    if (grp) grp.open = true;
+    const card = document.querySelector('[data-call="r599"] details.tool-disclosure');
+    if (card) { card.open = true; card.dispatchEvent(new Event("toggle")); }
+    document.querySelector('[data-call="r599"]')?.scrollIntoView({ block: "start" });
+  });
+  await page.waitForTimeout(400);
   const said = await page.evaluate(() => document.body.textContent.includes("没有放在页面里"));
   check(`${scheme}: a card says what it left out`, said);
-  if (shotDir) {
-    await page.evaluate(() => {
-      const grp = [...document.querySelectorAll("details")].filter((d) => d.querySelector('[data-call="r599"]')).pop();
-      if (grp) grp.open = true;
-      const card = document.querySelector('[data-call="r599"] details.tool-disclosure');
-      if (card) { card.open = true; card.dispatchEvent(new Event("toggle")); }
-      document.querySelector('[data-call="r599"]')?.scrollIntoView({ block: "start" });
-    });
-    await page.waitForTimeout(400);
-    await page.screenshot({ path: `${shotDir}/${scheme}-output-cap.png`, clip: { x: 360, y: 40, width: 1000, height: 520 } });
-  }
+  if (shotDir) await page.screenshot({ path: `${shotDir}/${scheme}-output-cap.png`, clip: { x: 360, y: 40, width: 1000, height: 520 } });
   await ctx.close();
 }
 await browser.close();
