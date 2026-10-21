@@ -386,6 +386,13 @@ func RepairMutationLockDir() string {
 	return joinRoot(storageRootDir(RootLocks), "repair-mutation-locks")
 }
 
+// MemoryLockDir stores one mutation lock per memory store directory, keyed by
+// that directory's absolute path. It follows the locks root for the same reason
+// the repair locks do: two instances sharing a memory directory must converge.
+func MemoryLockDir() string {
+	return joinRoot(storageRootDir(RootLocks), "memory-store-locks")
+}
+
 // DeliveryWorktreeDir is durable storage for user-visible isolated Delivery
 // workspaces. Explicit state/home overrides remain authoritative. Windows uses
 // LocalAppData by default so large Git worktrees do not roam with the user's
