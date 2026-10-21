@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"reasonix/internal/state/sessionstore"
 	"strings"
@@ -131,6 +132,10 @@ func TestMachineSessionIDIsStableAndOpaque(t *testing.T) {
 func TestSessionMachineErrorsAreJSONAndNonZero(t *testing.T) {
 	installMachineTestIdentity(t)
 	dir := testenv.TempDir(t)
+	file := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		name string
 		args []string
@@ -139,6 +144,9 @@ func TestSessionMachineErrorsAreJSONAndNonZero(t *testing.T) {
 	}{
 		{name: "missing json", args: []string{"list", "--dir", dir}, code: 2, err: "invalid_argument"},
 		{name: "missing session", args: []string{"show", "--json", "missing", "--dir", dir}, code: 1, err: "session_not_found"},
+		{name: "dir that does not exist", args: []string{"list", "--json", "--dir", filepath.Join(dir, "absent")}, code: 2, err: "invalid_argument"},
+		{name: "dir that is a file", args: []string{"list", "--json", "--dir", file}, code: 2, err: "invalid_argument"},
+		{name: "recovery in a dir that does not exist", args: []string{"recovery", "--json", "--dir", filepath.Join(dir, "absent")}, code: 2, err: "invalid_argument"},
 		{name: "conflicting session sources", args: []string{"list", "--json", "--dir", dir, "--project-root", dir}, code: 2, err: "invalid_argument"},
 	}
 	for _, tc := range cases {
