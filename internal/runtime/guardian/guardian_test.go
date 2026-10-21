@@ -583,13 +583,10 @@ func TestFailedReviewDoesNotCountItsTranscriptAsSent(t *testing.T) {
 	if len(reqs) < 2 {
 		t.Fatalf("the review after the failure reached no provider (%d requests)", len(reqs))
 	}
-	sent := ""
-	for _, m := range reqs[len(reqs)-1].Messages {
-		sent += m.Content + "\n"
-	}
+	last := reqs[len(reqs)-1].Messages
 	for _, want := range []string{"first ask", "second ask", "third ask", "fourth ask"} {
-		if !strings.Contains(sent, want) {
-			t.Fatalf("review after the failure never re-sent %q:\n%s", want, sent)
+		if !slices.ContainsFunc(last, func(m provider.Message) bool { return strings.Contains(m.Content, want) }) {
+			t.Fatalf("review after the failure never re-sent %q:\n%+v", want, last)
 		}
 	}
 }
