@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { host } from "../port/host";
 import { PATH_TYPE } from "./filedrag";
+import { listenAction } from "./listen";
 
 // What a drop hands over depends on which shell the page is in, and the two
 // halves are not interchangeable. A window reports where the file lives, which
@@ -150,7 +151,7 @@ export function install() {
     },
     true,
   );
-  addEventListener("dragend", () => light(null), true);
+  listenAction(window, "dragend", { action: "file-drop.finish", listener: () => light(null) }, true);
   addEventListener(
     "drop",
     (e: DragEvent) => {
@@ -160,7 +161,7 @@ export function install() {
       light(null);
       if (!zone) return;
       const dt = e.dataTransfer;
-      const path = dt?.getData(PATH_TYPE);
+      const path = dt?.types.includes(PATH_TYPE) ? dt.getData(PATH_TYPE) : "";
       if (path) {
         // Internal paths have no native follow-up event and must not enter the
         // external-file deduplication window, which would swallow rapid drags.
