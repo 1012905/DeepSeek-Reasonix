@@ -39,7 +39,7 @@ func TestRemoteCommandsThatChangeOrOpenAreRefusedForAnAgentChild(t *testing.T) {
 	if len(cfg.Remote.Hosts) != 1 || cfg.Remote.Hosts[0].Name != "box" {
 		t.Fatalf("a refused command changed the book: %+v", cfg.Remote.Hosts)
 	}
-	for _, args := range [][]string{{"list"}, {"ls"}, {"help"}, {"wsl", "list"}} {
+	for _, args := range [][]string{{"list"}, {"ls"}, {"help"}, {"wsl", "list"}, {"wsl", "test", "no-such-distribution"}} {
 		if code := remoteCommand(args, "test"); code == exitAgentChild {
 			t.Errorf("remote %v was refused, it only reads", args)
 		}
