@@ -16,9 +16,10 @@ import (
 )
 
 type historyToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	ID                    string                          `json:"id"`
+	Name                  string                          `json:"name"`
+	Arguments             string                          `json:"arguments"`
+	ArgumentNormalization *provider.ArgumentNormalization `json:"argumentNormalization,omitempty"`
 	// What a stable proxy actually reached. Name stays the provider-visible
 	// call, so a rebuild without these draws use_capability where the live
 	// transcript drew the capability it resolved to.
@@ -135,8 +136,9 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 				for i, tc := range m.ToolCalls {
 					calls[tc.ID] = tc
 					hm.ToolCalls[i] = historyToolCall{
-						ID: tc.ID, Name: tc.Name, Arguments: eventwire.SurfaceArgs(tc.Name, tc.ResolvedName, tc.Arguments),
-						ResolvedName: tc.ResolvedName, CapabilityID: tc.CapabilityID,
+						ID: tc.ID, Name: tc.Name, Arguments: eventwire.SurfaceArgs(tc.Name, tc.ResolvedName, tc.ExecutionArguments()),
+						ArgumentNormalization: eventwire.SurfaceArgumentNormalization(tc.Name, tc.ResolvedName, tc.ArgumentNormalization),
+						ResolvedName:          tc.ResolvedName, CapabilityID: tc.CapabilityID,
 					}
 				}
 			}

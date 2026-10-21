@@ -131,6 +131,8 @@ export const EN_WINDOW: Record<string, string> = {
   "点击步骤可原位查看详情、结果或文件差异": "Select a step to inspect its details, result, or file diff in place",
   "调用 {id}": "Call {id}",
   "输入": "Input",
+  "参数格式已自动兼容": "Argument format automatically normalized",
+  "兼容前的原始输入": "Original input before normalization",
   "结果": "Result",
   "筛选 {n} 项": "Filter {n} entries",
   "关闭其他（{n}）": "Close the others ({n})",

@@ -154,7 +154,7 @@ export function ToolCard({
   // A call being watched in the activity group opens to its input even with no
   // output yet: a row that cannot open is the one that looks stuck.
   const hasBody = Boolean(
-    takeover || tool.diff || goal || tool.name === "todo_write" ||
+    takeover || tool.diff || goal || tool.argumentNormalization || tool.name === "todo_write" ||
     (tool.output && !echoed && children.length === 0) || tool.err || children.length || (activity && running && activityArgs),
   );
   const activityResult = Boolean(
@@ -190,6 +190,15 @@ export function ToolCard({
   );
   const body = (
     <div className="out">
+      {tool.argumentNormalization && (
+        <section className="activity-call-input">
+          <p>{t("参数格式已自动兼容")}</p>
+          <details>
+            <summary>{t("兼容前的原始输入")}</summary>
+            <pre>{prettyArgs(tool.argumentNormalization.original)}</pre>
+          </details>
+        </section>
+      )}
       {activity && (
         <>
           <div className="activity-call-meta">

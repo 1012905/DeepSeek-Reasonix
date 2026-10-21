@@ -628,7 +628,7 @@ func interruptedToolSummary(call provider.ToolCall) provider.InterruptedToolSumm
 		summary.Files = append(summary.Files, path)
 	}
 	var args map[string]any
-	if json.Unmarshal([]byte(call.Arguments), &args) == nil {
+	if json.Unmarshal([]byte(call.ExecutionArguments()), &args) == nil {
 		for _, key := range []string{"path", "file", "file_path", "filename"} {
 			if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
 				addFile(value)
