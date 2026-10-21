@@ -835,6 +835,9 @@ what exists.
   each settings block (`.apply`). Results are laid under the header without
   repainting settings itself: looking for something should not take away the
   page you are reading.
+- Search results give the setting name a full-width first row. Section and
+  scope/apply metadata share a wrapping second row; neither can consume the
+  name's width. Results retain their content height inside the scrolling list.
 - What changing a setting costs is a fact, not a warning: one colour for all
   three tiers, only lighter than body text. What deserves colour is a present
   state such as "cannot be changed while a turn is running".
