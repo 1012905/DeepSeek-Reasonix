@@ -16,30 +16,11 @@ import (
 	"reasonix/internal/base/testenv"
 )
 
-// interleaveAt runs run at the ordinal'th matching fault of this process, once.
-// Faults the hook itself causes are ignored, so a model step cannot re-enter.
-func interleaveAt(t *testing.T, match func(op, path string) bool, ordinal int, run func()) {
-	t.Helper()
-	seen, fired, busy := 0, false, false
-	withFault(t, func(op, path string) error {
-		if busy || fired || !match(op, path) {
-			return nil
-		}
-		seen++
-		if seen != ordinal {
-			return nil
-		}
-		fired, busy = true, true
-		run()
-		busy = false
-		return nil
-	})
-}
-
-// otherProcessSave publishes one update: read the target, snapshot the preimage
-// under the revision it read, write the next revision, reindex. That is the
-// sequence SaveWithOptions runs.
-func otherProcessSave(t *testing.T, dir, name, body string) {
+// lockFreeProcessSave publishes one update the way a writer that does not take
+// the store lock would, such as an older build: read the target, snapshot the
+// preimage under the revision it read, write the next revision, reindex. The
+// snapshot's own check is what protects the revision slots against it.
+func lockFreeProcessSave(t *testing.T, dir, name, body string) {
 	t.Helper()
 	path := filepath.Join(dir, name+".md")
 	existing, ok := loadMemory(path)
@@ -86,10 +67,6 @@ func otherProcessArchiveAndRecreate(t *testing.T, dir, name, body string) {
 	}
 }
 
-func crossProcDirRead(dir string) func(op, path string) bool {
-	return func(op, path string) bool { return op == "read-dir" && path == dir }
-}
-
 // TestAuditCrossProcessSnapshotIsTheRevisionItNames covers the mislabel: the
 // snapshot re-reads the fact file and stores whatever bytes are there under the
 // revision the earlier findSaveTarget read produced, so a newer revision must
@@ -109,7 +86,7 @@ func TestAuditCrossProcessSnapshotIsTheRevisionItNames(t *testing.T) {
 	// The other process reads alpha (revision 2) at the same time this process
 	// does, and publishes its own revision 3 before this process snapshots.
 	interleaveAt(t, crossProcDirRead(dir), 2, func() {
-		otherProcessSave(t, dir, "alpha", "from the other process")
+		lockFreeProcessSave(t, dir, "alpha", "from the other process")
 	})
 	_, err = s.SaveWithOptions(Memory{ID: id, Name: "alpha", Body: "three"}, SaveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "memory revision conflict: expected 2, found 3") {
@@ -152,7 +129,7 @@ func TestAuditCrossProcessRestoreReturnsTheBytesItNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	interleaveAt(t, crossProcDirRead(dir), 2, func() {
-		otherProcessSave(t, dir, "alpha", "from the other process")
+		lockFreeProcessSave(t, dir, "alpha", "from the other process")
 	})
 	if _, err := s.SaveWithOptions(Memory{ID: id, Name: "alpha", Body: "three"}, SaveOptions{}); err == nil ||
 		!strings.Contains(err.Error(), "memory revision conflict: expected 2, found 3") {
