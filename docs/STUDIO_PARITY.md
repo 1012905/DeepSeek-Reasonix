@@ -53,6 +53,7 @@ Checked against `studio` at `d779d89bc` on 2026-10-08.
 | --- | --- | --- |
 | Skill invocation shown as a badge in the transcript | Have differently | Composer chips in `ui/skillchips.ts`; the transcript shows plain `/name` text; #12383 (#11145 closed) |
 | Slash and `@` completion | Have | `ui/Completion.tsx` |
+| Drag workspace files and folders into chat / 拖拽工作区文件和文件夹到对话 | Have | `ui/filedrag.ts`: file tree, search results and Git changes share the composer reference intake; 文件树、搜索结果和 Git 改动共用引用入口；#12771 |
 | "Add to chat" bar on selected transcript text | Missing | #11954 |
 | Find in the conversation | Have | `ui/Find.tsx` |
 | Turn navigator | Have differently | Scroll rail with marks in `ui/Transcript.tsx` |
