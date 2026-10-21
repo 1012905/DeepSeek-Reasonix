@@ -1,2 +1,0 @@
-- 修复：会话记录读不出来时，历史搜索不再说「没有匹配」，而是先提示索引不完整，并把该会话标为损坏、稍后自动重试。关联 #14023。
-- Fixed: when a session's transcript cannot be read, history search no longer claims a miss; it says the index is incomplete, marks that session corrupt, and retries on the next scan. Refs #14023.
