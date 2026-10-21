@@ -4,9 +4,11 @@ import { reason } from "../i18n/kernel";
 import type { AgentPort, StageRequest, WorkspaceChange } from "../port/port";
 import { buildTree, stagedState, type ChangeNode } from "../state/gittree";
 import { StudioIcon } from "./StudioIcon";
+import { workspaceDrag } from "./filedrag";
 
 interface Props {
   port: AgentPort;
+  workspaceRoot?: string;
   changes: WorkspaceChange[];
   // The repository below the workspace this list belongs to; absent is the workspace's own.
   repo?: string;
@@ -31,7 +33,7 @@ const withRepo = (repo: string | undefined, req: StageRequest): StageRequest => 
 // What differs as a folder tree, without opening anything, and which of it the next
 // commit will record: the index is what a commit reads, so it is shown and changed
 // here, a folder at a time or a file at a time. A change can also be thrown away.
-export function WorkbenchChanges({ port, changes, repo, current, onOpen, onChanged, commit, actions, below }: Props) {
+export function WorkbenchChanges({ port, workspaceRoot, changes, repo, current, onOpen, onChanged, commit, actions, below }: Props) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
   const [shut, setShut] = useState<Set<string>>(new Set());
@@ -75,6 +77,7 @@ export function WorkbenchChanges({ port, changes, repo, current, onOpen, onChang
                 </button>
               )}
               <button type="button" className="workbench-change-row workbench-folder-row" style={inset} data-action="workbench.change-folder" data-target={node.path}
+                {...workspaceDrag(workspaceRoot, repo ? `${repo}/${node.path}` : node.path)}
                 aria-expanded={open} onClick={() => fold(node.path)}>
                 <StudioIcon name={open ? "down" : "chevron"} aria-hidden="true" />
                 <span>{node.name}</span>
@@ -99,6 +102,7 @@ export function WorkbenchChanges({ port, changes, repo, current, onOpen, onChang
               </button>
             )}
             <button className="workbench-change-row" style={inset} data-action="workbench.diff" data-target={item.path} title={item.path}
+              {...workspaceDrag(workspaceRoot, repo ? `${repo}/${item.path}` : item.path)}
               aria-current={current === item.path ? "page" : undefined} onClick={() => onOpen(item.path)}>
               <em data-status={item.status}>{item.status || "M"}</em>
               <span>{node.name}</span>
