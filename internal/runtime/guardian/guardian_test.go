@@ -3,6 +3,7 @@ package guardian
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -544,6 +545,51 @@ func TestTranscriptKeepsUserTurnsAndToolCallsOnly(t *testing.T) {
 	for _, e := range ExtractTranscript(msgs) {
 		if e.Kind != "user" && e.Kind != "tool" {
 			t.Fatalf("entry kind %q; the guardian sees user turns and tool calls only", e.Kind)
+		}
+	}
+}
+
+// A review that never reached the model leaves nothing behind in the guardian's
+// own transcript, and the turns it would have carried are rolled back with it.
+// The cursor has to come back too: left advanced, the next review treats those
+// entries as already sent and the guardian never reads them at all.
+func TestFailedReviewDoesNotCountItsTranscriptAsSent(t *testing.T) {
+	// One provider for both reviews: the agent binds the one it was built with,
+	// so the recovery has to come from the same script. Its first answer is the
+	// failure; with no more scripted responses it falls back to a plain allow.
+	prov := &scriptedProvider{responses: []scriptedResponse{
+		{err: errors.New("provider refused the review")},
+	}}
+	gs := NewSession(prov, tool.NewRegistry(), nil, PolicyPrompt(), "guardian-test", 0, nil, &captureSink{}, nil)
+
+	parent := sessionstore.NewSession("sys")
+	for _, text := range []string{"first ask", "second ask", "third ask"} {
+		parent.Add(provider.Message{Role: provider.RoleUser, Content: text})
+	}
+
+	if _, _, err := gs.ReviewVerdict(context.Background(), "bash", json.RawMessage(`{"command":"ls"}`), parent); err == nil {
+		t.Fatal("a provider error was reported as an authentic verdict")
+	}
+	if gs.cursor.EntryCount != 0 {
+		t.Fatalf("cursor advanced to %d over a review the model never received, want 0", gs.cursor.EntryCount)
+	}
+
+	parent.Add(provider.Message{Role: provider.RoleUser, Content: "fourth ask"})
+	if _, _, err := gs.ReviewVerdict(context.Background(), "bash", json.RawMessage(`{"command":"ls"}`), parent); err != nil {
+		t.Fatalf("review after the failure: %v", err)
+	}
+
+	reqs := prov.requestsSnapshot()
+	if len(reqs) < 2 {
+		t.Fatalf("the review after the failure reached no provider (%d requests)", len(reqs))
+	}
+	sent := ""
+	for _, m := range reqs[len(reqs)-1].Messages {
+		sent += m.Content + "\n"
+	}
+	for _, want := range []string{"first ask", "second ask", "third ask", "fourth ask"} {
+		if !strings.Contains(sent, want) {
+			t.Fatalf("review after the failure never re-sent %q:\n%s", want, sent)
 		}
 	}
 }
