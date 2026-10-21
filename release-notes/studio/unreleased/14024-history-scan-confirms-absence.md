@@ -1,0 +1,2 @@
+- 修复：两个进程共用一个历史索引时，另一个进程刚索引的会话不再被误判为「已删除」而从历史搜索里消失；只有确认文件不存在才会被标记缺失。关联 #14024。
+- Fixed: with two processes sharing one history index, a conversation the other process just indexed is no longer swept as deleted; only a file confirmed gone is marked missing. Refs #14024.

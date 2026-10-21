@@ -423,12 +423,15 @@ func (c *Catalog) reconcileRoot(ctx context.Context, root Root) error {
 			runtime.Gosched()
 		}
 	}
+	live, absent, err := c.measureUnseen(ctx, root, generation)
+	if err != nil {
+		return err
+	}
 	tx, err = c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE history_sources SET missing_since=CASE WHEN missing_since=0 THEN ? ELSE missing_since END,
-        health='missing' WHERE root=? AND seen_generation<>?`, now, root.Path, generation); err != nil {
+	if err := c.applyScanResult(ctx, tx, now, generation, live, absent); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
