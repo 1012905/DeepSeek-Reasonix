@@ -388,6 +388,34 @@ bind   = "127.0.0.1:5432"
 target = "127.0.0.1:5432"
 ```
 
+Windows 电脑上的 WSL 发行版也是一台主机，写作 `kind = "wsl"` 加一个 `distro`（可用 `reasonix remote wsl list` 查看）：
+
+- 它没有地址，所以只接受目录和安装相关的字段。在它上面写 `host`、`port`、`user`、密钥、密码、
+  `proxy_jump`、`use_ssh_config` 或转发都会被拒绝。
+- 在 **设置 → 远程** 里添加：只有装了 WSL 的机器才会出现「WSL 发行版」选项，并列出它的发行版
+  （WSL 1 的发行版显示为不可选）。之后 Studio 像打开列表里其他机器一样打开它。
+- 连接需要 WSL 2，且发行版里有 `ps`
+  和 `nohup`；缺少它们的精简镜像会被拒绝，并说明缺的是哪一个。
+- 内核运行在 Studio 保持打开的一个 shell 会话里，因为会话结束时 WSL 会结束它启动的所有进程。
+  - Studio 关闭连接后，内核随发行版一起退出（空闲的发行版大约 15 秒后会被 WSL 停止）。
+  - 对话保存在磁盘上，下次连接时继续。
+  - 不会有任何东西在你不知情时让发行版一直运行。
+- 模型凭据来自发行版自己的配置（`provider = "remote"`）：在 WSL 默认的网络模式下，发行版访问不到
+  本机的回环地址，所以不共享本机的 provider。
+- 以 Windows 路径选择的目录（`C:\work\app` 或 `\\wsl.localhost\<distro>\home\me\app`）由发行版转换；
+  它看不到的目录会被拒绝。
+- 命令行下用 `reasonix remote wsl add <名字> <发行版>` 添加，之后 `remote test` 和
+  `remote connect` 的用法与 SSH 主机相同。
+  - `connect` 会一直保持会话，直到你按 Ctrl-C，内核随之停止。
+  - `status`、`forward`、`serve` 和 `fs` 仍只支持 SSH，对 WSL 机器会以
+    `remote: host is not reached over ssh` 拒绝。
+
+由 agent 自己执行的 shell 命令里，只有 `list`、`help` 和 `wsl list|test` 能运行：
+
+- 其他 `reasonix remote` 子命令在那里都会被拒绝（退出码 77），因为它们会修改主机列表或打开链接，
+  这些是人要做的事。
+- 主机会给它替 agent 运行的命令做标记，以便区分。它防的是不刻意隐藏的 agent，不是沙箱。
+
 命令行:
 
 ```bash
