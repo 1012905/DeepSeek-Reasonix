@@ -9,6 +9,7 @@ import (
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/safety/permission"
+	"reasonix/internal/state/sessionstore"
 )
 
 // noteOriginMatch counts a call that is not read-only and whose arguments carry,
@@ -32,7 +33,7 @@ func (a *Agent) userTexts() []string {
 	var out []string
 	for _, m := range a.sess.conversation.Snapshot() {
 		if m.Role == provider.RoleUser {
-			out = append(out, m.Content)
+			out = append(out, sessionstore.UserMessageText(m))
 		}
 	}
 	return out

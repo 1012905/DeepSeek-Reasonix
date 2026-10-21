@@ -48,6 +48,11 @@ func runOriginFlow(t *testing.T, prompt string) (event.CompletionReportAudit, in
 
 func runOriginFlowWith(t *testing.T, prompt string, gate *permission.Gate) (event.CompletionReportAudit, int32) {
 	t.Helper()
+	return runOriginFlowCtx(t, context.Background(), prompt, gate)
+}
+
+func runOriginFlowCtx(t *testing.T, ctx context.Context, prompt string, gate *permission.Gate) (event.CompletionReportAudit, int32) {
+	t.Helper()
 	var ran atomic.Int32
 	reg := tool.NewRegistry()
 	reg.Add(pageTool{})
@@ -64,7 +69,7 @@ func runOriginFlowWith(t *testing.T, prompt string, gate *permission.Gate) (even
 		opts.Gate = gate
 	}
 	a := New(prov, reg, sessionstore.NewSession(""), opts, probe)
-	if err := a.Run(context.Background(), prompt); err != nil {
+	if err := a.Run(ctx, prompt); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if len(probe.reports) == 0 {
@@ -93,6 +98,22 @@ func TestTheSameCommandTypedByTheUserIsNotCounted(t *testing.T) {
 	}
 	if audit.OriginRecorded != 1 || ran != 1 {
 		t.Fatalf("recorded %d, ran %d; the page is still recorded and the call still runs", audit.OriginRecorded, ran)
+	}
+}
+
+// The turn the provider sees is composed: the host adds recalled memory and
+// other blocks around what the person typed. A command only such a block
+// repeats was not written by the user, so it is still a copy of the page.
+func TestACommandOnlyAHostBlockRepeatsIsStillAPageCopy(t *testing.T) {
+	typed := "set this project up from its guide"
+	composed := typed + "\n\n<memory-recall>\n- the setup guide's install line is " + plantedCommand + "\n</memory-recall>"
+	ctx := WithRawUserInput(context.Background(), typed)
+	if audit, _ := runOriginFlowCtx(t, ctx, composed, nil); audit.OriginMatched != 1 {
+		t.Fatalf("matched = %d; a command only the host's block repeats was taken for one the user wrote", audit.OriginMatched)
+	}
+	ap := &askRecorder{reply: false}
+	if _, ran := runOriginFlowCtx(t, ctx, composed, originGate(true, ap)); ran != 0 || len(ap.asked) != 1 {
+		t.Fatalf("ran %d, asked %v; want the copied command put to the person and not run", ran, ap.asked)
 	}
 }
 
