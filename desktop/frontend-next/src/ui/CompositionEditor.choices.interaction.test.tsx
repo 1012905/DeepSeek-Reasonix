@@ -26,17 +26,16 @@ async function open() {
 
 it("shows what a module is for beside its name, and says nothing where its source says nothing", async () => {
   await open();
-  const pick = screen.getAllByRole<HTMLSelectElement>("combobox").find((s) => /添加模块/.test(s.getAttribute("aria-label") ?? ""))!;
-  const labels = [...pick.options].map((o) => o.textContent);
-  expect(labels).toContain("bash — Run a shell command in the workspace and return its output.");
-  expect(labels).toContain("task");
-  const bash = [...pick.options].find((o) => o.value === "bash")!;
-  expect(bash.title).toBe("Run a shell command in the workspace and return its output.");
+  await userEvent.click(screen.getByText("工具", { selector: "summary" }));
+  await userEvent.click(screen.getByRole("button", { name: "工具 添加模块" }));
+  expect(screen.getByText("Run a shell command in the workspace and return its output.")).toBeTruthy();
+  expect(screen.getByRole("checkbox", { name: "task" }).getAttribute("aria-describedby")).toBeNull();
 });
 
 it("stores only the id of the module it adds, never its description", async () => {
   const state = await open();
-  const pick = screen.getAllByRole<HTMLSelectElement>("combobox").find((s) => /添加模块/.test(s.getAttribute("aria-label") ?? ""))!;
-  await userEvent.selectOptions(pick, "bash");
+  await userEvent.click(screen.getByText("工具", { selector: "summary" }));
+  await userEvent.click(screen.getByRole("button", { name: "工具 添加模块" }));
+  await userEvent.click(screen.getByRole("checkbox", { name: "bash" }));
   expect(state.saved.tools.members).toEqual([{ id: "bash" }]);
 });

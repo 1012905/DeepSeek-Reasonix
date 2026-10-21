@@ -1675,6 +1675,9 @@ A sub-agent row, by the list's own width:
 - Preset management separates two built-in mode cards from custom presets. Card selection inspects a definition; setting a default affects new conversations and never switches the active binding.
 - Open floating controls follow responsive fold changes and recheck their anchor after layout transitions finish; window resize alone precedes the body observer's fold publication.
 
+- Preset module selection uses one anchored, scroll-bounded checkbox popover with source groups, search, group selection and current-result selection. It stays open for repeated choices and returns focus on dismissal.
+- Source groups come from the module catalog; older hosts without provenance use an unclassified group. Selection edits retain existing parameter drafts. Selecting all does not change the inheritance mode.
+
 ## Side question
 
 - The panel stays anchored above its own composer. Collapsing it leaves a header with separate expand and close controls so the conversation can be read without discarding the side question.

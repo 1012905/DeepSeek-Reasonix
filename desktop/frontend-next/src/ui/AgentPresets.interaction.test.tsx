@@ -167,7 +167,8 @@ describe("Agent preset management", () => {
     await user.click(screen.getByText("技能与扩展", { selector: "summary" }));
     await user.selectOptions(screen.getByLabelText("MCP 服务 选择方式"),"select");
     const group=screen.getByRole("group",{name:"MCP 服务"});
-    await user.click(group.querySelector("button")!);
+    await user.click(within(group).getByText("高级：手动输入模块 ID"));
+    await user.click(within(group).getByRole("button", { name: "添加空白 ID" }));
     await user.type(screen.getByLabelText("MCP 服务 ID 1"),"docs");
     await user.clear(screen.getByLabelText("MCP 服务 独立参数 1"));
     await user.type(screen.getByLabelText("MCP 服务 独立参数 1"),"invalid");
