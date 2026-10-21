@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"reasonix/internal/contract/provider"
 )
@@ -61,7 +62,7 @@ func loadSessionMessagesFromJSONLKeepingDecodedTail(path string) []provider.Mess
 }
 
 func loadSessionMessagesFromJSONLKeepingDecodedTailWithLimits(path string, limits sessionReplayLimits) []provider.Message {
-	f, err := os.Open(path)
+	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		return nil
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reasonix/internal/contract/provider"
 	"sync"
 	"time"
@@ -66,7 +67,7 @@ func loadSessionMessagesFromJSONL(path string) ([]provider.Message, error) {
 }
 
 func loadSessionMessagesFromJSONLWithLimits(path string, limits sessionReplayLimits) ([]provider.Message, error) {
-	f, err := os.Open(path)
+	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		return nil, err
 	}
