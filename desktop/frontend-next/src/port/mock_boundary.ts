@@ -190,7 +190,7 @@ export class MockBoundary extends MockShell {
     return { ...this.plans };
   }
 
-  private deliveries = { enabled: true, path: "/Users/you/.reasonix/config.toml" };
+  private deliveries = { enabled: false, path: "/Users/you/.reasonix/config.toml" };
 
   async presentFiles() {
     return { ...this.deliveries };

@@ -17,10 +17,11 @@ func TestPresentFilesSettingsPersistWithoutRebuilding(t *testing.T) {
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	controller := s.ctl()
-	if got := readJSON[map[string]any](t, srv.URL, "/present-files"); got["enabled"] != true {
-		t.Fatalf("default = %v, want enabled", got)
+	initial := config.LoadForEdit(config.UserConfigPath()).Tools.PresentFiles
+	if got := readJSON[map[string]any](t, srv.URL, "/present-files"); got["enabled"] != initial {
+		t.Fatalf("read = %v, want saved choice %v", got, initial)
 	}
-	for _, enabled := range []bool{false, true} {
+	for _, enabled := range []bool{!initial, initial} {
 		resp := postProvider(t, srv.URL, "/present-files", fmt.Sprintf(`{"enabled":%t}`, enabled))
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
@@ -42,7 +43,8 @@ func TestPresentFilesSettingsRejectInvalidAndUnauthorizedWrites(t *testing.T) {
 	s := newProviderEditServer(t)
 	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
-	resp := postProvider(t, srv.URL, "/present-files", `{"enabled":false}`)
+	initial := config.LoadForEdit(config.UserConfigPath()).Tools.PresentFiles
+	resp := postProvider(t, srv.URL, "/present-files", fmt.Sprintf(`{"enabled":%t}`, !initial))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("ungranted save = %d", resp.StatusCode)
@@ -55,14 +57,15 @@ func TestPresentFilesSettingsRejectInvalidAndUnauthorizedWrites(t *testing.T) {
 			t.Fatalf("body %s: status %d", body, resp.StatusCode)
 		}
 	}
-	if !config.LoadForEdit(config.UserConfigPath()).Tools.PresentFiles {
+	if config.LoadForEdit(config.UserConfigPath()).Tools.PresentFiles != initial {
 		t.Fatal("rejected request changed user config")
 	}
 }
 
 func TestPresentFilesSettingsPreserveOtherUserSettings(t *testing.T) {
 	srv := newRichProviderServer(t)
-	resp := postProvider(t, srv.URL, "/present-files", `{"enabled":false}`)
+	enabled := !config.LoadForEdit(config.UserConfigPath()).Tools.PresentFiles
+	resp := postProvider(t, srv.URL, "/present-files", fmt.Sprintf(`{"enabled":%t}`, enabled))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("save = %d", resp.StatusCode)
@@ -76,7 +79,7 @@ func TestPresentFilesSettingsPreserveOtherUserSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), "present_files = false") {
+	if !strings.Contains(string(raw), fmt.Sprintf("present_files = %t", enabled)) {
 		t.Fatal("missing saved choice")
 	}
 }

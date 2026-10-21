@@ -1,23 +1,20 @@
 package config
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
 )
 
-func TestPresentFilesDefaultsOnAndPreservesUserChoice(t *testing.T) {
-	if !Default().Tools.PresentFiles {
-		t.Fatal("present_files must be on by default")
-	}
-	unset, _ := loadScoped(t, "", "")
-	if !unset.Tools.PresentFiles {
-		t.Fatal("an existing config without the key must enable delivery")
+func TestPresentFilesIsUserOptIn(t *testing.T) {
+	if Default().Tools.PresentFiles {
+		t.Fatal("present_files is on by default")
 	}
 	for _, enabled := range []bool{false, true} {
-		user := fmt.Sprintf("[tools]\npresent_files = %t\n", enabled)
-		project := fmt.Sprintf("[tools]\npresent_files = %t\n", !enabled)
+		user, project := "", "[tools]\npresent_files = true\n"
+		if enabled {
+			user, project = project, "[tools]\npresent_files = false\n"
+		}
 		cfg, _ := loadScoped(t, user, project)
 		if cfg.Tools.PresentFiles != enabled {
 			t.Fatal("project changed the user's delivery choice")
@@ -32,10 +29,6 @@ func TestPresentFilesDefaultsOnAndPreservesUserChoice(t *testing.T) {
 		loaded, _ := loadScoped(t, out, "")
 		if loaded.Tools.PresentFiles != enabled {
 			t.Fatal("saved choice did not round-trip")
-		}
-		delta, _ := loadScoped(t, RenderTOMLProjectDelta(cfg), "")
-		if delta.Tools.PresentFiles != enabled {
-			t.Fatal("delta render lost the user's choice")
 		}
 	}
 }

@@ -52,7 +52,7 @@ describe("finding a setting", () => {
     await userEvent.click(hit);
     await waitFor(() => expect(block("present-files")).toBeTruthy());
     expect(block("present-files")?.previousElementSibling?.getAttribute("data-setting")).toBe("approval");
-    expect((await screen.findByRole("switch", { name: "启用 AI 文件交付卡片" })).getAttribute("aria-checked")).toBe("true");
+    expect((await screen.findByRole("switch", { name: "启用 AI 文件交付卡片" })).getAttribute("aria-checked")).toBe("false");
     expect(block("present-files")?.querySelector("[data-apply]")?.getAttribute("data-apply")).toBe("on-open");
     expect(screen.getByRole("switch", { name: "启用内置浏览器" })).toBeTruthy();
   });
