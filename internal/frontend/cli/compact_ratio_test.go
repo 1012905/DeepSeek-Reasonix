@@ -112,6 +112,14 @@ func TestCompactRatioMatchesConfigAndPreservesNeighbours(t *testing.T) {
 	}
 }
 
+func TestParseCLICompactRatioRefusesHugeExponentsWithoutBuildingThem(t *testing.T) {
+	for _, value := range []string{"1e999999999", "1e-999999999", "9e99999999999"} {
+		if _, err := parseCLICompactRatio(value); err == nil {
+			t.Fatalf("%q was accepted", value)
+		}
+	}
+}
+
 func TestParseCLICompactRatioKeepsTheDecimalTyped(t *testing.T) {
 	for value, want := range map[string]string{
 		"12.3": "0.123", "33.3": "0.333", "66.6": "0.666", "87.65": "0.8765", "99.9": "0.999", "0.1": "0.001", "50": "0.5", " 7.25 ": "0.0725", "1e1": "0.1",

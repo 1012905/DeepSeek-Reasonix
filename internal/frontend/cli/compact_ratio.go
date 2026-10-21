@@ -17,7 +17,7 @@ func parseCLICompactRatio(value string) (float64, error) {
 	typed := strings.TrimSpace(value)
 	percent, err := strconv.ParseFloat(typed, 64)
 	ratio := percent / 100
-	if exact, ok := new(big.Rat).SetString(typed); ok {
+	if exact, ok := new(big.Rat).SetString(typed); err == nil && percent > 0 && percent < 100 && ok {
 		ratio, _ = exact.Quo(exact, big.NewRat(100, 1)).Float64()
 	}
 	if err == nil {
