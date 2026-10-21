@@ -36,11 +36,11 @@ export const incomplete = (row: PriceText | undefined) => !!row && (row.inp === 
 const MAX_SOURCE = 500;
 const utcToday = () => new Date().toISOString().slice(0, 10);
 
-// A source is a link to read: http or https, a host, no credentials, no blanks or
-// control characters. Nothing here opens or fetches it.
+// A source is a link to read: http or https, a host, no credentials, no blanks,
+// control or format characters. Nothing here opens or fetches it.
 export function sourceProblem(src: string): boolean {
   if (src === "") return false;
-  if (src.length > MAX_SOURCE || /[\s\u0000-\u001f\u007f]/.test(src)) return true;
+  if (src.length > MAX_SOURCE || /[\s\p{Cc}\p{Cf}]/u.test(src)) return true;
   try {
     const u = new URL(src);
     return !((u.protocol === "http:" || u.protocol === "https:") && u.hostname !== "" && u.username === "" && u.password === "");

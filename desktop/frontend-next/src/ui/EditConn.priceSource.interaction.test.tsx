@@ -63,6 +63,12 @@ describe("where a price came from", () => {
     expect(save().disabled).toBe(true);
     fireEvent.change(field("alpha 的价格来源"), { target: { value: "https://gw.example/p" } });
     expect(save().disabled).toBe(false);
+    for (const hidden of ["https://api-docs.deep\u200bseek.com/pricing", "https://api-docs.deep\u00adseek.com/pricing", "https://gw.example/\u202elmth.gnicirp"]) {
+      fireEvent.change(field("alpha 的价格来源"), { target: { value: hidden } });
+      expect(screen.getByText("来源必须是 http 或 https 链接，不能带用户名密码。")).toBeTruthy();
+      expect(save().disabled).toBe(true);
+    }
+    fireEvent.change(field("alpha 的价格来源"), { target: { value: "https://gw.example/p" } });
     fireEvent.change(field("alpha 的核对日期"), { target: { value: "2999-01-01" } });
     expect(screen.getByText("核对日期不能晚于今天（按 UTC）。")).toBeTruthy();
     expect(save().disabled).toBe(true);

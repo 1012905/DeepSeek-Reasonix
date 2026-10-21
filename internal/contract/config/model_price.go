@@ -72,13 +72,15 @@ const maxPriceSourceLen = 500
 var utcToday = func() time.Time { return time.Now().UTC() }
 
 // validPriceSource accepts a link to read, never one to follow on its own: http or
-// https, a host, no credentials, no control or blank characters, a bounded length.
+// https, a host, no credentials, no control, format or blank characters, a bounded
+// length. A format character is invisible or reorders text, so the page would show a
+// link other than the one stored.
 func validPriceSource(raw string) bool {
 	if len(raw) > maxPriceSourceLen {
 		return false
 	}
 	for _, r := range raw {
-		if unicode.IsControl(r) || unicode.IsSpace(r) {
+		if unicode.IsControl(r) || unicode.IsSpace(r) || unicode.Is(unicode.Cf, r) {
 			return false
 		}
 	}
