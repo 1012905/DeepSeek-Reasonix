@@ -1,8 +1,7 @@
 package boot
 
-// RED (second arm, real Build): /new starts a session whose history is empty, so
-// nothing carries the standing blocks — yet the controller remembers them as
-// delivered and the new session's first request goes out without them.
+// A /new session's first request carries the standing blocks: the skills listing,
+// the project instructions and the date, because the new history contains none of them.
 
 import (
 	"context"
