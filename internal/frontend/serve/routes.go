@@ -104,7 +104,6 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /complete", s.complete)
 	s.mcpRoutes(mux)
 	mux.HandleFunc("GET /capability-scope", s.capabilityScopeHandler)
-	mux.HandleFunc("GET /account", s.account)
 	mux.HandleFunc("POST /account/login", s.accountLogin)
 	mux.HandleFunc("POST /account/poll", s.accountPoll)
 	mux.HandleFunc("POST /account/logout", s.accountLogout)
