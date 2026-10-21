@@ -191,7 +191,7 @@ func (w *Writer) queryJSONL(f SourceFilter) (RangeStats, error) {
 				totalCost.add(mode, currency, pricing.Amount(amount))
 				out.CostEstimated = out.CostEstimated || (mode == "" && rec.CostEstimated)
 			}
-			if rec.CostComplete != nil && !*rec.CostComplete {
+			if usagecatalog.CostIncomplete(rec.CostComplete, rec.Total, rec.CostAmount) {
 				out.CostIncomplete = true
 			}
 			dayActive = dayActive || rec.Total > 0 || requests > 0

@@ -50,6 +50,18 @@ type Priced struct {
 	BillingMode string
 }
 
+// CostIncomplete reports whether a line that counted usage has no cost fact:
+// a quote that said it could not price the call, or no amount at all — a row
+// written before the cost fields existed, or one that simply lacks them. Such
+// a row's zero money is unknown, not free, so a total folding it in is a floor.
+// A turn marker counts no usage, so it is never an unpriced call.
+func CostIncomplete(costComplete *bool, total int, amount string) bool {
+	if costComplete != nil && !*costComplete {
+		return true
+	}
+	return total > 0 && strings.TrimSpace(amount) == ""
+}
+
 // WithCost attaches a line's quote. An amount that does not parse is dropped
 // rather than guessed: a missing total beats a wrong one.
 func (e Entry) WithCost(p Priced) Entry {
