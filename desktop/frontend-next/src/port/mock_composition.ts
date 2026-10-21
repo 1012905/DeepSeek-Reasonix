@@ -7,16 +7,20 @@ type Library = { revision:number; user:AgentPresetVersion[]; projects:Map<string
 
 const MOCK_MODULES: AgentPresetCatalog["modules"] = {
   tools: [
-    { id: "bash", description: "Run a shell command in the workspace and return its output." },
-    { id: "bash_output", description: "Read new output from a shell command that is still running." },
-    { id: "browser_act", description: "Click, type or scroll on the page open in the built-in browser." },
-    { id: "edit_file", description: "Replace an exact piece of text in a file." },
-    { id: "task" },
-    { id: "view_image", description: "Read an image file." },
+    { source: "builtin", id: "bash", description: "Run a shell command in the workspace and return its output." },
+    { source: "builtin", id: "bash_output", description: "Read new output from a shell command that is still running." },
+    { source: "builtin", id: "browser_act", description: "Click, type or scroll on the page open in the built-in browser." },
+    { source: "builtin", id: "edit_file", description: "Replace an exact piece of text in a file." },
+    { source: "builtin", id: "task" },
+    { source: "builtin", id: "view_image", description: "Read an image file." },
   ],
   skills: [
-    { id: "review", description: "Review the changes on this branch and report problems by severity." },
-    { id: "tidy-notes", description: "Tidy the notes folder" },
+    { source: "builtin", id: "review", description: "Review the changes on this branch and report problems by severity." },
+    { source: "builtin", id: "explore", description: "Explore the codebase and trace how a feature works." },
+    { source: "builtin", id: "reasonix-guide", description: "Explain Reasonix configuration and workflows." },
+    { source: "custom", id: "tidy-notes", description: "Tidy the notes folder" },
+    { source: "custom", id: "api-check", description: "Validate project endpoints and response contracts." },
+    { source: "custom", id: "release-check", description: "Run the team's release checklist." },
   ],
 };
 

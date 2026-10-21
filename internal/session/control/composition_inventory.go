@@ -36,38 +36,42 @@ func (c *Controller) compositionInventory() (map[string][]agentpreset.Choice, er
 		return nil, err
 	}
 	out := map[string][]agentpreset.Choice{}
-	add := func(kind, id, description string) {
-		out[kind] = append(out[kind], agentpreset.Choice{ID: id, Description: choiceDescription(description)})
+	add := func(kind, id, description, source string) {
+		out[kind] = append(out[kind], agentpreset.Choice{ID: id, Description: choiceDescription(description), Source: source})
 	}
 	for _, kind := range []string{"tools", "skills", "mcp", "extensions", "hooks", "commands"} {
 		out[kind] = []agentpreset.Choice{}
 	}
 	for _, t := range tool.Builtins() {
-		add("tools", t.Name(), t.Description())
+		add("tools", t.Name(), t.Description(), "builtin")
 	}
 	for _, name := range []string{"task", "run_skill", "read_only_skill", "use_capability"} {
-		add("tools", name, "")
+		add("tools", name, "", "builtin")
 	}
 	store := skill.New(skill.Options{ProjectRoot: s.Workspace, ReasonixHomeDir: s.Home, CustomPaths: cfg.SkillCustomPaths(), PluginPaths: cfg.PluginPackageSkillOwners(), PluginAgentPaths: cfg.PluginPackageAgentOwners(), ExcludedPaths: cfg.SkillExcludedPaths(), SuppressWarnings: true})
 	for _, sk := range store.CompositionSkills() {
-		add("skills", sk.SlashName(), sk.Description)
+		source := "custom"
+		if sk.Scope == skill.ScopeBuiltin {
+			source = "builtin"
+		}
+		add("skills", sk.SlashName(), sk.Description, source)
 	}
 	for _, m := range cfg.EnabledPlugins(s.Workspace, config.DefaultActivationStore()) {
-		add("mcp", m.Name, "")
+		add("mcp", m.Name, "", "custom")
 	}
 	installed, _ := pluginpkg.LoadInstalled(s.Home)
 	for _, p := range installed {
-		add("extensions", p.Installed.Name, "")
+		add("extensions", p.Installed.Name, "", "custom")
 	}
 	cmds, err := command.LoadRoots(cfg.Roots().CommandRootsForRoot(s.Workspace)...)
 	if err != nil {
 		return nil, err
 	}
 	for _, cmd := range cmds {
-		add("commands", cmd.Name, cmd.Description)
+		add("commands", cmd.Name, cmd.Description, "custom")
 	}
 	for i, h := range hook.Load(hook.LoadOptions{ProjectRoot: s.Workspace, ReasonixHomeDir: s.Home}) {
-		add("hooks", fmt.Sprintf("%s:%s:%d", h.Scope, h.Event, i), "")
+		add("hooks", fmt.Sprintf("%s:%s:%d", h.Scope, h.Event, i), "", "custom")
 	}
 	for _, items := range out {
 		sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })

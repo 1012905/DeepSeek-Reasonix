@@ -21,6 +21,20 @@ to bind a version.
 
 ## Choosing and editing
 
+For **Selected modules only**, **Add modules** opens a checkbox menu. Select several
+items without reopening it, search by ID or description, or select a whole source
+group. Built-in and custom modules are grouped using catalog provenance; older
+hosts without that metadata show an unclassified group.
+
+**Select all** affects the current search results only. It preserves selections
+outside the results and never selects future additions. **Clear** removes every
+selected ID. **Done**, Escape and outside clicks close the menu while keeping the
+draft; **Save preset** persists it. Inheritance remains a separate mode.
+
+Existing module parameters survive bulk selection changes. Unlisted IDs remain
+editable, and **Advanced: enter a module ID** retains manual entry without implying
+that an ID installs a resource or grants authorization.
+
 The mode picker is hidden by default. Enable **Show mode picker** on the Persona
 management page to add it above the chat input in every pane. Settings search
 also leads directly to this switch. Hiding it leaves the conversation's mode intact.

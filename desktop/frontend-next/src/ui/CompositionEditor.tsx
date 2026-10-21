@@ -6,10 +6,12 @@ import type {
   CompositionChoice,
   CompositionKind,
   CompositionSelection,
+  CompositionModule,
 } from "../port/composition";
 import { COMPOSITION_KINDS } from "../port/composition";
 import { Switch } from "./Switch";
 import { StudioIcon } from "./StudioIcon";
+import { CompositionModulePicker } from "./CompositionModulePicker";
 
 const labels: Record<CompositionKind, string> = {
   tools: "工具",
@@ -163,16 +165,17 @@ function ModuleEditor({
     setJsonErrors(errors);
     onValidityChange(Object.values(errors).every((v) => !v));
   };
-  const remove = (index: number) => {
-    const shift = <T,>(source: Record<number, T>): Record<number, T> =>
+  const changeMembers = (members: CompositionModule[]) => {
+    const remap = <T,>(source: Record<number, T>): Record<number, T> =>
       Object.fromEntries(
-        Object.entries(source)
-          .filter(([key]) => Number(key) !== index)
-          .map(([key, v]) => [Number(key) > index ? Number(key) - 1 : Number(key), v]),
+        members.flatMap((member, index) => {
+          const old = value.members.indexOf(member);
+          return old in source ? [[index, source[old]]] : [];
+        }),
       );
-    validate(shift(jsonErrors));
-    setRawParameters(shift(rawParameters));
-    onChange({ ...value, members: value.members.filter((_, i) => i !== index) });
+    validate(remap(jsonErrors));
+    setRawParameters(remap(rawParameters));
+    onChange({ ...value, members });
   };
   return (
     <fieldset className="composition-modules" disabled={disabled}>
@@ -180,6 +183,7 @@ function ModuleEditor({
       {kind === "hooks" && (
         <p className="ds">{t("安全 Hook 和权限规则始终生效；此处仅选择非阻断型自动化。")}</p>
       )}
+      <div className="composition-module-controls">
       <select
         aria-label={`${t(labels[kind])} ${t("选择方式")}`}
         data-action-change="agent-preset.module-mode"
@@ -194,29 +198,10 @@ function ModuleEditor({
         <option value="inherit">{t("跟随当前配置，包含之后启用的资源")}</option>
         <option value="select">{t("仅使用所选项（空列表表示禁用）")}</option>
       </select>
+      {value.mode === "select" && <CompositionModulePicker kind={kind} label={t(labels[kind])} choices={choices} members={value.members} disabled={disabled} onChange={changeMembers} />}
+      </div>
       {value.mode === "select" && (
         <>
-          {choices.length > 0 && (
-            <select
-              aria-label={`${t(labels[kind])} ${t("添加模块")}`}
-              data-action-change="agent-preset.module-choose"
-              data-target={kind}
-              value=""
-              onChange={(e) => {
-                if (e.target.value)
-                  onChange({ ...value, members: [...value.members, { id: e.target.value }] });
-              }}
-            >
-              <option value="">{t("添加模块")}</option>
-              {choices
-                .filter((m) => !value.members.some((s) => s.id === m.id))
-                .map((m) => (
-                  <option key={m.id} value={m.id} title={m.description || undefined}>
-                    {m.description ? `${m.id} — ${m.description}` : m.id}
-                  </option>
-                ))}
-            </select>
-          )}
           {value.members.map((module, index) => (
             <div className="composition-module" key={index}>
               <div className="composition-toolbar">
@@ -238,7 +223,7 @@ function ModuleEditor({
                   className="act"
                   data-action="agent-preset.module-remove"
                   data-target={kind}
-                  onClick={() => remove(index)}
+                  onClick={() => changeMembers(value.members.filter((_, i) => i !== index))}
                 >
                   {t("移除")}
                 </button>
@@ -275,6 +260,9 @@ function ModuleEditor({
               )}
             </div>
           ))}
+          <details className="composition-manual">
+          <summary>{t("高级：手动输入模块 ID")}</summary>
+          <p className="ds">{t("仅在模块未列出时使用；填写 ID 不会安装模块或授予权限。")}</p>
           <button
             type="button"
             className="act"
@@ -282,8 +270,9 @@ function ModuleEditor({
             data-target={kind}
             onClick={() => onChange({ ...value, members: [...value.members, { id: "" }] })}
           >
-            {t("添加模块")}
+            {t("添加空白 ID")}
           </button>
+          </details>
         </>
       )}
     </fieldset>
