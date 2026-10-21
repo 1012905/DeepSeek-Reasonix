@@ -58,4 +58,7 @@ func TestV4ConversationsWithoutAListingCacheAreReplayedOnce(t *testing.T) {
 			t.Fatalf("%s previews %q, first listing said %q", row.Path, row.Preview, previews[row.Path])
 		}
 	}
+	if entries := len(loadV4Listings(sessions).Entries); entries != len(dirs) {
+		t.Fatalf("persisted entries = %d, want %d", entries, len(dirs))
+	}
 }

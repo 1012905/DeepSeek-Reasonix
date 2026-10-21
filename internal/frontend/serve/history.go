@@ -2,6 +2,7 @@ package serve
 
 import (
 	"net/http"
+	"reasonix/internal/base/backgroundwork"
 	"reasonix/internal/state/sessionstore"
 	"strconv"
 	"unicode/utf8"
@@ -179,7 +180,14 @@ func (s *Server) projectedHistory() []historyMessage {
 	return msgs
 }
 
-func (s *Server) registerHistoryRoutes(mux *http.ServeMux) {
+func (s *Server) registerHistoryRoutes(parent *http.ServeMux) {
+	mux := http.NewServeMux()
+	foreground := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer backgroundwork.Shared.Foreground()()
+		mux.ServeHTTP(w, r)
+	})
+	parent.Handle("GET /history", foreground)
+	parent.Handle("GET /history/", foreground)
 	mux.HandleFunc("GET /history", s.history)
 	mux.HandleFunc("GET /history/tool/{id}", s.historyToolOutput)
 }

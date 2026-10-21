@@ -25,6 +25,13 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  "部分历史摘要暂不可用，可继续打开会话": "Some history summaries are unavailable. You can still open conversations.",
+  "仍在搜索部分历史会话…": "Still searching some historical conversations…",
+  "正在读取历史摘要…": "Reading history summaries…",
+  "正在读取摘要": "Reading summary",
+  "摘要暂不可用": "Summary unavailable",
+  "用搜索查找更多会话": "Search to find more conversations",
+  "显示更多": "Show more",
 	...EN_COMPOSITION,
   ...EN_DOCUMENT,
   "此检查点不包含文件快照": "This checkpoint contains no file snapshots",
