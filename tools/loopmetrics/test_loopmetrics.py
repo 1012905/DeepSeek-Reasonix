@@ -78,6 +78,12 @@ class ToolCalls(unittest.TestCase):
         s = Stream().turn().call("c1", dispatches=2)
         self.assertEqual(metrics(s)["m1"]["unique_calls"], 1)
 
+    def test_a_result_event_emitted_twice_counts_one_call(self):
+        s = Stream().turn().call("c1")
+        s.rows.append(dict(s.rows[-1], seq=s.seq + 1))
+        m = metrics(s)["m1"]
+        self.assertEqual((m["unique_calls"], m["redundant"]), (1, 0))
+
     def test_polling_that_returns_new_output_is_not_a_repeat(self):
         s = Stream().turn()
         for i in range(4):
