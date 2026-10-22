@@ -3313,7 +3313,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
    and focus, not to every card or to the whole veil. This also closes the old
    Studio prototype's fixed dark borders that survived in light mode. */
 .prefs {
-  background: color-mix(in srgb, var(--page) 58%, transparent) !important;
+  background: color-mix(in srgb, var(--page) 93%, transparent) !important;
   color: var(--text);
 }
 .prefs-sheet {
@@ -3374,9 +3374,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   background: color-mix(in srgb, var(--float) 94%, var(--accent-wash)) !important;
 }
 .advset:not(.appearance-advanced) > .grp { background: transparent !important; box-shadow: none; }
-:root[data-theme="light"] .prefs {
-  background: color-mix(in srgb, var(--page) 66%, transparent) !important;
-}
 :root[data-theme="light"] .prefs-sheet {
   box-shadow: 0 22px 60px -28px color-mix(in srgb, var(--text) 28%, transparent),
               0 1px 0 color-mix(in srgb, var(--float) 90%, transparent) inset;
