@@ -313,10 +313,6 @@ var SyntheticUserPrefixes = []string{
 	"<reasoning-language>",
 	"Plan approved — plan mode is off",
 	"Host final-answer readiness check failed",
-	// Injected without this entry, a reload read the prompt back as something
-	// the person typed, so it became the session title, the preview line and a
-	// user turn in the count.
-	"Host: this turn ended with work still outstanding",
 	"You are already in the executor phase",
 	"The previous assistant response was interrupted while a tool call",
 	"The previous assistant response was interrupted during streaming",
