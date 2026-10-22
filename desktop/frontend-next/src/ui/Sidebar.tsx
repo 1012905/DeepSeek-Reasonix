@@ -15,6 +15,7 @@ import { remoteProjects } from "./remoteProjects";
 import { StudioIcon } from "./StudioIcon";
 import { UpdateDot } from "./UpdateDot";
 import { useHiddenHosts } from "../state/remotehide";
+import { useSidebarFolds } from "../state/sidebarFolds";
 import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
 import { Workspaces } from "./Workspaces";
@@ -133,7 +134,7 @@ export function Sidebar({
   const [railScope, setRailScope] = useState<"all" | "live" | "pinned" | "archived">("all");
   const [palette, setPalette] = useState(false);
   const [projectPicker, setProjectPicker] = useState(false);
-  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const [folded, setFolded] = useSidebarFolds();
   const hideAmounts = useHidesAmounts();
   const hiddenHosts = useHiddenHosts();
   // Hidden hosts stay manageable in settings but do not contribute project rows.
@@ -205,13 +206,12 @@ export function Sidebar({
     [newSessionRoot, onNew, onOpen, onOpenRemote, runtimes, active, onFiles, onView, onSettings, onFeedback, feedbackUnread, onFind, onError],
   );
 
-  const onFold = (root: string, shut: boolean) =>
-    setFolded((prev) => {
-      const next = new Set(prev);
-      if (shut) next.add(root);
-      else next.delete(root);
-      return next;
-    });
+  const onFold = (root: string, shut: boolean) => {
+    const next = new Set(folded);
+    if (shut) next.add(root);
+    else next.delete(root);
+    setFolded(next);
+  };
   const foldable = [
     ...tree.filter((ws) => ws.sessions.length || ws.remaining).map((ws) => ws.root),
     ...shownRemotes.flatMap((host) => remoteWorkspaces(host, remoteTrees[host.name], runtimes)
@@ -219,8 +219,8 @@ export function Sidebar({
       .map((ws) => remoteProjectKey(host.name, ws.root))),
   ];
   const allFolded = foldable.length > 0 && foldable.every((key) => folded.has(key));
-  const toggleAll = () => setFolded((current) => allFolded
-    ? new Set([...current].filter((key) => !foldable.includes(key))) : new Set([...current, ...foldable]));
+  const toggleAll = () => setFolded(allFolded
+    ? new Set([...folded].filter((key) => !foldable.includes(key))) : new Set([...folded, ...foldable]));
 
 
   return (
