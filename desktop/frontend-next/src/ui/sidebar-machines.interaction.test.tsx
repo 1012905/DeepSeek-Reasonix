@@ -41,3 +41,11 @@ it("without the icon rail has one way into the remote settings, and it opens tha
   await userEvent.click(remoteEntries()[0] as HTMLElement);
   expect(onSettings).toHaveBeenCalledWith("remote");
 });
+
+it("writes the hints beside its shortcut rows with one separator", () => {
+  draw(false);
+  const hints = [...document.querySelectorAll(".studio-quicknav small")].map((el) => el.textContent ?? "");
+  expect(hints.length).toBeGreaterThan(1);
+  const separators = new Set(hints.map((h) => h.replace(/[A-Za-z0-9\s]/g, "")));
+  expect([...separators]).toHaveLength(1);
+});

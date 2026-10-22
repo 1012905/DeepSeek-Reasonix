@@ -602,6 +602,7 @@ body { background: var(--page) !important; }
 .studio-section-label button:hover { color: var(--text); }
 .studio-session-label { margin-top: 13px; }
 .studio-quicknav { display: grid; gap: 1px; }
+.studio-search:has(+ .studio-quicknav) { margin-bottom: 3px; }
 .studio-quicknav button {
   width: 100%; height: 33px; display: grid; grid-template-columns: 18px minmax(0,1fr) auto;
   align-items: center; gap: 7px; padding: 0 7px; border: 0; border-radius: 6px;

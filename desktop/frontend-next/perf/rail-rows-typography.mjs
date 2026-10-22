@@ -28,6 +28,9 @@ try {
     const distinct = new Set(Object.values(looks));
     check(`${scheme}: the sidebar's shortcut rows share one size, weight and colour`, distinct.size === 1,
       distinct.size === 1 ? [...distinct][0] : Object.entries(looks).map(([k, v]) => `${k}: ${v}`).join("; "));
+    const [search, first] = await Promise.all([page.locator(".studio-search").first().boundingBox(), page.locator(".studio-quicknav > button").first().boundingBox()]);
+    const gap = first.y - (search.y + search.height);
+    check(`${scheme}: the shortcut rows follow the search row without a blank band`, gap <= 4, `${gap.toFixed(1)}px`);
     await ctx.close();
   }
 } finally {
