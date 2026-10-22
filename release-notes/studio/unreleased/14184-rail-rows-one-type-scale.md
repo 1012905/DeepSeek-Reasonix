@@ -1,0 +1,2 @@
+- 修复：隐藏图标栏时，侧栏底部的“连接与机器”不再比其他入口更大更粗，和同类入口使用同一字号和字重。关联 #14184。
+- Fixed: with the icon rail hidden, the sidebar's "Connections & machines" row is no longer larger and bolder than the other shortcut rows; they share one size and weight. Refs #14184.
