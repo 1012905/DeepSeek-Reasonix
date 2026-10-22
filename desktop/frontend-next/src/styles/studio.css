@@ -713,7 +713,7 @@ body { background: var(--page) !important; }
 .srail-m[data-on] > i { background: #91a7df; }
 .srail-peek { right: 42px; width: min(300px, calc(100vw - var(--rail-w) - 78px)); }
 .flow {
-  width: min(var(--doc), calc(100% - var(--srail-w) - 44px));
+  width: min(var(--flow-w, var(--doc)), calc(100% - var(--srail-w) - 44px));
   margin-inline: auto;
   position: relative;
   left: 0;
@@ -722,7 +722,7 @@ body { background: var(--page) !important; }
 .flow[data-empty] { display: flex; align-items: center; justify-content: center; }
 .flow:not([data-empty]) {
   flex: 0 0 auto;
-  width: min(var(--doc), calc(100% - var(--srail-w) - 34px));
+  width: min(var(--flow-w, var(--doc)), calc(100% - var(--srail-w) - 34px));
   margin: 0 auto;
   padding: 28px 0 36px;
   box-sizing: border-box;
