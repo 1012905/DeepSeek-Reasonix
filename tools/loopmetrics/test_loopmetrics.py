@@ -163,6 +163,23 @@ class Reasoning(unittest.TestCase):
         s = Stream().turn().think(text).think(text.upper().replace(" ", ",  "))
         self.assertEqual(metrics(s)["m2"]["cross_max"], 1.0)
 
+    def test_a_stream_without_reasoning_events_falls_back_to_the_message_and_says_so(self):
+        s = Stream().turn().add("message", reasoning=varied(4))
+        m = metrics(s)["m2"]
+        self.assertEqual((m["source"], m["blocks"]), ("message", 1))
+
+    def test_a_flat_envelope_reads_like_the_wrapped_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "flat.jsonl")
+            with open(path, "w") as fh:
+                for row in (
+                    {"kind": "turn_started", "seq": 1},
+                    {"kind": "tool_result", "seq": 2, "tool": {"id": "a", "name": "r", "args": "{}", "output": "x", "readOnly": True}},
+                    {"kind": "tool_result", "seq": 3, "tool": {"id": "b", "name": "r", "args": "{}", "output": "x", "readOnly": True}},
+                ):
+                    fh.write(json.dumps(row) + "\n")
+            self.assertEqual(lm.run_metrics(lm.load(path))["m1"]["redundant"], 1)
+
     def test_the_message_event_is_not_read_as_a_second_block(self):
         s = Stream().turn().think(varied(3)).add("message", reasoning=varied(3))
         self.assertEqual(metrics(s)["m2"]["reasoning_blocks"], 1)

@@ -69,6 +69,13 @@ turn. Reported: median and maximum of both, the share of blocks over each flag,
 and reasoning characters and blocks as covariates, so "thinks more" and "thinks
 the same thing again" are not read as one thing.
 
+Two stream shapes are read: the `--trajectory` envelope (`{"event": {...}}`)
+and the flat events of the session `*.wire.jsonl` logs. The flat logs carry no
+`reasoning` events, only `message.reasoning` (one request's reasoning in one
+piece). For those, M2 reads the message instead and prints `source: message`;
+a message-sourced M2 is a different unit from a block-sourced one and the two
+are never pooled. Thresholds are unchanged.
+
 **M3 redo after stop-and-continue.** For a first and a continued trajectory:
 among the first K resolved calls of the continued run, the share whose
 (name, canonical arguments, result bytes) already completed in the first run.

@@ -41,6 +41,8 @@ def load(path):
                     raise TrajectoryError(f"{path}:{n}: {e}") from e
                 if isinstance(row, dict) and isinstance(row.get("event"), dict):
                     out.append((row.get("seq", n), row["event"]))
+                elif isinstance(row, dict) and "kind" in row:
+                    out.append((row.get("seq", n), row))
     except OSError as e:
         raise TrajectoryError(str(e)) from e
     if not any(ev.get("kind") == "turn_started" for _, ev in out):
@@ -118,10 +120,12 @@ def shingles(norm):
 
 def reasoning(turn):
     blocks, excluded, chars, nblocks = [], 0, 0, 0
-    for _, ev in turn:
-        if ev.get("kind") != "reasoning":
-            continue
-        text = ev.get("text") or ""
+    texts = [ev.get("text") or "" for _, ev in turn if ev.get("kind") == "reasoning"]
+    source = "block"
+    if not texts:
+        texts = [ev.get("reasoning") or "" for _, ev in turn if ev.get("kind") == "message" and ev.get("reasoning")]
+        source = "message"
+    for text in texts:
         chars += len(text)
         nblocks += 1
         norm = normalise(text)
@@ -136,7 +140,7 @@ def reasoning(turn):
         if sets:
             cross.append(max(len(s & o) / len(s | o) for o in sets))
         sets.append(s)
-    return within, cross, excluded, chars, nblocks
+    return within, cross, excluded, chars, nblocks, source
 
 
 def replies(events):
@@ -186,13 +190,14 @@ def med(values):
 def run_metrics(events, ignore=()):
     uniq = red = best = unresolved = 0
     within, cross, excluded, chars, nblocks = [], [], 0, 0, 0
-    all_calls = []
+    all_calls, sources = [], set()
     for t in turns(events):
         calls, lost = resolved_calls(t)
         all_calls.extend(calls)
         r, b = redundancy(calls, ignore)
         uniq, red, best, unresolved = uniq + len(calls), red + r, max(best, b), unresolved + lost
-        w, c, ex, ch, nb = reasoning(t)
+        w, c, ex, ch, nb, src = reasoning(t)
+        sources.add(src)
         within += w
         cross += c
         excluded, chars, nblocks = excluded + ex, chars + ch, nblocks + nb
@@ -201,7 +206,7 @@ def run_metrics(events, ignore=()):
         "turns": len(turns(events)),
         "m1": {"unique_calls": uniq, "redundant": red, "rate": red / uniq if uniq else None, "max_run": best, "unresolved": unresolved},
         "m2": {
-            "blocks": len(within), "excluded_short": excluded, "reasoning_chars": chars, "reasoning_blocks": nblocks,
+            "source": "/".join(sorted(sources)) or None, "blocks": len(within), "excluded_short": excluded, "reasoning_chars": chars, "reasoning_blocks": nblocks,
             "within_median": med(within), "within_max": max(within, default=None),
             "cross_median": med(cross), "cross_max": max(cross, default=None),
             "within_flag_share": {str(f): share(within, f) for f in WITHIN_FLAGS},
