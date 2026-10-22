@@ -958,3 +958,25 @@ describe("an error that names where it came from", () => {
     expect(reduce(failed, { kind: "__error", text: "" }).error).toBe("");
   });
 });
+
+describe("what a turn spent against what the session spent", () => {
+  const billed = (amount: number) => ({ kind: "usage", usage: { cacheHitTokens: 1, cacheMissTokens: 1, completionTokens: 1, totalTokens: 3, cost: amount, currency: "CNY", source: "executor" } }) as unknown as SessionEvent;
+  const turn = (n: number, amount: number): SessionEvent[] => [{ kind: "turn_started", msgIndex: n } as SessionEvent, billed(amount), { kind: "turn_done" } as SessionEvent];
+
+  it("restarts the turn's amount at each turn while the session total keeps growing", () => {
+    const s = run([...turn(1, 1), ...turn(2, 2), ...turn(3, 3)]);
+    expect(s.metrics.cost).toEqual([{ currency: "CNY", amount: 6 }]);
+    expect(s.metrics.turn).toEqual([{ currency: "CNY", amount: 3 }]);
+  });
+
+  it("adds every round of one turn to that turn", () => {
+    const s = run([...turn(1, 1), { kind: "turn_started", msgIndex: 2 } as SessionEvent, billed(2), billed(0.5)]);
+    expect(s.metrics.turn).toEqual([{ currency: "CNY", amount: 2.5 }]);
+    expect(s.metrics.cost).toEqual([{ currency: "CNY", amount: 3.5 }]);
+  });
+
+  it("does not restart the turn when the same turn is announced twice", () => {
+    const s = run([{ kind: "turn_started", msgIndex: 4 } as SessionEvent, billed(1), { kind: "turn_started", msgIndex: 4 } as SessionEvent, billed(1)]);
+    expect(s.metrics.turn).toEqual([{ currency: "CNY", amount: 2 }]);
+  });
+});
