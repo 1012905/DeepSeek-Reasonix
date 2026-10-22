@@ -15,6 +15,10 @@ type InboxItem struct {
 	Preview string `json:"preview"`
 	// Images marks a line that froze a picture: it cannot join a running turn.
 	Images bool `json:"images"`
+	// BlockCode is the kernel's stable name for why a held entry stopped, and
+	// BlockReason its sentence; the retry rule reads the code.
+	BlockCode   string `json:"blockCode"`
+	BlockReason string `json:"blockReason"`
 }
 
 // InboxSnapshot is the durable queue as GET /inbox answers it.

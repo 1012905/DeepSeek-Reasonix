@@ -14,6 +14,15 @@ var queueEN = QueueMessages{
 	QueueResumedNote:     "inbox resumed",
 	QueueActionFailedFmt: "queue: %s",
 	QueueGoneFmt:         "#%s already left the queue; the edit was not saved",
+	QueueBlockWhy: map[string]string{
+		"steer_unapplied":      "it did not reach the model before the turn ended",
+		"turn_snapshot_failed": "the turn ended, but the transcript could not be saved",
+		"turn_ack_failed":      "the turn ended, but the queue could not confirm this entry",
+		"owner_inactive":       "the session that was running it is gone",
+		"manifest_salvaged":    "the queue record was damaged, so this entry was recovered from a leftover file",
+	},
+	QueueRetryHeldFmt: "not retrying #%s: %s — it may already have run; check the transcript, or delete it",
+	QueueRetryNoWhy:   "the kernel did not say why it stopped",
 }
 
 var queueZH = QueueMessages{
@@ -30,6 +39,15 @@ var queueZH = QueueMessages{
 	QueueResumedNote:     "队列已继续",
 	QueueActionFailedFmt: "队列操作失败：%s",
 	QueueGoneFmt:         "#%s 已经离开队列，改动没有保存",
+	QueueBlockWhy: map[string]string{
+		"steer_unapplied":      "这条插话在本轮结束前没来得及送达，没有发给模型",
+		"turn_snapshot_failed": "本轮已结束，但对话记录没能保存",
+		"turn_ack_failed":      "本轮已结束，但队列没能确认这一条",
+		"owner_inactive":       "运行这一条的会话已不在了",
+		"manifest_salvaged":    "队列记录损坏，这一条是从残留文件里找回的",
+	},
+	QueueRetryHeldFmt: "未重试 #%s：%s —— 这一条可能已经跑过；请先查看对话记录，或删除它",
+	QueueRetryNoWhy:   "内核没有说明它为什么停下",
 }
 
 var queueZHTW = QueueMessages{
@@ -46,4 +64,13 @@ var queueZHTW = QueueMessages{
 	QueueResumedNote:     "佇列已繼續",
 	QueueActionFailedFmt: "佇列操作失敗：%s",
 	QueueGoneFmt:         "#%s 已經離開佇列，改動沒有儲存",
+	QueueBlockWhy: map[string]string{
+		"steer_unapplied":      "這條插話在本輪結束前沒來得及送達，沒有發給模型",
+		"turn_snapshot_failed": "本輪已結束，但對話紀錄沒能儲存",
+		"turn_ack_failed":      "本輪已結束，但佇列沒能確認這一條",
+		"owner_inactive":       "執行這一條的會話已經不在了",
+		"manifest_salvaged":    "佇列紀錄損壞，這一條是從殘留檔案裡找回的",
+	},
+	QueueRetryHeldFmt: "未重試 #%s：%s —— 這一條可能已經跑過；請先查看對話紀錄，或刪除它",
+	QueueRetryNoWhy:   "核心沒有說明它為什麼停下",
 }

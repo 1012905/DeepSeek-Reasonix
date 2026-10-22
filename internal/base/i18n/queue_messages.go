@@ -15,4 +15,9 @@ type QueueMessages struct {
 	QueueResumedNote     string // the queue was resumed by the key
 	QueueActionFailedFmt string // a queue key could not be applied
 	QueueGoneFmt         string // a selected message left the queue (it ran or was removed)
+	// QueueBlockWhy mirrors BLOCK_WHY in desktop/frontend-next/src/i18n/queue_why.ts:
+	// a block code -> why that entry stopped.
+	QueueBlockWhy     map[string]string
+	QueueRetryHeldFmt string // retry key on an entry that may have run — %s short id, %s why
+	QueueRetryNoWhy   string // a held entry arrived with neither a code nor a reason
 }
