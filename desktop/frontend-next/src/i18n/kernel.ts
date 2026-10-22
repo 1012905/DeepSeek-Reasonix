@@ -507,6 +507,7 @@ const SAID: Record<string, string> = {
   "mux.pane_not_local": "这个窗格由另一台机器驱动，使用它自己的事件流",
   "job.stop_in_progress": "已经请求停止这个后台任务，它的进程还没有退出，仍在等待",
   "inbox.invalid_state": "该条当前状态不允许此操作",
+  "inbox.retry_may_repeat": "这一条可能已经跑过，重新发送可能重复执行；请先查看对话记录，或删除它",
   "inbox.paused": "待送达已暂停，请先恢复派发再进行操作",
   "inbox.capacity_items": "待送达条数已达上限，请先发送部分内容",
   "inbox.capacity_bytes": "待送达总字数已达上限，请先发送部分内容",
