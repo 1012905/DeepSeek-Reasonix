@@ -1,2 +1,0 @@
-- 修复：设置里“模型可用的工具”不再显示英文原文；内置工具按界面语言给出一句话说明，被截断的说明也不再在词中间断开。关联 #14175。
-- Fixed: the tool list in Settings no longer shows the model-facing English text; built-in tools get a one-line description in the interface language, and a long line is cut cleanly. Refs #14175.

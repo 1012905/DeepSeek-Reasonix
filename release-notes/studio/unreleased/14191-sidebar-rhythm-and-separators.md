@@ -1,2 +1,0 @@
-- 优化：隐藏图标栏时，侧栏搜索行与下面的快捷入口之间不再有多余空白；两处小字提示统一使用“·”分隔。关联 #14191。
-- Changed: with the icon rail hidden, the blank band between the sidebar's search row and the shortcut rows is gone, and both hints use the same "·" separator. Refs #14191.
