@@ -1556,9 +1556,11 @@ A sub-agent row, by the list's own width:
 - The phone layout (`data-fold~="scene"`) shows settings full screen, so it is
   excluded.
 
-## The feedback veil
+## Settings and feedback veils
 
-- `.fbk-veil` is a flat scrim, not a blurred backdrop.
+- `.prefs` and `.fbk-veil` use the same flat, 93% page-colour scrim in both
+  themes, not a blurred backdrop. Settings stays visually separate from live
+  content without filtering that content on every frame.
 - A backdrop filter over the whole window is redone every frame while anything
   beneath it moves; a running turn's spinners are enough.
 - The scrim is opaque enough that what shows through reads as dimmed, which is
