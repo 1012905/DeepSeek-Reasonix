@@ -250,6 +250,27 @@ class Cost(unittest.TestCase):
         self.assertEqual((m["requests"], m["completion"]), (2, 10))
 
 
+class Legs(unittest.TestCase):
+    def test_usage_in_two_processes_is_not_deduplicated_across_them(self):
+        a = Stream().turn().usage("sa-1-1")
+        b = Stream().turn().usage("sa-1-1")
+        m = lm.run_metrics([a.events(), b.events()])["m5"]
+        self.assertEqual(m["requests"], 2)
+
+    def test_legs_sum_calls_and_keep_turns_apart(self):
+        a = Stream().turn().call("c1")
+        b = Stream().turn().call("c2")
+        m = lm.run_metrics([a.events(), b.events()])
+        self.assertEqual((m["turns"], m["m1"]["unique_calls"], m["m1"]["redundant"]), (2, 2, 0))
+
+    def test_a_run_given_as_comma_separated_files_is_one_run(self):
+        with tempfile.TemporaryDirectory() as d:
+            one = Stream().turn().call("c1").usage("a").write(d, "1.jsonl")
+            two = Stream().turn().call("c2").usage("a").write(d, "2.jsonl")
+            s = lm.cell_summary("x", [one + "," + two])
+            self.assertEqual((s["runs"], s["series"]["requests"]["median"]), (1, 2))
+
+
 class Cells(unittest.TestCase):
     def build(self, n, directory):
         paths = []

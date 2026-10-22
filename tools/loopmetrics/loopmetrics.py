@@ -188,6 +188,46 @@ def med(values):
 
 
 def run_metrics(events, ignore=()):
+    """events is one stream, or a list of streams (the legs of one session)."""
+    legs = events if events and isinstance(events[0], list) else [events]
+    parts = [_leg_metrics(leg, ignore) for leg in legs]
+    if len(parts) == 1:
+        return parts[0]
+    return merge(parts)
+
+
+def merge(parts):
+    out = json.loads(json.dumps({k: v for k, v in parts[0].items() if k != "_calls"}))
+    out["_calls"] = [c for p in parts for c in p["_calls"]]
+    out["legs"] = len(parts)
+    out["turns"] = sum(p["turns"] for p in parts)
+    m1 = out["m1"]
+    for k in ("unique_calls", "redundant", "unresolved"):
+        m1[k] = sum(p["m1"][k] for p in parts)
+    m1["rate"] = m1["redundant"] / m1["unique_calls"] if m1["unique_calls"] else None
+    m1["max_run"] = max(p["m1"]["max_run"] for p in parts)
+    m2 = out["m2"]
+    for k in ("blocks", "excluded_short", "reasoning_chars", "reasoning_blocks"):
+        m2[k] = sum(p["m2"][k] for p in parts)
+    m2["source"] = "/".join(sorted({x for p in parts for x in (p["m2"]["source"] or "").split("/") if x})) or None
+    within, cross = [], []
+    for p in parts:
+        within += p["_within"]
+        cross += p["_cross"]
+    out["_within"], out["_cross"] = within, cross
+    m2["within_median"], m2["within_max"] = med(within), max(within, default=None)
+    m2["cross_median"], m2["cross_max"] = med(cross), max(cross, default=None)
+    m2["within_flag_share"] = {str(f): share(within, f) for f in WITHIN_FLAGS}
+    m2["cross_flag_share"] = {str(f): share(cross, f) for f in JACCARD_FLAGS}
+    out["m4"]["max_run"] = max(p["m4"]["max_run"] for p in parts)
+    for k in ("requests", "prompt", "completion", "cache_hit", "cost"):
+        out["m5"][k] = sum(p["m5"][k] for p in parts)
+    if "redundant_without_ignore" in parts[0]["m1"]:
+        m1["redundant_without_ignore"] = sum(p["m1"]["redundant_without_ignore"] for p in parts)
+    return out
+
+
+def _leg_metrics(events, ignore=()):
     uniq = red = best = unresolved = 0
     within, cross, excluded, chars, nblocks = [], [], 0, 0, 0
     all_calls, sources = [], set()
@@ -215,6 +255,8 @@ def run_metrics(events, ignore=()):
         "m4": {"max_run": replies(events)},
         "m5": usage(events),
         "_calls": all_calls,
+        "_within": within,
+        "_cross": cross,
     }
     if ignore:
         t_red = sum(redundancy(resolved_calls(t)[0], ())[0] for t in turns(events))
@@ -249,11 +291,17 @@ SERIES = (
 )
 
 
+def load_run(spec):
+    """A run is one file, or comma-separated files that are its legs in order."""
+    legs = [load(p) for p in spec.split(",")]
+    return legs if len(legs) > 1 else legs[0]
+
+
 def cell_summary(name, paths, ignore=()):
     runs, failed = [], []
     for p in paths:
         try:
-            runs.append(run_metrics(load(p), ignore))
+            runs.append(run_metrics(load_run(p), ignore))
         except TrajectoryError as e:
             failed.append(f"{p}: {e}")
     out = {
@@ -297,8 +345,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     try:
         if a.cmd == "run":
-            m = run_metrics(load(a.file), tuple(a.ignore_arg))
-            m.pop("_calls")
+            m = run_metrics(load_run(a.file), tuple(a.ignore_arg))
+            for k in ("_calls", "_within", "_cross"):
+                m.pop(k)
             print(json.dumps(m, indent=2, ensure_ascii=False) if a.json else json.dumps(m, ensure_ascii=False))
         elif a.cmd == "cell":
             summary = cell_summary(a.name, a.files, tuple(a.ignore_arg))
