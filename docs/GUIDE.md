@@ -1002,6 +1002,11 @@ Composer shortcuts:
 
 Remembered projects have Move up / Move down in their project menu. Open it with the keyboard, navigate with arrows or Home/End, and use Escape to return to the trigger. Moving a project changes sidebar order without changing the launch project.
 
+Studio remembers which local and remote projects you collapse in the sidebar,
+including Collapse all / Expand all, when you reopen it in the same browser or
+desktop profile. New projects start expanded. These display choices stay on
+this device; they do not change sessions or synchronize to another client.
+
 Ordinary Reasonix-managed worktree chats appear under their original project,
 without a separate project row for each checkout. The chat header shows Local
 checkout or Worktree, with its actual working directory available on hover;
