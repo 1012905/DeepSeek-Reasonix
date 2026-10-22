@@ -162,13 +162,15 @@ func (c *Controller) recallTail(source string, hasNotes bool) string {
 // a hardware exception on Windows, recovered or not.
 var ErrNoRunner = errors.New("controller has no runner")
 
-// runWithRunner hands the composed turn to the runner. Nothing about delivery is
-// recorded here: whether the model holds a projected block is asked of the
-// model-visible history, so a refusal, a cancel or a failed send needs no
-// compensating bookkeeping.
+// runWithRunner hands the composed turn to the runner. Whether the model holds a
+// projected block is asked of the model-visible history, so a refusal, a cancel
+// or a failed send needs no compensating bookkeeping. The exception is the
+// opening restatement of a rebuilt runtime (see projection_debt.go): this
+// hand-off ends that one-turn state.
 func (c *Controller) runWithRunner(ctx context.Context, input string) error {
 	if c.runner == nil {
 		return ErrNoRunner
 	}
+	c.settleProjection()
 	return c.runner.Run(ctx, input)
 }

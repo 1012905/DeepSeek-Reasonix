@@ -92,6 +92,9 @@ type Controller struct {
 	guardianPath string // persisted guardian session file ("" when disabled)
 	systemPrompt string
 	commands     atomic.Pointer[[]command.Command]
+	// restateProjection answers "not visible" until a turn is handed to the
+	// runner; a model switch sets it. See projection_debt.go.
+	restateProjection atomic.Bool
 	// hookContexts carries one-shot lifecycle hook context into the next real
 	// user turn without changing the cache-stable system prompt.
 	hookContexts []string
@@ -482,7 +485,7 @@ func New(opts Options) *Controller {
 		runtimeGeneration:  opts.RuntimeGeneration,
 	}
 	if c.executor != nil {
-		c.bindProjectionSeer(c.executor.NewestStandingBlock, c.executor.SeesProjection)
+		c.bindProjectionSeer(c.deliveredNewest, c.deliveredSees)
 	}
 	c.adoptSessionResources(opts)
 	c.publishPerProjectContext(opts)

@@ -42,6 +42,42 @@ func (c *Controller) bindProjectionSeer(newest func(string) (string, bool), note
 	c.deliveryNotes(notes)
 }
 
+// deliveredNewest is the seer a controller uses for its own model: it resolves
+// the executor held at call time, so an adopted or rotated session is answered
+// from the session this runtime has now, and it answers "nothing is visible"
+// until a turn is handed to the runner. A switched model inherits another
+// model's delivery, so the replacement restates the blocks once (see Restate).
+func (c *Controller) deliveredNewest(tag string) (string, bool) {
+	if c == nil || c.restateProjection.Load() || c.executor == nil {
+		return "", false
+	}
+	return c.executor.NewestStandingBlock(tag)
+}
+
+// deliveredSees is deliveredNewest's question for the one-time notes.
+func (c *Controller) deliveredSees(text string) bool {
+	if c == nil || c.restateProjection.Load() || c.executor == nil {
+		return false
+	}
+	return c.executor.SeesProjection(text)
+}
+
+// RestateStandingProjection marks this generation as having delivered nothing to
+// the model it is about to address: a rebuild that switched models adopted a
+// conversation composed for the model being replaced, not for this one.
+func (c *Controller) RestateStandingProjection() {
+	if c == nil {
+		return
+	}
+	c.restateProjection.Store(true)
+}
+
+// settleProjection records that a composed turn is being handed to the runner.
+// From here on the visible history is the record of what this runtime delivered.
+func (c *Controller) settleProjection() {
+	c.restateProjection.Store(false)
+}
+
 // deliveryNotes binds the one-time facts a turn also carries. They are not
 // standing blocks: a note is delivered when the model can read it anywhere.
 func (c *Controller) deliveryNotes(notes func(string) bool) {
