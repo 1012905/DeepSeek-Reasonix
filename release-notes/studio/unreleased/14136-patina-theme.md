@@ -1,0 +1,2 @@
+- 新增：内置 Patina 主题，雾灰画布、白色浮卡与钢蓝强调色，明暗两套，需要时在设置里手动选择。关联 #14136。
+- Added: a built-in Patina theme with a grey canvas, white cards and a steel-blue accent, in light and dark, chosen in Settings when you want it. Refs #14136.
