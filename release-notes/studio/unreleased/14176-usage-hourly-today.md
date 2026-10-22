@@ -1,0 +1,2 @@
+- 新增：用量页多了“今日”范围，单日窗口按小时显示用量、花费和请求。关联 #14176。
+- Added: the Usage page has a Today range, and any one-day window shows usage, spend and requests by the hour. Refs #14176.
