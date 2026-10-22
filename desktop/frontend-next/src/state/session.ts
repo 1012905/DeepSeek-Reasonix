@@ -367,7 +367,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       // twice: no seal — calls still run, a prompt is still owed — but naming
       // still runs, because the row may have been sent between the two.
       if (s.running && ev.msgIndex !== undefined && ev.msgIndex === s.turnMsgIndex) return nameTurnStart(s, ev);
-      return nameTurnStart({ ...s, running: true, runSince: Date.now(), doing: "运行中", terminal: null, outLive: 0, turnModel: ev.modelRef || s.turnModel, waiting: { ttftSince: Date.now() }, turnMsgIndex: ev.msgIndex ?? s.turnMsgIndex, items: sealTurn(sealSay(s.items, true)) }, ev);
+      return nameTurnStart({ ...s, metrics: { ...s.metrics, turn: [] }, running: true, runSince: Date.now(), doing: "运行中", terminal: null, outLive: 0, turnModel: ev.modelRef || s.turnModel, waiting: { ttftSince: Date.now() }, turnMsgIndex: ev.msgIndex ?? s.turnMsgIndex, items: sealTurn(sealSay(s.items, true)) }, ev);
 
     case "reasoning":
       return {

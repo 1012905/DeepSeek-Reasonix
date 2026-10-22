@@ -297,9 +297,21 @@ class BenchPort extends MockPort {
   }
 
   private settingCardSent = false;
+  private meterSent = false;
 
   subscribe(on: (e: WireEvent) => void) {
     this.subs.add(on);
+    if (query.has("meter") && !this.meterSent) {
+      this.meterSent = true;
+      const usage = (amount: number) => ({ cacheHitTokens: 90, cacheMissTokens: 10, completionTokens: 40, totalTokens: 140, cost: amount, currency: "CNY", currencyCode: "CNY", source: "executor" });
+      setTimeout(() => {
+        for (const [msgIndex, amount] of [[1, 1.2], [2, 0.35]] as const) {
+          this.feed({ kind: "turn_started", msgIndex } as unknown as WireEvent);
+          this.feed({ kind: "usage", usage: usage(amount) } as unknown as WireEvent);
+          this.feed({ kind: "turn_done" } as unknown as WireEvent);
+        }
+      }, 500);
+    }
     const card = query.get("settingcard");
     if (card && !this.settingCardSent) {
       this.settingCardSent = true;

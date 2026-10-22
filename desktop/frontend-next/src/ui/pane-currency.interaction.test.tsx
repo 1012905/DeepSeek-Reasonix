@@ -94,7 +94,8 @@ describe("the session cost chip when the session billed in two currencies", () =
       emit({ kind: "usage", usage: usage("2.00", "USD") } as WireEvent);
       emit({ kind: "usage", usage: usage("1.00", "CNY") } as WireEvent);
     });
-    const figures = () => [...container.querySelectorAll<HTMLElement>(".studio-meter-cost b")].map((b) => b.textContent);
-    await waitFor(() => expect(figures()).toEqual(["US$2.00", "¥1.00"]));
+    const figures = (chip: number) => [...(container.querySelectorAll<HTMLElement>(".studio-meter-cost")[chip]?.querySelectorAll("b") ?? [])].map((b) => b.textContent);
+    await waitFor(() => expect(figures(0)).toEqual(["US$2.00", "¥1.00"]));
+    expect(figures(1)).toEqual(["US$2.00", "¥1.00"]);
   });
 });
