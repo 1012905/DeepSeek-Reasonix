@@ -1,0 +1,2 @@
+- 修复：配置了 TCP 方式的 DNS 服务器时，健康探测把正常应答的服务器误判为不可用，导致第一个服务器失效后不会切换到下一个。关联 #14044。
+- Fixed: the DNS server health probe read a TCP reply as if it had no length prefix and reported a live server as dead, so failover to the next `[network]` server never happened. Refs #14044.
