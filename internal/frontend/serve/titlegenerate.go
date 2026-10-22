@@ -68,7 +68,12 @@ func (s *Server) tryRequestTitle(ctx context.Context, firstMsg string, model tit
 	defer func() {
 		usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 		if usage != nil && !nilutil.IsNil(model.sink) {
-			model.sink.Emit(event.Event{Kind: event.Usage, ModelRef: model.ref, Usage: usage, Pricing: model.price, UsageSource: event.UsageSourceTitle})
+			e := event.Event{Kind: event.Usage, ModelRef: model.ref, Usage: usage, Pricing: model.price, UsageSource: event.UsageSourceTitle}
+			// The recorder writes money only for a non-nil quote, and no
+			// CostQuoteSink fronts the title's own recorder, so price the call
+			// here with the function that sink uses.
+			e.CostQuote = event.EnsureCostQuote(e, model.quote)
+			model.sink.Emit(e)
 		}
 	}()
 	ch, err := model.prov.Stream(ctx, provider.Request{

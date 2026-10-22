@@ -494,11 +494,12 @@ func entryFromRaw(day string, raw rawRecord) Entry {
 	if raw.Turn {
 		turns = 1
 	}
+	incomplete := CostIncomplete(raw.CostComplete, raw.Total, raw.CostAmount)
 	return Entry{Day: day, Source: raw.Source, ModelRef: raw.ModelRef, Provider: providerOf(raw.ModelRef), Prompt: raw.Prompt,
 		Completion: raw.Completion, Reasoning: raw.Reasoning, CacheHit: raw.CacheHit, CacheMiss: raw.CacheMiss,
 		Total: raw.Total, Requests: raw.Requests, Turns: turns}.WithCost(Priced{Amount: raw.CostAmount,
 		Currency: raw.CostCurrency, CNY: raw.ValuationCNY, USD: raw.ValuationUSD, Estimated: raw.CostEstimated,
-		Incomplete: raw.CostComplete != nil && !*raw.CostComplete, BillingMode: raw.BillingMode})
+		Incomplete: incomplete, BillingMode: raw.BillingMode})
 }
 
 // recordDays is every day the file's records were filed under, plus the day it
