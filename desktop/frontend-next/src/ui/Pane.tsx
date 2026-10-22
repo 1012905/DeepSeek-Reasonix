@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, us
 import { streamBudget } from "../port/streambudget";
 import { loadReceiptPref, receiptPrefOf } from "../state/receiptpref";
 import { ReceiptPrefContext } from "../state/foldpref";
-import { money } from "../i18n/format";
+import { moneyList } from "../i18n/format";
 import { pushToast } from "../state/toasts";
 import { reason } from "../i18n/kernel";
 import { noteFault } from "./fault";
@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import type { Checkpoint, ContextBreakdown, JobEntry, McpEntry, SessionStatus, WorkspaceChanges, WorkspaceGit } from "../port/port";
 import type { TrajectoryRead } from "../port/wire";
 import { chipLabel, fromHistory, initialState, quoteAmount, reduce } from "../state/session";
+import type { CurrencyAmount } from "../state/session";
 import { pairCheckpoints } from "../state/checkpoints";
 import { useReplyActions } from "./reply";
 import { useGateActions } from "./gates";
@@ -80,6 +81,7 @@ export type { PaneReport };
 // A shared constant, not `?? []`: a fresh empty array every render reads as a
 // changed prop to the rail below it.
 const NO_JOBS: JobEntry[] = [];
+const NO_COST: CurrencyAmount[] = [];
 
 type SessionRead = { kind: "pending" } | { kind: "settled"; status: SessionStatus | null };
 
@@ -456,7 +458,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   const blocked = hasPendingDecision(status);
   const browserSize = useBrowserWide(docked, active && visible, blocked);
   const run = runState({ blocked, running, hasItems: s.items.length > 0, terminal: s.terminal });
-  const cost = s.metrics.coverage === "none" ? "" : money(s.metrics.cost, s.metrics.currency);
+  const cost = s.metrics.coverage === "none" ? NO_COST : s.metrics.cost;
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : null;
   const walletDisplay = wallet.kind === "read" ? wallet.reading.display : "";
 
@@ -474,7 +476,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       steer: waiting(queue).filter((it) => it.intent === "steer").length,
       run: trustWaiting && run === "idle" ? "halt" : run,
       live: running || blocked || trustWaiting,
-      cost,
+      cost: moneyList(cost),
       contextPercent,
       context: ctx,
       mcp,

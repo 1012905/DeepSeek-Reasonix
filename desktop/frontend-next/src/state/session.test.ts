@@ -792,13 +792,13 @@ describe("a question the run is still blocked on", () => {
 // the record is not replayed on restore, so the fold has folded nothing yet.
 describe("restoring what a session has been billed", () => {
   const totals = (over: Partial<Extract<SessionEvent, { kind: "__totals" }>> = {}): SessionEvent =>
-    ({ kind: "__totals", hit: 10, miss: 5, cost: 0.02, ...over }) as SessionEvent;
+    ({ kind: "__totals", hit: 10, miss: 5, cost: 0.02, currency: "CNY", ...over }) as SessionEvent;
 
   it("takes the coverage the kernel holds every round for", () => {
     const s = reduce(initialState, totals({ coverage: "partial", incompleteReason: "no_price" }));
     expect(s.metrics.coverage).toBe("partial");
     expect(s.metrics.incompleteReason).toBe("no_price");
-    expect(s.metrics.cost).toBe(0.02);
+    expect(s.metrics.cost).toEqual([{ currency: "CNY", amount: 0.02 }]);
   });
 
   // Replaced rather than joined, for the same reason the totals are: the read
@@ -815,7 +815,7 @@ describe("restoring what a session has been billed", () => {
   it("restores no coverage from a kernel that cannot say", () => {
     const s = reduce(initialState, totals({ coverage: undefined }));
     expect(s.metrics.coverage).toBe("none");
-    expect(s.metrics.cost).toBe(0.02);
+    expect(s.metrics.cost).toEqual([{ currency: "CNY", amount: 0.02 }]);
   });
 });
 
