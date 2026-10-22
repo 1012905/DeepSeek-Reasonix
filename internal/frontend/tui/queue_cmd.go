@@ -96,11 +96,14 @@ func queueCommand(ctx context.Context, c *Client, args []string) slashDoneMsg {
 		}
 		return info("inbox resumed")
 	case "retry":
-		return withQueueItem(ctx, c, rest, "retry", func(id string) string {
-			if err := c.InboxRetry(ctx, id); err != nil {
+		return withQueueEntry(ctx, c, rest, "retry", func(it InboxItem) string {
+			if mayHaveRun(it) {
+				return retryHeldText(it)
+			}
+			if err := c.InboxRetry(ctx, it.ID); err != nil {
 				return "retry: " + err.Error()
 			}
-			return "retry queued #" + shortID(id)
+			return "retry queued #" + shortID(it.ID)
 		})
 	case "refresh":
 		return withQueueItem(ctx, c, rest, "refresh", func(id string) string {
@@ -116,6 +119,12 @@ func queueCommand(ctx context.Context, c *Client, args []string) slashDoneMsg {
 var errMissingQueueRef = errors.New("missing item ref (index or id)")
 
 func withQueueItem(ctx context.Context, c *Client, ref []string, verb string, run func(id string) string) slashDoneMsg {
+	return withQueueEntry(ctx, c, ref, verb, func(it InboxItem) string { return run(it.ID) })
+}
+
+// withQueueEntry is withQueueItem for a verb that decides from the entry
+// itself, such as the retry rule that reads its block code.
+func withQueueEntry(ctx context.Context, c *Client, ref []string, verb string, run func(InboxItem) string) slashDoneMsg {
 	snap, err := c.Inbox(ctx)
 	if err != nil {
 		return info(verb + ": " + err.Error())
@@ -124,7 +133,12 @@ func withQueueItem(ctx context.Context, c *Client, ref []string, verb string, ru
 	if err != nil {
 		return info(err.Error())
 	}
-	return info(run(id))
+	for _, it := range snap.Items {
+		if it.ID == id {
+			return info(run(it))
+		}
+	}
+	return info(verb + ": #" + shortID(id) + " is no longer in the queue")
 }
 
 // resolveQueueRef takes a 1-based position, a full id or an id prefix.

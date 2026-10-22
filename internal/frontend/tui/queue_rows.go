@@ -166,8 +166,9 @@ func (m *model) queued(it *Item) bool {
 
 // queueKey takes the keys that browse and manage the queue: up and down select
 // a queued message into the composer, alt+up and alt+down move it, d (twice)
-// deletes it, r runs a blocked one again, enter saves what was edited, esc lets
-// go, and space pauses or resumes the queue when the composer is empty.
+// deletes it, r retries one that cannot have run and says why when it may have,
+// enter saves what was edited, esc lets go, and space pauses or resumes the
+// queue when the composer is empty.
 func (m *model) queueKey(k string) (tea.Cmd, bool) {
 	selected := m.queue.selID != ""
 	acting := selected && m.queue.ready && m.composer.Value() == m.queue.loaded
@@ -285,6 +286,9 @@ func (m *model) queueDelete() tea.Cmd {
 }
 
 func (m *model) queueRetry() tea.Cmd {
+	if at := m.queueIndex(); at >= 0 && mayHaveRun(m.queue.items[at]) {
+		return m.queueRetryHeld(m.queue.items[at])
+	}
 	id, ctx, c := m.queue.selID, m.ctx, m.client
 	m.queueEnd(true)
 	return func() tea.Msg {
