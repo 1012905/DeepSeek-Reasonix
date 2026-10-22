@@ -1,4 +1,0 @@
-- 修复：用量总额现在把"只计了次数和 token、没有金额"的调用（旧版本写入的记录、标题生成）算作未定价，总额标成下限而不是账单。关联 #14112。
-- 修复：标题生成的调用现在会按价目计价，不再只计 token 不计钱。关联 #14112。
-- Fixed: the usage total now treats a call that was counted but carries no amount (pre-schema rows, title generation) as unpriced, so the total is a floor rather than a bill. Refs #14112.
-- Fixed: title-generation calls are now priced from the rate card instead of counting tokens with no money. Refs #14112.

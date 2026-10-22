@@ -1,2 +1,0 @@
-- 优化：自动命名遇到关不掉思考的模型时，会明确提示“模型把输出额度花在思考上”，并建议换一个能关闭思考的命名模型。关联 #14188。
-- Changed: when a model that cannot turn thinking off spends its budget thinking, automatic naming now says so and suggests a naming model that can. Refs #14188.

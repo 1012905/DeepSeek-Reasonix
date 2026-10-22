@@ -1,2 +1,0 @@
-- 优化：隐藏图标栏时，侧栏不再有两个打开同一个“远程”设置页的入口；底部重复的“连接与机器”已移除，顶部“运行环境”仍可进入。关联 #14187。
-- Changed: with the icon rail hidden, the sidebar no longer has two entries to the same Remote settings page; the duplicate bottom row is gone and "Environments" still opens it. Refs #14187.
