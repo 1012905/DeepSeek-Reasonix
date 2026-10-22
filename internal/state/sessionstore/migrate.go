@@ -122,18 +122,10 @@ func migrateLegacySessionsWithMarkers(srcDir, globalDest, marker, jsonlMarker st
 		return 0, nil
 	}
 
-	// Build the set of base names that have a .events.jsonl so the .jsonl-only
-	// pass can skip sessions that will be (or were) handled by event reconstruction.
-	hasEvents := map[string]bool{}
-	for _, e := range entries {
-		name := e.Name()
-		if !e.IsDir() && strings.HasSuffix(name, ".events.jsonl") && !isNativeSessionEventLog(filepath.Join(srcDir, name)) {
-			hasEvents[strings.TrimSuffix(name, ".events.jsonl")] = true
-		}
-	}
+	hasEvents := legacyEventBases(srcDir, entries)
 
 	imported := 0
-	hadArtifactFailure := false
+	incomplete := false
 
 	// Pass 1 — event-log sessions (*.events.jsonl). When a same-named .jsonl
 	// exists in the source with a modification time >= the event log's, prefer
@@ -159,9 +151,10 @@ func migrateLegacySessionsWithMarkers(srcDir, globalDest, marker, jsonlMarker st
 			continue // already imported, or a v1+ session of the same name
 		}
 		eventsInfo, _ := e.Info()
-		if destDir != globalDest && moveFlatImport(filepath.Join(globalDest, base+".jsonl"), dest, eventsInfo) {
-			recordImportedTitle(destDir, base, meta.Summary)
-			imported++
+		count, deferred := rehomeFlatImport(filepath.Join(globalDest, base+".jsonl"), dest, destDir, base, meta.Summary, eventsInfo)
+		imported += count
+		incomplete = incomplete || deferred
+		if count > 0 || deferred {
 			continue
 		}
 
@@ -213,7 +206,7 @@ func migrateLegacySessionsWithMarkers(srcDir, globalDest, marker, jsonlMarker st
 	if rep != nil || !importMarkerExists(globalDest, jsonlMarker) {
 		n, failed := importJsonlSessions(entries, srcDir, globalDest, hasEvents, projectDir, rep)
 		imported += n
-		hadArtifactFailure = hadArtifactFailure || failed
+		incomplete = incomplete || failed
 
 		imported += importBakSessions(entries, srcDir, globalDest, hasEvents, projectDir, rep)
 	}
@@ -224,8 +217,9 @@ func migrateLegacySessionsWithMarkers(srcDir, globalDest, marker, jsonlMarker st
 	imported += migrateProjectSubdirs(entries, srcDir, globalDest, projectDir, rep)
 
 	// Also stamp the flat markers so a downgrade to an older build doesn't
-	// re-run the flat import over routed sessions.
-	if hadArtifactFailure {
+	// re-run the flat import over routed sessions. An incomplete source (failed
+	// copy or a live owner) stays unwritten so the next pass can retry it.
+	if incomplete {
 		return imported, nil
 	}
 	writeImportMarkers(globalDest, marker, legacyImportMarker, legacyEventsHomeImportMarker, legacyEventsConfigImportMarker, jsonlMarker)

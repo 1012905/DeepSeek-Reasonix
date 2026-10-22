@@ -21,6 +21,37 @@ func ImportLegacySessionsFromExplicitDir(srcDir, globalDest string, projectDir f
 	return n, rep, err
 }
 
+// legacyEventBases names the sessions that have a v0.x event log, so the
+// .jsonl-only pass can skip the ones event reconstruction already handles.
+func legacyEventBases(srcDir string, entries []os.DirEntry) map[string]bool {
+	bases := map[string]bool{}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() && strings.HasSuffix(name, ".events.jsonl") && !isNativeSessionEventLog(filepath.Join(srcDir, name)) {
+			bases[strings.TrimSuffix(name, ".events.jsonl")] = true
+		}
+	}
+	return bases
+}
+
+// rehomeFlatImport re-homes one legacy event-log session's flat leftover into
+// its routed project directory. count is 1 when the session was imported this
+// way; deferred reports that a live runtime owns the leftover, so the base must
+// neither be imported beside it nor let the one-time marker claim the source.
+func rehomeFlatImport(oldPath, newPath, destDir, base, summary string, srcInfo os.FileInfo) (count int, deferred bool) {
+	if sameDirPath(destDir, filepath.Dir(oldPath)) {
+		return 0, false
+	}
+	switch moveFlatImport(oldPath, newPath, srcInfo) {
+	case flatImportMoved:
+		recordImportedTitle(destDir, base, summary)
+		return 1, false
+	case flatImportDeferred:
+		return 0, true
+	}
+	return 0, false
+}
+
 // importBakSessions recovers sessions whose .jsonl was lost but a .jsonl.bak
 // remains.
 func importBakSessions(entries []os.DirEntry, srcDir, globalDest string, hasEvents map[string]bool, projectDir func(string) string, rep *LegacyReport) int {
