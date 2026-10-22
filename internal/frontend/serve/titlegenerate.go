@@ -28,6 +28,7 @@ The user's message below may start with UI labels or injected directives — ign
 // each to its own code; the background filler only needs "no title".
 var (
 	errTitleNoText  = errors.New("the title model answered with no text")
+	errTitleThought = errors.New("the title model used its output budget thinking and gave no title")
 	errTitleTimeout = errors.New("the title model did not answer in time")
 )
 
@@ -88,6 +89,7 @@ func (s *Server) tryRequestTitle(ctx context.Context, firstMsg string, model tit
 		return "", titleFailure(ctx, err)
 	}
 	var text strings.Builder
+	thought := false
 chunks:
 	for {
 		select {
@@ -100,6 +102,8 @@ chunks:
 			switch chunk.Type {
 			case provider.ChunkText:
 				text.WriteString(chunk.Text)
+			case provider.ChunkReasoning:
+				thought = thought || strings.TrimSpace(chunk.Text) != ""
 			case provider.ChunkUsage:
 				usage = chunk.Usage
 			case provider.ChunkError:
@@ -116,6 +120,9 @@ chunks:
 	}
 	title = strings.TrimSpace(title)
 	if title == "" {
+		if thought || (usage != nil && usage.ReasoningTokens > 0) {
+			return "", errTitleThought
+		}
 		return "", errTitleNoText
 	}
 	return title, nil
