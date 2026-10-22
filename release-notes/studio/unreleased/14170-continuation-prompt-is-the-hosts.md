@@ -1,0 +1,2 @@
+- 修复：宿主发出的「本轮还有未完成事项」的续做提示不再被当成你发的话，不会再变成会话标题、预览或用户轮次。关联 #14170。
+- Fixed: the host's own "work still outstanding" prompt is no longer read back as something you typed, so it stops becoming a session title, a preview line or a user turn. Refs #14170.
