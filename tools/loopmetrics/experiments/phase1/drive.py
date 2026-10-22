@@ -86,11 +86,13 @@ def run_cond():
 
 toml = f"{FIX}/reasonix.toml"
 if os.path.exists(toml):
-    os.remove(toml)
+    sys.exit(f"refusing to start: {toml} already exists and is not this harness's")
+created = False
 if cond == "compact":
     subprocess.run([RX, "config", "compact-ratio", "--local", os.environ.get("COMPACT_RATIO", "4")], cwd=FIX, check=True, capture_output=True)
+    created = True
 try:
     run_cond()
 finally:
-    if os.path.exists(toml):
+    if created and os.path.exists(toml):
         os.remove(toml)

@@ -54,9 +54,12 @@ Run it: `LM_FIXTURE=<worktree> LM_RX=<binary> ./batch.sh`, then
 **Null result: no loop signal in any of the 12 cells.**
 
 - M1: 0 redundant calls out of 1,602 unique calls across all cells.
-- M2: over 900 reasoning blocks the largest cross-block Jaccard is 0.314 and
-  the largest within-block repeat is 0.287. Nothing reaches the pre-registered
-  flags or any sensitivity value (0.7, 0.8, 0.9 cross; 0.4, 0.5, 0.6 within).
+- M2: 892 reasoning blocks analysed; 958 in total, and 66 under the 40-char
+  minimum are excluded.
+  - Largest cross-block Jaccard: 0.314, over 611 measurable blocks.
+  - Largest within-block repeat: 0.287.
+  - Nothing reaches the pre-registered flags or any sensitivity value (0.7,
+    0.8, 0.9 cross; 0.4, 0.5, 0.6 within).
 - M3: in all 15 interrupted-and-continued runs, 0 of the first 5, 10 and 20
   calls of the continued run repeat a completed call.
 - M4: no repeated short reply.
