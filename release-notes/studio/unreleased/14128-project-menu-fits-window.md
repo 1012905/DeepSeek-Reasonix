@@ -1,0 +1,2 @@
+- 修复：窗口比项目右键菜单矮时，菜单底部的操作被切掉点不到；现在菜单限制在窗口内，可以滚动。关联 #14128。
+- Fixed: when the window was shorter than a project's right-click menu, the actions at the bottom were cut off; the menu now stays inside the window and scrolls. Refs #14128.
